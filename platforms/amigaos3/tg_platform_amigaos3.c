@@ -340,11 +340,20 @@ static unsigned long tg_os3_entropy_gather(unsigned char *buf, unsigned long cap
     if (n + sizeof(t) <= cap) { memcpy(buf + n, &t, sizeof(t)); n += sizeof(t); }
 
     for (i = 0; i < 128UL && n + sizeof(unsigned long) <= cap; ++i) {
-        unsigned long tb = tg_os3_timebase();
+        struct EClockVal ev_j;
+        unsigned long tb, tbhi = 0;
         volatile unsigned long spin;
         unsigned long k;
+        if (TimerBase != 0) {
+            ReadEClock(&ev_j);
+            tb   = (unsigned long)ev_j.ev_lo;
+            tbhi = (unsigned long)ev_j.ev_hi;
+        } else {
+            tb = (unsigned long)time(0);
+        }
         memcpy(buf + n, &tb, sizeof(tb));
         n += sizeof(tb);
+        if (n + sizeof(tbhi) <= cap) { memcpy(buf + n, &tbhi, sizeof(tbhi)); n += sizeof(tbhi); }
         spin = tb;
         for (k = 0; k < (tb & 0x3fUL); ++k) {
             spin = (spin * 2654435761UL) + k;
@@ -362,6 +371,14 @@ static unsigned long tg_os3_entropy_gather(unsigned char *buf, unsigned long cap
     if (n + sizeof(task) <= cap) {
         memcpy(buf + n, &task, sizeof(task));
         n += sizeof(task);
+    }
+    {
+        /* AvailMem reflects runtime allocation state; harder to predict than
+           static addresses alone, especially across different boot sessions. */
+        unsigned long chip = (unsigned long)AvailMem(MEMF_CHIP);
+        unsigned long any  = (unsigned long)AvailMem(MEMF_ANY);
+        if (n + sizeof(chip) <= cap) { memcpy(buf + n, &chip, sizeof(chip)); n += sizeof(chip); }
+        if (n + sizeof(any)  <= cap) { memcpy(buf + n, &any,  sizeof(any));  n += sizeof(any);  }
     }
 
     return n;
@@ -531,8 +548,7 @@ static void tg_platform_set_error(char *error_buffer, unsigned long error_buffer
                                   const char *message)
 {
     if (error_buffer != 0 && error_buffer_size > 0) {
-        strncpy(error_buffer, message, error_buffer_size - 1);
-        error_buffer[error_buffer_size - 1] = '\0';
+        snprintf(error_buffer, error_buffer_size, "%s", message);
     }
 }
 
@@ -910,7 +926,7 @@ static int tg_amigaos3_amissl_init(char *error_buffer, unsigned long error_buffe
                                   AmiSSL_ErrNoPtr, (ULONG)&errno,
                                   TAG_DONE);
     if (amissl_error != 0) {
-        sprintf(detail, "could not initialize AmiSSL (%ld)", amissl_error);
+        snprintf(detail, sizeof(detail), "could not initialize AmiSSL (%ld)", amissl_error);
         tg_platform_set_error(error_buffer, error_buffer_size, detail);
         tg_amigaos3_amissl_cleanup();
         return 1;
