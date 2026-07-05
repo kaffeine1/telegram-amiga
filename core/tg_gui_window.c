@@ -837,6 +837,7 @@ static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
     if (tg_gui_session_is_open()) {
         state->message_count = 0;
         tg_gui_window_paint(state, backend);
+        tg_gui_log("open_selection: open_chat begin");
         (void)tg_gui_session_open_chat(state->chats[sel].index, stdout);
     }
     tg_gui_window_paint(state, backend);
@@ -1225,8 +1226,10 @@ static void tg_gui_window_remove_selected(tg_gui_state *state,
     }
     idx = state->chats[sel].index;
     if (idx == 0UL) {
+        tg_gui_log("remove: idx 0, ignored");
         return;
     }
+    tg_gui_log("remove: begin (showing confirm)");
     if (tg_gui_amiga_confirm_remove(win, state->chats[sel].name) != 1) {
         return; /* cancelled */
     }
@@ -2324,6 +2327,7 @@ int tg_gui_run_window(tg_gui_state *state)
                     tg_gui_window_paint(state, &backend);
                 }
             } else if (msg_class == IDCMP_MENUPICK) {
+                tg_gui_log("menu: pick");
                 UWORD mnum;
 
                 mnum = msg_code;

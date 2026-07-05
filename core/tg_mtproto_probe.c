@@ -12173,6 +12173,9 @@ void tg_gui_log(const char *msg)
     f = fopen("tg-gui-debug.log", "a");
 #endif
     if (f != 0) {
+        unsigned long t = (unsigned long)time(0) % 100000UL;
+
+        fprintf(f, "[%05lu] ", t); /* gaps between lines = where time went */
         fputs(msg, f);
         fputc('\n', f);
         fflush(f);
@@ -13345,6 +13348,7 @@ int tg_gui_session_tick(FILE *stream)
         return 0;
     }
     dirty = 0;
+    tg_gui_log("tick: begin");
     quiet = tg_mtproto_open_quiet_stream(stream);
     /* Run the poll on a short leash: a stalled recv must cost a brief hiccup,
        not freeze the window. Restored right after. */
@@ -13488,6 +13492,7 @@ int tg_gui_session_tick(FILE *stream)
         tg_net_set_connect_timeout_seconds(prev_timeout);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log("tick: end");
 
     /* Dispatch every harvested notification to the GUI driver, then clear the
        queue (same consume semantics as the console's print_notify_lines). */
