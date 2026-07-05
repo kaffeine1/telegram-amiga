@@ -1210,6 +1210,31 @@ static int tg_gui_amiga_confirm_delete(struct Window *win)
 /* Confirm + remove the selected chat from the sidebar, persist it, then land on
    a neighbouring chat (or an empty transcript if the list is now empty). Shared
    by the menu item and the Del key. No-op outside chat mode / with no selection. */
+/* Dynamic right-button trap: while the pointer is over a real transcript
+   bubble the window claims the right button (WFLG_RMBTRAP -> MENUDOWN comes
+   in as a normal MOUSEBUTTONS event for OUR context menu); anywhere else the
+   flag is dropped so the right button opens the standard Intuition menu bar.
+   Flag poking under Forbid() is the documented classic idiom and works on
+   every lane. This replaces IDCMP_MENUVERIFY, whose reply handshake blocked
+   input.device system-wide whenever this task was busy in a slow network
+   poll -- the "right-click freezes the whole Amiga" report. */
+static void tg_gui_amiga_set_rmbtrap(struct Window *win, int on)
+{
+    if (win == 0) {
+        return;
+    }
+    if (((win->Flags & WFLG_RMBTRAP) != 0UL) == (on != 0)) {
+        return; /* already in the wanted state */
+    }
+    Forbid();
+    if (on) {
+        win->Flags |= WFLG_RMBTRAP;
+    } else {
+        win->Flags &= ~(ULONG)WFLG_RMBTRAP;
+    }
+    Permit();
+}
+
 static void tg_gui_window_remove_selected(tg_gui_state *state,
                                           struct Window *win,
                                           tg_gui_backend *backend)
@@ -1670,10 +1695,12 @@ int tg_gui_run_window(tg_gui_state *state)
     tags[i++].ti_Data = IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY | IDCMP_RAWKEY |
                         IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW | IDCMP_INTUITICKS |
                         IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_MENUPICK
-                        /* MENUVERIFY: intercept a right-click over a message to
-                           pop our own context menu (and MENUCANCEL the standard
-                           one) instead of the top menu bar. */
-                        | IDCMP_MENUVERIFY
+                        /* NO IDCMP_MENUVERIFY, ever: input.device blocks the
+                           WHOLE SYSTEM until the verify is replied, and this
+                           task can be tens of seconds deep in a network poll
+                           (heavy channels) -- a right-click then froze all of
+                           OS3. The context menu uses a dynamic WFLG_RMBTRAP
+                           instead (see the MOUSEMOVE handler). */
 #if defined(__amigaos4__)
                         /* OS4: the wheel arrives as IDCMP_EXTENDEDMOUSE -- the only
                            form QEMU's emulated mouse emits. Real hardware and the
@@ -1929,7 +1956,6 @@ int tg_gui_run_window(tg_gui_state *state)
 #if defined(__amigaos4__)
             WORD wheel_y = 0;
 #endif
-            int ctx_repaint = 0; /* our context menu opened this MENUVERIFY */
 
             msg_class = msg->Class;
             msg_code = msg->Code;
@@ -1963,38 +1989,6 @@ int tg_gui_run_window(tg_gui_state *state)
                 wheel_y = ((struct IntuiWheelData *)msg->IAddress)->WheelY;
             }
 #endif
-            /* MENUVERIFY (right button pressed): if the pointer is over a real
-               message bubble, pop OUR context menu there and CANCEL the standard
-               "Telegram" menu by setting Code = MENUCANCEL; otherwise leave it so
-               the normal menu opens. Must run BEFORE ReplyMsg -- input.device
-               blocks on the verify until we answer, so keep it minimal. */
-            if (msg_class == IDCMP_MENUVERIFY && msg_code == MENUHOT &&
-                state->mode == TG_GUI_MODE_CHAT) {
-                /* MENUHOT == we are the ACTIVE window and so MAY cancel; an
-                   inactive window gets MENUWAITING and must reply without
-                   cancelling (Intuition would ignore the cancel anyway). */
-                int hx = (int)mouse_x - ctx.origin_x;
-                int hy = (int)mouse_y - ctx.origin_y;
-                int hit = tg_gui_hit_test(state, ctx.inner_w, ctx.inner_h,
-                                          ctx.line_h, hx, hy);
-
-                state->ctx_visible = 0; /* default: let the normal menu open */
-                if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
-                    int mi = TG_GUI_HIT_MESSAGE_BASE - hit;
-
-                    if (mi >= 0 && mi < state->message_count &&
-                        !state->messages[mi].is_system &&
-                        state->messages[mi].id != 0UL) {
-                        state->ctx_visible = 1;
-                        state->ctx_msg = mi;
-                        state->ctx_x = hx;
-                        state->ctx_y = hy;
-                        state->ctx_hover = -1; /* set on first pointer move */
-                        msg->Code = MENUCANCEL;
-                        ctx_repaint = 1;
-                    }
-                }
-            }
             ReplyMsg((struct Message *)msg);
 
             /* Remember the last keystroke so the live poll can defer the
@@ -2320,16 +2314,10 @@ int tg_gui_run_window(tg_gui_state *state)
                 } else if (msg_code == 0x46) { /* Del: remove selected chat (confirm) */
                     tg_gui_window_remove_selected(state, ctx.window, &backend);
                 }
-            } else if (msg_class == IDCMP_MENUVERIFY) {
-                /* Decided pre-ReplyMsg above; repaint only when WE opened our
-                   popup (the standard menu was cancelled, so drawing is safe). */
-                if (ctx_repaint) {
-                    tg_gui_window_paint(state, &backend);
-                }
             } else if (msg_class == IDCMP_MENUPICK) {
-                tg_gui_log("menu: pick");
                 UWORD mnum;
 
+                tg_gui_log("menu: pick");
                 mnum = msg_code;
                 while (mnum != MENUNULL) {
                     struct MenuItem *item;
@@ -2456,7 +2444,28 @@ int tg_gui_run_window(tg_gui_state *state)
 
                 hx = (int)mouse_x - ctx.origin_x;
                 hy = (int)mouse_y - ctx.origin_y;
-                if (msg_code == SELECTDOWN && state->ctx_visible) {
+                if (msg_code == MENUDOWN) {
+                    /* Right press with RMBTRAP held: open OUR context menu on
+                       the bubble under the pointer. (Without the trap the
+                       press never reaches us -- Intuition runs the menu bar.) */
+                    int hit = tg_gui_hit_test(state, ctx.inner_w, ctx.inner_h,
+                                              ctx.line_h, hx, hy);
+
+                    if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
+                        int mi = TG_GUI_HIT_MESSAGE_BASE - hit;
+
+                        if (mi >= 0 && mi < state->message_count &&
+                            !state->messages[mi].is_system &&
+                            state->messages[mi].id != 0UL) {
+                            state->ctx_visible = 1;
+                            state->ctx_msg = mi;
+                            state->ctx_x = hx;
+                            state->ctx_y = hy;
+                            state->ctx_hover = -1;
+                            tg_gui_window_paint(state, &backend);
+                        }
+                    }
+                } else if (msg_code == SELECTDOWN && state->ctx_visible) {
                     /* A left click while the context menu is open: run the item
                        under the pointer, or dismiss when the click is outside. */
                     int it = tg_gui_context_menu_hit(state, ctx.inner_w,
@@ -2748,6 +2757,24 @@ int tg_gui_run_window(tg_gui_state *state)
                     }
                 }
             } else if (msg_class == IDCMP_MOUSEMOVE) {
+                /* Right-button trap follows the pointer: claimed over a real
+                   bubble (our context menu), released elsewhere (menu bar). */
+                if (state->mode == TG_GUI_MODE_CHAT && !state->ctx_visible) {
+                    int hx = (int)mouse_x - ctx.origin_x;
+                    int hy = (int)mouse_y - ctx.origin_y;
+                    int hit = tg_gui_hit_test(state, ctx.inner_w, ctx.inner_h,
+                                              ctx.line_h, hx, hy);
+                    int over_msg = 0;
+
+                    if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
+                        int mi = TG_GUI_HIT_MESSAGE_BASE - hit;
+
+                        over_msg = (mi >= 0 && mi < state->message_count &&
+                                    !state->messages[mi].is_system &&
+                                    state->messages[mi].id != 0UL);
+                    }
+                    tg_gui_amiga_set_rmbtrap(ctx.window, over_msg);
+                }
                 /* Context-menu hover: highlight the item under the pointer so the
                    user sees which of Reply/Edit/Delete the click will pick.
                    REPORTMOUSE floods moves, so repaint ONLY when the highlighted
