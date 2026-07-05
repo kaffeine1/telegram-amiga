@@ -820,14 +820,19 @@ static void tg_gui_window_paint_caret(const tg_gui_state *state,
 static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
                                          tg_gui_backend *backend)
 {
+    /* Hard bounds guard: with a reprojected (possibly emptied) sidebar a
+       stale sel would read garbage from chats[] and open a nonexistent peer
+       -- the silent half of the "remove leaves the app stuck" report. */
+    if (sel < 0 || sel >= state->chat_count) {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
     state->selected_chat = sel;
     state->transcript_scroll = 0; /* a freshly opened chat pins to the newest */
     state->chat_scroll_to_sel = 1; /* scroll the sidebar so the row is visible */
     /* Opening a chat clears its unread badge / flash -- you are now reading it. */
-    if (sel >= 0 && sel < state->chat_count) {
-        state->chats[sel].unread = 0;
-        state->chats[sel].flash = 0;
-    }
+    state->chats[sel].unread = 0;
+    state->chats[sel].flash = 0;
     tg_gui_window_apply_selection(state);
     if (tg_gui_session_is_open()) {
         state->message_count = 0;
@@ -1226,7 +1231,11 @@ static void tg_gui_window_remove_selected(tg_gui_state *state,
         return; /* cancelled */
     }
     if (tg_gui_session_remove_chat(idx, stdout) != 0) {
-        return; /* nothing removed */
+        /* Silent no-ops read as "stuck": say it and repaint instead. */
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not remove this chat");
+        tg_gui_window_paint(state, backend);
+        return;
     }
     /* remove_chat reprojected the sidebar (chat_count updated). Open a neighbour
        so the user is never left on the now-gone chat. */

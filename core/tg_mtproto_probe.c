@@ -12582,10 +12582,11 @@ static void tg_gui_session_reload_chats(void)
     missing = 0;
     count = tg_mtproto_chat_list_parse(tg_gui_session_state.peer_cache_file, 0UL,
                                        rows, TG_CHAT_LIST_MAX, &missing);
-    if (count > 0) {
-        tg_gui_session_state.driver.on_chat_list_changed(
-            tg_gui_session_state.driver.ctx, rows, count);
-    }
+    /* ALWAYS fire, even with count 0: skipping the callback on an emptied
+       list left the window's chat_count stale, and the remove flow then
+       opened a neighbour from rows that no longer existed (stuck UI). */
+    tg_gui_session_state.driver.on_chat_list_changed(
+        tg_gui_session_state.driver.ctx, rows, count);
 }
 
 /* Public: rebuild the sidebar from the cached chat list (peer-cache file, no
