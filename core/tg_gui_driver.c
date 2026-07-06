@@ -90,8 +90,12 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
         if (skip) {
             continue;
         }
-        if (cp < 0x20UL) {
-            dest[o++] = ' ';
+        if (cp == 0x0AUL) {
+            dest[o++] = '\n'; /* keep real line breaks (lists, paragraphs) */
+        } else if (cp == 0x0DUL) {
+            continue; /* drop CR: a CRLF becomes a single '\n' */
+        } else if (cp < 0x20UL) {
+            dest[o++] = ' '; /* other control bytes -> space */
         } else if (cp < 0x100UL) {
             dest[o++] = (char)cp;
         } else {
