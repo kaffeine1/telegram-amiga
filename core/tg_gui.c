@@ -141,19 +141,25 @@ static int tg_gui_wrap(tg_gui_backend *backend, const char *text, int max_width,
     total = (unsigned long)strlen(text);
     i = 0UL;
     line = 0;
-    while (i < total && line < max_lines) {
+    while (line < max_lines) {
         unsigned long line_start;
         unsigned long last_space;
         int have_space;
         unsigned long j;
+        int hard_break;
 
         line_start = i;
         last_space = 0UL;
         have_space = 0;
+        hard_break = 0;
         j = i;
         while (j < total) {
             unsigned long segment;
 
+            if (text[j] == '\n') { /* an explicit line break in the message */
+                hard_break = 1;
+                break;
+            }
             segment = j - line_start + 1UL;
             if (j > line_start &&
                 backend->text_width(backend, text + line_start, segment) >
@@ -165,6 +171,19 @@ static int tg_gui_wrap(tg_gui_backend *backend, const char *text, int max_width,
                 have_space = 1;
             }
             ++j;
+        }
+        if (hard_break) {
+            /* Emit up to (not including) the newline, then resume AFTER it --
+               real newlines and bullet lists keep their shape, and a blank
+               line between paragraphs stays a blank line. */
+            starts[line] = line_start;
+            lengths[line] = j - line_start;
+            ++line;
+            i = j + 1UL; /* skip the '\n' */
+            if (i >= total) {
+                break;
+            }
+            continue;
         }
         if (j >= total) {
             starts[line] = line_start;
