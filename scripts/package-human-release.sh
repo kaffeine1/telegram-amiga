@@ -455,8 +455,10 @@ Bug reports and wishes are very welcome -- testers on real hardware
 (A1200s, A4000s, Pegasos, Sam, FPGA machines) are what moves this
 project forward.
 
-  Source + issues:    $REPO_URL
-  Development diary:  $DIARY_URL
+  Source + issues:
+    $REPO_URL
+  Development diary:
+    $DIARY_URL
 EOF
 }
 
