@@ -546,7 +546,7 @@ package_one() {
         amiwork="$AMINET_ROOT/$AMINET_DRAWER"
         lhafile="$AMINET_ROOT/$AMINET_BASE.$archtag.lha"
         rm -rf "$amiwork"; mkdir -p "$amiwork"
-        cp "$dest"/* "$amiwork"/
+        cp -R "$dest"/* "$amiwork"/ # -R: the package now contains data/
         rm -f "$lhafile"
         ( cd "$AMINET_ROOT" && "$LHA_BIN" a "$AMINET_BASE.$archtag.lha" "$AMINET_DRAWER" >/dev/null )
         rm -rf "$amiwork"
