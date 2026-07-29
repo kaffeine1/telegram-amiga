@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 CC ?= ppc-amigaos-gcc
-CFLAGS ?= -Wall -Wextra -O2 -Iinclude
+CFLAGS ?= -Wall -Wextra -O2 -Iinclude -gstabs
 SDK_INCLUDE ?= SDK:include/include_h
 SDK_NETINCLUDE ?= SDK:include/netinclude
 TARGET ?= build/TelegramAmiga
@@ -11,7 +11,7 @@ OBJ_DIR ?= $(TARGET).obj
 SRC := src/main.c core/tg_app.c core/tg_bot.c core/tg_config.c core/tg_console.c core/tg_console_ui.c core/tg_console_tui.c core/tg_gui.c core/tg_gui_window.c core/tg_chat_engine.c core/tg_gui_driver.c core/tg_client_state.c core/tg_offset_state.c core/tg_text_client.c core/tg_file.c core/tg_http.c core/tg_https.c core/tg_json.c core/tg_telegram.c core/tg_log.c core/tg_mtproto.c core/tg_mtproto_auth.c core/tg_mtproto_bigint.c core/tg_mtproto_dc.c core/tg_mtproto_envelope.c core/tg_mtproto_encrypted.c core/tg_mtproto_login.c core/tg_mtproto_message_id.c core/tg_mtproto_probe.c core/tg_mtproto_rsa.c core/tg_mtproto_crypto.c core/tg_mtproto_session.c core/tg_mtproto_srp.c core/tg_mtproto_tl.c core/tg_mtproto_transport.c core/tg_net.c core/tg_tls.c platforms/amigaos4/tg_platform_amigaos4.c
 OBJ := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRC))
 HEADERS := include/tg_app.h include/tg_bot.h include/tg_config.h include/tg_console.h include/tg_console_ui.h include/tg_console_tui.h include/tg_client_state.h include/tg_offset_state.h include/tg_text_client.h include/tg_file.h include/tg_http.h include/tg_https.h include/tg_json.h include/tg_telegram.h include/tg_log.h include/tg_mtproto.h include/tg_mtproto_auth.h include/tg_mtproto_bigint.h include/tg_mtproto_dc.h include/tg_mtproto_envelope.h include/tg_mtproto_encrypted.h include/tg_mtproto_login.h include/tg_mtproto_message_id.h include/tg_mtproto_probe.h include/tg_mtproto_rsa.h include/tg_mtproto_crypto.h include/tg_mtproto_session.h include/tg_mtproto_srp.h include/tg_mtproto_tl.h include/tg_mtproto_transport.h include/tg_net.h include/tg_platform.h include/tg_tls.h include/tg_gui.h
-ENABLE_AMISSL ?= 0
+ENABLE_AMISSL ?= 1
 ENABLE_GZIP ?= 0
 ENABLE_GZIP_PUFF ?= 1
 AMISSL_LIB ?= amisslstubs
