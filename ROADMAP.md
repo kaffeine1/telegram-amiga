@@ -478,6 +478,45 @@ the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
 
+## Planned: new-message notification without stealing focus
+
+A user asked for the screen to come to the front when a message arrives,
+optional, for the times the client sits in the background while they do
+something else. The need is real; the mechanism they suggested is not
+the one to build. On the Amiga, pulling a screen or a window to the
+front while someone is typing elsewhere is a system-wide interruption,
+and it is exactly what the desktop client avoids: it signals, it never
+grabs. So the plan is a notification, and it has to work in both states
+the client can be in.
+
+Window open, other things in front. The desktop client changes its
+title and taskbar badge; the Amiga equivalent is the window title. When
+a message lands in a chat other than the open one, the title becomes
+"Telegram Amiga (3 new)" through SetWindowTitles, which repaints only
+the title bar and stays visible on the screen's depth-arranged windows,
+and it reverts when the chat is opened. Optional, off by default: one
+DisplayBeep on the first unread of a run, which on Amiga is the polite
+"look at me" (a screen flash, and a sound where the user configured
+one), never a raise. Both are two lines each on top of the notification
+collector the sidebar flash already uses.
+
+Parked on the AppIcon. Today the iconified wait sleeps in Wait() on the
+AppIcon's port alone, so a parked client neither reads the network nor
+could ever notice a message. That changes to a Wait() on the port plus
+the session's own network signal with a timer tick, so the update poll
+keeps running while parked, and unread arrivals redraw the AppIcon's
+label with the count, "TelegramAmiga (3)", where AddAppIcon allows a
+text change or through a remove and re-add otherwise. Double-clicking
+the icon, as now, brings the window back on the chat with the news.
+
+Kept out on purpose: raising the screen or the window, and any hover
+popup or ARexx or commodities integration for now. If people ask for a
+hook, a simple one exists later, running a user command such as a sound
+player on the first unread; it is a preference away, not a design.
+
+Settings entry: "Notify: Title | Title + beep | Off". Fits the 0.0.9x
+polish line and touches nothing in the protocol.
+
 ## Planned: two MorphOS popup glitches
 
 Both reported from the field on 0.0.9 and both about the right-click popup
