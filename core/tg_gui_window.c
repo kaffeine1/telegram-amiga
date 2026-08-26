@@ -3126,6 +3126,26 @@ static int tg_gui_photo_decode_start(tg_gui_amiga_ctx *ctx)
     int preview_ready;
     if (tg_gui_photo_request_count <= 0 ||
         tg_gui_photo_decode_pipeline.owner != 0) {
+        /* Field diagnosis (Vampire 0.0.91): fetches completed in a loop while
+           decode never started, and this silent return was the only way out.
+           Name the blocking condition, once per change, so one log says
+           whether the gate is held (and by which scope) or the queue is
+           simply empty. */
+        static int last_reason = -1;
+        int reason = (tg_gui_photo_request_count <= 0) ? 0 : 1;
+
+        if (reason != last_reason) {
+            last_reason = reason;
+            if (reason == 0) {
+                tg_gui_photo_diag("photo: decode idle (no request queued)");
+            } else {
+                char line[72];
+
+                sprintf(line, "photo: decode blocked (gate held, scope %d)",
+                        tg_gui_photo_decode_pipeline.scope);
+                tg_gui_photo_diag(line);
+            }
+        }
         return 0;
     }
     request = tg_gui_photo_requests[0];
