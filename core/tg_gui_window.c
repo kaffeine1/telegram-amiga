@@ -5535,6 +5535,10 @@ typedef struct tg_gui_sendphoto_ui {
     int btn_y;                 /* buttons row top */
     int btn_x[3], btn_w[3];    /* Photo / File / Cancel boxes */
     int cursor_on;
+    int prev_h;                /* preview strip height: the scaled image's own
+                                  height, so the picture fills its space; the
+                                  fixed fallback height only when there is no
+                                  image to show */
     int tick_count;            /* caret cadence: toggle every 5 ticks, like
                                   the composer and the search box */
     /* Preview fallback palette: a 4x4x4 colour cube obtained lazily against
@@ -5545,6 +5549,22 @@ typedef struct tg_gui_sendphoto_ui {
     struct ColorMap *cmap;
     LONG pen_map[64];
 } tg_gui_sendphoto_ui;
+
+/* One dithered cube index for pixel x of a row: each channel gets the
+   Bayer offset for its screen position, then quantizes to four levels. */
+static int tg_gui_sendphoto_quant(const unsigned char *row, int x, int y,
+                                  const unsigned char bay[4][4])
+{
+    int t = ((int)bay[y & 3][x & 3] - 7) * 5;
+    int r = (int)row[(x * 3)] + t;
+    int g = (int)row[(x * 3) + 1] + t;
+    int b = (int)row[(x * 3) + 2] + t;
+
+    if (r < 0) { r = 0; } else if (r > 255) { r = 255; }
+    if (g < 0) { g = 0; } else if (g > 255) { g = 255; }
+    if (b < 0) { b = 0; } else if (b > 255) { b = 255; }
+    return ((r >> 6) << 4) | ((g >> 6) << 2) | (b >> 6);
+}
 
 /* Replay the decoded preview through the quantized pen cube, run-length per
    row, exactly like the avatar replay but with a private palette that the
@@ -5560,16 +5580,19 @@ static void tg_gui_sendphoto_rgb_pens(tg_gui_sendphoto_ui *ui, int px, int py)
         int x = 0;
 
         while (x < ui->pw) {
-            int idx = ((row[(x * 3)] >> 6) << 4) |
-                      ((row[(x * 3) + 1] >> 6) << 2) |
-                      (row[(x * 3) + 2] >> 6);
+            /* Ordered 4x4 dither over the 4-level cube, the same idea the
+               inline-photo pen path uses: the threshold trades the 64-colour
+               banding for grain, which reads as a photograph. */
+            static const unsigned char bay[4][4] = {
+                { 0, 8, 2, 10 }, { 12, 4, 14, 6 },
+                { 3, 11, 1, 9 }, { 15, 7, 13, 5 }
+            };
+            int idx = tg_gui_sendphoto_quant(row, x, y, bay);
             int run = x + 1;
             LONG pen;
 
             while (run < ui->pw &&
-                   ((((row[(run * 3)] >> 6) << 4) |
-                     ((row[(run * 3) + 1] >> 6) << 2) |
-                     (row[(run * 3) + 2] >> 6)) == idx)) {
+                   tg_gui_sendphoto_quant(row, run, y, bay) == idx) {
                 ++run;
             }
             pen = ui->pen_map[idx];
@@ -5659,7 +5682,7 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
 {
     struct RastPort *rp = ui->win->RPort;
     int lh = ui->main_ctx->line_h;
-    int prev_h = TG_GUI_SENDPHOTO_PREVIEW_H;
+    int prev_h = ui->prev_h;
     static const char *labels[3];
     int i;
 
@@ -5667,8 +5690,11 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     labels[1] = "File";
     labels[2] = "Cancel";
     tg_gui_sendphoto_box(ui, TG_GUI_PEN_WINDOW, 0, 0, ui->iw, ui->ih);
-    /* Preview area (SURFACE ground), image centred when we have pixels. */
-    tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8, ui->iw - 16, prev_h);
+    if (ui->rgb == 0) {
+        /* No pixels to show: the SURFACE strip carries the info text. */
+        tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8, ui->iw - 16,
+                             prev_h);
+    }
     if (ui->rgb != 0) {
         int px = 8 + ((ui->iw - 16 - ui->pw) / 2);
         int py = 8 + ((prev_h - ui->ph) / 2);
@@ -5789,15 +5815,10 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     ui.name = name;
     lh = main_ctx->line_h;
     screen = parent->WScreen;
-    ui.iw = 340;
-    if (screen != 0 && ui.iw > (int)screen->Width - 60) {
-        ui.iw = (int)screen->Width - 60;
-    }
-    ui.cap_y = 8 + TG_GUI_SENDPHOTO_PREVIEW_H + 6 + lh + 2;
-    ui.btn_y = ui.cap_y + lh + 6 + 10;
-    ui.ih = ui.btn_y + lh + 8 + 8;
-    /* Load + decode the preview: bounded read, SOF dimensions, and pixels
-       only where the photo pipeline's own RGB check passes on this window. */
+    /* Load the file and decode the preview BEFORE the window opens: the
+       dialog then sizes itself around the scaled image, so the picture
+       fills its space instead of floating in a fixed strip (MorphOS
+       validation note). */
     {
         FILE *f = fopen(path, "rb");
 
@@ -5822,6 +5843,60 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     if (jlen != 0UL) {
         (void)tg_gui_amiga_jpeg_dims(jpeg, jlen, &ui.jw, &ui.jh);
     }
+    if (jlen != 0UL && ui.jw != 0UL) {
+        /* Largest fit of the source aspect inside what the screen affords:
+           the image then IS the preview area. */
+        unsigned long bw = 320UL;
+        unsigned long bh = 240UL;
+        unsigned long pw = ui.jw;
+        unsigned long ph = ui.jh;
+
+        if (screen != 0) {
+            if (bw > (unsigned long)screen->Width - 80UL) {
+                bw = (unsigned long)screen->Width - 80UL;
+            }
+            if (bh > (unsigned long)(screen->Height / 2)) {
+                bh = (unsigned long)(screen->Height / 2);
+            }
+        }
+        if (bh < 96UL) {
+            bh = 96UL;
+        }
+        if (pw > bw) {
+            ph = (ph * bw) / pw;
+            pw = bw;
+        }
+        if (ph > bh) {
+            pw = (pw * bh) / ph;
+            ph = bh;
+        }
+        if (pw >= 8UL && ph >= 8UL) {
+            ui.rgb = (unsigned char *)malloc(pw * ph * 3UL);
+            if (ui.rgb != 0 &&
+                tg_avatar_decode_jpeg(jpeg, jlen, ui.rgb, (int)pw,
+                                      (int)ph) != 0) {
+                free(ui.rgb);
+                ui.rgb = 0;
+            }
+            if (ui.rgb != 0) {
+                ui.pw = (int)pw;
+                ui.ph = (int)ph;
+            }
+        }
+    }
+    if (jpeg != 0) {
+        free(jpeg);
+        jpeg = 0;
+    }
+    /* The window wraps the image; without one it wraps the info strip. */
+    ui.prev_h = (ui.rgb != 0) ? ui.ph : TG_GUI_SENDPHOTO_PREVIEW_H;
+    ui.iw = (ui.rgb != 0 && ui.pw + 16 > 300) ? ui.pw + 16 : 300;
+    if (screen != 0 && ui.iw > (int)screen->Width - 60) {
+        ui.iw = (int)screen->Width - 60;
+    }
+    ui.cap_y = 8 + ui.prev_h + 6 + lh + 2;
+    ui.btn_y = ui.cap_y + lh + 6 + 10;
+    ui.ih = ui.btn_y + lh + 8 + 8;
     i = 0;
     tags[i].ti_Tag = WA_Title;
     tags[i++].ti_Data = TG_GUI_TAG("Send photo");
@@ -5892,40 +5967,6 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
         }
         MoveWindow(ui.win, (WORD)(nl - (int)ui.win->LeftEdge),
                    (WORD)(nt - (int)ui.win->TopEdge));
-    }
-    /* Decode whenever the JPEG parsed: the paint picks the RGB or the pen
-       path per screen. Fit the source aspect inside the preview box. */
-    if (jlen != 0UL && ui.jw != 0UL) {
-        unsigned long bw = (unsigned long)(ui.iw - 20);
-        unsigned long bh = (unsigned long)(TG_GUI_SENDPHOTO_PREVIEW_H - 8);
-        unsigned long pw = ui.jw;
-        unsigned long ph = ui.jh;
-
-        if (pw > bw) {
-            ph = (ph * bw) / pw;
-            pw = bw;
-        }
-        if (ph > bh) {
-            pw = (pw * bh) / ph;
-            ph = bh;
-        }
-        if (pw >= 8UL && ph >= 8UL) {
-            ui.rgb = (unsigned char *)malloc(pw * ph * 3UL);
-            if (ui.rgb != 0 &&
-                tg_avatar_decode_jpeg(jpeg, jlen, ui.rgb, (int)pw,
-                                      (int)ph) != 0) {
-                free(ui.rgb);
-                ui.rgb = 0;
-            }
-            if (ui.rgb != 0) {
-                ui.pw = (int)pw;
-                ui.ph = (int)ph;
-            }
-        }
-    }
-    if (jpeg != 0) {
-        free(jpeg);
-        jpeg = 0;
     }
     tg_gui_sendphoto_paint(&ui);
     while (!done) {
