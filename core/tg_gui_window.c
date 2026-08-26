@@ -5535,7 +5535,69 @@ typedef struct tg_gui_sendphoto_ui {
     int btn_y;                 /* buttons row top */
     int btn_x[3], btn_w[3];    /* Photo / File / Cancel boxes */
     int cursor_on;
+    int tick_count;            /* caret cadence: toggle every 5 ticks, like
+                                  the composer and the search box */
+    /* Preview fallback palette: a 4x4x4 colour cube obtained lazily against
+       the dialog's screen and released at close. This is the path MorphOS
+       always takes (its RGB888 window writes came out grey in the field,
+       the same lesson the 0.0.9 photo pipeline learned) and the path any
+       screen without a validated RGB target takes. -2 untried, -1 failed. */
+    struct ColorMap *cmap;
+    LONG pen_map[64];
 } tg_gui_sendphoto_ui;
+
+/* Replay the decoded preview through the quantized pen cube, run-length per
+   row, exactly like the avatar replay but with a private palette that the
+   dialog releases on close. */
+static void tg_gui_sendphoto_rgb_pens(tg_gui_sendphoto_ui *ui, int px, int py)
+{
+    struct RastPort *rp = ui->win->RPort;
+    int y;
+
+    for (y = 0; y < ui->ph; ++y) {
+        const unsigned char *row =
+            ui->rgb + ((unsigned long)y * (unsigned long)ui->pw * 3UL);
+        int x = 0;
+
+        while (x < ui->pw) {
+            int idx = ((row[(x * 3)] >> 6) << 4) |
+                      ((row[(x * 3) + 1] >> 6) << 2) |
+                      (row[(x * 3) + 2] >> 6);
+            int run = x + 1;
+            LONG pen;
+
+            while (run < ui->pw &&
+                   ((((row[(run * 3)] >> 6) << 4) |
+                     ((row[(run * 3) + 1] >> 6) << 2) |
+                     (row[(run * 3) + 2] >> 6)) == idx)) {
+                ++run;
+            }
+            pen = ui->pen_map[idx];
+            if (pen == -2L) {
+                pen = (ui->cmap != 0)
+                          ? ObtainBestPenA(
+                                ui->cmap,
+                                tg_gui_amiga_rgb32(
+                                    (unsigned char)(((idx >> 4) & 3) * 85)),
+                                tg_gui_amiga_rgb32(
+                                    (unsigned char)(((idx >> 2) & 3) * 85)),
+                                tg_gui_amiga_rgb32(
+                                    (unsigned char)((idx & 3) * 85)),
+                                0)
+                          : -1L;
+                ui->pen_map[idx] = pen;
+            }
+            if (pen != -1L) {
+                SetAPen(rp, pen);
+                RectFill(rp, ui->win->BorderLeft + px + x,
+                         ui->win->BorderTop + py + y,
+                         ui->win->BorderLeft + px + run - 1,
+                         ui->win->BorderTop + py + y);
+            }
+            x = run;
+        }
+    }
+}
 
 static void tg_gui_sendphoto_text(tg_gui_sendphoto_ui *ui, int pen, int x,
                                   int baseline, const char *text,
@@ -5608,16 +5670,28 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     /* Preview area (SURFACE ground), image centred when we have pixels. */
     tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8, ui->iw - 16, prev_h);
     if (ui->rgb != 0) {
-#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
         int px = 8 + ((ui->iw - 16 - ui->pw) / 2);
         int py = 8 + ((prev_h - ui->ph) / 2);
+        int drawn = 0;
 
-        (void)tg_gui_cgx_write_pixel_array(
-            ui->rgb, 0, 0, (UWORD)(ui->pw * 3), rp,
-            (UWORD)(ui->win->BorderLeft + px),
-            (UWORD)(ui->win->BorderTop + py), (UWORD)ui->pw, (UWORD)ui->ph,
-            RECTFMT_RGB);
+#if defined(TG_GUI_HAVE_CYBERGRAPHICS) && !defined(__MORPHOS__) && \
+    !defined(__MORPHOS)
+        /* Direct RGB888 where the photo pipeline's own check passes on this
+           window. MorphOS is excluded on purpose: its field reports showed
+           grey RGB writes, so it goes through the pen cube below. */
+        if (tg_gui_amiga_open_cybergraphics() &&
+            tg_gui_photo_cgx_target_possible(rp)) {
+            (void)tg_gui_cgx_write_pixel_array(
+                ui->rgb, 0, 0, (UWORD)(ui->pw * 3), rp,
+                (UWORD)(ui->win->BorderLeft + px),
+                (UWORD)(ui->win->BorderTop + py), (UWORD)ui->pw,
+                (UWORD)ui->ph, RECTFMT_RGB);
+            drawn = 1;
+        }
 #endif
+        if (!drawn) {
+            tg_gui_sendphoto_rgb_pens(ui, px, py);
+        }
     } else {
         char info[96];
         unsigned long nlen = (unsigned long)strlen(ui->name);
@@ -5789,13 +5863,39 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
         SetFont(ui.win->RPort, main_ctx->rport->Font);
     }
-    /* Decode after the window exists: the RGB target check needs its
-       RastPort. Fit the source aspect inside the preview box. */
-    if (jlen != 0UL && ui.jw != 0UL && tg_gui_amiga_open_cybergraphics()
-#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
-        && tg_gui_photo_cgx_target_possible(ui.win->RPort)
-#endif
-        ) {
+    ui.cmap = (ui.win->WScreen != 0) ? ui.win->WScreen->ViewPort.ColorMap : 0;
+    for (i = 0; i < 64; ++i) {
+        ui.pen_map[i] = -2L;
+    }
+    /* Centre the dialog over the main window now that both sizes are real;
+       clamped to the screen so a corner-parked window cannot push it off. */
+    {
+        struct Screen *scr = ui.win->WScreen;
+        int nl = (int)parent->LeftEdge +
+                 (((int)parent->Width - (int)ui.win->Width) / 2);
+        int nt = (int)parent->TopEdge +
+                 (((int)parent->Height - (int)ui.win->Height) / 2);
+
+        if (scr != 0) {
+            if (nl + (int)ui.win->Width > (int)scr->Width) {
+                nl = (int)scr->Width - (int)ui.win->Width;
+            }
+            if (nt + (int)ui.win->Height > (int)scr->Height) {
+                nt = (int)scr->Height - (int)ui.win->Height;
+            }
+        }
+        if (nl < 0) {
+            nl = 0;
+        }
+        if (nt < 0) {
+            nt = 0;
+        }
+        MoveWindow(ui.win, (WORD)(nl - (int)ui.win->LeftEdge),
+                   (WORD)(nt - (int)ui.win->TopEdge));
+    }
+    /* Decode whenever the JPEG parsed: the paint picks the RGB or the pen
+       path per screen. Fit the source aspect inside the preview box. */
+    if (jlen != 0UL && ui.jw != 0UL) {
         unsigned long bw = (unsigned long)(ui.iw - 20);
         unsigned long bh = (unsigned long)(TG_GUI_SENDPHOTO_PREVIEW_H - 8);
         unsigned long pw = ui.jw;
@@ -5847,8 +5947,13 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
                 tg_gui_sendphoto_paint(&ui);
                 EndRefresh(ui.win, TRUE);
             } else if (cls == IDCMP_INTUITICKS) {
-                ui.cursor_on = !ui.cursor_on;
-                tg_gui_sendphoto_caption_row(&ui);
+                /* Same cadence as the composer and the search box: the
+                   ticks come ~10 a second, the caret flips every fifth. */
+                if (++ui.tick_count >= 5) {
+                    ui.tick_count = 0;
+                    ui.cursor_on = !ui.cursor_on;
+                    tg_gui_sendphoto_caption_row(&ui);
+                }
             } else if (cls == IDCMP_VANILLAKEY) {
                 if (code == 13U) {
                     result = 1;
@@ -5888,6 +5993,13 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     }
     if (ui.rgb != 0) {
         free(ui.rgb);
+    }
+    if (ui.cmap != 0) {
+        for (i = 0; i < 64; ++i) {
+            if (ui.pen_map[i] >= 0L) {
+                ReleasePen(ui.cmap, ui.pen_map[i]);
+            }
+        }
     }
     CloseWindow(ui.win);
     return result;
