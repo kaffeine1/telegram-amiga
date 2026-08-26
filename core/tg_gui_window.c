@@ -821,14 +821,25 @@ static void tg_gui_amiga_pill_rows(tg_gui_amiga_ctx *ctx, LONG rawpen, int x,
         return;
     }
     SetAPen(ctx->rport, rawpen);
-    for (row = 0; row < h; ++row) {
+    /* Bands, not rows: consecutive rows share an inset (the body is one tall
+       band), so a disc costs a handful of RectFills instead of one per row.
+       On a 68k every primitive is real event-loop time, and a paint heavy
+       enough to keep the port busy starves the photo pipeline. */
+    row = 0;
+    while (row < h) {
         int inset = tg_gui_amiga_disc_inset(row, h);
         int rw = w - (2 * inset);
+        int last = row;
 
+        while (last + 1 < h &&
+               tg_gui_amiga_disc_inset(last + 1, h) == inset) {
+            ++last;
+        }
         if (rw > 0) {
             RectFill(ctx->rport, x + inset, y + row, x + inset + rw - 1,
-                     y + row);
+                     y + last);
         }
+        row = last + 1;
     }
 }
 
@@ -974,7 +985,12 @@ static int tg_gui_av_rich = 0;        /* seed: cube+greys vs greys only */
 #define TG_GUI_PHOTO_WORK_INITIAL 12UL
 #define TG_GUI_PHOTO_WORK_MAX 256UL
 #define TG_GUI_PHOTO_MAX_DEFER_TICKS 6
-#define TG_GUI_PHOTO_FORCE_QUEUED_EVENTS 0
+/* A saturated event loop must not starve the photo pipeline for good: after
+   MAX_DEFER_TICKS deferred turns the background turn is forced even with
+   window events queued. Without this a paint heavy enough to keep a tick
+   always pending stopped inline photos dead on 68k (Vampire field log:
+   requests offered, nothing ever fetched or decoded). */
+#define TG_GUI_PHOTO_FORCE_QUEUED_EVENTS 1
 #define TG_GUI_PHOTO_VIEWER_JPEG_MAX (768UL * 1024UL)
 #define TG_GUI_PHOTO_VIEWER_CANONICAL_CAP 512
 #define TG_GUI_PHOTO_VIEWER_DECODE_CAP 768
