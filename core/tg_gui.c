@@ -778,6 +778,10 @@ static void tg_gui_fill_pill(tg_gui_backend *backend, int pen, tg_gui_rect rect)
     if (rect.w <= 0 || rect.h <= 0) {
         return;
     }
+    if (backend->fill_pill != 0) { /* backend smooths the edge where it can */
+        backend->fill_pill(backend, pen, rect);
+        return;
+    }
     if (rect.w < rect.h) {
         backend->fill_rect(backend, pen, rect);
         return;
@@ -1243,6 +1247,13 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
         }
 
         avatar = (2 * lh);
+        /* The background this row painted under its round chrome: the edge
+           smoothing must blend toward it, or the ring reads as a halo. */
+        backend->round_bg =
+            (i == state->selected_chat || i == state->nav_chat ||
+             (state->drag_active && i == state->drag_src))
+                ? TG_GUI_PEN_SELECT
+                : TG_GUI_PEN_WINDOW;
         /* Real avatar first (decoded stripped thumb, when the backend and the
            store have one); the classic colored-initials square is the fallback
            and the only path on backends without image support. */
@@ -2464,6 +2475,7 @@ static void tg_gui_paint_jump_button(tg_gui_backend *backend, int x, int y,
     int ty = y + (h / 2) - (arm / 2);
     int r;
 
+    backend->round_bg = TG_GUI_PEN_WINDOW;
     tg_gui_fill_pill(backend, TG_GUI_PEN_ACCENT, tg_gui_make_rect(x, y, w, h));
     for (r = 0; r <= arm; ++r) {
         int half = arm - r;      /* wide at top, narrowing to a point downward */
@@ -2548,6 +2560,7 @@ static void tg_gui_paint_main(const tg_gui_state *state,
             const tg_gui_chat *open_chat = &state->chats[state->selected_chat];
             int av = (2 * lh) - 2;
 
+            backend->round_bg = TG_GUI_PEN_WINDOW;
             if (backend->avatar_image == 0 ||
                 !backend->avatar_image(backend, open_chat->peer_id_hi,
                                        open_chat->peer_id_lo,
@@ -3850,6 +3863,8 @@ int tg_gui_self_test(void)
     backend.fill_rect = tg_gui_rec_fill;
     backend.avatar_image = 0;
     backend.photo_image = tg_gui_rec_photo;
+    backend.fill_pill = 0; /* recorder: exercise the renderer's row fallback */
+    backend.round_bg = TG_GUI_PEN_WINDOW;
     /* The oldest slot is visible and the next one is active: neither may be
        evicted. Once every resident slot is protected, the cache must wait. */
     {

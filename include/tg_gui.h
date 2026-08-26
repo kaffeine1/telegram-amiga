@@ -100,6 +100,14 @@ struct tg_gui_backend {
                        unsigned long photo_id_lo,
                        unsigned long source_w, unsigned long source_h,
                        tg_gui_rect rect, tg_gui_rect clip);
+    /* OPTIONAL: pill/disc fill (cap radius = h/2) drawn by the backend so it
+       can smooth the edge where the screen affords exact colours. NULL makes
+       the renderer fall back to its own one-run-per-row fill (host
+       recorders). round_bg names the pen role painted UNDER the round shape;
+       the renderer sets it before every round-chrome call, avatars included,
+       so the smoothed edge blends toward the right background. */
+    void (*fill_pill)(tg_gui_backend *backend, int pen, tg_gui_rect rect);
+    int round_bg;
 };
 
 /* Sidebar capacity. Raised from 32 so a congested account shows far more of its

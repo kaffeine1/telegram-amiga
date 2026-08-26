@@ -18177,7 +18177,8 @@ int tg_gui_session_transfer_start_download(unsigned long msg_id, FILE *stream)
     return 0;
 }
 
-int tg_gui_session_transfer_start_upload(const char *path, FILE *stream)
+int tg_gui_session_transfer_start_upload(const char *path,
+                                         const char *caption, FILE *stream)
 {
     tg_mtproto_file_ctx fc;
     int rc;
@@ -18186,7 +18187,7 @@ int tg_gui_session_transfer_start_upload(const char *path, FILE *stream)
         return 1;
     }
     tg_gui_session_file_ctx(&fc);
-    rc = tg_mtproto_upload_begin(&fc, 0, path, stream, 0);
+    rc = tg_mtproto_upload_begin(&fc, caption, path, stream, 0);
     if (rc != 0) {
         return rc;
     }

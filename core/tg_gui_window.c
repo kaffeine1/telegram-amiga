@@ -745,13 +745,144 @@ static int tg_gui_amiga_disc_inset(int y, int h)
     return (h - dx) / 2;
 }
 
+/* Edge smoothing for the round chrome (0.0.91 field feedback: the circles
+   looked stair-stepped). A one-pixel ring in the colour halfway between the
+   shape and its background is exactly the anti-aliasing a hard-edged display
+   can afford: the ring follows the true silhouette, the solid shape sits one
+   pixel inside it. Blend pens are obtained lazily against the screen's
+   colormap and cached; on paletted screens (no exact pens, tight budget) the
+   cache stays empty and every shape keeps its hard edge, which is also what
+   those screens' dithered look expects. */
+#define TG_GUI_BLEND_PENS 24
+static struct {
+    ULONG rgb;
+    LONG pen;
+} tg_gui_blend_pens[TG_GUI_BLEND_PENS];
+static int tg_gui_blend_count;
+/* Defined with the avatar pen pool below; the blends share its colormap and
+   its truecolor gate. */
+static struct ColorMap *tg_gui_av_cmap;
+static int tg_gui_av_rich;
+static ULONG tg_gui_amiga_rgb32(unsigned char component);
+
+static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
+{
+    ULONG key;
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+    int i;
+    LONG p;
+
+    if (!tg_gui_av_rich || tg_gui_av_cmap == 0 || fg == 0 || bg == 0) {
+        return -1;
+    }
+    r = (unsigned char)(((int)fg->r + (int)bg->r) / 2);
+    g = (unsigned char)(((int)fg->g + (int)bg->g) / 2);
+    b = (unsigned char)(((int)fg->b + (int)bg->b) / 2);
+    key = ((ULONG)r << 16) | ((ULONG)g << 8) | (ULONG)b;
+    for (i = 0; i < tg_gui_blend_count; ++i) {
+        if (tg_gui_blend_pens[i].rgb == key) {
+            return tg_gui_blend_pens[i].pen;
+        }
+    }
+    if (tg_gui_blend_count >= TG_GUI_BLEND_PENS) {
+        return -1;
+    }
+    p = ObtainBestPenA(tg_gui_av_cmap, tg_gui_amiga_rgb32(r),
+                       tg_gui_amiga_rgb32(g), tg_gui_amiga_rgb32(b), 0);
+    if (p == -1) {
+        return -1;
+    }
+    tg_gui_blend_pens[tg_gui_blend_count].rgb = key;
+    tg_gui_blend_pens[tg_gui_blend_count].pen = p;
+    ++tg_gui_blend_count;
+    return p;
+}
+
+static void tg_gui_amiga_blend_release(struct ColorMap *cmap)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_blend_count; ++i) {
+        ReleasePen(cmap, tg_gui_blend_pens[i].pen);
+    }
+    tg_gui_blend_count = 0;
+}
+
+/* One RectFill per row, clipped to the pill silhouette (cap radius = h/2;
+   with w == h it is a disc). Shared by the smoothed and the plain paths. */
+static void tg_gui_amiga_pill_rows(tg_gui_amiga_ctx *ctx, LONG rawpen, int x,
+                                   int y, int w, int h)
+{
+    int row;
+
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    SetAPen(ctx->rport, rawpen);
+    for (row = 0; row < h; ++row) {
+        int inset = tg_gui_amiga_disc_inset(row, h);
+        int rw = w - (2 * inset);
+
+        if (rw > 0) {
+            RectFill(ctx->rport, x + inset, y + row, x + inset + rw - 1,
+                     y + row);
+        }
+    }
+}
+
+/* Backend pill fill: the blend ring under a one-pixel-inset solid shape when
+   the screen affords exact pens, plain hard rows otherwise. round_bg (set by
+   the renderer before the call) names what the ring blends toward. */
+static void tg_gui_amiga_fill_pill(tg_gui_backend *backend, int pen,
+                                   tg_gui_rect rect)
+{
+    tg_gui_amiga_ctx *ctx;
+    int x0;
+    int y0;
+    int bg;
+    LONG blend;
+
+    ctx = (tg_gui_amiga_ctx *)backend->context;
+    if (rect.w <= 0 || rect.h <= 0) {
+        return;
+    }
+    if (pen < 0 || pen >= TG_GUI_PEN_COUNT) {
+        pen = 0;
+    }
+    if (rect.w < rect.h) { /* degenerate: the renderer's plain-box rule */
+        tg_gui_amiga_fill_rect(backend, pen, rect);
+        return;
+    }
+    x0 = ctx->origin_x + rect.x;
+    y0 = ctx->origin_y + rect.y;
+    tg_gui_prim_log("pill", x0, y0, rect.w, rect.h);
+    bg = backend->round_bg;
+    if (bg < 0 || bg >= TG_GUI_PEN_COUNT) {
+        bg = TG_GUI_PEN_WINDOW;
+    }
+    blend = (rect.h >= 6)
+                ? tg_gui_amiga_blend_pen(&tg_gui_dark_pens[pen],
+                                         &tg_gui_dark_pens[bg])
+                : -1;
+    if (blend != -1) {
+        tg_gui_amiga_pill_rows(ctx, blend, x0, y0, rect.w, rect.h);
+        tg_gui_amiga_pill_rows(ctx, ctx->pens[pen], x0 + 1, y0 + 1,
+                               rect.w - 2, rect.h - 2);
+    } else {
+        tg_gui_amiga_pill_rows(ctx, ctx->pens[pen], x0, y0, rect.w, rect.h);
+    }
+}
+
 static void tg_gui_amiga_avatar_fill(tg_gui_backend *backend, int color_index,
                                      tg_gui_rect rect)
 {
     tg_gui_amiga_ctx *ctx;
     int x0;
     int y0;
-    int y;
+    int bg;
+    LONG blend;
 
     ctx = (tg_gui_amiga_ctx *)backend->context;
     if (rect.w <= 0 || rect.h <= 0) {
@@ -763,17 +894,25 @@ static void tg_gui_amiga_avatar_fill(tg_gui_backend *backend, int color_index,
     x0 = ctx->origin_x + rect.x;
     y0 = ctx->origin_y + rect.y;
     tg_gui_prim_log("afill", x0, y0, rect.w, rect.h);
-    SetAPen(ctx->rport, ctx->avatar_pens[color_index]);
-    /* One RectFill per row, clipped to the disc: the corners keep whatever
-       the row painted underneath (tint, background), no knockout needed. */
-    for (y = 0; y < rect.h; ++y) {
-        int inset = tg_gui_amiga_disc_inset(y, rect.h);
-        int rw = rect.w - (2 * inset);
-
-        if (rw > 0) {
-            RectFill(ctx->rport, x0 + inset, y0 + y,
-                     x0 + inset + rw - 1, y0 + y);
-        }
+    bg = backend->round_bg;
+    if (bg < 0 || bg >= TG_GUI_PEN_COUNT) {
+        bg = TG_GUI_PEN_WINDOW;
+    }
+    /* Rows clipped to the disc: the corners keep whatever the row painted
+       underneath. The blend ring smooths the silhouette on exact-pen
+       screens; the initials still fit, the solid disc only loses one pixel
+       of radius under the ring. */
+    blend = (rect.h >= 6)
+                ? tg_gui_amiga_blend_pen(&tg_gui_avatar_rgb[color_index],
+                                         &tg_gui_dark_pens[bg])
+                : -1;
+    if (blend != -1) {
+        tg_gui_amiga_pill_rows(ctx, blend, x0, y0, rect.w, rect.h);
+        tg_gui_amiga_pill_rows(ctx, ctx->avatar_pens[color_index], x0 + 1,
+                               y0 + 1, rect.w - 2, rect.h - 2);
+    } else {
+        tg_gui_amiga_pill_rows(ctx, ctx->avatar_pens[color_index], x0, y0,
+                               rect.w, rect.h);
     }
 }
 
@@ -4089,6 +4228,7 @@ static void tg_gui_amiga_release_pens(tg_gui_amiga_ctx *ctx,
         }
     }
     tg_gui_av_release_pool(cmap); /* the shared real-avatar pen pool */
+    tg_gui_amiga_blend_release(cmap); /* the round-chrome edge blends */
     ctx->pens_held = 0;
 }
 
@@ -5316,42 +5456,441 @@ static int tg_gui_amiga_confirm_clear_photo_cache(struct Window *win)
     return (int)tg_gui_amiga_easyreq_cancel_args(win, &es);
 }
 
-/* A JPEG dropped on the window is ambiguous: Telegram can preserve it as a
-   document or recompress it as a photo. First button is the default action. */
-static int tg_gui_amiga_choose_jpeg_mode(struct Window *win)
-{
-    struct EasyStruct es;
+/* Send-photo dialog (0.0.91 field feedback): the composer-as-caption
+   question was invisible until you knew the trick. This mirrors the desktop
+   client instead: one small window with the photo's preview, a caption line
+   prefilled with the composer draft (the desktop moves the draft into its
+   media box the same way), and Photo / File / Cancel as explicit actions.
+   Preview pixels need a validated RGB target (the same check the photo
+   pipeline uses); anywhere else the box shows the file's name, dimensions
+   and size instead, which still beats a bare Yes/No requester. Modal by
+   design, exactly like the ASL requester that preceded it in the flow.
+   Returns 0 cancel, 1 send as photo, 2 send as file; fills caption. */
 
-    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
-    es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Send JPEG";
-    es.es_TextFormat = (STRPTR)"Send this JPEG as a photo or as a file?";
-    es.es_GadgetFormat = (STRPTR)"Photo|File|Cancel";
-    return (int)tg_gui_amiga_easyreq_cancel_args(win, &es);
+#define TG_GUI_SENDPHOTO_LOAD_CAP (6UL * 1024UL * 1024UL)
+#define TG_GUI_SENDPHOTO_PREVIEW_H 120
+
+/* JPEG dimensions straight from the SOF marker, for aspect and info line. */
+static int tg_gui_amiga_jpeg_dims(const unsigned char *jpeg,
+                                  unsigned long len,
+                                  unsigned long *w, unsigned long *h)
+{
+    unsigned long i;
+
+    if (jpeg == 0 || len < 10UL || jpeg[0] != 0xffU || jpeg[1] != 0xd8U) {
+        return 0;
+    }
+    i = 2UL;
+    while (i + 9UL < len) {
+        unsigned long seg;
+        unsigned char marker;
+
+        if (jpeg[i] != 0xffU) {
+            ++i;
+            continue;
+        }
+        marker = jpeg[i + 1UL];
+        if (marker == 0xffU) {
+            ++i;
+            continue;
+        }
+        if (marker == 0xd8U || marker == 0x01U ||
+            (marker >= 0xd0U && marker <= 0xd7U)) {
+            i += 2UL;
+            continue;
+        }
+        seg = ((unsigned long)jpeg[i + 2UL] << 8) | (unsigned long)jpeg[i + 3UL];
+        if (marker >= 0xc0U && marker <= 0xcfU && marker != 0xc4U &&
+            marker != 0xc8U && marker != 0xccU) {
+            if (seg >= 7UL && i + 8UL < len) {
+                *h = ((unsigned long)jpeg[i + 5UL] << 8) |
+                     (unsigned long)jpeg[i + 6UL];
+                *w = ((unsigned long)jpeg[i + 7UL] << 8) |
+                     (unsigned long)jpeg[i + 8UL];
+                return *w != 0UL && *h != 0UL;
+            }
+            return 0;
+        }
+        if (marker == 0xdaU || seg < 2UL) {
+            return 0;
+        }
+        i += 2UL + seg;
+    }
+    return 0;
 }
 
-/* Photo caption from the composer: when the user confirms a photo send while
-   a draft sits in the composer, offer that text as the caption. Yes empties
-   the composer (the text leaves with the photo); No keeps the draft intact
-   and the photo goes out bare. Returns the caption or NULL. */
-static const char *tg_gui_window_photo_caption(tg_gui_state *state,
-                                               struct Window *win)
-{
-    struct EasyStruct es;
+typedef struct tg_gui_sendphoto_ui {
+    struct Window *win;
+    tg_gui_amiga_ctx *main_ctx;
+    const char *name;          /* bare filename for the info line */
+    unsigned char *rgb;        /* decoded preview, 0 = info text instead */
+    int pw, ph;                /* decoded preview size */
+    unsigned long jw, jh;      /* source JPEG dimensions (0 = unknown) */
+    unsigned long bytes;       /* file size for the info line */
+    char *caption;
+    unsigned long caption_size;
+    unsigned long caption_len;
+    int iw, ih;                /* window inner size */
+    int cap_y;                 /* caption box top (inner coords) */
+    int btn_y;                 /* buttons row top */
+    int btn_x[3], btn_w[3];    /* Photo / File / Cancel boxes */
+    int cursor_on;
+} tg_gui_sendphoto_ui;
 
-    if (state == 0 || state->input[0] == '\0') {
+static void tg_gui_sendphoto_text(tg_gui_sendphoto_ui *ui, int pen, int x,
+                                  int baseline, const char *text,
+                                  unsigned long len)
+{
+    struct RastPort *rp = ui->win->RPort;
+
+    SetAPen(rp, ui->main_ctx->pens[pen]);
+    SetBPen(rp, ui->main_ctx->pens[TG_GUI_PEN_WINDOW]);
+    SetDrMd(rp, JAM1);
+    Move(rp, ui->win->BorderLeft + x, ui->win->BorderTop + baseline);
+    Text(rp, (STRPTR)text, (UWORD)len);
+}
+
+static void tg_gui_sendphoto_box(tg_gui_sendphoto_ui *ui, int pen, int x,
+                                 int y, int w, int h)
+{
+    struct RastPort *rp = ui->win->RPort;
+
+    SetAPen(rp, ui->main_ctx->pens[pen]);
+    RectFill(rp, ui->win->BorderLeft + x, ui->win->BorderTop + y,
+             ui->win->BorderLeft + x + w - 1, ui->win->BorderTop + y + h - 1);
+}
+
+/* The caption row: box, the tail of the text that fits, the caret. */
+static void tg_gui_sendphoto_caption_row(tg_gui_sendphoto_ui *ui)
+{
+    struct RastPort *rp = ui->win->RPort;
+    int lh = ui->main_ctx->line_h;
+    int box_w = ui->iw - 16;
+    unsigned long start;
+    int ascent;
+
+    tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, ui->cap_y, box_w, lh + 6);
+    start = 0UL;
+    while (start < ui->caption_len &&
+           (int)TextLength(rp, (STRPTR)(ui->caption + start),
+                           (UWORD)(ui->caption_len - start)) > box_w - 14) {
+        ++start; /* keep the END visible while typing */
+    }
+    ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline : lh - 2;
+    if (ui->caption_len > start) {
+        SetAPen(rp, ui->main_ctx->pens[TG_GUI_PEN_TEXT]);
+        SetDrMd(rp, JAM1);
+        Move(rp, ui->win->BorderLeft + 12,
+             ui->win->BorderTop + ui->cap_y + 3 + ascent);
+        Text(rp, (STRPTR)(ui->caption + start),
+             (UWORD)(ui->caption_len - start));
+    }
+    if (ui->cursor_on) {
+        int cx = 12 + (int)TextLength(rp, (STRPTR)(ui->caption + start),
+                                      (UWORD)(ui->caption_len - start)) + 1;
+
+        tg_gui_sendphoto_box(ui, TG_GUI_PEN_TEXT, cx, ui->cap_y + 3, 2, lh);
+    }
+}
+
+static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
+{
+    struct RastPort *rp = ui->win->RPort;
+    int lh = ui->main_ctx->line_h;
+    int prev_h = TG_GUI_SENDPHOTO_PREVIEW_H;
+    static const char *labels[3];
+    int i;
+
+    labels[0] = "Photo";
+    labels[1] = "File";
+    labels[2] = "Cancel";
+    tg_gui_sendphoto_box(ui, TG_GUI_PEN_WINDOW, 0, 0, ui->iw, ui->ih);
+    /* Preview area (SURFACE ground), image centred when we have pixels. */
+    tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8, ui->iw - 16, prev_h);
+    if (ui->rgb != 0) {
+#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
+        int px = 8 + ((ui->iw - 16 - ui->pw) / 2);
+        int py = 8 + ((prev_h - ui->ph) / 2);
+
+        (void)tg_gui_cgx_write_pixel_array(
+            ui->rgb, 0, 0, (UWORD)(ui->pw * 3), rp,
+            (UWORD)(ui->win->BorderLeft + px),
+            (UWORD)(ui->win->BorderTop + py), (UWORD)ui->pw, (UWORD)ui->ph,
+            RECTFMT_RGB);
+#endif
+    } else {
+        char info[96];
+        unsigned long nlen = (unsigned long)strlen(ui->name);
+
+        if (nlen > 40UL) {
+            nlen = 40UL;
+        }
+        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT, 16, 8 + lh + 4, ui->name,
+                              nlen);
+        if (ui->jw != 0UL) {
+            sprintf(info, "%lu x %lu, %lu KB", ui->jw, ui->jh,
+                    (ui->bytes + 512UL) / 1024UL);
+        } else {
+            sprintf(info, "%lu KB", (ui->bytes + 512UL) / 1024UL);
+        }
+        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT_DIM, 16, 8 + (2 * lh) + 8,
+                              info, (unsigned long)strlen(info));
+    }
+    tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT_DIM, 8,
+                          ui->cap_y - 4, "Caption:", 8UL);
+    tg_gui_sendphoto_caption_row(ui);
+    /* Buttons, right-aligned: [Photo] [File] [Cancel]. */
+    {
+        int x = ui->iw - 8;
+
+        for (i = 2; i >= 0; --i) {
+            int tw = (int)TextLength(rp, (STRPTR)labels[i],
+                                     (UWORD)strlen(labels[i]));
+
+            ui->btn_w[i] = tw + 16;
+            x -= ui->btn_w[i];
+            ui->btn_x[i] = x;
+            x -= 6;
+        }
+        for (i = 0; i < 3; ++i) {
+            int fill = (i == 0) ? TG_GUI_PEN_ACCENT : TG_GUI_PEN_SURFACE;
+            int ink = (i == 0) ? TG_GUI_PEN_ACCENT_TEXT : TG_GUI_PEN_TEXT;
+            int tw = ui->btn_w[i] - 16;
+            int ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline
+                                         : lh - 2;
+
+            tg_gui_sendphoto_box(ui, fill, ui->btn_x[i], ui->btn_y,
+                                 ui->btn_w[i], lh + 8);
+            SetAPen(rp, ui->main_ctx->pens[ink]);
+            SetDrMd(rp, JAM1);
+            Move(rp, ui->win->BorderLeft + ui->btn_x[i] + 8 +
+                     ((ui->btn_w[i] - 16 - tw) / 2),
+                 ui->win->BorderTop + ui->btn_y + 4 + ascent);
+            Text(rp, (STRPTR)labels[i], (UWORD)strlen(labels[i]));
+        }
+    }
+}
+
+static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
+                                           tg_gui_amiga_ctx *main_ctx,
+                                           struct Window *parent,
+                                           const char *path, char *caption,
+                                           unsigned long caption_size)
+{
+    tg_gui_sendphoto_ui ui;
+    struct TagItem tags[16];
+    struct Screen *screen;
+    unsigned char *jpeg = 0;
+    unsigned long jlen = 0UL;
+    const char *name;
+    const char *pp;
+    int lh;
+    int i;
+    int result = 0;
+    int done = 0;
+
+    if (state == 0 || main_ctx == 0 || parent == 0 || path == 0 ||
+        caption == 0 || caption_size < 2UL) {
         return 0;
     }
-    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
-    es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Photo caption";
-    es.es_TextFormat =
-        (STRPTR)"Send the message you are typing\nas the photo's caption?";
-    es.es_GadgetFormat = (STRPTR)"Yes|No";
-    if (tg_gui_amiga_easyreq_cancel_args(win, &es) != 1) {
+    memset(&ui, 0, sizeof(ui));
+    ui.main_ctx = main_ctx;
+    ui.caption = caption;
+    ui.caption_size = caption_size;
+    ui.cursor_on = 1;
+    /* Desktop behaviour: the composer draft moves into the caption box. */
+    caption[0] = '\0';
+    ui.caption_len = 0UL;
+    for (i = 0; state->input[i] != '\0' &&
+                ui.caption_len + 1UL < caption_size; ++i) {
+        caption[ui.caption_len++] = state->input[i];
+    }
+    caption[ui.caption_len] = '\0';
+    name = path;
+    for (pp = path; *pp != '\0'; ++pp) {
+        if (*pp == '/' || *pp == ':') {
+            name = pp + 1;
+        }
+    }
+    ui.name = name;
+    lh = main_ctx->line_h;
+    screen = parent->WScreen;
+    ui.iw = 340;
+    if (screen != 0 && ui.iw > (int)screen->Width - 60) {
+        ui.iw = (int)screen->Width - 60;
+    }
+    ui.cap_y = 8 + TG_GUI_SENDPHOTO_PREVIEW_H + 6 + lh + 2;
+    ui.btn_y = ui.cap_y + lh + 6 + 10;
+    ui.ih = ui.btn_y + lh + 8 + 8;
+    /* Load + decode the preview: bounded read, SOF dimensions, and pixels
+       only where the photo pipeline's own RGB check passes on this window. */
+    {
+        FILE *f = fopen(path, "rb");
+
+        if (f != 0) {
+            long fsz;
+
+            if (fseek(f, 0L, SEEK_END) == 0 && (fsz = ftell(f)) > 0L) {
+                ui.bytes = (unsigned long)fsz;
+                if ((unsigned long)fsz <= TG_GUI_SENDPHOTO_LOAD_CAP &&
+                    fseek(f, 0L, SEEK_SET) == 0) {
+                    jpeg = (unsigned char *)malloc((unsigned long)fsz);
+                    if (jpeg != 0 &&
+                        fread(jpeg, 1, (unsigned long)fsz, f) ==
+                            (unsigned long)fsz) {
+                        jlen = (unsigned long)fsz;
+                    }
+                }
+            }
+            fclose(f);
+        }
+    }
+    if (jlen != 0UL) {
+        (void)tg_gui_amiga_jpeg_dims(jpeg, jlen, &ui.jw, &ui.jh);
+    }
+    i = 0;
+    tags[i].ti_Tag = WA_Title;
+    tags[i++].ti_Data = TG_GUI_TAG("Send photo");
+    tags[i].ti_Tag = WA_InnerWidth;
+    tags[i++].ti_Data = (ULONG)ui.iw;
+    tags[i].ti_Tag = WA_InnerHeight;
+    tags[i++].ti_Data = (ULONG)ui.ih;
+    tags[i].ti_Tag = WA_Left;
+    tags[i++].ti_Data = (ULONG)(parent->LeftEdge + 40);
+    tags[i].ti_Tag = WA_Top;
+    tags[i++].ti_Data = (ULONG)(parent->TopEdge + 40);
+    tags[i].ti_Tag = WA_DragBar;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_DepthGadget;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_CloseGadget;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_Activate;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_SmartRefresh;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_AutoAdjust;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_IDCMP;
+    tags[i++].ti_Data = IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY |
+                        IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW |
+                        IDCMP_INTUITICKS;
+    tags[i].ti_Tag = WA_CustomScreen;
+    tags[i++].ti_Data = TG_GUI_TAG(screen);
+    tags[i].ti_Tag = TAG_END;
+    tags[i++].ti_Data = 0;
+    ui.win = OpenWindowTagList(0, tags);
+    if (ui.win == 0) {
+        if (jpeg != 0) {
+            free(jpeg);
+        }
         return 0;
     }
-    return state->input;
+    if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
+        SetFont(ui.win->RPort, main_ctx->rport->Font);
+    }
+    /* Decode after the window exists: the RGB target check needs its
+       RastPort. Fit the source aspect inside the preview box. */
+    if (jlen != 0UL && ui.jw != 0UL && tg_gui_amiga_open_cybergraphics()
+#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
+        && tg_gui_photo_cgx_target_possible(ui.win->RPort)
+#endif
+        ) {
+        unsigned long bw = (unsigned long)(ui.iw - 20);
+        unsigned long bh = (unsigned long)(TG_GUI_SENDPHOTO_PREVIEW_H - 8);
+        unsigned long pw = ui.jw;
+        unsigned long ph = ui.jh;
+
+        if (pw > bw) {
+            ph = (ph * bw) / pw;
+            pw = bw;
+        }
+        if (ph > bh) {
+            pw = (pw * bh) / ph;
+            ph = bh;
+        }
+        if (pw >= 8UL && ph >= 8UL) {
+            ui.rgb = (unsigned char *)malloc(pw * ph * 3UL);
+            if (ui.rgb != 0 &&
+                tg_avatar_decode_jpeg(jpeg, jlen, ui.rgb, (int)pw,
+                                      (int)ph) != 0) {
+                free(ui.rgb);
+                ui.rgb = 0;
+            }
+            if (ui.rgb != 0) {
+                ui.pw = (int)pw;
+                ui.ph = (int)ph;
+            }
+        }
+    }
+    if (jpeg != 0) {
+        free(jpeg);
+        jpeg = 0;
+    }
+    tg_gui_sendphoto_paint(&ui);
+    while (!done) {
+        struct IntuiMessage *msg;
+
+        Wait(1UL << ui.win->UserPort->mp_SigBit);
+        while ((msg = (struct IntuiMessage *)GetMsg(ui.win->UserPort)) != 0) {
+            ULONG cls = msg->Class;
+            UWORD code = msg->Code;
+            WORD mx = msg->MouseX;
+            WORD my = msg->MouseY;
+
+            ReplyMsg((struct Message *)msg);
+            if (cls == IDCMP_CLOSEWINDOW) {
+                result = 0;
+                done = 1;
+            } else if (cls == IDCMP_REFRESHWINDOW) {
+                BeginRefresh(ui.win);
+                tg_gui_sendphoto_paint(&ui);
+                EndRefresh(ui.win, TRUE);
+            } else if (cls == IDCMP_INTUITICKS) {
+                ui.cursor_on = !ui.cursor_on;
+                tg_gui_sendphoto_caption_row(&ui);
+            } else if (cls == IDCMP_VANILLAKEY) {
+                if (code == 13U) {
+                    result = 1;
+                    done = 1;
+                } else if (code == 27U) {
+                    result = 0;
+                    done = 1;
+                } else if (code == 8U) {
+                    if (ui.caption_len > 0UL) {
+                        --ui.caption_len;
+                        ui.caption[ui.caption_len] = '\0';
+                        ui.cursor_on = 1;
+                        tg_gui_sendphoto_caption_row(&ui);
+                    }
+                } else if (code >= 32U && code != 127U &&
+                           ui.caption_len + 1UL < ui.caption_size) {
+                    ui.caption[ui.caption_len++] = (char)code;
+                    ui.caption[ui.caption_len] = '\0';
+                    ui.cursor_on = 1;
+                    tg_gui_sendphoto_caption_row(&ui);
+                }
+            } else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
+                int ix = (int)mx - (int)ui.win->BorderLeft;
+                int iy = (int)my - (int)ui.win->BorderTop;
+
+                if (iy >= ui.btn_y && iy < ui.btn_y + lh + 8) {
+                    for (i = 0; i < 3; ++i) {
+                        if (ix >= ui.btn_x[i] &&
+                            ix < ui.btn_x[i] + ui.btn_w[i]) {
+                            result = (i == 0) ? 1 : ((i == 1) ? 2 : 0);
+                            done = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (ui.rgb != 0) {
+        free(ui.rgb);
+    }
+    CloseWindow(ui.win);
+    return result;
 }
 
 /* Confirm + remove the selected chat from the sidebar, persist it, then land on
@@ -6035,18 +6574,31 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     if (path[0] == '\0') {
         return; /* cancelled */
     }
-    {
-        const char *caption = as_photo ? tg_gui_window_photo_caption(state, win)
-                                       : 0;
+    if (as_photo) {
+        char dcaption[512];
+        int drc;
 
+        drc = tg_gui_window_send_photo_dialog(
+            state, (tg_gui_amiga_ctx *)backend->context, win, path, dcaption,
+            sizeof(dcaption));
+        if (drc == 0) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Send cancelled");
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        as_photo = (drc == 1);
         rc = as_photo
-                 ? tg_gui_session_transfer_start_photo(path, caption, stdout)
-                 : tg_gui_session_transfer_start_upload(path, stdout);
-        if (rc == 0 && caption != 0) {
-            /* The draft left with the photo: an emptied composer says so. */
+                 ? tg_gui_session_transfer_start_photo(path, dcaption, stdout)
+                 : tg_gui_session_transfer_start_upload(path, dcaption,
+                                                        stdout);
+        if (rc == 0) {
+            /* The draft moved into the dialog and left with the send. */
             state->input[0] = '\0';
             state->input_caret = 0;
         }
+    } else {
+        rc = tg_gui_session_transfer_start_upload(path, 0, stdout);
     }
     if (rc == 0) {
         const char *pn = path;
@@ -7651,6 +8203,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     backend.photo_image = tg_gui_amiga_photo_image;
     backend.draw_text = tg_gui_amiga_draw_text;
     backend.set_style = tg_gui_amiga_set_style;
+    backend.fill_pill = tg_gui_amiga_fill_pill;
+    backend.round_bg = TG_GUI_PEN_WINDOW;
 
     mem_after = (unsigned long)AvailMem(MEMF_ANY);
     footprint = (mem_before > mem_after) ? (mem_before - mem_after) : 0UL;
@@ -9975,31 +10529,36 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             dname = dp + 1;
                         }
                     }
-                    jpeg_mode = tg_gui_window_path_is_jpeg(dropped)
-                        ? tg_gui_amiga_choose_jpeg_mode(ctx.window) : 2;
+                    if (tg_gui_window_path_is_jpeg(dropped)) {
+                        char dropcap[512];
+
+                        jpeg_mode = tg_gui_window_send_photo_dialog(
+                            state, &ctx, ctx.window, dropped, dropcap,
+                            sizeof(dropcap));
+                        if (jpeg_mode != 0) {
+                            as_photo = jpeg_mode == 1;
+                            urc = as_photo
+                                ? tg_gui_session_transfer_start_photo(
+                                      dropped, dropcap, stdout)
+                                : tg_gui_session_transfer_start_upload(
+                                      dropped, dropcap, stdout);
+                            if (urc == 0) {
+                                state->input[0] = '\0';
+                                state->input_caret = 0;
+                            }
+                        }
+                    } else {
+                        jpeg_mode = 2;
+                        as_photo = 0;
+                        urc = tg_gui_session_transfer_start_upload(dropped, 0,
+                                                                   stdout);
+                    }
                     if (jpeg_mode == 0) {
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
                                            "Send cancelled");
                         tg_gui_window_paint(state, &backend);
                     } else {
-                        as_photo = jpeg_mode == 1;
-                        {
-                            const char *dcap =
-                                as_photo ? tg_gui_window_photo_caption(
-                                               state, ctx.window)
-                                         : 0;
-
-                            urc = as_photo
-                                ? tg_gui_session_transfer_start_photo(
-                                      dropped, dcap, stdout)
-                                : tg_gui_session_transfer_start_upload(
-                                      dropped, stdout);
-                            if (urc == 0 && dcap != 0) {
-                                state->input[0] = '\0';
-                                state->input_caret = 0;
-                            }
-                        }
                         if (urc == 0) {
                             /* The progress line below carries the name for the
                                whole transfer -- a one-off "Sending X..." here
