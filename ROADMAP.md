@@ -478,6 +478,19 @@ the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
 
+## Planned: split long pastes into protocol-sized messages
+
+A 6 KB pasted text is refused today (issue #14). That ceiling is
+Telegram's own: the protocol caps a single message at 4096 characters,
+and the composer buffer matches it (2048 on classic 68k, where RAM is
+the budget). The desktop client handles the same paste by quietly
+splitting it into consecutive messages, and that is the behaviour to
+copy: when the text to send exceeds the cap, split at the last line
+break or space before the limit, send the pieces one after another
+through the existing send path, and stop cleanly at the first failure
+so nothing is lost silently. Same rule in the TUI. Until then the
+manuals' answer stands: a long text travels better as a document.
+
 ## Planned: new-message notification without stealing focus
 
 A user asked for the screen to come to the front when a message arrives,
