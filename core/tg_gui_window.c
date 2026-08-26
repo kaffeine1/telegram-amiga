@@ -5467,65 +5467,10 @@ static int tg_gui_amiga_confirm_clear_photo_cache(struct Window *win)
    design, exactly like the ASL requester that preceded it in the flow.
    Returns 0 cancel, 1 send as photo, 2 send as file; fills caption. */
 
-#define TG_GUI_SENDPHOTO_LOAD_CAP (6UL * 1024UL * 1024UL)
-#define TG_GUI_SENDPHOTO_PREVIEW_H 120
-
-/* JPEG dimensions straight from the SOF marker, for aspect and info line. */
-static int tg_gui_amiga_jpeg_dims(const unsigned char *jpeg,
-                                  unsigned long len,
-                                  unsigned long *w, unsigned long *h)
-{
-    unsigned long i;
-
-    if (jpeg == 0 || len < 10UL || jpeg[0] != 0xffU || jpeg[1] != 0xd8U) {
-        return 0;
-    }
-    i = 2UL;
-    while (i + 9UL < len) {
-        unsigned long seg;
-        unsigned char marker;
-
-        if (jpeg[i] != 0xffU) {
-            ++i;
-            continue;
-        }
-        marker = jpeg[i + 1UL];
-        if (marker == 0xffU) {
-            ++i;
-            continue;
-        }
-        if (marker == 0xd8U || marker == 0x01U ||
-            (marker >= 0xd0U && marker <= 0xd7U)) {
-            i += 2UL;
-            continue;
-        }
-        seg = ((unsigned long)jpeg[i + 2UL] << 8) | (unsigned long)jpeg[i + 3UL];
-        if (marker >= 0xc0U && marker <= 0xcfU && marker != 0xc4U &&
-            marker != 0xc8U && marker != 0xccU) {
-            if (seg >= 7UL && i + 8UL < len) {
-                *h = ((unsigned long)jpeg[i + 5UL] << 8) |
-                     (unsigned long)jpeg[i + 6UL];
-                *w = ((unsigned long)jpeg[i + 7UL] << 8) |
-                     (unsigned long)jpeg[i + 8UL];
-                return *w != 0UL && *h != 0UL;
-            }
-            return 0;
-        }
-        if (marker == 0xdaU || seg < 2UL) {
-            return 0;
-        }
-        i += 2UL + seg;
-    }
-    return 0;
-}
-
 typedef struct tg_gui_sendphoto_ui {
     struct Window *win;
     tg_gui_amiga_ctx *main_ctx;
     const char *name;          /* bare filename for the info line */
-    unsigned char *rgb;        /* decoded preview, 0 = info text instead */
-    int pw, ph;                /* decoded preview size */
-    unsigned long jw, jh;      /* source JPEG dimensions (0 = unknown) */
     unsigned long bytes;       /* file size for the info line */
     char *caption;
     unsigned long caption_size;
@@ -5535,86 +5480,10 @@ typedef struct tg_gui_sendphoto_ui {
     int btn_y;                 /* buttons row top */
     int btn_x[3], btn_w[3];    /* Photo / File / Cancel boxes */
     int cursor_on;
-    int prev_h;                /* preview strip height: the scaled image's own
-                                  height, so the picture fills its space; the
-                                  fixed fallback height only when there is no
-                                  image to show */
     int tick_count;            /* caret cadence: toggle every 5 ticks, like
                                   the composer and the search box */
-    /* Pen-path preview: the SAME mapping the inline photos use, the
-       configurable Bayer dither plus the shared pen pool that obtains the
-       image's own colours (exact on truecolor, nearest once full). MorphOS
-       always takes this road (its RGB888 window writes came out grey in the
-       field), and so does any screen without a validated RGB target. The
-       grid is mapped once at first paint; its pens belong to the shared
-       pool and are released with it at teardown. */
-    unsigned char *pens;
-    int pens_failed;
 } tg_gui_sendphoto_ui;
 
-/* Map + replay the decoded preview through the inline photos' own pen path:
-   tg_gui_photo_pen_for applies the user's dither preference and feeds the
-   shared pool, so the preview looks exactly like an inline photo does on
-   this screen. Mapping happens once; repaints only replay the grid with
-   run-length RectFills. */
-static void tg_gui_sendphoto_rgb_pens(tg_gui_sendphoto_ui *ui, int px, int py)
-{
-    struct RastPort *rp = ui->win->RPort;
-    int y;
-
-    if (ui->pens == 0 && !ui->pens_failed) {
-        ui->pens = (unsigned char *)malloc((unsigned long)ui->pw *
-                                           (unsigned long)ui->ph);
-        if (ui->pens != 0) {
-            for (y = 0; y < ui->ph && ui->pens != 0; ++y) {
-                int x;
-
-                for (x = 0; x < ui->pw; ++x) {
-                    LONG p = tg_gui_photo_pen_for(
-                        ui->main_ctx,
-                        ui->rgb + ((((unsigned long)y *
-                                     (unsigned long)ui->pw) +
-                                    (unsigned long)x) * 3UL),
-                        x, y);
-
-                    if (p == -1L) {
-                        free(ui->pens);
-                        ui->pens = 0;
-                        break;
-                    }
-                    ui->pens[((unsigned long)y * (unsigned long)ui->pw) +
-                             (unsigned long)x] = (unsigned char)p;
-                }
-            }
-        }
-        if (ui->pens == 0) {
-            ui->pens_failed = 1;
-        }
-    }
-    if (ui->pens == 0) {
-        return;
-    }
-    for (y = 0; y < ui->ph; ++y) {
-        const unsigned char *row =
-            ui->pens + ((unsigned long)y * (unsigned long)ui->pw);
-        int x = 0;
-
-        while (x < ui->pw) {
-            unsigned char p = row[x];
-            int run = x + 1;
-
-            while (run < ui->pw && row[run] == p) {
-                ++run;
-            }
-            SetAPen(rp, (LONG)p);
-            RectFill(rp, ui->win->BorderLeft + px + x,
-                     ui->win->BorderTop + py + y,
-                     ui->win->BorderLeft + px + run - 1,
-                     ui->win->BorderTop + py + y);
-            x = run;
-        }
-    }
-}
 
 static void tg_gui_sendphoto_text(tg_gui_sendphoto_ui *ui, int pen, int x,
                                   int baseline, const char *text,
@@ -5676,7 +5545,6 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
 {
     struct RastPort *rp = ui->win->RPort;
     int lh = ui->main_ctx->line_h;
-    int prev_h = ui->prev_h;
     static const char *labels[3];
     int i;
 
@@ -5684,54 +5552,19 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     labels[1] = "File";
     labels[2] = "Cancel";
     tg_gui_sendphoto_box(ui, TG_GUI_PEN_WINDOW, 0, 0, ui->iw, ui->ih);
-    if (ui->rgb == 0) {
-        /* No pixels to show: the SURFACE strip carries the info text. */
-        tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8, ui->iw - 16,
-                             prev_h);
-    }
-    if (ui->rgb != 0) {
-        int px = 8 + ((ui->iw - 16 - ui->pw) / 2);
-        int py = 8 + ((prev_h - ui->ph) / 2);
-        int drawn = 0;
-
-#if defined(TG_GUI_HAVE_CYBERGRAPHICS) && !defined(__MORPHOS__) && \
-    !defined(__MORPHOS)
-        /* Direct RGB888 where the photo pipeline's own check passes on this
-           window. MorphOS is excluded on purpose: its field reports showed
-           grey RGB writes, so it goes through the pen cube below. */
-        if (tg_gui_amiga_open_cybergraphics() &&
-            tg_gui_photo_cgx_target_possible(rp)) {
-            (void)tg_gui_cgx_write_pixel_array(
-                ui->rgb, 0, 0, (UWORD)(ui->pw * 3), rp,
-                (UWORD)(ui->win->BorderLeft + px),
-                (UWORD)(ui->win->BorderTop + py), (UWORD)ui->pw,
-                (UWORD)ui->ph, RECTFMT_RGB);
-            drawn = 1;
-        }
-#endif
-        if (!drawn) {
-            tg_gui_sendphoto_rgb_pens(ui, px, py);
-            if (ui->pens == 0) { /* pool exhausted: at least say what it is */
-                tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8,
-                                     ui->iw - 16, prev_h);
-            }
-        }
-    } else {
+    /* One info line: which file, how big. The pixel preview comes back once
+       the decode path can feed it properly (see ROADMAP: send-photo dialog
+       preview); a wrong picture was worse than none. */
+    {
         char info[96];
         unsigned long nlen = (unsigned long)strlen(ui->name);
 
-        if (nlen > 40UL) {
-            nlen = 40UL;
+        if (nlen > 34UL) {
+            nlen = 34UL;
         }
-        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT, 16, 8 + lh + 4, ui->name,
-                              nlen);
-        if (ui->jw != 0UL) {
-            sprintf(info, "%lu x %lu, %lu KB", ui->jw, ui->jh,
-                    (ui->bytes + 512UL) / 1024UL);
-        } else {
-            sprintf(info, "%lu KB", (ui->bytes + 512UL) / 1024UL);
-        }
-        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT_DIM, 16, 8 + (2 * lh) + 8,
+        memcpy(info, ui->name, nlen);
+        sprintf(info + nlen, " (%lu KB)", (ui->bytes + 512UL) / 1024UL);
+        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT, 8, 8 + lh,
                               info, (unsigned long)strlen(info));
     }
     tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT_DIM, 8,
@@ -5778,8 +5611,6 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     tg_gui_sendphoto_ui ui;
     struct TagItem tags[16];
     struct Screen *screen;
-    unsigned char *jpeg = 0;
-    unsigned long jlen = 0UL;
     const char *name;
     const char *pp;
     int lh;
@@ -5813,10 +5644,8 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     ui.name = name;
     lh = main_ctx->line_h;
     screen = parent->WScreen;
-    /* Load the file and decode the preview BEFORE the window opens: the
-       dialog then sizes itself around the scaled image, so the picture
-       fills its space instead of floating in a fixed strip (MorphOS
-       validation note). */
+    /* Only the size is read from the file: the dialog shows name and KB
+       while the pixel preview waits for a decode path that deserves it. */
     {
         FILE *f = fopen(path, "rb");
 
@@ -5825,74 +5654,15 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
 
             if (fseek(f, 0L, SEEK_END) == 0 && (fsz = ftell(f)) > 0L) {
                 ui.bytes = (unsigned long)fsz;
-                if ((unsigned long)fsz <= TG_GUI_SENDPHOTO_LOAD_CAP &&
-                    fseek(f, 0L, SEEK_SET) == 0) {
-                    jpeg = (unsigned char *)malloc((unsigned long)fsz);
-                    if (jpeg != 0 &&
-                        fread(jpeg, 1, (unsigned long)fsz, f) ==
-                            (unsigned long)fsz) {
-                        jlen = (unsigned long)fsz;
-                    }
-                }
             }
             fclose(f);
         }
     }
-    if (jlen != 0UL) {
-        (void)tg_gui_amiga_jpeg_dims(jpeg, jlen, &ui.jw, &ui.jh);
-    }
-    if (jlen != 0UL && ui.jw != 0UL) {
-        /* Largest fit of the source aspect inside what the screen affords:
-           the image then IS the preview area. */
-        unsigned long bw = 320UL;
-        unsigned long bh = 240UL;
-        unsigned long pw = ui.jw;
-        unsigned long ph = ui.jh;
-
-        if (screen != 0) {
-            if (bw > (unsigned long)screen->Width - 80UL) {
-                bw = (unsigned long)screen->Width - 80UL;
-            }
-            if (bh > (unsigned long)(screen->Height / 2)) {
-                bh = (unsigned long)(screen->Height / 2);
-            }
-        }
-        if (bh < 96UL) {
-            bh = 96UL;
-        }
-        if (pw > bw) {
-            ph = (ph * bw) / pw;
-            pw = bw;
-        }
-        if (ph > bh) {
-            pw = (pw * bh) / ph;
-            ph = bh;
-        }
-        if (pw >= 8UL && ph >= 8UL) {
-            ui.rgb = (unsigned char *)malloc(pw * ph * 3UL);
-            if (ui.rgb != 0 &&
-                tg_avatar_decode_jpeg(jpeg, jlen, ui.rgb, (int)pw,
-                                      (int)ph) != 0) {
-                free(ui.rgb);
-                ui.rgb = 0;
-            }
-            if (ui.rgb != 0) {
-                ui.pw = (int)pw;
-                ui.ph = (int)ph;
-            }
-        }
-    }
-    if (jpeg != 0) {
-        free(jpeg);
-        jpeg = 0;
-    }
-    /* The window wraps the image; without one it wraps the info strip. */
-    ui.prev_h = (ui.rgb != 0) ? ui.ph : TG_GUI_SENDPHOTO_PREVIEW_H;
-    ui.iw = (ui.rgb != 0 && ui.pw + 16 > 300) ? ui.pw + 16 : 300;
+    ui.iw = 300;
     if (screen != 0 && ui.iw > (int)screen->Width - 60) {
         ui.iw = (int)screen->Width - 60;
     }
-    ui.cap_y = 8 + ui.prev_h + 6 + lh + 2;
+    ui.cap_y = 8 + lh + 6 + lh + 2;
     ui.btn_y = ui.cap_y + lh + 6 + 10;
     ui.ih = ui.btn_y + lh + 8 + 8;
     i = 0;
@@ -5928,9 +5698,6 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     tags[i++].ti_Data = 0;
     ui.win = OpenWindowTagList(0, tags);
     if (ui.win == 0) {
-        if (jpeg != 0) {
-            free(jpeg);
-        }
         return 0;
     }
     if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
@@ -6025,12 +5792,6 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
                 }
             }
         }
-    }
-    if (ui.rgb != 0) {
-        free(ui.rgb);
-    }
-    if (ui.pens != 0) {
-        free(ui.pens); /* the pens themselves live in the shared pool */
     }
     CloseWindow(ui.win);
     return result;

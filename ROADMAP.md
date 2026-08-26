@@ -530,6 +530,26 @@ player on the first unread; it is a preference away, not a design.
 Settings entry: "Notify: Title | Title + beep | Off". Fits the 0.0.9x
 polish line and touches nothing in the protocol.
 
+## Planned: the send-photo dialog's preview, done right
+
+The dialog shipped with a pixel preview and lost it: three MorphOS
+validation rounds judged it ugly, and the culprit turned out to be
+found only after the decision to pull it. The preview decoded through
+`tg_avatar_decode_jpeg`, which is built for avatars and passes through
+a 64 by 64 intermediate before nearest-scaling up, so a 320-pixel
+preview was a thumbnail blown up five times; no pen path could look
+good downstream of that. The dialog now shows the file's name and size
+where the picture was, which at least is never wrong.
+
+Bringing the picture back is small and precise: decode with
+`tg_image_decode_jpeg_scaled`, the message-photo path, with a source
+edge cap sized to the preview box, then hand the pixels to the same
+two renderers the dialog already had, direct RGB888 where the photo
+pipeline's check passes and the inline photos' pen mapping elsewhere.
+The 6 MiB whole-file read cap and the aspect-fit window sizing from
+the pulled version are worth keeping. Fits any 0.0.9x cycle, and it is
+the kind of change one MorphOS screenshot can judge in a minute.
+
 ## Planned: two MorphOS popup glitches
 
 Both reported from the field on 0.0.9 and both about the right-click popup
