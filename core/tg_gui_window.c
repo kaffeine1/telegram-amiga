@@ -3265,6 +3265,32 @@ static int tg_gui_photo_decode_tick(tg_gui_amiga_ctx *ctx,
     if (work_kind != 0) {
         *work_kind = TG_GUI_PHOTO_WORK_NONE;
     }
+    /* Field diagnosis (Vampire 0.0.91): fetches looped while decode never
+       started and every probe further in stayed silent, so report the whole
+       decision state here, once per change. */
+    if (tg_gui_log_is_enabled()) {
+        static int last_sig = -1;
+        int sig;
+
+        sig = (ctx == 0 || ctx->photo_resize_active) ? 1
+              : (mcu_budget == 0U || pen_row_budget <= 0) ? 2
+              : (tg_gui_photo_decode_pipeline.owner != 0 &&
+                 tg_gui_photo_pipeline_owner(TG_GUI_PHOTO_SCOPE_INLINE) == 0)
+                  ? 3
+              : (tg_gui_photo_request_count > 0) ? 4 : 5;
+        if (sig != last_sig) {
+            char line[96];
+
+            last_sig = sig;
+            sprintf(line,
+                    "photo: tick s%d req=%d gate=%d mcu=%u rows=%d resize=%d",
+                    sig, tg_gui_photo_request_count,
+                    tg_gui_photo_decode_pipeline.owner != 0 ? 1 : 0,
+                    mcu_budget, pen_row_budget,
+                    (ctx != 0) ? ctx->photo_resize_active : -1);
+            tg_gui_log(line);
+        }
+    }
     if (ctx == 0 || ctx->photo_resize_active || mcu_budget == 0U ||
         pen_row_budget <= 0) {
         return 0;
