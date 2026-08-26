@@ -5541,82 +5541,76 @@ typedef struct tg_gui_sendphoto_ui {
                                   image to show */
     int tick_count;            /* caret cadence: toggle every 5 ticks, like
                                   the composer and the search box */
-    /* Preview fallback palette: a 4x4x4 colour cube obtained lazily against
-       the dialog's screen and released at close. This is the path MorphOS
-       always takes (its RGB888 window writes came out grey in the field,
-       the same lesson the 0.0.9 photo pipeline learned) and the path any
-       screen without a validated RGB target takes. -2 untried, -1 failed. */
-    struct ColorMap *cmap;
-    LONG pen_map[64];
+    /* Pen-path preview: the SAME mapping the inline photos use, the
+       configurable Bayer dither plus the shared pen pool that obtains the
+       image's own colours (exact on truecolor, nearest once full). MorphOS
+       always takes this road (its RGB888 window writes came out grey in the
+       field), and so does any screen without a validated RGB target. The
+       grid is mapped once at first paint; its pens belong to the shared
+       pool and are released with it at teardown. */
+    unsigned char *pens;
+    int pens_failed;
 } tg_gui_sendphoto_ui;
 
-/* One dithered cube index for pixel x of a row: each channel gets the
-   Bayer offset for its screen position, then quantizes to four levels. */
-static int tg_gui_sendphoto_quant(const unsigned char *row, int x, int y,
-                                  const unsigned char bay[4][4])
-{
-    int t = ((int)bay[y & 3][x & 3] - 7) * 5;
-    int r = (int)row[(x * 3)] + t;
-    int g = (int)row[(x * 3) + 1] + t;
-    int b = (int)row[(x * 3) + 2] + t;
-
-    if (r < 0) { r = 0; } else if (r > 255) { r = 255; }
-    if (g < 0) { g = 0; } else if (g > 255) { g = 255; }
-    if (b < 0) { b = 0; } else if (b > 255) { b = 255; }
-    return ((r >> 6) << 4) | ((g >> 6) << 2) | (b >> 6);
-}
-
-/* Replay the decoded preview through the quantized pen cube, run-length per
-   row, exactly like the avatar replay but with a private palette that the
-   dialog releases on close. */
+/* Map + replay the decoded preview through the inline photos' own pen path:
+   tg_gui_photo_pen_for applies the user's dither preference and feeds the
+   shared pool, so the preview looks exactly like an inline photo does on
+   this screen. Mapping happens once; repaints only replay the grid with
+   run-length RectFills. */
 static void tg_gui_sendphoto_rgb_pens(tg_gui_sendphoto_ui *ui, int px, int py)
 {
     struct RastPort *rp = ui->win->RPort;
     int y;
 
+    if (ui->pens == 0 && !ui->pens_failed) {
+        ui->pens = (unsigned char *)malloc((unsigned long)ui->pw *
+                                           (unsigned long)ui->ph);
+        if (ui->pens != 0) {
+            for (y = 0; y < ui->ph && ui->pens != 0; ++y) {
+                int x;
+
+                for (x = 0; x < ui->pw; ++x) {
+                    LONG p = tg_gui_photo_pen_for(
+                        ui->main_ctx,
+                        ui->rgb + ((((unsigned long)y *
+                                     (unsigned long)ui->pw) +
+                                    (unsigned long)x) * 3UL),
+                        x, y);
+
+                    if (p == -1L) {
+                        free(ui->pens);
+                        ui->pens = 0;
+                        break;
+                    }
+                    ui->pens[((unsigned long)y * (unsigned long)ui->pw) +
+                             (unsigned long)x] = (unsigned char)p;
+                }
+            }
+        }
+        if (ui->pens == 0) {
+            ui->pens_failed = 1;
+        }
+    }
+    if (ui->pens == 0) {
+        return;
+    }
     for (y = 0; y < ui->ph; ++y) {
         const unsigned char *row =
-            ui->rgb + ((unsigned long)y * (unsigned long)ui->pw * 3UL);
+            ui->pens + ((unsigned long)y * (unsigned long)ui->pw);
         int x = 0;
 
         while (x < ui->pw) {
-            /* Ordered 4x4 dither over the 4-level cube, the same idea the
-               inline-photo pen path uses: the threshold trades the 64-colour
-               banding for grain, which reads as a photograph. */
-            static const unsigned char bay[4][4] = {
-                { 0, 8, 2, 10 }, { 12, 4, 14, 6 },
-                { 3, 11, 1, 9 }, { 15, 7, 13, 5 }
-            };
-            int idx = tg_gui_sendphoto_quant(row, x, y, bay);
+            unsigned char p = row[x];
             int run = x + 1;
-            LONG pen;
 
-            while (run < ui->pw &&
-                   tg_gui_sendphoto_quant(row, run, y, bay) == idx) {
+            while (run < ui->pw && row[run] == p) {
                 ++run;
             }
-            pen = ui->pen_map[idx];
-            if (pen == -2L) {
-                pen = (ui->cmap != 0)
-                          ? ObtainBestPenA(
-                                ui->cmap,
-                                tg_gui_amiga_rgb32(
-                                    (unsigned char)(((idx >> 4) & 3) * 85)),
-                                tg_gui_amiga_rgb32(
-                                    (unsigned char)(((idx >> 2) & 3) * 85)),
-                                tg_gui_amiga_rgb32(
-                                    (unsigned char)((idx & 3) * 85)),
-                                0)
-                          : -1L;
-                ui->pen_map[idx] = pen;
-            }
-            if (pen != -1L) {
-                SetAPen(rp, pen);
-                RectFill(rp, ui->win->BorderLeft + px + x,
-                         ui->win->BorderTop + py + y,
-                         ui->win->BorderLeft + px + run - 1,
-                         ui->win->BorderTop + py + y);
-            }
+            SetAPen(rp, (LONG)p);
+            RectFill(rp, ui->win->BorderLeft + px + x,
+                     ui->win->BorderTop + py + y,
+                     ui->win->BorderLeft + px + run - 1,
+                     ui->win->BorderTop + py + y);
             x = run;
         }
     }
@@ -5717,6 +5711,10 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
 #endif
         if (!drawn) {
             tg_gui_sendphoto_rgb_pens(ui, px, py);
+            if (ui->pens == 0) { /* pool exhausted: at least say what it is */
+                tg_gui_sendphoto_box(ui, TG_GUI_PEN_SURFACE, 8, 8,
+                                     ui->iw - 16, prev_h);
+            }
         }
     } else {
         char info[96];
@@ -5938,10 +5936,6 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
         SetFont(ui.win->RPort, main_ctx->rport->Font);
     }
-    ui.cmap = (ui.win->WScreen != 0) ? ui.win->WScreen->ViewPort.ColorMap : 0;
-    for (i = 0; i < 64; ++i) {
-        ui.pen_map[i] = -2L;
-    }
     /* Centre the dialog over the main window now that both sizes are real;
        clamped to the screen so a corner-parked window cannot push it off. */
     {
@@ -6035,12 +6029,8 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     if (ui.rgb != 0) {
         free(ui.rgb);
     }
-    if (ui.cmap != 0) {
-        for (i = 0; i < 64; ++i) {
-            if (ui.pen_map[i] >= 0L) {
-                ReleasePen(ui.cmap, ui.pen_map[i]);
-            }
-        }
+    if (ui.pens != 0) {
+        free(ui.pens); /* the pens themselves live in the shared pool */
     }
     CloseWindow(ui.win);
     return result;
