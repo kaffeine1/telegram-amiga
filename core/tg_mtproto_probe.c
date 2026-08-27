@@ -17838,7 +17838,23 @@ static int tg_gui_photo_finish(int success, const char *reason)
             success = 0;
             reason = "cache rename";
         } else {
-            tg_gui_window_photo_cache_file_changed(tg_gui_photo_fetch.path);
+            /* Read the cache entry back before calling it done. A filesystem
+               that accepts write, close and rename and then loses the file
+               (a tired card, a full or damaged volume) used to send the
+               client into an endless re-fetch: every repaint asked again,
+               every turn went to the network and nothing ever decoded, with
+               no line in the log saying why. Now the miss is named once and
+               the fetch is a clean failure. */
+            FILE *probe = fopen(tg_gui_photo_fetch.path, "rb");
+
+            if (probe == 0) {
+                success = 0;
+                reason = "cache vanished after write";
+            } else {
+                fclose(probe);
+                tg_gui_window_photo_cache_file_changed(
+                    tg_gui_photo_fetch.path);
+            }
         }
     }
     if (!success) {
