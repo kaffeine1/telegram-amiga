@@ -1264,15 +1264,16 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                                     avatar))) {
             backend->avatar_fill(backend, chat->avatar_color,
                                  tg_gui_make_rect(8, y + 6, avatar, avatar));
-            /* Center the initials in the (2*lh) square: measured width for the
-               horizontal axis; vertically the baseline sits half a text cell
-               below the square's middle, minus the ~2px typical Amiga font
-               descent (testers' screenshots showed them high-left). */
+            /* Centre the initials in the circle: measured width across, and
+               the shared centred baseline down. The old hand-tuned formula
+               (half a cell below the middle, minus a guessed descent) was
+               calibrated on topaz 8 and rode high on the taller fonts other
+               systems default to, MorphOS among them. */
             {
                 unsigned long ilen = (unsigned long)strlen(chat->initials);
                 int iw = backend->text_width(backend, chat->initials, ilen);
                 int ix = 8 + ((avatar - iw) / 2);
-                int iy = y + 6 + lh + ((lh - 4) / 2);
+                int iy = tg_gui_centred_baseline(backend, y + 6, avatar);
 
                 if (ix < 8) {
                     ix = 8;
@@ -2578,7 +2579,7 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                         ix = area_x;
                     }
                     backend->draw_text(backend, TG_GUI_PEN_TEXT, ix,
-                                       4 + lh + ((lh - 6) / 2),
+                                       tg_gui_centred_baseline(backend, 4, av),
                                        open_chat->initials, ilen);
                 }
             }
