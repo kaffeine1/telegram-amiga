@@ -5,6 +5,55 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
+## [0.0.91] - 2026-08-27
+
+### Added
+- Sending a photo now opens its own dialog instead of a bare requester: the
+  file's name and size, a caption line already holding whatever was in the
+  composer, and Photo, File and Cancel as explicit choices. ENTER sends,
+  ESC cancels, and the draft only leaves the composer once the send starts.
+  The same dialog serves the menu, the file requester and a Workbench drop.
+- Photos can carry a caption. It rides the sendMedia of the photo and of the
+  document fallback used above 10 MiB alike, converted from the platform
+  charset to UTF-8, so accented text arrives intact. The text client takes
+  it as `/photo <path> [caption]`.
+- The chat header shows the open chat's avatar beside its name, drawn like
+  its sidebar row, with the coloured initials as the fallback.
+- About names where the project lives, so a user who wants to report
+  something or fetch a newer build has the address in front of them.
+
+### Changed
+- Consecutive messages from the same sender no longer repeat the name: a run
+  shows it once, the way the desktop client groups a busy conversation, which
+  also buys back vertical space on a small screen.
+- The round chrome of the desktop client: avatars and the unread badges are
+  circles and pills, the jump-to-newest button is a disc, and message bubbles
+  have their corners clipped. On screens that afford exact colours the edge
+  carries a one-pixel blend ring, which is the anti-aliasing hard-edged
+  hardware can do; paletted screens keep their crisp edges.
+- Every Amiga lane now ships without the offline self-tests, which CI runs on
+  the host binary instead. The binaries lose about 15 per cent: 110 KB on
+  AmigaOS 3, 136 on MorphOS, 178 on AmigaOS 4, 128 on AROS. Field diagnostics
+  are still compiled in everywhere, and a stripped build says so plainly when
+  a self-test flag is used.
+- Background photo work can no longer be starved for good by a busy event
+  loop on 68k: after a bounded number of deferred turns it proceeds anyway,
+  the same valve the other lanes already had.
+
+### Fixed
+- Text that sits inside something now sits in the middle of it. The caret
+  covers the glyph cell instead of floating above it, the reply strip centres
+  its text and clears the composer by a few pixels, the unread counts centre
+  in their badge, and the avatar initials centre in their circle. All four
+  were the same mistake, a baseline guessed from the line height, and all four
+  grew worse the taller the font, which is why MorphOS showed them first.
+- A photo whose cache entry vanishes after a successful write is now reported
+  as the failure it is, instead of being fetched again on every repaint
+  forever. A tired or full volume can do this, and the loop hid it.
+- The plain-68000 build pauses briefly between the rounds of the initial
+  chat-list download, so a PCMCIA network card gets breathing room instead of
+  a continuous burst.
+
 ## [0.0.9] - 2026-08-07
 
 ### Added
