@@ -550,6 +550,25 @@ The 6 MiB whole-file read cap and the aspect-fit window sizing from
 the pulled version are worth keeping. Fits any 0.0.9x cycle, and it is
 the kind of change one MorphOS screenshot can judge in a minute.
 
+## Planned: centre the initials inside the avatar circle
+
+Field note from MorphOS: the two letters in a chat's coloured circle,
+"SM" for Saved Messages among them, sit slightly off vertically. The
+cause is visible in the code rather than in the pixels. Both places
+that draw initials, the sidebar row and the chat header, still place
+their baseline with a hand-tuned formula, half a text cell below the
+square's middle minus a couple of pixels for "the typical Amiga font
+descent". That approximation was calibrated on topaz 8 and drifts on
+any taller font, which is exactly what MorphOS runs by default: the
+same class of bug already fixed for the caret, the reply strip and the
+unread counts in 0.0.91.
+
+The fix is to reuse what those corrections introduced. The renderer
+already has a helper that returns a vertically centred baseline for a
+box from the font's real ascent, and the circles are boxes. Two call
+sites change, no new metric and nothing platform-specific; the
+horizontal centring, which measures the text, is already right.
+
 ## Planned: two MorphOS popup glitches
 
 Both reported from the field on 0.0.9 and both about the right-click popup
