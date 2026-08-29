@@ -569,6 +569,31 @@ box from the font's real ascent, and the circles are boxes. Two call
 sites change, no new metric and nothing platform-specific; the
 horizontal centring, which measures the text, is already right.
 
+## Planned: say where Telegram sent the login code (0.0.92)
+
+A first-time user could not find his code and wrote in. The answer was
+not a bug: Telegram does not send an SMS when another device is already
+signed in, it delivers the code inside Telegram itself, as a message
+from the official service chat. Someone waiting for an SMS concludes the
+Amiga client is broken, and every one of them has to be told by hand.
+
+The client already knows. `auth.sentCode` carries a type, and
+`tg_mtproto_parse_auth_sent_code` already reads it into
+`tg_mtproto_sent_code.type_constructor`, distinguishing app, SMS, voice
+call, flash call, missed call and Fragment. It also gets the expected
+code length in `type_length` and, where present, a `timeout`. All of it
+is parsed and then dropped: the code screen says nothing about any of
+it.
+
+Showing it is a couple of lines on a screen that already exists, in both
+the GUI panel and the text client: "the code was sent inside the
+Telegram app on your other device", or "sent by SMS", or "you will get a
+call". Where the type gives a length, the field can say how many digits
+to expect; where it gives a timeout, the screen can say when a new code
+can be requested, which also explains the silence that follows too many
+attempts. The manuals' first-start section gets the same sentence, so
+the answer arrives before the question.
+
 ## Planned: two MorphOS popup glitches
 
 Both reported from the field on 0.0.9 and both about the right-click popup
