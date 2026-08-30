@@ -9248,9 +9248,26 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->cursor_on = 1;
                                 caret_ticks = 0;
                                 tg_gui_window_mention_refresh(state);
-                                tg_gui_window_copy(state->status,
-                                                   sizeof(state->status),
-                                                   "Pasted");
+                                if (p < got) {
+                                    /* The composer took what it could hold.
+                                       Saying so beats dropping the rest in
+                                       silence, which read as a broken paste
+                                       (issue #14). */
+                                    char cut[64];
+
+                                    sprintf(cut,
+                                            "Pasted %lu of %lu characters "
+                                            "(composer full)",
+                                            (unsigned long)p,
+                                            (unsigned long)got);
+                                    tg_gui_window_copy(state->status,
+                                                       sizeof(state->status),
+                                                       cut);
+                                } else {
+                                    tg_gui_window_copy(state->status,
+                                                       sizeof(state->status),
+                                                       "Pasted");
+                                }
                                 tg_gui_window_paint(state, &backend);
                             } else {
                                 tg_gui_window_copy(state->status,

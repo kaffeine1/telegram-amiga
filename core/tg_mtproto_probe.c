@@ -8406,7 +8406,14 @@ int tg_mtproto_auth_send_peer_file(const char *host,
                                    const char *message,
                                    FILE *stream)
 {
-    unsigned char query[512];
+    /* The whole sendMessage query, text included, has to fit here. It was
+       512 bytes, which quietly capped a message at roughly 460 characters:
+       anything longer failed to build and the client refused to send it,
+       which is what a pasted text file runs into (issue #14). Size it from
+       the composer instead, doubled for the Latin-1 to UTF-8 growth, plus
+       room for the envelope. Static, not on the stack: the 68000 profile
+       runs on a fraction of the usual stack. */
+    static unsigned char query[(TG_GUI_MSG_TEXT_MAX * 2) + 128];
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
@@ -8506,7 +8513,14 @@ static int tg_mtproto_auth_send_peer_on_context(
     unsigned long *sent_message_id,
     FILE *stream)
 {
-    unsigned char query[512];
+    /* The whole sendMessage query, text included, has to fit here. It was
+       512 bytes, which quietly capped a message at roughly 460 characters:
+       anything longer failed to build and the client refused to send it,
+       which is what a pasted text file runs into (issue #14). Size it from
+       the composer instead, doubled for the Latin-1 to UTF-8 growth, plus
+       room for the envelope. Static, not on the stack: the 68000 profile
+       runs on a fraction of the usual stack. */
+    static unsigned char query[(TG_GUI_MSG_TEXT_MAX * 2) + 128];
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
