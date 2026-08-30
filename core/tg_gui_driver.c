@@ -108,9 +108,11 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
                 !tg_mtproto_display_codepoint_is_invisible(cp)) {
                 /* A symbol with no Latin-1 shape leaves nothing behind, and
                    the space that introduced it would read as a hole: "ciao
-                   <party> mondo" became "ciao  mondo", "[Sticker <party>]"
+                   <brick> mondo" became "ciao  mondo", "[Sticker <brick>]"
                    became "[Sticker ]". Take the space with it. Modifiers are
-                   exempt: they attach to the character before them. */
+                   exempt: they attach to the character before them. Plenty of
+                   emoji DO have a rendition (112 are mapped by hand, and the
+                   party popper is one of them); those keep their space. */
                 --o;
             }
             for (k = 0UL; k < n && o + 1UL < size; ++k) {
@@ -680,13 +682,13 @@ int tg_gui_driver_self_test(void)
         char out[64];
 
         tg_gui_driver_copy_latin1(out, sizeof(out),
-                                  "ciao \xf0\x9f\x8e\x89 mondo");
+                                  "ciao \xf0\x9f\xa7\xb1 mondo");
         if (strcmp(out, "ciao mondo") != 0) {
             printf("gui driver self-test: omitted symbol left \"%s\"\n", out);
             return 2;
         }
         tg_gui_driver_copy_latin1(out, sizeof(out),
-                                  "[Sticker \xf0\x9f\x8e\x89]");
+                                  "[Sticker \xf0\x9f\xa7\xb1]");
         if (strcmp(out, "[Sticker]") != 0) {
             printf("gui driver self-test: sticker fallback left \"%s\"\n", out);
             return 2;
