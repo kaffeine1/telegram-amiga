@@ -236,6 +236,15 @@ int tg_platform_break_pending(void);
  */
 void tg_platform_display_beep(void);
 
+/*
+ * Clear the AmigaDOS "e" protection bit on a saved file, so a program a
+ * friend sent through a chat runs without a manual `protect +e` (issue #15).
+ * The RWED bits are ACTIVE LOW: a set FIBB_EXECUTE forbids execution, so
+ * making a file runnable means clearing it. Read-modify-write, so the
+ * archive bit and the rest survive. A no-op wherever there is no AmigaDOS.
+ */
+void tg_platform_set_executable(const char *path);
+
 /**
  * Platform TCP connect implementation used by tg_net_connect().
  *

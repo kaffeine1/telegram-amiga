@@ -1257,6 +1257,44 @@ int tg_platform_break_pending(void)
 
 struct IntuitionBase *IntuitionBase = 0;
 
+/* Clear the "e" protection bit on a completed download (issue #15). The RWED
+   bits are active low, so a file is runnable when FIBB_EXECUTE is CLEAR;
+   read-modify-write keeps the archive bit and the others as the filesystem
+   left them. Any failure is silent: the download itself already succeeded and
+   the user can still `protect +e` by hand. */
+void tg_platform_set_executable(const char *path)
+{
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+    BPTR lock;
+    struct FileInfoBlock *fib;
+
+    if (path == 0 || path[0] == '\0') {
+        return;
+    }
+    lock = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (lock == 0) {
+        return;
+    }
+    fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, 0);
+    if (fib != 0) {
+        if (Examine(lock, fib) && fib->fib_DirEntryType < 0) {
+            ULONG prot = (ULONG)fib->fib_Protection;
+
+            UnLock(lock);
+            lock = 0;
+            SetProtection((CONST_STRPTR)path,
+                          (LONG)(prot & ~(ULONG)FIBF_EXECUTE));
+        }
+        FreeDosObject(DOS_FIB, fib);
+    }
+    if (lock != 0) {
+        UnLock(lock);
+    }
+#else
+    (void)path;
+#endif
+}
+
 void tg_platform_display_beep(void)
 {
     /* The screen flash is the Amiga-native notification; a BEL byte lets

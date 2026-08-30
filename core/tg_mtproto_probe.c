@@ -17694,6 +17694,41 @@ static void tg_mtproto_download_cancel(void)
 
 /* Close the engine: file (partial removed on failure), quiet stream, state.
    Returns the final rc; out_path gets the saved path (ok) or the reason. */
+/* An AmigaDOS loadable file starts with HUNK_HEADER, 0x000003F3: plain
+   executables, libraries, devices, handlers and datatypes all do. Object
+   files and link libraries start with 0x000003E7 instead and must NOT be
+   marked runnable. The name is no help here, people pass these around with
+   a .exe suffix that means nothing on this platform (issue #15), so the
+   magic longword decides. */
+static int tg_mtproto_file_is_amiga_executable(const char *path)
+{
+    FILE *f;
+    unsigned char magic[4];
+    unsigned long got;
+
+    if (path == 0 || path[0] == '\0') {
+        return 0;
+    }
+    f = fopen(path, "rb");
+    if (f == 0) {
+        return 0;
+    }
+    got = (unsigned long)fread(magic, 1, sizeof(magic), f);
+    fclose(f);
+    return got == 4UL && magic[0] == 0x00U && magic[1] == 0x00U &&
+           magic[2] == 0x03U && magic[3] == 0xf3U;
+}
+
+/* A saved attachment that IS a program gets its "e" bit cleared, so it runs
+   straight away instead of needing a manual protect (issue #15). Shared by
+   the download engine and any other path that lands a file on disk. */
+static void tg_mtproto_mark_downloaded_file(const char *path)
+{
+    if (tg_mtproto_file_is_amiga_executable(path)) {
+        tg_platform_set_executable(path);
+    }
+}
+
 static int tg_mtproto_download_end(char *out_path,
                                    unsigned long out_path_size)
 {
@@ -17709,6 +17744,8 @@ static int tg_mtproto_download_end(char *out_path,
     tg_gui_dl.f = 0;
     if (rc != 0) {
         (void)remove(tg_gui_dl.path); /* a half file is worse than none */
+    } else {
+        tg_mtproto_mark_downloaded_file(tg_gui_dl.path);
     }
     if (out_path != 0 && out_path_size > 0UL) {
         const char *src = (rc == 0) ? tg_gui_dl.path : tg_gui_dl.fail;

@@ -36,6 +36,10 @@
 #include <exec/tasks.h>
 #include <exec/exectags.h> /* ASOT_*/ASOIOR_* for AllocSysObject (PR #10) */
 #include <proto/dos.h>
+/* AmigaOS 4 renamed the classic DOS entries and keeps the old spellings here,
+   Examine() and FIBF_EXECUTE among them. Including this beats redefining
+   them locally, the same choice PR #12 made for the directory scan. */
+#include <dos/obsolete.h>
 #include <proto/exec.h>
 #include <dos/dos.h>
 #include <proto/socket.h>
@@ -1434,6 +1438,44 @@ int tg_platform_break_pending(void)
 struct Library *IntuitionBase = 0;
 struct IntuitionIFace *IIntuition = 0;
 #endif
+
+/* Clear the "e" protection bit on a completed download (issue #15). The RWED
+   bits are active low, so a file is runnable when FIBB_EXECUTE is CLEAR;
+   read-modify-write keeps the archive bit and the others as the filesystem
+   left them. Any failure is silent: the download itself already succeeded and
+   the user can still `protect +e` by hand. */
+void tg_platform_set_executable(const char *path)
+{
+#if defined(__amigaos4__)
+    BPTR lock;
+    struct FileInfoBlock *fib;
+
+    if (path == 0 || path[0] == '\0') {
+        return;
+    }
+    lock = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (lock == 0) {
+        return;
+    }
+    fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, 0);
+    if (fib != 0) {
+        if (Examine(lock, fib) && fib->fib_DirEntryType < 0) {
+            ULONG prot = (ULONG)fib->fib_Protection;
+
+            UnLock(lock);
+            lock = 0;
+            SetProtection((CONST_STRPTR)path,
+                          (LONG)(prot & ~(ULONG)FIBF_EXECUTE));
+        }
+        FreeDosObject(DOS_FIB, fib);
+    }
+    if (lock != 0) {
+        UnLock(lock);
+    }
+#else
+    (void)path;
+#endif
+}
 
 void tg_platform_display_beep(void)
 {
