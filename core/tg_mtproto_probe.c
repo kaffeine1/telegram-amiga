@@ -1840,42 +1840,57 @@ static void tg_login_progress_dot(void)
  * instead of an SMS. Without this hint the user keeps waiting for a text
  * message that will never arrive (the AROS / desktop-only setup hits this).
  */
-static void tg_mtproto_print_login_code_hint(FILE *stream,
-                                             unsigned long type_constructor)
+/* Where Telegram put the login code, in two lengths from ONE table: the
+   console can afford a sentence, the GUI status line is 48 bytes. Two
+   tables would drift the first time Telegram adds a delivery type. */
+static const char *tg_mtproto_sent_code_text(unsigned long type_constructor,
+                                             int brief)
 {
-    const char *hint = 0;
-
-    if (stream == 0) {
-        return;
-    }
     switch (type_constructor) {
     case 0x3dbb5986UL: /* auth.sentCodeTypeApp */
-        hint = "Check your other Telegram apps (mobile/desktop/web) for the"
-               " code.";
-        break;
+        return brief ? "Code sent in Telegram on your phone"
+                     : "Check your other Telegram apps (mobile/desktop/web)"
+                       " for the code.";
     case 0xc000bba2UL: /* auth.sentCodeTypeSms */
     case 0xa416ac81UL: /* auth.sentCodeTypeSmsWord */
     case 0xb37794afUL: /* auth.sentCodeTypeSmsPhrase */
     case 0xd9565c39UL: /* auth.sentCodeTypeFragmentSms */
     case 0x009fd736UL: /* auth.sentCodeTypeFirebaseSms */
-        hint = "Telegram is sending the code by SMS to your phone.";
-        break;
+        return brief ? "Code sent by SMS"
+                     : "Telegram is sending the code by SMS to your phone.";
     case 0x5353e5a7UL: /* auth.sentCodeTypeCall */
-        hint = "Telegram will call your phone and speak the code.";
-        break;
+        return brief ? "Telegram is calling with the code"
+                     : "Telegram will call your phone and speak the code.";
     case 0xab03c6d9UL: /* auth.sentCodeTypeFlashCall */
     case 0x82006484UL: /* auth.sentCodeTypeMissedCall */
-        hint = "Telegram is calling: the last digits of the caller ID are the"
-               " code.";
-        break;
+        return brief ? "Read the code from the incoming call"
+                     : "Telegram is calling: the last digits of the caller ID"
+                       " are the code.";
     case 0xf450f59bUL: /* auth.sentCodeTypeEmailCode */
-        hint = "Check your email for the code.";
-        break;
+        return brief ? "Code sent to your email"
+                     : "Check your email for the code.";
     default:
-        return; /* unknown delivery type - stay silent rather than mislead */
+        /* Unknown delivery type: the GUI still needs a prompt, the console
+           stays silent rather than mislead. */
+        return brief ? "Enter the code you received" : 0;
+    }
+}
+
+static void tg_mtproto_print_login_code_hint(FILE *stream,
+                                             unsigned long type_constructor)
+{
+    const char *hint;
+
+    if (stream == 0) {
+        return;
+    }
+    hint = tg_mtproto_sent_code_text(type_constructor, 0);
+    if (hint == 0) {
+        return;
     }
     fprintf(stream, "%s\n", hint);
 }
+
 
 static void tg_mtproto_login_phase(FILE *stream, const char *phase)
 {
@@ -3685,6 +3700,28 @@ static int tg_mtproto_send_saved_query(const char *host,
         result, stream, label, 32U, 0);
 }
 
+/* Where the last auth.sendCode put the code, and how long it is: parsed
+   already, and until now thrown away. */
+static unsigned long tg_mtproto_sent_code_type;
+static unsigned long tg_mtproto_sent_code_len;
+
+static void tg_mtproto_remember_sent_code(const tg_mtproto_sent_code *sc)
+{
+    tg_mtproto_sent_code_type = (sc != 0) ? sc->type_constructor : 0UL;
+    tg_mtproto_sent_code_len =
+        (sc != 0 && sc->has_type_length) ? sc->type_length : 0UL;
+}
+
+const char *tg_mtproto_sent_code_hint(void)
+{
+    return tg_mtproto_sent_code_text(tg_mtproto_sent_code_type, 1);
+}
+
+unsigned long tg_mtproto_sent_code_length(void)
+{
+    return tg_mtproto_sent_code_len;
+}
+
 int tg_mtproto_auth_send_code(const char *host,
                               const char *port,
                               const char *dc_id_text,
@@ -3793,6 +3830,12 @@ int tg_mtproto_auth_send_code(const char *host,
         fprintf(stream, "%s: sent-code-parse-failed\n", label);
         return 2;
     }
+    /* Telegram says WHERE it put the code, and it is rarely an SMS: with
+       another device signed in it delivers the code inside Telegram itself.
+       A user watching an empty inbox concludes this client is broken (field
+       question, 2026-08), so keep the answer and let the login screen say
+       it. */
+    tg_mtproto_remember_sent_code(&sent_code);
 
     session_status = tg_mtproto_session_save_authorization(
         auth_file, &context.session, context.auth_key, 1);

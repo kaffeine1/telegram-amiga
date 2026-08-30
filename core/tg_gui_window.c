@@ -4835,6 +4835,26 @@ static void tg_gui_window_login_finish(tg_gui_state *state)
    aborts the window; printable keys edit the field; RETURN submits the field
    to the matching auth step and advances the screen (or shows an error). The
    network round-trip blocks, so a "Connessione..." status is painted first. */
+
+/* The login code prompt, with Telegram's own answer about where it sent the
+   code (inside the app, SMS, a call) and how many digits it has when the
+   server said so. */
+static void tg_gui_window_login_code_prompt(tg_gui_state *state)
+{
+    const char *hint = tg_mtproto_sent_code_hint();
+    unsigned long digits = tg_mtproto_sent_code_length();
+    char line[TG_GUI_NAME_MAX + 16];
+
+    /* The status line is short: keep the hint inside it and only add the
+       digit count when there is room for it. */
+    if (digits > 0UL && digits < 100UL) {
+        sprintf(line, "%.34s (%lu digits)", hint, digits);
+    } else {
+        sprintf(line, "%.46s", hint);
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+}
+
 static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
                                     tg_gui_backend *backend, int *done,
                                     int *caret_ticks)
@@ -4883,11 +4903,12 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
     if ((state->mode == TG_GUI_MODE_LOGIN_PHONE ||
          state->mode == TG_GUI_MODE_LOGIN_CODE) &&
         state->input[0] == '\0') {
-        tg_gui_window_copy(
-            state->status, sizeof(state->status),
-            state->mode == TG_GUI_MODE_LOGIN_PHONE
-                ? "Enter your phone (+ country code)"
-                : "Enter the code you received");
+        if (state->mode == TG_GUI_MODE_LOGIN_PHONE) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Enter your phone (+ country code)");
+        } else {
+            tg_gui_window_login_code_prompt(state);
+        }
         state->cursor_on = 1;
         *caret_ticks = 0;
         tg_gui_window_paint(state, backend);
@@ -4908,8 +4929,10 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         state->input[0] = '\0';
         if (rc == TG_GUI_LOGIN_OK) {
             state->mode = TG_GUI_MODE_LOGIN_CODE;
-            tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Enter the code you received");
+            /* Say WHERE the code went. Telegram sends it inside the app when
+               another device is signed in, and someone waiting for an SMS
+               concludes this client is broken (field question). */
+            tg_gui_window_login_code_prompt(state);
         } else {
             const char *e = tg_gui_session_login_last_error();
             tg_gui_window_copy(state->status, sizeof(state->status),
@@ -4931,6 +4954,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         } else if (rc == TG_GUI_LOGIN_BAD_CODE) {
             tg_gui_window_copy(state->status, sizeof(state->status),
                                "Wrong code - try again");
+            state->mode = TG_GUI_MODE_LOGIN_CODE;
         } else {
             const char *e = tg_gui_session_login_last_error();
             tg_gui_window_copy(state->status, sizeof(state->status),

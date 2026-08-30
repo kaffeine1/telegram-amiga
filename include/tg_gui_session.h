@@ -223,6 +223,16 @@ int tg_gui_session_load_older(FILE *stream, int allow_drop_newest);
 /* Sends `text` to the open chat and echoes it into the transcript. When
    reply_to_msg_id != 0 the message is sent as a reply to that message id.
    Returns 0 on success, non-zero on failure or when no chat is open. */
+/* Where Telegram put the login code, for the code screen to say out loud:
+   it only sends an SMS when no other device is signed in, otherwise the code
+   arrives as a message inside Telegram, and a user watching an empty inbox
+   concludes this client is broken. Short enough for the status line. Valid
+   after a successful send_code. */
+const char *tg_mtproto_sent_code_hint(void);
+
+/* Digits Telegram says the code has, 0 when it did not say. */
+unsigned long tg_mtproto_sent_code_length(void);
+
 int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                         FILE *stream);
 
