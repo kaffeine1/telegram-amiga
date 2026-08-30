@@ -86,15 +86,23 @@ fill_platform_text() {
         first_start_en="1. Unpack the drawer and double-click TelegramAmiga (or TelegramAmiga-TUI).
 2. If there is no saved login, a login panel appears. Enter your phone number
    in full international form (for example +39 333 1234567), then the code
-   Telegram sends you. If your account has a cloud password (2FA), type it on
-   the masked screen (if you do NOT have one, just press Enter to continue).
+   Telegram sends you. That code usually does NOT arrive by SMS: if you are
+   signed in to Telegram anywhere else (phone, PC, web), it is delivered
+   INSIDE Telegram, as a message from the official Telegram service chat.
+   The client tells you on screen where it was sent.
+   If your account has a cloud password (2FA), type it on the masked screen
+   (if you do NOT have one, just press Enter to continue).
 3. The client logs in and writes telegram-auth.bin in this drawer. After that
    it reuses the saved login -- you are not asked for the phone/code again."
         first_start_it="1. Scompatta il drawer e fai doppio click su TelegramAmiga (o TelegramAmiga-TUI).
 2. Se non c'e' un login salvato, compare il pannello di accesso. Inserisci il
    numero di telefono in formato internazionale completo (es. +39 333 1234567),
-   poi il codice che Telegram ti invia. Se il tuo account ha una password cloud
-   (2FA), digitala sulla schermata mascherata (se NON ce l'hai, premi Invio).
+   poi il codice che Telegram ti invia. Quel codice di solito NON arriva via
+   SMS: se sei collegato a Telegram da qualche altra parte (telefono, PC,
+   web), te lo consegna DENTRO Telegram, come messaggio della chat
+   ufficiale Telegram. Il client ti dice a schermo dove e' stato spedito.
+   Se il tuo account ha una password cloud (2FA), digitala sulla schermata
+   mascherata (se NON ce l'hai, premi Invio).
 3. Il client accede e scrive telegram-auth.bin in questo drawer. Da li' in poi
    riusa il login salvato -- non ti richiede piu' telefono/codice."
         readme_programs="  TelegramAmiga  - graphical (Intuition), with scrollbars + mouse.
@@ -221,15 +229,23 @@ then double-click TelegramAmiga-TUI."
         first_start_en="1. Unpack the drawer and double-click TelegramAmiga.
 2. If there is no saved login, a login panel appears. Enter your phone number
    in full international form (for example +39 333 1234567), then the code
-   Telegram sends you. If your account has a cloud password (2FA), type it on
-   the masked screen (if you do NOT have one, just press Enter to continue).
+   Telegram sends you. That code usually does NOT arrive by SMS: if you are
+   signed in to Telegram anywhere else (phone, PC, web), it is delivered
+   INSIDE Telegram, as a message from the official Telegram service chat.
+   The client tells you on screen where it was sent.
+   If your account has a cloud password (2FA), type it on the masked screen
+   (if you do NOT have one, just press Enter to continue).
 3. The client logs in and writes telegram-auth.bin in this drawer. After that
    it reuses the saved login -- you are not asked for the phone/code again."
         first_start_it="1. Scompatta il drawer e fai doppio click su TelegramAmiga.
 2. Se non c'e' un login salvato, compare il pannello di accesso. Inserisci il
    numero di telefono in formato internazionale completo (es. +39 333 1234567),
-   poi il codice che Telegram ti invia. Se il tuo account ha una password cloud
-   (2FA), digitala sulla schermata mascherata (se NON ce l'hai, premi Invio).
+   poi il codice che Telegram ti invia. Quel codice di solito NON arriva via
+   SMS: se sei collegato a Telegram da qualche altra parte (telefono, PC,
+   web), te lo consegna DENTRO Telegram, come messaggio della chat
+   ufficiale Telegram. Il client ti dice a schermo dove e' stato spedito.
+   Se il tuo account ha una password cloud (2FA), digitala sulla schermata
+   mascherata (se NON ce l'hai, premi Invio).
 3. Il client accede e scrive telegram-auth.bin in questo drawer. Da li' in poi
    riusa il login salvato -- non ti richiede piu' telefono/codice."
         readme_programs="  TelegramAmiga  - graphical (Intuition), with scrollbars + mouse.
