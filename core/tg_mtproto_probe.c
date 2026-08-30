@@ -5540,7 +5540,7 @@ static const char *tg_mtproto_display_emoticon(unsigned long cp)
 
 /* Codepoints that only modify a neighbouring emoji print as nothing at all.
    Without this, "<heart><variation-selector>" rendered as two '?'. */
-static int tg_mtproto_display_is_invisible(unsigned long cp)
+int tg_mtproto_display_codepoint_is_invisible(unsigned long cp)
 {
     return (cp >= 0xfe00UL && cp <= 0xfe0fUL) || /* variation selectors */
            (cp >= 0x200bUL && cp <= 0x200fUL) || /* ZW space/joiner/marks */
@@ -5606,7 +5606,7 @@ unsigned long tg_mtproto_display_codepoint_to_latin1(unsigned long cp,
     default:
         break;
     }
-    if (tg_mtproto_display_is_invisible(cp)) {
+    if (tg_mtproto_display_codepoint_is_invisible(cp)) {
         return 0UL;
     }
     /* Flag emoji are pairs of regional indicators: render each as its country
@@ -5716,7 +5716,7 @@ static void tg_mtproto_print_display_codepoint(FILE *stream, unsigned long cp)
     default:
         break;
     }
-    if (tg_mtproto_display_is_invisible(cp)) {
+    if (tg_mtproto_display_codepoint_is_invisible(cp)) {
         return;
     }
     /* Flag emoji are pairs of regional indicators: print them as the two

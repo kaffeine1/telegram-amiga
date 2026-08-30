@@ -104,6 +104,15 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
             unsigned long k;
 
             n = tg_mtproto_display_codepoint_to_latin1(cp, tmp, sizeof(tmp));
+            if (n == 0UL && o > 0UL && dest[o - 1UL] == ' ' &&
+                !tg_mtproto_display_codepoint_is_invisible(cp)) {
+                /* A symbol with no Latin-1 shape leaves nothing behind, and
+                   the space that introduced it would read as a hole: "ciao
+                   <party> mondo" became "ciao  mondo", "[Sticker <party>]"
+                   became "[Sticker ]". Take the space with it. Modifiers are
+                   exempt: they attach to the character before them. */
+                --o;
+            }
             for (k = 0UL; k < n && o + 1UL < size; ++k) {
                 dest[o++] = tmp[k];
             }
@@ -663,6 +672,39 @@ int tg_gui_driver_self_test(void)
 
     memset(&state, 0, sizeof(state));
     tg_gui_chat_driver_bind(&gui, &state, &driver);
+
+    /* 0.0.92: a symbol with no Latin-1 shape takes its leading space with it,
+       so it leaves a sentence rather than a hole. Modifiers do not: they hang
+       off the character before them, which is not a space. */
+    {
+        char out[64];
+
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "ciao \xf0\x9f\x8e\x89 mondo");
+        if (strcmp(out, "ciao mondo") != 0) {
+            printf("gui driver self-test: omitted symbol left \"%s\"\n", out);
+            return 2;
+        }
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "[Sticker \xf0\x9f\x8e\x89]");
+        if (strcmp(out, "[Sticker]") != 0) {
+            printf("gui driver self-test: sticker fallback left \"%s\"\n", out);
+            return 2;
+        }
+        /* One that does map keeps its space and its emoticon. */
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "[Sticker \xf0\x9f\x98\x80]");
+        if (strcmp(out, "[Sticker :)]") != 0) {
+            printf("gui driver self-test: mapped emoji left \"%s\"\n", out);
+            return 2;
+        }
+        /* A variation selector after a space must not eat it. */
+        tg_gui_driver_copy_latin1(out, sizeof(out), "a \xef\xb8\x8f" "b");
+        if (strcmp(out, "a b") != 0) {
+            printf("gui driver self-test: modifier ate a space (\"%s\")\n", out);
+            return 2;
+        }
+    }
 
     /* Incoming 1:1 (peer fallback), outgoing (own label), group (resolved
        sender), group unknown (no name), and a no-time row. */

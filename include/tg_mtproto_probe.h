@@ -257,4 +257,10 @@ unsigned long tg_mtproto_display_codepoint_to_latin1(unsigned long cp,
                                                      char *out,
                                                      unsigned long cap);
 
+/* 1 when the codepoint only modifies the character before it (variation
+   selector, zero-width joiner, skin tone). Callers that collapse whitespace
+   around an omitted codepoint need to leave these alone: they attach to a
+   neighbour rather than standing in for a word. */
+int tg_mtproto_display_codepoint_is_invisible(unsigned long cp);
+
 #endif

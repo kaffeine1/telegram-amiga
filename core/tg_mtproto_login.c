@@ -1893,12 +1893,93 @@ static tg_mtproto_tl_status tg_skip_video_size(tg_mtproto_tl_reader *reader)
     }
 }
 
+/* Priority, never last-one-wins: a GIF arrives as video plus animated, a voice
+   note as audio with the voice flag, a sticker as sticker plus imageSize. */
+static unsigned char tg_mtproto_document_kind_of(unsigned long attrs)
+{
+    if ((attrs & TG_MTPROTO_DOC_ATTR_STICKER) != 0UL) {
+        return (unsigned char)TG_MTPROTO_DOC_KIND_STICKER;
+    }
+    if ((attrs & TG_MTPROTO_DOC_ATTR_ANIMATED) != 0UL) {
+        return (unsigned char)TG_MTPROTO_DOC_KIND_GIF;
+    }
+    if ((attrs & TG_MTPROTO_DOC_ATTR_VOICE) != 0UL) {
+        return (unsigned char)TG_MTPROTO_DOC_KIND_VOICE;
+    }
+    if ((attrs & TG_MTPROTO_DOC_ATTR_VIDEO) != 0UL) {
+        return (unsigned char)TG_MTPROTO_DOC_KIND_VIDEO;
+    }
+    if ((attrs & TG_MTPROTO_DOC_ATTR_AUDIO) != 0UL) {
+        return (unsigned char)TG_MTPROTO_DOC_KIND_AUDIO;
+    }
+    return (unsigned char)TG_MTPROTO_DOC_KIND_FILE;
+}
+
+/* Whole seconds out of a TL double, without touching the FPU: these lanes run
+   from a 68000 with software floats to PPC, and a duration only ever needs the
+   integer part. IEEE 754 binary64 is sign, 11 bit exponent, 52 bit mantissa,
+   the top 20 bits of which sit in the high word. Anything past 2^21 seconds
+   (24 days) is not a real duration, so the shift never leaves that word and
+   the low word carries only the fraction we are dropping. */
+static unsigned long tg_tl_double_seconds(unsigned long hi, unsigned long lo)
+{
+    unsigned long exponent = (hi >> 20) & 0x7ffUL;
+    unsigned long shift;
+
+    (void)lo;
+    if (exponent < 1023UL) {
+        return 0UL; /* zero, or a clip shorter than a second */
+    }
+    shift = exponent - 1023UL;
+    if (shift > 20UL) {
+        return 0UL; /* absurd: say unknown rather than print a wrapped number */
+    }
+    return (1UL << shift) | ((hi & 0xfffffUL) >> (20UL - shift));
+}
+
+/* Trim a copied UTF-8 string back to a whole codepoint. tg_read_string_copy
+   cuts on a byte boundary, and half an emoji is worse than a shorter one. */
+static void tg_trim_utf8_tail(char *text)
+{
+    unsigned long n = (unsigned long)strlen(text);
+    unsigned long lead = n;
+    unsigned char b;
+    unsigned long need;
+
+    while (lead > 0UL &&
+           ((unsigned char)text[lead - 1UL] & 0xc0U) == 0x80U) {
+        --lead; /* back over continuation bytes */
+    }
+    if (lead == 0UL) {
+        text[0] = '\0'; /* continuations only: nothing whole to keep */
+        return;
+    }
+    --lead;
+    b = (unsigned char)text[lead];
+    if (b < 0x80U) {
+        need = 1UL;
+    } else if ((b & 0xe0U) == 0xc0U) {
+        need = 2UL;
+    } else if ((b & 0xf0U) == 0xe0U) {
+        need = 3UL;
+    } else if ((b & 0xf8U) == 0xf0U) {
+        need = 4UL;
+    } else {
+        need = 0UL; /* stray byte: not a lead at all */
+    }
+    if (need == 0UL || lead + need > n) {
+        text[lead] = '\0';
+    }
+}
+
 static tg_mtproto_tl_status tg_read_document_attribute(
     tg_mtproto_tl_reader *reader,
     tg_mtproto_document_meta *out)
 {
     unsigned long ctor;
     unsigned long flags;
+    unsigned long dur_hi;
+    unsigned long dur_lo;
 
     if (tg_mtproto_tl_read_u32(reader, &ctor) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
@@ -1908,25 +1989,39 @@ static tg_mtproto_tl_status tg_read_document_attribute(
         return tg_read_string_copy(reader, out->file_name,
                                    sizeof(out->file_name));
     case 0x11b58939UL: /* animated */
+        out->attr_seen |= TG_MTPROTO_DOC_ATTR_ANIMATED;
     case 0x9801d2f7UL: /* hasStickers */
         return TG_MTPROTO_TL_OK;
     case 0x6c37c15cUL: /* imageSize: w h */
-        return tg_skip_u32s(reader, 2UL);
+        out->attr_seen |= TG_MTPROTO_DOC_ATTR_IMAGE;
+        if (tg_mtproto_tl_read_u32(reader, &out->width) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &out->height) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        return TG_MTPROTO_TL_OK;
     case 0x6319d612UL: /* sticker: flags alt stickerset [flags.0 MaskCoords] */
+        out->attr_seen |= TG_MTPROTO_DOC_ATTR_STICKER;
         if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-            tg_skip_string(reader) != TG_MTPROTO_TL_OK ||
+            tg_read_string_copy(reader, out->alt, sizeof(out->alt)) !=
+                TG_MTPROTO_TL_OK ||
             tg_skip_input_sticker_set(reader) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
+        tg_trim_utf8_tail(out->alt);
         if ((flags & 1UL) != 0UL) { /* maskCoords#aed6dbb2: ctor n + 3 double */
             return tg_skip_u32s(reader, 8UL);
         }
         return TG_MTPROTO_TL_OK;
     case 0x43c57c48UL: /* video: flags duration(double) w h [opts] */
+        out->attr_seen |= TG_MTPROTO_DOC_ATTR_VIDEO;
         if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-            tg_skip_u32s(reader, 4UL) != TG_MTPROTO_TL_OK) {
+            tg_mtproto_tl_read_u64(reader, &dur_hi, &dur_lo) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &out->width) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &out->height) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
+        out->duration = tg_tl_double_seconds(dur_hi, dur_lo);
         if ((flags & 4UL) != 0UL &&
             tg_skip_u32s(reader, 1UL) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
@@ -1942,9 +2037,13 @@ static tg_mtproto_tl_status tg_read_document_attribute(
         return TG_MTPROTO_TL_OK;
     case 0x9852f9c6UL: /* audio: flags duration [title][performer][waveform] */
         if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-            tg_skip_u32s(reader, 1UL) != TG_MTPROTO_TL_OK) {
+            tg_mtproto_tl_read_u32(reader, &out->duration) !=
+                TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
+        out->attr_seen |= ((flags & 1024UL) != 0UL) /* voice:flags.10 */
+                              ? TG_MTPROTO_DOC_ATTR_VOICE
+                              : TG_MTPROTO_DOC_ATTR_AUDIO;
         if ((flags & 1UL) != 0UL &&
             tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
@@ -2045,6 +2144,7 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
             return TG_MTPROTO_TL_INVALID_DATA;
         }
     }
+    out->kind = tg_mtproto_document_kind_of(out->attr_seen);
     out->has_document = 1;
     return TG_MTPROTO_TL_OK;
 }
@@ -4561,14 +4661,44 @@ static const char *tg_mtproto_media_label(unsigned long constructor)
     }
 }
 
-/* Builds the transcript label for an attached document into `text`, using the
-   filename when present and a compact human size (B / KB / MB from the 64-bit
-   size). Media-only messages (no caption) show this instead of an empty bubble;
-   the document meta itself is captured separately for the download. */
+/* Bounded append for the label builders: stops at the cap and keeps the string
+   terminated, which is exactly what a fixed size bubble label wants. */
+static void tg_label_append(char *text, unsigned long text_size,
+                            unsigned long *n, const char *s)
+{
+    while (*s != '\0' && *n + 1UL < text_size) {
+        text[(*n)++] = *s++;
+    }
+    text[*n] = '\0';
+}
+
+/* m:ss, or h:mm:ss once past the hour. `buf` needs 16 bytes. */
+static void tg_format_duration(unsigned long seconds, char *buf)
+{
+    unsigned long h = seconds / 3600UL;
+    unsigned long m = (seconds / 60UL) % 60UL;
+    unsigned long s = seconds % 60UL;
+
+    if (h != 0UL) {
+        sprintf(buf, "%lu:%02lu:%02lu", h, m, s);
+    } else {
+        sprintf(buf, "%lu:%02lu", m, s);
+    }
+}
+
+/* Builds the transcript label for an attached document into `text`. A plain
+   file gets its name and a compact human size (B / KB / MB from the 64-bit
+   size); the kinds people actually recognise get told apart, because
+   "[File: sticker.webp (14 KB)]" says nothing a reader wants to know and
+   "[Video 1:32 640x360]" says everything. Media-only messages (no caption)
+   show this instead of an empty bubble; the document meta itself is captured
+   separately for the download, so a shorter label costs no function. */
 static void tg_mtproto_format_document_label(
     const tg_mtproto_document_meta *doc, char *text, unsigned long text_size)
 {
     char size_buf[24];
+    char dur_buf[16];
+    char geo_buf[24];
     const char *name;
     unsigned long n = 0UL;
     const char *p;
@@ -4577,6 +4707,18 @@ static void tg_mtproto_format_document_label(
         if (text_size > 0UL) {
             text[0] = '\0';
         }
+        return;
+    }
+    /* A sticker stands for an emoji, and that emoji is the whole message. The
+       .webp behind it has a name nobody wants to read and a size nobody cares
+       about, so neither appears. */
+    if (doc->kind == (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
+        tg_label_append(text, text_size, &n, "[Sticker");
+        if (doc->alt[0] != '\0') {
+            tg_label_append(text, text_size, &n, " ");
+            tg_label_append(text, text_size, &n, doc->alt);
+        }
+        tg_label_append(text, text_size, &n, "]");
         return;
     }
     /* Human size: exact enough for a label; treats >4GB as MB (avatars/docs on
@@ -4590,6 +4732,61 @@ static void tg_mtproto_format_document_label(
         sprintf(size_buf, "%lu KB", doc->size_lo / 1024UL);
     } else {
         sprintf(size_buf, "%lu B", doc->size_lo);
+    }
+    dur_buf[0] = '\0';
+    geo_buf[0] = '\0';
+    if (doc->duration != 0UL) {
+        tg_format_duration(doc->duration, dur_buf);
+    }
+    if (doc->width != 0UL && doc->height != 0UL) {
+        sprintf(geo_buf, "%lux%lu", doc->width, doc->height);
+    }
+    switch (doc->kind) {
+    case TG_MTPROTO_DOC_KIND_VIDEO:
+    case TG_MTPROTO_DOC_KIND_GIF:
+        /* A clip is its length and its shape, not its camera filename. The
+           GIF keeps the size because it is the one people forward blind. */
+        tg_label_append(text, text_size, &n,
+                        (doc->kind == TG_MTPROTO_DOC_KIND_GIF)
+                            ? "[GIF" : "[Video");
+        if (dur_buf[0] != '\0') {
+            tg_label_append(text, text_size, &n, " ");
+            tg_label_append(text, text_size, &n, dur_buf);
+        }
+        if (geo_buf[0] != '\0') {
+            tg_label_append(text, text_size, &n, " ");
+            tg_label_append(text, text_size, &n, geo_buf);
+        }
+        tg_label_append(text, text_size, &n, " (");
+        tg_label_append(text, text_size, &n, size_buf);
+        tg_label_append(text, text_size, &n, ")]");
+        return;
+    case TG_MTPROTO_DOC_KIND_VOICE:
+        /* A voice note has no name worth showing: it is a length. */
+        tg_label_append(text, text_size, &n, "[Voice");
+        if (dur_buf[0] != '\0') {
+            tg_label_append(text, text_size, &n, " ");
+            tg_label_append(text, text_size, &n, dur_buf);
+        }
+        tg_label_append(text, text_size, &n, " (");
+        tg_label_append(text, text_size, &n, size_buf);
+        tg_label_append(text, text_size, &n, ")]");
+        return;
+    case TG_MTPROTO_DOC_KIND_AUDIO:
+        /* Music keeps its filename: it is how you know which track it is. */
+        name = (doc->file_name[0] != '\0') ? doc->file_name : "Audio";
+        tg_label_append(text, text_size, &n, "[Audio: ");
+        tg_label_append(text, text_size, &n, name);
+        if (dur_buf[0] != '\0') {
+            tg_label_append(text, text_size, &n, " ");
+            tg_label_append(text, text_size, &n, dur_buf);
+        }
+        tg_label_append(text, text_size, &n, " (");
+        tg_label_append(text, text_size, &n, size_buf);
+        tg_label_append(text, text_size, &n, ")]");
+        return;
+    default:
+        break;
     }
     name = (doc->file_name[0] != '\0') ? doc->file_name : "File";
     for (p = "[File: "; *p != '\0' && n + 1UL < text_size; ++p) {
@@ -5559,6 +5756,128 @@ int tg_mtproto_login_self_test(void)
         if (strcmp(lbl, "commento\n[File: clip.mp4 (3 MB)]") != 0) {
             puts("f9 self-test: caption plus document label mismatch");
             return 2;
+        }
+    }
+
+    /* 0.0.92: the kinds people recognise. The parser keeps the sticker emoji,
+       the clip length and the geometry it used to walk past, and the label
+       says what the thing is instead of naming a .webp nobody asked about. */
+    {
+        tg_mtproto_document_meta d;
+        char lbl[80];
+
+        /* A sticker is its emoji, with no name and no size. */
+        memset(&d, 0, sizeof(d));
+        d.has_document = 1;
+        d.size_lo = 14336UL;
+        strcpy(d.file_name, "sticker.webp");
+        d.kind = tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_STICKER |
+                                             TG_MTPROTO_DOC_ATTR_IMAGE);
+        strcpy(d.alt, "\xf0\x9f\x98\x80"); /* grinning face */
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[Sticker \xf0\x9f\x98\x80]") != 0) {
+            puts("0.0.92 self-test: sticker label mismatch");
+            return 2;
+        }
+        d.alt[0] = '\0'; /* a pack with no alt still reads as a sticker */
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[Sticker]") != 0) {
+            puts("0.0.92 self-test: sticker label without alt mismatch");
+            return 2;
+        }
+
+        /* Video and GIF differ only by the animated attribute. */
+        memset(&d, 0, sizeof(d));
+        d.has_document = 1;
+        d.size_lo = 3UL * 1048576UL;
+        strcpy(d.file_name, "VID_0001.mp4");
+        d.kind = tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_VIDEO);
+        d.duration = 92UL;
+        d.width = 640UL;
+        d.height = 360UL;
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[Video 1:32 640x360 (3 MB)]") != 0) {
+            puts("0.0.92 self-test: video label mismatch");
+            return 2;
+        }
+        d.kind = tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_VIDEO |
+                                             TG_MTPROTO_DOC_ATTR_ANIMATED);
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[GIF 1:32 640x360 (3 MB)]") != 0) {
+            puts("0.0.92 self-test: gif label mismatch");
+            return 2;
+        }
+        d.duration = 3725UL; /* past the hour: h:mm:ss */
+        d.kind = tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_VIDEO);
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[Video 1:02:05 640x360 (3 MB)]") != 0) {
+            puts("0.0.92 self-test: long video label mismatch");
+            return 2;
+        }
+
+        /* Voice keeps no name; music keeps its own. */
+        memset(&d, 0, sizeof(d));
+        d.has_document = 1;
+        d.size_lo = 30UL * 1024UL;
+        strcpy(d.file_name, "audio.ogg");
+        d.duration = 7UL;
+        d.kind = tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_VOICE);
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[Voice 0:07 (30 KB)]") != 0) {
+            puts("0.0.92 self-test: voice label mismatch");
+            return 2;
+        }
+        strcpy(d.file_name, "song.mp3");
+        d.duration = 225UL;
+        d.size_lo = 5UL * 1048576UL;
+        d.kind = tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_AUDIO);
+        tg_mtproto_format_document_label(&d, lbl, sizeof(lbl));
+        if (strcmp(lbl, "[Audio: song.mp3 3:45 (5 MB)]") != 0) {
+            puts("0.0.92 self-test: audio label mismatch");
+            return 2;
+        }
+
+        /* A GIF arrives as video AND animated, a voice note as audio with the
+           voice flag: the kind is a priority, not the attribute seen last. */
+        if (tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_VIDEO |
+                                        TG_MTPROTO_DOC_ATTR_ANIMATED) !=
+                (unsigned char)TG_MTPROTO_DOC_KIND_GIF ||
+            tg_mtproto_document_kind_of(TG_MTPROTO_DOC_ATTR_AUDIO |
+                                        TG_MTPROTO_DOC_ATTR_VOICE) !=
+                (unsigned char)TG_MTPROTO_DOC_KIND_VOICE ||
+            tg_mtproto_document_kind_of(0UL) !=
+                (unsigned char)TG_MTPROTO_DOC_KIND_FILE) {
+            puts("0.0.92 self-test: document kind priority mismatch");
+            return 2;
+        }
+
+        /* Durations arrive as IEEE 754 doubles and these lanes have no FPU to
+           spare: 92.5 -> 92, 0.4 -> 0, and the high word carries it all. */
+        if (tg_tl_double_seconds(0x40572000UL, 0UL) != 92UL ||
+            tg_tl_double_seconds(0x3fd99999UL, 0x9999999aUL) != 0UL ||
+            tg_tl_double_seconds(0x3ff00000UL, 0UL) != 1UL ||
+            tg_tl_double_seconds(0UL, 0UL) != 0UL) {
+            puts("0.0.92 self-test: TL double to seconds mismatch");
+            return 2;
+        }
+
+        /* An alt cut mid-emoji by the fixed buffer must lose the whole
+           codepoint, never leave half of one behind. */
+        {
+            char alt[8];
+
+            strcpy(alt, "ab\xf0\x9f\x98");  /* 4 byte emoji, 3 bytes of it */
+            tg_trim_utf8_tail(alt);
+            if (strcmp(alt, "ab") != 0) {
+                puts("0.0.92 self-test: utf-8 tail trim mismatch");
+                return 2;
+            }
+            strcpy(alt, "a\xc3\xa8");        /* whole 2 byte sequence: kept */
+            tg_trim_utf8_tail(alt);
+            if (strcmp(alt, "a\xc3\xa8") != 0) {
+                puts("0.0.92 self-test: utf-8 tail trim ate a whole codepoint");
+                return 2;
+            }
         }
     }
 

@@ -91,6 +91,27 @@ typedef struct tg_mtproto_password_summary {
 #define TG_MTPROTO_DOC_NAME_MAX 128U
 #define TG_MTPROTO_DOC_MIME_MAX 64U
 
+/* The kind is derived once, after the whole attribute vector is read: a GIF
+   carries video and animated together, a voice note carries audio with the
+   voice flag set, and a sticker carries an imageSize as well. Deciding as the
+   attributes arrive would let the last one win and misread all three. */
+#define TG_MTPROTO_DOC_KIND_FILE    0U
+#define TG_MTPROTO_DOC_KIND_STICKER 1U
+#define TG_MTPROTO_DOC_KIND_GIF     2U
+#define TG_MTPROTO_DOC_KIND_VIDEO   3U
+#define TG_MTPROTO_DOC_KIND_VOICE   4U
+#define TG_MTPROTO_DOC_KIND_AUDIO   5U
+#define TG_MTPROTO_DOC_ATTR_STICKER  1UL
+#define TG_MTPROTO_DOC_ATTR_ANIMATED 2UL
+#define TG_MTPROTO_DOC_ATTR_VIDEO    4UL
+#define TG_MTPROTO_DOC_ATTR_AUDIO    8UL
+#define TG_MTPROTO_DOC_ATTR_VOICE    16UL
+#define TG_MTPROTO_DOC_ATTR_IMAGE    32UL
+/* Room for the emoji a sticker stands for. One codepoint is at most 4 bytes;
+   a joined sequence (family, flag, skin tone) runs longer and gets trimmed
+   back to a whole codepoint rather than kept as a broken one. */
+#define TG_MTPROTO_DOC_ALT_MAX 20U
+
 typedef struct tg_mtproto_document_meta {
     int has_document; /* 0 = documentEmpty or absent */
     unsigned long id_hi;
@@ -104,6 +125,15 @@ typedef struct tg_mtproto_document_meta {
     unsigned char file_reference[TG_MTPROTO_FILE_REF_MAX];
     char mime[TG_MTPROTO_DOC_MIME_MAX];
     char file_name[TG_MTPROTO_DOC_NAME_MAX]; /* "" when no filename attr */
+    /* What the document is, and the few attribute fields worth putting in a
+       bubble. The parser already walked the whole attribute vector to reach
+       the filename; from 0.0.92 it keeps what it walked past. */
+    unsigned char kind;               /* TG_MTPROTO_DOC_KIND_* */
+    unsigned long attr_seen;          /* parser scratch: TG_MTPROTO_DOC_ATTR_* */
+    char alt[TG_MTPROTO_DOC_ALT_MAX]; /* sticker emoji, "" when none */
+    unsigned long duration;           /* seconds, 0 = absent or unknown */
+    unsigned long width;              /* pixels, 0 = absent */
+    unsigned long height;
 } tg_mtproto_document_meta;
 
 /* Message photo (layer 214 Photo + selected PhotoSize). The parser keeps one
