@@ -154,7 +154,7 @@ the account salts, both stable; only srp_id and srp_B expire. So:
 That turns a guaranteed failure into a long but completable login. It needs
 `tg_mtproto_srp_make_proof` split into a derivation step and a proof step.
 
-## Planned: link previews (0.0.92)
+## Done in 0.0.92: link previews
 
 First field feedback on 0.0.9: link previews pasted into chats show up
 for some links and not for others. The ones that appear are not link
@@ -165,15 +165,22 @@ skips entirely, by design; the bubble shows only the clickable URL.
 
 Plan, in order:
 
-1. Parse `messageMediaWebPage` (TL constructors verified against the
-   layer-214 schema first): show the page title or site name plus the
-   first description line under the message text. The TUI shows the
-   title line only.
-2. When the preview carries a photo, feed it to the existing bounded
-   photo pipeline (stripped preview, incremental fetch, disk cache), so
-   the image costs nothing new and obeys the same inline-photos setting.
-3. Optional, only if the cycle has room: handle `updateWebPage`, so a
-   preview the server generates late still reaches an open chat.
+1. DONE. `messageMediaWebPage` is parsed and the bubble carries the site
+   and title on one bracketed line with the first description line under
+   it. Constructors verified at the source first: messageMediaWebPage
+   `ddf10c3b`, webPage `e89c45b2`, and the three that carry nothing to
+   show, `211a1788` / `b0d13e47` / `7311ca11`. The walk stops right after
+   the photo and never enters `cached_page`, the Instant View article,
+   which is a recursive tree of page blocks and would cost more than the
+   whole feature. Both clients show both lines: the plan had said the TUI
+   would show the title only, but the TUI word-wraps since 0.0.9, so
+   giving it less would have been extra code for less information.
+2. DONE, and it cost nothing. A webPage photo is a plain Photo, so
+   reading it hands the existing bounded pipeline exactly what it already
+   knows, under the same Inline photos setting.
+3. Still open: `updateWebPage`, so a preview the server generates late
+   reaches an open chat. Today a pending preview simply stays silent
+   until the history is read again.
 
 Even complete, previews will stay per-link: the server builds them from
 the target page's metadata, so pages without usable metadata show none
@@ -430,16 +437,22 @@ A sticker arrives as a document, so today it shows as a plain file
 label with a filename, which tells the reader nothing about what was
 sent. Three steps, in order of what they cost:
 
-1. Almost free: `documentAttributeSticker` is already parsed, but its
-   `alt` field, the emoji the sticker stands for, is thrown away by a
-   skip. Reading it instead turns the bubble into the sticker's own
-   emoji rather than `Sticker.webp`.
+1. DONE in 0.0.92, and it grew past the sticker. The parser was already
+   walking the whole attribute vector to reach the filename, so it now
+   keeps what it walked past: the sticker emoji, the clip duration and
+   geometry, the voice flag. The bubble says what the thing is rather
+   than naming a `.webp`. One display fix rode along, since an emoji
+   with no Latin-1 shape used to leave the space that introduced it
+   behind, in any text and not only here.
 2. The picture: a sticker document carries the same `thumbs` vector the
    inline-photo work already walks, so picking the best entry and
    handing it to the photo pipeline shows the sticker as a still, under
    the existing Inline photos preference. Worth checking per sticker
    type first, since our decoder reads JPEG and not every sticker thumb
-   is one.
+   is one. This is the one piece that needs the pipeline itself to
+   change: it fetches through `inputPhotoFileLocation`, and a document
+   thumb is `inputDocumentFileLocation` with a non-empty `thumb_size`.
+   The same change would give a video its still frame.
 3. Not planned: WEBP, the gzipped Lottie of animated stickers and WEBM
    video stickers. We have no decoder for any of them, and animation is
    not what this client is for.

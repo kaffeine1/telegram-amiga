@@ -1988,8 +1988,9 @@ static tg_mtproto_tl_status tg_read_document_attribute(
     case 0x15590068UL: /* documentAttributeFilename: THE one we want */
         return tg_read_string_copy(reader, out->file_name,
                                    sizeof(out->file_name));
-    case 0x11b58939UL: /* animated */
+    case 0x11b58939UL: /* animated: a GIF, paired with a video attribute */
         out->attr_seen |= TG_MTPROTO_DOC_ATTR_ANIMATED;
+        return TG_MTPROTO_TL_OK;
     case 0x9801d2f7UL: /* hasStickers */
         return TG_MTPROTO_TL_OK;
     case 0x6c37c15cUL: /* imageSize: w h */
@@ -4656,6 +4657,8 @@ static const char *tg_mtproto_media_label(unsigned long constructor)
         return "[File]";
     case 0x56e0d474UL: /* messageMediaGeo */
         return "[Location]";
+    case 0xddf10c3bUL: /* messageMediaWebPage: a link the server previewed */
+        return "[Link]";
     default:
         return "[Media]";
     }
@@ -4805,6 +4808,117 @@ static void tg_mtproto_format_document_label(
         text[n++] = *p;
     }
     text[n] = '\0';
+}
+
+/* A link preview is a page the server fetched on our behalf, so the fields are
+   short by construction. These caps are the bubble's, not the protocol's. */
+#define TG_WEBPAGE_SITE_MAX 40U
+#define TG_WEBPAGE_TITLE_MAX 96U
+#define TG_WEBPAGE_DESC_MAX 128U
+
+/* Reads the WebPage of a messageMediaWebPage and appends the two preview lines
+   under the message text: the bracketed site and title, then the first line of
+   the description. A bare pasted link used to show the URL and nothing else.
+
+   Only the fields a text bubble can show are read, in TL declaration order,
+   and the walk stops right after the photo. It never needs to go further:
+   cached_page:flags.10 is an Instant View article, a recursive tree of page
+   blocks and rich text that would cost more code than the whole feature, and
+   the caller abandons the reader after the media in any case.
+
+   Constructors verified at core.telegram.org: messageMediaWebPage ddf10c3b,
+   webPage e89c45b2, and the three that carry nothing to show, webPageEmpty
+   211a1788, webPagePending b0d13e47, webPageNotModified 7311ca11. A pending
+   preview is the server still fetching the page; it arrives later through
+   updateWebPage, which this client does not follow yet. */
+static void tg_mtproto_append_web_page(tg_mtproto_tl_reader *reader,
+                                       tg_mtproto_message_text *out)
+{
+    char site[TG_WEBPAGE_SITE_MAX];
+    char title[TG_WEBPAGE_TITLE_MAX];
+    char desc[TG_WEBPAGE_DESC_MAX];
+    unsigned long ctor;
+    unsigned long flags;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long scratch;
+    unsigned long n;
+    unsigned long i;
+
+    site[0] = '\0';
+    title[0] = '\0';
+    desc[0] = '\0';
+    if (tg_mtproto_tl_read_u32(reader, &ctor) != TG_MTPROTO_TL_OK ||
+        ctor != 0xe89c45b2UL) {
+        return; /* empty, pending or not modified: nothing to draw yet */
+    }
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u64(reader, &id_hi, &id_lo) != TG_MTPROTO_TL_OK ||
+        tg_skip_string(reader) != TG_MTPROTO_TL_OK ||  /* url */
+        tg_skip_string(reader) != TG_MTPROTO_TL_OK ||  /* display_url */
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if ((flags & 1UL) != 0UL && /* type: "article", "photo", "video", ... */
+        tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if ((flags & 2UL) != 0UL &&
+        tg_read_string_copy(reader, site, sizeof(site)) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if ((flags & 4UL) != 0UL &&
+        tg_read_string_copy(reader, title, sizeof(title)) !=
+            TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if ((flags & 8UL) != 0UL &&
+        tg_read_string_copy(reader, desc, sizeof(desc)) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    tg_trim_utf8_tail(site);
+    tg_trim_utf8_tail(title);
+    /* The description is a paragraph; the bubble gets its first line. */
+    for (i = 0UL; desc[i] != '\0'; ++i) {
+        if (desc[i] == '\n' || desc[i] == '\r') {
+            desc[i] = '\0';
+            break;
+        }
+    }
+    tg_trim_utf8_tail(desc);
+    /* The preview photo is a plain Photo, so it goes through the same bounded
+       inline pipeline as any other and obeys the same Inline photos setting.
+       The message keeps its own text, so this is never a photo-only bubble. */
+    if ((flags & 16UL) != 0UL) {
+        (void)tg_mtproto_read_photo(reader, &out->photo);
+    }
+    if (site[0] == '\0' && title[0] == '\0' && desc[0] == '\0') {
+        return; /* a preview with nothing in it is not worth a line */
+    }
+    n = (unsigned long)strlen(out->text);
+    if (site[0] != '\0' || title[0] != '\0') {
+        if (n != 0UL && n + 1UL < sizeof(out->text)) {
+            out->text[n++] = '\n';
+            out->text[n] = '\0';
+        }
+        tg_label_append(out->text, sizeof(out->text), &n, "[Link: ");
+        if (site[0] != '\0') {
+            tg_label_append(out->text, sizeof(out->text), &n, site);
+            if (title[0] != '\0') {
+                tg_label_append(out->text, sizeof(out->text), &n, " - ");
+            }
+        }
+        tg_label_append(out->text, sizeof(out->text), &n, title);
+        tg_label_append(out->text, sizeof(out->text), &n, "]");
+    }
+    if (desc[0] != '\0') {
+        if (n != 0UL && n + 1UL < sizeof(out->text)) {
+            out->text[n++] = '\n';
+            out->text[n] = '\0';
+        }
+        tg_label_append(out->text, sizeof(out->text), &n, desc);
+    }
+    out->has_text = out->text[0] != '\0';
 }
 
 /* Keep a real caption first (entity offsets refer to it), then place the file
@@ -4983,6 +5097,16 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                             TG_MTPROTO_TL_OK &&
                         (mflags & 1UL) != 0UL) {
                         (void)tg_mtproto_read_photo(reader, &out->photo);
+                    }
+                } else if (media_ctor == 0xddf10c3bUL) {
+                    /* messageMediaWebPage: flags then a non-optional WebPage.
+                       A pasted link used to show as the bare URL, because the
+                       preview the server built for it was skipped whole. */
+                    unsigned long mflags;
+
+                    if (tg_mtproto_tl_read_u32(reader, &mflags) ==
+                            TG_MTPROTO_TL_OK) {
+                        tg_mtproto_append_web_page(reader, out);
                     }
                 }
                 if (!out->has_text) { /* non-document media, or no caption */
@@ -5878,6 +6002,101 @@ int tg_mtproto_login_self_test(void)
                 puts("0.0.92 self-test: utf-8 tail trim ate a whole codepoint");
                 return 2;
             }
+        }
+    }
+
+    /* 0.0.92 link previews: a pasted link used to draw as the bare URL, with
+       the preview the server built for it skipped whole. Walk a synthetic
+       webPage off the wire and check the two lines it adds, the flag order it
+       depends on, and that the three empty forms stay silent. */
+    {
+        unsigned char wire[256];
+        tg_mtproto_tl_writer ww;
+        tg_mtproto_tl_reader wr;
+        static tg_mtproto_message_text msg;
+        tg_mtproto_tl_status ws;
+
+        tg_mtproto_tl_writer_init(&ww, wire, sizeof(wire));
+        ws = tg_mtproto_tl_write_u32(&ww, 0xe89c45b2UL); /* webPage */
+        /* flags: type(0) site_name(1) title(2) description(3), no photo */
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 15UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u64(&ww, 0UL, 7UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+            "https://www.morphos-team.net/");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+            "morphos-team.net");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 0UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "article");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "MorphOS Team");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+            "MorphOS 3.19 released");
+        /* Two paragraphs: the bubble takes the first line only. */
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+            "The team is pleased to announce.\nSecond paragraph.");
+        if (ws != TG_MTPROTO_TL_OK) {
+            puts("0.0.92 self-test: could not build the webPage wire");
+            return 2;
+        }
+        memset(&msg, 0, sizeof(msg));
+        strcpy(msg.text, "https://www.morphos-team.net/");
+        msg.has_text = 1;
+        tg_mtproto_tl_reader_init(&wr, wire, ww.length);
+        tg_mtproto_append_web_page(&wr, &msg);
+        if (strcmp(msg.text,
+                   "https://www.morphos-team.net/\n"
+                   "[Link: MorphOS Team - MorphOS 3.19 released]\n"
+                   "The team is pleased to announce.") != 0) {
+            printf("0.0.92 self-test: web page preview is \"%s\"\n", msg.text);
+            return 2;
+        }
+        if (msg.photo.has_photo) {
+            puts("0.0.92 self-test: web page invented a photo");
+            return 2;
+        }
+
+        /* Title but no site name, and no description. */
+        tg_mtproto_tl_writer_init(&ww, wire, sizeof(wire));
+        ws = tg_mtproto_tl_write_u32(&ww, 0xe89c45b2UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 4UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u64(&ww, 0UL, 8UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "http://a.b/");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "a.b");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 0UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "Solo titolo");
+        if (ws != TG_MTPROTO_TL_OK) {
+            puts("0.0.92 self-test: could not build the title-only wire");
+            return 2;
+        }
+        memset(&msg, 0, sizeof(msg));
+        strcpy(msg.text, "http://a.b/");
+        msg.has_text = 1;
+        tg_mtproto_tl_reader_init(&wr, wire, ww.length);
+        tg_mtproto_append_web_page(&wr, &msg);
+        if (strcmp(msg.text, "http://a.b/\n[Link: Solo titolo]") != 0) {
+            printf("0.0.92 self-test: title-only preview is \"%s\"\n",
+                   msg.text);
+            return 2;
+        }
+
+        /* The server is still fetching it: say nothing rather than guess. */
+        tg_mtproto_tl_writer_init(&ww, wire, sizeof(wire));
+        ws = tg_mtproto_tl_write_u32(&ww, 0xb0d13e47UL); /* webPagePending */
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 0UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u64(&ww, 0UL, 9UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 0UL);
+        if (ws != TG_MTPROTO_TL_OK) {
+            puts("0.0.92 self-test: could not build the pending wire");
+            return 2;
+        }
+        memset(&msg, 0, sizeof(msg));
+        strcpy(msg.text, "http://a.b/");
+        msg.has_text = 1;
+        tg_mtproto_tl_reader_init(&wr, wire, ww.length);
+        tg_mtproto_append_web_page(&wr, &msg);
+        if (strcmp(msg.text, "http://a.b/") != 0) {
+            printf("0.0.92 self-test: pending preview wrote \"%s\"\n",
+                   msg.text);
+            return 2;
         }
     }
 

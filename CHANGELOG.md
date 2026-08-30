@@ -5,6 +5,41 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
+## [Unreleased]
+
+### Added
+- Links get their preview. A pasted link showed as the bare URL, because the
+  preview the server had already built for it was skipped whole; the bubble
+  now carries the site and page title on one line and the first line of the
+  description under it. When the preview comes with a picture, that picture
+  goes through the same bounded photo pipeline as any other and obeys the
+  same Inline photos setting. A preview the server is still fetching stays
+  silent rather than guessing.
+- The transcript says what an attachment is instead of what it is called. A
+  sticker shows the emoji it stands for, a clip its length and its shape, a
+  voice note its duration. Music keeps its filename, which is how you know
+  which track it is, and a plain file is unchanged.
+- The login panel says where Telegram sent the code. With another device
+  signed in the code arrives inside Telegram itself, not by SMS, and a first
+  user waited for a message that was never coming. The window now says which
+  it was, and the digit count when the server gives one. The manuals say it
+  too, on the first-start page.
+
+### Fixed
+- A downloaded Amiga program comes out runnable. The executable bit is set
+  from the file's own magic longword rather than its name, on the completed
+  download only, and the other protection bits survive. Reported with the
+  polarity warning that saved a round: on Amiga those bits are active low.
+- A long message goes out. The send query was built into a 512 byte buffer,
+  so anything past roughly 460 characters failed to build and the client
+  quietly refused to send it. Both send paths now size that buffer from the
+  composer. Pasting more than the composer holds also used to truncate in
+  silence while still reporting success; it now says how much landed.
+- A symbol with no Latin-1 shape no longer leaves a hole. It renders as
+  nothing, and the space that introduced it stayed behind, so a line read
+  with a gap in the middle. The space now leaves with the symbol. Modifiers
+  are exempt, since they attach to the character before them.
+
 ## [0.0.91] - 2026-08-27
 
 ### Added
