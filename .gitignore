@@ -36,6 +36,3 @@ telegram-*-self-test.tmp
 
 .DS_Store
 telegram-text.txt
-
-# Istruzioni operative locali (privato, non committare)
-CLAUDE.md
