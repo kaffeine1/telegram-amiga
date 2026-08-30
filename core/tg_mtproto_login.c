@@ -4726,13 +4726,21 @@ static void tg_label_append(char *text, unsigned long text_size,
     text[*n] = '\0';
 }
 
-/* m:ss, or h:mm:ss once past the hour. `buf` needs 16 bytes. */
+/* m:ss, or h:mm:ss once past the hour. `buf` needs TG_DURATION_BUF bytes.
+   The hour count is clamped rather than trusted: it comes off the wire, a
+   four digit hour is already not a real clip, and a caller reading a fixed
+   buffer should not have to reason about how wide a long is on its lane. */
+#define TG_DURATION_BUF 24U
+#define TG_DURATION_HOURS_MAX 9999UL
 static void tg_format_duration(unsigned long seconds, char *buf)
 {
     unsigned long h = seconds / 3600UL;
     unsigned long m = (seconds / 60UL) % 60UL;
     unsigned long s = seconds % 60UL;
 
+    if (h > TG_DURATION_HOURS_MAX) {
+        h = TG_DURATION_HOURS_MAX;
+    }
     if (h != 0UL) {
         sprintf(buf, "%lu:%02lu:%02lu", h, m, s);
     } else {
@@ -4751,7 +4759,7 @@ static void tg_mtproto_format_document_label(
     const tg_mtproto_document_meta *doc, char *text, unsigned long text_size)
 {
     char size_buf[24];
-    char dur_buf[16];
+    char dur_buf[TG_DURATION_BUF];
     char geo_buf[24];
     const char *name;
     unsigned long n = 0UL;
@@ -4792,7 +4800,10 @@ static void tg_mtproto_format_document_label(
     if (doc->duration != 0UL) {
         tg_format_duration(doc->duration, dur_buf);
     }
-    if (doc->width != 0UL && doc->height != 0UL) {
+    /* Geometry only when it is geometry: past the largest sensor anyone will
+       point at an Amiga, the number says nothing and would not fit either. */
+    if (doc->width != 0UL && doc->height != 0UL &&
+        doc->width <= 99999UL && doc->height <= 99999UL) {
         sprintf(geo_buf, "%lux%lu", doc->width, doc->height);
     }
     switch (doc->kind) {
