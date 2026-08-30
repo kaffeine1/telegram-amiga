@@ -171,13 +171,26 @@ typedef struct tg_mtproto_photo_meta {
     tg_mtproto_photo_variant variants[TG_MTPROTO_PHOTO_VARIANT_MAX];
     unsigned long stripped_len;
     unsigned char stripped[TG_MTPROTO_STRIPPED_MAX];
+    /* 0.0.92: this "photo" is a document's thumbnail (a sticker still, a
+       video frame), so the identity above is the Document's and the fetch
+       must ask for inputDocumentFileLocation. Everything downstream, the
+       queue, the cache, the decoder and the pacing, is unchanged: a thumb is
+       a JPEG like any other. */
+    int from_document;
 } tg_mtproto_photo_meta;
 
 /* Parses one bare Document (document#8fd4c4d8 / documentEmpty#36f8c871),
    reader positioned ON the constructor; leaves the reader right after the
-   object (all thumb/attribute variants are skipped wire-exactly). */
+   object (every variant is walked wire-exactly).
+
+   `thumb` is optional. When given, the thumbs vector is selected into it the
+   way a Photo's sizes are, and on success it carries the Document's identity
+   with from_document set, ready for the inline photo pipeline: that is a
+   sticker's still and a video's frame. Pass NULL to skip the vector as
+   before. */
 tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
-                                              tg_mtproto_document_meta *out);
+                                              tg_mtproto_document_meta *out,
+                                              tg_mtproto_photo_meta *thumb);
 
 /* upload.getFile of a document (inputDocumentFileLocation, empty thumb_size);
    same offset/limit rules as the avatar download. */

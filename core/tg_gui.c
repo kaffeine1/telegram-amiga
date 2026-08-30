@@ -1764,6 +1764,21 @@ static int tg_gui_message_grouped(const tg_gui_state *state, int index)
     return 1;
 }
 
+/* What stands in for an image that is not being drawn: the marker with the
+   click target that opens the viewer on demand. It says "[Photo]" for a photo,
+   but a sticker's own label ("[Sticker :)]") says more for the same space, and
+   for a photo_only message that label IS the whole message text. Anything
+   longer than a marker falls back, so the box never grows into a paragraph. */
+#define TG_GUI_PHOTO_PLACEHOLDER_MAX 24U
+static const char *tg_gui_photo_placeholder(const tg_gui_message *message)
+{
+    if (message->photo_only && message->text[0] == '[' &&
+        strlen(message->text) < TG_GUI_PHOTO_PLACEHOLDER_MAX) {
+        return message->text;
+    }
+    return "[Photo]";
+}
+
 static void tg_gui_bubble_geometry(tg_gui_backend *backend,
                                    const tg_gui_message *message, int area_x,
                                    int area_w, int lh, int inline_photos,
@@ -1787,7 +1802,10 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
                                                : area_w;
     }
     if (message->has_photo && !inline_photos) {
-        geo->photo_w = backend->text_width(backend, "[Photo]", 7UL);
+        const char *ph = tg_gui_photo_placeholder(message);
+
+        geo->photo_w = backend->text_width(backend, ph,
+                                           (unsigned long)strlen(ph));
         geo->photo_h = lh;
     } else {
         tg_gui_photo_geometry(message, max_bubble_w - (2 * geo->pad),
@@ -2045,8 +2063,11 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             /* A deferred first decode (notably during NEWSIZE) must not leave
                an unexplained empty bubble. The next stable paint replaces
                this marker with the cached canonical image. */
+            const char *ph = tg_gui_photo_placeholder(message);
+
             backend->draw_text(backend, time_pen, photo_rect.x,
-                               photo_rect.y + lh, "[Photo]", 7UL);
+                               photo_rect.y + lh, ph,
+                               (unsigned long)strlen(ph));
         }
     }
     style = 0;
@@ -4233,6 +4254,33 @@ int tg_gui_self_test(void)
             state.photo_h[1] <= 0 || hit != TG_GUI_HIT_PHOTO_BASE - 1) {
             puts("gui self-test: disabled inline photo did background work");
             return 2;
+        }
+
+        /* 0.0.92: with inline photos off, a sticker's marker says what the
+           sticker is instead of "[Photo]", and it keeps the click target that
+           opens the viewer. A photo's marker is unchanged. */
+        {
+            char kept[TG_GUI_MSG_TEXT_MAX];
+            tg_gui_record st_record;
+
+            strcpy(kept, state.messages[1].text);
+            strcpy(state.messages[1].text, "[Sticker :)]");
+            state.inline_photos = 0;
+            memset(&st_record, 0, sizeof(st_record));
+            st_record.width = 480;
+            st_record.height = 320;
+            st_record.min_x = st_record.width;
+            st_record.min_y = st_record.height;
+            st_record.forbidden = "[Photo]";
+            backend.context = &st_record;
+            tg_gui_paint(&state, &backend);
+            strcpy(state.messages[1].text, kept);
+            state.inline_photos = 1;
+            backend.context = &record;
+            if (st_record.forbidden_hits != 0 || state.photo_w[1] <= 0) {
+                puts("gui self-test: sticker marker fell back to [Photo]");
+                return 2;
+            }
         }
     }
 

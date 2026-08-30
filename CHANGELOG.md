@@ -15,6 +15,14 @@ unless noted.
   goes through the same bounded photo pipeline as any other and obeys the
   same Inline photos setting. A preview the server is still fetching stays
   silent rather than guessing.
+- Stickers show as a picture and videos show a frame. A document carries the
+  same thumbnail vector a photo's sizes come from, so the still goes through
+  the bounded inline pipeline unchanged: same disk cache, same pacing, same
+  Inline photos setting, and nothing new to download twice. A sticker's emoji
+  label steps aside once its picture is drawn; a clip keeps its length and
+  size beside the frame, because those are not in the frame. With inline
+  photos switched off the marker now says what the thing is rather than
+  "[Photo]", and it still opens the viewer when clicked.
 - The transcript says what an attachment is instead of what it is called. A
   sticker shows the emoji it stands for, a clip its length and its shape, a
   voice note its duration. Music keeps its filename, which is how you know

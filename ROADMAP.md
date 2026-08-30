@@ -444,15 +444,18 @@ sent. Three steps, in order of what they cost:
    than naming a `.webp`. One display fix rode along, since an emoji
    with no Latin-1 shape used to leave the space that introduced it
    behind, in any text and not only here.
-2. The picture: a sticker document carries the same `thumbs` vector the
-   inline-photo work already walks, so picking the best entry and
-   handing it to the photo pipeline shows the sticker as a still, under
-   the existing Inline photos preference. Worth checking per sticker
-   type first, since our decoder reads JPEG and not every sticker thumb
-   is one. This is the one piece that needs the pipeline itself to
-   change: it fetches through `inputPhotoFileLocation`, and a document
-   thumb is `inputDocumentFileLocation` with a non-empty `thumb_size`.
-   The same change would give a video its still frame.
+2. DONE in 0.0.92, and it gave the video its frame in the same move. The
+   thumbs vector is selected exactly the way a Photo's sizes are, the
+   thumb wears the Document's identity, and the one word that changes on
+   the wire is the location constructor:
+   `inputDocumentFileLocation` instead of `inputPhotoFileLocation`, same
+   four fields. The worry about formats answered itself: the selector
+   only ever picks `photoSize` and `photoSizeProgressive`, which are
+   server-generated JPEG previews, and `photoPathSize`, the SVG outline
+   an animated sticker carries, was already marked undownloadable. If a
+   thumb still fails to decode, the existing fallback drops that variant,
+   remembers it and tries a smaller one, then gives up and leaves the
+   text label. Nothing new was needed for that.
 3. Not planned: WEBP, the gzipped Lottie of animated stickers and WEBM
    video stickers. We have no decoder for any of them, and animation is
    not what this client is for.

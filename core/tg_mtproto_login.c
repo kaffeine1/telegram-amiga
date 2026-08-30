@@ -1731,48 +1731,22 @@ static int tg_photo_candidate_preferred(unsigned long edge,
     return tg_photo_candidate_better(edge, best, target);
 }
 
-tg_mtproto_tl_status tg_mtproto_read_photo(tg_mtproto_tl_reader *reader,
-                                           tg_mtproto_photo_meta *out)
+/* Reads `count` PhotoSize entries and fills the selection fields of `out`:
+   the bounded inline pick, the larger viewer pick, the variant list and the
+   stripped preview. A Photo's sizes and a Document's thumbs are the same
+   vector of the same type, so a sticker still and a video frame get selected
+   exactly the way a photo does. */
+static tg_mtproto_tl_status tg_read_photo_size_vector(
+    tg_mtproto_tl_reader *reader,
+    unsigned long count,
+    tg_mtproto_photo_meta *out)
 {
-    unsigned long ctor;
-    unsigned long flags;
-    unsigned long scratch;
-    const unsigned char *ref;
-    unsigned long ref_len;
-    unsigned long count;
     unsigned long i;
     unsigned long best_edge;
     unsigned long best_large_edge;
     int best_progressive;
     int best_large_progressive;
 
-    if (reader == 0 || out == 0) {
-        return TG_MTPROTO_TL_INVALID_ARGUMENT;
-    }
-    memset(out, 0, sizeof(*out));
-    if (tg_mtproto_tl_read_u32(reader, &ctor) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_INVALID_DATA;
-    }
-    if (ctor == 0x2331b22dUL) { /* photoEmpty: id */
-        return tg_mtproto_tl_read_u64(reader, &out->id_hi, &out->id_lo);
-    }
-    if (ctor != 0xfb197a65UL ||
-        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u64(reader, &out->id_hi, &out->id_lo) !=
-            TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u64(reader, &out->access_hash_hi,
-                               &out->access_hash_lo) != TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_bytes(reader, &ref, &ref_len) !=
-            TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
-        tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
-        count > 64UL) {
-        return TG_MTPROTO_TL_INVALID_DATA;
-    }
-    if (ref_len > 0UL && ref_len <= TG_MTPROTO_FILE_REF_MAX) {
-        memcpy(out->file_reference, ref, ref_len);
-        out->file_reference_len = ref_len;
-    }
     best_edge = 0UL;
     best_large_edge = 0UL;
     best_progressive = 0;
@@ -1834,6 +1808,50 @@ tg_mtproto_tl_status tg_mtproto_read_photo(tg_mtproto_tl_reader *reader,
             best_large_edge = edge;
             best_large_progressive = progressive;
         }
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+tg_mtproto_tl_status tg_mtproto_read_photo(tg_mtproto_tl_reader *reader,
+                                           tg_mtproto_photo_meta *out)
+{
+    unsigned long ctor;
+    unsigned long flags;
+    unsigned long scratch;
+    const unsigned char *ref;
+    unsigned long ref_len;
+    unsigned long count;
+    unsigned long i;
+
+    if (reader == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(out, 0, sizeof(*out));
+    if (tg_mtproto_tl_read_u32(reader, &ctor) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (ctor == 0x2331b22dUL) { /* photoEmpty: id */
+        return tg_mtproto_tl_read_u64(reader, &out->id_hi, &out->id_lo);
+    }
+    if (ctor != 0xfb197a65UL ||
+        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u64(reader, &out->id_hi, &out->id_lo) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u64(reader, &out->access_hash_hi,
+                               &out->access_hash_lo) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_bytes(reader, &ref, &ref_len) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
+        tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+        count > 64UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (ref_len > 0UL && ref_len <= TG_MTPROTO_FILE_REF_MAX) {
+        memcpy(out->file_reference, ref, ref_len);
+        out->file_reference_len = ref_len;
+    }
+    if (tg_read_photo_size_vector(reader, count, out) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 2UL) != 0UL) { /* video_sizes:Vector<VideoSize> */
         if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
@@ -2070,7 +2088,8 @@ static tg_mtproto_tl_status tg_read_document_attribute(
 }
 
 tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
-                                              tg_mtproto_document_meta *out)
+                                              tg_mtproto_document_meta *out,
+                                              tg_mtproto_photo_meta *thumb)
 {
     unsigned long ctor;
     unsigned long flags;
@@ -2084,6 +2103,9 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     memset(out, 0, sizeof(*out));
+    if (thumb != 0) {
+        memset(thumb, 0, sizeof(*thumb)); /* the selector appends: start clean */
+    }
     if (tg_mtproto_tl_read_u32(reader, &ctor) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
@@ -2116,9 +2138,16 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
             count > 64UL) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
-        for (i = 0UL; i < count; ++i) {
-            if (tg_skip_photo_size(reader) != TG_MTPROTO_TL_OK) {
+        if (thumb != 0) {
+            if (tg_read_photo_size_vector(reader, count, thumb) !=
+                TG_MTPROTO_TL_OK) {
                 return TG_MTPROTO_TL_INVALID_DATA;
+            }
+        } else {
+            for (i = 0UL; i < count; ++i) {
+                if (tg_skip_photo_size(reader) != TG_MTPROTO_TL_OK) {
+                    return TG_MTPROTO_TL_INVALID_DATA;
+                }
             }
         }
     }
@@ -2147,6 +2176,23 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
     }
     out->kind = tg_mtproto_document_kind_of(out->attr_seen);
     out->has_document = 1;
+    /* The thumb borrows the Document's identity: a thumbnail is not addressed
+       by an id of its own, it is this file asked for at a given thumb_size. */
+    if (thumb != 0 && thumb->thumb_type[0] != '\0' &&
+        out->file_reference_len != 0UL) {
+        thumb->id_hi = out->id_hi;
+        thumb->id_lo = out->id_lo;
+        thumb->access_hash_hi = out->access_hash_hi;
+        thumb->access_hash_lo = out->access_hash_lo;
+        thumb->file_reference_len = out->file_reference_len;
+        memcpy(thumb->file_reference, out->file_reference,
+               (size_t)out->file_reference_len);
+        thumb->dc_id = out->dc_id;
+        thumb->from_document = 1;
+        thumb->has_photo = thumb->size != 0UL;
+        thumb->has_large = thumb->large_thumb_type[0] != '\0' &&
+                           thumb->large_size != 0UL;
+    }
     return TG_MTPROTO_TL_OK;
 }
 
@@ -2213,7 +2259,12 @@ tg_mtproto_tl_status tg_mtproto_build_upload_get_photo(
         status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0x40181ffeUL);
+        /* Same four fields either way (id, access_hash, file_reference,
+           thumb_size): only the location's own constructor says whether the
+           id names a Photo or the Document this thumbnail belongs to. */
+        status = tg_mtproto_tl_write_u32(
+            writer, photo->from_document ? 0xbad07584UL /* inputDocument.. */
+                                         : 0x40181ffeUL /* inputPhoto.. */);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u64(writer, photo->id_hi, photo->id_lo);
@@ -5077,17 +5128,28 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                    parse hiccup just falls back to the plain placeholder. */
                 if (media_ctor == 0x52d8ccd9UL) {
                     unsigned long mflags;
+                    int had_caption = out->has_text;
 
                     if (tg_mtproto_tl_read_u32(reader, &mflags) ==
                             TG_MTPROTO_TL_OK &&
                         (mflags & 1UL) != 0UL &&
-                        tg_mtproto_read_document(reader, &out->document) ==
+                        tg_mtproto_read_document(reader, &out->document,
+                                                 &out->photo) ==
                             TG_MTPROTO_TL_OK &&
                         out->document.has_document) {
                         tg_mtproto_append_document_label(&out->document,
                                                          out->text,
                                                          sizeof(out->text));
                         out->has_text = out->text[0] != '\0';
+                        /* A sticker IS its picture: once the still is drawn
+                           the emoji label has nothing left to add, so it
+                           steps aside the way the "[Photo]" fallback does.
+                           A clip keeps its label beside the frame, because
+                           the length and the size are not in the frame. */
+                        out->photo_only =
+                            !had_caption && out->photo.has_photo &&
+                            out->document.kind ==
+                                (unsigned char)TG_MTPROTO_DOC_KIND_STICKER;
                     }
                 } else if (media_ctor == 0x695150d7UL) {
                     unsigned long mflags;
@@ -6002,6 +6064,107 @@ int tg_mtproto_login_self_test(void)
                 puts("0.0.92 self-test: utf-8 tail trim ate a whole codepoint");
                 return 2;
             }
+        }
+    }
+
+    /* 0.0.92 document thumbnails: a video's frame and a sticker's still are
+       the same thumbs vector a Photo's sizes come from, so they go through
+       the inline pipeline unchanged. What differs is one word on the wire:
+       the location names the Document, not a Photo. */
+    {
+        unsigned char wire[256];
+        unsigned char query[96];
+        unsigned char ref[2];
+        tg_mtproto_tl_writer dw;
+        tg_mtproto_tl_writer qw;
+        tg_mtproto_tl_reader dr;
+        tg_mtproto_document_meta doc;
+        tg_mtproto_photo_meta thumb;
+        tg_mtproto_tl_status ds;
+
+        ref[0] = 0xa1U;
+        ref[1] = 0xb2U;
+        tg_mtproto_tl_writer_init(&dw, wire, sizeof(wire));
+        ds = tg_mtproto_tl_write_u32(&dw, 0x8fd4c4d8UL); /* document */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0x11223344UL, 0x55667788UL);        /* id */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0x99aabbccUL, 0xddeeff00UL);        /* access_hash */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_bytes(
+            &dw, ref, sizeof(ref));
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 0UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(&dw, "video/mp4");
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0UL, 3UL * 1048576UL);
+        /* thumbs: one photoSize the pipeline can actually fetch */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, TG_VECTOR_CONSTRUCTOR);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, 0x75c78e60UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(&dw, "m");
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 320UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 180UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 9000UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 2UL);
+        /* attributes: one video attribute, 4.0 seconds, 640x360 */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, TG_VECTOR_CONSTRUCTOR);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, 0x43c57c48UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 0UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0x40100000UL, 0UL);                 /* 4.0 as a double */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 640UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 360UL);
+        if (ds != TG_MTPROTO_TL_OK) {
+            puts("0.0.92 self-test: could not build the document wire");
+            return 2;
+        }
+        memset(&thumb, 0, sizeof(thumb));
+        tg_mtproto_tl_reader_init(&dr, wire, dw.length);
+        if (tg_mtproto_read_document(&dr, &doc, &thumb) != TG_MTPROTO_TL_OK ||
+            !doc.has_document) {
+            puts("0.0.92 self-test: document with thumbs did not parse");
+            return 2;
+        }
+        if (doc.kind != (unsigned char)TG_MTPROTO_DOC_KIND_VIDEO ||
+            doc.duration != 4UL || doc.width != 640UL || doc.height != 360UL) {
+            puts("0.0.92 self-test: video attributes were not kept");
+            return 2;
+        }
+        /* The thumb wears the Document's identity, not one of its own. */
+        if (!thumb.has_photo || !thumb.from_document ||
+            thumb.id_hi != 0x11223344UL || thumb.id_lo != 0x55667788UL ||
+            thumb.access_hash_hi != 0x99aabbccUL ||
+            thumb.access_hash_lo != 0xddeeff00UL ||
+            thumb.file_reference_len != sizeof(ref) ||
+            thumb.file_reference[0] != 0xa1U ||
+            thumb.dc_id != 2UL || strcmp(thumb.thumb_type, "m") != 0 ||
+            thumb.width != 320UL || thumb.height != 180UL) {
+            puts("0.0.92 self-test: document thumb identity wrong");
+            return 2;
+        }
+        /* And the query asks for a document location, not a photo one. */
+        tg_mtproto_tl_writer_init(&qw, query, sizeof(query));
+        if (tg_mtproto_build_upload_get_photo(&qw, &thumb, 0UL, 4096UL) !=
+            TG_MTPROTO_TL_OK) {
+            puts("0.0.92 self-test: thumb query would not build");
+            return 2;
+        }
+        if (query[8] != 0x84U || query[9] != 0x75U || query[10] != 0xd0U ||
+            query[11] != 0xbaU) { /* inputDocumentFileLocation, LE */
+            puts("0.0.92 self-test: thumb query used the photo location");
+            return 2;
+        }
+        /* Passing no thumb still walks the vector wire-exactly. */
+        tg_mtproto_tl_reader_init(&dr, wire, dw.length);
+        if (tg_mtproto_read_document(&dr, &doc, 0) != TG_MTPROTO_TL_OK ||
+            doc.kind != (unsigned char)TG_MTPROTO_DOC_KIND_VIDEO) {
+            puts("0.0.92 self-test: skipping the thumbs broke the walk");
+            return 2;
         }
     }
 
