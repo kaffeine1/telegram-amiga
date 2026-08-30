@@ -23,9 +23,9 @@ Two front-ends share one engine:
 - **TelegramAmiga-TUI** — the text/console client, at home on a 68030 with a
   serial console: same engine, launched from the second icon.
 
-![Telegram Amiga GUI on AmigaOS 4](assets/screenshots/telegram-amiga-gui-os4.png)
+![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.9** - everyday direct-message and group chat works on all
+Status: **alpha 0.0.91** - everyday direct-message and group chat works on all
 five platforms below. 0.0.9 brings photo messages into the native client:
 instant blurred previews, progressive inline rendering, a larger click-to-open
 viewer, an on-disk pixel cache with size controls, `Save photo as...` and native
