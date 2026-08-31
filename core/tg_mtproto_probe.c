@@ -11124,6 +11124,28 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.photo_id_lo = texts.messages[i].photo.id_lo;
                 row.photo_width = texts.messages[i].photo.width;
                 row.photo_height = texts.messages[i].photo.height;
+                /* 0.0.92 field diagnostic: a document that carries no
+                   usable thumbnail and one whose thumbnail simply never
+                   arrives look identical on screen (label, empty space), so
+                   say here what the parser actually found. One line per
+                   document, only with the debug log on. */
+                if (row.has_document && tg_gui_log_is_enabled()) {
+                    char dline[128];
+
+                    sprintf(dline,
+                            "doc: kind=%u attrs=%lu thumb=%s %lux%lu %lu b "
+                            "has_photo=%d from_doc=%d",
+                            (unsigned)texts.messages[i].document.kind,
+                            texts.messages[i].document.attr_seen,
+                            texts.messages[i].photo.thumb_type[0] != '\0'
+                                ? texts.messages[i].photo.thumb_type : "-",
+                            texts.messages[i].photo.width,
+                            texts.messages[i].photo.height,
+                            texts.messages[i].photo.size,
+                            texts.messages[i].photo.has_photo,
+                            texts.messages[i].photo.from_document);
+                    tg_gui_log(dline);
+                }
                 if (row.has_photo) {
                     row.photo_ready = tg_gui_photo_cache_exists(
                         row.photo_id_hi, row.photo_id_lo, 0);
