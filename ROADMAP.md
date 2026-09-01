@@ -391,6 +391,67 @@ those bytes even though it now refuses the sticker thumbnail, and the
 `doc:` line reports their length, so this can be decided by looking at
 one on a real screen instead of by taste.
 
+## Worth deciding: let datatypes read what we cannot
+
+Asked whether anything on Amiga reads WEBP outside this client, and the
+answer turned out to be yes, twice, and the second one is usable.
+
+Wayfarer reads WEBP, since version 1.4 in October 2020, but it does it
+inside WebKit, so nothing outside the browser can call it. The one that
+matters is **WarpWebP.datatype**, version 45.5 of January 2024, which
+covers 68k, PPC/OS4, PPC/WarpOS and PPC/MorphOS and wants a 68020 or
+better. There is an older WebP datatype and a webpconv tool from 2010
+as well. A datatype is exactly the Amiga answer to this problem: any
+program can open any format the user has installed, through an OS
+library, without knowing anything about the format.
+
+So the option is not "write a VP8 decoder", which the section above
+rightly refuses. The option is to ask `datatypes.library` to decode
+what our own decoders cannot, and to keep everything else as it is.
+
+The shape it should take:
+
+- Our JPEG path does not move. tjpgd is zero dependency, works on a
+  stock machine with nothing installed, and decodes at 1/8 and 1/4
+  scale so memory stays bounded. That is the primary path and the only
+  one photos ever need, since photos always arrive as JPEG.
+- A datatype attempt becomes the fallback for a format we cannot read:
+  a sticker's WEBP thumbnail today, a PNG thumbnail if those turn out
+  to exist. `picture.datatype` in V43 mode hands back RGB, which is
+  what the pipeline already consumes after a decode.
+- No datatype installed means the attempt fails cleanly and the bubble
+  keeps its text label, which is exactly what happens now. Nothing
+  regresses for a user who installs nothing.
+
+What has to be weighed before doing it, because none of it is free:
+
+- It would be the first soft dependency in a client whose whole point
+  is needing nothing. It stays honest only if it degrades in silence,
+  never nags, and never becomes the path anything requires.
+- `picture.datatype` differs across AmigaOS 3, AmigaOS 4, MorphOS and
+  AROS in tags and in how the pixels come back. Four lanes, one code
+  path, and the usual crop of small incompatibilities.
+- A datatype decodes at full size, with no scaled mode to ask for. A
+  320x320 sticker is around 300 KB in truecolour. Bounded, affordable
+  one at a time, but it wants a hard size cap before it is let near the
+  8 MB lane.
+- Speed on 68k. WarpWebP needs an 020 at minimum, and a 320x320 sticker
+  on an 020 will not be quick. It belongs behind the Inline photos
+  setting, and on 68k probably behind an explicit opt-in.
+- AROS is not covered by the Warp datatypes, and no WEBP datatype for
+  it has been checked. The AROS lanes would simply keep the label.
+
+Worth noting what else the same door opens: a PNG datatype is common
+enough that this may cover PNG thumbnails without us writing the
+decoder in the section above. The two are not rivals, they answer
+different questions. Ours would work with nothing installed; this one
+works with whatever the user already has, including formats we will
+never support.
+
+Not for 0.0.92, which is at full scope. Placing it is a decision, not a
+detail: it is the first crack in a rule the project has kept from the
+start.
+
 ## Planned: find out what caps transfer speed
 
 A field measurement on MorphOS: a speed test running on that same
