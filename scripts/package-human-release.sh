@@ -503,6 +503,10 @@ Using the GUI
   The conversation returns to lightweight [Photo] labels and does no background
   photo fetch or decode work. Click an individual [Photo] label to load only
   that image in the viewer. The choice is remembered for the next run.
+- Videos show a frame and a pasted link shows its preview, with the picture
+  when the page has one. Both go through the same photo pipeline, so the same
+  "Show inline photos" setting governs them. Stickers show the emoji they
+  stand for; their picture is a format this client cannot decode.
 - "Settings > Photo dithering" controls pen-grid photo quality: Full is the
   default, Light uses a gentler pattern, and Off uses direct colour matching.
   It affects paletted screens only. Compatible MorphOS, AmigaOS 4 and AROS RTG
@@ -670,6 +674,11 @@ Usare la GUI
   Telegram. La conversazione torna alle leggere etichette [Photo] e non avvia
   download o decodifiche in background. Clicca una singola [Photo] per caricare
   solo quella immagine nel viewer. La scelta resta memorizzata al riavvio.
+- I video mostrano un fotogramma e un link incollato mostra la sua anteprima,
+  con l'immagine se la pagina ne ha una. Passano dalla stessa pipeline delle
+  foto, quindi li governa la stessa impostazione "Show inline photos". Gli
+  sticker mostrano l'emoji che rappresentano: la loro immagine e' in un
+  formato che questo client non sa decodificare.
 - "Settings > Photo dithering" regola la resa delle foto a penne: Full e' il
   valore predefinito, Light usa una trama piu' leggera e Off usa i colori
   diretti. Vale solo sugli schermi a palette. Gli schermi RTG compatibili di
