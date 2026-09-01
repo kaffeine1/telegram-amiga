@@ -2186,7 +2186,23 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
        The emoji stays; the picture is a WEBP decoder away, which the roadmap
        does not plan. */
     if (thumb != 0 && out->kind == (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
+        /* The stripped preview survives the wipe. It is inline in the message,
+           it costs no request, and it is a JPEG whatever the sticker is: if we
+           ever decide a blurred thumbnail beats no thumbnail here, the bytes
+           are already in hand. Nothing reads it while has_photo stays 0. */
+        unsigned char keep[TG_MTPROTO_STRIPPED_MAX];
+        unsigned long keep_len = thumb->stripped_len;
+
+        if (keep_len > 0UL && keep_len <= sizeof(keep)) {
+            memcpy(keep, thumb->stripped, (size_t)keep_len);
+        } else {
+            keep_len = 0UL;
+        }
         memset(thumb, 0, sizeof(*thumb));
+        if (keep_len > 0UL) {
+            memcpy(thumb->stripped, keep, (size_t)keep_len);
+            thumb->stripped_len = keep_len;
+        }
     }
     /* The thumb borrows the Document's identity: a thumbnail is not addressed
        by an id of its own, it is this file asked for at a given thumb_size. */

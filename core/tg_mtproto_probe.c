@@ -11150,7 +11150,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
 
                     sprintf(dline,
                             "doc: kind=%u attrs=%lu thumb=%s %lux%lu %lu b "
-                            "has_photo=%d from_doc=%d",
+                            "stripped=%lu has_photo=%d from_doc=%d",
                             (unsigned)texts.messages[i].document.kind,
                             texts.messages[i].document.attr_seen,
                             texts.messages[i].photo.thumb_type[0] != '\0'
@@ -11158,6 +11158,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                             texts.messages[i].photo.width,
                             texts.messages[i].photo.height,
                             texts.messages[i].photo.size,
+                            texts.messages[i].photo.stripped_len,
                             texts.messages[i].photo.has_photo,
                             texts.messages[i].photo.from_document);
                     tg_gui_log(dline);

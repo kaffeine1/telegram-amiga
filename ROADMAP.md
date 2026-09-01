@@ -114,7 +114,9 @@ Features are therefore grouped by the work they share.
   the same document parsing and the same photo pipeline, so they are
   cheaper together than apart.
 - **0.0.93, sending.** The emoji picker with its glyph sheet, and
-  sending images that are not JPEGs, PNG first.
+  sending images that are not JPEGs, PNG first. Reading PNG is a
+  separate item with its own section, and cheaper than it sounds
+  because the inflate half is already in the tree.
 - **0.0.94, speed and open defects.** Whatever the transfer-ceiling
   measurement turns up, the two MorphOS popup glitches, photo speed
   under AfA_OS and two-step verification on a slow 68k.
@@ -331,6 +333,63 @@ as pictures rather than as attachments.
 
 Anything we cannot turn into a picture keeps going as a document,
 unchanged.
+
+## Planned: read PNG, and why WEBP is a different question
+
+Reading and writing are not the same problem, and until 0.0.92 only the
+writing half was on this list. The section above covers sending a PNG,
+which needs no decoder at all: Telegram re-encodes it server side, so
+the client only recognises the signature and lets the upload run.
+
+Reading one is new here, and the reason it is worth writing down is
+that we own the expensive half already. `third_party/puff` is Mark
+Adler's reference inflate, 840 lines, in the tree since the MTProto
+gzip work. A PNG decoder on top of it is unfiltering (five filter types
+per row), the palette, greyscale and truecolour pixel layouts, and
+Adam7 if we want interlaced files: a few hundred lines, not a few
+thousand, and it inherits puff's virtue of being small rather than
+fast, which is the right trade on these machines.
+
+What would it buy? Nothing for photos, which always arrive as JPEG
+because the server re-encodes them. The case is document thumbnails,
+and 0.0.92 taught us not to assume: a sticker's thumbnail turned out to
+be WEBP, that is the format of the source file rather than JPEG. If
+thumbnails inherit the source format generally, a `.png` sent as a file
+has a PNG thumbnail and lands in exactly the same hole. The `doc:` log
+line added in 0.0.92 prints what a thumbnail actually is, so the next
+field run answers this with evidence instead of reasoning.
+
+WEBP is a different question and the answer is different too.
+
+The licence is not the obstacle. libwebp is BSD-3, which sits fine
+beside our MIT, unlike the desktop client we are careful never to copy
+from. The obstacle is what a WEBP decoder is. Lossy WEBP is a VP8
+keyframe: a boolean arithmetic decoder, inverse DCT and Walsh-Hadamard
+transforms, the full set of intra prediction modes and a loop filter,
+several thousand lines. Lossless WEBP is an unrelated format in the
+same container, with its own LZ77, Huffman coding, colour transforms
+and colour cache, and worth another couple of thousand. The sticker
+thumbnail we caught was VP8X, the extended container, which means the
+alpha chunk on top of one of those two. So it is not one decoder, it is
+two and a half.
+
+Size is only half of it. The boolean decoder is bit-serial with a
+multiply in the inner loop, which is precisely the shape a 68030 is
+worst at. On PPC and on the AROS lanes it would be fine; on the machine
+that most wants cheap pictures it would be seconds per sticker. A
+feature that only works on the fast lanes is not one this project
+should carry, so WEBP stays where the roadmap already put it: not
+planned.
+
+There is one consolation worth measuring rather than dismissing. A
+sticker usually carries a `photoStrippedSize` as well, and that is a
+JPEG whatever the sticker is, inline in the message, costing no request
+at all. It is around forty pixels of blur, which for line art may well
+be mush, but stickers are strong flat colours and it might read as the
+right coloured shape under its emoji. From 0.0.92 the parser keeps
+those bytes even though it now refuses the sticker thumbnail, and the
+`doc:` line reports their length, so this can be decided by looking at
+one on a real screen instead of by taste.
 
 ## Planned: find out what caps transfer speed
 
