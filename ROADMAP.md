@@ -444,18 +444,29 @@ sent. Three steps, in order of what they cost:
    than naming a `.webp`. One display fix rode along, since an emoji
    with no Latin-1 shape used to leave the space that introduced it
    behind, in any text and not only here.
-2. DONE in 0.0.92, and it gave the video its frame in the same move. The
-   thumbs vector is selected exactly the way a Photo's sizes are, the
-   thumb wears the Document's identity, and the one word that changes on
-   the wire is the location constructor:
-   `inputDocumentFileLocation` instead of `inputPhotoFileLocation`, same
-   four fields. The worry about formats answered itself: the selector
-   only ever picks `photoSize` and `photoSizeProgressive`, which are
-   server-generated JPEG previews, and `photoPathSize`, the SVG outline
-   an animated sticker carries, was already marked undownloadable. If a
-   thumb still fails to decode, the existing fallback drops that variant,
-   remembers it and tries a smaller one, then gives up and leaves the
-   text label. Nothing new was needed for that.
+2. NOT POSSIBLE for a sticker, and the field said so plainly. The
+   machinery shipped in 0.0.92 and it gives a video its frame: the thumbs
+   vector is selected exactly the way a Photo's sizes are, the thumb
+   wears the Document's identity, and the only thing that changes on the
+   wire is the location constructor, `inputDocumentFileLocation` instead
+   of `inputPhotoFileLocation`, same four fields.
+
+   The caution about formats was right and the guess about why was
+   wrong. `photoPathSize` was indeed already undownloadable, but a
+   sticker also carries an ordinary `photoSize` that looks perfectly
+   fetchable and is not: on 2026-09-01 a test run left a 320x320 VP8X
+   WEBP with an alpha channel sitting in the photo cache, fetched as a
+   JPEG and refused by the decoder. So a sticker's thumbnail is never
+   offered to the pipeline now. It would cost a download per session, on
+   the lanes least able to afford one, to arrive at the emoji label
+   anyway. That covers all three sticker kinds, since WEBP, Lottie and
+   WEBM are one kind here.
+
+   The picture is exactly one WEBP decoder away, and point 3 below still
+   says we are not writing one. Two things came out of the hunt and both
+   stayed: the client now says in its log what a document's thumbnail
+   actually is, and a bubble stops reserving space for an image every
+   size of which has been refused.
 3. Not planned: WEBP, the gzipped Lottie of animated stickers and WEBM
    video stickers. We have no decoder for any of them, and animation is
    not what this client is for.

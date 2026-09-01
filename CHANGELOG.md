@@ -15,14 +15,16 @@ unless noted.
   goes through the same bounded photo pipeline as any other and obeys the
   same Inline photos setting. A preview the server is still fetching stays
   silent rather than guessing.
-- Stickers show as a picture and videos show a frame. A document carries the
-  same thumbnail vector a photo's sizes come from, so the still goes through
-  the bounded inline pipeline unchanged: same disk cache, same pacing, same
-  Inline photos setting, and nothing new to download twice. A sticker's emoji
-  label steps aside once its picture is drawn; a clip keeps its length and
-  size beside the frame, because those are not in the frame. With inline
-  photos switched off the marker now says what the thing is rather than
-  "[Photo]", and it still opens the viewer when clicked.
+- Videos show a frame. A document carries the same thumbnail vector a photo's
+  sizes come from, so the still goes through the bounded inline pipeline
+  unchanged: same disk cache, same pacing, same Inline photos setting, and
+  nothing new to download twice. The clip keeps its length and size beside
+  the frame, because those are not in the frame. Stickers do not get a
+  picture: the thumbnail Telegram serves for one is WEBP, which this client
+  has no decoder for, so it is not fetched at all and the bubble keeps the
+  sticker's emoji. With inline photos switched off the marker now says what
+  the thing is rather than "[Photo]", and it still opens the viewer when
+  clicked.
 - The transcript says what an attachment is instead of what it is called. A
   sticker shows the emoji it stands for, a clip its length and its shape, a
   voice note its duration. Music keeps its filename, which is how you know
@@ -34,6 +36,10 @@ unless noted.
   too, on the first-start page.
 
 ### Fixed
+- A bubble no longer holds space open for a picture the client has given up
+  on. Once every size of an image has been fetched and refused, which is what
+  an undecodable format looks like from here, the message falls back to its
+  text instead of showing an empty frame that no later paint will ever fill.
 - A downloaded Amiga program comes out runnable. The executable bit is set
   from the file's own magic longword rather than its name, on the completed
   download only, and the other protection bits survive. Reported with the

@@ -2176,6 +2176,18 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
     }
     out->kind = tg_mtproto_document_kind_of(out->attr_seen);
     out->has_document = 1;
+    /* A sticker's thumbnail is not a JPEG and never will be. Telegram serves
+       it as WEBP under an ordinary photoSize entry, so it looks downloadable
+       and is not: proved in the field on 2026-09-01, a 320x320 VP8X with an
+       alpha channel sitting in the photo cache after the decoder refused it.
+       Offering it would cost a fetch on every session, on the lanes least
+       able to afford one, to end at the emoji label anyway. That covers all
+       three sticker kinds, since WEBP, Lottie and WEBM are all one kind here.
+       The emoji stays; the picture is a WEBP decoder away, which the roadmap
+       does not plan. */
+    if (thumb != 0 && out->kind == (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
+        memset(thumb, 0, sizeof(*thumb));
+    }
     /* The thumb borrows the Document's identity: a thumbnail is not addressed
        by an id of its own, it is this file asked for at a given thumb_size. */
     if (thumb != 0 && thumb->thumb_type[0] != '\0' &&
@@ -6170,10 +6182,72 @@ int tg_mtproto_login_self_test(void)
             puts("0.0.92 self-test: thumb query used the photo location");
             return 2;
         }
-        /* Passing no thumb still walks the vector wire-exactly. */
+        /* A sticker offers a thumbnail that looks downloadable and is not:
+           Telegram serves it as WEBP under a plain photoSize. The vector is
+           still walked, the emoji is still kept, but nothing is published to
+           the photo pipeline, so no fetch is spent to reach a decode refusal
+           and the bubble does not hold space open for a picture we cannot
+           draw. Same wire as the video above, one attribute apart. */
+        tg_mtproto_tl_writer_init(&dw, wire, sizeof(wire));
+        ds = tg_mtproto_tl_write_u32(&dw, 0x8fd4c4d8UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0x11223344UL, 0x55667788UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0x99aabbccUL, 0xddeeff00UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_bytes(
+            &dw, ref, sizeof(ref));
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 0UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(&dw, "image/webp");
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u64(
+            &dw, 0UL, 14336UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, TG_VECTOR_CONSTRUCTOR);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, 0x75c78e60UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(&dw, "m");
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 320UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 320UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 24088UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 2UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, TG_VECTOR_CONSTRUCTOR);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, 0x6319d612UL);                      /* sticker attribute */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 0UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(
+            &dw, "\xf0\x9f\x98\x80");                 /* alt: grinning face */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, 0xffb62b95UL);                      /* inputStickerSetEmpty */
+        if (ds != TG_MTPROTO_TL_OK) {
+            puts("0.0.92 self-test: could not build the sticker wire");
+            return 2;
+        }
+        memset(&thumb, 0, sizeof(thumb));
+        tg_mtproto_tl_reader_init(&dr, wire, dw.length);
+        if (tg_mtproto_read_document(&dr, &doc, &thumb) != TG_MTPROTO_TL_OK ||
+            doc.kind != (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
+            puts("0.0.92 self-test: sticker document did not parse");
+            return 2;
+        }
+        if (strcmp(doc.alt, "\xf0\x9f\x98\x80") != 0) {
+            puts("0.0.92 self-test: sticker lost its emoji");
+            return 2;
+        }
+        if (thumb.has_photo || thumb.thumb_type[0] != '\0') {
+            puts("0.0.92 self-test: sticker offered its WEBP thumb anyway");
+            return 2;
+        }
+
+        /* Passing no thumb still walks the vector wire-exactly: the caller
+           that wants no picture must read the same document as the one that
+           does. Runs on the sticker wire, which also carries thumbs. */
         tg_mtproto_tl_reader_init(&dr, wire, dw.length);
         if (tg_mtproto_read_document(&dr, &doc, 0) != TG_MTPROTO_TL_OK ||
-            doc.kind != (unsigned char)TG_MTPROTO_DOC_KIND_VIDEO) {
+            doc.kind != (unsigned char)TG_MTPROTO_DOC_KIND_STICKER ||
+            strcmp(doc.alt, "\xf0\x9f\x98\x80") != 0) {
             puts("0.0.92 self-test: skipping the thumbs broke the walk");
             return 2;
         }

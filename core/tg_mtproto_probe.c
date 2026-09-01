@@ -10667,6 +10667,22 @@ static int tg_gui_photo_queue_offer(const tg_mtproto_photo_meta *source,
     return tg_gui_photo_queue_insert(&entry);
 }
 
+/* 0.0.92: is there still any chance of drawing this image? False once every
+   variant has been fetched and refused, which is what an undecodable format
+   looks like from here. A bubble that keeps reserving space for a picture the
+   client has given up on shows the user an empty rectangle for ever, and no
+   later paint will ever fill it. The scratch entry is static because it is a
+   whole photo record and this runs inside the per-message loop. */
+static int tg_gui_photo_still_possible(const tg_mtproto_photo_meta *photo)
+{
+    static tg_gui_photo_queue_entry probe;
+
+    if (photo == 0 || !photo->has_photo) {
+        return 0;
+    }
+    return tg_gui_photo_prepare_queue_entry(photo, 0, &probe);
+}
+
 int tg_gui_session_photo_pending(void)
 {
     return !tg_gui_photo_cache_paused &&
@@ -11149,6 +11165,17 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 if (row.has_photo) {
                     row.photo_ready = tg_gui_photo_cache_exists(
                         row.photo_id_hi, row.photo_id_lo, 0);
+                    /* Nothing cached and nothing left to try: the bubble
+                       stops holding space open for it and falls back to its
+                       text, rather than showing an empty frame for ever. */
+                    if (!row.photo_ready &&
+                        !tg_gui_photo_still_possible(
+                            &texts.messages[i].photo)) {
+                        row.has_photo = 0;
+                        row.photo_only = 0;
+                    }
+                }
+                if (row.has_photo) {
                     if (tg_chat_message_driver_override != 0) {
                         /* Keep credentials for a later visible-only inline
                            request or an explicit viewer click. Parsing alone
