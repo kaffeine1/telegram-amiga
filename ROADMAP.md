@@ -180,9 +180,11 @@ Plan, in order:
 2. DONE, and it cost nothing. A webPage photo is a plain Photo, so
    reading it hands the existing bounded pipeline exactly what it already
    knows, under the same Inline photos setting.
-3. Still open: `updateWebPage`, so a preview the server generates late
-   reaches an open chat. Today a pending preview simply stays silent
-   until the history is read again.
+3. Left for 0.0.93: `updateWebPage`, so a preview the server generates
+   late reaches an open chat. It only affects a link you send yourself
+   while the server is still fetching the page, it touches the update
+   path, and 0.0.92 is at full scope. Today a pending preview simply
+   stays silent until the history is read again.
 
 Even complete, previews will stay per-link: the server builds them from
 the target page's metadata, so pages without usable metadata show none
@@ -740,6 +742,40 @@ to expect; where it gives a timeout, the screen can say when a new code
 can be requested, which also explains the silence that follows too many
 attempts. The manuals' first-start section gets the same sentence, so
 the answer arrives before the question.
+
+## Open: one crash on AROS x86_64, in idle, not reproduced
+
+Seen once during the 0.0.92 field test, on 2026-09-02, in the AROS One
+x86_64 VM: a Software Failure requester, error 0x80000008 (privilege
+violation), PC inside the kernel's `tlsf_malloc`. Nobody was at the
+keyboard. The client had been left open on a media-heavy group for a
+few minutes and the requester was there on return, so the likely moment
+is the background poll handling a message that arrived meanwhile. The
+same build then ran for hours on the same VM without a repeat.
+
+A crash inside the allocator means the allocator was the victim: some
+earlier write corrupted its metadata. The trace behind "More..." would
+have named the caller, and it was lost when the VM restarted. What has
+been ruled out since, with evidence rather than reasoning: the 0.0.92
+parser and label code under AddressSanitizer on the host (all six
+self-tests clean), LP64 warnings in the touched files on the x86_64
+build (none), the decode buffers (the decoder clips to the buffer it is
+given), the `.pgc` canonical cache and the thumb store (both validated
+before any allocation), and the executable-bit hook (download path
+only, `AllocDosObject` for the FIB).
+
+What we do not know is whether it is a 0.0.92 regression at all. The
+x86_64 lane has a history of its own, and 0.0.92 fetches more images
+than 0.0.91 did, so an old defect can surface more often without being
+new. Not a release blocker on one occurrence, by decision, but it stays
+here until it is either reproduced or explained.
+
+Next time, before anything else: launch with `--gui-live-debug`, press
+"More..." when the requester appears and keep the screenshot, then read
+the tail of `tg-gui-debug.log`. And the x86_64 VM should boot with
+`debug=serial` on the AROS kernel line, so the kernel's own trace lands
+in the host file the launcher already captures; without that argument
+the serial channel stays silent, which is what we found.
 
 ## Planned: two MorphOS popup glitches
 
