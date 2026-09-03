@@ -383,15 +383,21 @@ feature that only works on the fast lanes is not one this project
 should carry, so WEBP stays where the roadmap already put it: not
 planned.
 
-There is one consolation worth measuring rather than dismissing. A
-sticker usually carries a `photoStrippedSize` as well, and that is a
-JPEG whatever the sticker is, inline in the message, costing no request
-at all. It is around forty pixels of blur, which for line art may well
-be mush, but stickers are strong flat colours and it might read as the
-right coloured shape under its emoji. From 0.0.92 the parser keeps
-those bytes even though it now refuses the sticker thumbnail, and the
-`doc:` line reports their length, so this can be decided by looking at
-one on a real screen instead of by taste.
+One consolation looked worth measuring rather than dismissing: a
+`photoStrippedSize`, the inline blurred preview, is a JPEG whatever the
+sticker is and costs no request, and forty pixels of strong flat colour
+might have read as the right shape under the emoji. Measured on
+2026-09-03 and it does not exist: every sticker in the first field log
+came with `stripped=0`. The server sends no blurred preview for a
+sticker at all, so there is nothing to show. The parser still keeps
+those bytes when a sticker carries them, and a self-test pins that, so
+the zero is the server's and not ours; but the question is closed.
+
+The same log settled GIFs, which share the video path: three of eight
+carried a `photoSize` the pipeline could fetch and got their frame, five
+carried nothing downloadable, most likely `videoSize` entries only,
+which we do not decode, and keep the `[GIF ...]` label. That is the
+rule working as written, not a gap to fill.
 
 ## Worth deciding: let datatypes read what we cannot
 
