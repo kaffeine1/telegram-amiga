@@ -11149,10 +11149,13 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                     char dline[128];
 
                     sprintf(dline,
-                            "doc: kind=%u attrs=%lu thumb=%s %lux%lu %lu b "
-                            "stripped=%lu has_photo=%d from_doc=%d",
+                            "doc: kind=%u attrs=%lu mime=%.24s thumb=%s "
+                            "%lux%lu %lu b stripped=%lu has_photo=%d "
+                            "from_doc=%d",
                             (unsigned)texts.messages[i].document.kind,
                             texts.messages[i].document.attr_seen,
+                            texts.messages[i].document.mime[0] != '\0'
+                                ? texts.messages[i].document.mime : "-",
                             texts.messages[i].photo.thumb_type[0] != '\0'
                                 ? texts.messages[i].photo.thumb_type : "-",
                             texts.messages[i].photo.width,

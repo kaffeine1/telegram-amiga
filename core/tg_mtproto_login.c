@@ -6114,6 +6114,9 @@ int tg_mtproto_login_self_test(void)
         unsigned char wire[256];
         unsigned char query[96];
         unsigned char ref[2];
+        static const unsigned char stripped_thumb[5] = {
+            0x01U, 0x08U, 0x0cU, 0xaaU, 0xbbU
+        };
         tg_mtproto_tl_writer dw;
         tg_mtproto_tl_writer qw;
         tg_mtproto_tl_reader dr;
@@ -6219,7 +6222,14 @@ int tg_mtproto_login_self_test(void)
             &dw, 0UL, 14336UL);
         if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
             &dw, TG_VECTOR_CONSTRUCTOR);
-        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 1UL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(&dw, 2UL);
+        /* photoStrippedSize "s": the inline blurred preview, JPEG whatever the
+           sticker is. The refusal below must keep these bytes. */
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
+            &dw, 0xe0b0bc2eUL);
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(&dw, "s");
+        if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_bytes(
+            &dw, stripped_thumb, sizeof(stripped_thumb));
         if (ds == TG_MTPROTO_TL_OK) ds = tg_mtproto_tl_write_u32(
             &dw, 0x75c78e60UL);
         if (ds == TG_MTPROTO_TL_OK) ds = tg_write_string(&dw, "m");
@@ -6254,6 +6264,11 @@ int tg_mtproto_login_self_test(void)
         }
         if (thumb.has_photo || thumb.thumb_type[0] != '\0') {
             puts("0.0.92 self-test: sticker offered its WEBP thumb anyway");
+            return 2;
+        }
+        if (thumb.stripped_len != sizeof(stripped_thumb) ||
+            thumb.stripped[0] != 0x01U || thumb.stripped[4] != 0xbbU) {
+            puts("0.0.92 self-test: sticker refusal lost the stripped bytes");
             return 2;
         }
 
