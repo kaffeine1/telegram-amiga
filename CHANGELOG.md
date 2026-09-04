@@ -5,7 +5,7 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
-## [Unreleased]
+## [0.0.92] - 2026-09-04
 
 ### Added
 - Links get their preview. A pasted link showed as the bare URL, because the
