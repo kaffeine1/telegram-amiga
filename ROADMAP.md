@@ -109,10 +109,13 @@ Features are therefore grouped by the work they share.
   messages from one sender, rounded bubble corners, the avatar in the
   chat header, and captions on outgoing photos. All low risk, all
   immediately visible.
-- **0.0.92, media coming in.** Link previews, stickers with their own
-  emoji and still frame, videos with details and a frame. They share
-  the same document parsing and the same photo pipeline, so they are
-  cheaper together than apart.
+- **0.0.92, media coming in.** RELEASED 2026-09-04. Link previews with
+  their picture, videos with details and a frame, stickers as their
+  emoji (their picture is WEBP, see the sticker section), the transcript
+  saying what an attachment is, plus the two field reports on long
+  messages and the executable bit, the latter fixed a second time in the
+  same cycle for the four ELF lanes. Validated on real AmigaOS 3 and
+  MorphOS and in the OS4, AROS i386 and AROS x86_64 VMs.
 - **0.0.93, sending.** The emoji picker with its glyph sheet, and
   sending images that are not JPEGs, PNG first. Reading PNG is a
   separate item with its own section, and cheaper than it sounds
