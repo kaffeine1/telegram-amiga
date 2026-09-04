@@ -1156,6 +1156,53 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-OS4.lha" ]; then
     echo "        then the readme (LAST). Queue: os4depot.net ?function=uploads"
 fi
 
+# --- The AROS Archives (fixed release channel since 0.0.92) ------------------
+# archives.arosworld.org (ex archives.aros-exec.org) runs the OS4Depot software,
+# so the readme is the same header format (name:/.../hend:) plus our Aminet
+# body, minus minosversion. Naming is theirs: lowercase, platform in the file
+# name, and "-v11" marks the x86_64 ABIv11 build. Web form only, no FTP:
+# index.php?function=submit (no captcha; fields f_name f_description f_version
+# f_author f_submitter f_email f_url f_category f_userfile f_replaces
+# f_requirements f_license f_distribute f_text=body). A replace of a file we
+# did not upload ourselves waits for the original uploader's confirmation.
+# Own subdirectory for the same reason as OS4Depot: never a lowercase twin of
+# an Aminet archive in the same directory on a case-insensitive filesystem.
+AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"}
+write_arosarchives_pair() {
+    # $1 Aminet base (TelegramAmiga-AROS / -AROS64), $2 their file name,
+    # $3 requirements text
+    aa_src="$AMINET_ROOT/$1.lha"
+    [ -f "$aa_src" ] || return 0
+    cp "$aa_src" "$AROSARCHIVES_ROOT/$2.lha"
+    {
+        printf 'name:TelegramAmiga\n'
+        printf 'description:Native MTProto Telegram chat client\n'
+        printf 'version:%s\n' "$VERSION"
+        printf 'author:Michele Dipace\n'
+        printf 'submitter:Michele Dipace\n'
+        printf 'email:michele.dipace@kaffeine.net\n'
+        printf 'url:%s\n' "$REPO_URL"
+        printf 'category:network/chat\n'
+        printf 'replaces:network/chat/%s.lha\n' "$2"
+        printf 'requirements:%s\n' "$3"
+        printf 'license:Other\n'
+        printf 'distribute:yes\n'
+        printf 'hend:\n\n'
+        awk 'flip { print } /^$/ && !flip { flip = 1 }' "$AMINET_ROOT/$1.readme"
+    } > "$AROSARCHIVES_ROOT/${2}_lha.readme"
+}
+if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-AROS64.lha" ]; }; then
+    mkdir -p "$AROSARCHIVES_ROOT"
+    write_arosarchives_pair TelegramAmiga-AROS telegramamiga.i386-aros \
+        "AROS i386 ABIv0 (AROS One, Icaros) with its TCP/IP stack"
+    write_arosarchives_pair TelegramAmiga-AROS64 telegramamiga.x86_64-aros-v11 \
+        "AROS x86_64 ABIv11 (AROS One x64) with its TCP/IP stack"
+    echo
+    echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (2 x .lha + _lha.readme)"
+    echo "Submit: https://archives.arosworld.org/index.php?function=submit (web form,"
+    echo "        no FTP); queue: index.php?function=uploads"
+fi
+
 # --- MorphOS-Storage (fixed release channel since 0.0.6) ---------------------
 # Web form only (https://www.morphos-storage.net/?page=submit), no account but
 # a CAPTCHA: Michele submits. Hand him TelegramAmiga-MOS.lha + its readme and
