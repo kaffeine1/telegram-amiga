@@ -13889,6 +13889,10 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 #if !defined(TG_NO_SELFTEST)
 static int tg_gui_hidden_projection_self_test(void);
 
+#if !defined(TG_NO_SELFTEST)
+static int tg_mtproto_executable_sniff_self_test(void); /* defined by the download engine */
+#endif
+
 int tg_mtproto_probe_self_test(void)
 {
     static const unsigned char nonce[16] = {
@@ -14326,6 +14330,9 @@ int tg_mtproto_probe_self_test(void)
         }
     }
 
+    if (tg_mtproto_executable_sniff_self_test() != 0) {
+        return 2;
+    }
     if (tg_gui_hidden_projection_self_test() != 0) {
         return 2;
     }
@@ -17804,12 +17811,22 @@ static void tg_mtproto_download_cancel(void)
 
 /* Close the engine: file (partial removed on failure), quiet stream, state.
    Returns the final rc; out_path gets the saved path (ok) or the reason. */
-/* An AmigaDOS loadable file starts with HUNK_HEADER, 0x000003F3: plain
+/* Two families of loadable file exist on these systems, and the name is no
+   help for either: people pass programs around with a .exe suffix that means
+   nothing here (issue #15), so the magic bytes decide.
+
+   A classic AmigaDOS file starts with HUNK_HEADER, 0x000003F3: plain 68k
    executables, libraries, devices, handlers and datatypes all do. Object
    files and link libraries start with 0x000003E7 instead and must NOT be
-   marked runnable. The name is no help here, people pass these around with
-   a .exe suffix that means nothing on this platform (issue #15), so the
-   magic longword decides. */
+   marked runnable.
+
+   AmigaOS 4, MorphOS and AROS programs are ELF, 0x7F "ELF", which the first
+   cut of this check did not know: a downloaded OS4 build of this very client
+   came out without its bit, found in the field on 2026-09-03. The four byte
+   magic is all we look at on purpose. Reading e_type to exclude object files
+   would be the HUNK rule's twin, but AROS executables are relocatable ELF,
+   ET_REL, so that rule would strip the bit from every AROS program. A foreign
+   ELF marked runnable costs nothing: LoadSeg refuses it cleanly. */
 static int tg_mtproto_file_is_amiga_executable(const char *path)
 {
     FILE *f;
@@ -17825,9 +17842,55 @@ static int tg_mtproto_file_is_amiga_executable(const char *path)
     }
     got = (unsigned long)fread(magic, 1, sizeof(magic), f);
     fclose(f);
-    return got == 4UL && magic[0] == 0x00U && magic[1] == 0x00U &&
-           magic[2] == 0x03U && magic[3] == 0xf3U;
+    if (got != 4UL) {
+        return 0;
+    }
+    if (magic[0] == 0x00U && magic[1] == 0x00U &&
+        magic[2] == 0x03U && magic[3] == 0xf3U) {
+        return 1; /* HUNK_HEADER */
+    }
+    return magic[0] == 0x7fU && magic[1] == 'E' && magic[2] == 'L' &&
+           magic[3] == 'F';
 }
+
+#if !defined(TG_NO_SELFTEST)
+/* Host-runnable: the sniff must say yes to both loadable families, and no
+   to a HUNK object file, a text file and a short file. */
+static int tg_mtproto_executable_sniff_self_test(void)
+{
+    static const unsigned char hunk[8] = {0x00,0x00,0x03,0xf3,0,0,0,0};
+    static const unsigned char obj[8] = {0x00,0x00,0x03,0xe7,0,0,0,0};
+    static const unsigned char elf[8] = {0x7f,'E','L','F',1,1,1,0};
+    static const unsigned char txt[8] = {'R','E','A','D','M','E','\n',0};
+    static const unsigned char tiny[2] = {0x00,0x00};
+    const char *path = "tg-exe-sniff-selftest.bin";
+    struct { const unsigned char *b; unsigned long n; int want; } c[5];
+    int i;
+
+    c[0].b = hunk; c[0].n = 8UL; c[0].want = 1;
+    c[1].b = elf;  c[1].n = 8UL; c[1].want = 1;
+    c[2].b = obj;  c[2].n = 8UL; c[2].want = 0;
+    c[3].b = txt;  c[3].n = 8UL; c[3].want = 0;
+    c[4].b = tiny; c[4].n = 2UL; c[4].want = 0;
+    for (i = 0; i < 5; ++i) {
+        FILE *f = fopen(path, "wb");
+        int got;
+
+        if (f == 0) {
+            return 2;
+        }
+        fwrite(c[i].b, 1, (size_t)c[i].n, f);
+        fclose(f);
+        got = tg_mtproto_file_is_amiga_executable(path);
+        (void)remove(path);
+        if (got != c[i].want) {
+            printf("executable sniff self-test: case %d gave %d\n", i, got);
+            return 2;
+        }
+    }
+    return 0;
+}
+#endif
 
 /* A saved attachment that IS a program gets its "e" bit cleared, so it runs
    straight away instead of needing a manual protect (issue #15). Shared by

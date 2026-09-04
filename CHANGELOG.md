@@ -41,8 +41,10 @@ unless noted.
   an undecodable format looks like from here, the message falls back to its
   text instead of showing an empty frame that no later paint will ever fill.
 - A downloaded Amiga program comes out runnable. The executable bit is set
-  from the file's own magic longword rather than its name, on the completed
-  download only, and the other protection bits survive. Reported with the
+  from the file's own magic bytes rather than its name, on the completed
+  download only, and the other protection bits survive. Both loadable
+  families count: HUNK for classic 68k programs and ELF for AmigaOS 4,
+  MorphOS and AROS ones, which the first cut had missed. Reported with the
   polarity warning that saved a round: on Amiga those bits are active low.
 - A long message goes out. The send query was built into a 512 byte buffer,
   so anything past roughly 460 characters failed to build and the client
