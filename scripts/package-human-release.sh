@@ -1201,6 +1201,8 @@ if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f
     echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (2 x .lha + _lha.readme)"
     echo "Submit: https://archives.arosworld.org/index.php?function=submit (web form,"
     echo "        no FTP); queue: index.php?function=uploads"
+    echo "        Set f_passphrase on OUR uploads (value in SECRETS, never here):"
+    echo "        without it every replace waits for the previous uploader's ok."
 fi
 
 # --- MorphOS-Storage (fixed release channel since 0.0.6) ---------------------
