@@ -17264,7 +17264,7 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
         if (tg_gui_ul.big_file) {
             tg_gui_ul.photo_fallback = 1;
         } else if (!tg_mtproto_photo_file_valid(tg_gui_ul.f, &why)) {
-            sprintf(tg_mtproto_query_fail, "%.100s", why);
+            sprintf(tg_mtproto_query_fail, "%.63s", why); /* 64 byte buffer */
             fclose(tg_gui_ul.f);
             tg_gui_ul.f = 0;
             return 7;
