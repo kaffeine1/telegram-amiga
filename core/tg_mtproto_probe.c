@@ -16441,6 +16441,20 @@ int tg_gui_session_mention_candidates(const char *prefix, char *items,
         return 0; /* mentions only make sense in an open group */
     }
     tg_gui_session_ensure_members(stream);
+    /* Field diagnostic: "no popup after @" has three legitimate causes that
+       look identical from the keyboard. Say which one this is, once per
+       open group, when the debug log is on. */
+    if (tg_gui_log_is_enabled() &&
+        tg_gui_session_state.member_cache.count == 0) {
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+        tg_gui_log("mention: no members (MorphOS skips the fetch by design)");
+#else
+        tg_gui_log(tg_gui_session_state.open_peer_constructor ==
+                           TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR
+                       ? "mention: no members (fetch returned none)"
+                       : "mention: no members (basic group, needs getFullChat)");
+#endif
+    }
     plen = (prefix != 0) ? (unsigned long)strlen(prefix) : 0UL;
     n = 0;
     for (i = 0UL;

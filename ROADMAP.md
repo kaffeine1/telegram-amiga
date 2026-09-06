@@ -642,6 +642,20 @@ the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
 
+## Planned: mentions in basic groups, and on MorphOS
+
+The '@' popup lists the members of the open group, and the member list
+comes from `channels.getParticipants`, which exists only for supergroups.
+A basic group (the kind a handful of friends make) has no channel id and
+would need `messages.getFullChat`, so in one of those the popup never
+appears, on any lane. On MorphOS the fetch is skipped outright, a guard
+from the bsdsocket freeze hunt, when a large participants reply was the
+documented trigger; the client has since moved photos and megabyte
+downloads through that stack without incident, so the guard deserves a
+measured retry on the machine rather than an assumption either way.
+Both were found again in the 0.0.93 field round, reported as "no popup
+after @", and the debug log now names which of the two it was.
+
 ## Planned: split long pastes into protocol-sized messages
 
 A 6 KB pasted text is refused today (issue #14). That ceiling is
