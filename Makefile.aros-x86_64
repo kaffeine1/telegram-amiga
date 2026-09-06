@@ -65,7 +65,7 @@ NO_SELFTEST ?= 1
 ifeq ($(NO_SELFTEST),1)
 CFLAGS += -DTG_NO_SELFTEST=1
 endif
-SRC += core/tg_avatar.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
+SRC += core/tg_avatar.c core/tg_emoji_sheet.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
 endif
 
 .PHONY: all clean

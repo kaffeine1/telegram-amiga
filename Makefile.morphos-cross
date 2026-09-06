@@ -29,7 +29,7 @@ endif
 
 ifeq ($(ENABLE_GZIP_PUFF),1)
 CFLAGS += -DTG_ENABLE_GZIP_PUFF=1 -Ithird_party/puff
-SRC += core/tg_avatar.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
+SRC += core/tg_avatar.c core/tg_emoji_sheet.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
 endif
 
 # Release lanes ship without the offline self-tests (decision 2026-08-07):

@@ -34,7 +34,7 @@ endif
 
 ifeq ($(ENABLE_GZIP_PUFF),1)
 CFLAGS += -DTG_ENABLE_GZIP_PUFF=1 -Ithird_party/puff
-SRC += core/tg_avatar.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
+SRC += core/tg_avatar.c core/tg_emoji_sheet.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
 OBJ += $(OBJ_DIR)/core/tg_avatar.o $(OBJ_DIR)/third_party/tjpgd/tjpgd.o $(OBJ_DIR)/third_party/puff/puff.o
 HEADERS += third_party/puff/puff.h
 endif

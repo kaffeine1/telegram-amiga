@@ -1,0 +1,7 @@
+The emoji glyph sheet in core/tg_emoji_sheet.c is derived from Noto Emoji,
+Copyright 2013 Google LLC, https://github.com/googlefonts/noto-emoji,
+licensed under the SIL Open Font License, Version 1.1 (see LICENSE here).
+Each glyph is the 128 pixel PNG of one emoji reduced to 16 by 16 pixels and
+a shared 255 colour palette by scripts/gen-emoji-sheet.py. The sheet itself
+is distributed under the same OFL 1.1; the rest of Telegram Amiga is MIT.
+Regenerate with: python3 scripts/gen-emoji-sheet.py <dir-with-emoji_u*.png>
