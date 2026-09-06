@@ -523,6 +523,10 @@ Using the GUI
   and Telegram's photo limits (width plus height at most 10000, at most 20:1)
   are checked before anything is uploaded. A photo over 10 MiB is preserved
   and sent as a document instead.
+- "Insert emoji..." in the Telegram menu (Amiga+E) opens a panel above the
+  composer: the recent ones first, then the whole set. Arrow keys move, ENTER
+  inserts and keeps the panel open, ESC closes it; a click inserts too. In the
+  composer an emoji shows as a small picture and is edited as one character.
 - Right-click a message and choose "Forward to Saved Messages" for a one-click
   cloud copy, or "Forward to..." to select another chat with the normal search.
 - In groups, type @ in the composer to autocomplete a member: a small list
@@ -598,6 +602,9 @@ then api_hash).
 Contributions: Javier de las Rivas (javierdlr).
 Thanks to the testers around the world who run this on real hardware and
 send back what they find -- this client is what it is because of them.
+
+The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
+1.1) reduced to sixteen pixels; the licence text ships in the archive.
 
 License: MIT -- a non-commercial community project. Diary:
 https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/
@@ -698,6 +705,11 @@ Usare la GUI
   non il nome, e i limiti Telegram per le foto (larghezza piu' altezza al
   massimo 10000, al massimo 20:1) sono controllati prima di caricare. Oltre
   10 MiB viene inviato come file.
+- "Insert emoji..." nel menu Telegram (Amiga+E) apre un pannello sopra il
+  composer: prima le emoji recenti, poi tutte. Le frecce si muovono, ENTER
+  inserisce e lascia il pannello aperto, ESC lo chiude; anche un click
+  inserisce. Nel composer un'emoji appare come una piccola figura e si
+  modifica come un carattere solo.
 - Click destro su un messaggio: "Forward to Saved Messages" lo copia con un
   click nel proprio cloud; "Forward to..." permette di scegliere un'altra chat
   usando la ricerca normale.

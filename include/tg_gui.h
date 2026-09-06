@@ -150,6 +150,7 @@ struct tg_gui_backend {
 #define TG_GUI_EMOJI_INDEX_MAX 0x7EU
 #define TG_GUI_EMOJI_PER_PREFIX 93UL /* 0x21..0x7E minus '@' */
 #define TG_GUI_EMOJI_MAX (2UL * TG_GUI_EMOJI_PER_PREFIX)
+#define TG_GUI_EMOJI_RECENT_MAX 12
 /* 1 when a pair starts at text[i] (i < len), with its glyph index in *index. */
 int tg_gui_emoji_pair_at(const char *text, unsigned long len, unsigned long i,
                          unsigned long *index);
@@ -398,6 +399,11 @@ typedef struct tg_gui_state {
     int mention_active;
     int mention_count;
     int mention_sel;
+    /* Emoji picker (see tg_gui_emoji_open). Recents hold sheet indexes. */
+    int emoji_active;
+    int emoji_sel;        /* highlighted cell: recents first, then the sheet */
+    int emoji_recent_count;
+    unsigned short emoji_recent[12];
     int mention_start;
     char mention_items[TG_GUI_MENTION_MAX][TG_GUI_MENTION_LEN];
 
@@ -425,6 +431,23 @@ void tg_gui_paint_trail_off(void);
 /* Inserts glyph `index` at the composer caret (two bytes). 0 if full. */
 int tg_gui_composer_insert_emoji(tg_gui_state *state, unsigned long index);
 
+/* The emoji picker: a panel above the composer, the recently used row first,
+   then the whole sheet in a grid walked with the arrow keys or clicked.
+   ENTER (or a click) inserts the highlighted glyph at the caret and moves it
+   to the front of the recent row; ESC leaves. Recents persist in
+   data/telegram-emoji-recent.txt like the other preferences. */
+void tg_gui_emoji_open(tg_gui_state *state);
+void tg_gui_emoji_close(tg_gui_state *state);
+void tg_gui_emoji_move(tg_gui_state *state, int dx, int dy);
+/* Inserts the highlighted glyph; returns 1 when something went in. */
+int tg_gui_emoji_pick(tg_gui_state *state);
+/* Cell under (x, y) in the panel's own coordinates, or -1. */
+int tg_gui_emoji_cell_at(const tg_gui_state *state, int width, int lh,
+                         int x, int y);
+void tg_gui_emoji_recent_load(tg_gui_state *state);
+void tg_gui_emoji_recent_save(const tg_gui_state *state);
+extern int tg_gui_emoji_geom_y; /* panel top as last painted (tests, hit checks) */
+
 /* Repaints ONLY the active caret region (composer input row in chat mode, login
    input box otherwise). Lets the ~2 Hz caret blink avoid a full-window repaint,
    which was visible as a constant refresh on slow OS3 planar displays. */
@@ -445,6 +468,8 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
 #define TG_GUI_HIT_SEARCH (-4) /* the sidebar search box: focus it */
 #define TG_GUI_HIT_JUMP_BOTTOM (-5) /* the floating scroll-to-bottom button */
 #define TG_GUI_HIT_REPLY_CANCEL (-6) /* the "Replying to ..." composer header */
+/* Emoji picker cells: TG_GUI_HIT_EMOJI_BASE - cell, cell = visible index. */
+#define TG_GUI_HIT_EMOJI_BASE (-2000)
 /* Transcript message pick: message i -> (TG_GUI_HIT_MESSAGE_BASE - i). */
 #define TG_GUI_HIT_MESSAGE_BASE (-100)
 /* Photo pick: message i -> (TG_GUI_HIT_PHOTO_BASE - i). */

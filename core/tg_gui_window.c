@@ -476,6 +476,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_CACHE_200 20
 #define TG_MENU_CACHE_UNLIMITED 21
 #define TG_MENU_CACHE_CLEAR 22
+#define TG_MENU_EMOJI 23
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -5321,6 +5322,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_SENDFILE },
     { NM_ITEM,  (STRPTR)"Send photo...", (STRPTR)"P", 0, 0,
       (APTR)TG_MENU_SENDPHOTO },
+    { NM_ITEM,  (STRPTR)"Insert emoji...", (STRPTR)"E", 0, 0,
+      (APTR)TG_MENU_EMOJI },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Quit", (STRPTR)"Q", 0, 0,
       (APTR)TG_MENU_QUIT },
@@ -8032,6 +8035,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     memset(&photo_save, 0, sizeof(photo_save));
     ctx.photo_dither = state->photo_dither;
     own_scr = 0;
+    tg_gui_emoji_recent_load(state);
     tg_gui_window_load_geom(&init_w, &init_h, &init_x, &init_y, &init_own);
     want_own = init_own;
     /* Own-screen mode (opt-in " own" token in telegram-gui-win.txt): a PRIVATE
@@ -8573,6 +8577,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 case 'R': key_menu_action = (APTR)TG_MENU_REMOVE; break;
                 case 'F': key_menu_action = (APTR)TG_MENU_SENDFILE; break;
                 case 'P': key_menu_action = (APTR)TG_MENU_SENDPHOTO; break;
+                case 'E': key_menu_action = (APTR)TG_MENU_EMOJI; break;
                 case 'I': key_menu_action = (APTR)TG_MENU_ICONIFY; break;
                 case 'Q': key_menu_action = (APTR)TG_MENU_QUIT; break;
                 default: break; /* unknown shortcut: swallowed, never typed */
@@ -8774,7 +8779,24 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    cancels, BACKSPACE deletes. While the '@' mention popup is
                    up, RETURN/TAB insert the highlighted username instead (the
                    NEXT return sends) and ESC only closes the popup. */
-                if ((msg_code == 13 || msg_code == 10 || msg_code == 9) &&
+                if (state->emoji_active &&
+                    (msg_code == 13 || msg_code == 10 || msg_code == 27 ||
+                     msg_code == 0x4C || msg_code == 0x4D ||
+                     msg_code == 0x4E || msg_code == 0x4F)) {
+                    /* The emoji picker owns the arrows, ENTER and ESC while it
+                       is up: ENTER inserts and keeps the panel open for the
+                       next one, ESC closes it. */
+                    if (msg_code == 27) {
+                        tg_gui_emoji_close(state);
+                    } else if (msg_code == 13 || msg_code == 10) {
+                        (void)tg_gui_emoji_pick(state);
+                    } else {
+                        tg_gui_emoji_move(state,
+                                          msg_code == 0x4F ? -1 : msg_code == 0x4E ? 1 : 0,
+                                          msg_code == 0x4C ? -1 : msg_code == 0x4D ? 1 : 0);
+                    }
+                    tg_gui_window_paint(state, &backend);
+                } else if ((msg_code == 13 || msg_code == 10 || msg_code == 9) &&
                     state->mention_active) {
                     tg_gui_window_mention_complete(state);
                     tg_gui_window_paint(state, &backend);
@@ -9207,6 +9229,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else if (ud == (APTR)TG_MENU_SENDFILE) {
                             tg_gui_window_send_file(state, ctx.window,
                                                     &backend);
+                        } else if (ud == (APTR)TG_MENU_EMOJI) {
+                            if (state->emoji_active) {
+                                tg_gui_emoji_close(state);
+                            } else {
+                                tg_gui_emoji_open(state);
+                            }
+                            tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_SENDPHOTO) {
                             tg_gui_window_send_photo(state, ctx.window,
                                                      &backend);
@@ -10389,6 +10418,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         caret_ticks = 0;
                         tg_gui_window_copy(state->status, sizeof(state->status),
                                "Type - ENTER sends, ESC cancels");
+                        tg_gui_window_paint(state, &backend);
+                    } else if (hit <= TG_GUI_HIT_EMOJI_BASE &&
+                               hit > TG_GUI_HIT_EMOJI_BASE - 400) {
+                        state->emoji_sel = TG_GUI_HIT_EMOJI_BASE - hit;
+                        (void)tg_gui_emoji_pick(state);
                         tg_gui_window_paint(state, &backend);
                     } else if (hit == TG_GUI_HIT_REPLY_CANCEL) {
                         /* The composer's reply header "X": drop the reply target

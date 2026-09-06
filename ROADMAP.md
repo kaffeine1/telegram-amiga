@@ -609,24 +609,28 @@ hand to text emoticons, so a grinning face reads as `:D` and a heart as
 instead of a question mark, which would read as lost text. Two separate
 jobs remain, and the less obvious one matters more.
 
-Sending them is impossible today. An Amiga keyboard produces Latin-1,
-so there is no way to type a codepoint the composer can send, and a
-user who receives `:D` cannot answer in kind. That is the gap to close
-first, with a picker in the spirit of the desktop client: a panel above
-the composer, categories along one edge, a grid to walk with the arrow
-keys, ENTER to insert, ESC to leave, and a row of recently used ones
-that survives between runs like the other preferences. The rest of the
-road already exists, since the send path has converted the composer to
-UTF-8 from the start.
+Sending them is DONE in 0.0.93. The composer stays a Latin-1 buffer;
+an emoji in it is a two byte escape (a C1 prefix no keymap emits plus
+an index byte, with '@' left out so the mention popup never wakes),
+which the backends measure and draw as one square cell of the font
+height, the wrap never splits, the caret steps over whole, and the send
+path expands to the codepoint's UTF-8. The picker is the panel the plan
+described minus the category edge, which 109 glyphs do not need: the
+recent row first, then the sheet, arrows and ENTER, ESC, a click, and
+recents saved in data/telegram-emoji-recent.txt. The glyphs are Noto
+Emoji reduced to 16 pixels, on one shared palette, OFL 1.1, generated
+by scripts/gen-emoji-sheet.py from the emoticon table so the two stay
+in step; the three table entries with no Noto image (two arrows and a
+check mark) remain text only.
 
-The picker also settles the order of the drawing work, because a grid
-is the easy half. Painting a glyph into a cell of a panel needs no text
-layout at all, so a small built-in glyph sheet pays off immediately
-there, and the curated list already says which emoji are worth having.
-Only afterwards comes the hard half, showing them inside the
-transcript, where the renderer has to break a line into runs to place
-an image between them. That is the code that has hurt us before under
-AfA_OS, so it gets its own hardware pass before anyone calls it done.
+What that machinery makes cheap is the hard half the plan deferred:
+showing received emoji inside the transcript. The backends already draw
+a pair anywhere in a text run, so the display conversion could emit a
+pair instead of the emoticon for any codepoint in the sheet, and the
+transcript would show the picture. It stays deferred on purpose: it
+touches every message paint, the code that hurt us under AfA_OS, so it
+gets a preference of its own and a hardware pass before anyone calls it
+done.
 
 On borrowing: the desktop client is worth studying for how a feature
 should behave, and that is how it will be used here, as a reference for

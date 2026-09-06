@@ -10,6 +10,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_emoji_sheet.h"
 #include "tg_gui_session.h" /* tg_gui_log: crash-safe first-paint trail */
 
 #include <stdio.h>
@@ -2341,6 +2342,354 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
     return tg_gui_input_h(state, backend, width, sidebar_w, lh);
 }
 
+/* --- Emoji picker --------------------------------------------------------- */
+
+/* Panel geometry from the same numbers the composer painter uses. Cells are
+   squares of the line height plus padding; the recents row, when there is
+   one, is the first row and the sheet follows. */
+typedef struct tg_gui_emoji_geom {
+    int cell;    /* cell side */
+    int cols;
+    int rows;    /* visible rows (recents row included) */
+    int x;
+    int y;
+    int w;
+    int h;
+    int recents; /* cells in the recents row (0 = no such row) */
+    int total;   /* cells addressable: recents + sheet */
+} tg_gui_emoji_geom;
+
+static void tg_gui_emoji_geometry(const tg_gui_state *state, int width,
+                                  int height, int lh, tg_gui_emoji_geom *geo)
+{
+    int sidebar_w = tg_gui_sidebar_w(width);
+    int sheet_rows;
+
+    geo->cell = lh + 6;
+    geo->x = sidebar_w + 8;
+    geo->w = width - 16 - sidebar_w;
+    geo->cols = geo->w / geo->cell;
+    if (geo->cols < 4) {
+        geo->cols = 4;
+    }
+    if (geo->cols > 16) {
+        geo->cols = 16;
+    }
+    geo->w = geo->cols * geo->cell + 4;
+    geo->recents = state->emoji_recent_count > geo->cols
+                       ? geo->cols : state->emoji_recent_count;
+    geo->total = geo->recents + (int)tg_emoji_sheet_count;
+    sheet_rows = ((int)tg_emoji_sheet_count + geo->cols - 1) / geo->cols;
+    geo->rows = sheet_rows + (geo->recents > 0 ? 1 : 0);
+    /* Never taller than the window minus the composer and header. */
+    if (geo->rows * geo->cell + 4 > height - 3 * lh - 24) {
+        geo->rows = (height - 3 * lh - 24) / geo->cell;
+        if (geo->rows < 1) {
+            geo->rows = 1;
+        }
+    }
+    geo->h = geo->rows * geo->cell + 4;
+    /* Sits directly above the composer box (the box top is height - lh*3
+       - ... in the painter; the painter passes the real box top through
+       tg_gui_emoji_paint, this is the default for the hit test). */
+    geo->y = height - (lh + 12) - geo->h - 2;
+    if (geo->y < 0) {
+        geo->y = 0;
+    }
+}
+
+/* Cell index -> sheet glyph index. */
+static unsigned long tg_gui_emoji_cell_glyph(const tg_gui_state *state,
+                                             const tg_gui_emoji_geom *geo,
+                                             int cell)
+{
+    if (cell < geo->recents) {
+        return state->emoji_recent[cell];
+    }
+    return (unsigned long)(cell - geo->recents);
+}
+
+/* Row/column of a cell: the recents row is row 0 and is padded to `cols`. */
+static void tg_gui_emoji_cell_pos(const tg_gui_emoji_geom *geo, int cell,
+                                  int *row, int *col)
+{
+    if (geo->recents > 0 && cell < geo->recents) {
+        *row = 0;
+        *col = cell;
+        return;
+    }
+    cell -= geo->recents;
+    *row = cell / geo->cols + (geo->recents > 0 ? 1 : 0);
+    *col = cell % geo->cols;
+}
+
+/* The last painted window metrics, so keys and hit tests use the geometry
+   the user is looking at. Painter side state, hence not in tg_gui_state. */
+static int tg_gui_emoji_geom_w;
+static int tg_gui_emoji_geom_h;
+static int tg_gui_emoji_geom_lh;
+int tg_gui_emoji_geom_y; /* panel top as painted; the self-test reads it */
+
+void tg_gui_emoji_open(tg_gui_state *state)
+{
+    if (state == 0) {
+        return;
+    }
+    state->emoji_active = 1;
+    state->emoji_sel = 0;
+    state->composing = 1;
+    state->mention_active = 0;
+    state->mention_count = 0;
+}
+
+void tg_gui_emoji_close(tg_gui_state *state)
+{
+    if (state != 0) {
+        state->emoji_active = 0;
+    }
+}
+
+void tg_gui_emoji_move(tg_gui_state *state, int dx, int dy)
+{
+    tg_gui_emoji_geom geo;
+    int row;
+    int col;
+    int target;
+
+    if (state == 0 || !state->emoji_active) {
+        return;
+    }
+    /* Geometry for a nominal window: only cols matters for movement, and
+       cols depends on the width the painter had; keep the last painted one
+       through a static so keys and paint agree. */
+    tg_gui_emoji_geometry(state, tg_gui_emoji_geom_w > 0 ? tg_gui_emoji_geom_w : 640,
+                          tg_gui_emoji_geom_h > 0 ? tg_gui_emoji_geom_h : 256,
+                          tg_gui_emoji_geom_lh > 0 ? tg_gui_emoji_geom_lh : 8,
+                          &geo);
+    if (geo.total <= 0) {
+        return;
+    }
+    tg_gui_emoji_cell_pos(&geo, state->emoji_sel, &row, &col);
+    if (dx != 0) {
+        target = state->emoji_sel + dx;
+    } else {
+        int trow = row + dy;
+
+        if (geo.recents > 0 && row == 1 && dy < 0) {
+            target = col < geo.recents ? col : geo.recents - 1;
+        } else if (geo.recents > 0 && row == 0 && dy > 0) {
+            target = geo.recents + col;
+        } else if (trow < 0) {
+            return;
+        } else {
+            target = state->emoji_sel + dy * geo.cols;
+        }
+    }
+    if (target < 0) {
+        target = 0;
+    }
+    if (target >= geo.total) {
+        target = geo.total - 1;
+    }
+    state->emoji_sel = target;
+}
+
+static void tg_gui_emoji_recent_push(tg_gui_state *state, unsigned long glyph)
+{
+    int i;
+    int at = -1;
+
+    for (i = 0; i < state->emoji_recent_count; ++i) {
+        if (state->emoji_recent[i] == glyph) {
+            at = i;
+            break;
+        }
+    }
+    if (at < 0) {
+        if (state->emoji_recent_count < TG_GUI_EMOJI_RECENT_MAX) {
+            at = state->emoji_recent_count++;
+        } else {
+            at = TG_GUI_EMOJI_RECENT_MAX - 1;
+        }
+    }
+    for (i = at; i > 0; --i) {
+        state->emoji_recent[i] = state->emoji_recent[i - 1];
+    }
+    state->emoji_recent[0] = (unsigned short)glyph;
+}
+
+int tg_gui_emoji_pick(tg_gui_state *state)
+{
+    tg_gui_emoji_geom geo;
+    unsigned long glyph;
+
+    if (state == 0 || !state->emoji_active) {
+        return 0;
+    }
+    tg_gui_emoji_geometry(state, tg_gui_emoji_geom_w > 0 ? tg_gui_emoji_geom_w : 640,
+                          tg_gui_emoji_geom_h > 0 ? tg_gui_emoji_geom_h : 256,
+                          tg_gui_emoji_geom_lh > 0 ? tg_gui_emoji_geom_lh : 8,
+                          &geo);
+    if (state->emoji_sel < 0 || state->emoji_sel >= geo.total) {
+        return 0;
+    }
+    glyph = tg_gui_emoji_cell_glyph(state, &geo, state->emoji_sel);
+    if (glyph >= tg_emoji_sheet_count ||
+        !tg_gui_composer_insert_emoji(state, glyph)) {
+        return 0;
+    }
+    tg_gui_emoji_recent_push(state, glyph);
+    tg_gui_emoji_recent_save(state);
+    return 1;
+}
+
+int tg_gui_emoji_cell_at(const tg_gui_state *state, int width, int lh,
+                         int x, int y)
+{
+    tg_gui_emoji_geom geo;
+    int col;
+    int row;
+    int cell;
+
+    if (state == 0 || !state->emoji_active) {
+        return -1;
+    }
+    /* The panel the user sees is the one the painter laid out: same width
+       and line height as that paint, and the top it actually drew at (the
+       composer box moves with the reply strip and the wrapped rows). */
+    if (tg_gui_emoji_geom_w > 0) {
+        width = tg_gui_emoji_geom_w;
+        lh = tg_gui_emoji_geom_lh;
+    }
+    tg_gui_emoji_geometry(state, width,
+                          tg_gui_emoji_geom_h > 0 ? tg_gui_emoji_geom_h : 256,
+                          lh, &geo);
+    if (tg_gui_emoji_geom_w > 0) {
+        geo.y = tg_gui_emoji_geom_y;
+    }
+    if (x < geo.x + 2 || y < geo.y + 2 || x >= geo.x + 2 + geo.cols * geo.cell ||
+        y >= geo.y + 2 + geo.rows * geo.cell) {
+        return -1;
+    }
+    col = (x - geo.x - 2) / geo.cell;
+    row = (y - geo.y - 2) / geo.cell;
+    if (geo.recents > 0) {
+        if (row == 0) {
+            return col < geo.recents ? col : -1;
+        }
+        cell = geo.recents + (row - 1) * geo.cols + col;
+    } else {
+        cell = row * geo.cols + col;
+    }
+    return cell < geo.total ? cell : -1;
+}
+
+void tg_gui_emoji_recent_load(tg_gui_state *state)
+{
+    FILE *f;
+    unsigned long v;
+
+    if (state == 0) {
+        return;
+    }
+    state->emoji_recent_count = 0;
+    f = fopen("data/telegram-emoji-recent.txt", "r");
+    if (f == 0) {
+        return;
+    }
+    while (state->emoji_recent_count < TG_GUI_EMOJI_RECENT_MAX &&
+           fscanf(f, "%lu", &v) == 1) {
+        if (v < tg_emoji_sheet_count) {
+            state->emoji_recent[state->emoji_recent_count++] =
+                (unsigned short)v;
+        }
+    }
+    fclose(f);
+}
+
+void tg_gui_emoji_recent_save(const tg_gui_state *state)
+{
+    FILE *f;
+    int i;
+
+    if (state == 0) {
+        return;
+    }
+    f = fopen("data/telegram-emoji-recent.txt", "w");
+    if (f == 0) {
+        return;
+    }
+    for (i = 0; i < state->emoji_recent_count; ++i) {
+        fprintf(f, "%u\n", (unsigned)state->emoji_recent[i]);
+    }
+    fclose(f);
+}
+
+/* The panel itself: accent frame, surface, one square per glyph, the
+   highlighted cell in the accent pen. Without a glyph primitive (the
+   recording backend) each cell shows a dot so geometry still exercises. */
+
+static void tg_gui_emoji_paint(const tg_gui_state *state,
+                               tg_gui_backend *backend,
+                               int width, int height, int lh, int box_top)
+{
+    tg_gui_emoji_geom geo;
+    int cell;
+
+    if (!state->emoji_active) {
+        return;
+    }
+    tg_gui_emoji_geom_w = width;
+    tg_gui_emoji_geom_h = height;
+    tg_gui_emoji_geom_lh = lh;
+    tg_gui_emoji_geometry(state, width, height, lh, &geo);
+    geo.y = box_top - geo.h - 2;
+    if (state->reply_to_id != 0UL) {
+        geo.y -= (lh + 4 + TG_GUI_REPLY_LIFT);
+    }
+    if (geo.y < 0) {
+        geo.y = 0;
+    }
+    tg_gui_emoji_geom_y = geo.y;
+    backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                       tg_gui_make_rect(geo.x - 1, geo.y - 1, geo.w + 2,
+                                        geo.h + 2));
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                       tg_gui_make_rect(geo.x, geo.y, geo.w, geo.h));
+    for (cell = 0; cell < geo.total; ++cell) {
+        int row;
+        int col;
+        int cx;
+        int cy;
+        unsigned long glyph;
+
+        tg_gui_emoji_cell_pos(&geo, cell, &row, &col);
+        if (row >= geo.rows) {
+            break;
+        }
+        cx = geo.x + 2 + col * geo.cell;
+        cy = geo.y + 2 + row * geo.cell;
+        if (cell == state->emoji_sel) {
+            backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                               tg_gui_make_rect(cx, cy, geo.cell, geo.cell));
+        }
+        glyph = tg_gui_emoji_cell_glyph(state, &geo, cell);
+        if (backend->glyph_image == 0 ||
+            !backend->glyph_image(backend, glyph, cx + 3, cy + 3,
+                                  geo.cell - 6)) {
+            backend->fill_rect(backend, TG_GUI_PEN_TEXT,
+                               tg_gui_make_rect(cx + geo.cell / 2 - 1,
+                                                cy + geo.cell / 2 - 1, 2, 2));
+        }
+    }
+    if (geo.recents > 0) {
+        /* a thin rule under the recents row */
+        backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                           tg_gui_make_rect(geo.x + 2, geo.y + 2 + geo.cell - 1,
+                                            geo.cols * geo.cell, 1));
+    }
+}
+
 /* Draws just the bottom composer row: the input box (now wrapped to multiple
    lines for a long message, with the caret on the right line), the placeholder /
    idle text, and the Send button. Factored out so the caret blink can repaint
@@ -2566,6 +2915,7 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
                                row, rl);
         }
     }
+    tg_gui_emoji_paint(state, backend, width, height, lh, box_top);
 }
 
 /* The floating "scroll to newest" button: an accent square with a filled
@@ -3120,6 +3470,13 @@ int tg_gui_selection_get(const tg_gui_state *state, char *out,
 int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
                     int x, int y)
 {
+    if (state != 0 && state->emoji_active) {
+        int ecell = tg_gui_emoji_cell_at(state, width, lh, x, y);
+
+        if (ecell >= 0) {
+            return TG_GUI_HIT_EMOJI_BASE - ecell;
+        }
+    }
     int sidebar_w;
     int status_h;
     int content_h;
@@ -3789,6 +4146,7 @@ typedef struct tg_gui_record {
     int photo_last_w;
     int photo_last_h;
     int texts;
+    int glyphs; /* emoji glyph cells drawn through glyph_image */
     int min_x;
     int min_y;
     int max_x;
@@ -3816,6 +4174,16 @@ static int tg_gui_rec_line_height(tg_gui_backend *backend)
 }
 
 #define TG_GUI_REC_EMOJI_CELL 12
+static int tg_gui_rec_glyph(tg_gui_backend *backend, unsigned long index,
+                            int x, int y_top, int size)
+{
+    tg_gui_record *record = (tg_gui_record *)backend->context;
+
+    (void)index; (void)x; (void)y_top; (void)size;
+    record->glyphs += 1;
+    return 1;
+}
+
 static int tg_gui_rec_text_width(tg_gui_backend *backend, const char *text,
                                  unsigned long length)
 {
@@ -3978,6 +4346,7 @@ int tg_gui_self_test(void)
     backend.line_height = tg_gui_rec_line_height;
     backend.font_ascent = 0; /* recorder: exercise the renderer's fallback */
     backend.text_width = tg_gui_rec_text_width;
+    backend.glyph_image = tg_gui_rec_glyph;
     backend.fill_rect = tg_gui_rec_fill;
     backend.avatar_image = 0;
     backend.photo_image = tg_gui_rec_photo;
@@ -4411,6 +4780,60 @@ int tg_gui_self_test(void)
             }
             state.input[0] = '\0';
             state.input_caret = 0;
+        }
+
+        /* 0.0.93: the emoji picker paints inside the window with one glyph per
+           cell, the arrows move the highlight, ENTER inserts and puts the
+           glyph at the front of the recents, and a click on a cell hits it. */
+        {
+            tg_gui_record em_record;
+            int before;
+            int hit;
+
+            state.composing = 1;
+            state.input[0] = '\0';
+            state.input_caret = 0;
+            state.emoji_recent_count = 0;
+            tg_gui_emoji_open(&state);
+            memset(&em_record, 0, sizeof(em_record));
+            em_record.width = 480;
+            em_record.height = 320;
+            em_record.min_x = em_record.width;
+            em_record.min_y = em_record.height;
+            backend.context = &em_record;
+            tg_gui_paint(&state, &backend);
+            if (em_record.glyphs < 20 || em_record.min_x < 0 ||
+                em_record.max_x > 480 || em_record.min_y < 0 ||
+                em_record.max_y > 320) {
+                printf("gui self-test: emoji panel drew %d glyphs, box %d..%d x %d..%d\n",
+                       em_record.glyphs, em_record.min_x, em_record.max_x,
+                       em_record.min_y, em_record.max_y);
+                return 2;
+            }
+            tg_gui_emoji_move(&state, 1, 0);
+            tg_gui_emoji_move(&state, 0, 1);
+            before = state.emoji_sel;
+            if (before <= 1 || !tg_gui_emoji_pick(&state) ||
+                strlen(state.input) != 2UL || state.emoji_recent_count != 1 ||
+                state.emoji_recent[0] != (unsigned short)before) {
+                puts("gui self-test: emoji pick / recents");
+                return 2;
+            }
+            /* now a recents row exists: repaint and hit its first cell */
+            tg_gui_paint(&state, &backend);
+            hit = tg_gui_hit_test(&state, 480, 320, 10,
+                                  (tg_gui_sidebar_w(480)) + 8 + 2 + 3,
+                                  tg_gui_emoji_geom_y + 2 + 3);
+            if (hit != TG_GUI_HIT_EMOJI_BASE - 0) {
+                printf("gui self-test: emoji hit test gave %d\n", hit);
+                return 2;
+            }
+            tg_gui_emoji_close(&state);
+            (void)remove("data/telegram-emoji-recent.txt");
+            state.input[0] = '\0';
+            state.input_caret = 0;
+            state.emoji_recent_count = 0;
+            backend.context = &record;
         }
 
         /* 0.0.92: with inline photos off, a sticker's marker says what the

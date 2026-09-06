@@ -8,6 +8,15 @@ unless noted.
 ## [Unreleased]
 
 ### Added
+- Emoji can be sent. "Insert emoji..." in the Telegram menu (Amiga+E) opens a
+  panel above the composer: the recently used ones first, then the 109 emoji
+  this client already reads back as text emoticons, in a grid walked with the
+  arrow keys or clicked. ENTER inserts one at the caret and keeps the panel
+  open, ESC closes it, and the recent row survives between runs. Inside the
+  composer an emoji is drawn as a small picture the height of the text, is
+  edited and stepped over as one character, and goes out as its real Unicode
+  codepoint. The pictures are Noto Emoji glyphs reduced to 16 pixels, shipped
+  under the SIL Open Font License; see third_party/noto-emoji.
 - A PNG goes out as a photo. The photo gate now reads the file's own bytes
   rather than its name: a JPEG is walked through its first scan as before, a
   PNG through its chunks to IEND, so a truncated file of either kind is
