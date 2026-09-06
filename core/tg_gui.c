@@ -697,6 +697,14 @@ static int tg_gui_wrap(tg_gui_backend *backend, const char *text, int max_width,
             lengths[line] = last_space - line_start;
             i = last_space + 1UL;
         } else {
+            /* A forced break inside a word: never between the two bytes of an
+               emoji pair, which would draw as two garbage glyphs and send as
+               two stray bytes. Step back to keep the pair whole on the next
+               line (a line holding just one pair still advances). */
+            if (j > line_start + 1UL &&
+                tg_gui_emoji_pair_at(text, total, j - 1UL, 0)) {
+                --j;
+            }
             starts[line] = line_start;
             lengths[line] = j - line_start;
             i = j;
@@ -704,6 +712,81 @@ static int tg_gui_wrap(tg_gui_backend *backend, const char *text, int max_width,
         ++line;
     }
     return line;
+}
+
+int tg_gui_emoji_pair_at(const char *text, unsigned long len, unsigned long i,
+                         unsigned long *index)
+{
+    unsigned char p;
+    unsigned char b;
+
+    if (text == 0 || i + 1UL >= len) {
+        return 0;
+    }
+    p = (unsigned char)text[i];
+    b = (unsigned char)text[i + 1UL];
+    if ((p != TG_GUI_EMOJI_PREFIX0 && p != TG_GUI_EMOJI_PREFIX1) ||
+        b < TG_GUI_EMOJI_INDEX_MIN || b > TG_GUI_EMOJI_INDEX_MAX || b == '@') {
+        return 0;
+    }
+    if (index != 0) {
+        unsigned long k = (unsigned long)(b - TG_GUI_EMOJI_INDEX_MIN);
+
+        if (b > '@') {
+            --k; /* the slot '@' would have taken */
+        }
+        *index = (p == TG_GUI_EMOJI_PREFIX1 ? TG_GUI_EMOJI_PER_PREFIX : 0UL) + k;
+    }
+    return 1;
+}
+
+int tg_gui_emoji_encode(unsigned long index, char *out)
+{
+    unsigned long k;
+    unsigned char b;
+
+    if (out == 0 || index >= TG_GUI_EMOJI_MAX) {
+        return 0;
+    }
+    k = index % TG_GUI_EMOJI_PER_PREFIX;
+    b = (unsigned char)(TG_GUI_EMOJI_INDEX_MIN + k);
+    if (b >= '@') {
+        ++b; /* skip '@' */
+    }
+    out[0] = (char)(index < TG_GUI_EMOJI_PER_PREFIX ? TG_GUI_EMOJI_PREFIX0
+                                                    : TG_GUI_EMOJI_PREFIX1);
+    out[1] = (char)b;
+    return 1;
+}
+
+unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
+                                   unsigned long i)
+{
+    return tg_gui_emoji_pair_at(text, len, i, 0) ? 2UL : 1UL;
+}
+
+int tg_gui_composer_insert_emoji(tg_gui_state *state, unsigned long index)
+{
+    char pair[2];
+    unsigned long n;
+    unsigned long c;
+
+    if (state == 0 || !tg_gui_emoji_encode(index, pair)) {
+        return 0;
+    }
+    n = (unsigned long)strlen(state->input);
+    if (n + 2UL >= sizeof(state->input)) {
+        return 0;
+    }
+    c = (unsigned long)state->input_caret;
+    if (c > n) {
+        c = n;
+    }
+    memmove(&state->input[c + 2UL], &state->input[c], n - c + 1UL);
+    state->input[c] = pair[0];
+    state->input[c + 1UL] = pair[1];
+    state->input_caret = (int)(c + 2UL);
+    return 1;
 }
 
 static tg_gui_rect tg_gui_make_rect(int x, int y, int w, int h)
@@ -3732,13 +3815,26 @@ static int tg_gui_rec_line_height(tg_gui_backend *backend)
     return 10;
 }
 
+#define TG_GUI_REC_EMOJI_CELL 12
 static int tg_gui_rec_text_width(tg_gui_backend *backend, const char *text,
                                  unsigned long length)
 {
+    unsigned long i;
+    int w = 0;
+
     (void)backend;
-    (void)text;
-    return (int)(length * 6UL);
+    for (i = 0UL; i < length; ) {
+        if (tg_gui_emoji_pair_at(text, length, i, 0)) {
+            w += TG_GUI_REC_EMOJI_CELL;
+            i += 2UL;
+        } else {
+            w += 6;
+            i += 1UL;
+        }
+    }
+    return w;
 }
+
 
 static void tg_gui_rec_track(tg_gui_record *record, int x, int y)
 {
@@ -4254,6 +4350,67 @@ int tg_gui_self_test(void)
             state.photo_h[1] <= 0 || hit != TG_GUI_HIT_PHOTO_BASE - 1) {
             puts("gui self-test: disabled inline photo did background work");
             return 2;
+        }
+
+        /* 0.0.93: emoji pairs. Encode and decode round-trip every glyph index,
+           '@' is never an index byte, the wrap never splits a pair on a forced
+           break, the recording backend measures a pair as one cell, and the
+           composer insert puts the two bytes at the caret. */
+        {
+            unsigned long k;
+            unsigned long back;
+            char pair[2];
+            char text[40];
+            unsigned long starts[TG_GUI_WRAP_MAX_LINES];
+            unsigned long lengths[TG_GUI_WRAP_MAX_LINES];
+            int lines;
+            int l;
+
+            for (k = 0UL; k < TG_GUI_EMOJI_MAX; ++k) {
+                if (!tg_gui_emoji_encode(k, pair) || pair[1] == '@' ||
+                    !tg_gui_emoji_pair_at(pair, 2UL, 0UL, &back) || back != k) {
+                    printf("gui self-test: emoji pair %lu does not round-trip\n", k);
+                    return 2;
+                }
+            }
+            if (tg_gui_emoji_encode(TG_GUI_EMOJI_MAX, pair) ||
+                tg_gui_emoji_pair_at("\x80@", 2UL, 0UL, &back) ||
+                tg_gui_emoji_pair_at("a\x80", 2UL, 1UL, &back)) {
+                puts("gui self-test: emoji pair accepted out of range");
+                return 2;
+            }
+            /* 7 letters then a pair, no spaces, in 8 cells of 6 px: the forced
+               break must land BEFORE the pair, never inside it. */
+            tg_gui_emoji_encode(5UL, pair);
+            memcpy(text, "abcdefg", 7);
+            text[7] = pair[0]; text[8] = pair[1]; text[9] = 'h'; text[10] = '\0';
+            lines = tg_gui_wrap(&backend, text, 8 * 6 + 1, starts, lengths,
+                                TG_GUI_WRAP_MAX_LINES);
+            for (l = 0; l < lines; ++l) {
+                unsigned long e = starts[l] + lengths[l];
+
+                if (e > 0UL && e <= 10UL &&
+                    tg_gui_emoji_pair_at(text, 10UL, e - 1UL, 0)) {
+                    puts("gui self-test: wrap split an emoji pair");
+                    return 2;
+                }
+            }
+            if (tg_gui_rec_text_width(&backend, text, 10UL) !=
+                8 * 6 + TG_GUI_REC_EMOJI_CELL) {
+                puts("gui self-test: recording width of a pair");
+                return 2;
+            }
+            strcpy(state.input, "ab");
+            state.input_caret = 1;
+            if (!tg_gui_composer_insert_emoji(&state, 5UL) ||
+                state.input_caret != 3 || strlen(state.input) != 4UL ||
+                state.input[0] != 'a' || state.input[3] != 'b' ||
+                !tg_gui_emoji_pair_at(state.input, 4UL, 1UL, &back) || back != 5UL) {
+                puts("gui self-test: composer emoji insert");
+                return 2;
+            }
+            state.input[0] = '\0';
+            state.input_caret = 0;
         }
 
         /* 0.0.92: with inline photos off, a sticker's marker says what the

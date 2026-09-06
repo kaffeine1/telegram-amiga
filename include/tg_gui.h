@@ -94,6 +94,12 @@ struct tg_gui_backend {
        initials square. NULL on backends without image support (host tests). */
     int (*avatar_image)(tg_gui_backend *backend, unsigned long peer_id_hi,
                         unsigned long peer_id_lo, tg_gui_rect rect);
+    /* OPTIONAL: draw sheet glyph `index` scaled into the size x size square
+       at (x, y_top), index 0 of the palette left untouched. A backend whose
+       draw_text handles emoji pairs itself needs no caller to use this; it
+       is here for the picker grid. Returns 1 when drawn. */
+    int (*glyph_image)(tg_gui_backend *backend, unsigned long index, int x,
+                       int y_top, int size);
     /* OPTIONAL: replay a cached message photo into rect, clipped to the
        transcript viewport. Returns 1 when drawn, 0 for the text fallback. */
     int (*photo_image)(tg_gui_backend *backend, unsigned long photo_id_hi,
@@ -129,6 +135,29 @@ struct tg_gui_backend {
 #define TG_GUI_NAME_MAX 48
 #define TG_GUI_TEXT_MAX 256
 
+/* Emoji in Latin-1 text. An Amiga keyboard produces Latin-1, so an emoji in
+   the composer is a two byte escape: a prefix byte from the C1 control range,
+   which no keymap emits, followed by an index byte from 0x21..0x7E with '@'
+   left out (it would wake the mention popup). 93 slots per prefix, two
+   prefixes, 186 addressable glyphs, against 109 in the sheet today. The
+   backends measure and draw a pair as one square cell of the line height
+   showing the sheet glyph; the wrap never splits one; the send path expands
+   it to the codepoint's UTF-8. Reception can use the same pairs later, so a
+   received emoji and a sent one are the same thing on screen. */
+#define TG_GUI_EMOJI_PREFIX0 0x80U
+#define TG_GUI_EMOJI_PREFIX1 0x81U
+#define TG_GUI_EMOJI_INDEX_MIN 0x21U
+#define TG_GUI_EMOJI_INDEX_MAX 0x7EU
+#define TG_GUI_EMOJI_PER_PREFIX 93UL /* 0x21..0x7E minus '@' */
+#define TG_GUI_EMOJI_MAX (2UL * TG_GUI_EMOJI_PER_PREFIX)
+/* 1 when a pair starts at text[i] (i < len), with its glyph index in *index. */
+int tg_gui_emoji_pair_at(const char *text, unsigned long len, unsigned long i,
+                         unsigned long *index);
+/* Writes the two bytes for glyph `index` into out[2]; 0 when out of range. */
+int tg_gui_emoji_encode(unsigned long index, char *out);
+/* Bytes of the text unit starting at text[i]: 2 for a pair, else 1. */
+unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
+                                   unsigned long i);
 /* '@' mention autocomplete popup (composer). */
 #define TG_GUI_MENTION_MAX 5
 #define TG_GUI_MENTION_LEN 40
@@ -392,6 +421,9 @@ void tg_gui_paint(const tg_gui_state *state, tg_gui_backend *backend);
    LockLayerRom (the direct, non-buffered path): the trail writes to disk, and
    DOS I/O under a layer lock can deadlock Intuition. */
 void tg_gui_paint_trail_off(void);
+
+/* Inserts glyph `index` at the composer caret (two bytes). 0 if full. */
+int tg_gui_composer_insert_emoji(tg_gui_state *state, unsigned long index);
 
 /* Repaints ONLY the active caret region (composer input row in chat mode, login
    input box otherwise). Lets the ~2 Hz caret blink avoid a full-window repaint,

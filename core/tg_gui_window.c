@@ -17,6 +17,7 @@
 #include "tg_gui.h"
 #include "tg_gui_session.h"
 #include "tg_avatar.h"
+#include "tg_emoji_sheet.h"
 #include "tg_mtproto_login.h"
 #include "tg_platform.h"
 #include "tg_version.h"
@@ -638,12 +639,10 @@ static int tg_gui_amiga_bitmap_text_width(const tg_gui_amiga_ctx *ctx,
     return width;
 }
 
-static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
-                                   unsigned long length)
+/* Width of a plain run: TextLength, or the bitmap path on compat screens. */
+static int tg_gui_amiga_run_width(tg_gui_amiga_ctx *ctx, const char *text,
+                                  unsigned long length)
 {
-    tg_gui_amiga_ctx *ctx;
-
-    ctx = (tg_gui_amiga_ctx *)backend->context;
     if (length == 0UL) {
         return 0;
     }
@@ -654,6 +653,108 @@ static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
         return tg_gui_amiga_bitmap_text_width(ctx, text, length);
     }
     return (int)TextLength(ctx->rport, (STRPTR)text, (UWORD)length);
+}
+
+/* The square an emoji occupies inline: the font height, so a glyph sits in
+   the line like a wide letter. 16 px glyphs scale down to it (9 px on Topaz
+   8, 13 on the PPC and AROS defaults), the way avatars scale into a row. */
+static int tg_gui_amiga_emoji_cell(const tg_gui_amiga_ctx *ctx)
+{
+    int h = ctx->rport != 0 && ctx->rport->Font != 0
+                ? (int)ctx->rport->Font->tf_YSize : 8;
+
+    return h < 8 ? 8 : h;
+}
+
+/* Pens for the sheet palette, resolved once per session through the same
+   colour matching the avatars use. Entry 0 is never drawn (transparent). */
+static LONG tg_gui_av_pen_for(const unsigned char *rgb); /* defined with the avatars */
+static unsigned char tg_gui_emoji_pen[256];
+static int tg_gui_emoji_pen_ready;
+
+static void tg_gui_amiga_emoji_pens(void)
+{
+    int k;
+
+    if (tg_gui_emoji_pen_ready) {
+        return;
+    }
+    for (k = 0; k < 255; ++k) {
+        tg_gui_emoji_pen[k + 1] =
+            (unsigned char)tg_gui_av_pen_for(tg_emoji_sheet_palette[k]);
+    }
+    tg_gui_emoji_pen_ready = 1;
+}
+
+/* Draws sheet glyph `index` into the size x size square at (x, y_top), rows
+   of equal pens merged into one RectFill like the avatar painter, index 0
+   skipped so the background shows through. */
+static int tg_gui_amiga_glyph_image(tg_gui_backend *backend,
+                                    unsigned long index, int x, int y_top,
+                                    int size)
+{
+    tg_gui_amiga_ctx *ctx = (tg_gui_amiga_ctx *)backend->context;
+    const unsigned char *px;
+    int y;
+
+    if (index >= tg_emoji_sheet_count || size <= 0 || ctx->rport == 0) {
+        return 0;
+    }
+    tg_gui_amiga_emoji_pens();
+    px = tg_emoji_sheet_pixels[index];
+    SetDrMd(ctx->rport, JAM1);
+    for (y = 0; y < size; ++y) {
+        int sy = (y * TG_EMOJI_GLYPH_SIZE) / size;
+        int xx = 0;
+
+        while (xx < size) {
+            int sx = (xx * TG_EMOJI_GLYPH_SIZE) / size;
+            unsigned char v = px[sy * TG_EMOJI_GLYPH_SIZE + sx];
+            int run = xx + 1;
+
+            if (v == 0U) {
+                ++xx;
+                continue;
+            }
+            while (run < size &&
+                   px[sy * TG_EMOJI_GLYPH_SIZE +
+                      ((run * TG_EMOJI_GLYPH_SIZE) / size)] == v) {
+                ++run;
+            }
+            SetAPen(ctx->rport, (LONG)tg_gui_emoji_pen[v]);
+            RectFill(ctx->rport, ctx->origin_x + x + xx,
+                     ctx->origin_y + y_top + y,
+                     ctx->origin_x + x + run - 1,
+                     ctx->origin_y + y_top + y);
+            xx = run;
+        }
+    }
+    return 1;
+}
+
+static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
+                                   unsigned long length)
+{
+    tg_gui_amiga_ctx *ctx = (tg_gui_amiga_ctx *)backend->context;
+    unsigned long i = 0UL;
+    unsigned long run_start = 0UL;
+    int w = 0;
+    int cell = 0;
+
+    while (i < length) {
+        if (tg_gui_emoji_pair_at(text, length, i, 0)) {
+            if (cell == 0) {
+                cell = tg_gui_amiga_emoji_cell(ctx);
+            }
+            w += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
+            w += cell;
+            i += 2UL;
+            run_start = i;
+        } else {
+            ++i;
+        }
+    }
+    return w + tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
 }
 
 static LONG tg_gui_amiga_resolve_pen(tg_gui_amiga_ctx *ctx, int pen)
@@ -4112,13 +4213,11 @@ static void tg_gui_amiga_blt_text(struct RastPort *rp, int x, int baseline,
     Move(rp, (LONG)cursor, (LONG)baseline);
 }
 
-static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
-                                   int baseline, const char *text,
-                                   unsigned long length)
+/* One plain run of text at (x, baseline). */
+static void tg_gui_amiga_draw_run(tg_gui_amiga_ctx *ctx, int pen, int x,
+                                  int baseline, const char *text,
+                                  unsigned long length)
 {
-    tg_gui_amiga_ctx *ctx;
-
-    ctx = (tg_gui_amiga_ctx *)backend->context;
     if (length == 0UL) {
         return;
     }
@@ -4136,6 +4235,45 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
     } else {
         Text(ctx->rport, (STRPTR)text, (UWORD)length);
     }
+}
+
+/* Text with emoji pairs: plain runs go through the font, each pair is a
+   glyph cell of the font height whose bottom sits on the descender line,
+   so a face lines up with the letters beside it. */
+static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
+                                   int baseline, const char *text,
+                                   unsigned long length)
+{
+    tg_gui_amiga_ctx *ctx = (tg_gui_amiga_ctx *)backend->context;
+    unsigned long i = 0UL;
+    unsigned long run_start = 0UL;
+    unsigned long index;
+    int cell = 0;
+
+    while (i < length) {
+        if (tg_gui_emoji_pair_at(text, length, i, &index)) {
+            int ascent;
+
+            if (cell == 0) {
+                cell = tg_gui_amiga_emoji_cell(ctx);
+            }
+            tg_gui_amiga_draw_run(ctx, pen, x, baseline, text + run_start,
+                                  i - run_start);
+            x += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
+            ascent = ctx->rport != 0 && ctx->rport->Font != 0
+                         ? (int)ctx->rport->Font->tf_Baseline : cell - 2;
+            tg_gui_amiga_glyph_image(backend, index, x,
+                                     baseline - ascent - (cell - ascent - 1) / 2,
+                                     cell);
+            x += cell;
+            i += 2UL;
+            run_start = i;
+        } else {
+            ++i;
+        }
+    }
+    tg_gui_amiga_draw_run(ctx, pen, x, baseline, text + run_start,
+                          i - run_start);
 }
 
 /* Map the renderer's style bitmask to graphics.library soft styles. Bold and
@@ -8149,6 +8287,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     backend.fill_rect = tg_gui_amiga_fill_rect;
     backend.avatar_fill = tg_gui_amiga_avatar_fill;
     backend.avatar_image = tg_gui_amiga_avatar_image;
+    backend.glyph_image = tg_gui_amiga_glyph_image;
     backend.photo_image = tg_gui_amiga_photo_image;
     backend.draw_text = tg_gui_amiga_draw_text;
     backend.set_style = tg_gui_amiga_set_style;
@@ -8706,10 +8845,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         c = n;
                     }
                     if (c > 0UL) {
-                        /* delete the char before the caret, keeping the NUL */
-                        memmove(&state->input[c - 1UL], &state->input[c],
+                        /* delete the unit before the caret, keeping the NUL:
+                           one byte, or the two of an emoji pair */
+                        unsigned long del = 1UL;
+
+                        if (c >= 2UL &&
+                            tg_gui_emoji_pair_at(state->input, n, c - 2UL, 0)) {
+                            del = 2UL;
+                        }
+                        memmove(&state->input[c - del], &state->input[c],
                                 n - c + 1UL);
-                        state->input_caret = (int)(c - 1UL);
+                        state->input_caret = (int)(c - del);
                         tg_gui_window_mention_refresh(state);
                         tg_gui_window_paint_composer_edit(
                             state, &backend, old_input_h, old_mention_active);
@@ -8730,7 +8876,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         /* forward-delete: pull the tail (incl. NUL) one left,
                            the caret stays put. Backspace (0x08) deletes left;
                            this splits the two so Canc is not folded into it. */
-                        memmove(&state->input[c], &state->input[c + 1UL],
+                        memmove(&state->input[c],
+                                &state->input[c + tg_gui_text_unit_len(state->input, n, c)],
                                 n - c);
                         tg_gui_window_mention_refresh(state);
                         tg_gui_window_paint_composer_edit(
@@ -8888,11 +9035,20 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     }
                     if (msg_code == 0x4F && state->input_caret > 0) {
                         state->input_caret--;
+                        if (state->input_caret > 0 &&
+                            tg_gui_emoji_pair_at(state->input,
+                                                 strlen(state->input),
+                                                 (unsigned long)state->input_caret - 1UL, 0)) {
+                            state->input_caret--; /* over the whole pair */
+                        }
                         changed = 1;
                     } else if (msg_code == 0x4E &&
                                state->input_caret <
                                    (int)strlen(state->input)) {
-                        state->input_caret++;
+                        state->input_caret +=
+                            (int)tg_gui_text_unit_len(state->input,
+                                                      strlen(state->input),
+                                                      (unsigned long)state->input_caret);
                         changed = 1;
                     }
                     if (shifted &&

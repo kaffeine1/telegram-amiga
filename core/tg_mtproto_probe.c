@@ -29,6 +29,7 @@
 #include "tg_chat_engine.h"
 #include "tg_mtproto_message_id.h"
 #include "tg_mtproto_probe.h"
+#include "tg_emoji_sheet.h"
 #include "tg_mtproto_rsa.h"
 #include "tg_mtproto_session.h"
 #include "tg_mtproto_srp.h"
@@ -98,6 +99,10 @@ static char tg_mtproto_query_fail[64];
 /* Defined by the upload engine further down; the text client and the GUI
    session accessor both put a server refusal into words. */
 static const char *tg_mtproto_upload_failure_text(const char *raw);
+#if TG_MTPROTO_DISPLAY_LATIN1
+static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
+                                     unsigned long dst_size);
+#endif
 
 /*
  * Consecutive failed reads/sends in the interactive chat loop before it drops
@@ -5760,6 +5765,33 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
     o = 0UL;
     for (i = 0UL; s[i] != '\0'; ++i) {
         unsigned char c = s[i];
+        unsigned long emoji;
+
+        /* An emoji pair from the composer (see tg_gui.h): two bytes in, the
+           codepoint's UTF-8 out, three or four bytes, still within the
+           "twice the input" bound this buffer is sized for. */
+        if ((c == TG_GUI_EMOJI_PREFIX0 || c == TG_GUI_EMOJI_PREFIX1) &&
+            s[i + 1U] != '\0' &&
+            tg_gui_emoji_pair_at(src, i + 2UL, i, &emoji) &&
+            emoji < tg_emoji_sheet_count) {
+            unsigned long cp = tg_emoji_sheet_codepoints[emoji];
+            unsigned long need = cp >= 0x10000UL ? 4UL : 3UL;
+
+            if (o + need >= dst_size) {
+                dst[0] = '\0';
+                return 0;
+            }
+            if (need == 4UL) {
+                dst[o++] = (char)(0xf0U | (cp >> 18));
+                dst[o++] = (char)(0x80U | ((cp >> 12) & 0x3fU));
+            } else {
+                dst[o++] = (char)(0xe0U | (cp >> 12));
+            }
+            dst[o++] = (char)(0x80U | ((cp >> 6) & 0x3fU));
+            dst[o++] = (char)(0x80U | (cp & 0x3fU));
+            ++i; /* the index byte */
+            continue;
+        }
         if (c < 0x80U) {
             if (o + 1UL >= dst_size) {
                 dst[0] = '\0';
@@ -17176,6 +17208,37 @@ static int tg_mtproto_photo_gate_self_test(void)
         puts("photo gate self-test: server refusal wording");
         return 2;
     }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    /* 0.0.93: an emoji pair in composer text goes out as the codepoint's
+       UTF-8; a lone prefix byte stays the two byte Latin-1 form as before. */
+    {
+        char src[8];
+        char out[32];
+        unsigned long cp;
+        unsigned long need;
+
+        if (!tg_gui_emoji_encode(0UL, src)) {
+            return 2;
+        }
+        src[2] = '!'; src[3] = '\0';
+        cp = tg_emoji_sheet_codepoints[0];
+        need = cp >= 0x10000UL ? 4UL : 3UL;
+        if (!tg_mtproto_latin1_to_utf8(src, out, sizeof(out)) ||
+            strlen(out) != need + 1UL || out[need] != '!' ||
+            (need == 4UL && (unsigned char)out[0] != (0xf0U | (cp >> 18))) ||
+            (need == 3UL && (unsigned char)out[0] != (0xe0U | (cp >> 12))) ||
+            (unsigned char)out[need - 1UL] != (0x80U | (cp & 0x3fU))) {
+            puts("photo gate self-test: emoji pair did not expand to UTF-8");
+            return 2;
+        }
+        src[0] = (char)0x80; src[1] = '\0';
+        if (!tg_mtproto_latin1_to_utf8(src, out, sizeof(out)) ||
+            strlen(out) != 2UL || (unsigned char)out[0] != 0xc2U) {
+            puts("photo gate self-test: lone prefix changed meaning");
+            return 2;
+        }
+    }
+#endif
     return 0;
 }
 #endif
