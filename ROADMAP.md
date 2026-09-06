@@ -316,14 +316,15 @@ The upload itself is format agnostic, it is bytes plus
 `inputMediaUploadedPhoto`, so the work splits in two very different
 halves.
 
-PNG is the cheap half and comes first. Telegram accepts it as a photo
-and re-encodes it server side, so the client only has to recognise it
-(the eight-byte signature, then IHDR for the dimensions) and let the
-existing upload run. That means teaching the extension check and the
-validator about a second format instead of hardcoding one, and
-reporting the server's own refusals (`PHOTO_EXT_INVALID`,
-`PHOTO_INVALID_DIMENSIONS`, `IMAGE_PROCESS_FAILED`) by name, the way
-other RPC errors already are.
+PNG is the cheap half and is DONE in 0.0.93. Telegram accepts it as a
+photo and re-encodes it server side, so the client only recognises it
+(the eight-byte signature, then IHDR for the dimensions, then the chunk
+walk to IEND so a truncated file is refused before the upload) and lets
+the existing upload run. The gate reads bytes rather than names, applies
+Telegram's own limits from the header (width plus height at most 10000,
+at most 20 to 1, verified at core.telegram.org), and turns the server's
+refusals (`PHOTO_INVALID_DIMENSIONS`, `PHOTO_EXT_INVALID`,
+`IMAGE_PROCESS_FAILED`) into sentences.
 
 IFF ILBM is the interesting half, and the one that matters on this
 platform: it is what an Amiga actually produces, and Telegram will

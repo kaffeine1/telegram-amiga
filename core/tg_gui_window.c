@@ -5976,12 +5976,16 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
             strcpy(line, requested_photo ? "Photo upload cancelled"
                                          : "Upload cancelled");
         } else if (trc == 7) {
-            strcpy(line, "That is not a valid JPEG");
+            const char *why = tg_gui_session_last_transfer_error();
+
+            sprintf(line, "Not sent as a photo: %.100s",
+                    (why != 0 && why[0] != '\0') ? why
+                                                  : "not a valid JPEG or PNG");
         } else {
             const char *why = tg_gui_session_last_transfer_error();
 
             if (why != 0 && why[0] != '\0') {
-                sprintf(line, "Upload failed: %.72s", why);
+                sprintf(line, "Upload failed: %.100s", why);
             } else {
                 strcpy(line, "Upload failed");
             }
@@ -6243,7 +6247,7 @@ static int tg_gui_photo_pick_destination(struct Window *win,
         /* Same visible pattern as the send side (issue #13): what lands here
            is a JPEG, so the drawer listing shows the photos already saved. */
         ASLFR_DoPatterns, TRUE,
-        ASLFR_InitialPattern, TG_GUI_TAG("#?.(jpg|jpeg)"), TAG_DONE);
+        ASLFR_InitialPattern, TG_GUI_TAG("#?.(jpg|jpeg|png)"), TAG_DONE);
     selected = req != 0 && AslRequestTags(req, TAG_DONE);
     result = 0;
     if (selected) {
@@ -6430,7 +6434,8 @@ static int tg_gui_window_path_is_jpeg(const char *path)
         ext[n++] = c;
     }
     ext[n] = '\0';
-    return strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0;
+    return strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0 ||
+           strcmp(ext, ".png") == 0;
 }
 
 /* ASL file requester -> non-blocking upload on the open chat.
@@ -6479,7 +6484,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
                javierdlr): the pattern then SHOWS in the requester's gadget,
                so the user can see what is being filtered and widen it. */
             ASLFR_DoPatterns, TRUE, ASLFR_InitialPattern,
-            (unsigned long)"#?.(jpg|jpeg)", TAG_DONE);
+            (unsigned long)"#?.(jpg|jpeg|png)", TAG_DONE);
     } else {
         req = (struct FileRequester *)AllocAslRequestTags(
             ASL_FileRequest, ASLFR_Window, (unsigned long)win,

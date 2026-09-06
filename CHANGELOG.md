@@ -5,6 +5,18 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
+## [Unreleased]
+
+### Added
+- A PNG goes out as a photo. The photo gate now reads the file's own bytes
+  rather than its name: a JPEG is walked through its first scan as before, a
+  PNG through its chunks to IEND, so a truncated file of either kind is
+  refused before a single part is uploaded. Telegram's photo limits, width
+  plus height at most 10000 and at most 20 to 1, are checked from the header
+  for the same reason, and the server's own refusals now come back in words
+  instead of an RPC name. The menu requester, the drop target and the text
+  client's /photo all take .png alongside .jpg.
+
 ## [0.0.92] - 2026-09-04
 
 ### Added

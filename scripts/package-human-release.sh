@@ -457,7 +457,7 @@ $gui_entry_en$tui_entry_en
   stays so you can read the last lines: one more click on the close gadget
   dismisses it.
   Sending by drag-and-drop: type "/sendfile " for a document or "/photo "
-  for a JPEG photo (words after the path become the caption), then drop
+  for a JPEG or PNG photo (words after the path become the caption), then drop
   the icon straight onto the console window
   (AmigaOS 3.x, MorphOS, AROS) or onto the "TG drop" Workbench icon (AmigaOS
   4.x, where the system reserves window drops); the path appears in the input
@@ -517,9 +517,12 @@ Using the GUI
   Old files are removed during idle time, while photos currently on screen stay
   available. "Settings > Clear cache..." asks for confirmation, deletes only
   photos/ (never avatars/) and keeps already displayed photos on screen.
-- To send a JPEG as a Telegram photo, use "Send photo..." in the Telegram menu
-  (Amiga+P). Dropping a .jpg/.jpeg on the GUI asks Photo, File or Cancel; ESC
-  also cancels. A photo over 10 MiB is preserved and sent as a document instead.
+- To send a JPEG or PNG as a Telegram photo, use "Send photo..." in the
+  Telegram menu (Amiga+P). Dropping a .jpg/.jpeg/.png on the GUI asks Photo,
+  File or Cancel; ESC also cancels. The file's own bytes decide, not its name,
+  and Telegram's photo limits (width plus height at most 10000, at most 20:1)
+  are checked before anything is uploaded. A photo over 10 MiB is preserved
+  and sent as a document instead.
 - Right-click a message and choose "Forward to Saved Messages" for a one-click
   cloud copy, or "Forward to..." to select another chat with the normal search.
 - In groups, type @ in the composer to autocomplete a member: a small list
@@ -627,7 +630,7 @@ $gui_entry_it$tui_entry_it
   finestra poi resta aperta per farti leggere le ultime righe: un altro
   click sul gadget la congeda.
   Per il drag-and-drop scrivi "/sendfile " per un documento oppure "/photo "
-  per una foto JPEG (le parole dopo il percorso diventano la didascalia),
+  per una foto JPEG o PNG (le parole dopo il percorso diventano la didascalia),
   poi trascina l'icona direttamente sulla finestra console
   (AmigaOS 3.x, MorphOS, AROS) o sull'icona Workbench "TG drop" (AmigaOS 4.x,
   dove i drop sulla finestra sono riservati al sistema); il percorso compare
@@ -689,9 +692,12 @@ Usare la GUI
   un problema. I file piu' vecchi vengono rimossi durante i momenti inattivi,
   mentre le foto gia' visibili restano a schermo. "Settings > Clear cache..." chiede
   conferma, svuota solo photos/ (mai avatars/) e conserva le immagini mostrate.
-- Per inviare un JPEG come vera foto Telegram usa "Send photo..." nel menu
-  Telegram (Amiga+P). Trascinando un .jpg/.jpeg sulla GUI puoi scegliere Photo,
-  File o Cancel; anche ESC annulla. Oltre 10 MiB viene inviato come file.
+- Per inviare un JPEG o un PNG come vera foto Telegram usa "Send photo..." nel
+  menu Telegram (Amiga+P). Trascinando un .jpg/.jpeg/.png sulla GUI puoi
+  scegliere Photo, File o Cancel; anche ESC annulla. Decidono i byte del file,
+  non il nome, e i limiti Telegram per le foto (larghezza piu' altezza al
+  massimo 10000, al massimo 20:1) sono controllati prima di caricare. Oltre
+  10 MiB viene inviato come file.
 - Click destro su un messaggio: "Forward to Saved Messages" lo copia con un
   click nel proprio cloud; "Forward to..." permette di scegliere un'altra chat
   usando la ricerca normale.

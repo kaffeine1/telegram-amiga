@@ -95,6 +95,9 @@
    otherwise printed only to the QUIET stream, so a GUI download could only say
    a bare "no reply" -- useless when diagnosing a slow-link failure. */
 static char tg_mtproto_query_fail[64];
+/* Defined by the upload engine further down; the text client and the GUI
+   session accessor both put a server refusal into words. */
+static const char *tg_mtproto_upload_failure_text(const char *raw);
 
 /*
  * Consecutive failed reads/sends in the interactive chat loop before it drops
@@ -12533,7 +12536,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 } else if (*fpath == '\0') {
                     tg_mtproto_chat_print_system_line(
                         stream, send_as_photo
-                            ? "Usage: /photo <jpeg-path> [caption]"
+                            ? "Usage: /photo <jpeg-or-png-path> [caption]"
                             : "Usage: /sendfile <path>");
                 } else {
                     tg_mtproto_file_ctx fc;
@@ -12572,10 +12575,14 @@ int tg_mtproto_auth_chat_file(const char *host,
                     } else if (frc == 5) {
                         fprintf(tui_cap, "That file is empty (0 bytes).\n");
                     } else if (frc == 7) {
-                        fprintf(tui_cap, "That is not a valid JPEG.\n");
+                        fprintf(tui_cap, "Not sent as a photo: %.100s.\n",
+                                tg_mtproto_query_fail[0] != '\0'
+                                    ? tg_mtproto_query_fail
+                                    : "not a valid JPEG or PNG");
                     } else if (tg_mtproto_query_fail[0] != '\0') {
-                        fprintf(tui_cap, "Upload failed: %.72s\n",
-                                tg_mtproto_query_fail);
+                        fprintf(tui_cap, "Upload failed: %.100s\n",
+                                tg_mtproto_upload_failure_text(
+                                    tg_mtproto_query_fail));
                     } else {
                         fprintf(tui_cap, "Upload failed.\n");
                     }
@@ -13891,6 +13898,7 @@ static int tg_gui_hidden_projection_self_test(void);
 
 #if !defined(TG_NO_SELFTEST)
 static int tg_mtproto_executable_sniff_self_test(void); /* defined by the download engine */
+static int tg_mtproto_photo_gate_self_test(void);       /* defined by the upload engine */
 #endif
 
 int tg_mtproto_probe_self_test(void)
@@ -14331,6 +14339,9 @@ int tg_mtproto_probe_self_test(void)
     }
 
     if (tg_mtproto_executable_sniff_self_test() != 0) {
+        return 2;
+    }
+    if (tg_mtproto_photo_gate_self_test() != 0) {
         return 2;
     }
     if (tg_gui_hidden_projection_self_test() != 0) {
@@ -16783,7 +16794,7 @@ unsigned long tg_gui_session_upload_limit_mib(void)
    there was none). Points at the shared query-failure reason. */
 const char *tg_gui_session_last_transfer_error(void)
 {
-    return tg_mtproto_query_fail;
+    return tg_mtproto_upload_failure_text(tg_mtproto_query_fail);
 }
 
 /* --- 0.0.8 punto 1b: the upload is a state machine too (one engine). ------
@@ -16951,6 +16962,224 @@ static int tg_mtproto_jpeg_file_valid(FILE *f)
     return valid;
 }
 
+/* Telegram's own limits for a photo, applied before a single byte goes up:
+   width plus height at most 10000, and neither side more than 20 times the
+   other. The server answers PHOTO_INVALID_DIMENSIONS otherwise, after the
+   whole upload; saying it here costs nothing and saves the transfer. */
+static int tg_mtproto_photo_dims_ok(unsigned long w, unsigned long h,
+                                    const char **why)
+{
+    if (w == 0UL || h == 0UL) {
+        *why = "image has no size";
+        return 0;
+    }
+    if (w + h > 10000UL) {
+        *why = "image too large for a photo (width + height over 10000)";
+        return 0;
+    }
+    if (w > h * 20UL || h > w * 20UL) {
+        *why = "image too elongated for a photo (over 20:1)";
+        return 0;
+    }
+    return 1;
+}
+
+/* Validate a PNG the way the JPEG walk does: the 8 byte signature, an IHDR
+   as the first chunk with a size Telegram will take, then every chunk up to
+   IEND, so a truncated file is refused here and not after the last part
+   reached the server. CRCs are not checked; the server decodes the file and
+   will say if it is broken inside. The cursor is restored on every outcome. */
+static int tg_mtproto_png_file_valid(FILE *f, unsigned long *out_w,
+                                     unsigned long *out_h)
+{
+    static const unsigned char sig[8] = {
+        0x89U, 'P', 'N', 'G', 0x0dU, 0x0aU, 0x1aU, 0x0aU
+    };
+    unsigned char head[8];
+    unsigned char ihdr[13];
+    unsigned long chunks;
+    int valid = 0;
+
+    *out_w = 0UL;
+    *out_h = 0UL;
+    if (f == 0 || fseek(f, 0L, SEEK_SET) != 0 ||
+        fread(head, 1, 8, f) != 8 || memcmp(head, sig, 8) != 0) {
+        if (f != 0) {
+            (void)fseek(f, 0L, SEEK_SET);
+        }
+        return 0;
+    }
+    for (chunks = 0UL; chunks < 65536UL; ++chunks) {
+        unsigned char ch[8];
+        unsigned long len;
+
+        if (fread(ch, 1, 8, f) != 8) {
+            break; /* ran out before IEND: truncated */
+        }
+        len = ((unsigned long)ch[0] << 24) | ((unsigned long)ch[1] << 16) |
+              ((unsigned long)ch[2] << 8) | (unsigned long)ch[3];
+        if (len > 0x7fffffffUL) {
+            break;
+        }
+        if (chunks == 0UL) {
+            if (memcmp(ch + 4, "IHDR", 4) != 0 || len != 13UL ||
+                fread(ihdr, 1, 13, f) != 13) {
+                break;
+            }
+            *out_w = ((unsigned long)ihdr[0] << 24) |
+                     ((unsigned long)ihdr[1] << 16) |
+                     ((unsigned long)ihdr[2] << 8) | (unsigned long)ihdr[3];
+            *out_h = ((unsigned long)ihdr[4] << 24) |
+                     ((unsigned long)ihdr[5] << 16) |
+                     ((unsigned long)ihdr[6] << 8) | (unsigned long)ihdr[7];
+            if (fseek(f, 4L, SEEK_CUR) != 0) { /* CRC */
+                break;
+            }
+            continue;
+        }
+        if (memcmp(ch + 4, "IEND", 4) == 0) {
+            valid = 1;
+            break;
+        }
+        if (fseek(f, (long)len + 4L, SEEK_CUR) != 0) { /* data + CRC */
+            break;
+        }
+    }
+    if (valid && (fgetc(f) == EOF) == 0) {
+        /* bytes after IEND are tolerated by decoders; keep it valid */
+    }
+    (void)fseek(f, 0L, SEEK_SET);
+    return valid;
+}
+
+/* The photo gate: the first bytes say what the file is, the matching walk
+   says whether it is whole, and Telegram's size rule says whether it will be
+   taken as a photo. `why` gets a sentence a status line can show. Extension
+   is not consulted: a JPEG called .png is still a JPEG. */
+static int tg_mtproto_photo_file_valid(FILE *f, const char **why)
+{
+    unsigned char magic[4];
+    unsigned long w = 0UL;
+    unsigned long h = 0UL;
+
+    *why = "not a valid JPEG or PNG";
+    if (f == 0 || fseek(f, 0L, SEEK_SET) != 0 ||
+        fread(magic, 1, 4, f) != 4) {
+        if (f != 0) {
+            (void)fseek(f, 0L, SEEK_SET);
+        }
+        return 0;
+    }
+    if (magic[0] == 0xffU && magic[1] == 0xd8U) {
+        if (!tg_mtproto_jpeg_file_valid(f)) {
+            *why = "not a valid JPEG (truncated or damaged)";
+            return 0;
+        }
+        return 1; /* the JPEG walk already refused an empty frame */
+    }
+    if (magic[0] == 0x89U && magic[1] == 'P' && magic[2] == 'N' &&
+        magic[3] == 'G') {
+        if (!tg_mtproto_png_file_valid(f, &w, &h)) {
+            *why = "not a valid PNG (truncated or damaged)";
+            return 0;
+        }
+        return tg_mtproto_photo_dims_ok(w, h, why);
+    }
+    (void)fseek(f, 0L, SEEK_SET);
+    return 0;
+}
+
+/* The server's own refusals of a photo, said in words. Anything else keeps
+   the RPC name, which is what a bug report needs. */
+static const char *tg_mtproto_upload_failure_text(const char *raw)
+{
+    if (raw == 0) {
+        return 0;
+    }
+    if (strcmp(raw, "PHOTO_INVALID_DIMENSIONS") == 0) {
+        return "Telegram refused the photo's size (width + height over "
+               "10000, or over 20:1)";
+    }
+    if (strcmp(raw, "PHOTO_EXT_INVALID") == 0) {
+        return "Telegram does not take this image format as a photo";
+    }
+    if (strcmp(raw, "IMAGE_PROCESS_FAILED") == 0) {
+        return "Telegram could not decode the image";
+    }
+    if (strcmp(raw, "PHOTO_SAVE_FILE_INVALID") == 0) {
+        return "Telegram could not save the photo";
+    }
+    return raw;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* Host-runnable: the gate says yes to a whole JPEG and a whole PNG, no to a
+   truncated one of each, no to a PNG Telegram would refuse for its size, and
+   no to plain text, each with the sentence a status line will show. */
+static int tg_mtproto_photo_gate_self_test(void)
+{
+    static const unsigned char jpeg_ok[] = {
+        0xff,0xd8, 0xff,0xc0,0x00,0x0b,0x08,0x00,0x08,0x00,0x08,0x01,0x01,0x11,0x00,
+        0xff,0xda,0x00,0x08,0x01,0x01,0x00,0x00,0x3f,0x00, 0x12,0x34, 0xff,0xd9 };
+    static const unsigned char png_head[] = {
+        0x89,'P','N','G',0x0d,0x0a,0x1a,0x0a,
+        0x00,0x00,0x00,0x0d,'I','H','D','R', 0x00,0x00,0x00,0x08, 0x00,0x00,0x00,0x08,
+        0x08,0x02,0x00,0x00,0x00, 0x00,0x00,0x00,0x00 };
+    static const unsigned char png_tail[] = {
+        0x00,0x00,0x00,0x01,'I','D','A','T',0x00, 0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,'I','E','N','D', 0xae,0x42,0x60,0x82 };
+    static const unsigned char txt[] = "hello, not an image\n";
+    const char *path = "tg-photo-gate-selftest.bin";
+    struct { const unsigned char *a; unsigned long an; const unsigned char *b;
+             unsigned long bn; int want; const char *why_has; } c[6];
+    unsigned char png_big[sizeof(png_head)];
+    int i;
+
+    memcpy(png_big, png_head, sizeof(png_head));
+    png_big[16] = 0x00; png_big[17] = 0x00; png_big[18] = 0x27; png_big[19] = 0x10; /* w 10000 */
+    png_big[20] = 0x00; png_big[21] = 0x00; png_big[22] = 0x00; png_big[23] = 0x08; /* h 8 */
+    c[0].a = jpeg_ok; c[0].an = sizeof(jpeg_ok); c[0].b = 0; c[0].bn = 0UL; c[0].want = 1; c[0].why_has = 0;
+    c[1].a = jpeg_ok; c[1].an = sizeof(jpeg_ok) - 4UL; c[1].b = 0; c[1].bn = 0UL; c[1].want = 0; c[1].why_has = "JPEG";
+    c[2].a = png_head; c[2].an = sizeof(png_head); c[2].b = png_tail; c[2].bn = sizeof(png_tail); c[2].want = 1; c[2].why_has = 0;
+    c[3].a = png_head; c[3].an = sizeof(png_head); c[3].b = png_tail; c[3].bn = 9UL; c[3].want = 0; c[3].why_has = "PNG";
+    c[4].a = png_big; c[4].an = sizeof(png_big); c[4].b = png_tail; c[4].bn = sizeof(png_tail); c[4].want = 0; c[4].why_has = "10000";
+    c[5].a = txt; c[5].an = sizeof(txt) - 1UL; c[5].b = 0; c[5].bn = 0UL; c[5].want = 0; c[5].why_has = "JPEG or PNG";
+    for (i = 0; i < 6; ++i) {
+        FILE *f = fopen(path, "wb");
+        const char *why = 0;
+        int got;
+
+        if (f == 0) {
+            return 2;
+        }
+        fwrite(c[i].a, 1, (size_t)c[i].an, f);
+        if (c[i].b != 0) {
+            fwrite(c[i].b, 1, (size_t)c[i].bn, f);
+        }
+        fclose(f);
+        f = fopen(path, "rb");
+        got = f != 0 ? tg_mtproto_photo_file_valid(f, &why) : -1;
+        if (f != 0) {
+            fclose(f);
+        }
+        (void)remove(path);
+        if (got != c[i].want ||
+            (c[i].why_has != 0 && (why == 0 || strstr(why, c[i].why_has) == 0))) {
+            printf("photo gate self-test: case %d gave %d (%s)\n", i, got,
+                   why != 0 ? why : "-");
+            return 2;
+        }
+    }
+    if (strcmp(tg_mtproto_upload_failure_text("PHOTO_INVALID_DIMENSIONS"),
+               "PHOTO_INVALID_DIMENSIONS") == 0 ||
+        strcmp(tg_mtproto_upload_failure_text("FLOOD_WAIT_3"), "FLOOD_WAIT_3") != 0) {
+        puts("photo gate self-test: server refusal wording");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
 /* Open the file, size/limit checks, peer resolution, file_id. 0 = armed;
    != 0 = failed fast with the usual rc codes (1 generic, 2 too big, 3 file,
    5 empty). */
@@ -16959,6 +17188,7 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
                                    const char *path, FILE *stream,
                                    int as_photo)
 {
+    const char *why = 0;
     unsigned char rnd[8];
     long file_size;
     const char *name;
@@ -17033,8 +17263,8 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
     if (tg_gui_ul.requested_photo) {
         if (tg_gui_ul.big_file) {
             tg_gui_ul.photo_fallback = 1;
-        } else if (!tg_mtproto_jpeg_file_valid(tg_gui_ul.f)) {
-            strcpy(tg_mtproto_query_fail, "not a valid JPEG");
+        } else if (!tg_mtproto_photo_file_valid(tg_gui_ul.f, &why)) {
+            sprintf(tg_mtproto_query_fail, "%.100s", why);
             fclose(tg_gui_ul.f);
             tg_gui_ul.f = 0;
             return 7;
