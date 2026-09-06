@@ -1031,6 +1031,11 @@ package_one() {
     write_manual_en "$dest/Manual-EN.txt" "$platform"
     write_manual_it "$dest/Manuale-IT.txt" "$platform"
     cp "$ROOT_DIR/LICENSE" "$dest/LICENSE"
+    # The emoji sheet is derived from Noto Emoji (OFL 1.1): the licence and the
+    # notice travel with every package, next to our own MIT text, so the
+    # credit line in the readme points at something the user actually has.
+    cp "$ROOT_DIR/third_party/noto-emoji/LICENSE" "$dest/LICENSE-NotoEmoji.txt"
+    cp "$ROOT_DIR/third_party/noto-emoji/NOTICE.txt" "$dest/NOTICE-NotoEmoji.txt"
     # Full changelog in every package (release rule since 0.0.8): the repo
     # CHANGELOG.md is the single source; refuse to package a release whose
     # version is not in it yet (the Unreleased section must be promoted).
