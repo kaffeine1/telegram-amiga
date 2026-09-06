@@ -642,6 +642,25 @@ the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
 
+## Planned: a preference for full-size photos in the viewer and on save
+
+A field question on 0.0.92: clicking a picture opens what looks like a
+reduced copy of a much larger image, and it is. Photos come in tiers
+picked by the parser: the inline copy targets 256 pixels on 68k and 800
+elsewhere, and the viewer, which "Save photo as..." also uses, takes the
+largest size under a byte cap, 768 KB on 68k and 2 MB on the other lanes,
+which usually lands at 640 and about 1024 pixels. Telegram normally keeps
+a 1280 pixel copy as well, and 2560 for some uploads, so the original is
+often bigger than anything the client fetches today.
+
+The request is fair and cheap to honour: a "Full size" preference for the
+viewer and for saving that takes the largest size the message offers,
+with no byte cap. The decoder already scales, so showing a 2560 pixel
+JPEG on a 68k is a download and a wait rather than a memory problem,
+which is exactly why it should be a choice and not the default. Saving
+would then write the original bytes Telegram holds, which is what a user
+who asks for the full image wants. A 0.0.94 item.
+
 ## Planned: mentions in basic groups, and on MorphOS
 
 The '@' popup lists the members of the open group, and the member list
