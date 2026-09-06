@@ -5546,6 +5546,17 @@ static const char *tg_mtproto_display_emoticon(unsigned long cp)
     }
 }
 
+const char *tg_gui_session_emoji_text(unsigned long index)
+{
+    const char *t;
+
+    if (index >= tg_emoji_sheet_count) {
+        return "?";
+    }
+    t = tg_mtproto_display_emoticon(tg_emoji_sheet_codepoints[index]);
+    return t != 0 ? t : "?";
+}
+
 /* Codepoints that only modify a neighbouring emoji print as nothing at all.
    Without this, "<heart><variation-selector>" rendered as two '?'. */
 int tg_mtproto_display_codepoint_is_invisible(unsigned long cp)

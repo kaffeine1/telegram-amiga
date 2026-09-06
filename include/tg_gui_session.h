@@ -377,4 +377,9 @@ void tg_gui_log_enable(void);
 int tg_gui_log_is_enabled(void);
 void tg_gui_log(const char *msg);
 
+/* The text emoticon standing for sheet glyph `index` (":)", "<3", ...), or
+   "?" when the table has none. Backends draw it where a glyph cell would be
+   too small to read, and the clipboard gets it in place of a pair. */
+const char *tg_gui_session_emoji_text(unsigned long index);
+
 #endif

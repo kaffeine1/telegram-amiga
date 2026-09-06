@@ -103,6 +103,22 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
             unsigned long n;
             unsigned long k;
 
+            /* A codepoint the glyph sheet knows becomes an emoji pair, the
+               same two bytes the picker inserts, so a received face and a
+               sent one are one thing on screen; the backend decides at draw
+               time whether the cell is big enough for the picture or draws
+               the text emoticon instead. Everything else keeps the text path. */
+            {
+                int gi = tg_gui_emoji_index_of(cp);
+
+                if (gi >= 0 && tg_gui_emoji_encode((unsigned long)gi, tmp)) {
+                    n = 2UL;
+                    for (k = 0UL; k < n && o + 1UL < size; ++k) {
+                        dest[o++] = tmp[k];
+                    }
+                    continue;
+                }
+            }
             n = tg_mtproto_display_codepoint_to_latin1(cp, tmp, sizeof(tmp));
             if (n == 0UL && o > 0UL && dest[o - 1UL] == ' ' &&
                 !tg_mtproto_display_codepoint_is_invisible(cp)) {
@@ -693,12 +709,22 @@ int tg_gui_driver_self_test(void)
             printf("gui driver self-test: sticker fallback left \"%s\"\n", out);
             return 2;
         }
-        /* One that does map keeps its space and its emoticon. */
+        /* One the glyph sheet knows keeps its space and becomes the two byte
+           pair the picker inserts (0.0.93), so a received face and a sent
+           one are one thing on screen; the backend draws it as a picture or
+           as the emoticon depending on the cell size. */
         tg_gui_driver_copy_latin1(out, sizeof(out),
                                   "[Sticker \xf0\x9f\x98\x80]");
-        if (strcmp(out, "[Sticker :)]") != 0) {
-            printf("gui driver self-test: mapped emoji left \"%s\"\n", out);
-            return 2;
+        {
+            unsigned long idx = 0UL;
+            int want = tg_gui_emoji_index_of(0x1f600UL);
+
+            if (want < 0 || strlen(out) != 12UL || out[8] != ' ' ||
+                !tg_gui_emoji_pair_at(out, 12UL, 9UL, &idx) ||
+                idx != (unsigned long)want || out[11] != ']') {
+                printf("gui driver self-test: sheet emoji left \"%s\"\n", out);
+                return 2;
+            }
         }
         /* A variation selector after a space must not eat it. */
         tg_gui_driver_copy_latin1(out, sizeof(out), "a \xef\xb8\x8f" "b");
@@ -792,17 +818,27 @@ int tg_gui_driver_self_test(void)
         return 2;
     }
 
-    /* UTF-8 -> Latin-1 transcode: Italian accents map 1:1, the common emoji
-       map to their ASCII emoticon via the shared display table.
-       "cia\xC3\xB2 \xF0\x9F\x99\x82" = "cia(o-grave) (slight-smile)" ->
-       "cia(o-grave) :)". */
+    /* UTF-8 -> Latin-1 transcode: Italian accents map 1:1; an emoji the
+       glyph sheet knows becomes the two byte pair (0.0.93), which the
+       backend draws as a picture or as the ":)" emoticon by cell size.
+       "cia\xC3\xB2 \xF0\x9F\x99\x82" = "cia(o-grave) (slight-smile)". */
     tg_gui_driver_emit(&driver, 0UL, 0, 0, 0, "Mario", "Io", 0,
                        "cia\xC3\xB2 \xF0\x9F\x99\x82");
-    if (strcmp(state.messages[state.message_count - 1].text,
-               "cia\xF2 :)") != 0) {
+    {
+        char want[8];
+        int gi = tg_gui_emoji_index_of(0x1f642UL);
+
+        strcpy(want, "cia\xF2 ");
+        if (gi < 0 || !tg_gui_emoji_encode((unsigned long)gi, want + 5)) {
+            puts("gui driver self-test: slight smile missing from the sheet");
+            return 2;
+        }
+        want[7] = '\0';
+        if (strcmp(state.messages[state.message_count - 1].text, want) != 0) {
         printf("gui driver self-test: utf8->latin1 wrong (%s)\n",
                state.messages[state.message_count - 1].text);
         return 2;
+        }
     }
 
     /* Unmapped symbol (U+1F4E6 package, no readable rendition) is OMITTED, not

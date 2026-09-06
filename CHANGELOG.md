@@ -16,7 +16,13 @@ unless noted.
   composer an emoji is drawn as a small picture the height of the text, is
   edited and stepped over as one character, and goes out as its real Unicode
   codepoint. The pictures are Noto Emoji glyphs reduced to 16 pixels, shipped
-  under the SIL Open Font License; see third_party/noto-emoji.
+  under the SIL Open Font License; see third_party/noto-emoji. A smiley
+  button between the input and Send opens the same panel with the mouse.
+- Received emoji show as pictures too, the same ones the picker offers, so a
+  face someone sends and the one you answer with look alike. Where the font
+  is too small for a readable picture (Topaz 8 gives nine pixels of cell) the
+  text emoticon stands in, on screen and in the clipboard; the panel keeps
+  its pictures at their native size everywhere.
 - A PNG goes out as a photo. The photo gate now reads the file's own bytes
   rather than its name: a JPEG is walked through its first scan as before, a
   PNG through its chunks to IEND, so a truncated file of either kind is
@@ -57,6 +63,10 @@ unless noted.
   too, on the first-start page.
 
 ### Fixed
+- On MorphOS a photo no longer paints over a popup. The direct photo replay
+  writes into the window after the buffer is blitted, which put pictures on
+  top of the context menu, the mention list and the emoji panel; the popups
+  are now painted once more after the replay, straight onto the window.
 - A bubble no longer holds space open for a picture the client has given up
   on. Once every size of an image has been fetched and refused, which is what
   an undecodable format looks like from here, the message falls back to its

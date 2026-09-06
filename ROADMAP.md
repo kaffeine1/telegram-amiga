@@ -623,14 +623,15 @@ by scripts/gen-emoji-sheet.py from the emoticon table so the two stay
 in step; the three table entries with no Noto image (two arrows and a
 check mark) remain text only.
 
-What that machinery makes cheap is the hard half the plan deferred:
-showing received emoji inside the transcript. The backends already draw
-a pair anywhere in a text run, so the display conversion could emit a
-pair instead of the emoticon for any codepoint in the sheet, and the
-transcript would show the picture. It stays deferred on purpose: it
-touches every message paint, the code that hurt us under AfA_OS, so it
-gets a preference of its own and a hardware pass before anyone calls it
-done.
+The hard half followed at once, because the machinery made it cheap:
+received emoji are pairs too, emitted by the display conversion for any
+codepoint the sheet knows, and the backends draw them inside the text
+runs. Field feedback set the one rule that matters on this hardware:
+below a twelve pixel cell a reduced picture is a blob, so there the text
+emoticon stands in (Topaz 8 lands at nine), while the panel keeps its
+pictures at sixteen pixels regardless of the font. Still owed: a
+hardware pass on every lane, the AfA_OS one in particular, before
+anyone calls the transcript rendering done.
 
 On borrowing: the desktop client is worth studying for how a feature
 should behave, and that is how it will be used here, as a reference for
@@ -796,12 +797,11 @@ the serial channel stays silent, which is what we found.
 Both reported from the field on 0.0.9 and both about the right-click popup
 living next to inline photos.
 
-1. Opening the popup beside a photo draws it BEHIND the picture. The window
-   paint composes the popup last for exactly this reason, but the photo
-   replay is a separate pass that writes straight to the window RastPort
-   (the CyberGraphX path) after the blit, so it lands on top. The popup
-   needs to be excluded from the replay's dirty rectangles, or repainted
-   after them.
+1. DONE in 0.0.93, to be confirmed on the machine: the popup was drawn
+   BEHIND the picture because the photo replay writes straight to the
+   window RastPort after the blit. The popups (context menu, mention list,
+   emoji panel) are now painted once more right after the replay, onto the
+   window, through the same core painters.
 2. On an own screen, right-clicking in the conversation to pick an entry
    makes the chat flicker. The popup path repaints more than it needs to
    there; the transcript should keep its pixels while only the popup area

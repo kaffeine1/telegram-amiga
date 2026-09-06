@@ -11,6 +11,8 @@
 
 #include "tg_gui.h"
 #include "tg_emoji_sheet.h"
+
+#define TG_GUI_EMOJI_BUTTON_W 22 /* smiley button in the composer row */
 #include "tg_gui_session.h" /* tg_gui_log: crash-safe first-paint trail */
 
 #include <stdio.h>
@@ -758,6 +760,18 @@ int tg_gui_emoji_encode(unsigned long index, char *out)
                                                     : TG_GUI_EMOJI_PREFIX1);
     out[1] = (char)b;
     return 1;
+}
+
+int tg_gui_emoji_index_of(unsigned long codepoint)
+{
+    unsigned long i;
+
+    for (i = 0UL; i < tg_emoji_sheet_count; ++i) {
+        if (tg_emoji_sheet_codepoints[i] == codepoint) {
+            return (int)i;
+        }
+    }
+    return -1;
 }
 
 unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
@@ -2280,7 +2294,7 @@ static int tg_gui_input_text_w(int width, int sidebar_w)
 {
     int w;
 
-    w = (width - 64) - (sidebar_w + 12) - 8;
+    w = (width - 64 - TG_GUI_EMOJI_BUTTON_W) - (sidebar_w + 12) - 8;
     if (w < 20) {
         w = 20;
     }
@@ -2344,6 +2358,40 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
 
 /* --- Emoji picker --------------------------------------------------------- */
 
+/* The smiley button between the input and Send, in the spirit of the desktop
+   client's toggle at the right end of the field: a sheet glyph in a square,
+   the first grinning face if the sheet has it. */
+static void tg_gui_paint_emoji_button(const tg_gui_state *state,
+                                      tg_gui_backend *backend, int width,
+                                      int box_top, int input_h)
+{
+    int side = input_h - 8;
+    int idx;
+    int bx;
+    int by;
+
+    if (side > TG_EMOJI_GLYPH_SIZE) {
+        side = TG_EMOJI_GLYPH_SIZE;
+    }
+    if (side < 8) {
+        side = 8;
+    }
+    bx = width - 64 - TG_GUI_EMOJI_BUTTON_W + (TG_GUI_EMOJI_BUTTON_W - side) / 2;
+    by = box_top + (input_h - side) / 2;
+    if (state->emoji_active) {
+        backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                           tg_gui_make_rect(bx - 2, by - 2, side + 4, side + 4));
+    }
+    idx = tg_gui_emoji_index_of(0x1f600UL);
+    if (idx < 0) {
+        idx = 0;
+    }
+    if (backend->glyph_image == 0 ||
+        !backend->glyph_image(backend, (unsigned long)idx, bx, by, side)) {
+        backend->draw_text(backend, TG_GUI_PEN_TEXT, bx, by + side - 2, ":)", 2UL);
+    }
+}
+
 /* Panel geometry from the same numbers the composer painter uses. Cells are
    squares of the line height plus padding; the recents row, when there is
    one, is the first row and the sheet follows. */
@@ -2365,7 +2413,10 @@ static void tg_gui_emoji_geometry(const tg_gui_state *state, int width,
     int sidebar_w = tg_gui_sidebar_w(width);
     int sheet_rows;
 
-    geo->cell = lh + 6;
+    /* A cell is at least the sheet's native 16 pixels: the panel is not
+       inline text, so a 9 pixel font must not shrink the pictures into
+       blobs. Fonts taller than that get proportionally larger cells. */
+    geo->cell = (lh > TG_EMOJI_GLYPH_SIZE ? lh : TG_EMOJI_GLYPH_SIZE) + 6;
     geo->x = sidebar_w + 8;
     geo->w = width - 16 - sidebar_w;
     geo->cols = geo->w / geo->cell;
@@ -2690,6 +2741,91 @@ static void tg_gui_emoji_paint(const tg_gui_state *state,
     }
 }
 
+/* The popups that live above the composer: the mention list and the emoji
+   panel. Painted last by the composer painter, and again on demand by a
+   backend whose photo replay wrote over them. */
+static void tg_gui_paint_context_menu(const tg_gui_state *state,
+                                      tg_gui_backend *backend);
+
+static void tg_gui_paint_popups_at(const tg_gui_state *state,
+                                   tg_gui_backend *backend, int width,
+                                   int height, int lh, int box_top)
+{
+    int sidebar_w = tg_gui_sidebar_w(width);
+
+    /* '@' mention popup: the candidate usernames above the composer (over the
+       reply strip when one is shown); the highlighted row is what ENTER/TAB
+       will insert. Same accent-frame + surface look as the context menu. */
+    if (state->composing && state->mention_active && state->mention_count > 0) {
+        int ih = lh + 4;
+        int n = state->mention_count;
+        int bw = 220;
+        int bh = (n * ih) + 4;
+        int bx = sidebar_w + 8;
+        int by = box_top - bh - 2;
+        int mi;
+
+        if (state->reply_to_id != 0UL) {
+            by -= (lh + 4 + TG_GUI_REPLY_LIFT); /* sit above the reply strip */
+        }
+        if (bx + bw > width - 8) {
+            bw = width - 8 - bx;
+        }
+        if (by < 0) {
+            by = 0;
+        }
+        backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                           tg_gui_make_rect(bx - 1, by - 1, bw + 2, bh + 2));
+        backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                           tg_gui_make_rect(bx, by, bw, bh));
+        for (mi = 0; mi < n; ++mi) {
+            int pen = TG_GUI_PEN_TEXT;
+            char row[TG_GUI_MENTION_LEN + 2];
+            unsigned long rl = 0UL;
+            const char *u = state->mention_items[mi];
+
+            if (mi == state->mention_sel) {
+                backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                                   tg_gui_make_rect(bx, by + 2 + (mi * ih),
+                                                    bw, ih));
+                pen = TG_GUI_PEN_ACCENT_TEXT;
+            }
+            row[rl++] = '@';
+            while (*u != '\0' && rl < sizeof(row) - 1UL) {
+                row[rl++] = *u++;
+            }
+            row[rl] = '\0';
+            backend->draw_text(backend, pen, bx + 8, by + 2 + (mi * ih) + lh,
+                               row, rl);
+        }
+    }
+    tg_gui_emoji_paint(state, backend, width, height, lh, box_top);
+}
+
+void tg_gui_paint_popups(const tg_gui_state *state, tg_gui_backend *backend)
+{
+    int width;
+    int height;
+    int lh;
+    int input_h;
+    int box_top;
+
+    if (state == 0 || backend == 0) {
+        return;
+    }
+    width = backend->width(backend);
+    height = backend->height(backend);
+    lh = backend->line_height(backend);
+    input_h = (state->input_h > 0) ? state->input_h : (lh + 14);
+    box_top = (height - (lh + 6)) - input_h;
+    if (state->ctx_visible) {
+        tg_gui_paint_context_menu(state, backend);
+    }
+    if (state->composing) {
+        tg_gui_paint_popups_at(state, backend, width, height, lh, box_top);
+    }
+}
+
 /* Draws just the bottom composer row: the input box (now wrapped to multiple
    lines for a long message, with the caret on the right line), the placeholder /
    idle text, and the Send button. Factored out so the caret blink can repaint
@@ -2868,54 +3004,9 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
                        tg_gui_make_rect(width - 64, box_top, 56, input_h - 4));
     backend->draw_text(backend, TG_GUI_PEN_ACCENT_TEXT, width - 56,
                        box_top + lh + 2, "Send", 4UL);
+    tg_gui_paint_emoji_button(state, backend, width, box_top, input_h);
 
-    /* '@' mention popup: the candidate usernames above the composer (over the
-       reply strip when one is shown); the highlighted row is what ENTER/TAB
-       will insert. Same accent-frame + surface look as the context menu. */
-    if (state->composing && state->mention_active && state->mention_count > 0) {
-        int ih = lh + 4;
-        int n = state->mention_count;
-        int bw = 220;
-        int bh = (n * ih) + 4;
-        int bx = sidebar_w + 8;
-        int by = box_top - bh - 2;
-        int mi;
-
-        if (state->reply_to_id != 0UL) {
-            by -= (lh + 4 + TG_GUI_REPLY_LIFT); /* sit above the reply strip */
-        }
-        if (bx + bw > width - 8) {
-            bw = width - 8 - bx;
-        }
-        if (by < 0) {
-            by = 0;
-        }
-        backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
-                           tg_gui_make_rect(bx - 1, by - 1, bw + 2, bh + 2));
-        backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
-                           tg_gui_make_rect(bx, by, bw, bh));
-        for (mi = 0; mi < n; ++mi) {
-            int pen = TG_GUI_PEN_TEXT;
-            char row[TG_GUI_MENTION_LEN + 2];
-            unsigned long rl = 0UL;
-            const char *u = state->mention_items[mi];
-
-            if (mi == state->mention_sel) {
-                backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
-                                   tg_gui_make_rect(bx, by + 2 + (mi * ih),
-                                                    bw, ih));
-                pen = TG_GUI_PEN_ACCENT_TEXT;
-            }
-            row[rl++] = '@';
-            while (*u != '\0' && rl < sizeof(row) - 1UL) {
-                row[rl++] = *u++;
-            }
-            row[rl] = '\0';
-            backend->draw_text(backend, pen, bx + 8, by + 2 + (mi * ih) + lh,
-                               row, rl);
-        }
-    }
-    tg_gui_emoji_paint(state, backend, width, height, lh, box_top);
+    tg_gui_paint_popups_at(state, backend, width, height, lh, box_top);
 }
 
 /* The floating "scroll to newest" button: an accent square with a filled
@@ -3474,7 +3565,7 @@ int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
         int ecell = tg_gui_emoji_cell_at(state, width, lh, x, y);
 
         if (ecell >= 0) {
-            return TG_GUI_HIT_EMOJI_BASE - ecell;
+            return TG_GUI_HIT_EMOJI_BASE + ecell;
         }
     }
     int sidebar_w;
@@ -3499,6 +3590,9 @@ int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
                 return TG_GUI_HIT_REPLY_CANCEL;
             }
             return TG_GUI_HIT_INPUT;
+        }
+        if (x >= width - 64 - TG_GUI_EMOJI_BUTTON_W && x < width - 64) {
+            return TG_GUI_HIT_EMOJI_BUTTON;
         }
         if (x >= width - 64) {
             return TG_GUI_HIT_SEND;
@@ -4824,11 +4918,17 @@ int tg_gui_self_test(void)
             hit = tg_gui_hit_test(&state, 480, 320, 10,
                                   (tg_gui_sidebar_w(480)) + 8 + 2 + 3,
                                   tg_gui_emoji_geom_y + 2 + 3);
-            if (hit != TG_GUI_HIT_EMOJI_BASE - 0) {
+            if (hit != TG_GUI_HIT_EMOJI_BASE + 0) {
                 printf("gui self-test: emoji hit test gave %d\n", hit);
                 return 2;
             }
             tg_gui_emoji_close(&state);
+            /* the smiley button sits between the input and Send */
+            hit = tg_gui_hit_test(&state, 480, 320, 10, 480 - 64 - 4, 292);
+            if (hit != TG_GUI_HIT_EMOJI_BUTTON) {
+                printf("gui self-test: emoji button hit gave %d\n", hit);
+                return 2;
+            }
             (void)remove("data/telegram-emoji-recent.txt");
             state.input[0] = '\0';
             state.input_caret = 0;

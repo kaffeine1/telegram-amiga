@@ -733,22 +733,34 @@ static int tg_gui_amiga_glyph_image(tg_gui_backend *backend,
     return 1;
 }
 
+/* Under this cell size a 16 pixel picture reduced inline is a blob (Topaz 8
+   gives 9), so the text emoticon stands in for it there; the picker keeps
+   the pictures at their native size regardless. */
+#define TG_GUI_EMOJI_INLINE_MIN 12
+
 static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
                                    unsigned long length)
 {
     tg_gui_amiga_ctx *ctx = (tg_gui_amiga_ctx *)backend->context;
     unsigned long i = 0UL;
     unsigned long run_start = 0UL;
+    unsigned long index;
     int w = 0;
     int cell = 0;
 
     while (i < length) {
-        if (tg_gui_emoji_pair_at(text, length, i, 0)) {
+        if (tg_gui_emoji_pair_at(text, length, i, &index)) {
             if (cell == 0) {
                 cell = tg_gui_amiga_emoji_cell(ctx);
             }
             w += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
-            w += cell;
+            if (cell >= TG_GUI_EMOJI_INLINE_MIN) {
+                w += cell;
+            } else {
+                const char *t = tg_gui_session_emoji_text(index);
+
+                w += tg_gui_amiga_run_width(ctx, t, (unsigned long)strlen(t));
+            }
             i += 2UL;
             run_start = i;
         } else {
@@ -4261,12 +4273,20 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
             tg_gui_amiga_draw_run(ctx, pen, x, baseline, text + run_start,
                                   i - run_start);
             x += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
-            ascent = ctx->rport != 0 && ctx->rport->Font != 0
-                         ? (int)ctx->rport->Font->tf_Baseline : cell - 2;
-            tg_gui_amiga_glyph_image(backend, index, x,
-                                     baseline - ascent - (cell - ascent - 1) / 2,
-                                     cell);
-            x += cell;
+            if (cell >= TG_GUI_EMOJI_INLINE_MIN) {
+                ascent = ctx->rport != 0 && ctx->rport->Font != 0
+                             ? (int)ctx->rport->Font->tf_Baseline : cell - 2;
+                tg_gui_amiga_glyph_image(backend, index, x,
+                                         baseline - ascent - (cell - ascent - 1) / 2,
+                                         cell);
+                x += cell;
+            } else {
+                const char *t = tg_gui_session_emoji_text(index);
+                unsigned long tl = (unsigned long)strlen(t);
+
+                tg_gui_amiga_draw_run(ctx, pen, x, baseline, t, tl);
+                x += tg_gui_amiga_run_width(ctx, t, tl);
+            }
             i += 2UL;
             run_start = i;
         } else {
@@ -4637,6 +4657,15 @@ static void tg_gui_window_paint(const tg_gui_state *state,
                           c->inner_w, c->inner_h, 0xC0);
         (void)tg_gui_photo_direct_replay(c, 0, 0,
                                          c->inner_w, c->inner_h);
+        /* The replay wrote photos straight into the window, on top of any
+           popup the buffer had composed last (field report on MorphOS: the
+           context menu, and now the emoji panel, behind a picture). Paint
+           the popups once more, directly on the window this time; the
+           painters use the same graphics calls the replay just did. */
+        if (state->ctx_visible || state->mention_active ||
+            state->emoji_active) {
+            tg_gui_paint_popups(state, backend);
+        }
         if (layer != 0) {
             UnlockLayerRom(layer);
         }
@@ -5174,7 +5203,44 @@ static void tg_gui_clip_close(struct IOClipReq *io, struct MsgPort *port)
 }
 
 /* Writes `text` to clip unit 0 as FORM FTXT / CHRS. 1 = ok. */
+/* Pairs are a screen thing: the clipboard gets the text emoticon instead,
+   which is what any other Amiga program can show. */
+static void tg_gui_clip_expand_pairs(const char *src, char *dst,
+                                     unsigned long dst_size)
+{
+    unsigned long i = 0UL;
+    unsigned long o = 0UL;
+    unsigned long len = (unsigned long)strlen(src);
+    unsigned long index;
+
+    while (i < len && o + 1UL < dst_size) {
+        if (tg_gui_emoji_pair_at(src, len, i, &index)) {
+            const char *t = tg_gui_session_emoji_text(index);
+
+            while (*t != '\0' && o + 1UL < dst_size) {
+                dst[o++] = *t++;
+            }
+            i += 2UL;
+        } else {
+            dst[o++] = src[i++];
+        }
+    }
+    dst[o] = '\0';
+}
+
+static int tg_gui_clip_write_text_raw(const char *text);
 static int tg_gui_clip_write_text(const char *text)
+{
+    static char expanded[TG_GUI_MSG_TEXT_MAX + 64];
+
+    if (text == 0) {
+        return 0;
+    }
+    tg_gui_clip_expand_pairs(text, expanded, sizeof(expanded));
+    return tg_gui_clip_write_text_raw(expanded);
+}
+
+static int tg_gui_clip_write_text_raw(const char *text)
 {
     static unsigned char iff[TG_GUI_MSG_TEXT_MAX + 24];
     struct MsgPort *port;
@@ -8780,20 +8846,15 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    up, RETURN/TAB insert the highlighted username instead (the
                    NEXT return sends) and ESC only closes the popup. */
                 if (state->emoji_active &&
-                    (msg_code == 13 || msg_code == 10 || msg_code == 27 ||
-                     msg_code == 0x4C || msg_code == 0x4D ||
-                     msg_code == 0x4E || msg_code == 0x4F)) {
-                    /* The emoji picker owns the arrows, ENTER and ESC while it
-                       is up: ENTER inserts and keeps the panel open for the
-                       next one, ESC closes it. */
+                    (msg_code == 13 || msg_code == 10 || msg_code == 27)) {
+                    /* The emoji picker owns ENTER and ESC while it is up:
+                       ENTER inserts and keeps the panel open for the next
+                       one, ESC closes it. The arrows are raw keys and are
+                       taken in the raw key chain below. */
                     if (msg_code == 27) {
                         tg_gui_emoji_close(state);
-                    } else if (msg_code == 13 || msg_code == 10) {
-                        (void)tg_gui_emoji_pick(state);
                     } else {
-                        tg_gui_emoji_move(state,
-                                          msg_code == 0x4F ? -1 : msg_code == 0x4E ? 1 : 0,
-                                          msg_code == 0x4C ? -1 : msg_code == 0x4D ? 1 : 0);
+                        (void)tg_gui_emoji_pick(state);
                     }
                     tg_gui_window_paint(state, &backend);
                 } else if ((msg_code == 13 || msg_code == 10 || msg_code == 9) &&
@@ -8898,9 +8959,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         /* forward-delete: pull the tail (incl. NUL) one left,
                            the caret stays put. Backspace (0x08) deletes left;
                            this splits the two so Canc is not folded into it. */
-                        memmove(&state->input[c],
-                                &state->input[c + tg_gui_text_unit_len(state->input, n, c)],
-                                n - c);
+                        {
+                            unsigned long unit =
+                                tg_gui_text_unit_len(state->input, n, c);
+
+                            memmove(&state->input[c], &state->input[c + unit],
+                                    n - (c + unit) + 1UL); /* tail + NUL */
+                        }
                         tg_gui_window_mention_refresh(state);
                         tg_gui_window_paint_composer_edit(
                             state, &backend, old_input_h, old_mention_active);
@@ -9039,6 +9104,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 : 0;
                     }
                     tg_gui_window_paint_caret(state, &backend);
+                } else if (state->emoji_active &&
+                           (msg_code == 0x4C || msg_code == 0x4D ||
+                            msg_code == 0x4E || msg_code == 0x4F)) {
+                    /* The emoji panel walks its grid with the arrows. */
+                    tg_gui_emoji_move(state,
+                                      msg_code == 0x4F ? -1 : msg_code == 0x4E ? 1 : 0,
+                                      msg_code == 0x4C ? -1 : msg_code == 0x4D ? 1 : 0);
+                    tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 0x4F || msg_code == 0x4E) {
                     /* cursor left/right; with SHIFT they grow/shrink the
                        composer selection anchored where Shift was first
@@ -9810,7 +9883,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     int hit = tg_gui_hit_test(state, ctx.inner_w, ctx.inner_h,
                                               ctx.line_h, hx, hy);
 
-                    if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
+                    if (hit >= TG_GUI_HIT_EMOJI_BASE) {
+                        /* an emoji cell: insert it, keep the panel open */
+                        state->emoji_sel = hit - TG_GUI_HIT_EMOJI_BASE;
+                        (void)tg_gui_emoji_pick(state);
+                        tg_gui_window_paint(state, &backend);
+                    } else if (hit == TG_GUI_HIT_EMOJI_BUTTON) {
+                        if (state->emoji_active) {
+                            tg_gui_emoji_close(state);
+                        } else {
+                            tg_gui_emoji_open(state);
+                        }
+                        tg_gui_window_paint(state, &backend);
+                    } else if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
                         int mi = hit <= TG_GUI_HIT_PHOTO_BASE
                             ? TG_GUI_HIT_PHOTO_BASE - hit
                             : TG_GUI_HIT_MESSAGE_BASE - hit;
@@ -10418,11 +10503,6 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         caret_ticks = 0;
                         tg_gui_window_copy(state->status, sizeof(state->status),
                                "Type - ENTER sends, ESC cancels");
-                        tg_gui_window_paint(state, &backend);
-                    } else if (hit <= TG_GUI_HIT_EMOJI_BASE &&
-                               hit > TG_GUI_HIT_EMOJI_BASE - 400) {
-                        state->emoji_sel = TG_GUI_HIT_EMOJI_BASE - hit;
-                        (void)tg_gui_emoji_pick(state);
                         tg_gui_window_paint(state, &backend);
                     } else if (hit == TG_GUI_HIT_REPLY_CANCEL) {
                         /* The composer's reply header "X": drop the reply target

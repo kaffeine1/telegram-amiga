@@ -523,8 +523,9 @@ Using the GUI
   and Telegram's photo limits (width plus height at most 10000, at most 20:1)
   are checked before anything is uploaded. A photo over 10 MiB is preserved
   and sent as a document instead.
-- "Insert emoji..." in the Telegram menu (Amiga+E) opens a panel above the
-  composer: the recent ones first, then the whole set. Arrow keys move, ENTER
+- "Insert emoji..." in the Telegram menu (Amiga+E), or the smiley button next
+  to Send, opens a panel above the composer: the recent ones first, then the
+  whole set. Arrow keys move, ENTER
   inserts and keeps the panel open, ESC closes it; a click inserts too. In the
   composer an emoji shows as a small picture and is edited as one character.
 - Right-click a message and choose "Forward to Saved Messages" for a one-click
@@ -705,8 +706,8 @@ Usare la GUI
   non il nome, e i limiti Telegram per le foto (larghezza piu' altezza al
   massimo 10000, al massimo 20:1) sono controllati prima di caricare. Oltre
   10 MiB viene inviato come file.
-- "Insert emoji..." nel menu Telegram (Amiga+E) apre un pannello sopra il
-  composer: prima le emoji recenti, poi tutte. Le frecce si muovono, ENTER
+- "Insert emoji..." nel menu Telegram (Amiga+E), o la faccina accanto a
+  Send, apre un pannello sopra il composer: prima le emoji recenti, poi tutte. Le frecce si muovono, ENTER
   inserisce e lascia il pannello aperto, ESC lo chiude; anche un click
   inserisce. Nel composer un'emoji appare come una piccola figura e si
   modifica come un carattere solo.

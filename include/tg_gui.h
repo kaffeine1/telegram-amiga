@@ -447,6 +447,12 @@ int tg_gui_emoji_cell_at(const tg_gui_state *state, int width, int lh,
 void tg_gui_emoji_recent_load(tg_gui_state *state);
 void tg_gui_emoji_recent_save(const tg_gui_state *state);
 extern int tg_gui_emoji_geom_y; /* panel top as last painted (tests, hit checks) */
+/* Sheet index of a codepoint, or -1 when the sheet has no glyph for it. */
+int tg_gui_emoji_index_of(unsigned long codepoint);
+/* Paints the popups that must sit above everything else (context menu,
+   mention list, emoji panel), for a backend that has just replayed photos
+   straight into the window over them. */
+void tg_gui_paint_popups(const tg_gui_state *state, tg_gui_backend *backend);
 
 /* Repaints ONLY the active caret region (composer input row in chat mode, login
    input box otherwise). Lets the ~2 Hz caret blink avoid a full-window repaint,
@@ -468,8 +474,11 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
 #define TG_GUI_HIT_SEARCH (-4) /* the sidebar search box: focus it */
 #define TG_GUI_HIT_JUMP_BOTTOM (-5) /* the floating scroll-to-bottom button */
 #define TG_GUI_HIT_REPLY_CANCEL (-6) /* the "Replying to ..." composer header */
-/* Emoji picker cells: TG_GUI_HIT_EMOJI_BASE - cell, cell = visible index. */
-#define TG_GUI_HIT_EMOJI_BASE (-2000)
+/* The smiley button in the composer row that toggles the emoji picker. */
+#define TG_GUI_HIT_EMOJI_BUTTON (-7)
+/* Emoji picker cells: TG_GUI_HIT_EMOJI_BASE + cell. Positive on purpose: the
+   message and photo ranges are negative and their dispatch tests "<=". */
+#define TG_GUI_HIT_EMOJI_BASE 1000
 /* Transcript message pick: message i -> (TG_GUI_HIT_MESSAGE_BASE - i). */
 #define TG_GUI_HIT_MESSAGE_BASE (-100)
 /* Photo pick: message i -> (TG_GUI_HIT_PHOTO_BASE - i). */
