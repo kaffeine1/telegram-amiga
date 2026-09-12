@@ -5,6 +5,15 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
+## [Unreleased]
+
+### Changed
+- The About box credits the contributor who took the build to AROS on ARM,
+  next to the one already there. The aarch64 lane is still not part of a
+  release: the build file lives in the tree and the port runs on a Raspberry
+  Pi, but nothing ships until it goes through the same round as the other
+  five.
+
 ## [0.0.93] - 2026-09-12
 
 ### Added
