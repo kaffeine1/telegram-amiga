@@ -5650,7 +5650,7 @@ static void tg_gui_menu_set_photo_cache_limit(struct Menu *menu,
 
 static const char tg_gui_about_text[] =
     "Telegram Amiga\n"
-    "alpha " TG_VERSION "  (built " __DATE__ ")\n\n"
+    TG_VERSION_CHANNEL " " TG_VERSION "  (built " __DATE__ ")\n\n"
     "A native Telegram client for AmigaOS,\n"
     "MorphOS and AROS.\n\n"
     "by Michele Dipace\n"

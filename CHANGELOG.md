@@ -31,6 +31,13 @@ unless noted.
   codepage on the systems whose font has them, which is in the roadmap.
 
 ### Changed
+- The word in front of the version comes from the version itself. Everything
+  that prints "alpha 0.0.93" now reads it from one place, and the packaging and
+  the release check work it out from the number: three components means an
+  alpha, two mean the beta numbering. The beta starts at 0.1 and not at 0.1.0,
+  because an AmigaOS version cookie is two integers and every release so far
+  has read as plain "0.0" to the system. This is so that the day the number
+  loses a dot, nothing is left saying alpha by accident.
 - The debug log says which font the window drew with, next to its size. The
   window takes whatever face the screen hands it, and which face that is
   decides what a name written in Polish or Czech can look like at all, so it

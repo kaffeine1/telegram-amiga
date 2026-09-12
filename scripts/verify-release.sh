@@ -16,6 +16,12 @@ REPO=${REPO:-kaffeine1/telegram-amiga}
 VERSION=${VERSION:-$(sed -n 's/.*define TG_VERSION "\([^"]*\)".*/\1/p' \
     "$ROOT_DIR/include/tg_version.h" 2>/dev/null)}
 VERSION=${VERSION:-0.0.0}
+# Same rule as the packaging: three components means alpha, two means the beta
+# numbering (0.1). The release tags follow it.
+case $VERSION in
+    *.*.*) CHANNEL=${CHANNEL:-alpha} ;;
+    *)     CHANNEL=${CHANNEL:-beta} ;;
+esac
 
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 
@@ -51,11 +57,11 @@ verify() {
     if [ "$ok" = 1 ]; then echo "OK   $tag  [bin $(printf %.8s "$got")]"; else fail=1; fi
 }
 
-verify "os3-alpha-$VERSION"        "*amigaos3*"   build/amigaos3-clib2/TelegramAmiga  "AmigaOS"
-verify "os4-alpha-$VERSION"        "*amigaos4*"   build/amigaos4/TelegramAmiga        "PowerPC"
-verify "morphos-alpha-$VERSION"    "*morphos*"    build/morphos-cross/TelegramAmiga   "PowerPC"
-verify "aros-i386-alpha-$VERSION"  "*aros-i386*"  build/aros-i386-abiv0/TelegramAmiga "80386"
-verify "aros-x86_64-alpha-$VERSION" "*x86_64*"    build/aros-x86_64/TelegramAmiga     "x86-64"
+verify "os3-$CHANNEL-$VERSION"        "*amigaos3*"   build/amigaos3-clib2/TelegramAmiga  "AmigaOS"
+verify "os4-$CHANNEL-$VERSION"        "*amigaos4*"   build/amigaos4/TelegramAmiga        "PowerPC"
+verify "morphos-$CHANNEL-$VERSION"    "*morphos*"    build/morphos-cross/TelegramAmiga   "PowerPC"
+verify "aros-i386-$CHANNEL-$VERSION"  "*aros-i386*"  build/aros-i386-abiv0/TelegramAmiga "80386"
+verify "aros-x86_64-$CHANNEL-$VERSION" "*x86_64*"    build/aros-x86_64/TelegramAmiga     "x86-64"
 
 if [ "$fail" = 0 ]; then
     echo "All published $VERSION assets match the local builds."

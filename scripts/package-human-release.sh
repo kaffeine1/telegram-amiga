@@ -22,6 +22,13 @@ COMMIT_ID=${COMMIT_ID:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null |
 # startup banner) comes from include/tg_version.h, so the package always matches.
 VERSION=${VERSION:-$(sed -n 's/.*define TG_VERSION "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)}
 VERSION=${VERSION:-0.0.0}
+# "alpha" while the number has three components, "beta" from the two integer
+# numbering the beta starts with (0.1, then 0.2, then 1.0). Derived rather than
+# written down, so the day the number loses a dot nothing keeps saying alpha.
+case $VERSION in
+    *.*.*) CHANNEL=${CHANNEL:-alpha} ;;
+    *)     CHANNEL=${CHANNEL:-beta} ;;
+esac
 
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 
@@ -408,7 +415,7 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 
 write_readme() {
     cat > "$1" <<EOF
-Telegram Amiga - $2 - alpha $VERSION
+Telegram Amiga - $2 - $CHANNEL $VERSION
 ========================================
 
 A from-scratch, native Telegram (MTProto) client. Zero dependencies: no MUI,
