@@ -66,13 +66,18 @@ tg_file_status tg_file_write_text(const char *path, const char *text,
         return TG_FILE_INVALID_ARGUMENT;
     }
 
-    /* Delete first, then create. On the FAT card of a Raspberry Pi running
-       AROS, rewriting a file that already exists through fopen("wb") reported
-       success from both fwrite and fclose and still left zero bytes on the
-       card: a saved login was lost on every restart, and the client could only
-       say the file was empty. A brand new file commits reliably there, and
-       every platform truncates the old contents at open anyway, so this window
-       is the one we already had. Diagnosed on ARM by bohunamiga. */
+    /* Delete first, then create. Rewriting a file that ALREADY EXISTS on a FAT
+       volume under AROS reports success from fwrite and from fclose and leaves
+       zero bytes behind: our saved login vanished on every restart and the
+       client could only say the file was empty. It is not our bug and not
+       specific to the Raspberry Pi where it reached us: AROS carries it open
+       as deadwood2/AROS issue 161, "Issues writting to existing file on FAT
+       volumes", with a reproducer of nine lines and no client of ours in
+       sight, and issue 43 says rename on that handler is unreliable too, which
+       is why this is a delete and not a write-to-temp-then-rename. A brand new
+       file commits reliably, and every platform truncates the old contents at
+       open anyway, so the window where the data is gone is the one we already
+       had. Reached us from ARM, diagnosed by bohunamiga. */
     (void)remove(path);
 
     file = fopen(path, "wb");

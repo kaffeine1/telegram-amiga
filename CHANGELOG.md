@@ -8,14 +8,17 @@ unless noted.
 ## [Unreleased]
 
 ### Fixed
-- A saved login survives a restart on a FAT card. Rewriting a file that
-  already exists reported success from every call and still left zero bytes
-  behind, so the client wrote its session, said nothing, and asked for the
-  phone number again on the next run. Files are now deleted before they are
-  created, which commits reliably, and a write is flushed while the file is
-  still open so a failure is reported where it happens. Found, diagnosed and
-  fixed on a Raspberry Pi by bohunamiga; the same code runs on every platform,
-  so anyone keeping the drawer on a FAT volume gets the fix too.
+- A saved login survives a restart on a FAT volume. Rewriting a file that
+  already exists there reported success from every call and still left zero
+  bytes behind, so the client wrote its session, said nothing, and asked for
+  the phone number again on the next run. The fault is in the system, not in
+  this client: AROS carries it as an open bug of its FAT handler, with a
+  reproducer that involves no Telegram at all. Until that is fixed, files are
+  deleted before they are created, which commits reliably, and a write is
+  flushed while the file is still open so a failure is reported where it
+  happens. It reached us from a Raspberry Pi, where bohunamiga tracked it down
+  and proposed the workaround; the same code runs everywhere, so a drawer kept
+  on a FAT stick or card is covered on every platform.
 - Letters outside Latin-1 no longer disappear. Text is one byte per character
   because that is what an Amiga font draws, and a codepoint with no Latin-1
   shape rendered as nothing, so a Polish name arrived with holes where its own
