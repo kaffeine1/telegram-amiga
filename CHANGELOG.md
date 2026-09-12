@@ -5,7 +5,7 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
-## [Unreleased]
+## [0.0.93] - 2026-09-12
 
 ### Added
 - When the code Telegram delivers inside its app does not show up, the

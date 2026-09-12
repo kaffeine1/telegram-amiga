@@ -62,11 +62,11 @@ client:
   grows its composer. System datatypes remain an optional OS4-side
   optimization, while the zero-install in-binary decoder stays the
   portable base path.
-- Next come the 0.0.9x releases, then 0.1.0, the first BETA: same
+- Next come the 0.0.9x releases, then 0.1, the first BETA: same
   program, a different promise. It ships once no known freeze remains on
   any of the five platforms, an adversarial review pass has run, and a
   full cycle has gone by without field regressions. See "The road to
-  0.1.0" below for what each step carries.
+  0.1 beta" below for what each step carries.
 - Later: per-chat file browser, multi-message selection, archive management.
 - A Bot-API text path stays available as a fallback for tokens/bots.
 - TLS certificate validation has passed a live CA-bundle smoke test on all four
@@ -88,9 +88,9 @@ client:
 - Minimal local persistence
 - Packaging for the supported platforms
 
-## The road to 0.1.0
+## The road to the 0.1 beta
 
-0.0.9 shipped, and 0.1.0 is the first beta. In between come the 0.0.9x
+0.0.9 shipped, and 0.1 is the first beta. In between come the 0.0.9x
 releases, whose job is to put every new feature in front of real
 machines before the promise changes. The numbering counts up to the
 beta on purpose, so anyone watching can see it coming.
@@ -116,10 +116,13 @@ Features are therefore grouped by the work they share.
   messages and the executable bit, the latter fixed a second time in the
   same cycle for the four ELF lanes. Validated on real AmigaOS 3 and
   MorphOS and in the OS4, AROS i386 and AROS x86_64 VMs.
-- **0.0.93, sending.** The emoji picker with its glyph sheet, and
-  sending images that are not JPEGs, PNG first. Reading PNG is a
-  separate item with its own section, and cheaper than it sounds
-  because the inflate half is already in the tree.
+- **0.0.93, sending.** RELEASED 2026-09-12. The emoji picker with its
+  glyph sheet and emoji drawn in the composer, the paperclip next to the
+  composer, PNG sent as a photo with the gate reading the file's own
+  bytes, and a late link preview completing its bubble by itself. It also
+  carries the fix for new logins, which Telegram had silently stopped
+  sending codes to. Validated on real AmigaOS 3 and MorphOS and in the
+  OS4, AROS i386 and AROS x86_64 VMs.
 - **0.0.94, speed and open defects.** Whatever the transfer-ceiling
   measurement turns up, the two MorphOS popup glitches, photo speed
   under AfA_OS and two-step verification on a slow 68k.
@@ -127,8 +130,14 @@ Features are therefore grouped by the work they share.
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
   something went wrong.
-- **0.1.0, the beta.** No new features: a quiet cycle, an adversarial
-  review pass, and the texts brought up to date.
+- **0.1, the beta.** No new features: a quiet cycle, an adversarial
+  review pass, and the texts brought up to date. The number loses a dot
+  on purpose. An AmigaOS version cookie is two integers, `version.revision`,
+  so every release so far has read as plain "0.0" to the system and to any
+  update tool that compares versions. From the beta the public number and
+  the cookie are the same two integers: 0.1, then 0.2, and one day 1.0. The
+  alphas keep their three-part numbers; mapping 0.0.93 onto 0.93 would make
+  the beta look like a downgrade to the system.
 
 Two things run outside this list. The plain-68000 crash hunt has its
 own rhythm, since it depends on field logs from one machine. And emoji
@@ -301,7 +310,7 @@ the transfer stays cancellable and off the event loop, like every other
 transfer since 0.0.8.
 
 Timing: step 1 fits a 0.0.9x cycle. Steps 2 and 3 belong after the
-0.1.0 beta, whose gate asks for no known freeze and a quiet cycle, which
+0.1 beta, whose gate asks for no known freeze and a quiet cycle, which
 is the worst moment to add a path that installs code.
 
 ## Planned: send other image formats, PNG first

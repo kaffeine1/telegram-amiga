@@ -25,31 +25,35 @@ Two front-ends share one engine:
 
 ![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.92** - everyday direct-message and group chat works on all
-five platforms below. 0.0.92 brings the media people actually send into the
-transcript: a pasted link shows the page's title and first line, with its
-picture when the page has one; a video shows a frame with its length and
-size beside it; a sticker shows the emoji it stands for; a voice note its
-duration, and music keeps its filename. All of it rides the bounded photo
-pipeline from 0.0.9 and obeys the same "Show inline photos" setting.
+Status: **alpha 0.0.93** - everyday direct-message and group chat works on all
+five platforms below. 0.0.93 is the sending cycle. Emoji can be sent: a panel
+above the composer (Amiga+E) offers the ones this client already reads back as
+text emoticons, most recently used first, walked with the arrow keys or
+clicked, and each one goes out as its real Unicode codepoint while being drawn
+as a picture in the composer. A paperclip next to the composer opens the
+attachment chooser, and a PNG now goes out as a photo rather than a file: the
+photo gate reads the file's own bytes instead of its name, so a truncated
+image is refused before a single part is uploaded. A link preview that
+Telegram finishes building after the message is already on screen now appears
+by itself, in the open chat, including for a link just sent from here.
 
-Two field reports are fixed: a long message now goes out (the send buffer
-was capped at 512 bytes), and a downloaded Amiga program comes out runnable,
-its executable bit set from the file's own magic word. The login panel says
-where Telegram sent the code, since with another device signed in it arrives
-inside Telegram rather than by SMS. It retains 0.0.91's visual polish
-(grouped messages, rounded bubbles, the header avatar, captions on outgoing
-photos), 0.0.9's photo pipeline, and the messaging, file sharing, replies,
-editing, read receipts and avatars delivered by earlier releases.
+The release also gets new logins working again. Telegram had quietly stopped
+delivering the in-app code to this client, on more than one account and more
+than one api key: the connection now declares a full locale and the codes
+arrive as before. The login screen no longer promises a code that is not
+coming, says what an account needs when Telegram asks for a verified email
+first, and can ask for the code again by the route Telegram offers. Emoji and
+inline photos have separate saved settings; both default off on native
+AGA/ECS/OCS screens (including classic OS4) or 68k CPUs below 68040, and
+enabled emoji stay graphical with small fonts. It retains 0.0.92's link
+previews, video frames and attachment labels, 0.0.9's photo pipeline, and the
+messaging, file sharing, replies, editing, read receipts and avatars delivered
+by earlier releases.
 
-Development on `main` now targets 0.0.93, the sending cycle: the emoji
-picker and images that are not JPEGs. Emoji and inline photos have separate
-saved settings; both default off on native AGA/ECS/OCS screens (including
-classic OS4) or 68k CPUs below 68040. Enabled emoji stay graphical with small
-fonts, and a paperclip in the composer opens the attachment chooser.
-Work there is unreleased and remains
-subject to real-system validation on all five platforms; see
-[ROADMAP.md](ROADMAP.md).
+Development on `main` now targets the 0.1 beta, where the version number
+loses a dot and becomes the two-integer one AmigaOS itself understands. Work
+there is unreleased and remains subject to real-system validation on all five
+platforms; see [ROADMAP.md](ROADMAP.md).
 
 License: MIT — a non-commercial community project, a gift to the Amiga
 community. Development diary:
@@ -62,11 +66,11 @@ per-architecture IT/EN manuals — and **no private files**.
 
 | Platform | CPU | Release |
 |---|---|---|
-| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.92](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.92) |
-| AmigaOS 4.x | PPC | [os4-alpha-0.0.92](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.92) |
-| MorphOS | PPC | [morphos-alpha-0.0.92](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.92) |
-| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.92](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.92) |
-| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.92](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.92) |
+| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.93) |
+| AmigaOS 4.x | PPC | [os4-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.93) |
+| MorphOS | PPC | [morphos-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.93) |
+| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.93) |
+| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.93) |
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases> —
 full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
