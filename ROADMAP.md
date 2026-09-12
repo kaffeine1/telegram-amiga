@@ -634,6 +634,33 @@ by scripts/gen-emoji-sheet.py from the emoticon table so the two stay
 in step; the three table entries with no Noto image (two arrows and a
 check mark) remain text only.
 
+## Letters outside Latin-1
+
+Reported from the field on 2026-09-12, from the aarch64 port running on a
+Raspberry Pi: Polish text loses its own letters. The client keeps text one
+byte per character in Latin-1, because that is what an Amiga font draws, and
+a codepoint with no Latin-1 shape renders as nothing rather than as a wrong
+glyph. Western European accents survive; the Central European ones, the
+Baltic ones, Turkish and anything in another script do not. The same is true
+of the composer, which is a Latin-1 buffer with the emoji escape.
+
+Two steps, in this order.
+
+- **A fold for Latin Extended-A.** A table that maps those letters to their
+  base letter, so a name reads with the wrong diacritic rather than with a
+  hole in it. It is the same table shape the emoticon map already uses, costs
+  nothing at runtime, works on every lane including the 68k, and it is a
+  strict improvement on a missing character. It does not pretend to be
+  correct: it is a fallback, and the roadmap should say so.
+- **A second codepage, properly.** Keep the text in Latin-2 (or the codepage
+  the locale asks for) and let the font draw the real letters, on the systems
+  whose font has them. This is a real piece of work: the conversion, the
+  measuring, the composer, the search, and a decision per platform about which
+  font is actually there. It is worth doing where the glyphs exist, and the
+  fold stays underneath as the fallback for everything else.
+
+Neither step touches the wire: what goes out has always been UTF-8.
+
 The hard half followed at once, because the machinery made it cheap:
 received emoji are pairs too, emitted by the display conversion for any
 codepoint the sheet knows, and the backends draw them inside the text
