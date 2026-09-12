@@ -66,6 +66,15 @@ tg_file_status tg_file_write_text(const char *path, const char *text,
         return TG_FILE_INVALID_ARGUMENT;
     }
 
+    /* Delete first, then create. On the FAT card of a Raspberry Pi running
+       AROS, rewriting a file that already exists through fopen("wb") reported
+       success from both fwrite and fclose and still left zero bytes on the
+       card: a saved login was lost on every restart, and the client could only
+       say the file was empty. A brand new file commits reliably there, and
+       every platform truncates the old contents at open anyway, so this window
+       is the one we already had. Diagnosed on ARM by bohunamiga. */
+    (void)remove(path);
+
     file = fopen(path, "wb");
     if (file == 0) {
         return TG_FILE_OPEN_FAILED;
@@ -73,6 +82,12 @@ tg_file_status tg_file_write_text(const char *path, const char *text,
 
     written = fwrite(text, 1, (size_t)text_length, file);
     if (written != (size_t)text_length || ferror(file)) {
+        fclose(file);
+        return TG_FILE_WRITE_FAILED;
+    }
+    /* Flush before close so a full buffer that cannot be written is reported
+       here, where the file is still open and the error is unambiguous. */
+    if (fflush(file) != 0) {
         fclose(file);
         return TG_FILE_WRITE_FAILED;
     }
@@ -100,6 +115,10 @@ tg_file_status tg_file_append_text(const char *path, const char *text,
 
     written = fwrite(text, 1, (size_t)text_length, file);
     if (written != (size_t)text_length || ferror(file)) {
+        fclose(file);
+        return TG_FILE_WRITE_FAILED;
+    }
+    if (fflush(file) != 0) {
         fclose(file);
         return TG_FILE_WRITE_FAILED;
     }

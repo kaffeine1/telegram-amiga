@@ -413,6 +413,27 @@ int tg_mtproto_session_self_test(void)
     unsigned char loaded_key[TG_MTPROTO_AUTH_KEY_LENGTH];
     int i;
 
+    /* The contract every saved file leans on: a write REPLACES, it never
+       leaves a tail behind. A long file rewritten with a short one has to read
+       back short. The reason it matters arrived from a Raspberry Pi, where
+       rewriting an existing file on the FAT card silently kept zero bytes and
+       a saved login vanished on every restart; tg_file_write_text now deletes
+       before it creates. */
+    {
+        char probe[32];
+        unsigned long probe_len;
+
+        if (tg_file_write_text(path, "0123456789", 10UL) != TG_FILE_OK ||
+            tg_file_write_text(path, "ab", 2UL) != TG_FILE_OK ||
+            tg_file_read_text(path, probe, sizeof(probe), &probe_len)
+                != TG_FILE_OK ||
+            probe_len != 2UL || probe[0] != 'a' || probe[1] != 'b') {
+            remove(path);
+            return 2;
+        }
+        remove(path);
+    }
+
     tg_mtproto_session_init(&session);
     session.dc_id = 2;
     session.auth_key_id_hi = 0x11223344UL;
