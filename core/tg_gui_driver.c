@@ -932,6 +932,24 @@ int tg_gui_driver_self_test(void)
                 return 2;
             }
         }
+        /* 0.0.94: letters outside Latin-1 fold to their base letter instead
+           of vanishing. Reported from AROS on ARM: Polish text arrived with
+           holes where its own letters were. The fold is a fallback, not a
+           translation, and the wire stays UTF-8. */
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "Cze\xc5\x9b\xc4\x87, \xc5\x81\xc3\xb3" "d\xc5\xba");
+        if (strcmp(out, "Czesc, L\xf3" "dz") != 0) {
+            printf("gui driver self-test: latin fold left \"%s\"\n", out);
+            return 2;
+        }
+        /* The two ligatures widen to two letters, and a Latin-1 accent is
+           untouched: it has a shape of its own. */
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "\xc5\x92uf \xc3\xa8 \xc8\x99i");
+        if (strcmp(out, "OEuf \xe8 si") != 0) {
+            printf("gui driver self-test: fold widths left \"%s\"\n", out);
+            return 2;
+        }
         /* A variation selector after a space must not eat it. */
         tg_gui_driver_copy_latin1(out, sizeof(out), "a \xef\xb8\x8f" "b");
         if (strcmp(out, "a b") != 0) {

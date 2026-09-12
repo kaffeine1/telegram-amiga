@@ -5937,6 +5937,60 @@ static int tg_mtproto_display_is_symbol_block(unsigned long cp)
            (cp >= 0x2300UL && cp <= 0x23ffUL);
 }
 
+/* Letters outside Latin-1, folded to their base letter.
+   Latin Extended-A is what Polish, Czech, Slovak, Hungarian, Croatian, the
+   Baltic languages, Turkish, Maltese and Welsh are written with, and an Amiga
+   font has none of it: a codepoint with no Latin-1 shape renders as nothing,
+   so a name written with those letters used to arrive with holes in it,
+   reported from the field on AROS ARM in 2026-09.
+   The fold does not pretend to be correct. It is the fallback that turns a
+   hole into a readable word: a Polish reader sees "Czesc" rather than "Cze".
+   The proper answer is a second codepage on the systems whose font has the
+   glyphs, which is in ROADMAP.md under "Letters outside Latin-1". Two entries
+   are two letters wide (the ligatures) and one carries an apostrophe, so the
+   rows are three bytes. */
+static const char tg_mtproto_latin_ext_a_fold[128][3] = {
+    "A", "a", "A", "a", "A", "a", "C", "c", /* 0100 */
+    "C", "c", "C", "c", "C", "c", "D", "d", /* 0108 */
+    "D", "d", "E", "e", "E", "e", "E", "e", /* 0110 */
+    "E", "e", "E", "e", "G", "g", "G", "g", /* 0118 */
+    "G", "g", "G", "g", "H", "h", "H", "h", /* 0120 */
+    "I", "i", "I", "i", "I", "i", "I", "i", /* 0128 */
+    "I", "i", "IJ", "ij", "J", "j", "K", "k", /* 0130 */
+    "k", "L", "l", "L", "l", "L", "l", "L", /* 0138 */
+    "l", "L", "l", "N", "n", "N", "n", "N", /* 0140 */
+    "n", "'n", "N", "n", "O", "o", "O", "o", /* 0148 */
+    "O", "o", "OE", "oe", "R", "r", "R", "r", /* 0150 */
+    "R", "r", "S", "s", "S", "s", "S", "s", /* 0158 */
+    "S", "s", "T", "t", "T", "t", "T", "t", /* 0160 */
+    "U", "u", "U", "u", "U", "u", "U", "u", /* 0168 */
+    "U", "u", "U", "u", "W", "w", "Y", "y", /* 0170 */
+    "Y", "Z", "z", "Z", "z", "Z", "z", "s"  /* 0178 */
+};
+
+/* The fold above, plus the four Romanian letters with a comma below, which
+   live in Latin Extended-B and are the only ones there common enough to be
+   worth a line. Returns 0 when the codepoint is not one of ours. */
+static const char *tg_mtproto_display_latin_fold(unsigned long cp)
+{
+    if (cp >= 0x100UL && cp <= 0x17fUL) {
+        return tg_mtproto_latin_ext_a_fold[cp - 0x100UL];
+    }
+    switch (cp) {
+    case 0x0218UL:
+        return "S";
+    case 0x0219UL:
+        return "s";
+    case 0x021aUL:
+        return "T";
+    case 0x021bUL:
+        return "t";
+    default:
+        break;
+    }
+    return 0;
+}
+
 /* GUI counterpart of tg_mtproto_print_display_codepoint: render one codepoint
    into `out` (cap >= 8) as ASCII/Latin-1 and return the bytes written. The
    mapping order mirrors the console path exactly, but symbol-block and unknown
@@ -5984,6 +6038,23 @@ unsigned long tg_mtproto_display_codepoint_to_latin1(unsigned long cp,
         return 3UL;
     default:
         break;
+    }
+    {
+        const char *fold = tg_mtproto_display_latin_fold(cp);
+
+        if (fold != 0) {
+            unsigned long n;
+
+            n = 0UL;
+            while (fold[n] != '\0') {
+                if (n >= cap) {
+                    return 0UL;
+                }
+                out[n] = fold[n];
+                ++n;
+            }
+            return n;
+        }
     }
     if (tg_mtproto_display_codepoint_is_invisible(cp)) {
         return 0UL;
@@ -6094,6 +6165,14 @@ static void tg_mtproto_print_display_codepoint(FILE *stream, unsigned long cp)
         return;
     default:
         break;
+    }
+    {
+        const char *fold = tg_mtproto_display_latin_fold(cp);
+
+        if (fold != 0) {
+            fputs(fold, stream);
+            return;
+        }
     }
     if (tg_mtproto_display_codepoint_is_invisible(cp)) {
         return;

@@ -7,6 +7,18 @@ unless noted.
 
 ## [Unreleased]
 
+### Fixed
+- Letters outside Latin-1 no longer disappear. Text is one byte per character
+  because that is what an Amiga font draws, and a codepoint with no Latin-1
+  shape rendered as nothing, so a Polish name arrived with holes where its own
+  letters were, reported from the field on AROS ARM. Latin Extended-A now
+  folds to the base letter: a reader gets "Czesc" instead of "Cze", the two
+  ligatures widen to two letters, and the four Romanian letters with a comma
+  below come along. Accents that Latin-1 already has are untouched, and the
+  wire is unchanged: what goes out has always been UTF-8. The fold is a
+  fallback and not a translation. Drawing the real letters needs a second
+  codepage on the systems whose font has them, which is in the roadmap.
+
 ### Changed
 - The About box credits the contributor who took the build to AROS on ARM,
   next to the one already there. The aarch64 lane is still not part of a
