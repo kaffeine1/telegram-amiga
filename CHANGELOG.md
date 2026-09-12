@@ -53,6 +53,12 @@ unless noted.
   for the same reason, and the server's own refusals now come back in words
   instead of an RPC name. The menu requester, the drop target and the text
   client's /photo all take .png alongside .jpg.
+- A build file for AROS aarch64 (ARM64), aimed at the cross-toolchain
+  used for AROS on the Raspberry Pi. The client needs no external SSL
+  library, so the port is only a matter of the build recipe. That lane is
+  not part of a release and is not validated yet: it builds and the login
+  goes through, while the session file it leaves behind is still being
+  looked at. Contributed by bohunamiga (PR #16).
 
 ### Fixed
 - A new login gets its code again. Telegram had stopped delivering the
