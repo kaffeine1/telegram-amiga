@@ -28,6 +28,10 @@ unless noted.
   codepage on the systems whose font has them, which is in the roadmap.
 
 ### Changed
+- The debug log says which font the window drew with, next to its size. The
+  window takes whatever face the screen hands it, and which face that is
+  decides what a name written in Polish or Czech can look like at all, so it
+  belongs in the line rather than in a guess from a screenshot.
 - The About box credits the contributor who took the build to AROS on ARM,
   next to the one already there. The aarch64 lane is still not part of a
   release: the build file lives in the tree and the port runs on a Raspberry

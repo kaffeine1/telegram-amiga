@@ -8532,11 +8532,23 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
     tg_gui_log("window: activating");
     ActivateWindow(ctx.window);
-    printf("gui window: open %dx%d, font %dpx, %lu pens; window footprint "
-           "~%lu KB\n",
-           ctx.inner_w, ctx.inner_h, ctx.line_h,
-           (unsigned long)(TG_GUI_PEN_COUNT + TG_GUI_AVATAR_COLORS),
-           footprint / 1024UL);
+    /* The font name belongs in this line: the window draws with whatever the
+       screen hands it, and which face that is decides what a name written in
+       Polish or Czech can even look like. Reading it from a log beats guessing
+       from a screenshot. */
+    {
+        const char *font_name = "?";
+
+        if (ctx.rport != 0 && ctx.rport->Font != 0 &&
+            ctx.rport->Font->tf_Message.mn_Node.ln_Name != 0) {
+            font_name = (const char *)ctx.rport->Font->tf_Message.mn_Node.ln_Name;
+        }
+        printf("gui window: open %dx%d, font %s %dpx, %lu pens; window "
+               "footprint ~%lu KB\n",
+               ctx.inner_w, ctx.inner_h, font_name, ctx.line_h,
+               (unsigned long)(TG_GUI_PEN_COUNT + TG_GUI_AVATAR_COLORS),
+               footprint / 1024UL);
+    }
     fflush(stdout);
 
     puts("gui window: close gadget or Q to quit.");
