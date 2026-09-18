@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Closed-loop pointing for the AROS x86_64 QEMU VM (VNC 127.0.0.1::5911).
+"""Closed-loop pointing for the AROS QEMU VMs: x86_64 (VNC 127.0.0.1::5911,
+Italian guest keymap, the default) and i386 (TG_VNC=127.0.0.1::5901
+TG_KEYMAP=us).
 
 Why this exists: qemu offers a usb-tablet, but the AROS x86_64 guest drives the
 PS/2 mouse instead, so it sees RELATIVE motion.  Absolute vnc coordinates are
@@ -10,12 +12,17 @@ the top-left corner (the guest clamps there, so we know where it is), walk to
 the target in small paced hops, then screenshot, find the red arrow and correct
 until its tip sits on the target.
 
-Two more notes about this VM, learned the hard way:
+Three more notes about these VMs, learned the hard way:
   * an AROS-Shell window covering the desktop icons is best shrunk with its own
     ZOOM gadget (one click) rather than dragged out of the way;
-  * the guest keyboard layout is Italian: '/' is shift-7 and '-' is the key
-    that carries '/' on a US board.  A shifted character sent as a single
-    character does not come out shifted, so build key names explicitly.
+  * the x86_64 guest keyboard layout is Italian: '/' is shift-7 and '-' is the
+    key that carries '/' on a US board.  A shifted character sent as a single
+    character does not come out shifted, so build key names explicitly.  The
+    i386 guest is US (TG_KEYMAP=us);
+  * on the i386 guest a long horizontal run lands LONG (996 asked, 1020 seen,
+    the arrow clipped at the edge where it is no longer recognised), so the
+    first hop stops 40 px short and inside, and the correction finishes it.
+    The guest takes no input for the first three to four minutes after boot.
 
 Usage:
   aros-x64-vm-point.py click X Y            # land on (X,Y) and left click
@@ -28,13 +35,15 @@ As a module:
   from aros_x64_vm_point import Pointer
   p = Pointer(); p.land(753, 545); p.click(); p.shot('panel.png'); p.close()
 """
+import os
 import sys
 import time
 
 from PIL import Image
 from vncdotool import api
 
-VNC = "127.0.0.1::5911"
+VNC = os.environ.get("TG_VNC", "127.0.0.1::5911")
+KEYMAP = os.environ.get("TG_KEYMAP", "it")
 SHOT = "/tmp/aros-x64-point.png"
 
 # the arrow is a bright red blob roughly 14x22; every other red thing on screen
@@ -126,7 +135,7 @@ class Pointer(object):
         """Put the arrow tip on the guest pixel (tx,ty)."""
         if slam:
             self.corner()
-            self.hop(tx, ty, step=20, dt=0.08)
+            self.hop(max(0, tx - 40), min(700, ty + 40), step=20, dt=0.08)
             time.sleep(0.8)
         g = None
         for _ in range(tries):
@@ -165,15 +174,28 @@ class Pointer(object):
         self.c.keyPress(name)
         time.sleep(dt)
 
+    US_SHIFTED = {":": "shift-;", "@": "shift-2", ">": "shift-.", "<": "shift-,",
+                  "_": "shift--", "?": "shift-/", "!": "shift-1", "(": "shift-9",
+                  ")": "shift-0", "+": "shift-=", '"': "shift-'"}
+
     def type(self, text, dt=0.07):
-        """Type through the guest's Italian layout."""
+        """Type through the guest's layout (TG_KEYMAP: it or us)."""
         for ch in text:
-            if ch == "-":
-                name = "/"
-            elif ch == "/":
-                name = "shift-7"
-            elif ch == ":":
-                name = "shift-."
+            if ch == " ":
+                name = "space"
+            elif KEYMAP == "it":
+                if ch == "-":
+                    name = "/"
+                elif ch == "/":
+                    name = "shift-7"
+                elif ch == ":":
+                    name = "shift-."
+                else:
+                    name = ch
+            elif ch in self.US_SHIFTED:
+                name = self.US_SHIFTED[ch]
+            elif ch.isalpha() and ch.isupper():
+                name = "shift-" + ch.lower()
             else:
                 name = ch
             self.c.keyPress(name)
