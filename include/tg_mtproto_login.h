@@ -842,6 +842,18 @@ tg_mtproto_tl_status tg_mtproto_read_update_message_text(
     tg_mtproto_message_text *out,
     tg_mtproto_dialog_peer *out_dest);
 
+/* The same walk, and page_out (optional) receives the message's
+   messageMediaWebPage as tg_mtproto_read_web_page leaves it: pending with its
+   id, or complete with the preview lines and photo, or all zero when the
+   message carries no link. A send answer is read this way, because a page
+   Telegram already had cached comes back complete right there and no
+   updateWebPage follows it. */
+tg_mtproto_tl_status tg_mtproto_read_update_message_page(
+    tg_mtproto_tl_reader *reader,
+    tg_mtproto_message_text *out,
+    tg_mtproto_dialog_peer *out_dest,
+    tg_mtproto_web_page *page_out);
+
 /* Scans forward from fallback_offset for the next TL Message constructor
    (the history walker's recovery step, exported for other Vector<Message>
    walkers). Returns non-zero when the reader was repositioned. */

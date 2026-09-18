@@ -13782,6 +13782,12 @@ int tg_mtproto_auth_chat_file(const char *host,
                         pc == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ? ph : 0UL,
                         pc == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ? pl : 0UL);
                 }
+            } else if (tg_chat_sent_webpage.text[0] != '\0') {
+                /* Telegram had the page cached: it came back complete in the
+                   send answer and no updateWebPage will follow, so the preview
+                   lines go under the marker now, where the delayed ones land. */
+                tg_mtproto_print_message_text(tui_cap, tg_chat_sent_webpage.text);
+                fputc('\n', tui_cap);
             }
             tg_console_tui_capture_end(tui_cap, stream);
         }

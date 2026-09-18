@@ -5075,13 +5075,17 @@ tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
 }
 
 static void tg_mtproto_append_web_page(tg_mtproto_tl_reader *reader,
-                                       tg_mtproto_message_text *out)
+                                       tg_mtproto_message_text *out,
+                                       tg_mtproto_web_page *page_out)
 {
     tg_mtproto_web_page page;
     unsigned long n;
 
     if (tg_mtproto_read_web_page(reader, &page) != TG_MTPROTO_TL_OK) {
         return;
+    }
+    if (page_out != 0) {
+        *page_out = page;
     }
     out->pending_webpage_hi = page.pending ? page.id_hi : 0UL;
     out->pending_webpage_lo = page.pending ? page.id_lo : 0UL;
@@ -5137,7 +5141,8 @@ static void tg_mtproto_append_document_label(
 static tg_mtproto_tl_status tg_read_common_message_text(
     tg_mtproto_tl_reader *reader,
     tg_mtproto_message_text *out,
-    tg_mtproto_dialog_peer *out_dest)
+    tg_mtproto_dialog_peer *out_dest,
+    tg_mtproto_web_page *page_out)
 {
     unsigned long constructor;
     unsigned long flags;
@@ -5292,7 +5297,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
 
                     if (tg_mtproto_tl_read_u32(reader, &mflags) ==
                             TG_MTPROTO_TL_OK) {
-                        tg_mtproto_append_web_page(reader, out);
+                        tg_mtproto_append_web_page(reader, out, page_out);
                     }
                 }
                 if (!out->has_text) { /* non-document media, or no caption */
@@ -5410,7 +5415,7 @@ static int tg_message_text_resync(tg_mtproto_tl_reader *reader,
 
                 trial = *reader;
                 trial.offset = pos;
-                if (tg_read_common_message_text(&trial, &probe, 0) ==
+                if (tg_read_common_message_text(&trial, &probe, 0, 0) ==
                         TG_MTPROTO_TL_OK &&
                     probe.id != 0UL && probe.id < max_id) {
                     reader->offset = pos;
@@ -5804,7 +5809,7 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
             (reader.offset + 4UL <= reader.length) ?
                 tg_read_u32_le(reader.buffer + reader.offset) : 0UL;
         message_start = reader.offset;
-        if (tg_read_common_message_text(&reader, &message, 0) !=
+        if (tg_read_common_message_text(&reader, &message, 0, 0) !=
             TG_MTPROTO_TL_OK) {
             /*
              * Older parser paths can stop on media tails such as
@@ -5873,21 +5878,26 @@ tg_mtproto_tl_status tg_mtproto_parse_updates_summary(
             return TG_MTPROTO_TL_OK;
         }
         out->has_sent_message = 1;
+        /* The Message of the matching updateNewMessage hands over its link
+           preview whole: pending with its id, as before, or complete when
+           Telegram had the page cached. A cached page comes back only here,
+           no updateWebPage follows, and this shape is what Saved Messages,
+           groups and channels answer with; keeping just the pending id left
+           the sent message without its preview until the next reload. */
         for (offset = reader.offset; offset + 8UL <= body_length; offset += 4UL) {
             reader.offset = offset;
             if (tg_mtproto_tl_read_u32(&reader, &item) != TG_MTPROTO_TL_OK ||
                 (item != 0x1f2b0afdUL && item != 0x62ba04d9UL) ||
-                tg_mtproto_read_update_message_text(&reader, &message, 0) !=
+                tg_mtproto_read_update_message_page(&reader, &message, 0,
+                                                    &out->webpage) !=
                     TG_MTPROTO_TL_OK || message.id != out->id) {
                 continue;
             }
             out->date = message.date;
-            out->webpage.id_hi = message.pending_webpage_hi;
-            out->webpage.id_lo = message.pending_webpage_lo;
-            out->webpage.pending = message.pending_webpage_hi != 0UL ||
-                                      message.pending_webpage_lo != 0UL;
             return TG_MTPROTO_TL_OK;
         }
+        /* No Message matched: a page read off another one must not leak. */
+        memset(&out->webpage, 0, sizeof(out->webpage));
         return TG_MTPROTO_TL_OK;
     }
     if (constructor != TG_UPDATE_SHORT_SENT_MESSAGE_CONSTRUCTOR) {
@@ -6422,6 +6432,7 @@ int tg_mtproto_login_self_test(void)
         tg_mtproto_tl_writer ww;
         tg_mtproto_tl_reader wr;
         static tg_mtproto_message_text msg;
+        static tg_mtproto_web_page page_out;
         tg_mtproto_tl_status ws;
 
         tg_mtproto_tl_writer_init(&ww, wire, sizeof(wire));
@@ -6449,7 +6460,7 @@ int tg_mtproto_login_self_test(void)
         strcpy(msg.text, "https://www.morphos-team.net/");
         msg.has_text = 1;
         tg_mtproto_tl_reader_init(&wr, wire, ww.length);
-        tg_mtproto_append_web_page(&wr, &msg);
+        tg_mtproto_append_web_page(&wr, &msg, &page_out);
         if (strcmp(msg.text,
                    "https://www.morphos-team.net/\n"
                    "[Link: MorphOS Team - MorphOS 3.19 released]\n"
@@ -6459,6 +6470,15 @@ int tg_mtproto_login_self_test(void)
         }
         if (msg.photo.has_photo) {
             puts("0.0.92 self-test: web page invented a photo");
+            return 2;
+        }
+        /* 0.0.94: the page itself is handed over too, for a send answer that
+           already carries it complete. */
+        if (page_out.pending || page_out.id_hi != 0UL || page_out.id_lo != 7UL ||
+            strcmp(page_out.text,
+                   "[Link: MorphOS Team - MorphOS 3.19 released]\n"
+                   "The team is pleased to announce.") != 0) {
+            puts("0.0.94 self-test: the complete page was not handed over");
             return 2;
         }
 
@@ -6479,7 +6499,7 @@ int tg_mtproto_login_self_test(void)
         strcpy(msg.text, "http://a.b/");
         msg.has_text = 1;
         tg_mtproto_tl_reader_init(&wr, wire, ww.length);
-        tg_mtproto_append_web_page(&wr, &msg);
+        tg_mtproto_append_web_page(&wr, &msg, &page_out);
         if (strcmp(msg.text, "http://a.b/\n[Link: Solo titolo]") != 0) {
             printf("0.0.92 self-test: title-only preview is \"%s\"\n",
                    msg.text);
@@ -6500,10 +6520,15 @@ int tg_mtproto_login_self_test(void)
         strcpy(msg.text, "http://a.b/");
         msg.has_text = 1;
         tg_mtproto_tl_reader_init(&wr, wire, ww.length);
-        tg_mtproto_append_web_page(&wr, &msg);
+        tg_mtproto_append_web_page(&wr, &msg, &page_out);
         if (strcmp(msg.text, "http://a.b/") != 0) {
             printf("0.0.92 self-test: pending preview wrote \"%s\"\n",
                    msg.text);
+            return 2;
+        }
+        if (!page_out.pending || page_out.id_lo != 9UL ||
+            page_out.text[0] != '\0') {
+            puts("0.0.94 self-test: the pending page was not handed over");
             return 2;
         }
     }
@@ -8010,7 +8035,22 @@ tg_mtproto_tl_status tg_mtproto_read_update_message_text(
     if (reader == 0 || out == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
-    return tg_read_common_message_text(reader, out, out_dest);
+    return tg_read_common_message_text(reader, out, out_dest, 0);
+}
+
+tg_mtproto_tl_status tg_mtproto_read_update_message_page(
+    tg_mtproto_tl_reader *reader,
+    tg_mtproto_message_text *out,
+    tg_mtproto_dialog_peer *out_dest,
+    tg_mtproto_web_page *page_out)
+{
+    if (reader == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    if (page_out != 0) {
+        memset(page_out, 0, sizeof(*page_out));
+    }
+    return tg_read_common_message_text(reader, out, out_dest, page_out);
 }
 
 int tg_mtproto_resync_message_text(tg_mtproto_tl_reader *reader,

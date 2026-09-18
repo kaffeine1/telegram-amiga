@@ -8,6 +8,13 @@ unless noted.
 ## [Unreleased]
 
 ### Fixed
+- A link Telegram already knew gets its preview on the message just sent, in
+  Saved Messages, groups and channels too. When the page was in Telegram's
+  cache the preview came back inside the answer to the send itself, and no
+  updateWebPage followed; the short answer of a private chat was read, but
+  the full Updates the other chats return kept only a pending id, so the
+  preview waited for the next reload of the history. Seen on AROS x86_64
+  during the 0.0.93 round. The TUI prints the lines under its sent marker.
 - A saved login survives a restart on a FAT volume. Rewriting a file that
   already exists there reported success from every call and still left zero
   bytes behind, so the client wrote its session, said nothing, and asked for

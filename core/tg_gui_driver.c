@@ -876,6 +876,76 @@ static int tg_gui_driver_webpage_self_test(void)
                 state.msg_gen != gen) return 0;
         }
     }
+    /* 0.0.94: a link Telegram already had cached comes back COMPLETE inside
+       the send answer, and no updateWebPage follows. Both answer shapes must
+       hand the page to the echo at once: updateShortSentMessage (a private
+       chat) and the full Updates that Saved Messages, groups and channels
+       return, which used to keep only a pending id, so the sent message had
+       no preview until the next reload (AROS x86_64 round, 2026-09-12). */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    W32(512UL | 2UL); W32(702UL); W32(11UL); W32(1UL); W32(1700000000UL);
+    W32(0xddf10c3bUL); W32(0UL); W32(0xe89c45b2UL); W32(15UL); W64(hi, lo + 1UL);
+    WSTR("https://example.invalid/cached"); WSTR("example.invalid"); W32(0UL);
+    WSTR("article"); WSTR("Test site"); WSTR("Cached title");
+    WSTR("Cached description.\nIgnored second paragraph.");
+    if (!ok || tg_mtproto_parse_updates_summary(0x9015e101UL, wire, w.length,
+            &sent) != TG_MTPROTO_TL_OK || sent.id != 702UL || sent.webpage.pending ||
+        sent.webpage.id_hi != hi || sent.webpage.id_lo != lo + 1UL ||
+        strcmp(sent.webpage.text, "[Link: Test site - Cached title]\nCached description.") != 0) return 0;
+    tg_gui_driver_append_own(&gui, "Cached link", "Me", 0, sent.id);
+    tg_gui_driver_set_pending_webpage(&gui, sent.id, sent.webpage.id_hi, sent.webpage.id_lo);
+    gen = state.msg_gen;
+    if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state.msg_gen == gen ||
+        state.message_count != 3 || state.messages[2].has_photo ||
+        state.messages[2].pending_webpage_hi != 0UL || state.messages[2].pending_webpage_lo != 0UL ||
+        strcmp(state.messages[2].text,
+               "Cached link\n[Link: Test site - Cached title]\nCached description.") != 0) return 0;
+
+    /* Saved Messages: the same cached page inside the Message of a full Updates. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    W32(0x1cb5c415UL); W32(2UL); W32(0x4e90bfd6UL); W32(703UL); W64(0UL, 2UL);
+    W32(0x1f2b0afdUL); W32(0x9815cec8UL); W32(512UL); W32(0UL); W32(703UL);
+    W32(0x59511722UL); W64(0UL, 99UL); W32(1700000000UL);
+    WSTR("https://example.invalid/cached"); W32(0xddf10c3bUL); W32(0UL);
+    W32(0xe89c45b2UL); W32(15UL); W64(hi, lo + 2UL);
+    WSTR("https://example.invalid/cached"); WSTR("example.invalid"); W32(0UL);
+    WSTR("article"); WSTR("Test site"); WSTR("Cached title"); WSTR("Cached description.");
+    W32(12UL); W32(1UL);
+    if (!ok || tg_mtproto_parse_updates_summary(0x74ae4240UL, wire, w.length,
+            &sent) != TG_MTPROTO_TL_OK || sent.id != 703UL || sent.webpage.pending ||
+        sent.webpage.id_hi != hi || sent.webpage.id_lo != lo + 2UL ||
+        strcmp(sent.webpage.text, "[Link: Test site - Cached title]\nCached description.") != 0) return 0;
+    tg_gui_driver_append_own(&gui, "Saved link", "Me", 0, sent.id);
+    tg_gui_driver_set_pending_webpage(&gui, sent.id, sent.webpage.id_hi, sent.webpage.id_lo);
+    if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state.message_count != 4 ||
+        strcmp(state.messages[3].text,
+               "Saved link\n[Link: Test site - Cached title]\nCached description.") != 0) return 0;
+
+    /* A page read off ANOTHER message of the same Updates must not leak onto
+       ours (no Message matches the sent id here), and a plain message hands
+       over nothing at all. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    W32(0x1cb5c415UL); W32(2UL); W32(0x4e90bfd6UL); W32(706UL); W64(0UL, 3UL);
+    W32(0x1f2b0afdUL); W32(0x9815cec8UL); W32(512UL); W32(0UL); W32(707UL);
+    W32(0x59511722UL); W64(0UL, 99UL); W32(1700000000UL);
+    WSTR("https://example.invalid/cached"); W32(0xddf10c3bUL); W32(0UL);
+    W32(0xe89c45b2UL); W32(15UL); W64(hi, lo + 3UL);
+    WSTR("https://example.invalid/cached"); WSTR("example.invalid"); W32(0UL);
+    WSTR("article"); WSTR("Test site"); WSTR("Cached title"); WSTR("Cached description.");
+    W32(13UL); W32(1UL);
+    if (!ok || tg_mtproto_parse_updates_summary(0x74ae4240UL, wire, w.length,
+            &sent) != TG_MTPROTO_TL_OK || sent.id != 706UL || sent.webpage.pending ||
+        sent.webpage.id_hi != 0UL || sent.webpage.id_lo != 0UL ||
+        sent.webpage.text[0] != '\0') return 0;
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    W32(0x1cb5c415UL); W32(2UL); W32(0x4e90bfd6UL); W32(708UL); W64(0UL, 4UL);
+    W32(0x1f2b0afdUL); W32(0x9815cec8UL); W32(0UL); W32(0UL); W32(708UL);
+    W32(0x59511722UL); W64(0UL, 99UL); W32(1700000000UL); WSTR("plain");
+    W32(14UL); W32(1UL);
+    if (!ok || tg_mtproto_parse_updates_summary(0x74ae4240UL, wire, w.length,
+            &sent) != TG_MTPROTO_TL_OK || sent.id != 708UL || sent.webpage.pending ||
+        sent.webpage.id_hi != 0UL || sent.webpage.id_lo != 0UL ||
+        sent.webpage.text[0] != '\0') return 0;
 #undef W32
 #undef W64
 #undef WSTR
