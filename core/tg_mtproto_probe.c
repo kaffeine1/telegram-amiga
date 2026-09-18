@@ -16756,9 +16756,13 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                 tg_chat_sent_webpage.photo.id_lo, 0);
 
             if (tg_gui_driver_apply_webpage(&tg_gui_session_state.gui_driver,
-                                            &tg_chat_sent_webpage, ready) &&
-                tg_chat_sent_webpage.photo.has_photo) {
-                tg_gui_photo_catalog_offer(&tg_chat_sent_webpage.photo);
+                                            &tg_chat_sent_webpage, ready)) {
+                /* The delayed path logs its two markers; a page that was
+                   cached leaves this one, so a log tells which road it took. */
+                tg_gui_log("webpage: cached page applied");
+                if (tg_chat_sent_webpage.photo.has_photo) {
+                    tg_gui_photo_catalog_offer(&tg_chat_sent_webpage.photo);
+                }
             }
         }
     }
