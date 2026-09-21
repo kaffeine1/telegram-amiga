@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Build a classic AmigaOS 3.5 colour icon (.info) from PNG artwork.
+
+AmigaOS 3.x cannot read PNG icons (icon.library 47.5 of 3.2.3 included), so
+artwork drawn as PNG has to become the format 3.5 introduced: the classic
+DiskObject with a planar image for every Workbench since 1.x, followed by a
+FORM ICON with a FACE chunk and one IMAG chunk per state, palette based, RLE
+compressed, up to 256 colours. This is the "GlowIcons" format, and what the
+stock 3.2 icons are. The planar image here is a Floyd-Steinberg rendition in
+the four default Workbench pens, so a plain 3.1 shows a sensible icon too.
+
+Input is a PNG with an alpha channel (or two PNGs concatenated in one file,
+normal then selected, as some icon tools save them); --selected names a
+separate second state. Fully transparent pixels become the transparent colour.
+
+The FORM ICON layout written (verified against the 3.2 CD icons):
+  FACE  width-1, height-1, flags (bit0 frameless), aspect (x<<4|y), UWORD
+        max palette bytes - 1 over the states
+  IMAG  transparent colour, colours-1, flags (bit0 transparent, bit1 palette),
+        image format 1 (RLE), palette format 1 (RLE), depth (bits per pixel),
+        UWORD image bytes - 1, UWORD palette bytes - 1, then the two streams.
+  RLE   a bit stream: 8-bit control c, then c+1 literal values of `depth` bits
+        when c < 128, or one value repeated 257-c times when c > 128.
+
+Needs Pillow. The launcher fields follow scripts/make_gui_icon.py.
+
+Usage:
+  make_os35_icon.py IN.png OUT.info --project [--tool TelegramAmiga] [--stack N]
+  make_os35_icon.py IN.png OUT.info --drawer
+  options: --selected SEL.png  --colors 64  --frameless
+"""
+import io
+import struct
+import sys
+
+from PIL import Image
+
+sys.path.insert(0, __file__.rsplit("/", 1)[0] if "/" in __file__ else ".")
+import make_gui_icon as classic  # noqa: E402  (the DiskObject walker)
+
+WB_PENS = [(0x95, 0x95, 0x95), (0x00, 0x00, 0x00), (0xff, 0xff, 0xff), (0x3b, 0x67, 0xa2)]
+NO_ICON_POSITION = 0x80000000
+SIG = b"\x89PNG\r\n\x1a\n"
+
+
+class BitWriter(object):
+    def __init__(self):
+        self.bits = []
+
+    def put(self, value, n):
+        for i in range(n - 1, -1, -1):
+            self.bits.append((value >> i) & 1)
+
+    def bytes(self):
+        out = bytearray()
+        for i in range(0, len(self.bits), 8):
+            chunk = self.bits[i:i + 8] + [0] * (8 - len(self.bits[i:i + 8]))
+            out.append(int("".join(str(b) for b in chunk), 2))
+        return bytes(out)
+
+
+class BitReader(object):
+    def __init__(self, data):
+        self.d, self.pos = data, 0
+
+    def get(self, n):
+        v = 0
+        for _ in range(n):
+            v = (v << 1) | ((self.d[self.pos >> 3] >> (7 - (self.pos & 7))) & 1)
+            self.pos += 1
+        return v
+
+
+def rle_encode(values, depth):
+    w = BitWriter()
+    i, n = 0, len(values)
+    while i < n:
+        run = 1
+        while i + run < n and values[i + run] == values[i] and run < 128:
+            run += 1
+        if run >= 2:
+            w.put(257 - run, 8)
+            w.put(values[i], depth)
+            i += run
+            continue
+        j = i
+        while j < n and j - i < 128:
+            if j + 1 < n and values[j + 1] == values[j] and (j + 2 < n and values[j + 2] == values[j]):
+                break
+            j += 1
+        w.put(j - i - 1, 8)
+        for v in values[i:j]:
+            w.put(v, depth)
+        i = j
+    return w.bytes()
+
+
+def rle_decode(data, depth, count):
+    r = BitReader(data)
+    out = []
+    while len(out) < count and (r.pos >> 3) < len(data):
+        c = r.get(8)
+        if c < 128:
+            for _ in range(c + 1):
+                if len(out) >= count:
+                    break
+                out.append(r.get(depth))
+        elif c > 128:
+            v = r.get(depth)
+            out.extend([v] * (257 - c))
+    return out[:count]
+
+
+def split_pngs(data):
+    parts = []
+    p = 0
+    while data[p:p + 8] == SIG:
+        q = p + 8
+        while q + 12 <= len(data):
+            ln = struct.unpack(">I", data[q:q + 4])[0]
+            ctype = data[q + 4:q + 8]
+            q += 12 + ln
+            if ctype == b"IEND":
+                break
+        parts.append(data[p:q])
+        p = q
+    return parts
+
+
+def load_states(path, selected):
+    parts = split_pngs(open(path, "rb").read())
+    if not parts:
+        raise ValueError("%s is not a PNG" % path)
+    images = [Image.open(io.BytesIO(parts[0])).convert("RGBA")]
+    if selected:
+        images.append(Image.open(selected).convert("RGBA"))
+    elif len(parts) > 1:
+        images.append(Image.open(io.BytesIO(parts[1])).convert("RGBA"))
+    return images
+
+
+def quantize_state(im, colors):
+    """(indices, palette): index 0 is the transparent colour, the rest the
+    median-cut palette of the opaque pixels."""
+    w, h = im.size
+    alpha = im.split()[3]
+    opaque = im.convert("RGB")
+    q = opaque.quantize(colors=colors - 1, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    qpal = q.getpalette()[:3 * (colors - 1)]
+    qdata = list(q.tobytes())
+    used = sorted(set(qdata))
+    remap = dict((old, new + 1) for new, old in enumerate(used))
+    palette = [WB_PENS[0]] + [tuple(qpal[3 * k:3 * k + 3]) for k in used]
+    idx = []
+    adata = list(alpha.tobytes())
+    for k in range(w * h):
+        idx.append(0 if adata[k] < 128 else remap[qdata[k]])
+    return idx, palette
+
+
+def planar(im):
+    """Two bitplanes in the four Workbench pens, dithered; transparent = pen 0."""
+    w, h = im.size
+    pal = Image.new("P", (1, 1))
+    pal.putpalette(sum([list(c) for c in WB_PENS], []) + [0] * (768 - 12))
+    q = im.convert("RGB").quantize(palette=pal, dither=Image.Dither.FLOYDSTEINBERG)
+    alpha = list(im.split()[3].tobytes())
+    pens = [0 if alpha[k] < 128 else v for k, v in enumerate(q.tobytes())]
+    rowbytes = ((w + 15) // 16) * 2
+    planes = bytearray()
+    for plane in range(2):
+        for y in range(h):
+            row = bytearray(rowbytes)
+            for x in range(w):
+                if (pens[y * w + x] >> plane) & 1:
+                    row[x >> 3] |= 0x80 >> (x & 7)
+            planes += row
+    return bytes(planes)
+
+
+def chunk(cid, body):
+    return cid + struct.pack(">I", len(body)) + body + (b"\x00" if len(body) & 1 else b"")
+
+
+def build(images, do_type, tool, stack, colors, frameless, drawer):
+    w, h = images[0].size
+    for im in images[1:]:
+        if im.size != (w, h):
+            raise ValueError("the selected state must have the same size")
+    states = [quantize_state(im, colors) for im in images]
+    imags = []
+    for idx, palette in states:
+        depth = max(1, (len(palette) - 1).bit_length())
+        img = rle_encode(idx, depth)
+        palbytes = [c for rgb in palette for c in rgb]
+        pal = rle_encode(palbytes, 8)
+        # what we wrote must decode to what we meant
+        assert rle_decode(img, depth, len(idx)) == idx
+        assert rle_decode(pal, 8, len(palbytes)) == palbytes
+        body = struct.pack(">BBBBBBHH", 0, len(palette) - 1, 3, 1, 1, depth, len(img) - 1, len(pal) - 1) + img + pal
+        imags.append((body, len(palbytes)))
+    face = struct.pack(">BBBBH", w - 1, h - 1, 1 if frameless else 0, 0x11, max(n for _, n in imags) - 1)
+    form_body = b"ICON" + chunk(b"FACE", face) + b"".join(chunk(b"IMAG", b) for b, _ in imags)
+    form = b"FORM" + struct.pack(">I", len(form_body)) + form_body
+    # classic part
+    has_select = len(images) > 1
+    gadget = struct.pack(">IhhhhHHHIIIiIhI", 0, 0, 0, w, h, 6 if has_select else 4, 3, 1,
+                         1, 1 if has_select else 0, 0, 0, 0, 0, 1)
+    header = (b"\xe3\x10\x00\x01" + gadget + bytes([do_type, 0]) +
+              struct.pack(">IIIIIII", 1 if tool else 0, 0, NO_ICON_POSITION, NO_ICON_POSITION,
+                          1 if drawer else 0, 0, stack))
+    out = header
+    if drawer:
+        out += classic.DEFAULT_DRAWERDATA
+    for im in images:
+        out += struct.pack(">hhhhhIBBI", 0, 0, w, h, 2, 1, 3, 0, 0) + planar(im)
+    if tool:
+        s = tool.encode("latin-1") + b"\x00"
+        out += struct.pack(">I", len(s)) + s
+    if drawer:
+        out += classic.DEFAULT_DRAWERDATA2
+    return out + form
+
+
+def main(argv):
+    flags = [a for a in argv[1:] if a.startswith("--")]
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    opts = {}
+    for i, a in enumerate(argv):
+        if a in ("--tool", "--stack", "--selected", "--colors") and i + 1 < len(argv):
+            opts[a] = argv[i + 1]
+    args = [a for a in args if a not in opts.values()]
+    if len(args) < 2 or not ({"--project", "--drawer"} & set(flags)):
+        sys.stderr.write(__doc__)
+        return 2
+    drawer = "--drawer" in flags
+    tool = None if drawer else opts.get("--tool", "TelegramAmiga")
+    stack = int(opts.get("--stack", "1048576"))
+    colors = int(opts.get("--colors", "64"))
+    if not 2 <= colors <= 256:
+        sys.stderr.write("colors must be 2..256\n")
+        return 2
+    images = load_states(args[0], opts.get("--selected"))
+    out = build(images, classic.WBDRAWER if drawer else classic.WBPROJECT, tool, stack,
+                colors, "--frameless" in flags, drawer)
+    back = classic.parse(out)
+    if classic.serialize(back) != out:
+        sys.stderr.write("FATAL: the icon does not walk back as written\n")
+        return 1
+    open(args[1], "wb").write(out)
+    print("wrote %s (%d bytes, %d state%s, %d colours max): %s"
+          % (args[1], len(out), len(images), "s" if len(images) > 1 else "", colors,
+             classic.describe(back)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -165,6 +165,10 @@ validation; it is no longer the product direction.
 
 ## Notes
 
+The icons are by Carlo Spadoni, who drew them for Telegram Amiga and let me
+ship them with it. The artwork as delivered is in `assets/icons/carlo-spadoni/`;
+`scripts/build-icons.sh` turns it into one launcher set per platform.
+
 Developed with the help of LLM agents used as engineering tools (analysis,
 implementation, packaging, docs, test prep). Local diaries, transcripts and
 secrets stay out of Git.

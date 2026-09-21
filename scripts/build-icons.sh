@@ -1,0 +1,42 @@
+#!/bin/sh
+# Regenerates the launcher icons of every lane from the artwork in
+# assets/icons/carlo-spadoni/. The result is committed, so this only runs
+# when the artwork or the icon scripts change. The OS3 step needs Pillow:
+# PYTHON=/path/to/python-with-pillow scripts/build-icons.sh
+#
+# Every lane gets TelegramAmiga.info (the program, a PROJECT icon whose
+# DefaultTool is the binary and whose stack is 1 MB), TelegramAmiga-TUI.info
+# (the SAME bytes: the file name alone picks the console client) and
+# drawer.info, which the packaging places next to the drawer under the
+# drawer's own name.
+set -e
+cd "$(dirname "$0")/.."
+PY=${PYTHON:-python3}
+SRC=assets/icons/carlo-spadoni
+OUT=assets/icons
+
+mkdir -p "$OUT/amigaos4" "$OUT/amigaos3" "$OUT/amigaos3-68000" "$OUT/morphos" "$OUT/aros"
+
+# AmigaOS 4: classic + ARGB, as drawn; only the launcher fields change.
+"$PY" scripts/make_gui_icon.py "$SRC/OS4/OS4-1.info" "$OUT/amigaos4/TelegramAmiga.info" --project
+"$PY" scripts/make_gui_icon.py "$SRC/OS4/OS4-2.info" "$OUT/amigaos4/drawer.info" --drawer
+
+# AmigaOS 3.x: the PNG artwork becomes an OS3.5 colour icon with a planar
+# fallback for 3.1. The 68000 build asks for 384 KB of stack, not 1 MB: a
+# 2 MB machine cannot spare the megabyte and the binary's cookie says so.
+"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-1.info" "$OUT/amigaos3/TelegramAmiga.info" --project --frameless
+"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3/drawer.info" --drawer --frameless
+"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-1.info" "$OUT/amigaos3-68000/TelegramAmiga.info" --project --frameless --stack 393216
+"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3-68000/drawer.info" --drawer --frameless --stack 393216
+
+# MorphOS and AROS: PNG icons, the icOn chunk rewritten.
+"$PY" scripts/make_png_icon.py "$SRC/MOS/Mos1.info" "$OUT/morphos/TelegramAmiga.info" --project
+"$PY" scripts/make_png_icon.py "$SRC/MOS/Mos2.info" "$OUT/morphos/drawer.info" --drawer
+"$PY" scripts/make_png_icon.py "$SRC/AROS/AROS-1.info" "$OUT/aros/TelegramAmiga.info" --project
+"$PY" scripts/make_png_icon.py "$SRC/AROS/AROS-2.info" "$OUT/aros/drawer.info" --drawer
+
+# The TUI icon is the GUI icon under another name (byte-identical, by rule).
+for lane in amigaos4 amigaos3 amigaos3-68000 morphos aros; do
+    cp "$OUT/$lane/TelegramAmiga.info" "$OUT/$lane/TelegramAmiga-TUI.info"
+done
+echo "icons rebuilt in $OUT/{amigaos4,amigaos3,amigaos3-68000,morphos,aros}"

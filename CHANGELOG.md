@@ -7,6 +7,19 @@ unless noted.
 
 ## [Unreleased]
 
+### Added
+- Icons by Carlo Spadoni, one set per platform, plus an icon for the drawer
+  itself, which had none. AmigaOS 4, MorphOS and AROS get his files as he
+  drew them, in the format each system reads natively (an ARGB colour icon,
+  PNG icons with the launcher fields written into them). AmigaOS 3.x cannot
+  read PNG icons, so its set is built from his artwork as an AmigaOS 3.5
+  colour icon of 64 colours with a planar fallback in the four Workbench
+  pens for 3.1; a 68k icon weighs three kilobytes. Every program icon keeps
+  what the self-launch needs: a project icon whose default tool is the
+  binary, with a 1 MB stack (384 KB on the 68000 build). The credit is in
+  the About box, the readme and the manuals, and the artwork as delivered
+  is kept in the repository.
+
 ### Fixed
 - A link Telegram already knew gets its preview on the message just sent, in
   Saved Messages, groups and channels too. When the page was in Telegram's

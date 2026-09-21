@@ -59,9 +59,22 @@ REPO_URL="https://github.com/kaffeine1/telegram-amiga"
 sha_cmd() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
 
 mkdir -p "$PACKAGE_ROOT"
-rm -f "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP".zip
+rm -f "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP".zip "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP".info
 rm -rf "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP"
 if [ "$AMINET" = "1" ]; then rm -rf "$AMINET_ROOT"; mkdir -p "$AMINET_ROOT"; fi
+
+# Which assets/icons/<lane>/ set a platform ships (scripts/build-icons.sh
+# regenerates them from the artwork by Carlo Spadoni in assets/icons/carlo-spadoni).
+icon_lane() {
+    case "$1" in
+    "AmigaOS 3.x (68000)") echo amigaos3-68000 ;;
+    "AmigaOS 3.x") echo amigaos3 ;;
+    "AmigaOS 4"*) echo amigaos4 ;;
+    "MorphOS") echo morphos ;;
+    AROS*) echo aros ;;
+    *) echo "icon_lane: unknown platform $1" >&2; exit 1 ;;
+    esac
+}
 
 # --- per-architecture text blocks -------------------------------------------
 # requirements_en / requirements_it / notes_en / notes_it are filled per
@@ -441,6 +454,9 @@ Full instructions:
 
 NEVER share telegram-auth.bin -- once you log in, it holds your Telegram session.
 
+The icons are by Carlo Spadoni, who drew them for Telegram Amiga and let me
+ship them with it.
+
 Version: $VERSION   Build: $COMMIT_ID
 Author: Michele Dipace <michele.dipace@kaffeine.net>   License: MIT
 EOF
@@ -628,7 +644,9 @@ Advanced: the bundled data/telegram-api.txt holds public Telegram API app
 credentials. Advanced users may replace it with their own (two lines: api_id
 then api_hash).
 
-Contributions: Javier de las Rivas (javierdlr).
+Contributions: Javier de las Rivas (javierdlr), and Bohun (bohunamiga), who
+took the build to AROS on ARM. The icons are by Carlo Spadoni, who drew them
+for Telegram Amiga and let me ship them with it.
 Thanks to the testers around the world who run this on real hardware and
 send back what they find -- this client is what it is because of them.
 
@@ -828,7 +846,9 @@ di accesso, password e messaggi privati.
 Avanzato: il data/telegram-api.txt incluso contiene credenziali API pubbliche. Gli
 utenti avanzati possono sostituirlo col proprio (due righe: api_id poi api_hash).
 
-Contributi: Javier de las Rivas (javierdlr).
+Contributi: Javier de las Rivas (javierdlr) e Bohun (bohunamiga), che ha
+portato la build su AROS ARM. Le icone sono di Carlo Spadoni, che le ha
+disegnate per Telegram Amiga e mi ha permesso di distribuirle con il programma.
 Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
 raccontano quello che trovano: questo client e' com'e' grazie a loro.
 
@@ -980,6 +1000,9 @@ Bug reports and wishes are very welcome -- testers on real hardware
 (A1200s, A4000s, Pegasos, Sam, FPGA machines) are what moves this
 project forward.
 
+The icons are by Carlo Spadoni, who drew them for Telegram Amiga and let
+me ship them with it.
+
   Source + issues:
   $REPO_URL
   Development diary:
@@ -1047,8 +1070,12 @@ package_one() {
     # TelegramAmiga-TUI.info owns a 0-byte marker whose name carries "TUI" -> the
     # binary opens a CON: window and runs the console client. No IconX, no shell
     # scripts.
+    # One icon set per platform: AmigaOS 3.x gets an OS3.5 colour icon built
+    # from the artwork, the other lanes the files as drawn; every set carries
+    # the same three launcher fields (see scripts/build-icons.sh).
+    icons="$ROOT_DIR/assets/icons/$(icon_lane "$platform")"
     if [ "$gui_icon" != "0" ]; then
-        cp "$ROOT_DIR/assets/TelegramAmiga.info" "$dest/TelegramAmiga.info"
+        cp "$icons/TelegramAmiga.info" "$dest/TelegramAmiga.info"
     fi
     # From 0.0.9 (Michele) the TUI icon ships ONLY on the 68k line, where a
     # console client is what those machines actually want. The PPC and x86
@@ -1056,17 +1083,13 @@ package_one() {
     # command for anyone who still wants the text client.
     if [ "$tui_icon" = "1" ]; then
         : > "$dest/TelegramAmiga-TUI"
-        if [ "$gui_icon" = "0" ]; then
-            # 68000 package: the icon must ask for the same 384 KB the binary's
-            # cookie does, or a Workbench launch would reserve the full
-            # megabyte and hand back the memory this build just saved.
-            cp "$ROOT_DIR/assets/TelegramAmiga-TUI-68000.info" \
-               "$dest/TelegramAmiga-TUI.info"
-        else
-            cp "$ROOT_DIR/assets/TelegramAmiga-TUI.info" \
-               "$dest/TelegramAmiga-TUI.info"
-        fi
+        # The 68000 set asks for the same 384 KB the binary's cookie does, or
+        # a Workbench launch would reserve the full megabyte and hand back the
+        # memory that build just saved.
+        cp "$icons/TelegramAmiga-TUI.info" "$dest/TelegramAmiga-TUI.info"
     fi
+    # The drawer's own icon sits NEXT to the drawer, under the drawer's name.
+    cp "$icons/drawer.info" "$PACKAGE_ROOT/$drawer.info"
     mkdir -p "$dest/data"
     cp "$ROOT_DIR/assets/public-telegram-api.txt" "$dest/data/telegram-api.txt"
 
@@ -1089,7 +1112,7 @@ package_one() {
     cp "$ROOT_DIR/CHANGELOG.md" "$dest/CHANGELOG.txt"
 
     if command -v zip >/dev/null 2>&1; then
-        (cd "$PACKAGE_ROOT" && rm -f "$drawer.zip" && zip -qr "$drawer.zip" "$drawer")
+        (cd "$PACKAGE_ROOT" && rm -f "$drawer.zip" && zip -qr "$drawer.zip" "$drawer" "$drawer.info")
         # Post-zip guard: the archive must hold THIS binary and no private file.
         unzip -p "$PACKAGE_ROOT/$drawer.zip" "*/TelegramAmiga" > "$PACKAGE_ROOT/.zipbin" 2>/dev/null
         if [ "$(md5of "$PACKAGE_ROOT/.zipbin")" != "$(md5of "$binary")" ]; then
@@ -1116,11 +1139,12 @@ package_one() {
         aminet_meta "$expected"
         amiwork="$AMINET_ROOT/$AMINET_DRAWER"
         lhafile="$AMINET_ROOT/$lhaname.lha"
-        rm -rf "$amiwork"; mkdir -p "$amiwork"
+        rm -rf "$amiwork" "$amiwork.info"; mkdir -p "$amiwork"
         cp -R "$dest"/* "$amiwork"/ # -R: the package now contains data/
+        cp "$icons/drawer.info" "$amiwork.info" # the drawer's icon, beside it
         rm -f "$lhafile"
-        ( cd "$AMINET_ROOT" && "$LHA_BIN" a "$lhaname.lha" "$AMINET_DRAWER" >/dev/null )
-        rm -rf "$amiwork"
+        ( cd "$AMINET_ROOT" && "$LHA_BIN" a "$lhaname.lha" "$AMINET_DRAWER" "$AMINET_DRAWER.info" >/dev/null )
+        rm -rf "$amiwork" "$amiwork.info"
         # Verify it extracts under UNIX lha (Aminet's own checklist requirement).
         if ! "$LHA_BIN" t "$lhafile" >/dev/null 2>&1; then
             echo "ERROR $platform: $lhafile fails lha integrity test" >&2; exit 1

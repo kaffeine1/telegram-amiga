@@ -30,12 +30,20 @@ refuses an icon it cannot reproduce rather than guess.
 
 Usage:
   make_gui_icon.py IN.info OUT.info [tool] [stack] [--project] [--drop-tooltypes]
+  make_gui_icon.py IN.info OUT.info [stack] --drawer      (a drawer icon: no tool)
   make_gui_icon.py --dump IN.info
 """
 import struct
 import sys
 
+WBDRAWER = 2
 WBPROJECT = 4
+# DrawerData for a drawer icon that has none: a NewWindow at 20,20 of 600x199
+# (the size Workbench itself picks), no gadgets, then dd_CurrentX/Y 0.
+DEFAULT_DRAWERDATA = (struct.pack(">hhhhBBIIIIIIIhhHHH", 20, 20, 600, 199, 255, 255,
+                                  0, 0, 0, 0, 0, 0, 0, 90, 40, 65535, 65535, 1)
+                      + struct.pack(">ii", 0, 0))
+DEFAULT_DRAWERDATA2 = struct.pack(">IH", 0, 0)  # dd_Flags, dd_ViewModes: defaults
 
 
 def _image_size(data, p):
@@ -93,10 +101,19 @@ def parse(data):
 
 
 def serialize(s, default_tool=None, stack=None, project=False,
-              drop_tooltypes=False):
+              drop_tooltypes=False, drawer=False):
     header = bytearray(s["header"])
+    drawerdata, drawerdata2 = s["drawer"], s["drawer2"]
     if project:
         header[48] = WBPROJECT
+    if drawer:
+        header[48] = WBDRAWER
+        if not drawerdata:
+            drawerdata = DEFAULT_DRAWERDATA
+            header[66:70] = struct.pack(">I", 1)  # "present"
+        if not drawerdata2:
+            drawerdata2 = DEFAULT_DRAWERDATA2
+            header[44:48] = struct.pack(">I", 1)  # Gadget.UserData: OS2 icon
     if stack is not None:
         header[74:78] = struct.pack(">I", stack)
     dt = s["dt_str"]
@@ -108,10 +125,10 @@ def serialize(s, default_tool=None, stack=None, project=False,
     if drop_tooltypes:
         header[54:58] = struct.pack(">I", 0)
         tooltypes = b""
-    out = bytes(header) + s["drawer"] + s["imagery"]
+    out = bytes(header) + drawerdata + s["imagery"]
     if dt:
         out += struct.pack(">I", len(dt)) + dt
-    out += tooltypes + s["toolwin"] + s["drawer2"] + s["trailing"]
+    out += tooltypes + s["toolwin"] + drawerdata2 + s["trailing"]
     return out
 
 
@@ -151,8 +168,13 @@ def main(argv):
         sys.stderr.write(__doc__)
         return 2
     src, dst = args[0], args[1]
-    tool = args[2] if len(args) > 2 else "TelegramAmiga"
-    stack = int(args[3]) if len(args) > 3 else 1048576
+    drawer = "--drawer" in flags
+    if drawer:
+        tool = None
+        stack = int(args[2]) if len(args) > 2 else 1048576
+    else:
+        tool = args[2] if len(args) > 2 else "TelegramAmiga"
+        stack = int(args[3]) if len(args) > 3 else 1048576
     data = open(src, "rb").read()
     try:
         s = parse(data)
@@ -168,12 +190,14 @@ def main(argv):
         return 1
     out = serialize(s, default_tool=tool, stack=stack,
                     project="--project" in flags,
-                    drop_tooltypes="--drop-tooltypes" in flags)
+                    drop_tooltypes="--drop-tooltypes" in flags, drawer=drawer)
     # What we wrote must read back as what we meant.
     back = parse(out)
-    if (back["dt_str"] != tool.encode("latin-1") + b"\x00" or
+    if ((tool is not None and back["dt_str"] != tool.encode("latin-1") + b"\x00") or
             back["stack"] != stack or
             ("--project" in flags and back["do_type"] != WBPROJECT) or
+            (drawer and (back["do_type"] != WBDRAWER or len(back["drawer"]) != 56 or
+                         len(back["drawer2"]) != 6)) or
             back["trailing"] != s["trailing"] or back["imagery"] != s["imagery"]):
         sys.stderr.write("FATAL: the rewritten icon does not read back as "
                          "intended; refusing.\n")
