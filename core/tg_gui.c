@@ -10,6 +10,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_file.h"
 #include "tg_emoji_sheet.h"
 
 #define TG_GUI_EMOJI_BUTTON_W 22 /* smiley button in the composer row */
@@ -193,7 +194,7 @@ int tg_gui_photo_preferences_save(const char *path, int inline_photos,
     }
     memcpy(tmp, path, length);
     memcpy(tmp + length, ".tmp", 5UL);
-    file = fopen(tmp, "wb");
+    file = tg_file_fopen_replace(tmp, "wb");
     if (file == 0) {
         return 1;
     }
@@ -303,7 +304,7 @@ int tg_gui_emoji_preferences_save(const char *path, int enabled)
     }
     memcpy(tmp, path, length);
     memcpy(tmp + length, ".tmp", 5UL);
-    file = fopen(tmp, "wb");
+    file = tg_file_fopen_replace(tmp, "wb");
     if (file == 0) {
         return 1;
     }
@@ -2915,7 +2916,7 @@ void tg_gui_emoji_recent_save(const tg_gui_state *state)
     if (state == 0) {
         return;
     }
-    f = fopen("data/telegram-emoji-recent.txt", "w");
+    f = tg_file_fopen_replace("data/telegram-emoji-recent.txt", "w");
     if (f == 0) {
         return;
     }
@@ -5253,7 +5254,7 @@ int tg_gui_self_test(void)
         int named;
 
         /* A JPEG under a .png name must still be suggested as .jpg. */
-        file = fopen(fixture, "wb");
+        file = tg_file_fopen_replace(fixture, "wb");
         if (file == 0) {
             return 2;
         }
@@ -5282,7 +5283,7 @@ int tg_gui_self_test(void)
         /* Cache names currently end in .jpg. A PNG keeps its actual format,
            including after a fresh fetch; a missing/unknown header is refused. */
         fixture = "tg-photo-name-selftest.jpg";
-        file = fopen(fixture, "wb");
+        file = tg_file_fopen_replace(fixture, "wb");
         if (file == 0) {
             return 2;
         }
@@ -5300,7 +5301,7 @@ int tg_gui_self_test(void)
             puts("gui self-test: PNG save-as format mismatch");
             return 2;
         }
-        file = fopen(fixture, "wb");
+        file = tg_file_fopen_replace(fixture, "wb");
         if (file == 0) {
             return 2;
         }
@@ -6026,7 +6027,7 @@ int tg_gui_self_test(void)
             puts("gui self-test: explicit photo preference mismatch");
             return 2;
         }
-        file = fopen(pref, "wb");
+        file = tg_file_fopen_replace(pref, "wb");
         if (file == 0) {
             (void)remove(pref);
             puts("gui self-test: old photo preference fixture failed");
@@ -6242,7 +6243,7 @@ int tg_gui_self_test(void)
             int n;
             int size = i == 0 ? 11 : 23;
 
-            file = fopen(paths[i], "wb");
+            file = tg_file_fopen_replace(paths[i], "wb");
             if (file == 0) {
                 (void)remove(paths[0]);
                 (void)remove(paths[1]);

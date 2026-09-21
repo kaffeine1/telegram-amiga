@@ -7098,7 +7098,10 @@ static int tg_mtproto_save_peer_cache_file(
     if (path == 0 || cache == 0) {
         return 2;
     }
-    file = fopen(path, "w");
+    /* Replaced, never rewritten in place: on a FAT volume under AROS the
+       rewrite left an empty file, and every chat opened after it was "not
+       found" in a cache the sidebar had just listed (Raspberry Pi 400). */
+    file = tg_file_fopen_replace(path, "w");
     if (file == 0) {
         if (stream != 0) {
             fprintf(stream, "%s: peer-cache-open-failed\n", label);
@@ -8138,7 +8141,7 @@ int tg_mtproto_chat_list_self_test(void)
     int saved_charset;
     int saved_theme;
 
-    file = fopen(path, "w");
+    file = tg_file_fopen_replace(path, "w");
     if (file == 0) {
         puts("chat list self-test: cannot write temp cache");
         return 2;
@@ -9724,7 +9727,7 @@ static FILE *tg_mtproto_open_quiet_stream(FILE *fallback)
         return fallback;
     }
     tg_mtproto_quiet_tmp_name(name, tg_mtproto_quiet_depth);
-    quiet = fopen(name, "w+b"); /* w+ truncates any stale slot content */
+    quiet = tg_file_fopen_replace(name, "w+b"); /* a stale slot is replaced */
     if (quiet == 0) {
         return fallback;
     }
@@ -10936,7 +10939,7 @@ static void tg_gui_photo_store_stripped(const tg_mtproto_photo_meta *photo)
     (void)mkdir("photos", 0777);
     sprintf(part_path, "%s.part", path);
     (void)remove(part_path);
-    out = fopen(part_path, "wb");
+    out = tg_file_fopen_replace(part_path, "wb");
     if (out == 0) {
         return;
     }
@@ -14881,6 +14884,35 @@ int tg_mtproto_probe_self_test(void)
         }
     }
 
+    /* tg_file_fopen_replace: the second save must leave only the second
+       content, a contract a FAT volume under AROS breaks for a plain rewrite. */
+    {
+        static const char rep_path[] = "telegram-mtproto-replace-self-test.tmp";
+        char back[16];
+        unsigned long back_len;
+        FILE *rf;
+
+        (void)remove(rep_path);
+        rf = tg_file_fopen_replace(rep_path, "wb");
+        if (rf == 0 || fputs("0123456789", rf) == EOF || fclose(rf) != 0) {
+            (void)remove(rep_path);
+            return 2;
+        }
+        rf = tg_file_fopen_replace(rep_path, "wb");
+        if (rf == 0 || fputs("ab", rf) == EOF || fclose(rf) != 0) {
+            (void)remove(rep_path);
+            return 2;
+        }
+        back_len = 0UL;
+        if (tg_file_read_text(rep_path, back, sizeof(back), &back_len) != TG_FILE_OK ||
+            back_len != 2UL || back[0] != 'a' || back[1] != 'b') {
+            (void)remove(rep_path);
+            puts("probe self-test: fopen_replace did not replace");
+            return 2;
+        }
+        (void)remove(rep_path);
+    }
+
     /* Live "is typing" parse (updateShort -> *UserTyping -> typing action). The
        collector writes the sink; here we drive synthetic pushes through it. */
     {
@@ -15695,7 +15727,7 @@ static void tg_gui_hidden_forget(unsigned long id_hi, unsigned long id_lo)
     if (src == 0) {
         return;
     }
-    dst = fopen(TG_GUI_HIDDEN_TMP, "w");
+    dst = tg_file_fopen_replace(TG_GUI_HIDDEN_TMP, "w");
     if (dst == 0) {
         fclose(src);
         return;
@@ -15798,7 +15830,7 @@ static int tg_gui_hidden_projection_self_test(void)
     int missing;
     int count;
 
-    f = fopen(cache_path, "w");
+    f = tg_file_fopen_replace(cache_path, "w");
     if (f == 0) {
         puts("probe self-test: cannot write hidden cache");
         return 2;
@@ -15810,7 +15842,7 @@ static int tg_gui_hidden_projection_self_test(void)
     fputs("peer 3 type group id 0x0000000000000003 access_hash - top 0 "
           "unread 0 self no bot no username three title Visible Three\n", f);
     fclose(f);
-    f = fopen(hidden_path, "w");
+    f = tg_file_fopen_replace(hidden_path, "w");
     if (f == 0) {
         remove(cache_path);
         puts("probe self-test: cannot write hidden list");
@@ -17414,7 +17446,7 @@ int tg_gui_session_set_download_dir(const char *dir)
     }
     strcpy(tmp, path);
     strcat(tmp, ".tmp");
-    f = fopen(tmp, "w");
+    f = tg_file_fopen_replace(tmp, "w");
     if (f == 0) {
         return 2; /* in force for this run, but not remembered */
     }
@@ -18062,7 +18094,7 @@ static int tg_mtproto_photo_gate_self_test(void)
     c[4].a = png_big; c[4].an = sizeof(png_big); c[4].b = png_tail; c[4].bn = sizeof(png_tail); c[4].want = 0; c[4].why_has = "10000";
     c[5].a = txt; c[5].an = sizeof(txt) - 1UL; c[5].b = 0; c[5].bn = 0UL; c[5].want = 0; c[5].why_has = "JPEG or PNG";
     for (i = 0; i < 6; ++i) {
-        FILE *f = fopen(path, "wb");
+        FILE *f = tg_file_fopen_replace(path, "wb");
         const char *why = 0;
         int got;
 
@@ -18717,7 +18749,7 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
         tg_platform_ensure_drawer_icon(dir); /* visible on Workbench */
         tg_gui_dl_join_path(tg_gui_dl.path, sizeof(tg_gui_dl.path), dir, safe);
     }
-    tg_gui_dl.f = fopen(tg_gui_dl.path, "wb");
+    tg_gui_dl.f = tg_file_fopen_replace(tg_gui_dl.path, "wb");
     if (tg_gui_dl.f != 0) {
         /* One big write buffer instead of the runtime's default: a tester on
            an 030 could HEAR the drive working through a download, which is
@@ -19051,7 +19083,7 @@ static int tg_mtproto_executable_sniff_self_test(void)
     c[3].b = txt;  c[3].n = 8UL; c[3].want = 0;
     c[4].b = tiny; c[4].n = 2UL; c[4].want = 0;
     for (i = 0; i < 5; ++i) {
-        FILE *f = fopen(path, "wb");
+        FILE *f = tg_file_fopen_replace(path, "wb");
         int got;
 
         if (f == 0) {
@@ -19341,7 +19373,7 @@ static int tg_gui_photo_begin(FILE *stream)
     sprintf(tg_gui_photo_fetch.part_path, "%s.part", tg_gui_photo_fetch.path);
     (void)mkdir("photos", 0777);
     (void)remove(tg_gui_photo_fetch.part_path);
-    tg_gui_photo_fetch.out = fopen(tg_gui_photo_fetch.part_path, "wb");
+    tg_gui_photo_fetch.out = tg_file_fopen_replace(tg_gui_photo_fetch.part_path, "wb");
     if (tg_gui_photo_fetch.out == 0) {
         tg_gui_photo_log("photo: fetch fail cache open");
         memset(&tg_gui_photo_fetch, 0, sizeof(tg_gui_photo_fetch));
@@ -19837,7 +19869,7 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
 
         sprintf(name, "avatars/tgav%08lx%08lx.jpg", id_hi, id_lo);
         (void)mkdir("avatars", 0777); /* best-effort; EEXIST is the norm */
-        f = fopen(name, "wb");
+        f = tg_file_fopen_replace(name, "wb");
         if (f != 0) {
             if (fwrite(bytes, 1, bytes_len, f) == bytes_len) {
                 fclose(f);

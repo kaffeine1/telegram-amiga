@@ -6,6 +6,8 @@
 #ifndef TG_FILE_H
 #define TG_FILE_H
 
+#include <stdio.h>
+
 /**
  * File helper result.
  *
@@ -39,6 +41,15 @@ tg_file_status tg_file_read_text(const char *path, char *buffer,
  */
 tg_file_status tg_file_write_text(const char *path, const char *text,
                                   unsigned long text_length);
+
+/**
+ * fopen() for a file the client is REPLACING: deletes it first, then creates
+ * it. The same rule tg_file_write_text follows, for the same reason: on the
+ * AROS FAT handler (issue 161) a file rewritten in place ends up empty, so
+ * every save of a file that may already exist goes through here, with the
+ * mode it would have given fopen(). Appends are fine and are not routed.
+ */
+FILE *tg_file_fopen_replace(const char *path, const char *mode);
 
 /**
  * Appends a complete text buffer to a file.

@@ -103,6 +103,18 @@ tg_file_status tg_file_write_text(const char *path, const char *text,
     return TG_FILE_OK;
 }
 
+FILE *tg_file_fopen_replace(const char *path, const char *mode)
+{
+    if (path == 0 || path[0] == '\0' || mode == 0) {
+        return 0;
+    }
+    /* See tg_file_write_text: delete, then create. Proven again on the AROS
+       ARM image in QEMU (2026-09-21): an in-place rewrite on the FAT volume
+       reads back as zero bytes, a delete and a fresh file read back whole. */
+    (void)remove(path);
+    return fopen(path, mode);
+}
+
 tg_file_status tg_file_append_text(const char *path, const char *text,
                                    unsigned long text_length)
 {

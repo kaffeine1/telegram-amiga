@@ -21,6 +21,20 @@ unless noted.
   is kept in the repository.
 
 ### Fixed
+- Chats open again on AROS ARM, and on any FAT volume under AROS. The chat
+  list is saved back whenever an unread count changes, and that save
+  rewrote the file in place: on the AROS FAT handler (its issue 161, the
+  same bug that ate the saved login in 0.0.93) a file rewritten in place
+  reads back empty, so from the first save on every chat you opened was "not
+  found" in a list you were looking at. It reached us from a Raspberry Pi
+  400 and was reproduced in an AROS ARM machine under QEMU with four small
+  probes: the C library reads and writes correctly, appends and renames are
+  fine, only the in-place rewrite is broken. Every file the client replaces
+  now goes through one door that deletes and recreates it: the chat list,
+  the avatar store, the window geometry, the recent emoji, downloads to a
+  name that exists, and every temporary the client writes before a rename.
+  The chat-list line is also read by one hand-written reader instead of
+  five scanf formats, so whatever the sidebar lists, the lookup finds.
 - A link Telegram already knew gets its preview on the message just sent, in
   Saved Messages, groups and channels too. When the page was in Telegram's
   cache the preview came back inside the answer to the send itself, and no

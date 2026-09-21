@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include "tg_mtproto_login.h"
 #include "tg_avatar.h"
+#include "tg_file.h"
 
 #define TG_MTPROTO_CURRENT_LAYER 214UL
 #define TG_INVOKE_WITH_LAYER_CONSTRUCTOR 0xda9b0d0dUL
@@ -3848,7 +3849,7 @@ void tg_mtproto_avatar_store_save(void)
     FILE *f;
     unsigned long header[2];
 
-    f = fopen(TG_AVATAR_STORE_FILE, "wb");
+    f = tg_file_fopen_replace(TG_AVATAR_STORE_FILE, "wb");
     if (f == 0) {
         return;
     }

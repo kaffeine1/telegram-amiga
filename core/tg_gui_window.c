@@ -15,6 +15,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_file.h"
 #include "tg_gui_session.h"
 #include "tg_avatar.h"
 #include "tg_emoji_sheet.h"
@@ -6519,7 +6520,7 @@ static int tg_gui_photo_copy_atomic(const char *source,
         return 1;
     }
     (void)remove(part);
-    out = fopen(part, "wb");
+    out = tg_file_fopen_replace(part, "wb");
     if (out == 0) {
         fclose(in);
         return 1;
@@ -7044,7 +7045,7 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
         y = 0;
     }
     (void)mkdir("data", 0777); /* best-effort; normally the launcher made it */
-    f = fopen("data/telegram-gui-win.txt", "w");
+    f = tg_file_fopen_replace("data/telegram-gui-win.txt", "w");
     if (f != 0) {
         fprintf(f, "%d %d %d %d%s\n", w, h, x, y, own ? " own" : "");
         fclose(f);

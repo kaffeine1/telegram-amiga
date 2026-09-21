@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "tg_avatar.h"
+#include "tg_file.h"
 #include "../third_party/tjpgd/tjpgd.h"
 
 static const unsigned char tg_avatar_jpeg_header[623] = {
@@ -354,7 +355,7 @@ int tg_image_canonical_cache_write(const char *path,
     tg_image_cache_put_u32(header + 16, payload_size);
     sprintf(part_path, "%s.tmp", path);
     (void)remove(part_path);
-    file = fopen(part_path, "wb");
+    file = tg_file_fopen_replace(part_path, "wb");
     if (file == 0) {
         return 1;
     }
@@ -1126,7 +1127,7 @@ int tg_avatar_self_test(void)
             FILE *bad;
             int bad_ok;
 
-            bad = fopen("tg-photo-cache-selftest.pgc", "wb");
+            bad = tg_file_fopen_replace("tg-photo-cache-selftest.pgc", "wb");
             if (bad == 0) {
                 (void)remove("tg-photo-cache-selftest.pgc");
                 puts("avatar self-test: corrupt cache setup failed");
