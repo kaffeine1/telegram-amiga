@@ -21,6 +21,21 @@ unless noted.
   is kept in the repository.
 
 ### Fixed
+- The GUI self-tests run on AROS ARM, and the live window there starts with
+  the stack it was promised. On a 64-bit build the model the window paints
+  from is over half a megabyte, and the client kept a copy of it in the
+  frame of the routine that runs everything, under the live window and under
+  every self-test alike: with the two GUI self-tests, which held copies of
+  their own, that overran the 1 MB AmigaOS stack by a hundred kilobytes, and
+  each test went silent after its bootstrap lines, its first line of output
+  landing in whatever memory sat below the stack. Reproduced in the AROS ARM
+  machine under QEMU, with a probe that reports the task's stack bounds (a
+  full megabyte, so the frames were at fault, not the Shell's Stack command).
+  The four users of that model now share one object off the stack, and every
+  self-test block borrows one scratch copy per file instead of keeping its
+  own, so the frames fall from 584 KB to 25 KB in the runner and to under
+  10 KB in the tests, and the 68k package pays nothing new for it. Both GUI
+  self-tests now pass on AROS ARM with the same output as on the host.
 - Chats open again on AROS ARM, and on any FAT volume under AROS. The chat
   list is saved back whenever an unread count changes, and that save
   rewrote the file in place: on the AROS FAT handler (its issue 161, the

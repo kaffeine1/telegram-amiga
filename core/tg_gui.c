@@ -4609,6 +4609,21 @@ typedef struct tg_gui_record {
 } tg_gui_record;
 
 #if !defined(TG_NO_SELFTEST)
+
+/* One scratch state for the self-test blocks below. Each block used to keep a
+   copy of its own, on the stack or static: on a 64-bit build the struct is
+   over half a megabyte, so two of them on the stack (this frame under
+   tg_app_run's) overran the 1 MB AmigaOS stack on AROS ARM, and every static
+   one costs the 68k package a quarter megabyte of BSS. The blocks run one
+   after another and each starts from zero, so one object serves them all. */
+static tg_gui_state tg_gui_test_scratch;
+
+static tg_gui_state *tg_gui_test_scratch_state(void)
+{
+    memset(&tg_gui_test_scratch, 0, sizeof(tg_gui_test_scratch));
+    return &tg_gui_test_scratch;
+}
+
 static int tg_gui_rec_width(tg_gui_backend *backend)
 {
     return ((tg_gui_record *)backend->context)->width;
@@ -4862,7 +4877,7 @@ static void tg_gui_rec_text(tg_gui_backend *backend, int pen, int x,
 
 int tg_gui_self_test(void)
 {
-    tg_gui_state state;
+    static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
     tg_gui_backend backend;
     tg_gui_record record;
     int ok;
@@ -5091,7 +5106,7 @@ int tg_gui_self_test(void)
        when a photo, reply or sender band precedes the body. Narrow windows
        force the URL across lines; emoji on/off changes the text line height. */
     {
-        static tg_gui_state draft;
+        tg_gui_state *draft = tg_gui_test_scratch_state();
         const char *url = "https://example.org/a_b*c~d_e*f~g_h*i~j_image.png";
         int narrow;
         int enabled;
@@ -5108,13 +5123,13 @@ int tg_gui_self_test(void)
                         int mi = kind == 2 ? 1 : 0;
 
                         memset(&rec, 0, sizeof(rec));
-                        tg_gui_demo_state(&draft);
-                        memset(draft.messages, 0, sizeof(draft.messages));
-                        draft.message_count = mi + 1;
-                        draft.selected_msg = -1;
-                        draft.inline_photos = photos;
-                        draft.emoji_enabled = enabled;
-                        m = &draft.messages[mi];
+                        tg_gui_demo_state(draft);
+                        memset(draft->messages, 0, sizeof(draft->messages));
+                        draft->message_count = mi + 1;
+                        draft->selected_msg = -1;
+                        draft->inline_photos = photos;
+                        draft->emoji_enabled = enabled;
+                        m = &draft->messages[mi];
                         m->id = 2UL;
                         m->is_own = kind == 1;
                         strcpy(m->sender, "Example");
@@ -5127,31 +5142,31 @@ int tg_gui_self_test(void)
                         m->photo_width = 320UL;
                         m->photo_height = 180UL;
                         if (mi == 1) {
-                            draft.messages[0].id = 1UL;
-                            strcpy(draft.messages[0].sender, "Example");
-                            strcpy(draft.messages[0].text, "Earlier message");
+                            draft->messages[0].id = 1UL;
+                            strcpy(draft->messages[0].sender, "Example");
+                            strcpy(draft->messages[0].text, "Earlier message");
                         }
                         rec.width = narrow ? 480 : 1280;
                         rec.height = 720;
                         rec.font_h = 8;
-                        rec.line_h = tg_gui_font_line_height(&draft, 8);
-                        rec.ascent = tg_gui_font_cell_ascent(&draft, 8, 6);
-                        rec.link_state = &draft;
+                        rec.line_h = tg_gui_font_line_height(draft, 8);
+                        rec.ascent = tg_gui_font_cell_ascent(draft, 8, 6);
+                        rec.link_state = draft;
                         rec.link_msg = mi;
                         rec.link_text = url;
                         b.context = &rec;
                         b.font_ascent = tg_gui_rec_ascent;
                         b.font_height = tg_gui_rec_font_height;
-                        tg_gui_paint(&draft, &b);
+                        tg_gui_paint(draft, &b);
                         if (rec.link_bad_hits != 0 ||
                             rec.link_chars != strlen(url)) {
                             puts("gui self-test: drawn URL glyph did not open its link");
                             return 2;
                         }
-                        if (draft.photo_w[mi] <= 0 || draft.photo_h[mi] <= 0 ||
-                            tg_gui_hit_test(&draft, rec.width, rec.height,
-                                             rec.line_h, draft.photo_x[mi] + 2,
-                                             draft.photo_y[mi] + 2) !=
+                        if (draft->photo_w[mi] <= 0 || draft->photo_h[mi] <= 0 ||
+                            tg_gui_hit_test(draft, rec.width, rec.height,
+                                             rec.line_h, draft->photo_x[mi] + 2,
+                                             draft->photo_y[mi] + 2) !=
                                 TG_GUI_HIT_PHOTO_BASE - mi) {
                             puts("gui self-test: URL click stole the picture target");
                             return 2;
@@ -5632,24 +5647,24 @@ int tg_gui_self_test(void)
             {16, 11, 18, 11, 16},
             {24, 18, 26, 18, 24}
         };
-        static tg_gui_state draft;
+        tg_gui_state *draft = tg_gui_test_scratch_state();
         unsigned long i;
         int enabled;
 
-        tg_gui_demo_state(&draft);
+        tg_gui_demo_state(draft);
         for (i = 0; i < sizeof(metrics) / sizeof(metrics[0]); ++i) {
             const int *m = metrics[i];
 
-            draft.emoji_enabled = 1;
-            if (tg_gui_font_line_height(&draft, m[0]) != m[2] ||
-                tg_gui_font_cell_ascent(&draft, m[0], m[1]) != m[3] ||
-                tg_gui_emoji_inline_size(&draft, m[0]) != m[4]) {
+            draft->emoji_enabled = 1;
+            if (tg_gui_font_line_height(draft, m[0]) != m[2] ||
+                tg_gui_font_cell_ascent(draft, m[0], m[1]) != m[3] ||
+                tg_gui_emoji_inline_size(draft, m[0]) != m[4]) {
                 puts("gui self-test: emoji line metrics do not fit the glyph");
                 return 2;
             }
-            draft.emoji_enabled = 0;
-            if (tg_gui_font_line_height(&draft, m[0]) != m[0] + 2 ||
-                tg_gui_font_cell_ascent(&draft, m[0], m[1]) != m[1]) {
+            draft->emoji_enabled = 0;
+            if (tg_gui_font_line_height(draft, m[0]) != m[0] + 2 ||
+                tg_gui_font_cell_ascent(draft, m[0], m[1]) != m[1]) {
                 puts("gui self-test: disabled emoji did not restore font metrics");
                 return 2;
             }
@@ -5663,21 +5678,21 @@ int tg_gui_self_test(void)
             memset(&rec, 0, sizeof(rec));
             rec.width = 1280;
             rec.height = 720;
-            draft.emoji_enabled = enabled;
-            rec.line_h = tg_gui_font_line_height(&draft, 8);
-            rec.ascent = tg_gui_font_cell_ascent(&draft, 8, 6);
+            draft->emoji_enabled = enabled;
+            rec.line_h = tg_gui_font_line_height(draft, 8);
+            rec.ascent = tg_gui_font_cell_ascent(draft, 8, 6);
             b.context = &rec;
             b.font_ascent = tg_gui_rec_ascent;
-            strcpy(draft.input, "abc");
-            draft.input_caret = 2;
-            draft.composing = 1;
-            tg_gui_paint_input_row(&draft, &b);
+            strcpy(draft->input, "abc");
+            draft->input_caret = 2;
+            draft->composing = 1;
+            tg_gui_paint_input_row(draft, &b);
             y = rec.first_text_y;
             if (rec.first_text_x != sw + 34 ||
-                tg_gui_input_click_caret(&draft, &b, rec.first_text_x + 6, y) != 1 ||
-                tg_gui_hit_test(&draft, 1280, 720, rec.line_h,
+                tg_gui_input_click_caret(draft, &b, rec.first_text_x + 6, y) != 1 ||
+                tg_gui_hit_test(draft, 1280, 720, rec.line_h,
                                  sw + 18, y) != TG_GUI_HIT_ATTACH_BUTTON ||
-                tg_gui_hit_test(&draft, 1280, 720, rec.line_h,
+                tg_gui_hit_test(draft, 1280, 720, rec.line_h,
                                  rec.first_text_x, y) != TG_GUI_HIT_INPUT) {
                 puts("gui self-test: paperclip overlaps input or shifts caret clicks");
                 return 2;
@@ -5688,30 +5703,30 @@ int tg_gui_self_test(void)
 
                 /* Clicking the last pixel of the first line's tall emoji
                    must stay on that line, not select the next wrapped row. */
-                memset(&draft.messages[0], 0, sizeof(draft.messages[0]));
-                draft.messages[0].is_own = 1;
+                memset(&draft->messages[0], 0, sizeof(draft->messages[0]));
+                draft->messages[0].is_own = 1;
                 (void)tg_gui_emoji_encode(0UL, pair);
-                strcpy(draft.messages[0].text, "aXXb\nabc");
-                draft.messages[0].text[1] = pair[0];
-                draft.messages[0].text[2] = pair[1];
-                draft.message_count = draft.msg_cached = 1;
-                draft.msg_top[0] = 10;
-                draft.tr_area_x = 10;
-                draft.tr_area_w = 480;
+                strcpy(draft->messages[0].text, "aXXb\nabc");
+                draft->messages[0].text[1] = pair[0];
+                draft->messages[0].text[2] = pair[1];
+                draft->message_count = draft->msg_cached = 1;
+                draft->msg_top[0] = 10;
+                draft->tr_area_x = 10;
+                draft->tr_area_w = 480;
                 rec.texts = 0;
-                (void)tg_gui_paint_bubble(&b, &draft.messages[0], 10, 480,
+                (void)tg_gui_paint_bubble(&b, &draft->messages[0], 10, 480,
                                           10, rec.line_h, 0, 200, 0, 0, 1, 0, 0);
                 glyph_bottom = rec.first_text_y - rec.ascent + 15;
-                if (tg_gui_transcript_char_at(&draft, &b, rec.line_h, 0,
+                if (tg_gui_transcript_char_at(draft, &b, rec.line_h, 0,
                                                rec.first_text_x + 6,
                                                glyph_bottom) != 1) {
                     puts("gui self-test: tall emoji click leaked into next chat row");
                     return 2;
                 }
-                memcpy(draft.messages[0].reply_text, pair, 2);
-                draft.messages[0].reply_text[2] = '\0';
+                memcpy(draft->messages[0].reply_text, pair, 2);
+                draft->messages[0].reply_text[2] = '\0';
                 rec.texts = 0;
-                (void)tg_gui_paint_bubble(&b, &draft.messages[0], 10, 480,
+                (void)tg_gui_paint_bubble(&b, &draft->messages[0], 10, 480,
                                           10, rec.line_h, 0, 200, 0, 0, 1, 0, 0);
                 if (rec.first_text_y - rec.ascent < 10 ||
                     rec.first_text_y - rec.ascent + 16 > 10 + rec.line_h) {
@@ -5737,7 +5752,7 @@ int tg_gui_self_test(void)
        under a native layer lock. Full and caret paints must agree, and a
        closed popup must not leave a stale region in the next frame. */
     {
-        static tg_gui_state draft;
+        tg_gui_state *draft = tg_gui_test_scratch_state();
         int mask;
         int caret;
 
@@ -5746,18 +5761,18 @@ int tg_gui_self_test(void)
             int expected = ((mask & 1) != 0) + ((mask & 2) != 0) +
                            ((mask & 4) != 0);
 
-            tg_gui_demo_state(&draft);
-            draft.messages[1].id = 2UL;
-            draft.composing = 1;
-            draft.ctx_visible = (mask & 1) != 0;
-            draft.ctx_msg = 1;
-            draft.ctx_x = 320;
-            draft.ctx_y = 200;
-            draft.mention_active = (mask & 2) != 0;
-            draft.mention_count = 1;
-            strcpy(draft.mention_items[0], "sample");
-            draft.emoji_enabled = 1;
-            draft.emoji_active = (mask & 4) != 0;
+            tg_gui_demo_state(draft);
+            draft->messages[1].id = 2UL;
+            draft->composing = 1;
+            draft->ctx_visible = (mask & 1) != 0;
+            draft->ctx_msg = 1;
+            draft->ctx_x = 320;
+            draft->ctx_y = 200;
+            draft->mention_active = (mask & 2) != 0;
+            draft->mention_count = 1;
+            strcpy(draft->mention_items[0], "sample");
+            draft->emoji_enabled = 1;
+            draft->emoji_active = (mask & 4) != 0;
             for (caret = 0; caret < 2; ++caret) {
                 tg_gui_record rec;
                 tg_gui_backend b = backend;
@@ -5769,9 +5784,9 @@ int tg_gui_self_test(void)
                 b.context = &rec;
                 b.popup_area = tg_gui_rec_popup;
                 if (caret) {
-                    tg_gui_paint_caret(&draft, &b);
+                    tg_gui_paint_caret(draft, &b);
                 } else {
-                    tg_gui_paint(&draft, &b);
+                    tg_gui_paint(draft, &b);
                 }
                 if (rec.popup_count != expected ||
                     rec.popup_frames != expected) {
@@ -5811,7 +5826,7 @@ int tg_gui_self_test(void)
             {16, 11, 36, 34, 28, 48, 68, 17, 43, 103, 25},
             {24, 18, 52, 50, 36, 64, 92, 24, 58, 138, 36}
         };
-        static tg_gui_state draft;
+        tg_gui_state *draft = tg_gui_test_scratch_state();
         unsigned long f;
         int enabled;
         int images;
@@ -5823,36 +5838,36 @@ int tg_gui_self_test(void)
                     tg_gui_backend b = backend;
                     int w;
 
-                    tg_gui_demo_state(&draft);
-                    tg_gui_set_emoji_enabled(&draft, enabled);
-                    strcpy(draft.chats[0].name, "Row name \x80!");
-                    strcpy(draft.chats[0].preview, "Preview \x80!");
-                    strcpy(draft.chats[1].name, "Single \x80!");
-                    draft.chats[1].preview[0] = '\0';
-                    strcpy(draft.title, "Header title \x80!");
-                    strcpy(draft.subtitle, "Header subtitle \x80!");
+                    tg_gui_demo_state(draft);
+                    tg_gui_set_emoji_enabled(draft, enabled);
+                    strcpy(draft->chats[0].name, "Row name \x80!");
+                    strcpy(draft->chats[0].preview, "Preview \x80!");
+                    strcpy(draft->chats[1].name, "Single \x80!");
+                    draft->chats[1].preview[0] = '\0';
+                    strcpy(draft->title, "Header title \x80!");
+                    strcpy(draft->subtitle, "Header subtitle \x80!");
                     if (images) {
-                        strcpy(draft.typing, "Header typing \x80!");
+                        strcpy(draft->typing, "Header typing \x80!");
                     }
-                    draft.more_above = 1; /* ensure a transcript scrollbar */
+                    draft->more_above = 1; /* ensure a transcript scrollbar */
                     memset(&rec, 0, sizeof(rec));
                     rec.width = 1280;
                     rec.height = 720;
                     rec.font_h = fonts[f][0];
-                    rec.line_h = tg_gui_font_line_height(&draft, rec.font_h);
+                    rec.line_h = tg_gui_font_line_height(draft, rec.font_h);
                     rec.ascent = tg_gui_font_cell_ascent(
-                        &draft, rec.font_h, fonts[f][1]);
-                    rec.watch_text[0] = draft.chats[0].name;
-                    rec.watch_text[1] = draft.chats[0].preview;
-                    rec.watch_text[2] = draft.chats[1].name;
-                    rec.watch_text[3] = draft.title;
-                    rec.watch_text[4] = images ? draft.typing : draft.subtitle;
+                        draft, rec.font_h, fonts[f][1]);
+                    rec.watch_text[0] = draft->chats[0].name;
+                    rec.watch_text[1] = draft->chats[0].preview;
+                    rec.watch_text[2] = draft->chats[1].name;
+                    rec.watch_text[3] = draft->title;
+                    rec.watch_text[4] = images ? draft->typing : draft->subtitle;
                     b.context = &rec;
                     b.font_height = tg_gui_rec_font_height;
                     b.font_ascent = tg_gui_rec_ascent;
                     b.avatar_image = images ? tg_gui_rec_avatar_image : 0;
-                    tg_gui_paint(&draft, &b);
-                    if (rec.avatars != draft.chat_count + 1 ||
+                    tg_gui_paint(draft, &b);
+                    if (rec.avatars != draft->chat_count + 1 ||
                         rec.avatar_images != (images ? rec.avatars : 0)) {
                         puts("gui self-test: avatar paths were not painted");
                         return 2;
@@ -5882,7 +5897,7 @@ int tg_gui_self_test(void)
                         puts("gui self-test: emoji setting expanded chat rows");
                         return 2;
                     }
-                    if (draft.sb_tr_max <= 0 || draft.sb_tr_ty != fonts[f][6]) {
+                    if (draft->sb_tr_max <= 0 || draft->sb_tr_ty != fonts[f][6]) {
                         puts("gui self-test: emoji setting expanded the chat header");
                         return 2;
                     }
@@ -5893,7 +5908,7 @@ int tg_gui_self_test(void)
                         }
                     }
                     if (enabled) {
-                        int cell = tg_gui_emoji_inline_size(&draft, rec.font_h);
+                        int cell = tg_gui_emoji_inline_size(draft, rec.font_h);
                         int name_top = rec.watch_y[0] - rec.ascent;
                         int preview_top = rec.watch_y[1] - rec.ascent;
                         int title_top = rec.watch_y[3] - rec.ascent;
@@ -5906,7 +5921,7 @@ int tg_gui_self_test(void)
                             name_top + cell > preview_top ||
                             preview_top + cell > fonts[f][4] + fonts[f][5] ||
                             title_top < 0 || title_top + cell > subtitle_top ||
-                            subtitle_top + cell > draft.sb_tr_ty) {
+                            subtitle_top + cell > draft->sb_tr_ty) {
                             puts("gui self-test: navigation emoji escaped compact rows");
                             return 2;
                         }
@@ -5920,27 +5935,27 @@ int tg_gui_self_test(void)
                         puts("gui self-test: navigation text moved with emoji spacing");
                         return 2;
                     }
-                    if (tg_gui_hit_test(&draft, 1280, 720, rec.line_h, 12,
+                    if (tg_gui_hit_test(draft, 1280, 720, rec.line_h, 12,
                                         fonts[f][4] - 1) != TG_GUI_HIT_SEARCH ||
-                        tg_gui_hit_test(&draft, 1280, 720, rec.line_h, 12,
+                        tg_gui_hit_test(draft, 1280, 720, rec.line_h, 12,
                                         fonts[f][4]) != 0 ||
-                        tg_gui_hit_test(&draft, 1280, 720, rec.line_h, 12,
+                        tg_gui_hit_test(draft, 1280, 720, rec.line_h, 12,
                                         fonts[f][4] + fonts[f][5] - 1) != 0 ||
-                        tg_gui_hit_test(&draft, 1280, 720, rec.line_h, 12,
+                        tg_gui_hit_test(draft, 1280, 720, rec.line_h, 12,
                                         fonts[f][4] + fonts[f][5]) != 1) {
                         puts("gui self-test: chat clicks missed compact rows");
                         return 2;
                     }
-                    if (tg_gui_search_click_caret(&draft, &b, 12,
+                    if (tg_gui_search_click_caret(draft, &b, 12,
                                                   fonts[f][4] - 1) != 0 ||
-                        tg_gui_search_click_caret(&draft, &b, 12,
+                        tg_gui_search_click_caret(draft, &b, 12,
                                                   fonts[f][4]) != -1) {
                         puts("gui self-test: search click entered a chat row");
                         return 2;
                     }
-                    if (tg_gui_chat_drop_target(&draft, rec.line_h,
+                    if (tg_gui_chat_drop_target(draft, rec.line_h,
                             fonts[f][4] + fonts[f][5] / 2 - 1) != 0 ||
-                        tg_gui_chat_drop_target(&draft, rec.line_h,
+                        tg_gui_chat_drop_target(draft, rec.line_h,
                             fonts[f][4] + fonts[f][5] / 2) != 1) {
                         puts("gui self-test: chat reorder missed compact row gaps");
                         return 2;
@@ -5950,32 +5965,32 @@ int tg_gui_self_test(void)
         }
         /* A scrolled list must use the same row pitch for its knob, hits and
            drops. Toggle the same state, as the live Settings menu does. */
-        tg_gui_demo_state(&draft);
-        for (enabled = draft.chat_count; enabled < TG_GUI_MAX_CHATS; ++enabled) {
-            draft.chats[enabled] = draft.chats[4];
+        tg_gui_demo_state(draft);
+        for (enabled = draft->chat_count; enabled < TG_GUI_MAX_CHATS; ++enabled) {
+            draft->chats[enabled] = draft->chats[4];
         }
-        draft.chat_count = TG_GUI_MAX_CHATS;
-        draft.chat_scroll = 3;
+        draft->chat_count = TG_GUI_MAX_CHATS;
+        draft->chat_scroll = 3;
         for (enabled = 0; enabled <= 1; ++enabled) {
             tg_gui_record rec;
             tg_gui_backend b = backend;
 
             memset(&rec, 0, sizeof(rec));
-            tg_gui_set_emoji_enabled(&draft, enabled);
+            tg_gui_set_emoji_enabled(draft, enabled);
             rec.width = 1280;
             rec.height = 720;
             rec.font_h = 8;
-            rec.line_h = tg_gui_font_line_height(&draft, 8);
-            rec.ascent = tg_gui_font_cell_ascent(&draft, 8, 6);
+            rec.line_h = tg_gui_font_line_height(draft, 8);
+            rec.ascent = tg_gui_font_cell_ascent(draft, 8, 6);
             b.context = &rec;
             b.font_height = tg_gui_rec_font_height;
             b.font_ascent = tg_gui_rec_ascent;
-            tg_gui_paint(&draft, &b);
-            if (draft.sb_list_ty != 20 ||
-                draft.sb_list_max != TG_GUI_MAX_CHATS - 21 ||
-                rec.avatars != 22 || draft.chat_scroll != 3 ||
-                tg_gui_hit_test(&draft, 1280, 720, rec.line_h, 12, 52) != 4 ||
-                tg_gui_chat_drop_target(&draft, rec.line_h, 84) != 5) {
+            tg_gui_paint(draft, &b);
+            if (draft->sb_list_ty != 20 ||
+                draft->sb_list_max != TG_GUI_MAX_CHATS - 21 ||
+                rec.avatars != 22 || draft->chat_scroll != 3 ||
+                tg_gui_hit_test(draft, 1280, 720, rec.line_h, 12, 52) != 4 ||
+                tg_gui_chat_drop_target(draft, rec.line_h, 84) != 5) {
                 puts("gui self-test: scrolled list lost compact navigation geometry");
                 return 2;
             }
@@ -6105,26 +6120,26 @@ int tg_gui_self_test(void)
             {1, 1, 1, 0, 0, 1, 0, 1, 0},
             {0, 1, 1, 1, 0, 1, 0, 0, 0}
         };
-        static tg_gui_state prefs;
+        tg_gui_state *prefs = tg_gui_test_scratch_state();
         unsigned long i;
 
         for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]); ++i) {
             const int *c = cases[i];
 
-            memset(&prefs, 0, sizeof(prefs));
-            prefs.inline_photos_explicit = c[3];
-            prefs.inline_photos = c[4];
-            prefs.emoji_explicit = c[5];
-            prefs.emoji_enabled = c[6];
-            tg_gui_graphics_preferences_resolve(&prefs, c[0], c[1], c[2]);
-            if (prefs.inline_photos != c[7] || prefs.emoji_enabled != c[8] ||
-                prefs.inline_photos_explicit != c[3] || prefs.emoji_explicit != c[5] ||
-                !prefs.inline_photos_default_resolved || !prefs.emoji_default_resolved) {
+            memset(prefs, 0, sizeof(*prefs));
+            prefs->inline_photos_explicit = c[3];
+            prefs->inline_photos = c[4];
+            prefs->emoji_explicit = c[5];
+            prefs->emoji_enabled = c[6];
+            tg_gui_graphics_preferences_resolve(prefs, c[0], c[1], c[2]);
+            if (prefs->inline_photos != c[7] || prefs->emoji_enabled != c[8] ||
+                prefs->inline_photos_explicit != c[3] || prefs->emoji_explicit != c[5] ||
+                !prefs->inline_photos_default_resolved || !prefs->emoji_default_resolved) {
                 printf("gui self-test: photo/emoji hardware case %lu failed\n", i);
                 return 2;
             }
-            tg_gui_graphics_preferences_resolve(&prefs, 0, 1, 1);
-            if (prefs.inline_photos != c[7] || prefs.emoji_enabled != c[8]) {
+            tg_gui_graphics_preferences_resolve(prefs, 0, 1, 1);
+            if (prefs->inline_photos != c[7] || prefs->emoji_enabled != c[8]) {
                 puts("gui self-test: graphics choice changed during window reopen");
                 return 2;
             }
@@ -6303,16 +6318,16 @@ int tg_gui_self_test(void)
     /* The first-login 2FA screen must paint in bounds AND mask the password:
        the raw secret must never reach the backend's draw_text. */
     {
-        tg_gui_state ls;
+        tg_gui_state *ls = tg_gui_test_scratch_state();
         tg_gui_record lrec;
 
-        memset(&ls, 0, sizeof(ls));
-        ls.theme = TG_GUI_THEME_DARK;
-        ls.mode = TG_GUI_MODE_LOGIN_2FA;
-        ls.input_masked = 1;
-        ls.cursor_on = 1;
-        tg_gui_copy(ls.input, sizeof(ls.input), "zzqp7secret");
-        tg_gui_copy(ls.status, sizeof(ls.status), "2FA password");
+        memset(ls, 0, sizeof(*ls));
+        ls->theme = TG_GUI_THEME_DARK;
+        ls->mode = TG_GUI_MODE_LOGIN_2FA;
+        ls->input_masked = 1;
+        ls->cursor_on = 1;
+        tg_gui_copy(ls->input, sizeof(ls->input), "zzqp7secret");
+        tg_gui_copy(ls->status, sizeof(ls->status), "2FA password");
 
         memset(&lrec, 0, sizeof(lrec));
         lrec.width = 480;
@@ -6321,7 +6336,7 @@ int tg_gui_self_test(void)
         lrec.min_y = lrec.height;
         lrec.forbidden = "zzqp7secret";
         backend.context = &lrec;
-        tg_gui_paint(&ls, &backend);
+        tg_gui_paint(ls, &backend);
         if (lrec.texts <= 0 || lrec.min_x < 0 || lrec.min_y < 0 ||
             lrec.max_x > lrec.width || lrec.max_y > lrec.height) {
             puts("gui self-test: login screen out of bounds");

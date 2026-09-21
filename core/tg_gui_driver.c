@@ -740,6 +740,21 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
 /* --- self-test ---------------------------------------------------------- */
 
 #if !defined(TG_NO_SELFTEST)
+
+/* One scratch state for the self-test blocks below. Each block used to keep a
+   copy of its own, on the stack or static: on a 64-bit build the struct is
+   over half a megabyte, so two of them on the stack (this frame under
+   tg_app_run's) overran the 1 MB AmigaOS stack on AROS ARM, and every static
+   one costs the 68k package a quarter megabyte of BSS. The blocks run one
+   after another and each starts from zero, so one object serves them all. */
+static tg_gui_state tg_gui_driver_test_scratch;
+
+static tg_gui_state *tg_gui_driver_test_scratch_state(void)
+{
+    memset(&tg_gui_driver_test_scratch, 0, sizeof(tg_gui_driver_test_scratch));
+    return &tg_gui_driver_test_scratch;
+}
+
 static void tg_gui_driver_emit(tg_chat_driver *driver, unsigned long epoch,
                                int has_time, int is_out, int is_group,
                                const char *peer_label, const char *own_label,
@@ -761,7 +776,7 @@ static void tg_gui_driver_emit(tg_chat_driver *driver, unsigned long epoch,
 
 static int tg_gui_driver_webpage_self_test(void)
 {
-    static tg_gui_state state;
+    tg_gui_state *state = tg_gui_driver_test_scratch_state();
     static tg_mtproto_message_text message;
     tg_gui_chat_driver gui;
     tg_chat_driver driver;
@@ -781,8 +796,8 @@ static int tg_gui_driver_webpage_self_test(void)
 #define W32(v) (ok = ok && tg_mtproto_tl_write_u32(&w, (v)) == TG_MTPROTO_TL_OK)
 #define W64(h,l) (ok = ok && tg_mtproto_tl_write_u64(&w, (h), (l)) == TG_MTPROTO_TL_OK)
 #define WSTR(s) (ok = ok && tg_mtproto_tl_write_bytes(&w, (const unsigned char *)(s), sizeof(s)-1UL) == TG_MTPROTO_TL_OK)
-    memset(&state, 0, sizeof(state));
-    tg_gui_chat_driver_bind(&gui, &state, &driver);
+    memset(state, 0, sizeof(*state));
+    tg_gui_chat_driver_bind(&gui, state, &driver);
     /* A received Message with webPagePending (including flags.0 url). */
     tg_mtproto_tl_writer_init(&w, pending, sizeof(pending));
     W32(0x9815cec8UL); W32(512UL); W32(0UL); W32(700UL);
@@ -846,34 +861,34 @@ static int tg_gui_driver_webpage_self_test(void)
         WSTR("r"); W32(1700000000UL); W32(0x1cb5c415UL); W32(1UL);
         W32(0x75c78e60UL); WSTR("m"); W32(320UL); W32(200UL); W32(4096UL);
         W32(2UL); W32(12UL); W32(1UL); W32(1700000000UL);
-        gen = state.msg_gen;
+        gen = state->msg_gen;
         if (!ok) return 0;
         if (pass <= 2) {
             /* Unknown high id, truncated photo, and wrong channel are inert. */
             unsigned long len = pass == 1 ? w.length - 24UL : w.length;
             if (tg_mtproto_test_webpage_update(&gui, wire, len, 0UL,0UL) ||
-                state.msg_gen != gen || state.message_count != 2) return 0;
+                state->msg_gen != gen || state->message_count != 2) return 0;
         } else {
             if (pass == 4) {
                 tg_gui_driver_set_pending_webpage(&gui, 700UL, hi,lo);
-                strcpy(state.messages[0].text, "Channel link");
+                strcpy(state->messages[0].text, "Channel link");
             }
             if (!tg_mtproto_test_webpage_update(&gui, wire, w.length, 0UL,
                                                 pass == 4 ? 99UL : 0UL) ||
-                state.message_count != 2 || state.msg_gen == gen ||
-                !strstr(state.messages[0].text, "\n[Link: Test site - Late title]\nFirst description.") ||
-                strstr(state.messages[0].text, "Ignored") ||
-                strcmp(state.messages[0].sender, "Test sender") ||
-                strcmp(state.messages[0].reply_text, "Test reply") ||
-                !state.messages[0].has_photo || state.messages[0].photo_id_lo != 42UL ||
-                state.messages[0].photo_width != 320UL || state.inline_photos != 0 ||
-                !state.messages[1].is_own || state.messages[1].read_state != TG_GUI_READ_SENT ||
-                strcmp(state.messages[1].reply_text, "Own reply") ||
-                !strstr(state.messages[1].text, "Late title")) return 0;
-            gen = state.msg_gen;
+                state->message_count != 2 || state->msg_gen == gen ||
+                !strstr(state->messages[0].text, "\n[Link: Test site - Late title]\nFirst description.") ||
+                strstr(state->messages[0].text, "Ignored") ||
+                strcmp(state->messages[0].sender, "Test sender") ||
+                strcmp(state->messages[0].reply_text, "Test reply") ||
+                !state->messages[0].has_photo || state->messages[0].photo_id_lo != 42UL ||
+                state->messages[0].photo_width != 320UL || state->inline_photos != 0 ||
+                !state->messages[1].is_own || state->messages[1].read_state != TG_GUI_READ_SENT ||
+                strcmp(state->messages[1].reply_text, "Own reply") ||
+                !strstr(state->messages[1].text, "Late title")) return 0;
+            gen = state->msg_gen;
             if (tg_mtproto_test_webpage_update(&gui, wire, w.length, 0UL,
                                                pass == 4 ? 99UL : 0UL) ||
-                state.msg_gen != gen) return 0;
+                state->msg_gen != gen) return 0;
         }
     }
     /* 0.0.94: a link Telegram already had cached comes back COMPLETE inside
@@ -894,11 +909,11 @@ static int tg_gui_driver_webpage_self_test(void)
         strcmp(sent.webpage.text, "[Link: Test site - Cached title]\nCached description.") != 0) return 0;
     tg_gui_driver_append_own(&gui, "Cached link", "Me", 0, sent.id);
     tg_gui_driver_set_pending_webpage(&gui, sent.id, sent.webpage.id_hi, sent.webpage.id_lo);
-    gen = state.msg_gen;
-    if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state.msg_gen == gen ||
-        state.message_count != 3 || state.messages[2].has_photo ||
-        state.messages[2].pending_webpage_hi != 0UL || state.messages[2].pending_webpage_lo != 0UL ||
-        strcmp(state.messages[2].text,
+    gen = state->msg_gen;
+    if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state->msg_gen == gen ||
+        state->message_count != 3 || state->messages[2].has_photo ||
+        state->messages[2].pending_webpage_hi != 0UL || state->messages[2].pending_webpage_lo != 0UL ||
+        strcmp(state->messages[2].text,
                "Cached link\n[Link: Test site - Cached title]\nCached description.") != 0) return 0;
 
     /* Saved Messages: the same cached page inside the Message of a full Updates. */
@@ -917,8 +932,8 @@ static int tg_gui_driver_webpage_self_test(void)
         strcmp(sent.webpage.text, "[Link: Test site - Cached title]\nCached description.") != 0) return 0;
     tg_gui_driver_append_own(&gui, "Saved link", "Me", 0, sent.id);
     tg_gui_driver_set_pending_webpage(&gui, sent.id, sent.webpage.id_hi, sent.webpage.id_lo);
-    if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state.message_count != 4 ||
-        strcmp(state.messages[3].text,
+    if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state->message_count != 4 ||
+        strcmp(state->messages[3].text,
                "Saved link\n[Link: Test site - Cached title]\nCached description.") != 0) return 0;
 
     /* A page read off ANOTHER message of the same Updates must not leak onto
@@ -954,7 +969,7 @@ static int tg_gui_driver_webpage_self_test(void)
 
 int tg_gui_driver_self_test(void)
 {
-    tg_gui_state state;
+    static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
     tg_gui_chat_driver gui;
     tg_chat_driver driver;
     int i;
@@ -1066,13 +1081,13 @@ int tg_gui_driver_self_test(void)
     /* Inline-photo metadata stays compact across the engine/GUI boundary and
        completion flips every matching bubble exactly once. */
     {
-        tg_gui_state ps;
+        tg_gui_state *ps = tg_gui_driver_test_scratch_state();
         tg_gui_chat_driver pg;
         tg_chat_driver pd;
         tg_chat_message_row prow;
 
-        memset(&ps, 0, sizeof(ps));
-        tg_gui_chat_driver_bind(&pg, &ps, &pd);
+        memset(ps, 0, sizeof(*ps));
+        tg_gui_chat_driver_bind(&pg, ps, &pd);
         memset(&prow, 0, sizeof(prow));
         prow.text = "[Photo]";
         prow.sender = "Mario";
@@ -1083,11 +1098,11 @@ int tg_gui_driver_self_test(void)
         prow.photo_width = 320UL;
         prow.photo_height = 180UL;
         pd.on_message(pd.ctx, &prow);
-        if (ps.message_count != 1 || !ps.messages[0].has_photo ||
-            ps.messages[0].photo_ready || !ps.messages[0].photo_only ||
-            ps.messages[0].photo_width != 320UL ||
+        if (ps->message_count != 1 || !ps->messages[0].has_photo ||
+            ps->messages[0].photo_ready || !ps->messages[0].photo_only ||
+            ps->messages[0].photo_width != 320UL ||
             tg_gui_driver_mark_photo_ready(&pg, 0x12UL, 0x34UL) != 1 ||
-            !ps.messages[0].photo_ready ||
+            !ps->messages[0].photo_ready ||
             tg_gui_driver_mark_photo_ready(&pg, 0x12UL, 0x34UL) != 0) {
             puts("gui driver self-test: inline photo projection mismatch");
             return 2;
@@ -1299,13 +1314,13 @@ int tg_gui_driver_self_test(void)
     /* Read receipts: own messages flip "sent" -> "seen" as the peer's read
        cursor advances (monotonically); incoming and unsent rows carry no mark. */
     {
-        tg_gui_state rs;
+        tg_gui_state *rs = tg_gui_driver_test_scratch_state();
         tg_gui_chat_driver rg;
         tg_chat_driver rd;
         tg_chat_message_row row;
 
-        memset(&rs, 0, sizeof(rs));
-        tg_gui_chat_driver_bind(&rg, &rs, &rd);
+        memset(rs, 0, sizeof(*rs));
+        tg_gui_chat_driver_bind(&rg, rs, &rd);
 
         memset(&row, 0, sizeof(row));
         row.has_time = 1;
@@ -1324,17 +1339,17 @@ int tg_gui_driver_self_test(void)
         row.text = "in arrivo";
         rd.on_message(rd.ctx, &row);
 
-        if (rs.messages[0].read_state != TG_GUI_READ_SENT ||
-            rs.messages[1].read_state != TG_GUI_READ_SENT ||
-            rs.messages[2].read_state != TG_GUI_READ_NONE) {
+        if (rs->messages[0].read_state != TG_GUI_READ_SENT ||
+            rs->messages[1].read_state != TG_GUI_READ_SENT ||
+            rs->messages[2].read_state != TG_GUI_READ_NONE) {
             puts("gui driver self-test: initial read_state wrong");
             return 2;
         }
         /* Peer reads up to #100: only own #100 becomes "seen". */
         if (tg_gui_driver_set_read_outbox_max(&rg, 100UL) == 0 ||
-            rs.messages[0].read_state != TG_GUI_READ_SEEN ||
-            rs.messages[1].read_state != TG_GUI_READ_SENT ||
-            rs.messages[2].read_state != TG_GUI_READ_NONE) {
+            rs->messages[0].read_state != TG_GUI_READ_SEEN ||
+            rs->messages[1].read_state != TG_GUI_READ_SENT ||
+            rs->messages[2].read_state != TG_GUI_READ_NONE) {
             puts("gui driver self-test: read cursor 100 wrong");
             return 2;
         }
@@ -1345,7 +1360,7 @@ int tg_gui_driver_self_test(void)
         }
         /* Peer reads up to #250: own #200 also becomes "seen". */
         if (tg_gui_driver_set_read_outbox_max(&rg, 250UL) == 0 ||
-            rs.messages[1].read_state != TG_GUI_READ_SEEN) {
+            rs->messages[1].read_state != TG_GUI_READ_SEEN) {
             puts("gui driver self-test: read cursor 250 wrong");
             return 2;
         }
@@ -1356,15 +1371,15 @@ int tg_gui_driver_self_test(void)
         }
         /* Switching chats resets the cursor so a smaller value can take hold. */
         tg_gui_driver_reset_read_outbox(&rg);
-        if (rs.open_read_outbox_max != 0UL) {
+        if (rs->open_read_outbox_max != 0UL) {
             puts("gui driver self-test: reset must clear the read cursor");
             return 2;
         }
         /* The optimistic echo now carries the server id returned by
            messages.sendMessage, so it starts "sent" with a real id. */
         tg_gui_driver_append_own(&rg, "eco", "Io", 0, 400UL);
-        if (rs.messages[rs.message_count - 1].read_state != TG_GUI_READ_SENT ||
-            rs.messages[rs.message_count - 1].id != 400UL) {
+        if (rs->messages[rs->message_count - 1].read_state != TG_GUI_READ_SENT ||
+            rs->messages[rs->message_count - 1].id != 400UL) {
             puts("gui driver self-test: optimistic echo state wrong");
             return 2;
         }
@@ -1375,7 +1390,7 @@ int tg_gui_driver_self_test(void)
         /* Peer reads up to the echo's id -> it promotes to "seen" IN PLACE (the
            0.0.4 real-time double-check; previously id==0 blocked this). */
         if (tg_gui_driver_set_read_outbox_max(&rg, 400UL) == 0 ||
-            rs.messages[rs.message_count - 1].read_state != TG_GUI_READ_SEEN) {
+            rs->messages[rs->message_count - 1].read_state != TG_GUI_READ_SEEN) {
             puts("gui driver self-test: echo must promote to seen via sent_id");
             return 2;
         }
@@ -1388,13 +1403,13 @@ int tg_gui_driver_self_test(void)
     /* Multi-device dedup/reconcile: with include_outgoing the open-chat poll
        re-delivers our own messages; the driver must not double them. */
     {
-        tg_gui_state ds;
+        tg_gui_state *ds = tg_gui_driver_test_scratch_state();
         tg_gui_chat_driver dg;
         tg_chat_driver dd;
         tg_chat_message_row row;
 
-        memset(&ds, 0, sizeof(ds));
-        tg_gui_chat_driver_bind(&dg, &ds, &dd);
+        memset(ds, 0, sizeof(*ds));
+        tg_gui_chat_driver_bind(&dg, ds, &dd);
 
         /* Echo of a 1:1 send (server id known) + a re-fetch of it via the poll. */
         tg_gui_driver_append_own(&dg, "ciao", "Io", 0, 500UL);
@@ -1404,7 +1419,7 @@ int tg_gui_driver_self_test(void)
         row.id = 500UL;
         row.text = "ciao";
         dd.on_message(dd.ctx, &row); /* same id -> deduped */
-        if (ds.message_count != 1) {
+        if (ds->message_count != 1) {
             puts("gui driver self-test: re-fetched own echo must dedup by id");
             return 2;
         }
@@ -1412,21 +1427,21 @@ int tg_gui_driver_self_test(void)
         row.id = 600UL;
         row.text = "da altro device";
         dd.on_message(dd.ctx, &row);
-        if (ds.message_count != 2 || ds.messages[1].id != 600UL) {
+        if (ds->message_count != 2 || ds->messages[1].id != 600UL) {
             puts("gui driver self-test: other-session outgoing must append");
             return 2;
         }
         /* Group-send fallback: echo with no server id yet (sent_id 0), then the
            poll brings the real id -> reconcile onto the echo, no duplicate. */
         tg_gui_driver_append_own(&dg, "gruppo", "Io", 0, 0UL);
-        if (ds.message_count != 3 || ds.messages[2].id != 0UL) {
+        if (ds->message_count != 3 || ds->messages[2].id != 0UL) {
             puts("gui driver self-test: id-less echo setup wrong");
             return 2;
         }
         row.id = 700UL;
         row.text = "gruppo";
         dd.on_message(dd.ctx, &row);
-        if (ds.message_count != 3 || ds.messages[2].id != 700UL) {
+        if (ds->message_count != 3 || ds->messages[2].id != 700UL) {
             puts("gui driver self-test: id-less echo must reconcile by text");
             return 2;
         }
@@ -1435,19 +1450,19 @@ int tg_gui_driver_self_test(void)
         {
             unsigned long gen;
 
-            gen = ds.msg_gen;
+            gen = ds->msg_gen;
             if (tg_gui_driver_update_text(&dg, 600UL, "modificato") != 1 ||
-                strcmp(ds.messages[1].text, "modificato") != 0 ||
-                ds.msg_gen != gen + 1UL ||
+                strcmp(ds->messages[1].text, "modificato") != 0 ||
+                ds->msg_gen != gen + 1UL ||
                 tg_gui_driver_update_text(&dg, 999UL, "x") != 0) {
                 puts("gui driver self-test: edit update_text wrong");
                 return 2;
             }
-            gen = ds.msg_gen;
+            gen = ds->msg_gen;
             if (tg_gui_driver_update_text_utf8(
                     &dg, 600UL, "pi\xc3\xb9 recente") != 1 ||
-                strcmp(ds.messages[1].text, "pi\xf9 recente") != 0 ||
-                ds.msg_gen != gen + 1UL) {
+                strcmp(ds->messages[1].text, "pi\xf9 recente") != 0 ||
+                ds->msg_gen != gen + 1UL) {
                 puts("gui driver self-test: UTF-8 edit conversion wrong");
                 return 2;
             }
@@ -1456,10 +1471,10 @@ int tg_gui_driver_self_test(void)
         {
             unsigned long gen;
 
-            gen = ds.msg_gen;
+            gen = ds->msg_gen;
             if (tg_gui_driver_remove_by_id(&dg, 500UL) != 1 ||
-                ds.message_count != 2 || ds.messages[0].id != 600UL ||
-                ds.msg_gen != gen + 1UL ||
+                ds->message_count != 2 || ds->messages[0].id != 600UL ||
+                ds->msg_gen != gen + 1UL ||
                 tg_gui_driver_remove_by_id(&dg, 999UL) != 0) {
                 puts("gui driver self-test: delete remove_by_id wrong");
                 return 2;
