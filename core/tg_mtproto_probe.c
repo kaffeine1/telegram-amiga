@@ -6643,25 +6643,230 @@ static void tg_mtproto_merge_peer_cache_entry(
     }
 }
 
+/* One "peer" line of the cache file, read by hand.
+
+   Five places used to read that line, each with its own sscanf() format, two
+   to nine conversions of the same text. A line one of them accepted another
+   could reject: the sidebar showed a chat, the rewrite after an unread change
+   dropped it, and opening it failed with peer-cache-index-not-found. That is
+   what a Raspberry Pi running AROS ARM reported, where the C library is
+   young; the client should not depend on how a libc scans a line it wrote
+   itself. One reader, no scanning library behind it, the same answer on every
+   lane.
+
+   Returns how many fields were read in order, counted as the old formats did:
+   0 not a peer line, 2 index and type, 4 the id too, 6 the access hash slot
+   too (a "-" or anything unreadable there reads as no hash, as the loader
+   always allowed), 9 top, unread, self and bot too. Hex numbers take one to
+   sixteen digits, so a hand-written "0x0" reads as an id of zero. */
+typedef struct tg_mtproto_peer_line {
+    unsigned long index;
+    char type[24];
+    unsigned long id_hi;
+    unsigned long id_lo;
+    int has_access_hash;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    unsigned long top_message;
+    unsigned long unread_count;
+    int is_self;
+    int is_bot;
+} tg_mtproto_peer_line;
+
+static void tg_peer_line_skip(const char **p)
+{
+    while (**p == ' ' || **p == '\t') {
+        ++*p;
+    }
+}
+
+/* A literal word, followed by a blank or the end of the line. */
+static int tg_peer_line_word(const char **p, const char *word)
+{
+    const char *s;
+    unsigned long n;
+
+    tg_peer_line_skip(p);
+    s = *p;
+    n = (unsigned long)strlen(word);
+    if (strncmp(s, word, n) != 0 ||
+        (s[n] != ' ' && s[n] != '\t' && s[n] != '\r' && s[n] != '\n' &&
+         s[n] != '\0')) {
+        return 0;
+    }
+    *p = s + n;
+    return 1;
+}
+
+/* A run of non-blank characters that fits the buffer (what %Ns took). */
+static int tg_peer_line_token(const char **p, char *out, unsigned long cap)
+{
+    const char *s;
+    unsigned long n;
+
+    tg_peer_line_skip(p);
+    s = *p;
+    n = 0UL;
+    while (s[n] != '\0' && s[n] != ' ' && s[n] != '\t' && s[n] != '\r' &&
+           s[n] != '\n') {
+        ++n;
+    }
+    if (n == 0UL || n >= cap) {
+        return 0;
+    }
+    memcpy(out, s, n);
+    out[n] = '\0';
+    *p = s + n;
+    return 1;
+}
+
+static int tg_peer_line_dec(const char **p, unsigned long *out)
+{
+    const char *s;
+    unsigned long v;
+    unsigned long n;
+
+    tg_peer_line_skip(p);
+    s = *p;
+    v = 0UL;
+    n = 0UL;
+    while (s[n] >= '0' && s[n] <= '9') {
+        v = v * 10UL + (unsigned long)(s[n] - '0');
+        ++n;
+    }
+    if (n == 0UL) {
+        return 0;
+    }
+    *out = v;
+    *p = s + n;
+    return 1;
+}
+
+static int tg_peer_line_hex_digit(unsigned char c, unsigned long *d)
+{
+    if (c >= '0' && c <= '9') {
+        *d = (unsigned long)(c - '0');
+    } else if (c >= 'a' && c <= 'f') {
+        *d = (unsigned long)(c - 'a') + 10UL;
+    } else if (c >= 'A' && c <= 'F') {
+        *d = (unsigned long)(c - 'A') + 10UL;
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+/* A 64-bit hex number as two 32-bit halves: one to sixteen digits, the last
+   eight the low half, so "0x0" and "0x1234" read as a short id would, and
+   the sixteen digits the writer always emits split as before. */
+static int tg_peer_line_hex64(const char **p, unsigned long *hi,
+                              unsigned long *lo)
+{
+    const char *s;
+    unsigned long digits[16];
+    unsigned long n;
+    unsigned long i;
+
+    s = *p;
+    n = 0UL;
+    while (n < 16UL && tg_peer_line_hex_digit((unsigned char)s[n], &digits[n])) {
+        ++n;
+    }
+    if (n == 0UL) {
+        return 0;
+    }
+    *hi = 0UL;
+    *lo = 0UL;
+    for (i = 0UL; i < n; ++i) {
+        if (n - i > 8UL) {
+            *hi = (*hi << 4) | digits[i];
+        } else {
+            *lo = (*lo << 4) | digits[i];
+        }
+    }
+    *p = s + n;
+    return 1;
+}
+
+static int tg_mtproto_parse_peer_line(const char *line,
+                                      tg_mtproto_peer_line *out)
+{
+    const char *p;
+    const char *h;
+    char hash[32];
+    char flag[8];
+
+    memset(out, 0, sizeof(*out));
+    if (line == 0) {
+        return 0;
+    }
+    p = line;
+    if (!tg_peer_line_word(&p, "peer") || !tg_peer_line_dec(&p, &out->index)) {
+        return 0;
+    }
+    if (!tg_peer_line_word(&p, "type") ||
+        !tg_peer_line_token(&p, out->type, sizeof(out->type))) {
+        return 1;
+    }
+    if (!tg_peer_line_word(&p, "id")) {
+        return 2;
+    }
+    tg_peer_line_skip(&p);
+    if (p[0] != '0' || p[1] != 'x') {
+        return 2;
+    }
+    p += 2;
+    if (!tg_peer_line_hex64(&p, &out->id_hi, &out->id_lo)) {
+        return 2;
+    }
+    if (!tg_peer_line_word(&p, "access_hash") ||
+        !tg_peer_line_token(&p, hash, sizeof(hash))) {
+        return 4;
+    }
+    h = hash;
+    if (h[0] == '0' && h[1] == 'x') {
+        unsigned long hi = 0UL;
+        unsigned long lo = 0UL;
+
+        h += 2;
+        if (tg_peer_line_hex64(&h, &hi, &lo) && *h == '\0') {
+            out->access_hash_hi = hi;
+            out->access_hash_lo = lo;
+            out->has_access_hash = 1;
+        }
+    }
+    if (!tg_peer_line_word(&p, "top") ||
+        !tg_peer_line_dec(&p, &out->top_message)) {
+        return 6;
+    }
+    if (!tg_peer_line_word(&p, "unread") ||
+        !tg_peer_line_dec(&p, &out->unread_count)) {
+        return 7;
+    }
+    if (!tg_peer_line_word(&p, "self") ||
+        !tg_peer_line_token(&p, flag, sizeof(flag))) {
+        return 8;
+    }
+    out->is_self = strcmp(flag, "yes") == 0;
+    if (!tg_peer_line_word(&p, "bot") ||
+        !tg_peer_line_token(&p, flag, sizeof(flag))) {
+        return 8;
+    }
+    out->is_bot = strcmp(flag, "yes") == 0;
+    return 9;
+}
+
 static int tg_mtproto_load_peer_cache_file(const char *path,
                                            tg_mtproto_peer_cache *cache)
 {
     FILE *file;
     char line[512];
-    char type[24];
-    char hash_text[32];
-    char self_text[8];
-    char bot_text[8];
     char *title;
     char *username;
     tg_mtproto_peer_cache_entry *entry;
-    unsigned long peer_index;
+    tg_mtproto_peer_line pl;
     unsigned long public_count;
     unsigned long peer_constructor;
-    unsigned long id_hi;
-    unsigned long id_lo;
-    unsigned long top_message;
-    unsigned long unread_count;
 #ifdef TG_DIAG_TRACE
     unsigned long diag_lines;
 #endif
@@ -6696,9 +6901,6 @@ static int tg_mtproto_load_peer_cache_file(const char *path,
 #endif
     while (fgets(line, sizeof(line), file) != 0) {
         TG_PEERS_DIAG_TICK();
-        peer_index = 0UL;
-        id_hi = id_lo = top_message = unread_count = 0UL;
-        type[0] = hash_text[0] = self_text[0] = bot_text[0] = '\0';
         if (strncmp(line, "self ", 5) == 0) {
             if (cache->count >= TG_MTPROTO_PEER_CACHE_MAX) {
                 cache->truncated = 1;
@@ -6722,13 +6924,10 @@ static int tg_mtproto_load_peer_cache_file(const char *path,
             }
             continue;
         }
-        if (sscanf(line,
-                   "peer %lu type %23s id 0x%8lx%8lx access_hash %31s top %lu unread %lu self %7s bot %7s",
-                   &peer_index, type, &id_hi, &id_lo, hash_text,
-                   &top_message, &unread_count, self_text, bot_text) != 9) {
+        if (tg_mtproto_parse_peer_line(line, &pl) != 9) {
             continue;
         }
-        peer_constructor = tg_mtproto_peer_constructor_from_name(type);
+        peer_constructor = tg_mtproto_peer_constructor_from_name(pl.type);
         if (peer_constructor == 0UL) {
             continue;
         }
@@ -6739,17 +6938,15 @@ static int tg_mtproto_load_peer_cache_file(const char *path,
         entry = &cache->entries[cache->count++];
         memset(entry, 0, sizeof(*entry));
         entry->peer_constructor = peer_constructor;
-        entry->id_hi = id_hi;
-        entry->id_lo = id_lo;
-        entry->top_message = top_message;
-        entry->unread_count = unread_count;
-        entry->is_self = strcmp(self_text, "yes") == 0;
-        entry->is_bot = strcmp(bot_text, "yes") == 0;
-        if (hash_text[0] == '0' && hash_text[1] == 'x' &&
-            sscanf(hash_text, "0x%8lx%8lx", &entry->access_hash_hi,
-                   &entry->access_hash_lo) == 2) {
-            entry->has_access_hash = 1;
-        }
+        entry->id_hi = pl.id_hi;
+        entry->id_lo = pl.id_lo;
+        entry->top_message = pl.top_message;
+        entry->unread_count = pl.unread_count;
+        entry->is_self = pl.is_self;
+        entry->is_bot = pl.is_bot;
+        entry->has_access_hash = pl.has_access_hash;
+        entry->access_hash_hi = pl.access_hash_hi;
+        entry->access_hash_lo = pl.access_hash_lo;
         title = strstr(line, " title ");
         username = strstr(line, " username ");
         if (username != 0) {
@@ -7601,15 +7798,8 @@ static int tg_mtproto_load_peer_cache_peer(const char *path,
     }
     FILE *file;
     char line[512];
-    char type[24];
     unsigned long wanted_index;
-    unsigned long index;
-    unsigned long id_hi;
-    unsigned long id_lo;
-    unsigned long hash_hi;
-    unsigned long hash_lo;
     unsigned long constructor;
-    int matched;
 
     if (path == 0 || peer_constructor == 0 || peer_id_hi == 0 ||
         peer_id_lo == 0 || access_hash_hi == 0 || access_hash_lo == 0 ||
@@ -7625,30 +7815,29 @@ static int tg_mtproto_load_peer_cache_peer(const char *path,
         return 2;
     }
     while (fgets(line, sizeof(line), file) != 0) {
-        type[0] = '\0';
-        index = 0UL;
-        id_hi = id_lo = hash_hi = hash_lo = 0UL;
-        matched = sscanf(line,
-                         "peer %lu type %23s id 0x%8lx%8lx access_hash 0x%8lx%8lx",
-                         &index, type, &id_hi, &id_lo, &hash_hi,
-                         &hash_lo);
-        if (index == wanted_index) {
+        tg_mtproto_peer_line pl;
+        int fields = tg_mtproto_parse_peer_line(line, &pl);
+
+        if (fields < 1 || pl.index != wanted_index) {
+            continue;
+        }
+        {
             fclose(file);
-            if (matched < 4) {
+            if (fields < 4) {
                 fprintf(stream, "%s: peer-cache-parse-failed\n", label);
                 return 2;
             }
-            constructor = tg_mtproto_peer_constructor_from_name(type);
+            constructor = tg_mtproto_peer_constructor_from_name(pl.type);
             if (constructor == 0UL) {
                 fprintf(stream, "%s: peer-cache-type-unsupported\n", label);
                 return 2;
             }
             *peer_constructor = constructor;
-            *peer_id_hi = id_hi;
-            *peer_id_lo = id_lo;
-            *access_hash_hi = hash_hi;
-            *access_hash_lo = hash_lo;
-            *has_access_hash = matched == 6;
+            *peer_id_hi = pl.id_hi;
+            *peer_id_lo = pl.id_lo;
+            *access_hash_hi = pl.access_hash_hi;
+            *access_hash_lo = pl.access_hash_lo;
+            *has_access_hash = pl.has_access_hash;
             if ((constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
                  constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) &&
                 !*has_access_hash) {
@@ -7746,7 +7935,6 @@ int tg_mtproto_chat_list_parse(const char *path, unsigned long current_index,
 {
     FILE *file;
     char line[512];
-    char type[24];
     int count;
 
     if (file_missing != 0) {
@@ -7765,40 +7953,22 @@ int tg_mtproto_chat_list_parse(const char *path, unsigned long current_index,
     count = 0;
     while (count < max && fgets(line, sizeof(line), file) != 0) {
         tg_chat_list_row *row;
-        unsigned long index;
-        unsigned long unread;
+        tg_mtproto_peer_line pl;
         char *title;
         char *username;
-        char *unread_text;
 
-        index = 0UL;
-        type[0] = '\0';
-        if (sscanf(line, "peer %lu type %23s", &index, type) < 2) {
+        if (tg_mtproto_parse_peer_line(line, &pl) < 2) {
             continue;
         }
         row = &rows[count];
-        row->index = index;
-        row->is_user = strcmp(type, "user") == 0;
-        unread = 0UL;
-        unread_text = strstr(line, " unread ");
-        if (unread_text != 0) {
-            (void)sscanf(unread_text + 8, "%lu", &unread);
-        }
-        row->unread = unread;
-        row->is_current = (current_index != 0UL && index == current_index);
+        row->index = pl.index;
+        row->is_user = strcmp(pl.type, "user") == 0;
+        row->unread = pl.unread_count;
+        row->is_current = (current_index != 0UL && pl.index == current_index);
         /* The peer id (id 0x<hi8><lo8>) lets a driver match a notification to
            this row; written by the cache, ignored by the console renderer. */
-        row->peer_id_hi = 0UL;
-        row->peer_id_lo = 0UL;
-        {
-            char *id_text;
-
-            id_text = strstr(line, " id 0x");
-            if (id_text != 0) {
-                (void)sscanf(id_text + 6, "%8lx%8lx", &row->peer_id_hi,
-                             &row->peer_id_lo);
-            }
-        }
+        row->peer_id_hi = pl.id_hi;
+        row->peer_id_lo = pl.id_lo;
         row->name[0] = '\0';
         row->name_is_username = 0;
         /* Name resolution, byte-for-byte as the old inline printer: title
@@ -7828,7 +7998,7 @@ int tg_mtproto_chat_list_parse(const char *path, unsigned long current_index,
                 row->name_is_username = 1;
             }
         } else {
-            tg_chat_list_copy_name(row->name, type);
+            tg_chat_list_copy_name(row->name, pl.type);
         }
         ++count;
     }
@@ -8090,9 +8260,8 @@ static int tg_mtproto_load_peer_cache_label(const char *path,
     }
     FILE *file;
     char line[512];
-    char type[24];
+    tg_mtproto_peer_line pl;
     unsigned long wanted_index;
-    unsigned long index;
     char *title;
     char *username;
 
@@ -8110,10 +8279,8 @@ static int tg_mtproto_load_peer_cache_label(const char *path,
         return 2;
     }
     while (fgets(line, sizeof(line), file) != 0) {
-        index = 0UL;
-        type[0] = '\0';
-        if (sscanf(line, "peer %lu type %23s", &index, type) < 2 ||
-            index != wanted_index) {
+        if (tg_mtproto_parse_peer_line(line, &pl) < 2 ||
+            pl.index != wanted_index) {
             continue;
         }
         title = strstr(line, " title ");
@@ -11968,10 +12135,7 @@ static int tg_mtproto_peer_cache_find_by_id(const char *path,
 {
     FILE *file;
     char line[512];
-    char type[24];
-    unsigned long index;
-    unsigned long hi;
-    unsigned long lo;
+    tg_mtproto_peer_line pl;
     char *title;
     char *username;
 
@@ -11990,15 +12154,10 @@ static int tg_mtproto_peer_cache_find_by_id(const char *path,
         return 2;
     }
     while (fgets(line, sizeof(line), file) != 0) {
-        index = 0UL;
-        type[0] = '\0';
-        hi = 0UL;
-        lo = 0UL;
-        if (sscanf(line, "peer %lu type %23s id 0x%8lx%8lx", &index, type,
-                   &hi, &lo) < 4) {
+        if (tg_mtproto_parse_peer_line(line, &pl) < 4) {
             continue;
         }
-        if (hi != id_hi || lo != id_lo) {
+        if (pl.id_hi != id_hi || pl.id_lo != id_lo) {
             continue;
         }
         title = strstr(line, " title ");
@@ -12011,7 +12170,7 @@ static int tg_mtproto_peer_cache_find_by_id(const char *path,
             tg_mtproto_copy_cache_field(label_buffer, label_buffer_size,
                                         username + 10, title);
         }
-        *out_index = index;
+        *out_index = pl.index;
         fclose(file);
         return 0;
     }
@@ -14610,6 +14769,117 @@ int tg_mtproto_probe_self_test(void)
     }
     fclose(quiet);
     (void)remove(peer_path);
+
+    /* One reader for the cache line (tg_mtproto_parse_peer_line): the shapes
+       the writer produces, a few it never does, and the guarantee that
+       matters: every line the sidebar lists, the loader keeps and the lookup
+       finds, whatever the bytes in its title. */
+    {
+        static const char peer2_path[] = "telegram-mtproto-peer2-self-test.tmp";
+        static const char peer2_text[] =
+            "mtproto-peer-cache-v1\n"
+            "count 4 total_dialogs 4 users 2 chats 2\n"
+            "self username - title Me\n"
+            "peer 1 type user id 0x0000000000000001 access_hash 0x0000000000000002 top 0 unread 0 self no bot no username ada title Ada\n"
+            "peer 2 type chat id 0x0000000000000003 access_hash - top 0 unread 5 self no bot no username - title Test Group\n"
+            "peer 3 type channel id 0x0000000000000004 access_hash zz top 0 unread 0 self no bot no username - title Odd Hash\n"
+            "peer 4 type user id 0x12345678deadbeef access_hash 0xfedcba9876543210 top 456789 unread 999 self no bot yes username - title Caff\xc3\xa8 Am\xc3\xadga \xf0\x9f\x98\x80\n";
+        static tg_mtproto_peer_cache cache2;
+        tg_chat_list_row rows2[8];
+        tg_mtproto_peer_line pl;
+        FILE *quiet2;
+        char seen[256];
+        unsigned long i2;
+        int missing2;
+        int rows_n;
+
+        if (tg_mtproto_parse_peer_line(
+                "peer 7 type user id 0x12345678deadbeef access_hash 0xfedcba9876543210 top 456789 unread 999 self yes bot yes username u title x\r\n",
+                &pl) != 9 ||
+            pl.index != 7UL || strcmp(pl.type, "user") != 0 ||
+            pl.id_hi != 0x12345678UL || pl.id_lo != 0xdeadbeefUL ||
+            !pl.has_access_hash || pl.access_hash_hi != 0xfedcba98UL ||
+            pl.access_hash_lo != 0x76543210UL || pl.top_message != 456789UL ||
+            pl.unread_count != 999UL || !pl.is_self || !pl.is_bot) {
+            puts("peer line self-test: full line misread");
+            return 2;
+        }
+        if (tg_mtproto_parse_peer_line(
+                "peer\t8\ttype\tchannel\tid\t0x00000000ffffffff\taccess_hash\t-\ttop\t4294967295\tunread\t3\tself\tno\tbot\tno\tusername\t-\ttitle\tBig",
+                &pl) != 9 ||
+            pl.index != 8UL || pl.id_hi != 0UL || pl.id_lo != 0xffffffffUL ||
+            pl.has_access_hash || pl.top_message != 4294967295UL ||
+            pl.unread_count != 3UL || pl.is_self || pl.is_bot) {
+            puts("peer line self-test: tabs or a dash hash misread");
+            return 2;
+        }
+        if (tg_mtproto_parse_peer_line("peer 4 type user id 0x0000000000000001", &pl) != 4 ||
+            pl.id_lo != 1UL ||
+            tg_mtproto_parse_peer_line("peer 4 type user id 0x0 access_hash - top 0 unread 9 self no bot no", &pl) != 9 ||
+            pl.id_hi != 0UL || pl.id_lo != 0UL || pl.unread_count != 9UL ||
+            tg_mtproto_parse_peer_line("peer 4 type user id 0x123456789 access_hash 0x5", &pl) != 6 ||
+            pl.id_hi != 0x1UL || pl.id_lo != 0x23456789UL || !pl.has_access_hash ||
+            pl.access_hash_hi != 0UL || pl.access_hash_lo != 5UL ||
+            tg_mtproto_parse_peer_line("peer 4 type user id 0xg", &pl) != 2 ||
+            tg_mtproto_parse_peer_line("peer 6 type user", &pl) != 2 ||
+            tg_mtproto_parse_peer_line("peer 6", &pl) != 1 ||
+            tg_mtproto_parse_peer_line("peer x type user", &pl) != 0 ||
+            tg_mtproto_parse_peer_line("peers 1 type user", &pl) != 0 ||
+            tg_mtproto_parse_peer_line("self username - title Me", &pl) != 0 ||
+            tg_mtproto_parse_peer_line("", &pl) != 0) {
+            puts("peer line self-test: a short or foreign line misread");
+            return 2;
+        }
+        (void)remove(peer2_path);
+        if (tg_file_write_text(peer2_path, peer2_text,
+                               (unsigned long)strlen(peer2_text)) != TG_FILE_OK) {
+            return 2;
+        }
+        rows_n = tg_mtproto_chat_list_parse(peer2_path, 0UL, rows2, 8, &missing2);
+        if (tg_mtproto_load_peer_cache_file(peer2_path, &cache2) != 0 ||
+            cache2.count != 5UL || rows_n != 4 || rows2[1].unread != 5UL ||
+            rows2[3].peer_id_hi != 0x12345678UL ||
+            rows2[3].peer_id_lo != 0xdeadbeefUL ||
+            cache2.entries[3].has_access_hash ||
+            cache2.entries[4].unread_count != 999UL) {
+            (void)remove(peer2_path);
+            puts("peer line self-test: the sidebar and the loader disagree");
+            return 2;
+        }
+        quiet2 = tmpfile();
+        if (quiet2 == 0) {
+            (void)remove(peer2_path);
+            return 2;
+        }
+        for (i2 = 1UL; i2 <= 4UL; ++i2) {
+            char idx[8];
+            int rc;
+
+            sprintf(idx, "%lu", i2);
+            rc = tg_mtproto_load_peer_cache_peer(peer2_path, idx, &peer_constructor,
+                                                 &peer_id_hi, &peer_id_lo,
+                                                 &access_hash_hi, &access_hash_lo,
+                                                 &has_access_hash, quiet2, "peer2");
+            /* 3 is a channel without a usable hash: refused, as ever, but FOUND. */
+            if (i2 == 3UL ? rc == 0 : rc != 0) {
+                fclose(quiet2);
+                (void)remove(peer2_path);
+                puts("peer line self-test: the lookup disagrees with the sidebar");
+                return 2;
+            }
+        }
+        rewind(quiet2);
+        seen[fread(seen, 1U, sizeof(seen) - 1U, quiet2)] = '\0';
+        fclose(quiet2);
+        (void)remove(peer2_path);
+        if (strstr(seen, "index-not-found") != 0 ||
+            strstr(seen, "access-hash-missing") == 0 ||
+            peer_id_hi != 0x12345678UL || peer_id_lo != 0xdeadbeefUL ||
+            !has_access_hash || access_hash_lo != 0x76543210UL) {
+            puts("peer line self-test: the lookup did not read the last line");
+            return 2;
+        }
+    }
 
     /* Live "is typing" parse (updateShort -> *UserTyping -> typing action). The
        collector writes the sink; here we drive synthetic pushes through it. */
