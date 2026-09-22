@@ -25,10 +25,16 @@ VERSION=${VERSION:-0.0.0}
 # "alpha" while the number has three components, "beta" from the two integer
 # numbering the beta starts with (0.1, then 0.2, then 1.0). Derived rather than
 # written down, so the day the number loses a dot nothing keeps saying alpha.
-case $VERSION in
-    *.*.*) CHANNEL=${CHANNEL:-alpha} ;;
-    *)     CHANNEL=${CHANNEL:-beta} ;;
-esac
+# The channel word comes from the header, the same one the About box and the
+# banner print (TG_VERSION_CHANNEL), so the binary and the packaging cannot
+# disagree; the dot count is only a fallback for a tree without that macro.
+CHANNEL=${CHANNEL:-$(sed -n 's/.*define TG_VERSION_CHANNEL "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)}
+if [ -z "$CHANNEL" ]; then
+    case $VERSION in
+        *.*.*) CHANNEL=alpha ;;
+        *)     CHANNEL=beta ;;
+    esac
+fi
 
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 

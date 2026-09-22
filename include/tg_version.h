@@ -21,8 +21,8 @@
    From the beta the public number and the cookie are the same two integers:
    0.1, then 0.2, and one day 1.0. Never map 0.0.9x onto 0.9x: the beta would
    then look like a downgrade, revision 1 against revision 93. Bump this word
-   with the number; the packaging and the release check derive the same word
-   from the number itself, so nothing is left saying alpha by accident. */
+   with the number; the packaging and the release check read this very word
+   from this header, so nothing is left saying alpha by accident. */
 #define TG_VERSION_CHANNEL "alpha"
 
 #endif

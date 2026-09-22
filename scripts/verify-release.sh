@@ -18,10 +18,16 @@ VERSION=${VERSION:-$(sed -n 's/.*define TG_VERSION "\([^"]*\)".*/\1/p' \
 VERSION=${VERSION:-0.0.0}
 # Same rule as the packaging: three components means alpha, two means the beta
 # numbering (0.1). The release tags follow it.
-case $VERSION in
-    *.*.*) CHANNEL=${CHANNEL:-alpha} ;;
-    *)     CHANNEL=${CHANNEL:-beta} ;;
-esac
+# The channel word comes from the header, the same one the About box and the
+# banner print (TG_VERSION_CHANNEL), so the binary and the packaging cannot
+# disagree; the dot count is only a fallback for a tree without that macro.
+CHANNEL=${CHANNEL:-$(sed -n 's/.*define TG_VERSION_CHANNEL "\([^"]*\)".*/\1/p' "$(dirname "$0")/../include/tg_version.h" 2>/dev/null)}
+if [ -z "$CHANNEL" ]; then
+    case $VERSION in
+        *.*.*) CHANNEL=alpha ;;
+        *)     CHANNEL=beta ;;
+    esac
+fi
 
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 
