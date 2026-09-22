@@ -12531,6 +12531,9 @@ int tg_mtproto_auth_chat_file(const char *host,
        anything can collect (the recv path arms only after the reset below).
        init zeroes the updates cursor + notify queue and enables /diff. */
     tg_chat_engine_init(&chat_engine);
+#ifdef TG_DIAG_TRACE
+    tg_gui_log("diag: chat engine init done");
+#endif
     tg_chat_nq = &chat_engine.notify;
     tg_chat_webpage_count = 0UL;
     chat_quiet = 0;
@@ -12550,6 +12553,9 @@ int tg_mtproto_auth_chat_file(const char *host,
      */
 #if TG_ENABLE_CHAT_RAW_INPUT
     chat_raw = (tg_platform_stdin_set_raw(1) == 0);
+#ifdef TG_DIAG_TRACE
+    tg_gui_log("diag: stdin raw set");
+#endif
 #else
     chat_raw = 0;
 #endif
@@ -12558,6 +12564,9 @@ int tg_mtproto_auth_chat_file(const char *host,
     tg_chat_input_raw = chat_raw;
     /* Colour AUTO mode keys off the same signal: a real interactive console. */
     tg_console_ui_set_interactive(chat_raw);
+#ifdef TG_DIAG_TRACE
+    tg_gui_log("diag: console interactive set, entering tui");
+#endif
     /* Full-screen layout when the console cooperates (needs raw mode for the
        window-size report); falls back to the linear flow otherwise. */
     tg_chat_tui_stream = stream;
@@ -12574,6 +12583,9 @@ int tg_mtproto_auth_chat_file(const char *host,
         /* Dark theme: paint the window black before the first output. */
         tg_console_ui_enter_screen(stream);
     }
+#ifdef TG_DIAG_TRACE
+    tg_gui_log("diag: tui entered, resetting history");
+#endif
     tg_chat_history_reset();
     /* Arm the cross-chat notification collector for this chat run, and ask
        the server to actually push updates on the chat's connection (one-shot
