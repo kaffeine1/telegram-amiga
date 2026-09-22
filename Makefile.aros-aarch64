@@ -21,6 +21,9 @@ SRC := src/main.c core/tg_app.c core/tg_bot.c core/tg_config.c core/tg_console.c
 
 CPPFLAGS += -Iinclude --sysroot=$(SYSROOT)
 CFLAGS ?= -Wall -Wextra -O2 -ffixed-x18
+# AROS loads relocatable ELF files and rejects COMMON symbols.
+# Keep tentative definitions in BSS even with command-line CFLAGS.
+override CFLAGS += -fno-common
 ENABLE_TLS ?= 0
 ENABLE_GZIP ?= 0
 ENABLE_GZIP_PUFF ?= 1

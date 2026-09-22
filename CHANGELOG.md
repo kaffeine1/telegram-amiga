@@ -21,6 +21,10 @@ unless noted.
   is kept in the repository.
 
 ### Fixed
+- AROS ARM executables load directly after `make`, without a manual relink.
+  GCC 6.5 defaults to COMMON symbols for uninitialized globals, which the
+  AROS relocatable ELF loader rejects. The ARM build now enforces
+  `-fno-common`, and the shared emoji geometry value is explicitly initialized.
 - The GUI self-tests run on AROS ARM, and the live window there starts with
   the stack it was promised. On a 64-bit build the model the window paints
   from is over half a megabyte, and the client kept a copy of it in the

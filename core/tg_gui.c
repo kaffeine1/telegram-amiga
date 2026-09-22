@@ -2715,7 +2715,8 @@ static void tg_gui_emoji_cell_pos(const tg_gui_emoji_geom *geo, int cell,
 static int tg_gui_emoji_geom_w;
 static int tg_gui_emoji_geom_h;
 static int tg_gui_emoji_geom_lh;
-int tg_gui_emoji_geom_y; /* panel top as painted; the self-test reads it */
+/* GCC < 10 puts tentative definitions in COMMON, rejected by the AROS ELF REL loader. */
+int tg_gui_emoji_geom_y = 0; /* panel top as painted; the self-test reads it */
 
 void tg_gui_emoji_open(tg_gui_state *state)
 {
