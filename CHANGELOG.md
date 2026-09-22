@@ -46,6 +46,7 @@ unless noted.
   probes: the C library reads and writes correctly, appends and renames are
   fine, only the in-place rewrite is broken. Every file the client replaces
   now goes through one door that deletes and recreates it: the chat list,
+  the random seed (a Raspberry Pi 400 card came back with it at zero bytes),
   the avatar store, the window geometry, the recent emoji, downloads to a
   name that exists, and every temporary the client writes before a rename.
   The chat-list line is also read by one hand-written reader instead of

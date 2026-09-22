@@ -74,6 +74,7 @@
 #endif
 #include "tg_platform.h"
 #include "tg_mtproto_crypto.h"
+#include "tg_file.h"
 
 #if defined(__amigaos4__)
 struct Library *SocketBase = 0;
@@ -577,6 +578,17 @@ static FILE *tg_os4_open_seed_file(const char *mode)
                    "PROGDIR:data/telegram-seed.bin") != 0) {
             (void)rename("telegram-seed.bin", "data/telegram-seed.bin");
         }
+    }
+    if (mode[0] == 'w') {
+        /* Saving replaces the file: through the one door every file the
+           client rewrites uses, since a file rewritten in place on the AROS
+           FAT handler reads back empty (its issue 161; a Raspberry Pi 400
+           card came back with a zero-byte seed). */
+        f = tg_file_fopen_replace("PROGDIR:data/telegram-seed.bin", mode);
+        if (f == 0) {
+            f = tg_file_fopen_replace("data/telegram-seed.bin", mode);
+        }
+        return f;
     }
     f = fopen("PROGDIR:data/telegram-seed.bin", mode);
     if (f == 0) {
