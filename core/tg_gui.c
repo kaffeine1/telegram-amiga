@@ -4619,7 +4619,7 @@ typedef struct tg_gui_record {
    after another and each starts from zero, so one object serves them all. */
 static tg_gui_state tg_gui_test_scratch;
 
-static tg_gui_state *tg_gui_test_scratch_state(void)
+tg_gui_state *tg_gui_test_scratch_state(void)
 {
     memset(&tg_gui_test_scratch, 0, sizeof(tg_gui_test_scratch));
     return &tg_gui_test_scratch;

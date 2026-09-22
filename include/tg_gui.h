@@ -758,4 +758,11 @@ int tg_gui_self_test(void);
    place (updating the highlighted row and the header title). */
 int tg_gui_run_window(tg_gui_state *state);
 
+#if !defined(TG_NO_SELFTEST)
+/* One zeroed scratch model for the self-tests of the GUI and of its chat
+   driver: over half a megabyte on a 64-bit build, so never on the stack and
+   never one static copy per test block. */
+tg_gui_state *tg_gui_test_scratch_state(void);
+#endif
+
 #endif

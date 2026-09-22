@@ -741,19 +741,6 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
 
 #if !defined(TG_NO_SELFTEST)
 
-/* One scratch state for the self-test blocks below. Each block used to keep a
-   copy of its own, on the stack or static: on a 64-bit build the struct is
-   over half a megabyte, so two of them on the stack (this frame under
-   tg_app_run's) overran the 1 MB AmigaOS stack on AROS ARM, and every static
-   one costs the 68k package a quarter megabyte of BSS. The blocks run one
-   after another and each starts from zero, so one object serves them all. */
-static tg_gui_state tg_gui_driver_test_scratch;
-
-static tg_gui_state *tg_gui_driver_test_scratch_state(void)
-{
-    memset(&tg_gui_driver_test_scratch, 0, sizeof(tg_gui_driver_test_scratch));
-    return &tg_gui_driver_test_scratch;
-}
 
 static void tg_gui_driver_emit(tg_chat_driver *driver, unsigned long epoch,
                                int has_time, int is_out, int is_group,
@@ -776,7 +763,7 @@ static void tg_gui_driver_emit(tg_chat_driver *driver, unsigned long epoch,
 
 static int tg_gui_driver_webpage_self_test(void)
 {
-    tg_gui_state *state = tg_gui_driver_test_scratch_state();
+    tg_gui_state *state = tg_gui_test_scratch_state();
     static tg_mtproto_message_text message;
     tg_gui_chat_driver gui;
     tg_chat_driver driver;
@@ -1081,7 +1068,7 @@ int tg_gui_driver_self_test(void)
     /* Inline-photo metadata stays compact across the engine/GUI boundary and
        completion flips every matching bubble exactly once. */
     {
-        tg_gui_state *ps = tg_gui_driver_test_scratch_state();
+        tg_gui_state *ps = tg_gui_test_scratch_state();
         tg_gui_chat_driver pg;
         tg_chat_driver pd;
         tg_chat_message_row prow;
@@ -1314,7 +1301,7 @@ int tg_gui_driver_self_test(void)
     /* Read receipts: own messages flip "sent" -> "seen" as the peer's read
        cursor advances (monotonically); incoming and unsent rows carry no mark. */
     {
-        tg_gui_state *rs = tg_gui_driver_test_scratch_state();
+        tg_gui_state *rs = tg_gui_test_scratch_state();
         tg_gui_chat_driver rg;
         tg_chat_driver rd;
         tg_chat_message_row row;
@@ -1403,7 +1390,7 @@ int tg_gui_driver_self_test(void)
     /* Multi-device dedup/reconcile: with include_outgoing the open-chat poll
        re-delivers our own messages; the driver must not double them. */
     {
-        tg_gui_state *ds = tg_gui_driver_test_scratch_state();
+        tg_gui_state *ds = tg_gui_test_scratch_state();
         tg_gui_chat_driver dg;
         tg_chat_driver dd;
         tg_chat_message_row row;
