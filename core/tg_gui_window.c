@@ -6519,7 +6519,6 @@ static int tg_gui_photo_copy_atomic(const char *source,
     if (in == 0) {
         return 1;
     }
-    (void)remove(part);
     out = tg_file_fopen_replace(part, "wb");
     if (out == 0) {
         fclose(in);

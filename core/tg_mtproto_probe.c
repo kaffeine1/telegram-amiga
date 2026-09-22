@@ -10939,7 +10939,6 @@ static void tg_gui_photo_store_stripped(const tg_mtproto_photo_meta *photo)
     }
     (void)mkdir("photos", 0777);
     sprintf(part_path, "%s.part", path);
-    (void)remove(part_path);
     out = tg_file_fopen_replace(part_path, "wb");
     if (out == 0) {
         return;
@@ -14905,7 +14904,6 @@ int tg_mtproto_probe_self_test(void)
         unsigned long back_len;
         FILE *rf;
 
-        (void)remove(rep_path);
         rf = tg_file_fopen_replace(rep_path, "wb");
         if (rf == 0 || fputs("0123456789", rf) == EOF || fclose(rf) != 0) {
             (void)remove(rep_path);
@@ -19385,7 +19383,6 @@ static int tg_gui_photo_begin(FILE *stream)
     }
     sprintf(tg_gui_photo_fetch.part_path, "%s.part", tg_gui_photo_fetch.path);
     (void)mkdir("photos", 0777);
-    (void)remove(tg_gui_photo_fetch.part_path);
     tg_gui_photo_fetch.out = tg_file_fopen_replace(tg_gui_photo_fetch.part_path, "wb");
     if (tg_gui_photo_fetch.out == 0) {
         tg_gui_photo_log("photo: fetch fail cache open");

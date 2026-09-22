@@ -354,7 +354,6 @@ int tg_image_canonical_cache_write(const char *path,
     tg_image_cache_put_u32(header + 12, (unsigned long)h);
     tg_image_cache_put_u32(header + 16, payload_size);
     sprintf(part_path, "%s.tmp", path);
-    (void)remove(part_path);
     file = tg_file_fopen_replace(part_path, "wb");
     if (file == 0) {
         return 1;
