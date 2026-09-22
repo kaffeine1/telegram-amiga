@@ -8,6 +8,14 @@ unless noted.
 ## [Unreleased]
 
 ### Added
+- A sixth package: AROS on ARM64 (aarch64, ABIv1), for the Raspberry Pi 4,
+  400 and 5 running the native AROS image. It is built from the same commit
+  as the other five, on the same bench as the x86_64 lane, and it ships on
+  GitHub and on The AROS Archives (Aminet has no ARM64 entry to give it).
+  The lane started as a community port; this release is the first the
+  client's own build carries, after a full round on a Raspberry Pi 400:
+  login, chats, history, photos, documents and a download, with the chat
+  list, the seed and the window geometry surviving the card's FAT handler.
 - Icons by Carlo Spadoni, one set per platform, plus an icon for the drawer
   itself, which had none. AmigaOS 4, MorphOS and AROS get his files as he
   drew them, in the format each system reads natively (an ARGB colour icon,

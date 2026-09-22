@@ -152,8 +152,9 @@ needs it.
 
 ## Build (developers)
 
-Five lanes — see the `Makefile.*` files and `docs/`: AmigaOS 3.x (m68k clib2),
-AmigaOS 4 (PPC), MorphOS (PPC), AROS i386, AROS x86_64. Host smoke test:
+Six lanes — see the `Makefile.*` files and `docs/`: AmigaOS 3.x (m68k clib2),
+AmigaOS 4 (PPC), MorphOS (PPC), AROS i386, AROS x86_64, AROS aarch64 (Raspberry
+Pi, built on a Linux host with the AROS crosstools). Host smoke test:
 
 ```sh
 make -f Makefile.aros clean all ENABLE_GZIP=0 ENABLE_GZIP_PUFF=1

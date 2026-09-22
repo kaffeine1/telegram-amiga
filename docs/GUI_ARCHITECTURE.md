@@ -20,7 +20,7 @@ Both drive the same MTProto core and — once extracted — the same chat engine
 ## Layers
 
 1. **Core** (unchanged): MTProto, crypto, sessions, updates/pts, peer cache,
-   file I/O. Portable, proven on five CPU/OS targets and on host CI.
+   file I/O. Portable, proven on six CPU/OS targets and on host CI.
 2. **Chat engine** (to extract from `tg_mtproto_probe.c`): transcript model,
    chat list, notifications — event driven. Will drive both the console and
    the GUI. The TUI is the behavioural oracle during the extraction.
@@ -60,7 +60,7 @@ classic AmIRC skin are themes over the same pen roles — no renderer changes.
 - [x] branch `gui-intuition`; portable model + renderer skeleton + host
   self-test (`--gui-self-test`)
 - [x] milestone 0: Intuition backend + real window (`--gui-test`) — builds on
-  all five targets, validated end to end on hosted AROS x86_64 (headless
+  all six targets, validated end to end on hosted AROS x86_64 (headless
   Xvfb), redraw-time + footprint measurement included; passed a 12-finding
   adversarial review. Still to run on the Vampire (68k gate, Michele's HW).
 - [ ] chat engine extraction (TUI as oracle)

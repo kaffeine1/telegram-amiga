@@ -40,6 +40,9 @@ MORPHOS_BINARY=${MORPHOS_BINARY:-"$ROOT_DIR/build/morphos-cross/TelegramAmiga"}
 AMIGAOS4_BINARY=${AMIGAOS4_BINARY:-"$ROOT_DIR/build/amigaos4/TelegramAmiga"}
 AROS_I386_BINARY=${AROS_I386_BINARY:-"$ROOT_DIR/build/aros-i386-abiv0/TelegramAmiga"}
 AROS_X86_64_BINARY=${AROS_X86_64_BINARY:-"$ROOT_DIR/build/aros-x86_64/TelegramAmiga"}
+# aarch64 (Raspberry Pi, ABIv1): built on the bench like the x86_64 lane, from
+# 6fbf9d0 straight out of make (no relink). Sixth package since 0.0.94.
+AROS_AARCH64_BINARY=${AROS_AARCH64_BINARY:-"$ROOT_DIR/build/aros-aarch64/TelegramAmiga"}
 
 # --- Aminet artifacts (.lha + .readme) --------------------------------------
 # Aminet requires a real LhA ENCODER (the Mac's lhasa is extract-only); we use
@@ -49,6 +52,7 @@ AROS_X86_64_BINARY=${AROS_X86_64_BINARY:-"$ROOT_DIR/build/aros-x86_64/TelegramAm
 AMINET=${AMINET:-1}
 LHA_BIN=${LHA_BIN:-"$HOME/amiga-dev/tools/lha-src/src/lha"}
 AMINET_ROOT=${AMINET_ROOT:-"$PACKAGE_ROOT/aminet"}
+AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"} # set here: package_one stages the aarch64 lha there
 AMINET_BASE=${AMINET_BASE:-tgamiga}      # short base: keeps every name <= 30 chars incl. suffix
 AMINET_DRAWER=${AMINET_DRAWER:-TelegramAmiga}
 AMINET_UPLOADER=${AMINET_UPLOADER:-"michele.dipace@kaffeine.net (Michele Dipace)"}
@@ -409,6 +413,37 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
   nome del membro e' disattivato su MorphOS apposta, per evitare un freeze).
 - L'autocompletamento @ dei membri e' spento su MorphOS (guardia anti-freeze).
 - Modalita' schermo proprio: consigliato MorphOS 3.16 o piu' recente."
+        ;;
+    "AROS aarch64")
+        upload_limit="250 MiB"
+        req_en="- AROS for ARM64 (aarch64, ABIv1) on a Raspberry Pi 4, 400 or 5: a native
+  image of 2026-08-22 or newer, with its TCP/IP stack (AROSTCP) up.
+- A few MB of free RAM."
+        notes_en="Notes for AROS aarch64
+----------------------
+- Full feature set, including read receipts, typing names and history paging.
+- Bring the network up before starting the client (the AROSTCP start
+  script from a Shell or from S:User-Startup: on the Pi images that is the
+  usual advice, rather than the boot switch in the network preferences).
+- The stock image has no wget: copy the drawer onto the SD card from
+  another computer, into any drawer on SYS:.
+- Every file the client saves on the card is deleted and recreated rather
+  than rewritten: the AROS FAT handler leaves a rewritten file empty.
+- Validated on a Raspberry Pi 400 and in the QEMU raspi3b machine."
+        req_it="- AROS per ARM64 (aarch64, ABIv1) su un Raspberry Pi 4, 400 o 5: immagine
+  nativa del 2026-08-22 o piu' recente, con il suo stack TCP/IP (AROSTCP) attivo.
+- Qualche MB di RAM libera."
+        notes_it="Note per AROS aarch64
+---------------------
+- Set completo di funzioni: read receipt, nomi di chi scrive, paginazione storia.
+- Avvia la rete prima del client (lo script di avvio di AROSTCP da una Shell
+  o da S:User-Startup: sulle immagini per Pi e' il consiglio consueto, meglio
+  dell'interruttore di avvio nelle preferenze di rete).
+- L'immagine di serie non ha wget: copia il cassetto sulla scheda SD da un
+  altro computer, in un cassetto qualsiasi di SYS:.
+- Ogni file che il client salva sulla scheda viene cancellato e ricreato, mai
+  riscritto: il gestore FAT di AROS lascia vuoto un file riscritto.
+- Provato su un Raspberry Pi 400 e nella macchina raspi3b di QEMU."
         ;;
     *)
         upload_limit="250 MiB"
@@ -866,6 +901,7 @@ EOF
 # arch tags (TelegramAmiga.m68k-amigaos.readme would be 33). The old tgamiga.*
 # pages are superseded via the Replaces: field (lhaold below).
 aminet_meta() {
+    aminet_upload=1 # 0 = the lha is built for The AROS Archives only
     case "$1" in
     amigaos3)    archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
                  lhaname="TelegramAmiga"
@@ -882,9 +918,17 @@ aminet_meta() {
     aros-x86_64) archtag="x86_64-aros";  archval="i386-aros"
                  lhaname="TelegramAmiga-AROS64"
                  requires="AROS (x86_64) with a TCP/IP stack (AROSTCP)" ;;
+    # No Aminet page for the ARM64 lane (decision of 2026-09-22: GitHub and
+    # The AROS Archives only), so its lha is staged for the Archives pair and
+    # never listed among the Aminet uploads. Aminet has no aarch64 token
+    # anyway (its enum stops at i386-aros).
+    aros-aarch64) archtag="aarch64-aros"; archval="i386-aros"
+                 lhaname="TelegramAmiga-ARM64"
+                 requires="AROS aarch64 ABIv1 (Raspberry Pi 4, 400, 5) with a TCP/IP stack (AROSTCP)"
+                 aminet_upload=0 ;;
     *) echo "aminet_meta: unknown arch $1" >&2; exit 1 ;;
     esac
-    lhaold="comm/tcp/tgamiga.$archtag.lha"
+    if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/tgamiga.$archtag.lha"; else lhaold=""; fi
 }
 
 # The Aminet .readme: machine-readable header (Short/Uploader/Author/Type/
@@ -1028,11 +1072,15 @@ package_one() {
         amigaos4)   echo "$file_output" | grep -q "ELF 32-bit MSB executable, PowerPC" || { echo "Skipping $platform: $file_output" >&2; return 0; } ;;
         aros-i386)  echo "$file_output" | grep -q "ELF 32-bit LSB relocatable, Intel 80386.*AROS" || { echo "Skipping $platform: $file_output" >&2; return 0; } ;;
         aros-x86_64) echo "$file_output" | grep -q "ELF 64-bit LSB relocatable, x86-64.*AROS" || { echo "Skipping $platform: $file_output" >&2; return 0; } ;;
+        # "AROS" in the OS/ABI field is what the plain make output carries; a
+        # binary relinked by hand with ld -r -d says SYSV instead, so this also
+        # refuses the pre-6fbf9d0 way of building the lane.
+        aros-aarch64) echo "$file_output" | grep -q "ELF 64-bit LSB relocatable, ARM aarch64.*AROS" || { echo "Skipping $platform: $file_output" >&2; return 0; } ;;
         *) echo "Unknown expected type: $expected" >&2; exit 1 ;;
     esac
 
     case "$expected" in
-        amigaos4|aros-i386|aros-x86_64)
+        amigaos4|aros-i386|aros-x86_64|aros-aarch64)
             if ! strings "$binary" | grep -F '$STACK:1048576' >/dev/null; then
                 echo "ERROR $platform: binary lacks the 1 MiB AmigaDOS stack cookie." >&2
                 exit 1
@@ -1168,6 +1216,7 @@ package_one() {
             ppc-morphos|ppc-amigaos) arch_want="PowerPC" ;;
             i386-aros) arch_want="Intel 80386" ;;
             x86_64-aros) arch_want="x86-64" ;;
+            aarch64-aros) arch_want="aarch64" ;;
             *) arch_want="" ;;
         esac
         if [ -n "$arch_want" ] && \
@@ -1178,7 +1227,13 @@ package_one() {
         fi
         rm -rf "$lhatmp"
         write_aminet_readme "$AMINET_ROOT/$lhaname.readme" "$archval" "$requires" "$lhaold"
-        echo "$lhafile  +  $lhaname.readme  [Architecture: $archval]"
+        if [ "$aminet_upload" = 1 ]; then
+            echo "$lhafile  +  $lhaname.readme  [Architecture: $archval]"
+        else
+            mkdir -p "$AROSARCHIVES_ROOT"
+            mv "$lhafile" "$AMINET_ROOT/$lhaname.readme" "$AROSARCHIVES_ROOT/"
+            echo "$AROSARCHIVES_ROOT/$lhaname.lha  (staged for The AROS Archives only, no Aminet upload)"
+        fi
     fi
 }
 
@@ -1187,6 +1242,7 @@ package_one "MorphOS" "$MORPHOS_BINARY" "morphos" "morphos"
 package_one "AmigaOS 4.x" "$AMIGAOS4_BINARY" "amigaos4" "amigaos4"
 package_one "AROS i386 ABIv0" "$AROS_I386_BINARY" "aros-i386" "aros-i386"
 package_one "AROS x86_64" "$AROS_X86_64_BINARY" "aros-x86_64" "aros-x86_64"
+package_one "AROS aarch64" "$AROS_AARCH64_BINARY" "aros-aarch64" "aros-aarch64"
 package_one "AmigaOS 3.x (68000)" "$AMIGAOS3_68000_BINARY" "amigaos3-68000" "amigaos3"
 
 # --- checksums ---------------------------------------------------------------
@@ -1257,11 +1313,15 @@ fi
 # did not upload ourselves waits for the original uploader's confirmation.
 # Own subdirectory for the same reason as OS4Depot: never a lowercase twin of
 # an Aminet archive in the same directory on a case-insensitive filesystem.
-AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"}
+# (AROSARCHIVES_ROOT is set at the top, next to AMINET_ROOT.)
 write_arosarchives_pair() {
     # $1 Aminet base (TelegramAmiga-AROS / -AROS64), $2 their file name,
     # $3 requirements text
-    aa_src="$AMINET_ROOT/$1.lha"
+    # $4 "new" = first upload of this file: the form refuses a replaces: line
+    # for a file the site does not have yet; drop the argument from the next
+    # release on, when the site wants replaces:network/chat/<name>.lha.
+    aa_src="$AMINET_ROOT/$1.lha"; aa_readme="$AMINET_ROOT/$1.readme"
+    if [ ! -f "$aa_src" ]; then aa_src="$AROSARCHIVES_ROOT/$1.lha"; aa_readme="$AROSARCHIVES_ROOT/$1.readme"; fi
     [ -f "$aa_src" ] || return 0
     cp "$aa_src" "$AROSARCHIVES_ROOT/$2.lha"
     {
@@ -1273,22 +1333,27 @@ write_arosarchives_pair() {
         printf 'email:michele.dipace@kaffeine.net\n'
         printf 'url:%s\n' "$REPO_URL"
         printf 'category:network/chat\n'
-        printf 'replaces:network/chat/%s.lha\n' "$2"
+        if [ "${4:-}" != "new" ]; then printf 'replaces:network/chat/%s.lha\n' "$2"; fi
         printf 'requirements:%s\n' "$3"
         printf 'license:Other\n'
         printf 'distribute:yes\n'
         printf 'hend:\n\n'
-        awk 'flip { print } /^$/ && !flip { flip = 1 }' "$AMINET_ROOT/$1.readme"
+        awk 'flip { print } /^$/ && !flip { flip = 1 }' "$aa_readme"
     } > "$AROSARCHIVES_ROOT/${2}_lha.readme"
 }
-if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-AROS64.lha" ]; }; then
+if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-AROS64.lha" ] || [ -f "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.lha" ]; }; then
     mkdir -p "$AROSARCHIVES_ROOT"
     write_arosarchives_pair TelegramAmiga-AROS telegramamiga.i386-aros \
         "AROS i386 ABIv0 (AROS One, Icaros) with its TCP/IP stack"
     write_arosarchives_pair TelegramAmiga-AROS64 telegramamiga.x86_64-aros-v11 \
         "AROS x86_64 ABIv11 (AROS One x64) with its TCP/IP stack"
+    # Sixth package since 0.0.94: the site already files ARM64 uploads under
+    # the aarch64-aros suffix (pintp, commander_keen_4, super_trevor_land).
+    write_arosarchives_pair TelegramAmiga-ARM64 telegramamiga.aarch64-aros \
+        "AROS aarch64 ABIv1 (Raspberry Pi 4, 400 and 5; native image of 2026-08-22 or newer) with its TCP/IP stack" new
+    rm -f "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.lha" "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.readme" # staging copies
     echo
-    echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (2 x .lha + _lha.readme)"
+    echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (up to 3 x .lha + _lha.readme)"
     echo "Submit: https://archives.arosworld.org/index.php?function=submit (web form,"
     echo "        no FTP); queue: index.php?function=uploads"
     echo "        Set f_passphrase on OUR uploads (value in SECRETS, never here):"
