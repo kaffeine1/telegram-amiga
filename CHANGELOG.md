@@ -33,10 +33,11 @@ unless noted.
   over the Workbench grey, and the file also carries the drawing with its
   alpha as OS4-style ARGB chunks, which AmigaOS 4 and the third-party
   icon.library AmiKit ships blend over any backdrop (stock 3.x skips them
-  and draws the palette image). The 3.x set is also built from the 64 pixel
-  AmigaOS 4 artwork now, with 256 colours, since the 46 pixel one looked
-  coarse and small next to the icon it replaced. And the MorphOS set had the
-  program and the drawer swapped: the program showed up as a folder.
+  and draws the palette image). The 3.x program icon is also built from the
+  64 pixel AmigaOS 4 drawing now, with 256 colours, since the 46 pixel one
+  looked coarse and small next to the icon it replaced; the drawer keeps the
+  cabinet Carlo drew for 3.x. And the MorphOS set had the program and the
+  drawer swapped: the program showed up as a folder.
 
 ### Fixed
 - AROS ARM executables load directly after `make`, without a manual relink.
