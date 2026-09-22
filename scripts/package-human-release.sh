@@ -1179,7 +1179,13 @@ package_one() {
     # --- Aminet: tgamiga.<archtag>.lha + matching tgamiga.<archtag>.readme ----
     # Reuses the assembled drawer ($dest, incl. LICENSE) but under a clean
     # top-level name ($AMINET_DRAWER) so unpacking yields one tidy directory.
-    if [ "$AMINET" = "1" ]; then
+    # The 68000 text-only package is not an Aminet upload (it is the
+    # experimental low-memory variant, GitHub zip only): building its lha here
+    # would land on aminet/TelegramAmiga.lha, the name of the AmigaOS 3.x
+    # package, and silently replace it when both lanes run in one call (seen
+    # in the 0.0.94 test round; the published 0.0.93 archive was untouched
+    # because that release never packaged the 68000 lane).
+    if [ "$AMINET" = "1" ] && [ "$suffix" != "amigaos3-68000" ]; then
         if [ ! -x "$LHA_BIN" ]; then
             echo "ERROR $platform: LhA encoder not found at $LHA_BIN (build jca02266/lha or set LHA_BIN=, or AMINET=0)" >&2
             exit 1
