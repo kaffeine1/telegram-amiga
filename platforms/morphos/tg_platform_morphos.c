@@ -456,48 +456,6 @@ static void tg_morphos_gather(unsigned char digest[TG_MTPROTO_SHA512_LENGTH])
     memset(pool, 0, sizeof(pool));
 }
 
-static FILE *tg_morphos_open_seed_file(const char *mode)
-{
-    /* PROGDIR: keeps the seed next to the binary; some C libraries do not
-       grok Amiga-style paths, so fall back to the current directory (the
-       icon launcher CDs into the drawer anyway). */
-    FILE *f;
-
-    /* Tidy layout: the seed lives in data/ with the other auxiliary files.
-       One-time migration of a root-era seed, with the data/ copy winning
-       (never overwrite live state with a stale root leftover). */
-    f = fopen("PROGDIR:data/telegram-seed.bin", "rb");
-    if (f == 0) {
-        f = fopen("data/telegram-seed.bin", "rb");
-    }
-    if (f != 0) {
-        fclose(f);
-        (void)remove("PROGDIR:telegram-seed.bin");
-        (void)remove("telegram-seed.bin");
-    } else {
-        (void)mkdir("data", 0777);
-        if (rename("PROGDIR:telegram-seed.bin",
-                   "PROGDIR:data/telegram-seed.bin") != 0) {
-            (void)rename("telegram-seed.bin", "data/telegram-seed.bin");
-        }
-    }
-    if (mode[0] == 'w') {
-        /* Saving replaces the file: through the one door every file the
-           client rewrites uses, since a file rewritten in place on the AROS
-           FAT handler reads back empty (its issue 161; a Raspberry Pi 400
-           card came back with a zero-byte seed). */
-        f = tg_file_fopen_replace("PROGDIR:data/telegram-seed.bin", mode);
-        if (f == 0) {
-            f = tg_file_fopen_replace("data/telegram-seed.bin", mode);
-        }
-        return f;
-    }
-    f = fopen("PROGDIR:data/telegram-seed.bin", mode);
-    if (f == 0) {
-        f = fopen("data/telegram-seed.bin", mode);
-    }
-    return f;
-}
 
 static int tg_morphos_random_fallback(unsigned char *bytes,
                                       unsigned long byte_count)
@@ -531,7 +489,7 @@ static int tg_morphos_random_fallback(unsigned char *bytes,
        entropy accumulates across runs instead of restarting from a cold,
        reproducible boot state. */
     if (!seed_file_done) {
-        FILE *seed_file = tg_morphos_open_seed_file("rb");
+        FILE *seed_file = tg_file_open_seed("rb");
         seed_file_done = 1;
         seed_file_write = 1;
         if (seed_file != 0) {
@@ -596,7 +554,7 @@ static int tg_morphos_random_fallback(unsigned char *bytes,
         unsigned char fresh_seed[TG_MTPROTO_SHA512_LENGTH];
         FILE *seed_file;
         (void)tg_morphos_random_fallback(fresh_seed, sizeof(fresh_seed));
-        seed_file = tg_morphos_open_seed_file("wb");
+        seed_file = tg_file_open_seed("wb");
         if (seed_file != 0) {
             fwrite(fresh_seed, 1U, sizeof(fresh_seed), seed_file);
             fclose(seed_file);

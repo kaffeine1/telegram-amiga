@@ -51,6 +51,11 @@ tg_file_status tg_file_write_text(const char *path, const char *text,
  */
 FILE *tg_file_fopen_replace(const char *path, const char *mode);
 
+/* The RNG seed file (PROGDIR:data/telegram-seed.bin, migrated from the root
+   if an old one is there): "rb" to read it, "wb" to save it, which replaces
+   the file rather than rewriting it. */
+FILE *tg_file_open_seed(const char *mode);
+
 /**
  * Appends a complete text buffer to a file.
  *

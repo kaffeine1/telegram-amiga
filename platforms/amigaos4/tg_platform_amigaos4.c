@@ -554,48 +554,6 @@ static unsigned long tg_os4_entropy_gather(unsigned char *buf, unsigned long cap
 
 static void tg_os4_drbg_generate(unsigned char *out, unsigned long n);
 
-static FILE *tg_os4_open_seed_file(const char *mode)
-{
-    /* PROGDIR: keeps the seed next to the binary; some C libraries do not
-       grok Amiga-style paths, so fall back to the current directory (the
-       icon launcher CDs into the drawer anyway). */
-    FILE *f;
-
-    /* Tidy layout: the seed lives in data/ with the other auxiliary files.
-       One-time migration of a root-era seed, with the data/ copy winning
-       (never overwrite live state with a stale root leftover). */
-    f = fopen("PROGDIR:data/telegram-seed.bin", "rb");
-    if (f == 0) {
-        f = fopen("data/telegram-seed.bin", "rb");
-    }
-    if (f != 0) {
-        fclose(f);
-        (void)remove("PROGDIR:telegram-seed.bin");
-        (void)remove("telegram-seed.bin");
-    } else {
-        (void)mkdir("data", 0777);
-        if (rename("PROGDIR:telegram-seed.bin",
-                   "PROGDIR:data/telegram-seed.bin") != 0) {
-            (void)rename("telegram-seed.bin", "data/telegram-seed.bin");
-        }
-    }
-    if (mode[0] == 'w') {
-        /* Saving replaces the file: through the one door every file the
-           client rewrites uses, since a file rewritten in place on the AROS
-           FAT handler reads back empty (its issue 161; a Raspberry Pi 400
-           card came back with a zero-byte seed). */
-        f = tg_file_fopen_replace("PROGDIR:data/telegram-seed.bin", mode);
-        if (f == 0) {
-            f = tg_file_fopen_replace("data/telegram-seed.bin", mode);
-        }
-        return f;
-    }
-    f = fopen("PROGDIR:data/telegram-seed.bin", mode);
-    if (f == 0) {
-        f = fopen("data/telegram-seed.bin", mode);
-    }
-    return f;
-}
 
 /*
  * Persistent seed (PROGDIR:data/telegram-seed.bin, Linux random-seed style):
@@ -609,7 +567,7 @@ static void tg_os4_drbg_seed(void)
     unsigned char pool[1024];
     unsigned long len = tg_os4_entropy_gather(pool, sizeof(pool));
     {
-        FILE *seed_file = tg_os4_open_seed_file("rb");
+        FILE *seed_file = tg_file_open_seed("rb");
         if (seed_file != 0) {
             unsigned char saved[64];
             unsigned long got = (unsigned long)fread(saved, 1U,
@@ -628,7 +586,7 @@ static void tg_os4_drbg_seed(void)
         unsigned char fresh[64];
         FILE *seed_file;
         tg_os4_drbg_generate(fresh, sizeof(fresh));
-        seed_file = tg_os4_open_seed_file("wb");
+        seed_file = tg_file_open_seed("wb");
         if (seed_file != 0) {
             fwrite(fresh, 1U, sizeof(fresh), seed_file);
             fclose(seed_file);

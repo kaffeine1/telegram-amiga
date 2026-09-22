@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "tg_file.h"
+#include <sys/stat.h>
 
 tg_file_status tg_file_read_text(const char *path, char *buffer,
                                  unsigned long buffer_size,
@@ -164,4 +165,52 @@ const char *tg_file_status_name(tg_file_status status)
     default:
         return "unknown";
     }
+}
+
+/* The persistent RNG seed, PROGDIR:data/telegram-seed.bin, opened for reading
+   or for saving. One copy for the four Amiga platform layers, which used to
+   carry it verbatim each (a review of the 0.0.94 candidate counted them):
+   the migration of a root-era seed into data/, the PROGDIR: path with the
+   current-directory fallback, and the save through tg_file_fopen_replace. */
+FILE *tg_file_open_seed(const char *mode)
+{
+    /* PROGDIR: keeps the seed next to the binary; some C libraries do not
+       grok Amiga-style paths, so fall back to the current directory (the
+       icon launcher CDs into the drawer anyway). */
+    FILE *f;
+
+    /* Tidy layout: the seed lives in data/ with the other auxiliary files.
+       One-time migration of a root-era seed, with the data/ copy winning
+       (never overwrite live state with a stale root leftover). */
+    f = fopen("PROGDIR:data/telegram-seed.bin", "rb");
+    if (f == 0) {
+        f = fopen("data/telegram-seed.bin", "rb");
+    }
+    if (f != 0) {
+        fclose(f);
+        (void)remove("PROGDIR:telegram-seed.bin");
+        (void)remove("telegram-seed.bin");
+    } else {
+        (void)mkdir("data", 0777);
+        if (rename("PROGDIR:telegram-seed.bin",
+                   "PROGDIR:data/telegram-seed.bin") != 0) {
+            (void)rename("telegram-seed.bin", "data/telegram-seed.bin");
+        }
+    }
+    if (mode[0] == 'w') {
+        /* Saving replaces the file: through the one door every file the
+           client rewrites uses, since a file rewritten in place on the AROS
+           FAT handler reads back empty (its issue 161; a Raspberry Pi 400
+           card came back with a zero-byte seed). */
+        f = tg_file_fopen_replace("PROGDIR:data/telegram-seed.bin", mode);
+        if (f == 0) {
+            f = tg_file_fopen_replace("data/telegram-seed.bin", mode);
+        }
+        return f;
+    }
+    f = fopen("PROGDIR:data/telegram-seed.bin", mode);
+    if (f == 0) {
+        f = fopen("data/telegram-seed.bin", mode);
+    }
+    return f;
 }
