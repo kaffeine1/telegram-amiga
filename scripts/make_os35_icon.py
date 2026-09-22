@@ -10,8 +10,8 @@ stock 3.2 icons are. The planar image here is a Floyd-Steinberg rendition in
 the four default Workbench pens, so a plain 3.1 shows a sensible icon too.
 
 Input is a PNG with an alpha channel (or two PNGs concatenated in one file,
-normal then selected, as some icon tools save them); --selected names a
-separate second state. Fully transparent pixels become the transparent colour.
+normal then selected, as some icon tools save them), or an OS4 icon whose
+ARGB chunks carry the states; --selected names a separate second state. Fully transparent pixels become the transparent colour.
 
 The FORM ICON layout written (verified against the 3.2 CD icons):
   FACE  width-1, height-1, flags (bit0 frameless), aspect (x<<4|y), UWORD
@@ -133,10 +133,45 @@ def split_pngs(data):
     return parts
 
 
+def argb_states(data):
+    """The states of an OS4 icon: every ARGB chunk of its FORM ICON decoded
+    to an RGBA image (the inverse of argb_chunk_body)."""
+    i = data.find(b"FORM")
+    if i < 0 or data[i + 8:i + 12] != b"ICON":
+        return []
+    p = i + 12
+    w = h = None
+    images = []
+    while p + 8 <= len(data):
+        cid = data[p:p + 4]
+        ln = struct.unpack(">I", data[p + 4:p + 8])[0]
+        body = data[p + 8:p + 8 + ln]
+        if cid == b"FACE":
+            w, h = body[0] + 1, body[1] + 1
+        elif cid == b"ARGB" and w:
+            raw = zlib.decompress(body[10:])
+            rgba = bytearray(len(raw))
+            rgba[0::4] = raw[1::4]
+            rgba[1::4] = raw[2::4]
+            rgba[2::4] = raw[3::4]
+            rgba[3::4] = raw[0::4]
+            images.append(Image.frombytes("RGBA", (w, h), bytes(rgba)))
+        p += 8 + ln + (ln & 1)
+    return images
+
+
 def load_states(path, selected):
-    parts = split_pngs(open(path, "rb").read())
+    data = open(path, "rb").read()
+    parts = split_pngs(data)
     if not parts:
-        raise ValueError("%s is not a PNG" % path)
+        # not PNG artwork: an OS4 icon drawn with its alpha (ARGB chunks)
+        # serves just as well, and is what the 64 pixel sets are
+        images = argb_states(data)
+        if not images:
+            raise ValueError("%s is neither a PNG nor an ARGB icon" % path)
+        if selected:
+            images = images[:1] + [Image.open(selected).convert("RGBA")]
+        return images
     images = [Image.open(io.BytesIO(parts[0])).convert("RGBA")]
     if selected:
         images.append(Image.open(selected).convert("RGBA"))

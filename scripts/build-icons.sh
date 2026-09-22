@@ -21,13 +21,17 @@ mkdir -p "$OUT/amigaos4" "$OUT/amigaos3" "$OUT/amigaos3-68000" "$OUT/morphos" "$
 "$PY" scripts/make_gui_icon.py "$SRC/OS4/OS4-1.info" "$OUT/amigaos4/TelegramAmiga.info" --project
 "$PY" scripts/make_gui_icon.py "$SRC/OS4/OS4-2.info" "$OUT/amigaos4/drawer.info" --drawer
 
-# AmigaOS 3.x: the PNG artwork becomes an OS3.5 colour icon with a planar
-# fallback for 3.1. The 68000 build asks for 384 KB of stack, not 1 MB: a
-# 2 MB machine cannot spare the megabyte and the binary's cookie says so.
-"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-1.info" "$OUT/amigaos3/TelegramAmiga.info" --project --frameless
-"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3/drawer.info" --drawer --frameless
-"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-1.info" "$OUT/amigaos3-68000/TelegramAmiga.info" --project --frameless --stack 393216
-"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3-68000/drawer.info" --drawer --frameless --stack 393216
+# AmigaOS 3.x: an OS3.5 colour icon (256 colours, rim matted over the
+# Workbench grey, the drawing with its alpha in ARGB chunks too) with a planar
+# fallback for 3.1. Built from the 64 pixel AmigaOS 4 artwork, not from the
+# 46 pixel OS3 files: on a real 3.x box the small set looked coarse next to
+# the 64 pixel icon it replaced, and the two AmigaOS lanes now match. The
+# 68000 build asks for 384 KB of stack, not 1 MB: a 2 MB machine cannot
+# spare the megabyte and the binary's cookie says so.
+"$PY" scripts/make_os35_icon.py "$SRC/OS4/OS4-1.info" "$OUT/amigaos3/TelegramAmiga.info" --project --frameless --colors 256
+"$PY" scripts/make_os35_icon.py "$SRC/OS4/OS4-2.info" "$OUT/amigaos3/drawer.info" --drawer --frameless --colors 256
+"$PY" scripts/make_os35_icon.py "$SRC/OS4/OS4-1.info" "$OUT/amigaos3-68000/TelegramAmiga.info" --project --frameless --colors 256 --stack 393216
+"$PY" scripts/make_os35_icon.py "$SRC/OS4/OS4-2.info" "$OUT/amigaos3-68000/drawer.info" --drawer --frameless --colors 256 --stack 393216
 
 # MorphOS and AROS: PNG icons, the icOn chunk rewritten.
 # In the MorphOS set Carlo drew the DRAWER as Mos1 and the program badge as
