@@ -27,10 +27,16 @@ Needs Pillow. The launcher fields follow scripts/make_gui_icon.py.
 Usage:
   make_os35_icon.py IN.png OUT.info --project [--tool TelegramAmiga] [--stack N]
   make_os35_icon.py IN.png OUT.info --drawer
-  options: --selected SEL.png  --colors 64  --frameless
+  options: --selected SEL.png  --colors 64  --frameless  --matte 170,170,170
+           --alpha-cut 32  --no-argb
+The rim of the drawing is blended over --matte (the Workbench grey) since a
+palette icon has no alpha; pixels under --alpha-cut stay transparent. Unless
+--no-argb, the file also carries the drawing with its alpha as OS4 ARGB
+chunks, which icon.library versions that know them blend over any backdrop.
 """
 import io
 import struct
+import zlib
 import sys
 
 from PIL import Image
@@ -139,12 +145,22 @@ def load_states(path, selected):
     return images
 
 
-def quantize_state(im, colors):
+def matte_over(im, matte):
+    """The artwork over the Workbench background colour: a palette icon has
+    no alpha channel, so the antialiased rim of the drawing has to be blended
+    here, once, against the grey it will most likely sit on. Without this the
+    rim pixels keep their straight colour and the icon gets a dark, ragged
+    edge (a tester saw exactly that on the first 0.0.94 build)."""
+    bg = Image.new("RGBA", im.size, matte + (255,))
+    return Image.alpha_composite(bg, im).convert("RGB")
+
+
+def quantize_state(im, colors, matte, alpha_cut):
     """(indices, palette): index 0 is the transparent colour, the rest the
-    median-cut palette of the opaque pixels."""
+    median-cut palette of the pixels that show, matted over `matte`."""
     w, h = im.size
     alpha = im.split()[3]
-    opaque = im.convert("RGB")
+    opaque = matte_over(im, matte)
     q = opaque.quantize(colors=colors - 1, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     qpal = q.getpalette()[:3 * (colors - 1)]
     qdata = list(q.tobytes())
@@ -154,18 +170,35 @@ def quantize_state(im, colors):
     idx = []
     adata = list(alpha.tobytes())
     for k in range(w * h):
-        idx.append(0 if adata[k] < 128 else remap[qdata[k]])
+        idx.append(0 if adata[k] < alpha_cut else remap[qdata[k]])
     return idx, palette
 
 
-def planar(im):
+def argb_chunk_body(im):
+    """The OS4 way to carry the drawing with its alpha: A,R,G,B per pixel,
+    zlib compressed, behind a ten byte header (a one, the compressed size
+    minus one, a zero word: as the OS4 icons on disk have it). icon.library
+    versions that know it (AmigaOS 4, the third-party one AmiKit ships) blend
+    it over any backdrop; the 3.5 one of stock AmigaOS 3.x skips the chunk and
+    draws the palette image above."""
+    rgba = im.convert("RGBA").tobytes()
+    argb = bytearray(len(rgba))
+    argb[0::4] = rgba[3::4]
+    argb[1::4] = rgba[0::4]
+    argb[2::4] = rgba[1::4]
+    argb[3::4] = rgba[2::4]
+    z = zlib.compress(bytes(argb), 9)
+    return struct.pack(">IIH", 1, len(z) - 1, 0) + z
+
+
+def planar(im, matte, alpha_cut):
     """Two bitplanes in the four Workbench pens, dithered; transparent = pen 0."""
     w, h = im.size
     pal = Image.new("P", (1, 1))
     pal.putpalette(sum([list(c) for c in WB_PENS], []) + [0] * (768 - 12))
-    q = im.convert("RGB").quantize(palette=pal, dither=Image.Dither.FLOYDSTEINBERG)
+    q = matte_over(im, matte).quantize(palette=pal, dither=Image.Dither.FLOYDSTEINBERG)
     alpha = list(im.split()[3].tobytes())
-    pens = [0 if alpha[k] < 128 else v for k, v in enumerate(q.tobytes())]
+    pens = [0 if alpha[k] < alpha_cut else v for k, v in enumerate(q.tobytes())]
     rowbytes = ((w + 15) // 16) * 2
     planes = bytearray()
     for plane in range(2):
@@ -182,12 +215,12 @@ def chunk(cid, body):
     return cid + struct.pack(">I", len(body)) + body + (b"\x00" if len(body) & 1 else b"")
 
 
-def build(images, do_type, tool, stack, colors, frameless, drawer):
+def build(images, do_type, tool, stack, colors, frameless, drawer, matte, alpha_cut, argb):
     w, h = images[0].size
     for im in images[1:]:
         if im.size != (w, h):
             raise ValueError("the selected state must have the same size")
-    states = [quantize_state(im, colors) for im in images]
+    states = [quantize_state(im, colors, matte, alpha_cut) for im in images]
     imags = []
     for idx, palette in states:
         depth = max(1, (len(palette) - 1).bit_length())
@@ -201,6 +234,8 @@ def build(images, do_type, tool, stack, colors, frameless, drawer):
         imags.append((body, len(palbytes)))
     face = struct.pack(">BBBBH", w - 1, h - 1, 1 if frameless else 0, 0x11, max(n for _, n in imags) - 1)
     form_body = b"ICON" + chunk(b"FACE", face) + b"".join(chunk(b"IMAG", b) for b, _ in imags)
+    if argb:
+        form_body += b"".join(chunk(b"ARGB", argb_chunk_body(im)) for im in images)
     form = b"FORM" + struct.pack(">I", len(form_body)) + form_body
     # classic part
     has_select = len(images) > 1
@@ -213,7 +248,7 @@ def build(images, do_type, tool, stack, colors, frameless, drawer):
     if drawer:
         out += classic.DEFAULT_DRAWERDATA
     for im in images:
-        out += struct.pack(">hhhhhIBBI", 0, 0, w, h, 2, 1, 3, 0, 0) + planar(im)
+        out += struct.pack(">hhhhhIBBI", 0, 0, w, h, 2, 1, 3, 0, 0) + planar(im, matte, alpha_cut)
     if tool:
         s = tool.encode("latin-1") + b"\x00"
         out += struct.pack(">I", len(s)) + s
@@ -227,7 +262,7 @@ def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     opts = {}
     for i, a in enumerate(argv):
-        if a in ("--tool", "--stack", "--selected", "--colors") and i + 1 < len(argv):
+        if a in ("--tool", "--stack", "--selected", "--colors", "--matte", "--alpha-cut") and i + 1 < len(argv):
             opts[a] = argv[i + 1]
     args = [a for a in args if a not in opts.values()]
     if len(args) < 2 or not ({"--project", "--drawer"} & set(flags)):
@@ -240,9 +275,14 @@ def main(argv):
     if not 2 <= colors <= 256:
         sys.stderr.write("colors must be 2..256\n")
         return 2
+    matte = tuple(int(v) for v in opts.get("--matte", "170,170,170").split(","))
+    if len(matte) != 3 or not all(0 <= v <= 255 for v in matte):
+        sys.stderr.write("matte must be R,G,B\n")
+        return 2
+    alpha_cut = int(opts.get("--alpha-cut", "32"))
     images = load_states(args[0], opts.get("--selected"))
     out = build(images, classic.WBDRAWER if drawer else classic.WBPROJECT, tool, stack,
-                colors, "--frameless" in flags, drawer)
+                colors, "--frameless" in flags, drawer, matte, alpha_cut, "--no-argb" not in flags)
     back = classic.parse(out)
     if classic.serialize(back) != out:
         sys.stderr.write("FATAL: the icon does not walk back as written\n")

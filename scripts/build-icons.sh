@@ -30,8 +30,11 @@ mkdir -p "$OUT/amigaos4" "$OUT/amigaos3" "$OUT/amigaos3-68000" "$OUT/morphos" "$
 "$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3-68000/drawer.info" --drawer --frameless --stack 393216
 
 # MorphOS and AROS: PNG icons, the icOn chunk rewritten.
-"$PY" scripts/make_png_icon.py "$SRC/MOS/Mos1.info" "$OUT/morphos/TelegramAmiga.info" --project
-"$PY" scripts/make_png_icon.py "$SRC/MOS/Mos2.info" "$OUT/morphos/drawer.info" --drawer
+# In the MorphOS set Carlo drew the DRAWER as Mos1 and the program badge as
+# Mos2, the other way round from his other sets: the first 0.0.94 build shipped
+# them swapped and the program showed up as a folder on a real MorphOS box.
+"$PY" scripts/make_png_icon.py "$SRC/MOS/Mos2.info" "$OUT/morphos/TelegramAmiga.info" --project
+"$PY" scripts/make_png_icon.py "$SRC/MOS/Mos1.info" "$OUT/morphos/drawer.info" --drawer
 "$PY" scripts/make_png_icon.py "$SRC/AROS/AROS-1.info" "$OUT/aros/TelegramAmiga.info" --project
 "$PY" scripts/make_png_icon.py "$SRC/AROS/AROS-2.info" "$OUT/aros/drawer.info" --drawer
 

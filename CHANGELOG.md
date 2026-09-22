@@ -27,6 +27,14 @@ unless noted.
   binary, with a 1 MB stack (384 KB on the 68000 build). The credit is in
   the About box, the readme and the manuals, and the artwork as delivered
   is kept in the repository.
+  Two corrections from the first hardware round of this cycle: the AmigaOS
+  3.x icon had a dark, ragged rim, because a palette icon has no alpha and
+  the antialiased edge of the drawing was cut hard; the rim is now blended
+  over the Workbench grey, and the file also carries the drawing with its
+  alpha as OS4-style ARGB chunks, which AmigaOS 4 and the third-party
+  icon.library AmiKit ships blend over any backdrop (stock 3.x skips them
+  and draws the palette image). And the MorphOS set had the program and the
+  drawer swapped: the program showed up as a folder.
 
 ### Fixed
 - AROS ARM executables load directly after `make`, without a manual relink.
