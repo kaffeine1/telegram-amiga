@@ -23,7 +23,10 @@
 #define TG_MTPROTO_ENCRYPTED_BODY_MAX 40960U
 #endif
 #else
+#ifndef TG_MTPROTO_ENCRYPTED_BODY_MAX /* overridable here too: a host sanitizer
+                                         run can wear the 68000 profile */
 #define TG_MTPROTO_ENCRYPTED_BODY_MAX 73728U
+#endif
 #endif
 
 typedef struct tg_mtproto_encrypted_message {

@@ -205,12 +205,13 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
    for 60 (non-m68k) / 30 (m68k), and a busy group's frame overruns 32 KiB, so
    recv_abridged_packet rejected it ("Could not read messages now") and the chat
    loaded few/no messages. Size it to the page we actually request. */
+#ifndef TG_MTPROTO_REPLY_RECV_MAX /* overridable: LOWMEM shrinks the reply box,
+                                     and a host sanitizer run can wear that profile */
 #if defined(__m68k__)
-#ifndef TG_MTPROTO_REPLY_RECV_MAX /* overridable: LOWMEM shrinks the reply box */
 #define TG_MTPROTO_REPLY_RECV_MAX 49152U
-#endif
 #else
 #define TG_MTPROTO_REPLY_RECV_MAX 131072U
+#endif
 #endif
 /* Send-side buffers that must hold a whole upload chunk. The saveFilePart query
    IS a file chunk (unlike getFile, whose query is a tiny ~40-byte request), so
