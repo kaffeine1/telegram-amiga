@@ -354,11 +354,11 @@ int tg_mtproto_encrypted_self_test(void)
        round-trip without tripping the sizeof() guards. Without the platform-gated
        TG_MTPROTO_ENCRYPTED_PACKET_MAX this returns 2 on the non-m68k lanes. */
     {
-#if defined(__m68k__)
-        static unsigned char big[8192];
-#else
-        static unsigned char big[65536];
-#endif
+        /* Sized from the body cap itself, 8 KB under it: 64 KB on the 72 KB
+           lanes (what a full download chunk is there), 32 KB on the 40 KB
+           m68k body, 16 KB under the 24 KB low-memory profile, so the test
+           follows whatever profile the build wears. */
+        static unsigned char big[TG_MTPROTO_ENCRYPTED_BODY_MAX - 8192U];
         static unsigned char big_packet[TG_MTPROTO_ENCRYPTED_PACKET_MAX + 64U];
         static unsigned char big_pad[32];
         static tg_mtproto_encrypted_message big_decoded;

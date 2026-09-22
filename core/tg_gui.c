@@ -5964,8 +5964,11 @@ int tg_gui_self_test(void)
                 }
             }
         }
+#if TG_GUI_MAX_CHATS > 21
         /* A scrolled list must use the same row pitch for its knob, hits and
-           drops. Toggle the same state, as the live Settings menu does. */
+           drops. Toggle the same state, as the live Settings menu does. (Needs
+           more chats than the 21 rows on screen: a low-memory profile with a
+           shorter list has nothing to scroll and skips this part.) */
         tg_gui_demo_state(draft);
         for (enabled = draft->chat_count; enabled < TG_GUI_MAX_CHATS; ++enabled) {
             draft->chats[enabled] = draft->chats[4];
@@ -5996,6 +5999,7 @@ int tg_gui_self_test(void)
                 return 2;
             }
         }
+#endif
     }
 
     /* The old first-line format remains readable. "auto" preserves dither and
