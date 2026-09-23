@@ -142,7 +142,12 @@ Features are therefore grouped by the work they share.
   pure computation (the JPEG decoder, image scaling, inflate, the TL
   parser) can leave the safe -O0 for -O2 without meeting the compiler
   bug that pinned the rest there: the likeliest lever for photo speed and
-  for the first start on a 68030.
+  for the first start on a 68030. Measured there (14 MHz, stock 3.2.3):
+  a first start with only the saved login copied opens its window after
+  89 seconds, and 74 of them are the key exchange with the datacenter
+  that serves avatars, run before the window appears; the start after
+  that takes 12 seconds, about half of it decoding the first avatars. So
+  the window should open first and that key exchange should run after it.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -544,6 +549,24 @@ window must keep breathing while a file moves.
 No promise about the number that comes out: a retro machine will not
 saturate a 90 Mbit line, and it does not need to. But under three per
 cent of it is not a hardware limit, it is something we are doing.
+
+**First measurement (2026-09-23).** A measurement build now logs, for
+every part, the wait for the reply, the rest of the reply, the socket
+reads, the send, the crypto, the file write and the time between two
+parts. Run on a desktop machine over an ordinary line, a 64 KB download
+part takes about 150 ms: 125 of them are spent waiting for Telegram to
+start answering, 17 receiving the 64 KB in 29 socket reads, 3 or 4
+decrypting, and almost nothing else. Uploads show the same shape, about
+50 ms per part of which 47 wait for the acknowledgement. The prefetch
+from 0.0.8 does not change it, because the next request leaves only
+after the current reply has landed, so there is never more than one in
+flight. That caps downloads near 410 KB/s even on a fast machine, and
+the Amigas reach 320: the answer points at the wait, not at the socket
+reads the section suspected. The same build on real AmigaOS 3 and
+MorphOS hardware will say how much of the remaining gap is ours; the
+lever this points at is keeping several requests in flight, which costs
+almost no memory, since the replies still arrive one after another on
+the same connection.
 
 ## Design direction: closer to the desktop client
 
