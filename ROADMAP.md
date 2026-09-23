@@ -64,7 +64,7 @@ client:
   portable base path.
 - Next come the 0.0.9x releases, then 0.1, the first BETA: same
   program, a different promise. It ships once no known freeze remains on
-  any of the five platforms, an adversarial review pass has run, and a
+  any of the six platforms, an adversarial review pass has run, and a
   full cycle has gone by without field regressions. See "The road to
   0.1 beta" below for what each step carries.
 - Later: per-chat file browser, multi-message selection, archive management.
@@ -98,8 +98,8 @@ beta on purpose, so anyone watching can see it coming.
 Few large steps rather than many small ones, and for a reason that is
 easy to miss: the beta gate asks for a full cycle with no field
 regressions, and every release restarts that clock. Each one also costs
-five fresh builds, four publishing channels and a validation pass over
-five platforms, so the cost lives in the ritual, not in the code.
+six fresh builds, five publishing channels and a validation pass over
+six platforms, so the cost lives in the ritual, not in the code.
 Features are therefore grouped by the work they share.
 
 - **0.0.91, the visible polish.** Already half done on `main`: the
@@ -123,10 +123,27 @@ Features are therefore grouped by the work they share.
   carries the fix for new logins, which Telegram had silently stopped
   sending codes to. Validated on real AmigaOS 3 and MorphOS and in the
   OS4, AROS i386 and AROS x86_64 VMs.
-- **0.0.94, speed and open defects.** Whatever the transfer-ceiling
-  measurement turns up, the two MorphOS popup glitches, photo speed
-  under AfA_OS and two-step verification on a slow 68k.
-- **Room to spare.** The numbering leaves several slots between 0.0.94
+- **0.0.94, the sixth platform and the storage fixes.** AROS on ARM64
+  (Raspberry Pi 4, 400 and 5) becomes the sixth package, built from the
+  same commit as the other five and validated on a Raspberry Pi 400. The
+  field report that brought it in also found the AROS FAT handler
+  emptying any file rewritten in place, so every file the client saves is
+  now replaced instead (chat list, random seed, window geometry), and the
+  GUI model moved off the stack on 64-bit builds. A link Telegram already
+  knew gets its preview on the message just sent, and the icons are
+  Carlo Spadoni's. The speed work this slot first promised moved to
+  0.0.95: the Raspberry Pi cycle took the room, and a measured speed
+  release is worth more than a rushed one.
+- **0.0.95, speed and open defects.** Whatever the transfer-ceiling
+  measurement turns up (an instrumented build that times each cost
+  centre of a part comes first), the two MorphOS popup glitches, photo
+  speed under AfA_OS, two-step verification on a slow 68k and the
+  full-size photo preference. On the 68k line, a look at which files of
+  pure computation (the JPEG decoder, image scaling, inflate, the TL
+  parser) can leave the safe -O0 for -O2 without meeting the compiler
+  bug that pinned the rest there: the likeliest lever for photo speed and
+  for the first start on a 68030.
+- **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
   something went wrong.
@@ -707,7 +724,7 @@ with no byte cap. The decoder already scales, so showing a 2560 pixel
 JPEG on a 68k is a download and a wait rather than a memory problem,
 which is exactly why it should be a choice and not the default. Saving
 would then write the original bytes Telegram holds, which is what a user
-who asks for the full image wants. A 0.0.94 item.
+who asks for the full image wants. A 0.0.95 item.
 
 ## Planned: mentions in basic groups, and on MorphOS
 
