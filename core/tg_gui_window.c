@@ -17,6 +17,9 @@
 #include "tg_gui.h"
 #include "tg_file.h"
 #include "tg_gui_session.h"
+#if defined(TG_DIAG_XFER)
+#include "tg_net.h"
+#endif
 #include "tg_avatar.h"
 #include "tg_emoji_sheet.h"
 #include "tg_mtproto_login.h"
@@ -11046,7 +11049,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             unsigned long tdone = 0UL;
             unsigned long ttotal = 0UL;
 
+            TG_XFER_STOP(TG_XFER_LOOP_US);
             if (tg_gui_session_transfer_step(&tdone, &ttotal)) {
+                TG_XFER_START(TG_XFER_LOOP_US);
                 /* Percentage WITHOUT overflowing 32 bits: bytes*100 wraps
                    past 42.9 MB on every 32-bit lane, which sent the figure
                    back to 0 mid-file and climbing again (seen on an 82 MB

@@ -7,6 +7,9 @@
 
 #include "tg_mtproto_crypto.h"
 #include "tg_mtproto_encrypted.h"
+#if defined(TG_DIAG_XFER)
+#include "tg_net.h"
+#endif
 
 /* Size of one MTProto message's AES plaintext (envelope + body + padding), used
    for the intermediate decrypt/encrypt buffers below. It MUST track
@@ -130,7 +133,11 @@ void tg_mtproto_initial_server_salt(
     *hi = tg_read_le32(bytes + 4U);
 }
 
+#if defined(TG_DIAG_XFER)
+static tg_mtproto_tl_status tg_mtproto_write_encrypted_message_timed(
+#else
 tg_mtproto_tl_status tg_mtproto_write_encrypted_message(
+#endif
     tg_mtproto_tl_writer *writer,
     const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH],
     unsigned long server_salt_hi,
@@ -212,6 +219,33 @@ tg_mtproto_tl_status tg_mtproto_write_encrypted_message(
     return status;
 }
 
+#if defined(TG_DIAG_XFER)
+tg_mtproto_tl_status tg_mtproto_write_encrypted_message(
+    tg_mtproto_tl_writer *writer,
+    const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH],
+    unsigned long server_salt_hi,
+    unsigned long server_salt_lo,
+    const unsigned char session_id[8],
+    unsigned long message_id_hi,
+    unsigned long message_id_lo,
+    unsigned long seq_no,
+    const unsigned char *body,
+    unsigned long body_length,
+    const unsigned char *padding,
+    unsigned long padding_length)
+{
+    tg_mtproto_tl_status status;
+
+    TG_XFER_START(TG_XFER_ENC_US);
+    status = tg_mtproto_write_encrypted_message_timed(
+        writer, auth_key, server_salt_hi, server_salt_lo, session_id,
+        message_id_hi, message_id_lo, seq_no, body, body_length, padding,
+        padding_length);
+    TG_XFER_STOP(TG_XFER_ENC_US);
+    return status;
+}
+#endif
+
 static tg_mtproto_tl_status tg_mtproto_decrypt_encrypted_message_x(
     const unsigned char *payload,
     unsigned long payload_length,
@@ -285,8 +319,18 @@ tg_mtproto_tl_status tg_mtproto_decrypt_encrypted_message(
     const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH],
     tg_mtproto_encrypted_message *out)
 {
+#if defined(TG_DIAG_XFER)
+    tg_mtproto_tl_status status;
+
+    TG_XFER_START(TG_XFER_DEC_US);
+    status = tg_mtproto_decrypt_encrypted_message_x(payload, payload_length,
+                                                    auth_key, 8U, out);
+    TG_XFER_STOP(TG_XFER_DEC_US);
+    return status;
+#else
     return tg_mtproto_decrypt_encrypted_message_x(payload, payload_length,
                                                   auth_key, 8U, out);
+#endif
 }
 
 #if !defined(TG_NO_SELFTEST)

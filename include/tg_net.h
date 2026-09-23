@@ -115,4 +115,43 @@ tg_net_status tg_net_tcp_probe(const char *host, const char *port,
  */
 const char *tg_net_status_name(tg_net_status status);
 
+/* Transfer measurement (TG_DIAG_XFER builds only, never a release): where the
+   time of one file part goes. A microsecond clock, one running sum per cost
+   centre, and one log line per part with the sums since the last line. In any
+   other build the macros are empty statements and generate no code. */
+#if defined(TG_DIAG_XFER)
+enum {
+    TG_XFER_RECV_US,   /* inside the platform receive (its wait included) */
+    TG_XFER_RECV_CALLS,
+    TG_XFER_RECV_BYTES,
+    TG_XFER_SEND_US,
+    TG_XFER_WAIT_US,   /* a reply's length header: server time + round trip */
+    TG_XFER_STREAM_US, /* the rest of that reply */
+    TG_XFER_PACKETS,
+    TG_XFER_ENC_US,
+    TG_XFER_DEC_US,
+    TG_XFER_WRITE_US,  /* the part written to the file */
+    TG_XFER_LOG_US,    /* the diagnostic log itself */
+    TG_XFER_LOOP_US,   /* the GUI loop between two transfer steps */
+    TG_XFER_COUNT
+};
+void tg_net_xfer_reset(void);
+void tg_net_xfer_add(int slot, unsigned long value);
+void tg_net_xfer_start(int slot);
+void tg_net_xfer_stop(int slot);
+void tg_net_xfer_report(const char *what, unsigned long offset);
+unsigned long tg_net_xfer_clock_ms(void); /* for the log's time stamps */
+#define TG_XFER_RESET() tg_net_xfer_reset()
+#define TG_XFER_ADD(slot, value) tg_net_xfer_add((slot), (unsigned long)(value))
+#define TG_XFER_START(slot) tg_net_xfer_start(slot)
+#define TG_XFER_STOP(slot) tg_net_xfer_stop(slot)
+#define TG_XFER_REPORT(what, offset) tg_net_xfer_report((what), (unsigned long)(offset))
+#else
+#define TG_XFER_RESET() ((void)0)
+#define TG_XFER_ADD(slot, value) ((void)0)
+#define TG_XFER_START(slot) ((void)0)
+#define TG_XFER_STOP(slot) ((void)0)
+#define TG_XFER_REPORT(what, offset) ((void)0)
+#endif
+
 #endif

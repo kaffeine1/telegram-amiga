@@ -3948,6 +3948,9 @@ int tg_app_run(int argc, char **argv)
     tg_gui_log_enable();
     tg_gui_log("diag: tg_app_run entered");
 #endif
+#if defined(TG_DIAG_XFER)
+    tg_gui_log_enable(); /* the transfer measurement lines go to the file */
+#endif
     setvbuf(stdout, (char *)0, _IONBF, 0);
     /* In-place upgrade: drop the pre-0.0.6 leftovers (old binary name, IconX
        launcher scripts + icons) from the program's drawer before anything

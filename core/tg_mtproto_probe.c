@@ -789,8 +789,10 @@ static tg_net_status tg_mtproto_recv_abridged_packet(
         return TG_NET_INVALID_ARGUMENT;
     }
 
+    TG_XFER_START(TG_XFER_WAIT_US);
     status = tg_mtproto_recv_exact(connection, length_header, 1,
                                    error_buffer, error_buffer_size);
+    TG_XFER_STOP(TG_XFER_WAIT_US);
     if (status != TG_NET_OK) {
         return status;
     }
@@ -815,8 +817,11 @@ static tg_net_status tg_mtproto_recv_abridged_packet(
         return TG_NET_RECV_FAILED;
     }
 
+    TG_XFER_START(TG_XFER_STREAM_US);
     status = tg_mtproto_recv_exact(connection, payload, *payload_length,
                                    error_buffer, error_buffer_size);
+    TG_XFER_STOP(TG_XFER_STREAM_US);
+    TG_XFER_ADD(TG_XFER_PACKETS, 1);
     return status == TG_NET_TIMEOUT ? TG_NET_RECV_FAILED : status;
 }
 
@@ -15627,7 +15632,20 @@ int tg_gui_log_is_enabled(void)
     return tg_gui_log_on;
 }
 
+#if defined(TG_DIAG_XFER)
+static void tg_gui_log_timed(const char *msg);
+
 void tg_gui_log(const char *msg)
+{
+    TG_XFER_START(TG_XFER_LOG_US);
+    tg_gui_log_timed(msg);
+    TG_XFER_STOP(TG_XFER_LOG_US);
+}
+
+static void tg_gui_log_timed(const char *msg)
+#else
+void tg_gui_log(const char *msg)
+#endif
 {
     FILE *f;
 
@@ -15654,9 +15672,19 @@ void tg_gui_log(const char *msg)
     f = fopen("tg-gui-debug.log", "a");
 #endif
     if (f != 0) {
+#if defined(TG_DIAG_XFER)
+        /* measurement builds: milliseconds, so a first start can be profiled */
+        unsigned long ms = tg_net_xfer_clock_ms();
+        unsigned long t = (ms / 1000UL) % 100000UL;
+#else
         unsigned long t = (unsigned long)time(0) % 100000UL;
+#endif
 
+#if defined(TG_DIAG_XFER)
+        fprintf(f, "[%05lu.%03lu] ", t, ms % 1000UL);
+#else
         fprintf(f, "[%05lu] ", t); /* gaps between lines = where time went */
+#endif
         fputs(msg, f);
         fputc('\n', f);
         fflush(f);
@@ -18186,6 +18214,8 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
     const char *p;
     unsigned long n;
 
+    TG_XFER_RESET();
+
     if (fc == 0 || stream == 0 || path == 0 || path[0] == '\0' ||
         fc->peer_index == 0 || fc->peer_index[0] == '\0' ||
         tg_gui_ul.active) {
@@ -18324,6 +18354,8 @@ static int tg_mtproto_upload_step(void)
     unsigned char rnd[8];
     tg_mtproto_tl_writer writer;
     tg_mtproto_rpc_result result;
+
+    TG_XFER_REPORT("ul", tg_gui_ul.part);
 
     if (!tg_gui_ul.active || tg_gui_ul.rc == 6) {
         return 0; /* idle, or cancelled: don't send more parts / the media */
@@ -18695,6 +18727,8 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
     unsigned long home;
     unsigned long n;
 
+    TG_XFER_RESET();
+
     if (tg_gui_dl.active) {
         return 1; /* one transfer at a time; fail[] belongs to the running one */
     }
@@ -18829,6 +18863,8 @@ static int tg_mtproto_download_step(void)
     const unsigned char *bytes;
     unsigned long bytes_len;
     int cdn = 0; /* stays 0 when unpack fails before the parse fills it */
+
+    TG_XFER_REPORT("dl", tg_gui_dl.offset);
 
     if (!tg_gui_dl.active || tg_gui_dl.rc == 5) {
         return 0; /* idle, or cancelled: don't overwrite rc with a late finish */
@@ -18984,11 +19020,13 @@ static int tg_mtproto_download_step(void)
         strcpy(tg_gui_dl.fail, cdn ? "CDN file" : "bad reply");
         return 0; /* CDN redirect (large public file) not handled yet */
     }
+    TG_XFER_START(TG_XFER_WRITE_US);
     if (bytes_len > 0UL &&
         fwrite(bytes, 1, bytes_len, tg_gui_dl.f) != bytes_len) {
         tg_gui_dl.rc = 3;
         return 0;
     }
+    TG_XFER_STOP(TG_XFER_WRITE_US);
     tg_gui_dl.offset += bytes_len;
     tg_gui_dl.chunk_retry = 0; /* this chunk landed */
     if (bytes_len < TG_GUI_DL_CHUNK) {
@@ -19127,6 +19165,8 @@ static int tg_mtproto_download_end(char *out_path,
                                    unsigned long out_path_size)
 {
     int rc = tg_gui_dl.rc;
+
+    TG_XFER_REPORT("dl-end", tg_gui_dl.offset);
 
     tg_mtproto_download_pipe_reset(); /* never leave a request in flight */
     if (out_path != 0 && out_path_size > 0UL) {

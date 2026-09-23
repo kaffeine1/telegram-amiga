@@ -24,6 +24,119 @@ static void tg_net_diag(const char *what, unsigned long n)
 #define TG_NET_DIAG(what, n) ((void)0)
 #endif
 
+#if defined(TG_DIAG_XFER)
+#include <stdio.h>
+#include <sys/time.h>
+#include "tg_gui_session.h"
+static unsigned long tg_xfer_sum[TG_XFER_COUNT];
+static unsigned long tg_xfer_began[TG_XFER_COUNT];
+static int tg_xfer_armed[TG_XFER_COUNT];
+static unsigned long tg_xfer_mark;
+
+/* Microseconds, wrapping every 71 minutes: only differences are used. */
+static unsigned long tg_xfer_now(void)
+{
+    struct timeval tv;
+
+    if (gettimeofday(&tv, 0) != 0) {
+        return 0UL;
+    }
+    return (unsigned long)tv.tv_sec * 1000000UL + (unsigned long)tv.tv_usec;
+}
+
+unsigned long tg_net_xfer_clock_ms(void)
+{
+    struct timeval tv;
+
+    if (gettimeofday(&tv, 0) != 0) {
+        return 0UL;
+    }
+    return (unsigned long)tv.tv_sec * 1000UL +
+           (unsigned long)tv.tv_usec / 1000UL;
+}
+
+void tg_net_xfer_reset(void)
+{
+    int i;
+
+    for (i = 0; i < TG_XFER_COUNT; ++i) {
+        tg_xfer_sum[i] = 0UL;
+        tg_xfer_armed[i] = 0;
+    }
+    tg_xfer_mark = tg_xfer_now();
+}
+
+void tg_net_xfer_add(int slot, unsigned long value)
+{
+    if (slot >= 0 && slot < TG_XFER_COUNT) {
+        tg_xfer_sum[slot] += value;
+    }
+}
+
+void tg_net_xfer_start(int slot)
+{
+    if (slot >= 0 && slot < TG_XFER_COUNT) {
+        tg_xfer_began[slot] = tg_xfer_now();
+        tg_xfer_armed[slot] = 1;
+    }
+}
+
+void tg_net_xfer_stop(int slot)
+{
+    if (slot >= 0 && slot < TG_XFER_COUNT && tg_xfer_armed[slot]) {
+        tg_xfer_sum[slot] += tg_xfer_now() - tg_xfer_began[slot];
+        tg_xfer_armed[slot] = 0;
+    }
+}
+
+/* "12.3" from microseconds, into out (at least 16 bytes). */
+static const char *tg_xfer_ms(char *out, unsigned long us)
+{
+    sprintf(out, "%lu.%lu", us / 1000UL, (us % 1000UL) / 100UL);
+    return out;
+}
+
+void tg_net_xfer_report(const char *what, unsigned long offset)
+{
+    char line[320];
+    char a[16], b[16], c[16], d[16], e[16], f[16], g[16], h[16], k[16], m[16];
+    char o[16];
+    unsigned long now = tg_xfer_now();
+    unsigned long wall = now - tg_xfer_mark;
+    unsigned long known = tg_xfer_sum[TG_XFER_WAIT_US] +
+                          tg_xfer_sum[TG_XFER_STREAM_US] +
+                          tg_xfer_sum[TG_XFER_SEND_US] +
+                          tg_xfer_sum[TG_XFER_ENC_US] +
+                          tg_xfer_sum[TG_XFER_DEC_US] +
+                          tg_xfer_sum[TG_XFER_WRITE_US] +
+                          tg_xfer_sum[TG_XFER_LOG_US] +
+                          tg_xfer_sum[TG_XFER_LOOP_US];
+    unsigned long other = wall > known ? wall - known : 0UL;
+    int i;
+
+    sprintf(line,
+            "xfer %.8s off=%lu wall=%s wait=%s stream=%s recv=%s n=%lu b=%lu "
+            "send=%s enc=%s dec=%s write=%s log=%s loop=%s pk=%lu other=%s",
+            what, offset, tg_xfer_ms(a, wall),
+            tg_xfer_ms(b, tg_xfer_sum[TG_XFER_WAIT_US]),
+            tg_xfer_ms(c, tg_xfer_sum[TG_XFER_STREAM_US]),
+            tg_xfer_ms(d, tg_xfer_sum[TG_XFER_RECV_US]),
+            tg_xfer_sum[TG_XFER_RECV_CALLS], tg_xfer_sum[TG_XFER_RECV_BYTES],
+            tg_xfer_ms(e, tg_xfer_sum[TG_XFER_SEND_US]),
+            tg_xfer_ms(f, tg_xfer_sum[TG_XFER_ENC_US]),
+            tg_xfer_ms(g, tg_xfer_sum[TG_XFER_DEC_US]),
+            tg_xfer_ms(h, tg_xfer_sum[TG_XFER_WRITE_US]),
+            tg_xfer_ms(k, tg_xfer_sum[TG_XFER_LOG_US]),
+            tg_xfer_ms(m, tg_xfer_sum[TG_XFER_LOOP_US]),
+            tg_xfer_sum[TG_XFER_PACKETS], tg_xfer_ms(o, other));
+    for (i = 0; i < TG_XFER_COUNT; ++i) {
+        tg_xfer_sum[i] = 0UL;
+    }
+    tg_xfer_mark = now;
+    tg_gui_log(line); /* its own cost lands in the next line's log= */
+}
+#endif
+
 static unsigned long tg_connect_timeout_seconds = 0;
 
 void tg_net_connection_init(tg_net_connection *connection)
@@ -84,8 +197,10 @@ tg_net_status tg_net_send(tg_net_connection *connection, const void *data,
     {
         tg_net_status st;
 
+        TG_XFER_START(TG_XFER_SEND_US);
         st = tg_platform_tcp_send(connection, data, byte_count, bytes_sent,
                                   error_buffer, error_buffer_size);
+        TG_XFER_STOP(TG_XFER_SEND_US);
         TG_NET_DIAG("send done rc", (unsigned long)st);
         return st;
     }
@@ -109,9 +224,14 @@ tg_net_status tg_net_recv(tg_net_connection *connection, void *buffer,
     {
         tg_net_status st;
 
+        TG_XFER_START(TG_XFER_RECV_US);
         st = tg_platform_tcp_recv(connection, buffer, buffer_size,
                                   bytes_received, error_buffer,
                                   error_buffer_size);
+        TG_XFER_STOP(TG_XFER_RECV_US);
+        TG_XFER_ADD(TG_XFER_RECV_CALLS, 1);
+        TG_XFER_ADD(TG_XFER_RECV_BYTES,
+                    bytes_received != 0 ? *bytes_received : 0UL);
         TG_NET_DIAG("recv done rc", (unsigned long)st);
         return st;
     }
