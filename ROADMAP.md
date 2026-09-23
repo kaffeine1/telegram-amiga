@@ -134,20 +134,23 @@ Features are therefore grouped by the work they share.
   Carlo Spadoni's. The speed work this slot first promised moved to
   0.0.95: the Raspberry Pi cycle took the room, and a measured speed
   release is worth more than a rushed one.
-- **0.0.95, speed and open defects.** Whatever the transfer-ceiling
-  measurement turns up (an instrumented build that times each cost
-  centre of a part comes first), the two MorphOS popup glitches, photo
-  speed under AfA_OS, two-step verification on a slow 68k and the
-  full-size photo preference. On the 68k line, a look at which files of
-  pure computation (the JPEG decoder, image scaling, inflate, the TL
-  parser) can leave the safe -O0 for -O2 without meeting the compiler
-  bug that pinned the rest there: the likeliest lever for photo speed and
-  for the first start on a 68030. Measured there (14 MHz, stock 3.2.3):
-  a first start with only the saved login copied opens its window after
-  89 seconds, and 74 of them are the key exchange with the datacenter
-  that serves avatars, run before the window appears; the start after
-  that takes 12 seconds, about half of it decoding the first avatars. So
-  the window should open first and that key exchange should run after it.
+- **0.0.95, speed and open defects.** The levers the measurements of
+  2026-09-23 found, each one measured again with the same instrumented
+  build once it lands. Repaint only the status line during a transfer:
+  today the whole window is redrawn at every new percent, which is half
+  of a GUI download on a Vampire. Keep several requests in flight in
+  both directions: today there is one, so every part waits for Telegram
+  to answer before the next is even asked for. A word-at-a-time AES with
+  32-bit tables in place of the byte-at-a-time reference code: a 32 KB
+  part takes 155 ms to decrypt on a Vampire. Larger socket buffers: a
+  MorphOS upload blocks 79 ms per part inside the send. Open the window
+  before the key exchange with the datacenter that serves avatars, which
+  is 74 of the 89 seconds a first start takes on a 14 MHz 68030. And -O2
+  for the 68k files of pure computation (the JPEG decoder, image scaling,
+  inflate, the TL parser), one at a time, away from the compiler bug that
+  pinned the rest to -O0. Plus the open defects: the two MorphOS popup
+  glitches, photo speed under AfA_OS, two-step verification on a slow
+  68k and the full-size photo preference.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -567,6 +570,16 @@ MorphOS hardware will say how much of the remaining gap is ours; the
 lever this points at is keeping several requests in flight, which costs
 almost no memory, since the replies still arrive one after another on
 the same connection.
+
+**On real hardware, the same day, downloading one 4 MB file from the
+GUI.** A PiStorm running AmiKit reaches 119 KB/s, and 72 per cent of
+each part goes to repainting the whole window for the new percentage. A
+Vampire reaches 62 KB/s in the GUI and 82 in the text client: the
+repaint costs it 259 ms per 32 KB part, and our own crypto another 155
+to decrypt it, six times what the PiStorm needs. A MorphOS machine
+reaches 356 KB/s, with the wait for Telegram at about half of each part
+and the repaint at a quarter. The socket reads the section suspected
+take a few milliseconds everywhere. The levers are listed under 0.0.95.
 
 ## Design direction: closer to the desktop client
 
