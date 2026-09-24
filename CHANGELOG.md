@@ -5,7 +5,7 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
 Dates use YYYY-MM-DD. Each release ships on all five platform lanes
 unless noted.
 
-## [Unreleased]
+## [0.0.94] - 2026-09-25
 
 ### Added
 - A sixth package: AROS on ARM64 (aarch64, ABIv1), for the Raspberry Pi 4,
@@ -20,24 +20,15 @@ unless noted.
   itself, which had none. AmigaOS 4, MorphOS and AROS get his files as he
   drew them, in the format each system reads natively (an ARGB colour icon,
   PNG icons with the launcher fields written into them). AmigaOS 3.x cannot
-  read PNG icons, so its set is built from his artwork as an AmigaOS 3.5
-  colour icon of 64 colours with a planar fallback in the four Workbench
-  pens for 3.1; a 68k icon weighs three kilobytes. Every program icon keeps
-  what the self-launch needs: a project icon whose default tool is the
-  binary, with a 1 MB stack (384 KB on the 68000 build). The credit is in
-  the About box, the readme and the manuals, and the artwork as delivered
-  is kept in the repository.
-  Two corrections from the first hardware round of this cycle: the AmigaOS
-  3.x icon had a dark, ragged rim, because a palette icon has no alpha and
-  the antialiased edge of the drawing was cut hard; the rim is now blended
-  over the Workbench grey, and the file also carries the drawing with its
-  alpha as OS4-style ARGB chunks, which AmigaOS 4 and the third-party
-  icon.library AmiKit ships blend over any backdrop (stock 3.x skips them
-  and draws the palette image). The 3.x program icon is also built from the
-  64 pixel AmigaOS 4 drawing now, with 256 colours, since the 46 pixel one
-  looked coarse and small next to the icon it replaced; the drawer keeps the
-  cabinet Carlo drew for 3.x. And the MorphOS set had the program and the
-  drawer swapped: the program showed up as a folder.
+  read PNG icons, so its program icon is an AmigaOS 3.5 colour icon of 256
+  colours made from his 64 pixel AmigaOS 4 drawing, with the antialiased rim
+  blended over the Workbench grey and the drawing also carried with its
+  alpha, which the icon.library AmiKit ships draws over any backdrop; a
+  planar image in the four Workbench pens covers 3.1. The drawer keeps the
+  cabinet he drew for 3.x. Every program icon keeps what the self-launch
+  needs: a project icon whose default tool is the binary, with a 1 MB stack
+  (384 KB on the 68000 build). The credit is in the About box, the readme
+  and the manuals, and the artwork as delivered is kept in the repository.
 
 ### Fixed
 - AROS ARM executables load directly after `make`, without a manual relink.
@@ -104,10 +95,10 @@ unless noted.
   codepage on the systems whose font has them, which is in the roadmap.
 
 ### Changed
-- The word in front of the version comes from the version itself. Everything
-  that prints "alpha 0.0.93" now reads it from one place, and the packaging and
-  the release check work it out from the number: three components means an
-  alpha, two mean the beta numbering. The beta starts at 0.1 and not at 0.1.0,
+- The word in front of the version comes from one place. Everything that
+  prints "alpha 0.0.94" reads it from the version header, the packaging and
+  the release check included: three components means an alpha, two mean the
+  beta numbering. The beta starts at 0.1 and not at 0.1.0,
   because an AmigaOS version cookie is two integers and every release so far
   has read as plain "0.0" to the system. This is so that the day the number
   loses a dot, nothing is left saying alpha by accident.
@@ -116,10 +107,7 @@ unless noted.
   decides what a name written in Polish or Czech can look like at all, so it
   belongs in the line rather than in a guess from a screenshot.
 - The About box credits the contributor who took the build to AROS on ARM,
-  next to the one already there. The aarch64 lane is still not part of a
-  release: the build file lives in the tree and the port runs on a Raspberry
-  Pi, but nothing ships until it goes through the same round as the other
-  five.
+  next to the one already there.
 
 ## [0.0.93] - 2026-09-12
 
