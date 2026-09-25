@@ -433,6 +433,14 @@ void tg_gui_demo_state(tg_gui_state *state);
    geometry by issuing backend calls. Amiga backends draw to a RastPort; the
    host backend records the calls for the self-test. */
 void tg_gui_paint(const tg_gui_state *state, tg_gui_backend *backend);
+/* The status bar alone, for a line that changes while nothing else does (a
+   transfer's percentage): a full repaint for it redraws every photo too, which
+   a slow RTG display shows as a flash several times a second. Returns 0 and
+   draws nothing when the bar is not the whole story (another screen, a
+   context menu open): the caller then paints everything. out_rect, when
+   given, receives the strip that was drawn. */
+int tg_gui_paint_status_bar(const tg_gui_state *state,
+                            tg_gui_backend *backend, tg_gui_rect *out_rect);
 
 /* Disables the renderer's one-shot first-paint log trail (--gui-live-debug).
    The window backend MUST call this before running the painter under

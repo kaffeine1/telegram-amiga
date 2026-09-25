@@ -4802,6 +4802,82 @@ static void tg_gui_window_paint(const tg_gui_state *state,
    into it (tg_gui_paint_caret touches only that strip), then blit the whole
    already-current buffer -- correct and flicker-free; the blink only runs while a
    field is focused, so the 2 Hz full copy is cheap. */
+/* Transfer progress: the status bar alone, rendered in the off-screen buffer
+   and copied to the window as one strip. The full paint replays every inline
+   photo straight onto the window after its copy, so repainting everything for
+   each new percentage made the photos flash several times a second on a
+   Vampire, and cost 260 ms a part. Without a buffer the strip is drawn in
+   place; whenever the bar is not the whole story (a menu open) the full
+   paint runs as before. */
+static void tg_gui_window_paint_status(const tg_gui_state *state,
+                                       tg_gui_backend *backend)
+{
+    tg_gui_amiga_ctx *c = (tg_gui_amiga_ctx *)backend->context;
+    struct Layer *layer;
+    tg_gui_rect r;
+    int ok;
+
+    if (c == 0 || c->rport == 0) {
+        return;
+    }
+    layer = c->rport->Layer;
+    if (c->buf_ok && c->buf_bm != 0 &&
+        c->buf_w == c->inner_w && c->buf_h == c->inner_h) {
+        struct RastPort *saved_rport = c->rport;
+        int saved_ox = c->origin_x;
+        int saved_oy = c->origin_y;
+
+        WaitBlit(); /* the last copy may still be reading the buffer */
+        c->rport = &c->buf_rp;
+        c->origin_x = 0;
+        c->origin_y = 0;
+        ok = tg_gui_paint_status_bar(state, backend, &r);
+        c->rport = saved_rport;
+        c->origin_x = saved_ox;
+        c->origin_y = saved_oy;
+        if (!ok) {
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        if (r.x < 0) {
+            r.w += r.x;
+            r.x = 0;
+        }
+        if (r.y < 0) {
+            r.h += r.y;
+            r.y = 0;
+        }
+        if (r.x + r.w > c->inner_w) {
+            r.w = c->inner_w - r.x;
+        }
+        if (r.y + r.h > c->inner_h) {
+            r.h = c->inner_h - r.y;
+        }
+        if (r.w <= 0 || r.h <= 0) {
+            return;
+        }
+        if (layer != 0) {
+            LockLayerRom(layer);
+        }
+        BltBitMapRastPort(c->buf_bm, r.x, r.y, c->rport, saved_ox + r.x,
+                          saved_oy + r.y, r.w, r.h, 0xC0);
+        if (layer != 0) {
+            UnlockLayerRom(layer);
+        }
+    } else {
+        if (layer != 0) {
+            LockLayerRom(layer);
+        }
+        ok = tg_gui_paint_status_bar(state, backend, &r);
+        if (layer != 0) {
+            UnlockLayerRom(layer);
+        }
+        if (!ok) {
+            tg_gui_window_paint(state, backend);
+        }
+    }
+}
+
 static void tg_gui_window_paint_caret(const tg_gui_state *state,
                                       tg_gui_backend *backend)
 {
@@ -11109,7 +11185,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 if (strcmp(state->status, tline) != 0) {
                     tg_gui_window_copy(state->status, sizeof(state->status),
                                        tline);
-                    tg_gui_window_paint(state, &backend);
+                    tg_gui_window_paint_status(state, &backend);
                 }
             } else {
                 char saved[160];

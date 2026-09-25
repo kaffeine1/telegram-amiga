@@ -4502,6 +4502,45 @@ int tg_gui_mention_token(const char *input, int caret, int *start)
     return -1;
 }
 
+/* The status bar: the strip under the transcript and the list. */
+static void tg_gui_paint_status_strip(const tg_gui_state *state,
+                                      tg_gui_backend *backend, int width,
+                                      int content_h, int status_h, int lh)
+{
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                       tg_gui_make_rect(0, content_h, width, status_h));
+    backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, 10, content_h + lh,
+                       state->status, (unsigned long)strlen(state->status));
+}
+
+int tg_gui_paint_status_bar(const tg_gui_state *state,
+                            tg_gui_backend *backend, tg_gui_rect *out_rect)
+{
+    int width;
+    int height;
+    int lh;
+    int status_h;
+    int content_h;
+
+    if (state == 0 || backend == 0 || state->mode != TG_GUI_MODE_CHAT ||
+        state->ctx_visible) {
+        return 0; /* another screen, or a menu that may cover the bar */
+    }
+    width = backend->width(backend);
+    height = backend->height(backend);
+    lh = backend->line_height(backend);
+    if (width <= 0 || height <= 0 || lh <= 0) {
+        return 0;
+    }
+    status_h = lh + 6;
+    content_h = height - status_h;
+    tg_gui_paint_status_strip(state, backend, width, content_h, status_h, lh);
+    if (out_rect != 0) {
+        *out_rect = tg_gui_make_rect(0, content_h, width, status_h);
+    }
+    return 1;
+}
+
 void tg_gui_paint(const tg_gui_state *state, tg_gui_backend *backend)
 {
     int width;
@@ -4549,10 +4588,7 @@ void tg_gui_paint(const tg_gui_state *state, tg_gui_backend *backend)
     if (!tg_gui_first_paint_logged) {
         tg_gui_log("chat paint: status");
     }
-    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
-                       tg_gui_make_rect(0, content_h, width, status_h));
-    backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, 10, content_h + lh,
-                       state->status, (unsigned long)strlen(state->status));
+    tg_gui_paint_status_strip(state, backend, width, content_h, status_h, lh);
     /* Drawn last so it overlays the transcript/status; part of the off-screen
        render, so the double-buffer blit carries it and a repaint with
        ctx_visible==0 cleanly removes it. */
@@ -6380,6 +6416,48 @@ int tg_gui_self_test(void)
         if (tg_gui_mention_token("ciao", 4, &st) != -1 ||
             tg_gui_mention_token("", 0, &st) != -1) {
             puts("gui self-test: no-'@' input must yield no token");
+            return 2;
+        }
+    }
+
+    /* 0.0.94: a transfer's percentage repaints the status bar alone, so the
+       photos above it are not replayed (they flashed on a Vampire at every
+       new percent). The strip is the bar and nothing else: one fill over
+       exactly its rect and the status text inside it. With a context menu
+       open, which may cover the bar, the call declines and draws nothing, so
+       the window falls back to the full paint. */
+    {
+        tg_gui_state *st = tg_gui_test_scratch_state();
+        tg_gui_record srec;
+        tg_gui_backend sb = backend;
+        tg_gui_rect r;
+        int sok;
+
+        tg_gui_demo_state(st);
+        tg_gui_copy(st->status, sizeof(st->status),
+                    "Downloading 42% 118 KB/s (ESC cancels)");
+        memset(&srec, 0, sizeof(srec));
+        srec.width = 640;
+        srec.height = 400;
+        srec.min_x = srec.width;
+        srec.min_y = srec.height;
+        sb.context = &srec;
+        memset(&r, 0, sizeof(r));
+        sok = tg_gui_paint_status_bar(st, &sb, &r);
+        if (!sok || r.x != 0 || r.w != 640 || r.h != 10 + 6 ||
+            r.y + r.h != 400 || srec.fills != 1 || srec.texts != 1 ||
+            srec.min_y < r.y || srec.max_y > r.y + r.h ||
+            srec.first_text_y < r.y || srec.first_text_y > r.y + r.h) {
+            puts("gui self-test: status bar repaint left its strip");
+            return 2;
+        }
+        st->ctx_visible = 1;
+        memset(&srec, 0, sizeof(srec));
+        srec.width = 640;
+        srec.height = 400;
+        if (tg_gui_paint_status_bar(st, &sb, &r) != 0 || srec.fills != 0 ||
+            srec.texts != 0) {
+            puts("gui self-test: status bar repaint ignored an open menu");
             return 2;
         }
     }

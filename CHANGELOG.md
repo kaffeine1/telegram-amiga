@@ -20,17 +20,24 @@ unless noted.
   itself, which had none. AmigaOS 4, MorphOS and AROS get his files as he
   drew them, in the format each system reads natively (an ARGB colour icon,
   PNG icons with the launcher fields written into them). AmigaOS 3.x cannot
-  read PNG icons, so its program icon is an AmigaOS 3.5 colour icon of 256
-  colours made from his 64 pixel AmigaOS 4 drawing, with the antialiased rim
+  read PNG icons, so its set is made from the 46 pixel drawings he did for
+  3.x as AmigaOS 3.5 colour icons of 256 colours, with the antialiased rim
   blended over the Workbench grey and the drawing also carried with its
   alpha, which the icon.library AmiKit ships draws over any backdrop; a
-  planar image in the four Workbench pens covers 3.1. The drawer keeps the
-  cabinet he drew for 3.x. Every program icon keeps what the self-launch
+  planar image in the four Workbench pens covers 3.1. Every program icon keeps what the self-launch
   needs: a project icon whose default tool is the binary, with a 1 MB stack
   (384 KB on the 68000 build). The credit is in the About box, the readme
   and the manuals, and the artwork as delivered is kept in the repository.
 
 ### Fixed
+- A download no longer makes the window flash. Every new percentage used to
+  repaint the whole window, and the full paint draws the inline photos
+  straight onto it after copying the rest, so on a Vampire the photos in
+  view vanished and came back several times a second and the window was hard
+  to use while a file came in. The progress now repaints the status bar
+  alone, copied from the off-screen buffer as one strip; with a menu open it
+  still falls back to the full paint. It also gives a Vampire back the 260
+  ms each 32 KB part spent repainting.
 - AROS ARM executables load directly after `make`, without a manual relink.
   GCC 6.5 defaults to COMMON symbols for uninitialized globals, which the
   AROS relocatable ELF loader rejects. The ARM build now enforces
