@@ -20,11 +20,13 @@ unless noted.
   itself, which had none. AmigaOS 4, MorphOS and AROS get his files as he
   drew them, in the format each system reads natively (an ARGB colour icon,
   PNG icons with the launcher fields written into them). AmigaOS 3.x cannot
-  read PNG icons, so its set is made from the 46 pixel drawings he did for
-  3.x as AmigaOS 3.5 colour icons of 256 colours, with the antialiased rim
-  blended over the Workbench grey and the drawing also carried with its
-  alpha, which the icon.library AmiKit ships draws over any backdrop; a
-  planar image in the four Workbench pens covers 3.1. Every program icon keeps what the self-launch
+  read PNG icons, so its set becomes AmigaOS 3.5 colour icons of 256
+  colours: the drawer is the cabinet he drew for 3.x, the program his 64
+  pixel drawing shrunk to the size of the 3.x set, which keeps its rim clean
+  on a real Workbench. The antialiased rim is blended over the Workbench
+  grey and the drawing is also carried with its alpha, which the
+  icon.library AmiKit ships draws over any backdrop; a planar image in the
+  four Workbench pens covers 3.1. Every program icon keeps what the self-launch
   needs: a project icon whose default tool is the binary, with a 1 MB stack
   (384 KB on the 68000 build). The credit is in the About box, the readme
   and the manuals, and the artwork as delivered is kept in the repository.

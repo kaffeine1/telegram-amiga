@@ -28,18 +28,20 @@ Usage:
   make_os35_icon.py IN.png OUT.info --project [--tool TelegramAmiga] [--stack N]
   make_os35_icon.py IN.png OUT.info --drawer
   options: --selected SEL.png  --colors 64  --frameless  --matte 170,170,170
-           --alpha-cut 32  --no-argb
+           --alpha-cut 32  --no-argb  --size 44  --canvas 46
 The rim of the drawing is blended over --matte (the Workbench grey) since a
 palette icon has no alpha; pixels under --alpha-cut stay transparent. Unless
 --no-argb, the file also carries the drawing with its alpha as OS4 ARGB
 chunks, which icon.library versions that know them blend over any backdrop.
+--size resamples the artwork to that many pixels a side first, and --canvas
+centres the result on a larger transparent frame.
 """
 import io
 import struct
 import zlib
 import sys
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0] if "/" in __file__ else ".")
 import make_gui_icon as classic  # noqa: E402  (the DiskObject walker)
@@ -180,6 +182,26 @@ def load_states(path, selected):
     return images
 
 
+def shrink(im, size, canvas):
+    """The artwork resampled to size x size and centred on a transparent
+    canvas x canvas frame. A big drawing shrunk this way keeps a clean rim,
+    because its edge was drawn at a scale where it could be: on a real
+    Workbench the 46 pixel 3.x drawing showed a dark, broken outline that the
+    64 pixel one, shrunk to the same size, does not have. Lanczos works over
+    premultiplied alpha (Pillow does that for RGBA); a light unsharp mask on
+    the colour alone then gives back the detail the resampling softened,
+    and the alpha stays as resampled."""
+    small = im.resize((size, size), Image.Resampling.LANCZOS)
+    r, g, b, a = small.convert("RGBa").split()
+    rgb = Image.merge("RGB", (r, g, b)).filter(ImageFilter.UnsharpMask(radius=0.8, percent=50, threshold=0))
+    small = Image.merge("RGBa", rgb.split() + (a,)).convert("RGBA")
+    if canvas > size:
+        frame = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+        frame.paste(small, ((canvas - size) // 2, (canvas - size) // 2))
+        small = frame
+    return small
+
+
 def matte_over(im, matte):
     """The artwork over the Workbench background colour: a palette icon has
     no alpha channel, so the antialiased rim of the drawing has to be blended
@@ -297,7 +319,8 @@ def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     opts = {}
     for i, a in enumerate(argv):
-        if a in ("--tool", "--stack", "--selected", "--colors", "--matte", "--alpha-cut") and i + 1 < len(argv):
+        if a in ("--tool", "--stack", "--selected", "--colors", "--matte", "--alpha-cut",
+                 "--size", "--canvas") and i + 1 < len(argv):
             opts[a] = argv[i + 1]
     args = [a for a in args if a not in opts.values()]
     if len(args) < 2 or not ({"--project", "--drawer"} & set(flags)):
@@ -316,6 +339,13 @@ def main(argv):
         return 2
     alpha_cut = int(opts.get("--alpha-cut", "32"))
     images = load_states(args[0], opts.get("--selected"))
+    if "--size" in opts:
+        size = int(opts["--size"])
+        canvas = int(opts.get("--canvas", opts["--size"]))
+        if not 1 <= size <= canvas <= 256:
+            sys.stderr.write("size must be 1..canvas, canvas at most 256\n")
+            return 2
+        images = [shrink(im, size, canvas) for im in images]
     out = build(images, classic.WBDRAWER if drawer else classic.WBPROJECT, tool, stack,
                 colors, "--frameless" in flags, drawer, matte, alpha_cut, "--no-argb" not in flags)
     back = classic.parse(out)
