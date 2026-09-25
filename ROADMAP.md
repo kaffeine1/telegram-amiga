@@ -137,8 +137,7 @@ Features are therefore grouped by the work they share.
   The rest of the speed work moved to 0.0.95: the Raspberry Pi cycle
   took the room, and a measured speed release is worth more than a
   rushed one. Validated on real AmigaOS 3 and MorphOS, on a Raspberry Pi
-  400 and in the OS4 VM; the AROS i386 and x86_64 builds went through
-  the cycle's VM round.
+  400 and in the OS4, AROS i386 and AROS x86_64 VMs.
 - **0.0.95, speed and open defects.** The levers the measurements of
   2026-09-23 found, each one measured again with the same instrumented
   build once it lands. The first of them, repainting only the status
