@@ -25,35 +25,28 @@ Two front-ends share one engine:
 
 ![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.93** - everyday direct-message and group chat works on all
-five platforms below. 0.0.93 is the sending cycle. Emoji can be sent: a panel
-above the composer (Amiga+E) offers the ones this client already reads back as
-text emoticons, most recently used first, walked with the arrow keys or
-clicked, and each one goes out as its real Unicode codepoint while being drawn
-as a picture in the composer. A paperclip next to the composer opens the
-attachment chooser, and a PNG now goes out as a photo rather than a file: the
-photo gate reads the file's own bytes instead of its name, so a truncated
-image is refused before a single part is uploaded. A link preview that
-Telegram finishes building after the message is already on screen now appears
-by itself, in the open chat, including for a link just sent from here.
+Status: **alpha 0.0.94** - everyday direct-message and group chat works on all
+six platforms below. 0.0.94 adds the sixth: AROS on ARM64, for the Raspberry
+Pi 4, 400 and 5 running the native AROS image, built from the same commit as
+the other five and checked on a Raspberry Pi 400. Every platform gets icons by
+Carlo Spadoni, with an icon for the drawer too. The client is now safe on FAT
+volumes: every file it saves is replaced rather than rewritten in place, so
+the saved login, the chat list and the window geometry survive the AROS FAT
+handler. A download no longer makes the window flash, because the progress
+repaints the status bar alone; a link Telegram already knows gets its preview
+on the message just sent; and letters outside Latin-1, such as Polish ones,
+fold to their base letter instead of vanishing.
 
-The release also gets new logins working again. Telegram had quietly stopped
-delivering the in-app code to this client, on more than one account and more
-than one api key: the connection now declares a full locale and the codes
-arrive as before. The login screen no longer promises a code that is not
-coming, says what an account needs when Telegram asks for a verified email
-first, and can ask for the code again by the route Telegram offers. Emoji and
-inline photos have separate saved settings; both default off on native
-AGA/ECS/OCS screens (including classic OS4) or 68k CPUs below 68040, and
-enabled emoji stay graphical with small fonts. It retains 0.0.92's link
-previews, video frames and attachment labels, 0.0.9's photo pipeline, and the
-messaging, file sharing, replies, editing, read receipts and avatars delivered
-by earlier releases.
+It retains 0.0.93's emoji panel, attachment chooser and working logins,
+0.0.92's link previews, video frames and attachment labels, 0.0.9's photo
+pipeline, and the messaging, file sharing, replies, editing, read receipts and
+avatars delivered by earlier releases.
 
-Development on `main` now targets the 0.1 beta, where the version number
-loses a dot and becomes the two-integer one AmigaOS itself understands. Work
-there is unreleased and remains subject to real-system validation on all five
-platforms; see [ROADMAP.md](ROADMAP.md).
+Development on `main` now targets 0.0.95, a speed release: transfers timed
+part by part on real machines point to a handful of levers, from keeping
+several requests in flight to a faster AES. Work there is unreleased and
+remains subject to real-system validation on all six platforms; see
+[ROADMAP.md](ROADMAP.md).
 
 License: MIT — a non-commercial community project, a gift to the Amiga
 community. Development diary:
@@ -66,11 +59,12 @@ per-architecture IT/EN manuals — and **no private files**.
 
 | Platform | CPU | Release |
 |---|---|---|
-| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.93) |
-| AmigaOS 4.x | PPC | [os4-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.93) |
-| MorphOS | PPC | [morphos-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.93) |
-| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.93) |
-| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.93](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.93) |
+| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.94) |
+| AmigaOS 4.x | PPC | [os4-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.94) |
+| MorphOS | PPC | [morphos-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.94) |
+| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.94) |
+| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.94) |
+| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.94) |
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases> —
 full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
@@ -79,7 +73,8 @@ as `CHANGELOG.txt`).
 AmigaOS 3.x is a native clib2 build (no ixemul, no AmiSSL) and needs a 68020 or
 better. AROS x86_64 targets trunk-SDK-matched systems (AROS One v0.38 pairs a
 different kickstart and will not run it); AROS i386 ABIv0 is the broadest AROS
-build.
+build. AROS aarch64 (ABIv1) runs on the native AROS image for the Raspberry Pi
+4, 400 and 5, from the image of 2026-08-22 on.
 
 ## Quick start
 

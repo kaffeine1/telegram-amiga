@@ -39,8 +39,8 @@ The project has moved past the Bot-API diagnostic tester to a real MTProto
 client:
 
 - MTProto human releases ship for AmigaOS 3.x, AmigaOS 4.x, MorphOS,
-  AROS i386 and AROS x86_64: login wizard, 2FA/SRP, saved chat list,
-  text chat and file transfer.
+  AROS i386, AROS x86_64 and, from 0.0.94, AROS aarch64 on the Raspberry
+  Pi: login wizard, 2FA/SRP, saved chat list, text chat and file transfer.
 - Release 0.0.7 adds: robust big-file transfers (live %, chunk retry,
   cancellable, send timeouts on stalled links), GUI text selection and
   Copy/Cut/Paste in an Edit menu, reply on double-click, TUI file
@@ -123,34 +123,39 @@ Features are therefore grouped by the work they share.
   carries the fix for new logins, which Telegram had silently stopped
   sending codes to. Validated on real AmigaOS 3 and MorphOS and in the
   OS4, AROS i386 and AROS x86_64 VMs.
-- **0.0.94, the sixth platform and the storage fixes.** AROS on ARM64
-  (Raspberry Pi 4, 400 and 5) becomes the sixth package, built from the
-  same commit as the other five and validated on a Raspberry Pi 400. The
-  field report that brought it in also found the AROS FAT handler
-  emptying any file rewritten in place, so every file the client saves is
-  now replaced instead (chat list, random seed, window geometry), and the
-  GUI model moved off the stack on 64-bit builds. A link Telegram already
-  knew gets its preview on the message just sent, and the icons are
-  Carlo Spadoni's. The speed work this slot first promised moved to
-  0.0.95: the Raspberry Pi cycle took the room, and a measured speed
-  release is worth more than a rushed one.
+- **0.0.94, the sixth platform and the storage fixes.** RELEASED
+  2026-09-25. AROS on ARM64 (Raspberry Pi 4, 400 and 5) becomes the
+  sixth package, built from the same commit as the other five and
+  validated on a Raspberry Pi 400. The field report that brought it in
+  also found the AROS FAT handler emptying any file rewritten in place,
+  so every file the client saves is now replaced instead (chat list,
+  random seed, window geometry), and the GUI model moved off the stack
+  on 64-bit builds. A link Telegram already knew gets its preview on the
+  message just sent, and the icons are Carlo Spadoni's. The first
+  measured speed lever came in early, after a Vampire showed the window
+  flashing during a download: a transfer repaints the status bar alone.
+  The rest of the speed work moved to 0.0.95: the Raspberry Pi cycle
+  took the room, and a measured speed release is worth more than a
+  rushed one. Validated on real AmigaOS 3 and MorphOS, on a Raspberry Pi
+  400 and in the OS4 VM; the AROS i386 and x86_64 builds went through
+  the cycle's VM round.
 - **0.0.95, speed and open defects.** The levers the measurements of
   2026-09-23 found, each one measured again with the same instrumented
-  build once it lands. Repaint only the status line during a transfer:
-  today the whole window is redrawn at every new percent, which is half
-  of a GUI download on a Vampire. Keep several requests in flight in
-  both directions: today there is one, so every part waits for Telegram
-  to answer before the next is even asked for. A word-at-a-time AES with
-  32-bit tables in place of the byte-at-a-time reference code: a 32 KB
-  part takes 155 ms to decrypt on a Vampire. Larger socket buffers: a
-  MorphOS upload blocks 79 ms per part inside the send. Open the window
-  before the key exchange with the datacenter that serves avatars, which
-  is 74 of the 89 seconds a first start takes on a 14 MHz 68030. And -O2
-  for the 68k files of pure computation (the JPEG decoder, image scaling,
-  inflate, the TL parser), one at a time, away from the compiler bug that
-  pinned the rest to -O0. Plus the open defects: the two MorphOS popup
-  glitches, photo speed under AfA_OS, two-step verification on a slow
-  68k and the full-size photo preference.
+  build once it lands. The first of them, repainting only the status
+  line during a transfer, already shipped in 0.0.94. Keep several
+  requests in flight in both directions: today there is one, so every
+  part waits for Telegram to answer before the next is even asked for. A
+  word-at-a-time AES with 32-bit tables in place of the byte-at-a-time
+  reference code: a 32 KB part takes 155 ms to decrypt on a Vampire.
+  Larger socket buffers: a MorphOS upload blocks 79 ms per part inside
+  the send. Open the window before the key exchange with the datacenter
+  that serves avatars, which is 74 of the 89 seconds a first start takes
+  on a 14 MHz 68030. And -O2 for the 68k files of pure computation (the
+  JPEG decoder, image scaling, inflate, the TL parser), one at a time,
+  away from the compiler bug that pinned the rest to -O0. Plus the open
+  defects: the two MorphOS popup glitches, photo speed under AfA_OS,
+  two-step verification on a slow 68k and the full-size photo
+  preference.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that

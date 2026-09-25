@@ -1361,8 +1361,10 @@ if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f
         "AROS x86_64 ABIv11 (AROS One x64) with its TCP/IP stack"
     # Sixth package since 0.0.94: the site already files ARM64 uploads under
     # the aarch64-aros suffix (pintp, commander_keen_4, super_trevor_land).
+    # 0.0.94 was its first upload (with "new"); from 0.0.95 on it replaces
+    # network/chat/telegramamiga.aarch64-aros.lha like the other two.
     write_arosarchives_pair TelegramAmiga-ARM64 telegramamiga.aarch64-aros \
-        "AROS aarch64 ABIv1 (Raspberry Pi 4, 400 and 5; native image of 2026-08-22 or newer) with its TCP/IP stack" new
+        "AROS aarch64 ABIv1 (Raspberry Pi 4, 400 and 5; native image of 2026-08-22 or newer) with its TCP/IP stack"
     rm -f "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.lha" "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.readme" # staging copies
     echo
     echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (up to 3 x .lha + _lha.readme)"
