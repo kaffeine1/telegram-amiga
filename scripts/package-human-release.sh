@@ -904,8 +904,11 @@ EOF
 # the x86_64-aros FILENAME (verified live, e.g. filesysbox.x86_64-aros).
 # From 0.0.6 the archives are named after the binary (TelegramAmiga) in the
 # classic Aminet suffix style -- the 30-char filename limit rules out the long
-# arch tags (TelegramAmiga.m68k-amigaos.readme would be 33). The old tgamiga.*
-# pages are superseded via the Replaces: field (lhaold below).
+# arch tags (TelegramAmiga.m68k-amigaos.readme would be 33). Replaces: names
+# the previous release of the same archive (lhaold below): Aminet refuses an
+# upload whose Replaces: points at an archive it no longer has, which is what
+# the old tgamiga.* names did to all five 0.0.94 uploads (0.0.93 still passed
+# with them in September 2026).
 aminet_meta() {
     aminet_upload=1 # 0 = the lha is built for The AROS Archives only
     case "$1" in
@@ -934,7 +937,7 @@ aminet_meta() {
                  aminet_upload=0 ;;
     *) echo "aminet_meta: unknown arch $1" >&2; exit 1 ;;
     esac
-    if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/tgamiga.$archtag.lha"; else lhaold=""; fi
+    if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/$lhaname.lha"; else lhaold=""; fi
 }
 
 # The Aminet .readme: machine-readable header (Short/Uploader/Author/Type/
@@ -977,6 +980,8 @@ changelog_section_text() {
 }
 
 write_aminet_readme() {
+    # $4 = the Aminet path this upload replaces; empty for a first upload,
+    # and then the Replaces: line is dropped (an empty one would be refused)
     out=$1; archval=$2; requires=$3; replaces=$4
     cat > "$out" <<EOF
 Short:        Native MTProto Telegram chat client
@@ -1058,6 +1063,9 @@ me ship them with it.
   Development diary:
   $DIARY_URL
 EOF
+    if [ -z "$replaces" ]; then
+        awk 'NR <= 10 && /^Replaces:/ { next } { print }' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
+    fi
 }
 
 package_one() {
