@@ -59,7 +59,6 @@ AMINET=${AMINET:-1}
 LHA_BIN=${LHA_BIN:-"$HOME/amiga-dev/tools/lha-src/src/lha"}
 AMINET_ROOT=${AMINET_ROOT:-"$PACKAGE_ROOT/aminet"}
 AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"} # set here: package_one stages the aarch64 lha there
-AMINET_BASE=${AMINET_BASE:-tgamiga}      # short base: keeps every name <= 30 chars incl. suffix
 AMINET_DRAWER=${AMINET_DRAWER:-TelegramAmiga}
 AMINET_UPLOADER=${AMINET_UPLOADER:-"michele.dipace@kaffeine.net (Michele Dipace)"}
 AMINET_AUTHOR=${AMINET_AUTHOR:-"Michele Dipace <michele.dipace@kaffeine.net>"}
@@ -907,8 +906,8 @@ EOF
 # arch tags (TelegramAmiga.m68k-amigaos.readme would be 33). Replaces: names
 # the previous release of the same archive (lhaold below): Aminet refuses an
 # upload whose Replaces: points at an archive it no longer has, which is what
-# the old tgamiga.* names did to all five 0.0.94 uploads (0.0.93 still passed
-# with them in September 2026).
+# the archive names from before 0.0.6 did to all five 0.0.94 uploads (0.0.93
+# still passed with them in September 2026).
 aminet_meta() {
     aminet_upload=1 # 0 = the lha is built for The AROS Archives only
     case "$1" in
@@ -1190,7 +1189,7 @@ package_one() {
         echo "$dest"
     fi
 
-    # --- Aminet: tgamiga.<archtag>.lha + matching tgamiga.<archtag>.readme ----
+    # --- Aminet: TelegramAmiga<suffix>.lha + matching .readme ----------------
     # Reuses the assembled drawer ($dest, incl. LICENSE) but under a clean
     # top-level name ($AMINET_DRAWER) so unpacking yields one tidy directory.
     # The 68000 text-only package is not an Aminet upload (it is the
