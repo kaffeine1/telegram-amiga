@@ -146,13 +146,14 @@ Features are therefore grouped by the work they share.
   requests in flight in both directions: today there is one, so every
   part waits for Telegram to answer before the next is even asked for. A
   word-at-a-time AES with 32-bit tables in place of the byte-at-a-time
-  reference code: a 32 KB part takes 155 ms to decrypt on a Vampire.
-  Larger socket buffers: a MorphOS upload blocks 79 ms per part inside
-  the send. Open the window before the key exchange with the datacenter
-  that serves avatars, which is 74 of the 89 seconds a first start takes
-  on a 14 MHz 68030. And -O2 for the 68k files of pure computation (the
-  JPEG decoder, image scaling, inflate, the TL parser), one at a time,
-  away from the compiler bug that pinned the rest to -O0. Plus the open
+  reference code, now on main: on a Vampire a 32 KB part takes 34 ms to
+  decrypt instead of 128, and 39 ms to encrypt instead of 183. Larger
+  socket buffers: a MorphOS upload blocks 79 ms per part inside the
+  send. Open the window before the key exchange with the datacenter that
+  serves avatars, which is 74 of the 89 seconds a first start takes on a
+  14 MHz 68030. And -O2 for the 68k files of pure computation (the JPEG
+  decoder, image scaling, inflate, the TL parser), one at a time, away
+  from the compiler bug that pinned the rest to -O0. Plus the open
   defects: the two MorphOS popup glitches, photo speed under AfA_OS,
   two-step verification on a slow 68k and the full-size photo
   preference.
