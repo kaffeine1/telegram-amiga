@@ -67,7 +67,8 @@ client:
   any of the six platforms, an adversarial review pass has run, and a
   full cycle has gone by without field regressions. See "The road to
   0.1 beta" below for what each step carries.
-- Later: per-chat file browser, multi-message selection, archive management.
+- Later: per-chat file browser and archive management. Selecting several
+  messages to delete or forward them has its own entry below.
 - A Bot-API text path stays available as a fallback for tokens/bots.
 - TLS certificate validation has passed a live CA-bundle smoke test on all four
   platforms (see `docs/TLS_CERTIFICATES.md`).
@@ -831,6 +832,36 @@ player on the first unread; it is a preference away, not a design.
 
 Settings entry: "Notify: Title | Title + beep | Off". Fits the 0.0.9x
 polish line and touches nothing in the protocol.
+
+## Planned: select several messages, then delete or forward them
+
+Today every action on a message starts from the right-click popup and
+touches that one message: clearing out a run of test messages, or
+forwarding a whole exchange, means doing it one by one. The desktop
+client has a selection mode for this, and it is the model to follow.
+
+The popup gets a "Select" entry, and a click in the gutter left of a
+bubble does the same. Once the mode is on, a click toggles a message,
+Shift+click extends the selection to a range, and the composer strip is
+replaced by a bar in the desktop's style: "3 selected", then Forward,
+Delete and Cancel. Esc or Cancel leaves the mode, and so does switching
+chat. The text selection that feeds Copy stays what it is, inside a
+single message; the two never mix.
+
+Both actions already exist for one message, and the protocol takes a
+list: messages.deleteMessages and channels.deleteMessages accept several
+ids in one call, and messages.forwardMessages forwards several at once,
+in order, with one random id each. So the work is in the GUI: a flag per
+loaded message, the range logic, the bar, one confirmation for the whole
+batch (with "also for the other person" where Telegram allows it), and
+the existing destination chooser for forwarding. The selection spans
+only the history that is loaded, which on a small machine is the honest
+limit rather than a missing feature.
+
+It touches the transcript, the popup and the composer strip, and
+nothing in the transfer or login paths, so it fits the 0.0.9x line in
+one of the slots after the 0.0.95 speed release. The text client gets
+it later, if at all: its /forward stays one message at a time.
 
 ## Planned: the send-photo dialog's preview, done right
 
