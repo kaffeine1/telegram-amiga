@@ -81,6 +81,9 @@ int tg_mtproto_self_test(void)
                                       tg_mtproto_crypto_self_test) != 0) {
         return 2;
     }
+    if (tg_mtproto_run_self_test_step("aes", tg_mtproto_aes_self_test) != 0) {
+        return 2;
+    }
     if (tg_mtproto_run_self_test_step("srp", tg_mtproto_srp_self_test) != 0) {
         return 2;
     }
@@ -130,6 +133,9 @@ int tg_mtproto_self_test_fast(void)
     }
     if (tg_mtproto_run_self_test_step("crypto",
                                       tg_mtproto_crypto_self_test) != 0) {
+        return 2;
+    }
+    if (tg_mtproto_run_self_test_step("aes", tg_mtproto_aes_self_test) != 0) {
         return 2;
     }
     if (tg_mtproto_run_self_test_step("session",

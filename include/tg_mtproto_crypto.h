@@ -6,6 +6,8 @@
 #ifndef TG_MTPROTO_CRYPTO_H
 #define TG_MTPROTO_CRYPTO_H
 
+#include <stdio.h>
+
 #define TG_MTPROTO_SHA1_LENGTH 20
 #define TG_MTPROTO_SHA256_LENGTH 32
 #define TG_MTPROTO_SHA512_LENGTH 64
@@ -37,6 +39,8 @@ void tg_mtproto_aes256_ige_decrypt(unsigned char *data,
                                    const unsigned char key[32],
                                    const unsigned char iv[32]);
 int tg_mtproto_crypto_self_test(void);
+int tg_mtproto_aes_self_test(void);
+int tg_mtproto_aes_bench(FILE *stream);
 
 /*
  * Optional progress hook for long CPU-bound crypto (PBKDF2/SRP on slow CPUs

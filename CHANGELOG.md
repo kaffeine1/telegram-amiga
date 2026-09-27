@@ -1,9 +1,25 @@
 # Changelog
 
 Telegram Amiga, a from-scratch native MTProto Telegram client for
-AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386/x86_64).
-Dates use YYYY-MM-DD. Each release ships on all five platform lanes
-unless noted.
+AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386, x86_64 and, from 0.0.94,
+aarch64). Dates use YYYY-MM-DD. Each release ships on all six platform
+lanes unless noted.
+
+## [Unreleased]
+
+### Changed
+- AES works a column at a time. Every byte that crosses the connection
+  goes through AES-256 in IGE mode, and the client did it one byte at a
+  time: SubBytes, ShiftRows and MixColumns as three passes over the state
+  in every round, which cost a Vampire 155 ms to decrypt a single 32 KB
+  download part. A round is now sixteen lookups in tables of 32-bit words
+  and a few XORs per block, with decryption through the equivalent inverse
+  cipher; the tables (8 KB) are built from the S-box when first needed. A
+  self-test checks the new code against the FIPS-197 vector and against
+  the byte form on random keys, IVs and lengths in both directions, and
+  fails when either direction is broken. `--mtproto-aes-bench` reports the
+  cost per 32 KB part on the machine it runs on, and a build with the
+  self-tests also times the byte form for comparison.
 
 ## [0.0.94] - 2026-09-25
 

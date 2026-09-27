@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "tg_mtproto_bigint.h"
 #include "tg_mtproto_crypto.h"
@@ -172,6 +174,344 @@ static void tg_aes_key_expansion(const unsigned char key[32],
     }
 }
 
+static unsigned char tg_aes_gf_mul(unsigned char a, unsigned char b)
+{
+    unsigned char result;
+    unsigned char high_bit;
+    unsigned int i;
+
+    result = 0U;
+    for (i = 0U; i < 8U; ++i) {
+        if ((b & 1U) != 0U) {
+            result ^= a;
+        }
+        high_bit = (unsigned char)(a & 0x80U);
+        a <<= 1;
+        if (high_bit != 0U) {
+            a ^= 0x1bU;
+        }
+        b >>= 1;
+    }
+    return result;
+}
+
+/* AES a column at a time. Each round of the textbook cipher (SubBytes,
+   ShiftRows, MixColumns, AddRoundKey) collapses into sixteen lookups in four
+   tables of 32-bit words and a few XORs per 16-byte block, where the byte
+   form walked the state three times per round; decryption uses the
+   equivalent inverse cipher, whose round keys are pre-mixed once per key.
+   On a Vampire the byte form took 155 ms to decrypt a 32 KB download part.
+   The eight tables (8 KB) and the inverse S-box are built from the S-box on
+   first use, so the source carries no second copy of the constants.
+   unsigned int is 32 bits on every lane (checked below), which keeps the
+   word arithmetic free of masks on the 64-bit ones. */
+typedef unsigned int tg_aes_word;
+typedef char tg_aes_word_is_32_bits[(sizeof(tg_aes_word) == 4U) ? 1 : -1];
+
+static tg_aes_word tg_aes_te0[256];
+static tg_aes_word tg_aes_te1[256];
+static tg_aes_word tg_aes_te2[256];
+static tg_aes_word tg_aes_te3[256];
+static tg_aes_word tg_aes_td0[256];
+static tg_aes_word tg_aes_td1[256];
+static tg_aes_word tg_aes_td2[256];
+static tg_aes_word tg_aes_td3[256];
+static unsigned char tg_aes_inv_sbox[256];
+static int tg_aes_tables_ready = 0;
+
+#define TG_AES_ROTR8(w) (((w) >> 8) | ((w) << 24))
+#define TG_AES_B0(w) ((unsigned int)((w) >> 24))
+#define TG_AES_B1(w) ((unsigned int)(((w) >> 16) & 0xffU))
+#define TG_AES_B2(w) ((unsigned int)(((w) >> 8) & 0xffU))
+#define TG_AES_B3(w) ((unsigned int)((w) & 0xffU))
+
+static void tg_aes_init_tables(void)
+{
+    unsigned int i;
+
+    if (tg_aes_tables_ready) {
+        return;
+    }
+    for (i = 0U; i < 256U; ++i) {
+        tg_aes_inv_sbox[tg_aes_sbox[i]] = (unsigned char)i;
+    }
+    for (i = 0U; i < 256U; ++i) {
+        tg_aes_word s;
+        tg_aes_word s2;
+        tg_aes_word v;
+        tg_aes_word te;
+        tg_aes_word td;
+
+        s = tg_aes_sbox[i];
+        s2 = tg_xtime((unsigned char)s);
+        te = (s2 << 24) | (s << 16) | (s << 8) | (s2 ^ s);
+        v = tg_aes_inv_sbox[i];
+        td = ((tg_aes_word)tg_aes_gf_mul((unsigned char)v, 0x0eU) << 24) |
+             ((tg_aes_word)tg_aes_gf_mul((unsigned char)v, 0x09U) << 16) |
+             ((tg_aes_word)tg_aes_gf_mul((unsigned char)v, 0x0dU) << 8) |
+             (tg_aes_word)tg_aes_gf_mul((unsigned char)v, 0x0bU);
+        tg_aes_te0[i] = te;
+        tg_aes_te1[i] = TG_AES_ROTR8(te);
+        tg_aes_te2[i] = TG_AES_ROTR8(tg_aes_te1[i]);
+        tg_aes_te3[i] = TG_AES_ROTR8(tg_aes_te2[i]);
+        tg_aes_td0[i] = td;
+        tg_aes_td1[i] = TG_AES_ROTR8(td);
+        tg_aes_td2[i] = TG_AES_ROTR8(tg_aes_td1[i]);
+        tg_aes_td3[i] = TG_AES_ROTR8(tg_aes_td2[i]);
+    }
+    tg_aes_tables_ready = 1;
+}
+
+static tg_aes_word tg_aes_load(const unsigned char *p)
+{
+    return ((tg_aes_word)p[0] << 24) | ((tg_aes_word)p[1] << 16) |
+           ((tg_aes_word)p[2] << 8) | (tg_aes_word)p[3];
+}
+
+static void tg_aes_store(unsigned char *p, tg_aes_word w)
+{
+    p[0] = (unsigned char)(w >> 24);
+    p[1] = (unsigned char)(w >> 16);
+    p[2] = (unsigned char)(w >> 8);
+    p[3] = (unsigned char)w;
+}
+
+/* The 60 round-key words for encryption. */
+static void tg_aes_encrypt_key(const unsigned char key[32], tg_aes_word ek[60])
+{
+    unsigned char bytes[240];
+    unsigned int i;
+
+    tg_aes_key_expansion(key, bytes);
+    for (i = 0U; i < 60U; ++i) {
+        ek[i] = tg_aes_load(bytes + (i * 4U));
+    }
+}
+
+/* The equivalent inverse cipher's round keys: the encryption ones in reverse
+   round order, with InvMixColumns applied to all but the first and the last.
+   Td[S[x]] is InvMixColumns of x alone, hence the S-box inside. */
+static void tg_aes_decrypt_key(const tg_aes_word ek[60], tg_aes_word dk[60])
+{
+    unsigned int r;
+    unsigned int j;
+
+    for (r = 0U; r <= 14U; ++r) {
+        for (j = 0U; j < 4U; ++j) {
+            dk[r * 4U + j] = ek[(14U - r) * 4U + j];
+        }
+    }
+    for (r = 4U; r < 56U; ++r) {
+        tg_aes_word w;
+
+        w = dk[r];
+        dk[r] = tg_aes_td0[tg_aes_sbox[TG_AES_B0(w)]] ^
+                tg_aes_td1[tg_aes_sbox[TG_AES_B1(w)]] ^
+                tg_aes_td2[tg_aes_sbox[TG_AES_B2(w)]] ^
+                tg_aes_td3[tg_aes_sbox[TG_AES_B3(w)]];
+    }
+}
+
+static void tg_aes_encrypt_words(tg_aes_word s[4], const tg_aes_word *rk)
+{
+    tg_aes_word s0;
+    tg_aes_word s1;
+    tg_aes_word s2;
+    tg_aes_word s3;
+    tg_aes_word t0;
+    tg_aes_word t1;
+    tg_aes_word t2;
+    tg_aes_word t3;
+    unsigned int round;
+
+    s0 = s[0] ^ rk[0];
+    s1 = s[1] ^ rk[1];
+    s2 = s[2] ^ rk[2];
+    s3 = s[3] ^ rk[3];
+    for (round = 1U; round < 14U; ++round) {
+        rk += 4;
+        t0 = tg_aes_te0[TG_AES_B0(s0)] ^ tg_aes_te1[TG_AES_B1(s1)] ^
+             tg_aes_te2[TG_AES_B2(s2)] ^ tg_aes_te3[TG_AES_B3(s3)] ^ rk[0];
+        t1 = tg_aes_te0[TG_AES_B0(s1)] ^ tg_aes_te1[TG_AES_B1(s2)] ^
+             tg_aes_te2[TG_AES_B2(s3)] ^ tg_aes_te3[TG_AES_B3(s0)] ^ rk[1];
+        t2 = tg_aes_te0[TG_AES_B0(s2)] ^ tg_aes_te1[TG_AES_B1(s3)] ^
+             tg_aes_te2[TG_AES_B2(s0)] ^ tg_aes_te3[TG_AES_B3(s1)] ^ rk[2];
+        t3 = tg_aes_te0[TG_AES_B0(s3)] ^ tg_aes_te1[TG_AES_B1(s0)] ^
+             tg_aes_te2[TG_AES_B2(s1)] ^ tg_aes_te3[TG_AES_B3(s2)] ^ rk[3];
+        s0 = t0;
+        s1 = t1;
+        s2 = t2;
+        s3 = t3;
+    }
+    rk += 4;
+    s[0] = ((tg_aes_word)tg_aes_sbox[TG_AES_B0(s0)] << 24) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B1(s1)] << 16) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B2(s2)] << 8) ^
+           (tg_aes_word)tg_aes_sbox[TG_AES_B3(s3)] ^ rk[0];
+    s[1] = ((tg_aes_word)tg_aes_sbox[TG_AES_B0(s1)] << 24) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B1(s2)] << 16) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B2(s3)] << 8) ^
+           (tg_aes_word)tg_aes_sbox[TG_AES_B3(s0)] ^ rk[1];
+    s[2] = ((tg_aes_word)tg_aes_sbox[TG_AES_B0(s2)] << 24) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B1(s3)] << 16) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B2(s0)] << 8) ^
+           (tg_aes_word)tg_aes_sbox[TG_AES_B3(s1)] ^ rk[2];
+    s[3] = ((tg_aes_word)tg_aes_sbox[TG_AES_B0(s3)] << 24) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B1(s0)] << 16) ^
+           ((tg_aes_word)tg_aes_sbox[TG_AES_B2(s1)] << 8) ^
+           (tg_aes_word)tg_aes_sbox[TG_AES_B3(s2)] ^ rk[3];
+}
+
+static void tg_aes_decrypt_words(tg_aes_word s[4], const tg_aes_word *rk)
+{
+    tg_aes_word s0;
+    tg_aes_word s1;
+    tg_aes_word s2;
+    tg_aes_word s3;
+    tg_aes_word t0;
+    tg_aes_word t1;
+    tg_aes_word t2;
+    tg_aes_word t3;
+    unsigned int round;
+
+    s0 = s[0] ^ rk[0];
+    s1 = s[1] ^ rk[1];
+    s2 = s[2] ^ rk[2];
+    s3 = s[3] ^ rk[3];
+    for (round = 1U; round < 14U; ++round) {
+        rk += 4;
+        t0 = tg_aes_td0[TG_AES_B0(s0)] ^ tg_aes_td1[TG_AES_B1(s3)] ^
+             tg_aes_td2[TG_AES_B2(s2)] ^ tg_aes_td3[TG_AES_B3(s1)] ^ rk[0];
+        t1 = tg_aes_td0[TG_AES_B0(s1)] ^ tg_aes_td1[TG_AES_B1(s0)] ^
+             tg_aes_td2[TG_AES_B2(s3)] ^ tg_aes_td3[TG_AES_B3(s2)] ^ rk[1];
+        t2 = tg_aes_td0[TG_AES_B0(s2)] ^ tg_aes_td1[TG_AES_B1(s1)] ^
+             tg_aes_td2[TG_AES_B2(s0)] ^ tg_aes_td3[TG_AES_B3(s3)] ^ rk[2];
+        t3 = tg_aes_td0[TG_AES_B0(s3)] ^ tg_aes_td1[TG_AES_B1(s2)] ^
+             tg_aes_td2[TG_AES_B2(s1)] ^ tg_aes_td3[TG_AES_B3(s0)] ^ rk[3];
+        s0 = t0;
+        s1 = t1;
+        s2 = t2;
+        s3 = t3;
+    }
+    rk += 4;
+    s[0] = ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B0(s0)] << 24) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B1(s3)] << 16) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B2(s2)] << 8) ^
+           (tg_aes_word)tg_aes_inv_sbox[TG_AES_B3(s1)] ^ rk[0];
+    s[1] = ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B0(s1)] << 24) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B1(s0)] << 16) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B2(s3)] << 8) ^
+           (tg_aes_word)tg_aes_inv_sbox[TG_AES_B3(s2)] ^ rk[1];
+    s[2] = ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B0(s2)] << 24) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B1(s1)] << 16) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B2(s0)] << 8) ^
+           (tg_aes_word)tg_aes_inv_sbox[TG_AES_B3(s3)] ^ rk[2];
+    s[3] = ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B0(s3)] << 24) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B1(s2)] << 16) ^
+           ((tg_aes_word)tg_aes_inv_sbox[TG_AES_B2(s1)] << 8) ^
+           (tg_aes_word)tg_aes_inv_sbox[TG_AES_B3(s0)] ^ rk[3];
+}
+
+/* IGE: c[i] = E(p[i] ^ c[i-1]) ^ p[i-1], with c[0], p[0] from the IV. Only
+   whole blocks are processed; every caller passes a multiple of 16. */
+void tg_mtproto_aes256_ige_encrypt(unsigned char *data,
+                                  unsigned long length,
+                                  const unsigned char key[32],
+                                  const unsigned char iv[32])
+{
+    tg_aes_word ek[60];
+    tg_aes_word prev_cipher[4];
+    tg_aes_word prev_plain[4];
+    tg_aes_word plain[4];
+    tg_aes_word block[4];
+    unsigned long offset;
+    unsigned int j;
+
+    tg_aes_init_tables();
+    tg_aes_encrypt_key(key, ek);
+    for (j = 0U; j < 4U; ++j) {
+        prev_cipher[j] = tg_aes_load(iv + (j * 4U));
+        prev_plain[j] = tg_aes_load(iv + 16U + (j * 4U));
+    }
+    for (offset = 0UL; offset + 16UL <= length; offset += 16UL) {
+        for (j = 0U; j < 4U; ++j) {
+            plain[j] = tg_aes_load(data + offset + (j * 4U));
+            block[j] = plain[j] ^ prev_cipher[j];
+        }
+        tg_aes_encrypt_words(block, ek);
+        for (j = 0U; j < 4U; ++j) {
+            block[j] ^= prev_plain[j];
+            tg_aes_store(data + offset + (j * 4U), block[j]);
+            prev_cipher[j] = block[j];
+            prev_plain[j] = plain[j];
+        }
+    }
+}
+
+/* IGE: p[i] = D(c[i] ^ p[i-1]) ^ c[i-1]. */
+void tg_mtproto_aes256_ige_decrypt(unsigned char *data,
+                                  unsigned long length,
+                                  const unsigned char key[32],
+                                  const unsigned char iv[32])
+{
+    tg_aes_word ek[60];
+    tg_aes_word dk[60];
+    tg_aes_word prev_cipher[4];
+    tg_aes_word prev_plain[4];
+    tg_aes_word cipher[4];
+    tg_aes_word block[4];
+    unsigned long offset;
+    unsigned int j;
+
+    tg_aes_init_tables();
+    tg_aes_encrypt_key(key, ek);
+    tg_aes_decrypt_key(ek, dk);
+    for (j = 0U; j < 4U; ++j) {
+        prev_cipher[j] = tg_aes_load(iv + (j * 4U));
+        prev_plain[j] = tg_aes_load(iv + 16U + (j * 4U));
+    }
+    for (offset = 0UL; offset + 16UL <= length; offset += 16UL) {
+        for (j = 0U; j < 4U; ++j) {
+            cipher[j] = tg_aes_load(data + offset + (j * 4U));
+            block[j] = cipher[j] ^ prev_plain[j];
+        }
+        tg_aes_decrypt_words(block, dk);
+        for (j = 0U; j < 4U; ++j) {
+            block[j] ^= prev_cipher[j];
+            tg_aes_store(data + offset + (j * 4U), block[j]);
+            prev_cipher[j] = cipher[j];
+            prev_plain[j] = block[j];
+        }
+    }
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* The byte-at-a-time AES this client used up to 0.0.94, kept as the
+   reference the self-test compares the word form against and the benchmark
+   times it against. Not in the release binaries. */
+static unsigned char tg_aes_mul9[256];
+static unsigned char tg_aes_mul11[256];
+static unsigned char tg_aes_mul13[256];
+static unsigned char tg_aes_mul14[256];
+static int tg_aes_ref_tables_ready = 0;
+
+static void tg_aes_ref_init_tables(void)
+{
+    unsigned int i;
+
+    tg_aes_init_tables();
+    if (tg_aes_ref_tables_ready) {
+        return;
+    }
+    for (i = 0U; i < 256U; ++i) {
+        tg_aes_mul9[i] = tg_aes_gf_mul((unsigned char)i, 0x09U);
+        tg_aes_mul11[i] = tg_aes_gf_mul((unsigned char)i, 0x0bU);
+        tg_aes_mul13[i] = tg_aes_gf_mul((unsigned char)i, 0x0dU);
+        tg_aes_mul14[i] = tg_aes_gf_mul((unsigned char)i, 0x0eU);
+    }
+    tg_aes_ref_tables_ready = 1;
+}
+
 static void tg_aes_add_round_key(unsigned char state[16],
                                  const unsigned char *round_key)
 {
@@ -218,71 +558,12 @@ static void tg_aes_mix_columns(unsigned char state[16])
     }
 }
 
-/* Precomputed AES decryption tables, built once from the forward S-box and
-   the GF(2^8) multiply. They replace a per-lookup linear search of the S-box
-   and a bit-by-bit GF multiply in InvMixColumns, which together made
-   decryption ~8x slower than encryption on the host benchmark -- a serious
-   drag on the slow 68k, where every incoming message is IGE-decrypted. */
-static unsigned char tg_aes_inv_sbox[256];
-static unsigned char tg_aes_mul9[256];
-static unsigned char tg_aes_mul11[256];
-static unsigned char tg_aes_mul13[256];
-static unsigned char tg_aes_mul14[256];
-static int tg_aes_tables_ready = 0;
-
-static unsigned char tg_aes_gf_mul(unsigned char a, unsigned char b);
-
-static void tg_aes_init_tables(void)
-{
-    unsigned int i;
-
-    if (tg_aes_tables_ready) {
-        return;
-    }
-    for (i = 0U; i < 256U; ++i) {
-        tg_aes_inv_sbox[tg_aes_sbox[i]] = (unsigned char)i;
-    }
-    for (i = 0U; i < 256U; ++i) {
-        tg_aes_mul9[i] = tg_aes_gf_mul((unsigned char)i, 0x09U);
-        tg_aes_mul11[i] = tg_aes_gf_mul((unsigned char)i, 0x0bU);
-        tg_aes_mul13[i] = tg_aes_gf_mul((unsigned char)i, 0x0dU);
-        tg_aes_mul14[i] = tg_aes_gf_mul((unsigned char)i, 0x0eU);
-    }
-    tg_aes_tables_ready = 1;
-}
-
-static unsigned char tg_aes_inverse_sbox(unsigned char value)
-{
-    return tg_aes_inv_sbox[value];
-}
-
-static unsigned char tg_aes_gf_mul(unsigned char a, unsigned char b)
-{
-    unsigned char result;
-    unsigned char high_bit;
-    unsigned int i;
-
-    result = 0U;
-    for (i = 0U; i < 8U; ++i) {
-        if ((b & 1U) != 0U) {
-            result ^= a;
-        }
-        high_bit = (unsigned char)(a & 0x80U);
-        a <<= 1;
-        if (high_bit != 0U) {
-            a ^= 0x1bU;
-        }
-        b >>= 1;
-    }
-    return result;
-}
-
 static void tg_aes_inv_sub_bytes(unsigned char state[16])
 {
     unsigned int i;
 
     for (i = 0U; i < 16U; ++i) {
-        state[i] = tg_aes_inverse_sbox(state[i]);
+        state[i] = tg_aes_inv_sbox[state[i]];
     }
 }
 
@@ -349,7 +630,7 @@ static void tg_aes256_decrypt_block(const unsigned char in[16],
     unsigned char state[16];
     int round;
 
-    tg_aes_init_tables();
+    tg_aes_ref_init_tables();
     memcpy(state, in, 16U);
     tg_aes_add_round_key(state, round_key + 224U);
     for (round = 13; round >= 1; --round) {
@@ -364,10 +645,10 @@ static void tg_aes256_decrypt_block(const unsigned char in[16],
     memcpy(out, state, 16U);
 }
 
-void tg_mtproto_aes256_ige_encrypt(unsigned char *data,
-                                  unsigned long length,
-                                  const unsigned char key[32],
-                                  const unsigned char iv[32])
+static void tg_aes_ref_ige_encrypt(unsigned char *data,
+                                   unsigned long length,
+                                   const unsigned char key[32],
+                                   const unsigned char iv[32])
 {
     unsigned char prev_cipher[16];
     unsigned char prev_plain[16];
@@ -377,10 +658,11 @@ void tg_mtproto_aes256_ige_encrypt(unsigned char *data,
     unsigned long offset;
     unsigned int i;
 
+    tg_aes_ref_init_tables();
     tg_aes_key_expansion(key, round_key);
     memcpy(prev_cipher, iv, 16U);
     memcpy(prev_plain, iv + 16U, 16U);
-    for (offset = 0UL; offset < length; offset += 16UL) {
+    for (offset = 0UL; offset + 16UL <= length; offset += 16UL) {
         memcpy(plain, data + offset, 16U);
         for (i = 0U; i < 16U; ++i) {
             block[i] = (unsigned char)(plain[i] ^ prev_cipher[i]);
@@ -395,10 +677,10 @@ void tg_mtproto_aes256_ige_encrypt(unsigned char *data,
     }
 }
 
-void tg_mtproto_aes256_ige_decrypt(unsigned char *data,
-                                  unsigned long length,
-                                  const unsigned char key[32],
-                                  const unsigned char iv[32])
+static void tg_aes_ref_ige_decrypt(unsigned char *data,
+                                   unsigned long length,
+                                   const unsigned char key[32],
+                                   const unsigned char iv[32])
 {
     unsigned char prev_cipher[16];
     unsigned char prev_plain[16];
@@ -408,10 +690,11 @@ void tg_mtproto_aes256_ige_decrypt(unsigned char *data,
     unsigned long offset;
     unsigned int i;
 
+    tg_aes_ref_init_tables();
     tg_aes_key_expansion(key, round_key);
     memcpy(prev_cipher, iv, 16U);
     memcpy(prev_plain, iv + 16U, 16U);
-    for (offset = 0UL; offset < length; offset += 16UL) {
+    for (offset = 0UL; offset + 16UL <= length; offset += 16UL) {
         memcpy(cipher, data + offset, 16U);
         for (i = 0U; i < 16U; ++i) {
             block[i] = (unsigned char)(cipher[i] ^ prev_plain[i]);
@@ -425,6 +708,7 @@ void tg_mtproto_aes256_ige_decrypt(unsigned char *data,
         memcpy(prev_plain, block, 16U);
     }
 }
+#endif /* !TG_NO_SELFTEST */
 
 static void tg_rsa_public_encrypt_raw(
     const unsigned char input[TG_MTPROTO_RSA_MODULUS_LENGTH],
@@ -1337,4 +1621,177 @@ int tg_mtproto_rsa_self_test(void)
 
     return 0;
 }
+
+/* xorshift32: the same cases on every lane, no dependence on rand(). */
+static unsigned long tg_aes_test_next(unsigned long *state)
+{
+    unsigned long x;
+
+    x = *state & 0xffffffffUL;
+    x ^= (x << 13) & 0xffffffffUL;
+    x ^= x >> 17;
+    x ^= (x << 5) & 0xffffffffUL;
+    *state = x;
+    return x;
+}
+
+/* The word form of AES, first against FIPS-197 C.3 one block each way, then
+   in IGE against the byte form it replaced, which is what every message went
+   through up to 0.0.94: random keys, IVs, data and lengths, both directions,
+   and a round trip. */
+int tg_mtproto_aes_self_test(void)
+{
+    static const unsigned char fips_key[32] = {
+        0x00U,0x01U,0x02U,0x03U,0x04U,0x05U,0x06U,0x07U,
+        0x08U,0x09U,0x0aU,0x0bU,0x0cU,0x0dU,0x0eU,0x0fU,
+        0x10U,0x11U,0x12U,0x13U,0x14U,0x15U,0x16U,0x17U,
+        0x18U,0x19U,0x1aU,0x1bU,0x1cU,0x1dU,0x1eU,0x1fU
+    };
+    static const unsigned char fips_plain[16] = {
+        0x00U,0x11U,0x22U,0x33U,0x44U,0x55U,0x66U,0x77U,
+        0x88U,0x99U,0xaaU,0xbbU,0xccU,0xddU,0xeeU,0xffU
+    };
+    static const unsigned char fips_cipher[16] = {
+        0x8eU,0xa2U,0xb7U,0xcaU,0x51U,0x67U,0x45U,0xbfU,
+        0xeaU,0xfcU,0x49U,0x90U,0x4bU,0x49U,0x60U,0x89U
+    };
+    static unsigned char data[1024];
+    static unsigned char fast[1024];
+    static unsigned char ref[1024];
+    unsigned char out[16];
+    unsigned char key[32];
+    unsigned char iv[32];
+    tg_aes_word ek[60];
+    tg_aes_word dk[60];
+    tg_aes_word block[4];
+    unsigned long seed;
+    unsigned long length;
+    unsigned int n;
+    unsigned int i;
+
+    tg_aes_init_tables();
+    tg_aes_encrypt_key(fips_key, ek);
+    tg_aes_decrypt_key(ek, dk);
+    for (i = 0U; i < 4U; ++i) {
+        block[i] = tg_aes_load(fips_plain + (i * 4U));
+    }
+    tg_aes_encrypt_words(block, ek);
+    for (i = 0U; i < 4U; ++i) {
+        tg_aes_store(out + (i * 4U), block[i]);
+    }
+    if (memcmp(out, fips_cipher, sizeof(out)) != 0) {
+        return 2;
+    }
+    tg_aes_decrypt_words(block, dk);
+    for (i = 0U; i < 4U; ++i) {
+        tg_aes_store(out + (i * 4U), block[i]);
+    }
+    if (memcmp(out, fips_plain, sizeof(out)) != 0) {
+        return 2;
+    }
+
+    seed = 0x2545f491UL;
+    for (n = 0U; n < 48U; ++n) {
+        length = 16UL * (1UL + (tg_aes_test_next(&seed) % 64UL));
+        for (i = 0U; i < 32U; ++i) {
+            key[i] = (unsigned char)tg_aes_test_next(&seed);
+            iv[i] = (unsigned char)tg_aes_test_next(&seed);
+        }
+        for (i = 0U; i < (unsigned int)length; ++i) {
+            data[i] = (unsigned char)tg_aes_test_next(&seed);
+        }
+        memcpy(fast, data, (size_t)length);
+        memcpy(ref, data, (size_t)length);
+        tg_mtproto_aes256_ige_encrypt(fast, length, key, iv);
+        tg_aes_ref_ige_encrypt(ref, length, key, iv);
+        if (memcmp(fast, ref, (size_t)length) != 0 ||
+            memcmp(fast, data, (size_t)length) == 0) {
+            return 2;
+        }
+        tg_mtproto_aes256_ige_decrypt(fast, length, key, iv);
+        tg_aes_ref_ige_decrypt(ref, length, key, iv);
+        if (memcmp(fast, data, (size_t)length) != 0 ||
+            memcmp(ref, data, (size_t)length) != 0) {
+            return 2;
+        }
+    }
+    return 0;
+}
 #endif /* !TG_NO_SELFTEST */
+
+static unsigned long tg_aes_bench_clock_us(void)
+{
+    struct timeval tv;
+
+    if (gettimeofday(&tv, 0) != 0) {
+        return 0UL;
+    }
+    return (unsigned long)tv.tv_sec * 1000000UL + (unsigned long)tv.tv_usec;
+}
+
+static void tg_aes_bench_report(FILE *stream, const char *what,
+                                unsigned long t0, unsigned long t1,
+                                unsigned int parts)
+{
+    unsigned long per_part;
+
+    per_part = (t1 - t0) / (unsigned long)parts;
+    fprintf(stream, "aes bench: %s %lu.%lu ms per 32 KB part\n", what,
+            per_part / 1000UL, (per_part % 1000UL) / 100UL);
+    fflush(stream);
+}
+
+/* What AES-256-IGE costs on this machine, per 32 KB download part, each
+   way. No network, no files. A build with self-tests also times the byte
+   form the word form replaced, on the same data. */
+int tg_mtproto_aes_bench(FILE *stream)
+{
+    static unsigned char buffer[32768];
+    unsigned char key[32];
+    unsigned char iv[32];
+    unsigned long t0;
+    unsigned long t1;
+    unsigned int parts;
+    unsigned int i;
+
+    if (stream == 0) {
+        return 2;
+    }
+    parts = 32U;
+    for (i = 0U; i < sizeof(buffer); ++i) {
+        buffer[i] = (unsigned char)((i * 7U) + 3U);
+    }
+    for (i = 0U; i < 32U; ++i) {
+        key[i] = (unsigned char)((i * 5U) + 1U);
+        iv[i] = (unsigned char)((i * 3U) + 2U);
+    }
+    fprintf(stream, "aes bench: %u parts of 32 KB, AES-256-IGE\n", parts);
+    fflush(stream);
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < parts; ++i) {
+        tg_mtproto_aes256_ige_encrypt(buffer, sizeof(buffer), key, iv);
+    }
+    t1 = tg_aes_bench_clock_us();
+    tg_aes_bench_report(stream, "encrypt", t0, t1, parts);
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < parts; ++i) {
+        tg_mtproto_aes256_ige_decrypt(buffer, sizeof(buffer), key, iv);
+    }
+    t1 = tg_aes_bench_clock_us();
+    tg_aes_bench_report(stream, "decrypt", t0, t1, parts);
+#if !defined(TG_NO_SELFTEST)
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < parts; ++i) {
+        tg_aes_ref_ige_encrypt(buffer, sizeof(buffer), key, iv);
+    }
+    t1 = tg_aes_bench_clock_us();
+    tg_aes_bench_report(stream, "byte form encrypt", t0, t1, parts);
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < parts; ++i) {
+        tg_aes_ref_ige_decrypt(buffer, sizeof(buffer), key, iv);
+    }
+    t1 = tg_aes_bench_clock_us();
+    tg_aes_bench_report(stream, "byte form decrypt", t0, t1, parts);
+#endif
+    return 0;
+}
