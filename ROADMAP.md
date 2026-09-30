@@ -957,6 +957,37 @@ first login that cannot fail because a message did not arrive. The
 existing code path stays: a phone that cannot scan, or a user who
 prefers typing, still gets the number and the code.
 
+## Planned: the new name, Amigram, before the 0.1 beta
+
+Telegram's API terms let an app's title carry the word Telegram only
+after "Unofficial" (2.3). The title already says "Unofficial Telegram
+Amiga", which complies; the plan is a name that needs no qualifier at
+all: Amigram. It is free on Aminet, OS4Depot and The AROS Archives, and
+it follows the "-gram" names many third-party Telegram clients use. The
+sentence the terms ask for (2.2), an unofficial client that uses the
+Telegram API and is part of its ecosystem, stays where it is.
+
+Unlike the title, the name is also how the channels and the installers
+know the program. Easy2Install on MorphOS expects the archive, the
+drawer and the executable to share one name and reads the installed
+version from the executable, so a renamed program looks like a new
+package to it and an existing install would never hear of the new one.
+The move therefore comes in steps. One last release as TelegramAmiga
+says that the program becomes Amigram. Before it, the maintainer of
+MorphOS-Storage and Easy2Install is asked how the old entry should hand
+over to the new one there. On Aminet, OS4Depot and The AROS Archives
+the new archives replace the old ones through their Replaces fields.
+AmiUpdate is not used yet, so the program starts there as Amigram. The
+repository is renamed too; GitHub keeps the old address working.
+
+What changes: the executable (Amigram), its icons and the console
+marker (Amigram-TUI, the self-launch reads "TUI" in the name as today),
+the drawer, the archives, the version string, the manuals and every
+text. What does not: the files the client keeps (telegram-auth.bin and
+the data drawer), so a user who copies the new drawer over the old one
+keeps the session. It lands in the 0.0.9x line, so the 0.1 beta ships
+as Amigram.
+
 ## Planned: create an account from the client
 
 When a phone number has no account yet, auth.signIn answers that a sign
