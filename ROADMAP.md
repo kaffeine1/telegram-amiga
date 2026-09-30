@@ -957,6 +957,35 @@ first login that cannot fail because a message did not arrive. The
 existing code path stays: a phone that cannot scan, or a user who
 prefers typing, still gets the number and the code.
 
+## Planned: create an account from the client
+
+When a phone number has no account yet, auth.signIn answers that a sign
+up is required and attaches Telegram's terms of service. The client
+already recognises that answer and can build auth.signUp, but only from
+the command line, where it was written for Telegram's test numbers: the
+GUI and the text client stop at "sign-up required". The plan is a "New
+account" step in both login wizards: first name (required) and last
+name, the terms of service as Telegram sends them, Accept
+(help.acceptTermsOfService), then auth.signUp, after which everything
+goes on exactly as after a login. An invalid name, an expired code and
+a number already in use each get a message that says what to do.
+
+Development needs no new SIM: Telegram's test servers accept numbers of
+the form 99966XYYYY with a fixed code, which is what the existing
+command was built for.
+
+Two limits are not ours to lift. The code for a number with no account
+cannot arrive in the app, it has to come by SMS or by a call, and
+Telegram does not promise that to unofficial clients: it may ask for an
+email first, which the login already explains, or send nothing. And
+Telegram puts accounts that sign in through unofficial clients under
+observation; a brand-new account made from one looks like the usual
+spam pattern. So the manual keeps recommending the official app to
+create the account and this client to use it, and the feature is for
+the people for whom that is not an option: a phone that receives SMS
+and no smartphone. It fits the 0.0.9x line after the 0.0.95 speed
+release.
+
 ## Planned: the api credentials the packages carry
 
 Every package ships the same api_id and api_hash in a plain text file, so
