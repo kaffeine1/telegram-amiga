@@ -4066,7 +4066,7 @@ int tg_app_run(int argc, char **argv)
        on the host binary; on a release binary they are dead weight, felt the
        most on the 68000 package). Field diagnostics stay in: --net-test,
        --http-test, --https-test, --platform-rng-test, --mtproto-2fa-bench,
-       --mtproto-aes-bench.
+       --mtproto-crypto-bench.
        Saying so beats silently ignoring the flag. */
     if (config.run_http_post_self_test || config.run_gui_self_test ||
         config.run_chat_engine_self_test || config.run_chat_render_self_test ||
@@ -4356,8 +4356,8 @@ int tg_app_run(int argc, char **argv)
         return tg_mtproto_2fa_bench(stdout);
     }
 
-    if (config.run_mtproto_aes_bench) {
-        return tg_mtproto_aes_bench(stdout);
+    if (config.run_mtproto_crypto_bench) {
+        return tg_mtproto_crypto_bench(stdout);
     }
 
     if (config.run_mtproto_req_pq_probe) {

@@ -1736,19 +1736,21 @@ static void tg_aes_bench_report(FILE *stream, const char *what,
     unsigned long per_part;
 
     per_part = (t1 - t0) / (unsigned long)parts;
-    fprintf(stream, "aes bench: %s %lu.%lu ms per 32 KB part\n", what,
+    fprintf(stream, "crypto bench: %s %lu.%lu ms per 32 KB part\n", what,
             per_part / 1000UL, (per_part % 1000UL) / 100UL);
     fflush(stream);
 }
 
-/* What AES-256-IGE costs on this machine, per 32 KB download part, each
-   way. No network, no files. A build with self-tests also times the byte
-   form the word form replaced, on the same data. */
-int tg_mtproto_aes_bench(FILE *stream)
+/* What the per-message crypto costs on this machine, per 32 KB download
+   part: AES-256-IGE each way and the SHA-256 that checks every message
+   key. No network, no files. A build with self-tests also times the forms
+   the word forms replaced, on the same data. */
+int tg_mtproto_crypto_bench(FILE *stream)
 {
     static unsigned char buffer[32768];
     unsigned char key[32];
     unsigned char iv[32];
+    unsigned char digest[TG_MTPROTO_SHA256_LENGTH];
     unsigned long t0;
     unsigned long t1;
     unsigned int parts;
@@ -1765,7 +1767,7 @@ int tg_mtproto_aes_bench(FILE *stream)
         key[i] = (unsigned char)((i * 5U) + 1U);
         iv[i] = (unsigned char)((i * 3U) + 2U);
     }
-    fprintf(stream, "aes bench: %u parts of 32 KB, AES-256-IGE\n", parts);
+    fprintf(stream, "crypto bench: %u parts of 32 KB\n", parts);
     fflush(stream);
     t0 = tg_aes_bench_clock_us();
     for (i = 0U; i < parts; ++i) {
@@ -1779,19 +1781,31 @@ int tg_mtproto_aes_bench(FILE *stream)
     }
     t1 = tg_aes_bench_clock_us();
     tg_aes_bench_report(stream, "decrypt", t0, t1, parts);
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < parts; ++i) {
+        tg_mtproto_sha256(buffer, sizeof(buffer), digest);
+    }
+    t1 = tg_aes_bench_clock_us();
+    tg_aes_bench_report(stream, "sha256", t0, t1, parts);
 #if !defined(TG_NO_SELFTEST)
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < parts; ++i) {
+        tg_mtproto_sha256_ref_blocks(buffer, sizeof(buffer));
+    }
+    t1 = tg_aes_bench_clock_us();
+    tg_aes_bench_report(stream, "old sha256", t0, t1, parts);
     t0 = tg_aes_bench_clock_us();
     for (i = 0U; i < parts; ++i) {
         tg_aes_ref_ige_encrypt(buffer, sizeof(buffer), key, iv);
     }
     t1 = tg_aes_bench_clock_us();
-    tg_aes_bench_report(stream, "byte form encrypt", t0, t1, parts);
+    tg_aes_bench_report(stream, "old aes encrypt", t0, t1, parts);
     t0 = tg_aes_bench_clock_us();
     for (i = 0U; i < parts; ++i) {
         tg_aes_ref_ige_decrypt(buffer, sizeof(buffer), key, iv);
     }
     t1 = tg_aes_bench_clock_us();
-    tg_aes_bench_report(stream, "byte form decrypt", t0, t1, parts);
+    tg_aes_bench_report(stream, "old aes decrypt", t0, t1, parts);
 #endif
     return 0;
 }

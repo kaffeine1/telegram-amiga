@@ -56,11 +56,14 @@ static unsigned long tg_rotl32(unsigned long value, unsigned long bits)
     return ((value << bits) | (value >> (32UL - bits))) & 0xffffffffUL;
 }
 
+#if !defined(TG_NO_SELFTEST)
+/* Only the reference SHA-256 kept for the self-test still rotates this way. */
 static unsigned long tg_rotr32(unsigned long value, unsigned long bits)
 {
     value &= 0xffffffffUL;
     return ((value >> bits) | (value << (32UL - bits))) & 0xffffffffUL;
 }
+#endif
 
 static unsigned long tg_load_be32(const unsigned char *data)
 {
@@ -266,27 +269,111 @@ void tg_mtproto_sha1(const unsigned char *data, unsigned long data_length,
     tg_sha1_final(&context, digest);
 }
 
+/* SHA-256 on 32-bit words (0.0.95): FIPS 180-4, with the eight working
+   variables renamed from round to round instead of moved (eight rounds per
+   pass of the loop), rotations the compiler turns into single instructions
+   and unsigned int, 32 bits on every lane, so no masks. Every message the
+   client receives is hashed whole to check its message key: on a Vampire
+   that hash was about half of the 86 ms a 32 KB download part spent in
+   decryption. */
+typedef unsigned int tg_sha_word;
+typedef char tg_sha_word_is_32_bits[(sizeof(tg_sha_word) == 4U) ? 1 : -1];
+
+static const tg_sha_word tg_sha256_k[64] = {
+    0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U,
+    0x3956c25bU, 0x59f111f1U, 0x923f82a4U, 0xab1c5ed5U,
+    0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
+    0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U,
+    0xe49b69c1U, 0xefbe4786U, 0x0fc19dc6U, 0x240ca1ccU,
+    0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
+    0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U,
+    0xc6e00bf3U, 0xd5a79147U, 0x06ca6351U, 0x14292967U,
+    0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
+    0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U,
+    0xa2bfe8a1U, 0xa81a664bU, 0xc24b8b70U, 0xc76c51a3U,
+    0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
+    0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U,
+    0x391c0cb3U, 0x4ed8aa4aU, 0x5b9cca4fU, 0x682e6ff3U,
+    0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
+    0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U
+    };
+
+#define TG_SHA_ROTR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+#define TG_SHA_CH(e, f, g) ((g) ^ ((e) & ((f) ^ (g))))
+#define TG_SHA_MAJ(a, b, c) (((a) & (b)) | ((c) & ((a) | (b))))
+#define TG_SHA_BS0(a) (TG_SHA_ROTR(a, 2) ^ TG_SHA_ROTR(a, 13) ^ \
+                       TG_SHA_ROTR(a, 22))
+#define TG_SHA_BS1(e) (TG_SHA_ROTR(e, 6) ^ TG_SHA_ROTR(e, 11) ^ \
+                       TG_SHA_ROTR(e, 25))
+#define TG_SHA_SS0(x) (TG_SHA_ROTR(x, 7) ^ TG_SHA_ROTR(x, 18) ^ ((x) >> 3))
+#define TG_SHA_SS1(x) (TG_SHA_ROTR(x, 17) ^ TG_SHA_ROTR(x, 19) ^ ((x) >> 10))
+#define TG_SHA_ROUND(a, b, c, d, e, f, g, h, i) \
+    do { \
+        tg_sha_word t1_ = (h) + TG_SHA_BS1(e) + TG_SHA_CH(e, f, g) + \
+                          tg_sha256_k[i] + w[i]; \
+        (d) += t1_; \
+        (h) = t1_ + TG_SHA_BS0(a) + TG_SHA_MAJ(a, b, c); \
+    } while (0)
+
 static void tg_sha256_transform(tg_sha256_context *context,
                                 const unsigned char block[TG_SHA256_BLOCK_SIZE])
 {
-    static const unsigned long k[64] = {
-        0x428a2f98UL, 0x71374491UL, 0xb5c0fbcfUL, 0xe9b5dba5UL,
-        0x3956c25bUL, 0x59f111f1UL, 0x923f82a4UL, 0xab1c5ed5UL,
-        0xd807aa98UL, 0x12835b01UL, 0x243185beUL, 0x550c7dc3UL,
-        0x72be5d74UL, 0x80deb1feUL, 0x9bdc06a7UL, 0xc19bf174UL,
-        0xe49b69c1UL, 0xefbe4786UL, 0x0fc19dc6UL, 0x240ca1ccUL,
-        0x2de92c6fUL, 0x4a7484aaUL, 0x5cb0a9dcUL, 0x76f988daUL,
-        0x983e5152UL, 0xa831c66dUL, 0xb00327c8UL, 0xbf597fc7UL,
-        0xc6e00bf3UL, 0xd5a79147UL, 0x06ca6351UL, 0x14292967UL,
-        0x27b70a85UL, 0x2e1b2138UL, 0x4d2c6dfcUL, 0x53380d13UL,
-        0x650a7354UL, 0x766a0abbUL, 0x81c2c92eUL, 0x92722c85UL,
-        0xa2bfe8a1UL, 0xa81a664bUL, 0xc24b8b70UL, 0xc76c51a3UL,
-        0xd192e819UL, 0xd6990624UL, 0xf40e3585UL, 0x106aa070UL,
-        0x19a4c116UL, 0x1e376c08UL, 0x2748774cUL, 0x34b0bcb5UL,
-        0x391c0cb3UL, 0x4ed8aa4aUL, 0x5b9cca4fUL, 0x682e6ff3UL,
-        0x748f82eeUL, 0x78a5636fUL, 0x84c87814UL, 0x8cc70208UL,
-        0x90befffaUL, 0xa4506cebUL, 0xbef9a3f7UL, 0xc67178f2UL
-    };
+    tg_sha_word w[64];
+    tg_sha_word a;
+    tg_sha_word b;
+    tg_sha_word c;
+    tg_sha_word d;
+    tg_sha_word e;
+    tg_sha_word f;
+    tg_sha_word g;
+    tg_sha_word h;
+    int i;
+
+    for (i = 0; i < 16; ++i) {
+        w[i] = ((tg_sha_word)block[i * 4] << 24) |
+               ((tg_sha_word)block[i * 4 + 1] << 16) |
+               ((tg_sha_word)block[i * 4 + 2] << 8) |
+               (tg_sha_word)block[i * 4 + 3];
+    }
+    for (i = 16; i < 64; ++i) {
+        w[i] = TG_SHA_SS1(w[i - 2]) + w[i - 7] + TG_SHA_SS0(w[i - 15]) +
+               w[i - 16];
+    }
+    a = (tg_sha_word)context->h[0];
+    b = (tg_sha_word)context->h[1];
+    c = (tg_sha_word)context->h[2];
+    d = (tg_sha_word)context->h[3];
+    e = (tg_sha_word)context->h[4];
+    f = (tg_sha_word)context->h[5];
+    g = (tg_sha_word)context->h[6];
+    h = (tg_sha_word)context->h[7];
+    for (i = 0; i < 64; i += 8) {
+        TG_SHA_ROUND(a, b, c, d, e, f, g, h, i);
+        TG_SHA_ROUND(h, a, b, c, d, e, f, g, i + 1);
+        TG_SHA_ROUND(g, h, a, b, c, d, e, f, i + 2);
+        TG_SHA_ROUND(f, g, h, a, b, c, d, e, i + 3);
+        TG_SHA_ROUND(e, f, g, h, a, b, c, d, i + 4);
+        TG_SHA_ROUND(d, e, f, g, h, a, b, c, i + 5);
+        TG_SHA_ROUND(c, d, e, f, g, h, a, b, i + 6);
+        TG_SHA_ROUND(b, c, d, e, f, g, h, a, i + 7);
+    }
+    context->h[0] = (unsigned long)(tg_sha_word)(context->h[0] + a);
+    context->h[1] = (unsigned long)(tg_sha_word)(context->h[1] + b);
+    context->h[2] = (unsigned long)(tg_sha_word)(context->h[2] + c);
+    context->h[3] = (unsigned long)(tg_sha_word)(context->h[3] + d);
+    context->h[4] = (unsigned long)(tg_sha_word)(context->h[4] + e);
+    context->h[5] = (unsigned long)(tg_sha_word)(context->h[5] + f);
+    context->h[6] = (unsigned long)(tg_sha_word)(context->h[6] + g);
+    context->h[7] = (unsigned long)(tg_sha_word)(context->h[7] + h);
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* The SHA-256 transform this client used up to 0.0.94, kept as the
+   reference the self-test compares the word form against and the
+   benchmark times it against. Not in the release binaries. */
+static void tg_sha256_transform_ref(tg_sha256_context *context,
+                                    const unsigned char block[TG_SHA256_BLOCK_SIZE])
+{
     unsigned long w[64];
     unsigned long a;
     unsigned long b;
@@ -327,7 +414,7 @@ static void tg_sha256_transform(tg_sha256_context *context,
     for (i = 0; i < 64; ++i) {
         s1 = tg_rotr32(e, 6) ^ tg_rotr32(e, 11) ^ tg_rotr32(e, 25);
         ch = (e & f) ^ ((~e) & g);
-        temp1 = (h + s1 + ch + k[i] + w[i]) & 0xffffffffUL;
+        temp1 = (h + s1 + ch + (unsigned long)tg_sha256_k[i] + w[i]) & 0xffffffffUL;
         s0 = tg_rotr32(a, 2) ^ tg_rotr32(a, 13) ^ tg_rotr32(a, 22);
         maj = (a & b) ^ (a & c) ^ (b & c);
         temp2 = (s0 + maj) & 0xffffffffUL;
@@ -350,6 +437,7 @@ static void tg_sha256_transform(tg_sha256_context *context,
     context->h[6] = (context->h[6] + g) & 0xffffffffUL;
     context->h[7] = (context->h[7] + h) & 0xffffffffUL;
 }
+#endif /* !TG_NO_SELFTEST */
 
 static void tg_sha256_init(tg_sha256_context *context)
 {
@@ -374,6 +462,13 @@ static void tg_sha256_update(tg_sha256_context *context,
 
     tg_hash_add_length_256(context, data_length);
     while (data_length > 0) {
+        if (context->block_used == 0 && data_length >= TG_SHA256_BLOCK_SIZE) {
+            /* a whole block in place: no copy through the context */
+            tg_sha256_transform(context, data);
+            data += TG_SHA256_BLOCK_SIZE;
+            data_length -= TG_SHA256_BLOCK_SIZE;
+            continue;
+        }
         take = TG_SHA256_BLOCK_SIZE - context->block_used;
         if (take > data_length) {
             take = data_length;
@@ -766,6 +861,85 @@ int tg_mtproto_pbkdf2_hmac_sha512(const unsigned char *password,
 }
 
 #if !defined(TG_NO_SELFTEST)
+/* xorshift32: the same cases on every lane. */
+static unsigned long tg_sha_test_next(unsigned long *state)
+{
+    unsigned long x;
+
+    x = *state & 0xffffffffUL;
+    x ^= (x << 13) & 0xffffffffUL;
+    x ^= x >> 17;
+    x ^= (x << 5) & 0xffffffffUL;
+    *state = x;
+    return x;
+}
+
+/* The word form of SHA-256: the FIPS two-block vector, the transform
+   against the one it replaced on random states and blocks, and a digest
+   taken in one call (whole blocks straight from the input) against the
+   same data fed one byte at a time (every block through the context). */
+static int tg_sha256_word_self_test(void)
+{
+    static const unsigned char two_blocks[] =
+        "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    static const unsigned char two_blocks_digest[TG_MTPROTO_SHA256_LENGTH] = {
+        0x24U, 0x8dU, 0x6aU, 0x61U, 0xd2U, 0x06U, 0x38U, 0xb8U,
+        0xe5U, 0xc0U, 0x26U, 0x93U, 0x0cU, 0x3eU, 0x60U, 0x39U,
+        0xa3U, 0x3cU, 0xe4U, 0x59U, 0x64U, 0xffU, 0x21U, 0x67U,
+        0xf6U, 0xecU, 0xedU, 0xd4U, 0x19U, 0xdbU, 0x06U, 0xc1U
+    };
+    static unsigned char data[4096];
+    tg_sha256_context fast;
+    tg_sha256_context ref;
+    unsigned char one[TG_MTPROTO_SHA256_LENGTH];
+    unsigned char bytewise[TG_MTPROTO_SHA256_LENGTH];
+    unsigned char block[TG_SHA256_BLOCK_SIZE];
+    unsigned long seed;
+    unsigned long length;
+    unsigned long i;
+    unsigned int n;
+    unsigned int j;
+
+    tg_mtproto_sha256(two_blocks, sizeof(two_blocks) - 1U, one);
+    if (memcmp(one, two_blocks_digest, sizeof(one)) != 0) {
+        return 2;
+    }
+    seed = 0x9e3779b9UL;
+    for (n = 0U; n < 64U; ++n) {
+        tg_sha256_init(&fast);
+        for (j = 0U; j < 8U; ++j) {
+            fast.h[j] = tg_sha_test_next(&seed);
+        }
+        ref = fast;
+        for (j = 0U; j < TG_SHA256_BLOCK_SIZE; ++j) {
+            block[j] = (unsigned char)tg_sha_test_next(&seed);
+        }
+        tg_sha256_transform(&fast, block);
+        tg_sha256_transform_ref(&ref, block);
+        for (j = 0U; j < 8U; ++j) {
+            if (fast.h[j] != ref.h[j]) {
+                return 2;
+            }
+        }
+    }
+    for (n = 0U; n < 24U; ++n) {
+        length = tg_sha_test_next(&seed) % (unsigned long)sizeof(data);
+        for (i = 0UL; i < length; ++i) {
+            data[i] = (unsigned char)tg_sha_test_next(&seed);
+        }
+        tg_mtproto_sha256(data, length, one);
+        tg_sha256_init(&fast);
+        for (i = 0UL; i < length; ++i) {
+            tg_sha256_update(&fast, data + i, 1UL);
+        }
+        tg_sha256_final(&fast, bytewise);
+        if (memcmp(one, bytewise, sizeof(one)) != 0) {
+            return 2;
+        }
+    }
+    return 0;
+}
+
 int tg_mtproto_crypto_self_test(void)
 {
     static const unsigned char abc[] = { 'a', 'b', 'c' };
@@ -848,6 +1022,20 @@ int tg_mtproto_crypto_self_test(void)
         memcmp(pbkdf2, pbkdf2_expected, sizeof(pbkdf2_expected)) != 0) {
         return 2;
     }
-    return 0;
+    return tg_sha256_word_self_test();
+}
+
+/* For the benchmark: the reference transform over whole blocks. */
+void tg_mtproto_sha256_ref_blocks(const unsigned char *data,
+                                  unsigned long length)
+{
+    tg_sha256_context context;
+
+    tg_sha256_init(&context);
+    while (length >= TG_SHA256_BLOCK_SIZE) {
+        tg_sha256_transform_ref(&context, data);
+        data += TG_SHA256_BLOCK_SIZE;
+        length -= TG_SHA256_BLOCK_SIZE;
+    }
 }
 #endif /* !TG_NO_SELFTEST */

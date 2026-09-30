@@ -40,7 +40,11 @@ void tg_mtproto_aes256_ige_decrypt(unsigned char *data,
                                    const unsigned char iv[32]);
 int tg_mtproto_crypto_self_test(void);
 int tg_mtproto_aes_self_test(void);
-int tg_mtproto_aes_bench(FILE *stream);
+int tg_mtproto_crypto_bench(FILE *stream);
+#if !defined(TG_NO_SELFTEST)
+void tg_mtproto_sha256_ref_blocks(const unsigned char *data,
+                                  unsigned long length);
+#endif
 
 /*
  * Optional progress hook for long CPU-bound crypto (PBKDF2/SRP on slow CPUs

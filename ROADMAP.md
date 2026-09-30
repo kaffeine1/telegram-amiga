@@ -147,19 +147,21 @@ Features are therefore grouped by the work they share.
   to answer the one before it: downloads do it now on main (a 4 MB file
   in 1.8 s instead of 8.6 on a desktop, 97 KB/s to 191 on a Vampire),
   uploads are next. On the Vampire the time of a part now goes to
-  decryption, 86 of its 167 ms, most of it the SHA-256 that checks every
-  message: a faster SHA-256 is the next lever there. A word-at-a-time
-  AES with 32-bit tables in place of the byte-at-a-time reference code,
-  now on main: on a Vampire a 32 KB part takes 34 ms to decrypt instead
-  of 128, and 39 ms to encrypt instead of 183. Larger socket buffers: a
-  MorphOS upload blocks 79 ms per part inside the send. Open the window
-  before the key exchange with the datacenter that serves avatars, which
-  is 74 of the 89 seconds a first start takes on a 14 MHz 68030. And -O2
-  for the 68k files of pure computation (the JPEG decoder, image
-  scaling, inflate, the TL parser), one at a time, away from the
-  compiler bug that pinned the rest to -O0. Plus the open defects: the
-  two MorphOS popup glitches, photo speed under AfA_OS, two-step
-  verification on a slow 68k and the full-size photo preference.
+  decryption: 36 ms of AES and 26 of the SHA-256 that checks every
+  message, after a word-at-a-time SHA-256 that only gained 4 ms (the
+  compiler had done well with the old one), then 45 ms of socket reads.
+  A word-at-a-time AES with 32-bit tables in place of the byte-at-a-time
+  reference code, now on main: on a Vampire a 32 KB part takes 34 ms to
+  decrypt instead of 128, and 39 ms to encrypt instead of 183. Larger
+  socket buffers: a MorphOS upload blocks 79 ms per part inside the
+  send. Open the window before the key exchange with the datacenter that
+  serves avatars, which is 74 of the 89 seconds a first start takes on a
+  14 MHz 68030. And -O2 for the 68k files of pure computation (the JPEG
+  decoder, image scaling, inflate, the TL parser), one at a time, away
+  from the compiler bug that pinned the rest to -O0. Plus the open
+  defects: the two MorphOS popup glitches, photo speed under AfA_OS,
+  two-step verification on a slow 68k and the full-size photo
+  preference.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that

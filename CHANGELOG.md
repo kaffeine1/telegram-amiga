@@ -18,6 +18,19 @@ lanes unless noted.
   real Vampire without anyone at the keyboard.
 
 ### Changed
+- SHA-256 works on 32-bit words. Every message the client receives is
+  hashed whole to check its message key, so a 32 KB download part costs
+  one SHA-256 of 32 KB. The rounds now rename their eight working variables
+  instead of moving them, rotate with single instructions and need no masks,
+  and whole blocks are hashed straight from the input instead of being
+  copied through the context first. On a Vampire a 32 KB hash takes 26 ms
+  instead of 30, and a download goes from 191 KB/s to 199: a modest step,
+  because the compiler had already done well with the old code. A self-test
+  checks the FIPS two-block vector, the new transform against the old one
+  on random states and blocks, and a digest taken in one call against the
+  same data fed one byte at a time; each part fails when its code is
+  broken. The benchmark is now `--mtproto-crypto-bench` and times SHA-256
+  too.
 - Downloads keep several requests in flight. Every getFile used to wait for
   its reply before the next one went out, and that wait was most of each
   part: 125 of the 150 ms a 64 KB part took on a desktop, and the same order
@@ -59,7 +72,7 @@ lanes unless noted.
   a Vampire a 32 KB part now takes 34 ms to decrypt instead of 128, and 39
   ms to encrypt instead of 183. A self-test checks the new code against the FIPS-197 vector and against
   the byte form on random keys, IVs and lengths in both directions, and
-  fails when either direction is broken. `--mtproto-aes-bench` reports the
+  fails when either direction is broken. `--mtproto-crypto-bench` reports the
   cost per 32 KB part on the machine it runs on, and a build with the
   self-tests also times the byte form for comparison.
 
