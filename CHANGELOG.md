@@ -119,8 +119,8 @@ lanes unless noted.
 ### Fixed
 - Two-step verification can now finish on a slow 68k. Checking the
   password derives a key with PBKDF2, 100000 rounds of SHA-512: 54 s on a
-  Vampire, 27 minutes on a 14 MHz 68030 under WinUAE, and forty minutes or
-  so on a stock 14 MHz 68020, where the
+  Vampire, 27 minutes on a 14 MHz 68030 under WinUAE, and 31 on a stock
+  A1200 emulated cycle-exact (68EC020, 8 MB of fast memory), where the
   challenge Telegram hands out with account.getPassword had expired long
   before the end, as had the idle connection. The password could never be
   checked; a field report saw exactly that, with no error at the end. The
