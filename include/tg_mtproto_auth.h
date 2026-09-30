@@ -44,4 +44,12 @@ const tg_mtproto_fingerprint *tg_mtproto_select_fingerprint(
 
 int tg_mtproto_auth_self_test(void);
 
+#if !defined(TG_NO_SELFTEST)
+/* The rho the key exchange ran before 0.0.95 (64 shift-and-add rounds per
+   multiplication and a division per step), kept as the reference for the
+   self-test and the bench. */
+unsigned long long tg_mtproto_pq_rho_ref(unsigned long long n,
+                                         unsigned long long c);
+#endif
+
 #endif

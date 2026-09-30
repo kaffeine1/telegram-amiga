@@ -103,6 +103,26 @@ lanes unless noted.
   self-tests also times the byte form for comparison.
 
 ### Fixed
+- A key exchange could fail on a slow 68k before it had really begun. It
+  opens with pq, a product of two primes below 2^32 that the client must
+  split before it can answer, and the client split it with 64-bit
+  arithmetic made of shifts and additions and a division bit by bit at
+  every step, in a file the 68k builds without optimisation. On a 14 MHz
+  68030 that took minutes, and Telegram closed the connection first: under
+  WinUAE the exchange a cold start makes with the datacenter of the
+  pictures failed that way after 138 s, where the same start on the 23rd
+  of September had got through in 74 s with kinder numbers. The split now
+  runs on 32-bit words in Montgomery form, four 32x32 products and no
+  division per multiplication, with the processor's own 64-bit multiply
+  where it has one (68020, 030, 040 and the 68080), in a file built with
+  -O2. It takes 6.5 s on average on that 68030, and on a Vampire 0.29 s
+  instead of 7.1. The steps and the factor found are exactly those of the
+  old code, which stays in builds with self-tests as the reference: the
+  self-test compares the two on eight numbers of Telegram's size with
+  three constants each, on a 68k a second time through the 16-bit products
+  the 68060 and the 68000 use, and fails when either path is broken. A
+  walk that could go on for ever after a wrong product now stops after one
+  batch. The login's own key exchange runs the same code.
 - When an upload gave up on a part, the reason it reported ("part N of M"
   and what went wrong) could run one byte past its 64-byte buffer, with a
   file of a thousand parts or more and a long enough reason. It is now cut

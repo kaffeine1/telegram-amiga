@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/time.h>
 
+#include "tg_mtproto_auth.h"
 #include "tg_mtproto_bigint.h"
 #include "tg_mtproto_crypto.h"
 #include "tg_mtproto_rsa.h"
@@ -1363,6 +1364,356 @@ int tg_mtproto_verify_dh_gen_ok(const tg_mtproto_set_client_dh_answer *answer,
     return memcmp(answer->new_nonce_hash, digest + 4U, 16U) == 0;
 }
 
+/* --- pq, split in Montgomery form (0.0.95) ---------------------------------
+   The key exchange opens with pq, a product of two primes below 2^32 that
+   the client must split before it can answer. Pollard's rho with Brent's
+   cycle takes some 50000 steps for primes near 2^31, and each step used to
+   multiply modulo pq with 64 rounds of shift and add, then divide bit by
+   bit, in a file built -O0 on the 68k: on a 14 MHz 68030 the split took
+   one to two minutes, and Telegram closed the connection before the answer
+   left. The same steps now run on 32-bit words in Montgomery form: four
+   32x32 products and no division per multiplication, in this file, which
+   the 68k builds with -O2. The values, and so the factor found and the
+   steps taken, are exactly those of the old code, which the self-test keeps
+   as the reference. */
+typedef unsigned int tg_pq_word;
+typedef char tg_pq_word_is_32_bits[(sizeof(tg_pq_word) == 4U) ? 1 : -1];
+
+#if defined(__m68k__)
+#if defined(TG_MTPROTO_BIGINT_M68K_ASM)
+#include <exec/execbase.h>
+#include <proto/exec.h>
+
+/* 1 when the CPU has the 64-bit mulu.l: the 68020, 030 and 040 and the
+   68080, which reports itself as a 68040. Not a real 68060, where the
+   060 package would trap it, nor a 68000. The bignum makes the same test. */
+static int tg_pq_hw64 = -1;
+
+static void tg_pq_hw64_check(void)
+{
+    if (tg_pq_hw64 < 0) {
+        tg_pq_hw64 = ((SysBase->AttnFlags & AFF_68020) &&
+                      !(SysBase->AttnFlags & AFF_68060)) ? 1 : 0;
+    }
+}
+
+/* After the one instruction, back to the CPU this file is built for. */
+#if defined(__mc68060__)
+#define TG_PQ_CHIP_BACK "    .chip 68060\n"
+#elif defined(__mc68040__)
+#define TG_PQ_CHIP_BACK "    .chip 68040\n"
+#elif defined(__mc68030__)
+#define TG_PQ_CHIP_BACK "    .chip 68030\n"
+#elif defined(__mc68020__)
+#define TG_PQ_CHIP_BACK "    .chip 68020\n"
+#else
+#define TG_PQ_CHIP_BACK "    .chip 68000\n"
+#endif
+#endif
+
+/* A 32x32 product. With the 64-bit mulu.l it is that one instruction;
+   elsewhere it is built from four 16-bit products, since the 68k builds
+   target the 68060, which lacks that mulu.l, and gcc would otherwise call
+   __muldi3, a full 64x64 multiply, for every product. Inline: called on
+   its own, it cost a jsr for each of the eight products of a step. */
+static __inline__ unsigned long long tg_pq_mul(tg_pq_word a, tg_pq_word b)
+{
+    tg_pq_word ll;
+    tg_pq_word lh;
+    tg_pq_word hl;
+    tg_pq_word hh;
+    tg_pq_word mid;
+
+#if defined(TG_MTPROTO_BIGINT_M68K_ASM)
+    if (tg_pq_hw64 > 0) {
+        tg_pq_word hi;
+        tg_pq_word lo = a;
+
+        __asm__("    .chip 68040\n"
+                "    mulu.l  %2,%0:%1\n"
+                TG_PQ_CHIP_BACK
+                : "=&d"(hi), "+d"(lo)
+                : "d"(b)
+                : "cc");
+        return ((unsigned long long)hi << 32) | (unsigned long long)lo;
+    }
+#endif
+    ll = (tg_pq_word)(unsigned short)a * (tg_pq_word)(unsigned short)b;
+    lh = (tg_pq_word)(unsigned short)a * (tg_pq_word)(unsigned short)(b >> 16);
+    hl = (tg_pq_word)(unsigned short)(a >> 16) * (tg_pq_word)(unsigned short)b;
+    hh = (tg_pq_word)(unsigned short)(a >> 16) *
+         (tg_pq_word)(unsigned short)(b >> 16);
+    mid = (ll >> 16) + (lh & 0xffffU) + (hl & 0xffffU);
+    return ((unsigned long long)(hh + (lh >> 16) + (hl >> 16) + (mid >> 16))
+            << 32) |
+           (unsigned long long)((mid << 16) | (ll & 0xffffU));
+}
+#else
+#define tg_pq_mul(a, b) ((unsigned long long)(a) * (unsigned long long)(b))
+#endif
+
+/* -n^-1 mod 2^32 for odd n: Newton's step doubles the good bits. */
+static tg_pq_word tg_pq_neg_inverse(tg_pq_word n0)
+{
+    tg_pq_word inv = n0; /* right mod 8 for any odd n0 */
+    int i;
+
+    for (i = 0; i < 4; ++i) {
+        inv *= 2U - n0 * inv; /* 6, 12, 24, 48 bits */
+    }
+    return 0U - inv;
+}
+
+/* a * b / 2^64 mod n, for a, b < n and n odd: two rounds of word-wise
+   Montgomery reduction, the result below n. */
+static unsigned long long tg_pq_mont_mul(unsigned long long a,
+                                         unsigned long long b,
+                                         unsigned long long n,
+                                         tg_pq_word ninv)
+{
+    tg_pq_word a0 = (tg_pq_word)a;
+    tg_pq_word a1 = (tg_pq_word)(a >> 32);
+    tg_pq_word b0 = (tg_pq_word)b;
+    tg_pq_word b1 = (tg_pq_word)(b >> 32);
+    tg_pq_word n0 = (tg_pq_word)n;
+    tg_pq_word n1 = (tg_pq_word)(n >> 32);
+    tg_pq_word t0;
+    tg_pq_word t1;
+    tg_pq_word t2;
+    tg_pq_word t3;
+    tg_pq_word m;
+    unsigned long long cs;
+    unsigned long long r;
+
+    cs = tg_pq_mul(a0, b0); /* t = a * b0 */
+    t0 = (tg_pq_word)cs;
+    cs = tg_pq_mul(a1, b0) + (cs >> 32);
+    t1 = (tg_pq_word)cs;
+    t2 = (tg_pq_word)(cs >> 32);
+    m = t0 * ninv; /* t = (t + m * n) / 2^32 */
+    cs = tg_pq_mul(m, n0) + t0;
+    cs = tg_pq_mul(m, n1) + t1 + (cs >> 32);
+    t0 = (tg_pq_word)cs;
+    cs = (unsigned long long)t2 + (cs >> 32);
+    t1 = (tg_pq_word)cs;
+    t2 = (tg_pq_word)(cs >> 32);
+    cs = tg_pq_mul(a0, b1) + t0; /* t += a * b1 */
+    t0 = (tg_pq_word)cs;
+    cs = tg_pq_mul(a1, b1) + t1 + (cs >> 32);
+    t1 = (tg_pq_word)cs;
+    cs = (unsigned long long)t2 + (cs >> 32);
+    t2 = (tg_pq_word)cs;
+    t3 = (tg_pq_word)(cs >> 32);
+    m = t0 * ninv; /* t = (t + m * n) / 2^32 */
+    cs = tg_pq_mul(m, n0) + t0;
+    cs = tg_pq_mul(m, n1) + t1 + (cs >> 32);
+    t0 = (tg_pq_word)cs;
+    cs = (unsigned long long)t2 + (cs >> 32);
+    t1 = (tg_pq_word)cs;
+    t2 = t3 + (tg_pq_word)(cs >> 32);
+    r = ((unsigned long long)t1 << 32) | (unsigned long long)t0;
+    if (t2 != 0U || r >= n) {
+        r -= n; /* t < 2n: one subtraction brings it below n */
+    }
+    return r;
+}
+
+static unsigned long long tg_pq_mod_add(unsigned long long a,
+                                        unsigned long long b,
+                                        unsigned long long n)
+{
+    return a >= n - b ? a - (n - b) : a + b;
+}
+
+/* Binary gcd: shifts and subtractions, no 64-bit division. */
+static unsigned long long tg_pq_gcd(unsigned long long a,
+                                    unsigned long long b)
+{
+    unsigned long long t;
+    unsigned int shift = 0U;
+
+    if (a == 0ULL) {
+        return b;
+    }
+    if (b == 0ULL) {
+        return a;
+    }
+    while (((a | b) & 1ULL) == 0ULL) {
+        a >>= 1;
+        b >>= 1;
+        ++shift;
+    }
+    while ((a & 1ULL) == 0ULL) {
+        a >>= 1;
+    }
+    do {
+        while ((b & 1ULL) == 0ULL) {
+            b >>= 1;
+        }
+        if (a > b) {
+            t = a;
+            a = b;
+            b = t;
+        }
+        b -= a;
+    } while (b != 0ULL);
+    return a << shift;
+}
+
+unsigned long long tg_mtproto_pq_rho(unsigned long long n,
+                                     unsigned long long c)
+{
+    tg_pq_word ninv;
+    unsigned long long one;
+    unsigned long long r2;
+    unsigned long long cm;
+    unsigned long long x;
+    unsigned long long y;
+    unsigned long long ys;
+    unsigned long long q;
+    unsigned long long g;
+    unsigned long long r;
+    unsigned long long k;
+    unsigned long long i;
+    unsigned long long limit;
+    unsigned long long diff;
+    const unsigned long long batch = 128ULL;
+
+    if (n < 4ULL) {
+        return 0ULL;
+    }
+    if ((n & 1ULL) == 0ULL) {
+        return 2ULL;
+    }
+#if defined(__m68k__) && defined(TG_MTPROTO_BIGINT_M68K_ASM)
+    tg_pq_hw64_check();
+#endif
+    ninv = tg_pq_neg_inverse((tg_pq_word)n);
+    one = (0ULL - n) % n; /* 2^64 mod n: 1 in Montgomery form */
+    r2 = one;
+    for (i = 0ULL; i < 64ULL; ++i) {
+        r2 = tg_pq_mod_add(r2, r2, n); /* ends at 2^128 mod n */
+    }
+    cm = tg_pq_mont_mul(c % n, r2, n, ninv);
+    y = tg_pq_mont_mul(2ULL, r2, n, ninv);
+    x = y;
+    ys = y;
+    q = one;
+    g = 1ULL;
+    r = 1ULL;
+    /* Brent's cycle, as the old code ran it: y goes y^2 + c, and the gcd
+       is taken on the product of 128 differences at a time. */
+    while (g == 1ULL) {
+        x = y;
+        for (i = 0ULL; i < r; ++i) {
+            y = tg_pq_mod_add(tg_pq_mont_mul(y, y, n, ninv), cm, n);
+        }
+        k = 0ULL;
+        while (k < r && g == 1ULL) {
+            ys = y;
+            limit = (r - k) < batch ? (r - k) : batch;
+            for (i = 0ULL; i < limit; ++i) {
+                y = tg_pq_mod_add(tg_pq_mont_mul(y, y, n, ninv), cm, n);
+                diff = x > y ? x - y : y - x;
+                if (diff != 0ULL) {
+                    q = tg_pq_mont_mul(q, diff, n, ninv);
+                }
+            }
+            g = tg_pq_gcd(q, n);
+            k += batch;
+        }
+        r <<= 1;
+        if (r > 4000000ULL) {
+            break;
+        }
+    }
+    if (g == n || g <= 1ULL) {
+        /* The batch overshot: walk it again one difference at a time. A
+           factor the batch found lies within its 128 steps, so the walk
+           stops there; the old code had no bound, and a wrong product
+           could keep it going for ever. */
+        g = 1ULL;
+        for (i = 0ULL; i <= batch && g == 1ULL; ++i) {
+            ys = tg_pq_mod_add(tg_pq_mont_mul(ys, ys, n, ninv), cm, n);
+            diff = x > ys ? x - ys : ys - x;
+            g = tg_pq_gcd(diff, n);
+        }
+    }
+    return (g > 1ULL && g < n) ? g : 0ULL;
+}
+
+/* Products of two primes between 2^30 and 2^32, the size Telegram sends,
+   the last one the example from the MTProto documentation. */
+static const unsigned long tg_pq_vectors[8][4] = {
+    {0x31130b99UL, 0xa928514fUL, 1846844333UL, 1914716267UL},
+    {0x239c8877UL, 0x85007555UL, 1284450527UL, 1997800523UL},
+    {0x355f081cUL, 0xe9fce599UL, 1944557777UL, 1977725513UL},
+    {0x27707f7fUL, 0x90cdf32dUL, 1611312467UL, 1763724671UL},
+    {0x2402999dUL, 0xd3302c5bUL, 1368874531UL, 1895575657UL},
+    {0x316d099cUL, 0x9898e297UL, 1677163337UL, 2123534047UL},
+    {0xf52ed0e5UL, 0x9a455a9dUL, 4117119053UL, 4291177361UL},
+    {0x17ed4894UL, 0x1a08f981UL, 1229739323UL, 1402015859UL}
+};
+
+static unsigned long long tg_pq_vector_n(unsigned int v)
+{
+    return ((unsigned long long)tg_pq_vectors[v][0] << 32) |
+           (unsigned long long)tg_pq_vectors[v][1];
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* One pass over the vectors: every run finds the factor `want` holds. */
+static int tg_pq_self_test_pass(const unsigned long long want[8][3])
+{
+    unsigned int v;
+    unsigned int k;
+
+    for (v = 0U; v < 8U; ++v) {
+        for (k = 0U; k < 3U; ++k) {
+            if (tg_mtproto_pq_rho(tg_pq_vector_n(v),
+                                  (unsigned long long)k + 1ULL) !=
+                want[v][k]) {
+                return 2;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Each vector splits into its two primes, and every run, with three
+   constants, finds the same factor as the old code: the same sequence, in
+   another representation, so a wrong product anywhere shows up. On a 68k
+   with the 64-bit mulu.l a second pass goes through the 16-bit products
+   the 68060 and the 68000 use. */
+static int tg_mtproto_pq_self_test(void)
+{
+    unsigned long long want[8][3];
+    unsigned int v;
+    unsigned int k;
+    int rc;
+
+    for (v = 0U; v < 8U; ++v) {
+        for (k = 0U; k < 3U; ++k) {
+            want[v][k] = tg_mtproto_pq_rho_ref(tg_pq_vector_n(v),
+                                               (unsigned long long)k + 1ULL);
+        }
+        if (want[v][0] != (unsigned long long)tg_pq_vectors[v][2] &&
+            want[v][0] != (unsigned long long)tg_pq_vectors[v][3]) {
+            return 2;
+        }
+    }
+    rc = tg_pq_self_test_pass((const unsigned long long (*)[3])want);
+#if defined(__m68k__) && defined(TG_MTPROTO_BIGINT_M68K_ASM)
+    if (rc == 0 && tg_pq_hw64 > 0) {
+        tg_pq_hw64 = 0; /* the 16-bit products */
+        rc = tg_pq_self_test_pass((const unsigned long long (*)[3])want);
+        tg_pq_hw64 = -1; /* asked again on the next split */
+    }
+#endif
+    return rc;
+}
+#endif /* !TG_NO_SELFTEST */
+
 #if !defined(TG_NO_SELFTEST)
 int tg_mtproto_rsa_self_test(void)
 {
@@ -1618,6 +1969,9 @@ int tg_mtproto_rsa_self_test(void)
                                      auth_key)) {
         return 2;
     }
+    if (tg_mtproto_pq_self_test() != 0) {
+        return 2;
+    }
 
     return 0;
 }
@@ -1806,6 +2160,25 @@ int tg_mtproto_crypto_bench(FILE *stream)
     }
     t1 = tg_aes_bench_clock_us();
     tg_aes_bench_report(stream, "old aes decrypt", t0, t1, parts);
+#endif
+    /* The pq split that opens every key exchange, on the eight vectors. */
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < 8U; ++i) {
+        (void)tg_mtproto_pq_rho(tg_pq_vector_n(i), 1ULL);
+    }
+    t1 = tg_aes_bench_clock_us();
+    fprintf(stream, "crypto bench: pq split %lu ms on average\n",
+            (t1 - t0) / 8000UL);
+    fflush(stream);
+#if !defined(TG_NO_SELFTEST)
+    t0 = tg_aes_bench_clock_us();
+    for (i = 0U; i < 8U; ++i) {
+        (void)tg_mtproto_pq_rho_ref(tg_pq_vector_n(i), 1ULL);
+    }
+    t1 = tg_aes_bench_clock_us();
+    fprintf(stream, "crypto bench: old pq split %lu ms on average\n",
+            (t1 - t0) / 8000UL);
+    fflush(stream);
 #endif
     return 0;
 }

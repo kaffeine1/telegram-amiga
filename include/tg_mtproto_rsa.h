@@ -131,6 +131,11 @@ int tg_mtproto_verify_dh_gen_ok(const tg_mtproto_set_client_dh_answer *answer,
                                 const unsigned char new_nonce[32],
                                 const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH]);
 
+/* One run of Pollard's rho (Brent's cycle) on an odd n below 2^64 with the
+   polynomial x^2 + c: a factor of n, or 0 when this c finds none. */
+unsigned long long tg_mtproto_pq_rho(unsigned long long n,
+                                     unsigned long long c);
+
 int tg_mtproto_rsa_self_test(void);
 
 #endif

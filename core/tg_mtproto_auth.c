@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "tg_mtproto_auth.h"
+#include "tg_mtproto_rsa.h"
 
 #define TG_MTPROTO_VECTOR_CONSTRUCTOR 0x1cb5c415UL
 #define TG_MTPROTO_RES_PQ_CONSTRUCTOR 0x05162463UL
@@ -78,6 +79,10 @@ static unsigned long long tg_mtproto_u64_from_be(const unsigned char *data,
     return value;
 }
 
+#if !defined(TG_NO_SELFTEST)
+/* The pq split as it ran before 0.0.95, kept as the reference for the
+   self-test and the bench: the key exchange now runs tg_mtproto_pq_rho(),
+   the same steps in Montgomery form, in a file the 68k builds with -O2. */
 static unsigned long long tg_mtproto_u64_gcd(unsigned long long a,
                                              unsigned long long b)
 {
@@ -126,10 +131,10 @@ static unsigned long long tg_mtproto_u64_mod_mul(unsigned long long a,
 /* Brent's variant of Pollard's rho. Compared with the Floyd version it uses
    fewer modular multiplications per step and, crucially, batches the gcd so a
    64-bit modular gcd (a slow software division on 32-bit targets such as
-   AmigaOS4) runs once per ~128 steps instead of every step. This is what makes
-   pq factoring fast enough on emulated PPC (was ~120s, now a few seconds). */
-static unsigned long long tg_mtproto_pollard_rho(unsigned long long n,
-                                                 unsigned long long c)
+   AmigaOS4) runs once per ~128 steps instead of every step. This is what made
+   pq factoring fast enough on emulated PPC (was ~120s, then a few seconds). */
+unsigned long long tg_mtproto_pq_rho_ref(unsigned long long n,
+                                         unsigned long long c)
 {
     unsigned long long x;
     unsigned long long y;
@@ -192,6 +197,7 @@ static unsigned long long tg_mtproto_pollard_rho(unsigned long long n,
     }
     return 0ULL;
 }
+#endif /* !TG_NO_SELFTEST */
 
 static int tg_mtproto_fingerprint_equal(const tg_mtproto_fingerprint *a,
                                         const tg_mtproto_fingerprint *b)
@@ -325,7 +331,7 @@ int tg_mtproto_pq_factor(const unsigned char *pq,
     }
 
     for (c = 1UL; c < 32UL; ++c) {
-        factor = tg_mtproto_pollard_rho(n, (unsigned long long)c);
+        factor = tg_mtproto_pq_rho(n, (unsigned long long)c);
         if (factor > 1ULL && factor < n &&
             factor <= 0xffffffffULL &&
             (n / factor) <= 0xffffffffULL) {
