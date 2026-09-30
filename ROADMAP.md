@@ -875,6 +875,35 @@ nothing in the transfer or login paths, so it fits the 0.0.9x line in
 one of the slots after the 0.0.95 speed release. The text client gets
 it later, if at all: its /forward stays one message at a time.
 
+## Planned: open a downloaded file, or show it in its drawer
+
+Once a file has come down, the desktop client's menu on that message
+offers to open it and to show it in its folder. Here the only trace of a
+finished download is the status line, and finding the file means opening
+the download drawer by hand.
+
+The right-click popup on a message whose file is already on disk gets two
+entries. "Open" hands the file to the Workbench as a double-click would
+(OpenWorkbenchObjectA, workbench.library 44: AmigaOS 3.5 and later and
+AmigaOS 4, and on MorphOS and AROS as far as their Workbench implements
+it, to be checked there). "Show in drawer" opens the drawer window and
+selects the file's icon (ChangeWorkbenchSelectionA) where the Workbench
+can do that. On a Workbench too old for either, a plain 3.0 or 3.1,
+"Open" falls back to MultiView for what it can show, and otherwise the
+entry says where the file is instead of failing in silence.
+
+To know that a message's file is on disk, the client keeps a small record
+under data/ of what it saved: chat, message id, the path it wrote (the
+download drawer can change between two downloads) and the size. It is
+checked again when the popup opens, so a file moved or deleted by hand
+greys the two entries out instead of opening something else. Files
+downloaded before the record existed are not known to it; downloading
+one again fixes that.
+
+Only the GUI gets it: the text client already prints the path it saved
+to. It fits the 0.0.9x line in a slot after the 0.0.95 speed release,
+next to the multiple selection, which works on the same popup.
+
 ## Planned: the send-photo dialog's preview, done right
 
 The dialog shipped with a pixel preview and lost it: three MorphOS
