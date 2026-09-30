@@ -976,12 +976,18 @@ drawer and the executable to share one name and reads the installed
 version from the executable, so a renamed program looks like a new
 package to it and an existing install would never hear of the new one.
 The move therefore comes in steps. One last release as TelegramAmiga
-says that the program becomes Amigram. Before it, the maintainer of
-MorphOS-Storage and Easy2Install is asked how the old entry should hand
-over to the new one there. On Aminet, OS4Depot and The AROS Archives
-the new archives replace the old ones through their Replaces fields.
-AmiUpdate is not used yet, so the program starts there as Amigram. The
-repository is renamed too; GitHub keeps the old address working.
+says that the program becomes Amigram. Then the new archives replace
+the old ones through their Replaces fields everywhere: the maintainer of
+MorphOS-Storage and Easy2Install confirmed that a new archive, drawer
+and executable named Amigram, with a readme whose Replaces line names
+the old archive the way Aminet's does, is all it needs there. OS4Depot
+and The AROS Archives have the same field. AmiUpdate is not used yet, so
+the program starts there as Amigram. The repository is renamed too;
+GitHub keeps the old address working. The readme and the manuals of
+that release carry a short "coming from TelegramAmiga" section: which
+files to copy from the old drawer (telegram-auth.bin and the data
+drawer, the downloads if wanted) so the new one starts with the same
+session, chats and settings.
 
 What changes: the executable (Amigram), its icons and the console
 marker (Amigram-TUI, the self-launch reads "TUI" in the name as today),
