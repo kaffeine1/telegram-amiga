@@ -14724,6 +14724,7 @@ static int tg_mtproto_sent_code_text_self_test(void);   /* defined with the logi
 
 static int tg_mtproto_download_window_self_test(void);
 static int tg_mtproto_upload_window_self_test(void);
+static int tg_mtproto_first_contact_self_test(void);
 
 int tg_mtproto_probe_self_test(void)
 {
@@ -15558,6 +15559,9 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_mtproto_upload_window_self_test() != 0) {
+        return 2;
+    }
+    if (tg_mtproto_first_contact_self_test() != 0) {
         return 2;
     }
 
@@ -18996,6 +19000,67 @@ static char tg_gui_foreign_dc_text[24];
 static char tg_gui_foreign_auth_file[56];
 static int tg_gui_foreign_imported; /* account authority imported this run */
 
+/* 0.0.95: the first contact with a datacenter, a key exchange of about a
+   minute on a 14 MHz 68030 (74 of the 89 s a first start took there), no
+   longer runs inside open_chat: at startup it held the window back, and on
+   a chat switch the chat's own messages. The avatar that needs it waits
+   here for the window, which paints first, says on the status line what is
+   coming and then calls tg_gui_session_run_deferred_contact(). */
+static unsigned long tg_gui_contact_pending_dc; /* 0 = nothing waiting */
+static int tg_gui_contact_running; /* the window's call: do it now */
+
+/* 1 when the file channel to `dc` would open with a key exchange: it does
+   not point there already and no key for that datacenter is saved. */
+static int tg_gui_session_needs_first_contact(unsigned long dc)
+{
+    char path[48];
+    FILE *probe;
+
+    if (tg_gui_foreign_dc == dc && tg_gui_foreign_context.connection_open) {
+        return 0;
+    }
+    sprintf(path, "data/telegram-auth-dc%lu.bin", dc);
+    probe = fopen(path, "rb");
+    if (probe != 0) {
+        fclose(probe);
+        return 0;
+    }
+    return 1;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* 0.0.95: which avatars wait for the window. A datacenter with no saved key
+   and no open channel needs the key exchange; the channel already open
+   there does not; and nothing is offered while no session is open. No file
+   is written: datacenter 999 has no key on any machine. */
+static int tg_mtproto_first_contact_self_test(void)
+{
+    unsigned long saved_dc = tg_gui_foreign_dc;
+    int saved_open = tg_gui_foreign_context.connection_open;
+    unsigned long saved_pending = tg_gui_contact_pending_dc;
+    int ok;
+
+    tg_gui_foreign_dc = 0UL;
+    tg_gui_foreign_context.connection_open = 0;
+    ok = tg_gui_session_needs_first_contact(999UL) == 1;
+    tg_gui_foreign_dc = 999UL;
+    tg_gui_foreign_context.connection_open = 1;
+    ok = ok && tg_gui_session_needs_first_contact(999UL) == 0;
+    tg_gui_foreign_context.connection_open = saved_open;
+    tg_gui_foreign_dc = saved_dc;
+    if (!tg_gui_session_state.open) {
+        tg_gui_contact_pending_dc = 999UL;
+        ok = ok && tg_gui_session_deferred_contact() == 0UL;
+    }
+    tg_gui_contact_pending_dc = saved_pending;
+    if (!ok) {
+        puts("probe self-test: first contact: wrong datacenter left waiting");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
 static int tg_gui_session_setup_foreign_channel(
     const tg_mtproto_file_ctx *home, unsigned long dc,
     tg_mtproto_file_ctx *out, FILE *stream)
@@ -20671,6 +20736,13 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
             return; /* do not retarget the channel under a live transfer;
                        unmarked, so a later chat open retries */
         }
+        if (av_foreign && !tg_gui_contact_running &&
+            tg_gui_session_needs_first_contact(dc)) {
+            tg_gui_contact_pending_dc = dc;
+            tg_gui_log("avatar: first contact with its DC left for the "
+                       "window");
+            return; /* unmarked: the window's call fetches it */
+        }
     }
     /* Mark BEFORE the attempt: any failure must not retry this session. */
     if (tg_gui_avfetch_n < TG_GUI_AVFETCH_MAX) {
@@ -20755,6 +20827,27 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
 int tg_gui_session_is_open(void)
 {
     return tg_gui_session_state.open;
+}
+
+unsigned long tg_gui_session_deferred_contact(void)
+{
+    if (!tg_gui_session_state.open || tg_gui_session_transfer_busy()) {
+        return 0UL; /* a transfer may hold the channel elsewhere: later */
+    }
+    return tg_gui_contact_pending_dc;
+}
+
+void tg_gui_session_run_deferred_contact(FILE *stream)
+{
+    if (tg_gui_session_deferred_contact() == 0UL) {
+        return;
+    }
+    tg_gui_log("avatar: deferred first contact start");
+    tg_gui_contact_pending_dc = 0UL;
+    tg_gui_contact_running = 1;
+    tg_gui_session_fetch_open_avatar(stream);
+    tg_gui_contact_running = 0;
+    tg_gui_log("avatar: deferred first contact done");
 }
 
 /* Resolve the open group's typing member id->name. Tries the lazily-fetched
@@ -21312,6 +21405,7 @@ void tg_gui_session_close(void)
     }
     tg_gui_foreign_dc = 0UL;
     tg_gui_foreign_imported = 0;
+    tg_gui_contact_pending_dc = 0UL;
     tg_mtproto_quiet_tmp_sweep(); /* leave no quiet-stream slot behind in T: */
     tg_gui_log("close: context closed");
 #if defined(__MORPHOS__) || defined(__MORPHOS)

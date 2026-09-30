@@ -160,9 +160,13 @@ Features are therefore grouped by the work they share.
   send. On the Vampire, Roadshow's 32 KB each way made no difference
   against 64 and 128 KB (the CPU is the limit there), so the switch
   stays off until MorphOS, with its faster processor, is measured with
-  it. Open the window before the key exchange with the datacenter that
-  serves avatars, which is 74 of the 89 seconds a first start takes on a
-  14 MHz 68030. And -O2 for the 68k files of pure computation (the JPEG
+  it. The window now opens before the key exchange with the datacenter
+  that serves avatars, which was 74 of the 89 seconds a first start took
+  on a 14 MHz 68030: 14 s to the window under WinUAE, now on main. Timing
+  that start also showed the exchange itself failing there, the server
+  closing while the client still split pq; the split in Montgomery form,
+  also on main, takes 6.5 s instead of minutes, and the exchange 41 s.
+  And -O2 for the 68k files of pure computation (the JPEG
   decoder, image scaling, inflate, the TL parser), one at a time, away
   from the compiler bug that pinned the rest to -O0. Plus the open
   defects: the two MorphOS popup glitches, photo speed under AfA_OS,

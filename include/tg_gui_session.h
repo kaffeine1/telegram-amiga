@@ -333,6 +333,14 @@ void tg_gui_session_persist_unread(void);
 /* 1 while a live session is held (so the window can enable composing). */
 int tg_gui_session_is_open(void);
 
+/* The datacenter whose first contact the open chat's avatar is waiting for,
+   or 0. That contact is a key exchange (about a minute on a 14 MHz 68030),
+   so open_chat leaves it for the window: once the window has painted, it
+   says on the status line what is coming and calls the runner below, which
+   blocks for the exchange and fetches the avatar. 0 while a transfer runs. */
+unsigned long tg_gui_session_deferred_contact(void);
+void tg_gui_session_run_deferred_contact(FILE *stream);
+
 /* Closes the held connection and unbinds the notification queue. */
 void tg_gui_session_close(void);
 

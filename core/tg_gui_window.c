@@ -8758,6 +8758,23 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         if (older_cooldown > 0) {
             older_cooldown -= 1;
         }
+        /* 0.0.95: a first contact with a datacenter that open_chat left for
+           the window (the open chat's avatar lives there, and the key
+           exchange takes about a minute on a 14 MHz 68030). Everything up
+           to here is on screen, so say what is coming and run it; it
+           blocks like the login does, and the avatar shows once it is
+           through. */
+        if (tg_gui_session_deferred_contact() != 0UL) {
+            char contact_saved[sizeof(state->status)];
+
+            memcpy(contact_saved, state->status, sizeof(contact_saved));
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Setting up pictures, once: may take a minute");
+            tg_gui_window_paint_status(state, &backend);
+            tg_gui_session_run_deferred_contact(stdout);
+            memcpy(state->status, contact_saved, sizeof(contact_saved));
+            tg_gui_window_paint(state, &backend); /* the avatar, if it came */
+        }
         {
             ULONG wait_mask = 1UL << ctx.window->UserPort->mp_SigBit;
 

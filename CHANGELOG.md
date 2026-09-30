@@ -72,6 +72,20 @@ lanes unless noted.
   A self-test checks acknowledgements taken out of order and a rewind to
   the right place in the file; each check fails when the code it covers is
   broken.
+- A first start no longer waits for the key exchange with the datacenter
+  that keeps the pictures. A profile picture lives on its owner's
+  datacenter, and the first time the client needs one from a datacenter
+  other than its own it must agree a key with it: on a 14 MHz 68030 that
+  was 74 of the 89 seconds before the window appeared. The exchange no
+  longer runs while a chat opens. The window comes up, or the chat just
+  chosen shows, then the status line says "Setting up pictures, once: may
+  take a minute" and the exchange runs; the picture appears when it is
+  through. It still holds the window while it runs, as the login does,
+  but only once per datacenter, since the key is kept. Under WinUAE, on
+  that 68030, a cold start had its window up after 14 s instead of 89,
+  and the exchange then took 41 s with the faster pq split. A self-test
+  checks which datacenter is left waiting and that nothing is offered
+  without a session, and fails when that check is broken.
 - Neither window opens when a transfer runs on the chat's own connection,
   which happens when the separate file connection cannot open. Between two
   steps of a transfer the GUI reads that connection for new messages, and
