@@ -143,8 +143,9 @@ Features are therefore grouped by the work they share.
   2026-09-23 found, each one measured again with the same instrumented
   build once it lands. The first of them, repainting only the status
   line during a transfer, already shipped in 0.0.94. Keep several
-  requests in flight in both directions: today there is one, so every
-  part waits for Telegram to answer before the next is even asked for. A
+  requests in flight in both directions, so no part waits for Telegram
+  to answer the one before it: downloads do it now on main (a 4 MB file
+  in 1.8 s instead of 8.6 on a desktop), uploads are next. A
   word-at-a-time AES with 32-bit tables in place of the byte-at-a-time
   reference code, now on main: on a Vampire a 32 KB part takes 34 ms to
   decrypt instead of 128, and 39 ms to encrypt instead of 183. Larger

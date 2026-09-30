@@ -680,10 +680,23 @@ static void tg_mtproto_sync_time_from_server(
         context->server_time_delta_seconds = -((long)delta);
     }
 
-    context->last_msg_id.hi = message->message_id_hi;
-    context->last_msg_id.lo = message->message_id_lo;
-    context->session.last_msg_id_hi = context->last_msg_id.hi;
-    context->session.last_msg_id_lo = context->last_msg_id.lo;
+    /* The next msg_id we send has to be above the server's clock, which is
+       why its id is copied, but also above every id this session already
+       used. With several requests out (the 0.0.95 download window) the
+       reply to an older one arrives after newer ones went out, and copying
+       its id back made the next message reuse an id: bad_msg 33 on nearly
+       every window. So the id only moves forward, except when ours runs
+       more than 30 seconds ahead of the server, the clock correction this
+       copy was first there for. */
+    if (message->message_id_hi > context->last_msg_id.hi ||
+        (message->message_id_hi == context->last_msg_id.hi &&
+         message->message_id_lo > context->last_msg_id.lo) ||
+        context->last_msg_id.hi > message->message_id_hi + 30UL) {
+        context->last_msg_id.hi = message->message_id_hi;
+        context->last_msg_id.lo = message->message_id_lo;
+        context->session.last_msg_id_hi = context->last_msg_id.hi;
+        context->session.last_msg_id_lo = context->last_msg_id.lo;
+    }
 }
 
 static void tg_mtproto_refresh_saved_session(
@@ -1231,6 +1244,16 @@ static int tg_mtproto_send_encrypted_service(
                 tg_net_status_name(net_status));
         return 2;
     }
+#if defined(TG_DIAG_XFER)
+    {
+        char sl[128];
+
+        sprintf(sl, "wire: dc%lu service id=%08lx%08lx seq=%lu",
+                context->session.dc_id, msg_id.hi, msg_id.lo,
+                context->session.seq_no - 1UL);
+        tg_gui_log(sl);
+    }
+#endif
     return 0;
 }
 
@@ -1720,18 +1743,37 @@ static int tg_mtproto_send_query_noreply(tg_mtproto_auth_context *context,
                 tg_net_status_name(net_status));
         return 2;
     }
+#if defined(TG_DIAG_XFER)
+    {
+        char sl[128];
+
+        sprintf(sl, "wire: dc%lu query id=%08lx%08lx seq=%lu",
+                context->session.dc_id, out_msg_id->hi, out_msg_id->lo,
+                context->session.seq_no);
+        tg_gui_log(sl);
+    }
+#endif
     context->session.seq_no += 2UL; /* consumed by SENDING, as ever */
     return 0;
 }
 
-/* 0 = wanted delivered; 1 = idle budget hit (reason set); 2 = transport or
-   decrypt trouble; 3 = pipe-broken (a bad_msg needs a RESEND, which the
-   split model cannot do -- the caller reconnects and retries). */
-static int tg_mtproto_recv_rpc_result(tg_mtproto_auth_context *context,
-                                      const tg_mtproto_message_id *wanted,
-                                      tg_mtproto_rpc_result *rpc_result,
-                                      FILE *stream, const char *label,
-                                      unsigned long query_budget_seconds)
+/* 0.0.95: the download window. The reply may belong to any of the `count`
+   requests still out: 0 = one of them came, its index in `wanted` is in
+   *which (the lowest one, when a container carries several) and *more is
+   set when the same message also carries the reply of another request on
+   the list, which the shared buffer cannot keep for later. With count 1
+   this is the classic wait for one msg_id: replies to anything else are
+   traffic to tolerate, as ever. 1 = idle budget hit
+   (reason set); 2 = transport or decrypt trouble; 3 = pipe-broken (a bad_msg
+   needs a RESEND, which the split model cannot do -- the caller reconnects
+   and retries). */
+static int tg_mtproto_recv_rpc_result_any(tg_mtproto_auth_context *context,
+                                          const tg_mtproto_message_id *wanted,
+                                          unsigned int count,
+                                          unsigned int *which, int *more,
+                                          tg_mtproto_rpc_result *rpc_result,
+                                          FILE *stream, const char *label,
+                                          unsigned long query_budget_seconds)
 {
     unsigned long response_length;
     unsigned long query_start_time;
@@ -1740,17 +1782,23 @@ static int tg_mtproto_recv_rpc_result(tg_mtproto_auth_context *context,
     tg_mtproto_bad_msg_notification bad_msg;
     tg_net_status net_status;
     char error_buffer[160];
+    unsigned int i;
 
     if (context == 0 || !context->connection_open || wanted == 0 ||
-        rpc_result == 0 || stream == 0 || label == 0) {
+        count == 0U || which == 0 || more == 0 || rpc_result == 0 ||
+        stream == 0 || label == 0) {
         return 2;
     }
+    *which = 0U;
+    *more = 0;
     if (query_budget_seconds == 0UL) {
         query_budget_seconds = TG_MTPROTO_QUERY_BUDGET_SECONDS;
     }
     query_start_time = (unsigned long)time(0);
     rx_seen = tg_mtproto_rx_progress;
     for (;;) {
+        int found;
+
         if (tg_mtproto_rx_progress != rx_seen) {
             rx_seen = tg_mtproto_rx_progress;
             query_start_time = (unsigned long)time(0); /* idle budget */
@@ -1778,30 +1826,66 @@ static int tg_mtproto_recv_rpc_result(tg_mtproto_auth_context *context,
         if (tg_mtproto_decrypt_encrypted_message(
                 tg_mtproto_q_response, response_length, context->auth_key,
                 &tg_mtproto_q_decrypted) != TG_MTPROTO_TL_OK) {
+            sprintf(tg_mtproto_query_fail, "decrypt of %lu bytes",
+                    response_length);
             fprintf(stream, "%s: pipe-decrypt-failed\n", label);
             return 2;
         }
         tg_mtproto_sync_time_from_server(context, &tg_mtproto_q_decrypted);
-        if (tg_mtproto_find_bad_msg(tg_mtproto_q_decrypted.body,
-                                    tg_mtproto_q_decrypted.body_length,
-                                    wanted->hi, wanted->lo, &bad_msg)) {
-            /* Salt/seq/time fixes need a RESEND, which the split model
-               cannot do: apply what is applicable and report pipe-broken. */
-            if (bad_msg.has_new_server_salt && bad_msg.error_code == 48UL) {
-                context->session.server_salt_hi = bad_msg.new_server_salt_hi;
-                context->session.server_salt_lo = bad_msg.new_server_salt_lo;
+        for (i = 0U; i < count; ++i) {
+            if (tg_mtproto_find_bad_msg(tg_mtproto_q_decrypted.body,
+                                        tg_mtproto_q_decrypted.body_length,
+                                        wanted[i].hi, wanted[i].lo,
+                                        &bad_msg)) {
+                /* Salt/seq/time fixes need a RESEND, which the split model
+                   cannot do: apply what is applicable and report
+                   pipe-broken. */
+                if (bad_msg.has_new_server_salt &&
+                    bad_msg.error_code == 48UL) {
+                    context->session.server_salt_hi =
+                        bad_msg.new_server_salt_hi;
+                    context->session.server_salt_lo =
+                        bad_msg.new_server_salt_lo;
+                }
+                sprintf(tg_mtproto_query_fail, "pipe bad-msg %lu",
+                        bad_msg.error_code);
+#if defined(TG_DIAG_XFER)
+                {
+                    char bl[160];
+
+                    sprintf(bl, "wire: dc%lu bad-msg %lu for id=%08lx%08lx "
+                            "seq=%lu", context->session.dc_id,
+                            bad_msg.error_code, bad_msg.bad_msg_id_hi,
+                            bad_msg.bad_msg_id_lo, bad_msg.bad_msg_seqno);
+                    tg_gui_log(bl);
+                }
+#endif
+                return 3;
             }
-            sprintf(tg_mtproto_query_fail, "pipe bad-msg %lu",
-                    bad_msg.error_code);
-            return 3;
         }
         tg_mtproto_ack_encrypted_message(context, &tg_mtproto_q_decrypted,
                                          stream, label);
         tg_chat_notify_collect(tg_mtproto_q_decrypted.body,
                                tg_mtproto_q_decrypted.body_length);
-        if (tg_mtproto_find_rpc_result(tg_mtproto_q_decrypted.body,
-                                       tg_mtproto_q_decrypted.body_length,
-                                       wanted->hi, wanted->lo, rpc_result)) {
+        found = 0;
+        for (i = 0U; i < count; ++i) {
+            if (!found) {
+                if (tg_mtproto_find_rpc_result(
+                        tg_mtproto_q_decrypted.body,
+                        tg_mtproto_q_decrypted.body_length, wanted[i].hi,
+                        wanted[i].lo, rpc_result)) {
+                    *which = i;
+                    found = 1;
+                }
+            } else if (tg_mtproto_find_rpc_result(
+                           tg_mtproto_q_decrypted.body,
+                           tg_mtproto_q_decrypted.body_length, wanted[i].hi,
+                           wanted[i].lo, 0)) {
+                *more = 1;
+                break;
+            }
+        }
+        if (found) {
             return 0;
         }
         response_constructor = tg_mtproto_q_decrypted.body_length >= 4UL ?
@@ -1812,15 +1896,25 @@ static int tg_mtproto_recv_rpc_result(tg_mtproto_auth_context *context,
                 TG_MTPROTO_BAD_MSG_NOTIFICATION_CONSTRUCTOR ||
             response_constructor == TG_MTPROTO_BAD_SERVER_SALT_CONSTRUCTOR ||
             response_constructor == TG_MTPROTO_MSG_CONTAINER_CONSTRUCTOR ||
-            response_constructor == 0x9ec20908UL) {
+            response_constructor == 0x9ec20908UL || /* new_session_created */
+            /* With several requests out the server also acknowledges them
+               on their own, and says what it holds: msgs_ack,
+               msg_detailed_info, msg_new_detailed_info, msgs_state_info,
+               pong. Service traffic, not an answer. */
+            response_constructor == 0x62d6b459UL ||
+            response_constructor == 0x276d3ec6UL ||
+            response_constructor == 0x809db6dfUL ||
+            response_constructor == 0x04deb57dUL ||
+            response_constructor == 0x347773c5UL) {
             continue; /* push/ack/other traffic: same tolerance as classic */
         }
+        sprintf(tg_mtproto_query_fail, "unexpected 0x%08lx",
+                response_constructor);
         fprintf(stream, "%s: pipe-unexpected constructor 0x%08lx\n", label,
                 response_constructor);
         return 2;
     }
 }
-
 
 static int tg_mtproto_send_encrypted_query(
     tg_mtproto_auth_context *context,
@@ -14628,6 +14722,8 @@ static int tg_mtproto_photo_gate_self_test(void);       /* defined by the upload
 static int tg_mtproto_sent_code_text_self_test(void);   /* defined with the login texts */
 #endif
 
+static int tg_mtproto_download_window_self_test(void);
+
 int tg_mtproto_probe_self_test(void)
 {
     static const unsigned char nonce[16] = {
@@ -15456,6 +15552,9 @@ int tg_mtproto_probe_self_test(void)
             return 2;
         }
         tg_gui_photo_queue_reset();
+    }
+    if (tg_mtproto_download_window_self_test() != 0) {
+        return 2;
     }
 
     return 0;
@@ -17405,6 +17504,24 @@ static int tg_gui_avfetch_n = 0;
    link (phone hotspot, PLIP, a busy DC) loses the odd chunk; re-asking for the
    same offset costs one round-trip and saves the whole file. */
 #define TG_GUI_DL_CHUNK_RETRIES 4
+/* getFile requests in flight during a download (0.0.95). Each one waits
+   about a round trip for Telegram to start answering: 125 of the 150 ms a
+   64 KB part took on a desktop, the same wait on every Amiga. With several
+   out, the waits overlap and the parts come back to back; the replies still
+   arrive one after another on the same connection. Measured on a desktop,
+   4 MB: 478 KB/s at 1, 2.3 MB/s at 4, 4.8 MB/s at 8. The cost is a parking
+   buffer per request that can come early (the window minus one), so the
+   68k keeps 4 (96 KB), the low-memory 68000 build 2 (16 KB) and the rest 8.
+   1 = the old pace, one request at a time. Overridable. */
+#ifndef TG_GUI_DL_WINDOW
+#if defined(TG_LOWMEM)
+#define TG_GUI_DL_WINDOW 2U
+#elif defined(__m68k__)
+#define TG_GUI_DL_WINDOW 4U
+#else
+#define TG_GUI_DL_WINDOW 8U
+#endif
+#endif
 /* Write buffer for the file being downloaded: a few chunks' worth, so the
    drive is touched in big blocks. m68k keeps it modest (its whole BSS is
    the tight budget), the others can afford more. */
@@ -18692,15 +18809,29 @@ typedef struct tg_gui_dl_state {
                                     find/refetch always stay on fc (home) */
     unsigned long need_dc;    /* != 0: open the file channel on this DC
                                  before the next chunk */
-    /* 0.0.8 punto 1d: ONE prefetched chunk in flight. When armed, the
-       getFile for `pre_offset` is already on the wire and its reply is
-       matched by `pre_id`; the RTT of that request hides behind the
-       current chunk's own wait. Any anomaly drops the pipeline (the
-       connection is closed, which drains it) and the proven synchronous
-       retry takes the chunk. */
-    int pre_armed;
-    tg_mtproto_message_id pre_id;
-    unsigned long pre_offset;
+    /* 0.0.95: up to TG_GUI_DL_WINDOW getFile requests in flight, oldest
+       first (it replaced 0.0.8's single prefetch, which was only ever sent
+       once the previous reply had landed). When win_count is not 0,
+       win_offset[0] is the chunk the file needs next. Any anomaly (a reply
+       out of order, two in one message, an error) drops the window: the
+       connection is closed, which drains it, and the proven synchronous
+       request takes the chunk. win_drops counts those, for the log. */
+    unsigned int win_count;
+    tg_mtproto_message_id win_id[TG_GUI_DL_WINDOW];
+    unsigned long win_offset[TG_GUI_DL_WINDOW];
+    unsigned long win_drops;
+    /* Telegram does not answer a window in order: on a desktop test about
+       half the replies came before the one the file was waiting for. Such a
+       chunk is parked (copied aside) and written when its turn comes. One
+       buffer per request that can be early, the window minus one, taken per
+       download; without them the window stays at 1. */
+    unsigned int win_max;
+    unsigned char *win_data[TG_GUI_DL_WINDOW]; /* parked chunk, or 0 */
+    unsigned long win_len[TG_GUI_DL_WINDOW];
+    unsigned char *park_pool;
+    unsigned char *park_free[TG_GUI_DL_WINDOW];
+    unsigned int park_free_count;
+    unsigned long win_parked;
     int migrations;           /* FILE_MIGRATE hops, bounded */
     char peer_index_copy[64]; /* the live one moves when the user changes chat */
     unsigned long msg_id;
@@ -18722,6 +18853,30 @@ static tg_gui_dl_state tg_gui_dl;
 /* Resolve the document, guard the DC, create the local file: everything up
    to the first chunk. 0 = armed (active=1); != 0 = failed fast with the same
    rc codes the blocking call always used (reason in tg_gui_dl.fail). */
+/* The parking buffers for one download: the window minus one chunk. When
+   they cannot be had the window stays at 1, the old pace. end() frees. */
+static void tg_mtproto_download_park_alloc(void)
+{
+    unsigned int b;
+
+    tg_gui_dl.win_max = 1U;
+    tg_gui_dl.park_free_count = 0U;
+    if (TG_GUI_DL_WINDOW < 2U) {
+        return;
+    }
+    tg_gui_dl.park_pool = (unsigned char *)malloc(
+        (size_t)((TG_GUI_DL_WINDOW - 1U) * TG_GUI_DL_CHUNK));
+    if (tg_gui_dl.park_pool == 0) {
+        return;
+    }
+    for (b = 0U; b + 1U < TG_GUI_DL_WINDOW; ++b) {
+        tg_gui_dl.park_free[b] =
+            tg_gui_dl.park_pool + ((unsigned long)b * TG_GUI_DL_CHUNK);
+    }
+    tg_gui_dl.park_free_count = TG_GUI_DL_WINDOW - 1U;
+    tg_gui_dl.win_max = TG_GUI_DL_WINDOW;
+}
+
 static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
                                      unsigned long msg_id, FILE *stream)
 {
@@ -18814,6 +18969,7 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
     }
     tg_gui_dl.rc = 4; /* file open: any further failure is a transfer error */
     tg_gui_dl.active = 1;
+    tg_mtproto_download_park_alloc();
     return 0;
 }
 
@@ -18847,13 +19003,305 @@ static int tg_mtproto_pipe_send_getfile(const tg_mtproto_file_ctx *fc,
                                          "mtproto getFile(prefetch)");
 }
 
-/* Drop any in-flight prefetch: the connection is closed (which is what
-   actually drains the wire) and the parking slot is emptied. */
+/* Drop whatever is in flight: the connection is closed (which is what
+   actually drains the wire) and the window is emptied. */
 static void tg_mtproto_download_pipe_reset(void)
 {
-    if (tg_gui_dl.pre_armed) {
+    unsigned int w;
+
+    if (tg_gui_dl.win_count > 0U) {
         tg_mtproto_close_auth_context(tg_gui_dl.fc_file.context);
-        tg_gui_dl.pre_armed = 0;
+        for (w = 0U; w < tg_gui_dl.win_count; ++w) {
+            if (tg_gui_dl.win_data[w] != 0) {
+                tg_gui_dl.park_free[tg_gui_dl.park_free_count++] =
+                    tg_gui_dl.win_data[w];
+                tg_gui_dl.win_data[w] = 0;
+            }
+        }
+        tg_gui_dl.win_count = 0U;
+        ++tg_gui_dl.win_drops;
+    }
+}
+
+/* The oldest request is done with: shift the window down by one. */
+static void tg_mtproto_download_window_pop(void)
+{
+    unsigned int w;
+
+    for (w = 1U; w < tg_gui_dl.win_count; ++w) {
+        tg_gui_dl.win_id[w - 1U] = tg_gui_dl.win_id[w];
+        tg_gui_dl.win_offset[w - 1U] = tg_gui_dl.win_offset[w];
+        tg_gui_dl.win_data[w - 1U] = tg_gui_dl.win_data[w];
+        tg_gui_dl.win_len[w - 1U] = tg_gui_dl.win_len[w];
+    }
+    --tg_gui_dl.win_count;
+    tg_gui_dl.win_data[tg_gui_dl.win_count] = 0;
+    tg_gui_dl.win_len[tg_gui_dl.win_count] = 0UL;
+}
+
+/* Copy an early reply's chunk aside for window slot w. 0 = parked; != 0 =
+   it cannot be (an error, a gzip-packed or CDN reply, no free buffer) and
+   the caller drops the window. */
+static int tg_mtproto_download_park(unsigned int w,
+                                    const tg_mtproto_rpc_result *early)
+{
+    const unsigned char *bytes;
+    unsigned long bytes_len;
+    unsigned char *buf;
+    int cdn = 0;
+
+    if (early->result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
+        early->result_constructor == TG_MTPROTO_GZIP_PACKED_CONSTRUCTOR ||
+        tg_gui_dl.park_free_count == 0U ||
+        tg_mtproto_parse_upload_file(early->result_constructor,
+                                     early->result_body,
+                                     early->result_body_length, &bytes,
+                                     &bytes_len, &cdn) != TG_MTPROTO_TL_OK ||
+        cdn || bytes_len > TG_GUI_DL_CHUNK) {
+        return 1;
+    }
+    buf = tg_gui_dl.park_free[--tg_gui_dl.park_free_count];
+    if (bytes_len > 0UL) {
+        memcpy(buf, bytes, (size_t)bytes_len);
+    }
+    tg_gui_dl.win_data[w] = buf;
+    tg_gui_dl.win_len[w] = bytes_len;
+    ++tg_gui_dl.win_parked;
+    return 0;
+}
+
+/* Write the parked chunks whose turn has come. 0 = keep going; 1 = the file
+   is complete (a short chunk was the last); 2 = a write failed (rc set). */
+static int tg_mtproto_download_drain(void)
+{
+    while (tg_gui_dl.win_count > 0U && tg_gui_dl.win_data[0] != 0 &&
+           tg_gui_dl.win_offset[0] == tg_gui_dl.offset) {
+        unsigned long len = tg_gui_dl.win_len[0];
+
+        TG_XFER_START(TG_XFER_WRITE_US);
+        if (len > 0UL &&
+            fwrite(tg_gui_dl.win_data[0], 1, (size_t)len, tg_gui_dl.f) !=
+                len) {
+            tg_gui_dl.rc = 3;
+            return 2;
+        }
+        TG_XFER_STOP(TG_XFER_WRITE_US);
+        tg_gui_dl.park_free[tg_gui_dl.park_free_count++] =
+            tg_gui_dl.win_data[0];
+        tg_gui_dl.win_data[0] = 0;
+        tg_gui_dl.offset += len;
+        tg_mtproto_download_window_pop();
+        if (len < TG_GUI_DL_CHUNK) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* Build an upload.file body carrying `n` bytes of `fill` into `body`. */
+static unsigned long tg_mtproto_window_test_body(unsigned char *body,
+                                                 unsigned long n,
+                                                 unsigned char fill)
+{
+    unsigned long at;
+
+    body[0] = 0x05U; /* storage.fileUnknown#aa963b05, little endian */
+    body[1] = 0x3bU;
+    body[2] = 0x96U;
+    body[3] = 0xaaU;
+    memset(body + 4U, 0, 4U); /* mtime */
+    at = 8UL;
+    if (n < 254UL) {
+        body[at++] = (unsigned char)n;
+    } else {
+        body[at++] = 254U;
+        body[at++] = (unsigned char)(n & 0xffUL);
+        body[at++] = (unsigned char)((n >> 8) & 0xffUL);
+        body[at++] = (unsigned char)((n >> 16) & 0xffUL);
+    }
+    memset(body + at, fill, (size_t)n);
+    at += n;
+    while ((at % 4UL) != 0UL) {
+        body[at++] = 0U;
+    }
+    return at;
+}
+
+/* 0.0.95: the download window's parking, and the msg_id that no longer
+   walks back when a reply to an older request comes in. */
+static int tg_mtproto_download_window_self_test(void)
+{
+    static const char path[] = "telegram-mtproto-window-self-test.tmp";
+    static tg_mtproto_auth_context ctx;
+    static tg_mtproto_encrypted_message msg;
+    unsigned char *bodies;
+    unsigned long stride;
+    tg_mtproto_rpc_result early;
+    FILE *f;
+    int c;
+    unsigned long i;
+    int ok;
+
+    /* msg_id: an older server id keeps ours, a newer one moves it on, and
+       a clock of ours running minutes ahead is still pulled back */
+    memset(&ctx, 0, sizeof(ctx));
+    memset(&msg, 0, sizeof(msg));
+    ctx.last_msg_id.hi = 0x6abc0000UL;
+    ctx.last_msg_id.lo = 0x00000100UL;
+    msg.message_id_hi = 0x6abc0000UL;
+    msg.message_id_lo = 0x00000081UL;
+    tg_mtproto_sync_time_from_server(&ctx, &msg);
+    if (ctx.last_msg_id.hi != 0x6abc0000UL ||
+        ctx.last_msg_id.lo != 0x00000100UL) {
+        puts("probe self-test: window: msg_id walked back to an older reply");
+        return 2;
+    }
+    msg.message_id_lo = 0x00000201UL;
+    tg_mtproto_sync_time_from_server(&ctx, &msg);
+    if (ctx.last_msg_id.lo != 0x00000201UL) {
+        puts("probe self-test: window: msg_id did not follow a newer reply");
+        return 2;
+    }
+    msg.message_id_hi = 0x6abc0000UL - 600UL;
+    msg.message_id_lo = 0x00000401UL;
+    tg_mtproto_sync_time_from_server(&ctx, &msg);
+    if (ctx.last_msg_id.hi != 0x6abc0000UL - 600UL) {
+        puts("probe self-test: window: a clock far ahead was not corrected");
+        return 2;
+    }
+    if (TG_GUI_DL_WINDOW < 3U) {
+        return 0; /* the parking needs two early slots */
+    }
+
+    /* parking: chunks 2 and 1 come before 0, then a short last one */
+    stride = TG_GUI_DL_CHUNK + 16UL;
+    bodies = (unsigned char *)malloc((size_t)(4UL * stride));
+    if (bodies == 0) {
+        return 0; /* no room to test here: not a failure of the code */
+    }
+    memset(&tg_gui_dl, 0, sizeof(tg_gui_dl));
+    tg_gui_dl.f = fopen(path, "wb");
+    if (tg_gui_dl.f == 0) {
+        free(bodies);
+        puts("probe self-test: window: temp file");
+        return 2;
+    }
+    tg_mtproto_download_park_alloc();
+    ok = tg_gui_dl.win_max == TG_GUI_DL_WINDOW;
+    tg_gui_dl.win_count = 3U;
+    tg_gui_dl.win_offset[0] = 0UL;
+    tg_gui_dl.win_offset[1] = TG_GUI_DL_CHUNK;
+    tg_gui_dl.win_offset[2] = 2UL * TG_GUI_DL_CHUNK;
+    for (c = 2; ok && c >= 1; --c) {
+        memset(&early, 0, sizeof(early));
+        early.result_constructor = 0x096a18d5UL; /* upload.file */
+        early.result_body = bodies + ((unsigned long)c * stride);
+        early.result_body_length = tg_mtproto_window_test_body(
+            bodies + ((unsigned long)c * stride), TG_GUI_DL_CHUNK,
+            (unsigned char)('a' + c));
+        ok = tg_mtproto_download_park((unsigned int)c, &early) == 0;
+    }
+    /* chunk 0 lands the normal way, then its successors come off parking */
+    if (ok) {
+        memset(bodies, 'a', (size_t)TG_GUI_DL_CHUNK);
+        ok = fwrite(bodies, 1, (size_t)TG_GUI_DL_CHUNK, tg_gui_dl.f) ==
+             TG_GUI_DL_CHUNK;
+        tg_mtproto_download_window_pop();
+        tg_gui_dl.offset = TG_GUI_DL_CHUNK;
+    }
+    ok = ok && tg_mtproto_download_drain() == 0 &&
+         tg_gui_dl.offset == 3UL * TG_GUI_DL_CHUNK &&
+         tg_gui_dl.win_count == 0U &&
+         tg_gui_dl.park_free_count == TG_GUI_DL_WINDOW - 1U;
+    if (ok) {
+        tg_gui_dl.win_count = 1U;
+        tg_gui_dl.win_offset[0] = 3UL * TG_GUI_DL_CHUNK;
+        memset(&early, 0, sizeof(early));
+        early.result_constructor = 0x096a18d5UL;
+        early.result_body = bodies + (3UL * stride);
+        early.result_body_length =
+            tg_mtproto_window_test_body(bodies + (3UL * stride), 100UL, 'd');
+        ok = tg_mtproto_download_park(0U, &early) == 0 &&
+             tg_mtproto_download_drain() == 1 &&
+             tg_gui_dl.offset == (3UL * TG_GUI_DL_CHUNK) + 100UL;
+    }
+    /* a reset hands every parked buffer back */
+    if (ok) {
+        tg_gui_dl.win_count = 2U;
+        tg_gui_dl.win_offset[0] = 0UL;
+        tg_gui_dl.win_offset[1] = TG_GUI_DL_CHUNK;
+        memset(&early, 0, sizeof(early));
+        early.result_constructor = 0x096a18d5UL;
+        early.result_body = bodies + stride;
+        early.result_body_length = tg_mtproto_window_test_body(
+            bodies + stride, TG_GUI_DL_CHUNK, 'b');
+        ok = tg_mtproto_download_park(1U, &early) == 0 &&
+             tg_gui_dl.park_free_count == TG_GUI_DL_WINDOW - 2U;
+        tg_gui_dl.fc_file.context = &ctx; /* never opened: close is a no-op */
+        tg_mtproto_download_pipe_reset();
+        ok = ok && tg_gui_dl.win_count == 0U &&
+             tg_gui_dl.park_free_count == TG_GUI_DL_WINDOW - 1U;
+    }
+    fclose(tg_gui_dl.f);
+    free(tg_gui_dl.park_pool);
+    memset(&tg_gui_dl, 0, sizeof(tg_gui_dl));
+    /* the file holds a, b, c in order and the short d */
+    f = fopen(path, "rb");
+    if (ok && f != 0) {
+        for (i = 0UL; ok && i < 3UL * TG_GUI_DL_CHUNK + 100UL; ++i) {
+            c = fgetc(f);
+            ok = c == (int)('a' + (int)(i / TG_GUI_DL_CHUNK));
+        }
+        ok = ok && fgetc(f) == EOF;
+    } else {
+        ok = 0;
+    }
+    if (f != 0) {
+        fclose(f);
+    }
+    (void)remove(path);
+    free(bodies);
+    if (!ok) {
+        puts("probe self-test: window: parked chunks not written in order");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
+/* Top the window up: the offsets after the last request out, as long as
+   they start inside the file. A send that fails just leaves the window
+   shorter; with nothing out, the step asks synchronously. */
+static void tg_mtproto_download_window_fill(void)
+{
+    unsigned char query[384]; /* holds a getFile with a long file_reference */
+    tg_mtproto_tl_writer writer;
+    unsigned long next;
+
+    if (tg_gui_dl.doc.size_hi == 0UL && tg_gui_dl.doc.size_lo == 0UL) {
+        return; /* size unknown: one request at a time */
+    }
+    while (tg_gui_dl.win_count < tg_gui_dl.win_max) {
+        next = tg_gui_dl.win_count == 0U
+                   ? tg_gui_dl.offset
+                   : tg_gui_dl.win_offset[tg_gui_dl.win_count - 1U] +
+                         TG_GUI_DL_CHUNK;
+        if (tg_gui_dl.doc.size_hi == 0UL && next >= tg_gui_dl.doc.size_lo) {
+            break;
+        }
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_upload_get_document(&writer, &tg_gui_dl.doc,
+                                                 next, TG_GUI_DL_CHUNK) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_pipe_send_getfile(
+                &tg_gui_dl.fc_file, query, writer.length,
+                &tg_gui_dl.win_id[tg_gui_dl.win_count],
+                tg_gui_dl.quiet) != 0) {
+            break;
+        }
+        tg_gui_dl.win_offset[tg_gui_dl.win_count] = next;
+        ++tg_gui_dl.win_count;
     }
 }
 
@@ -18896,19 +19344,59 @@ static int tg_mtproto_download_step(void)
         int gfrc;
         char gl[128];
 
-        if (tg_gui_dl.pre_armed &&
-            tg_gui_dl.pre_offset == tg_gui_dl.offset) {
-            /* 1d: this chunk was asked for one step ago -- its round trip
-               already happened while the previous chunk was landing. Just
-               collect the reply. Anything unusual drops the pipeline and
-               falls through to the synchronous request below. */
-            gfrc = tg_mtproto_recv_rpc_result(
-                tg_gui_dl.fc_file.context, &tg_gui_dl.pre_id, &result,
-                tg_gui_dl.quiet, "mtproto getFile(pipelined)", 600U);
-            tg_gui_dl.pre_armed = 0;
-            if (gfrc != 0) {
-                sprintf(gl, "download: pipe off=%lu rc=%d, falling back",
-                        tg_gui_dl.offset, gfrc);
+        if (tg_gui_dl.win_count == 0U) {
+            tg_mtproto_download_window_fill();
+        }
+        if (tg_gui_dl.win_count > 0U &&
+            tg_gui_dl.win_offset[0] == tg_gui_dl.offset) {
+            /* This chunk and the next ones are already asked for: collect
+               whatever comes. Replies for later chunks are parked; the one
+               the file needs goes on below. Anything unusual drops the
+               window and falls through to the synchronous request. */
+            unsigned int which = 0U;
+            unsigned int w;
+            int more = 0;
+            int unparked = 0;
+
+            gfrc = tg_mtproto_recv_rpc_result_any(
+                tg_gui_dl.fc_file.context, tg_gui_dl.win_id,
+                tg_gui_dl.win_count, &which, &more, &result,
+                tg_gui_dl.quiet, "mtproto getFile(window)", 600U);
+            if (gfrc == 0) {
+                /* one message may carry several replies: park every early
+                   one it holds, while the shared buffer still has them */
+                for (w = 1U; w < tg_gui_dl.win_count; ++w) {
+                    tg_mtproto_rpc_result early;
+
+                    if (tg_gui_dl.win_data[w] != 0 ||
+                        !tg_mtproto_find_rpc_result(
+                            tg_mtproto_q_decrypted.body,
+                            tg_mtproto_q_decrypted.body_length,
+                            tg_gui_dl.win_id[w].hi, tg_gui_dl.win_id[w].lo,
+                            &early)) {
+                        continue;
+                    }
+                    if (tg_mtproto_download_park(w, &early) != 0) {
+                        unparked = 1;
+                        break;
+                    }
+                }
+            }
+            if (gfrc == 0 && !unparked && which != 0U) {
+                return 1; /* only later chunks came: wait again next step */
+            }
+            if (gfrc == 0 && !unparked) {
+                tg_mtproto_download_window_pop(); /* result is this chunk */
+            } else {
+                if (gfrc == 0) {
+                    sprintf(gl, "download: window: an early reply could not "
+                            "be parked at off=%lu, falling back",
+                            tg_gui_dl.offset);
+                } else {
+                    sprintf(gl, "download: window off=%lu rc=%d (%.48s), "
+                            "falling back", tg_gui_dl.offset, gfrc,
+                            tg_mtproto_query_fail);
+                }
                 tg_gui_log(gl);
                 tg_mtproto_download_pipe_reset(); /* closes: drains the wire */
                 memset(&result, 0, sizeof(result));
@@ -18920,7 +19408,7 @@ static int tg_mtproto_download_step(void)
                     tg_gui_dl.quiet, "mtproto getFile(document)", 600U);
             }
         } else {
-            tg_mtproto_download_pipe_reset(); /* stale prefetch, if any */
+            tg_mtproto_download_pipe_reset(); /* stale window, if any */
             gfrc = tg_mtproto_send_saved_query_on_context(
                 tg_gui_dl.fc_file.host, tg_gui_dl.fc_file.port,
                 tg_gui_dl.fc_file.api_id, tg_gui_dl.fc_file.auth_file,
@@ -19040,23 +19528,22 @@ static int tg_mtproto_download_step(void)
         tg_mtproto_download_pipe_reset();
         return 0; /* 512 MB hard stop: no runaway on a bad size (rc 4) */
     }
-    /* 1d: ask for the NEXT chunk now, so its round trip overlaps this
-       step's write and the caller's paint. Only when the file is known to
-       have more bytes; a failure just means the next step goes synchronous. */
-    if (!tg_gui_dl.pre_armed &&
-        tg_gui_dl.offset + TG_GUI_DL_CHUNK <= tg_gui_dl.doc.size_lo) {
-        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-        if (tg_mtproto_build_upload_get_document(&writer, &tg_gui_dl.doc,
-                                                 tg_gui_dl.offset,
-                                                 TG_GUI_DL_CHUNK) ==
-                TG_MTPROTO_TL_OK &&
-            tg_mtproto_pipe_send_getfile(&tg_gui_dl.fc_file, query,
-                                         writer.length, &tg_gui_dl.pre_id,
-                                         tg_gui_dl.quiet) == 0) {
-            tg_gui_dl.pre_armed = 1;
-            tg_gui_dl.pre_offset = tg_gui_dl.offset;
+    /* Write what was parked and is now in turn, then keep the window full,
+       so the round trips of the next chunks overlap this step's write, the
+       caller's paint and each other. */
+    {
+        int drained = tg_mtproto_download_drain();
+
+        if (drained == 1) {
+            tg_mtproto_download_pipe_reset();
+            tg_gui_dl.rc = 0;
+            return 0;
+        }
+        if (drained == 2) {
+            return 0; /* rc 3 */
         }
     }
+    tg_mtproto_download_window_fill();
     return 1;
 }
 
@@ -19171,6 +19658,17 @@ static int tg_mtproto_download_end(char *out_path,
     TG_XFER_REPORT("dl-end", tg_gui_dl.offset);
 
     tg_mtproto_download_pipe_reset(); /* never leave a request in flight */
+    {
+        char wl[128];
+
+        sprintf(wl, "download: end rc=%d, window %u, parked %lu, "
+                "fallbacks %lu", rc, tg_gui_dl.win_max, tg_gui_dl.win_parked,
+                tg_gui_dl.win_drops);
+        tg_gui_log(wl);
+    }
+    free(tg_gui_dl.park_pool); /* after the reset gave every buffer back */
+    tg_gui_dl.park_pool = 0;
+    tg_gui_dl.park_free_count = 0U;
     if (out_path != 0 && out_path_size > 0UL) {
         out_path[0] = '\0';
     }

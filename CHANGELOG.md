@@ -8,6 +8,22 @@ lanes unless noted.
 ## [Unreleased]
 
 ### Changed
+- Downloads keep several requests in flight. Every getFile used to wait for
+  its reply before the next one went out, and that wait was most of each
+  part: 125 of the 150 ms a 64 KB part took on a desktop, and the same order
+  of wait on every Amiga. A window of requests now goes out ahead (8, or 4 on
+  the 68k and 2 on the low-memory 68000 build), and since Telegram answers
+  them out of order about half the time, a chunk that comes early is parked
+  in a buffer and written when its turn comes. On a desktop a 4 MB file now
+  comes in 1.8 s instead of 8.6 with a window of 4, and in 0.85 s with 8.
+  Two things changed underneath. The wait for a reply accepts any of the
+  requests out, and lets through the acknowledgements the server sends on
+  their own when several are pending. And the client's message ids no
+  longer step back when the reply to an older request arrives: each message
+  from the server used to set the last id, so the next message could reuse
+  one and Telegram refused it. A self-test checks the parking order, that a
+  reset gives every buffer back, and the ids; each check fails when the code
+  it covers is broken.
 - The program calls itself Unofficial Telegram Amiga, and says what it is.
   Telegram's API terms let an app's title carry the word Telegram only after
   "Unofficial" (2.3), and ask every client to tell its users that it uses
