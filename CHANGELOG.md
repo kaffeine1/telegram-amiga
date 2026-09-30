@@ -119,7 +119,8 @@ lanes unless noted.
 ### Fixed
 - Two-step verification can now finish on a slow 68k. Checking the
   password derives a key with PBKDF2, 100000 rounds of SHA-512: 54 s on a
-  Vampire, and forty minutes or so on a stock 14 MHz 68020, where the
+  Vampire, 27 minutes on a 14 MHz 68030 under WinUAE, and forty minutes or
+  so on a stock 14 MHz 68020, where the
   challenge Telegram hands out with account.getPassword had expired long
   before the end, as had the idle connection. The password could never be
   checked; a field report saw exactly that, with no error at the end. The
@@ -128,7 +129,7 @@ lanes unless noted.
   closed and the session saved: the derivation, g^a and g^x. Then the
   client connects again, asks for a fresh challenge and finishes with the
   one exponentiation that needs it, about a second on a Vampire and half a
-  minute on a 68020, before it sends auth.checkPassword. If the salts
+  minute on that 68030, before it sends auth.checkPassword. If the salts
   changed in between, the password was changed elsewhere, and the client
   says so. The text client's warning no longer tells slow machines to
   turn Two-Step Verification off. A self-test checks the new code against
