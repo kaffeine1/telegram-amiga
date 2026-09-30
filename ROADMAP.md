@@ -169,9 +169,9 @@ Features are therefore grouped by the work they share.
   And -O2 for the 68k files of pure computation (the JPEG
   decoder, image scaling, inflate, the TL parser), one at a time, away
   from the compiler bug that pinned the rest to -O0. Plus the open
-  defects: the two MorphOS popup glitches, photo speed under AfA_OS,
-  two-step verification on a slow 68k and the full-size photo
-  preference.
+  defects: the two MorphOS popup glitches, photo speed under AfA_OS
+  and the full-size photo preference. Two-step verification on a slow
+  68k is on main, waiting for a login on a stock 1200.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -192,7 +192,7 @@ the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce
 while trying to prove a quiet cycle.
 
-## Planned: two-step verification on slow 68k
+## Done for 0.0.95: two-step verification on slow 68k
 
 Signing in with Two-Step Verification derives the key with PBKDF2 (100000
 iterations of SHA-512). On a stock 14 MHz 68020 that is roughly forty
@@ -213,6 +213,16 @@ the account salts, both stable; only srp_id and srp_B expire. So:
 
 That turns a guaranteed failure into a long but completable login. It needs
 `tg_mtproto_srp_make_proof` split into a derivation step and a proof step.
+
+Now on main, a little further than planned: A = g^a and v = g^x do not
+depend on the challenge either, so they are computed with the derivation,
+and after the fresh `account.getPassword` only one exponentiation is left
+(about a second on a Vampire, half a minute on a 14 MHz 68020). The
+connection is closed during the wait, with the session saved, and opened
+again for the fresh challenge; if the salts changed in between, the
+password was changed elsewhere and the client says so. What remains is the
+proof on the machine itself: a login with Two-Step Verification on a stock
+1200.
 
 ## Done in 0.0.92: link previews
 

@@ -117,6 +117,26 @@ lanes unless noted.
   self-tests also times the byte form for comparison.
 
 ### Fixed
+- Two-step verification can now finish on a slow 68k. Checking the
+  password derives a key with PBKDF2, 100000 rounds of SHA-512: 54 s on a
+  Vampire, and forty minutes or so on a stock 14 MHz 68020, where the
+  challenge Telegram hands out with account.getPassword had expired long
+  before the end, as had the idle connection. The password could never be
+  checked; a field report saw exactly that, with no error at the end. The
+  proof is now made in two steps. Everything that depends only on the
+  password and the account's salts comes first, with the connection
+  closed and the session saved: the derivation, g^a and g^x. Then the
+  client connects again, asks for a fresh challenge and finishes with the
+  one exponentiation that needs it, about a second on a Vampire and half a
+  minute on a 68020, before it sends auth.checkPassword. If the salts
+  changed in between, the password was changed elsewhere, and the client
+  says so. The text client's warning no longer tells slow machines to
+  turn Two-Step Verification off. A self-test checks the new code against
+  the values the single-step code computed, that a proof prepared with one
+  challenge and finished with another is the one the second alone gives,
+  and that a changed salt is caught; each check fails when the code it
+  covers is broken, and the test passes on the host and on a Vampire. A
+  login on a slow machine with a real account is still to come.
 - A key exchange could fail on a slow 68k before it had really begun. It
   opens with pq, a product of two primes below 2^32 that the client must
   split before it can answer, and the client split it with 64-bit

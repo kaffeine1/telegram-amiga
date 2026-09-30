@@ -4848,6 +4848,74 @@ int tg_mtproto_auth_get_password_file(const char *host,
     return rc;
 }
 
+/* account.getPassword on an open context, parsed into `out`. On failure the
+   context is closed (the session saved where it can still be used), the
+   reason printed, and 2 returned. */
+static int tg_mtproto_check_password_fetch(tg_mtproto_auth_context *context,
+                                           unsigned long api_id,
+                                           const char *auth_file,
+                                           tg_mtproto_password_summary *out,
+                                           FILE *stream, const char *label)
+{
+    unsigned char query[64];
+    unsigned char wrapped_query[760];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_session_status session_status;
+    tg_mtproto_tl_writer writer;
+    int qrc;
+
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_account_get_password(&writer) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_build_initialized_query(&writer, wrapped_query,
+                                           sizeof(wrapped_query), api_id,
+                                           query, writer.length) != 0) {
+        tg_mtproto_close_auth_context(context);
+        fprintf(stream, "%s: get-password-build-failed\n", label);
+        return 2;
+    }
+    qrc = tg_mtproto_send_encrypted_query_login(
+        context, wrapped_query, writer.length, &result, stream, label);
+    if (qrc != 0) {
+        if (qrc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+            session_status = tg_mtproto_session_save_authorization(
+                auth_file, &context->session, context->auth_key, 1);
+            if (session_status != TG_MTPROTO_SESSION_OK) {
+                fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                        tg_mtproto_session_status_name(session_status));
+            }
+        }
+        tg_mtproto_close_auth_context(context);
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        tg_mtproto_close_auth_context(context);
+        session_status = tg_mtproto_session_save_authorization(
+            auth_file, &context->session, context->auth_key, 1);
+        if (session_status != TG_MTPROTO_SESSION_OK) {
+            fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                    tg_mtproto_session_status_name(session_status));
+        } else if (!tg_mtproto_print_rpc_error(label, &result, stream)) {
+            fprintf(stream, "%s: rpc-error-parse-failed\n", label);
+        }
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
+        tg_mtproto_close_auth_context(context);
+        return 2;
+    }
+    if (tg_mtproto_parse_account_password_summary(result.result_constructor,
+                                                  result.result_body,
+                                                  result.result_body_length,
+                                                  out) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_auth_context(context);
+        fprintf(stream, "%s: password-parse-failed constructor 0x%08lx\n",
+                label, result.result_constructor);
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_mtproto_auth_check_password_text(const char *host,
                                                const char *port,
                                                const char *api_id_text,
@@ -4868,6 +4936,10 @@ static int tg_mtproto_auth_check_password_text(const char *host,
     tg_mtproto_session_status session_status;
     tg_mtproto_srp_proof proof;
     tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_status srp_status;
+    /* 1.6 KB of SRP state, secrets included: off the stack, zeroed on
+       every way out */
+    static tg_mtproto_srp_prepared prepared;
     long dc_id;
     int qrc;
     static const char label[] = "mtproto auth.checkPassword";
@@ -4896,59 +4968,9 @@ static int tg_mtproto_auth_check_password_text(const char *host,
     }
     context.session.dc_id = (unsigned long)dc_id;
 
-    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-    if (tg_mtproto_build_account_get_password(&writer) !=
-            TG_MTPROTO_TL_OK ||
-        tg_mtproto_build_initialized_query(&writer, wrapped_query,
-                                           sizeof(wrapped_query), api_id,
-                                           query, writer.length) != 0) {
-        tg_mtproto_close_auth_context(&context);
+    if (tg_mtproto_check_password_fetch(&context, api_id, auth_file,
+                                        &password, stream, label) != 0) {
         tg_mtproto_secure_zero(password_text, sizeof(password_text));
-        fprintf(stream, "%s: get-password-build-failed\n", label);
-        return 2;
-    }
-    qrc = tg_mtproto_send_encrypted_query_login(
-        &context, wrapped_query, writer.length, &result, stream, label);
-    if (qrc != 0) {
-        if (qrc == TG_MTPROTO_QUERY_SOFT_FAIL) {
-            session_status = tg_mtproto_session_save_authorization(
-                auth_file, &context.session, context.auth_key, 1);
-            if (session_status != TG_MTPROTO_SESSION_OK) {
-                fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
-                        tg_mtproto_session_status_name(session_status));
-            }
-        }
-        tg_mtproto_close_auth_context(&context);
-        tg_mtproto_secure_zero(password_text, sizeof(password_text));
-        return 2;
-    }
-    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
-        tg_mtproto_close_auth_context(&context);
-        session_status = tg_mtproto_session_save_authorization(
-            auth_file, &context.session, context.auth_key, 1);
-        if (session_status != TG_MTPROTO_SESSION_OK) {
-            fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
-                    tg_mtproto_session_status_name(session_status));
-        } else if (!tg_mtproto_print_rpc_error(label, &result, stream)) {
-            fprintf(stream, "%s: rpc-error-parse-failed\n", label);
-        }
-        tg_mtproto_secure_zero(password_text, sizeof(password_text));
-        return 2;
-    }
-    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
-        tg_mtproto_close_auth_context(&context);
-        tg_mtproto_secure_zero(password_text, sizeof(password_text));
-        return 2;
-    }
-    if (tg_mtproto_parse_account_password_summary(result.result_constructor,
-                                                  result.result_body,
-                                                  result.result_body_length,
-                                                  &password) !=
-        TG_MTPROTO_TL_OK) {
-        tg_mtproto_close_auth_context(&context);
-        tg_mtproto_secure_zero(password_text, sizeof(password_text));
-        fprintf(stream, "%s: password-parse-failed constructor 0x%08lx\n",
-                label, result.result_constructor);
         return 2;
     }
     if (!password.has_password || !password.has_current_algo) {
@@ -4984,29 +5006,68 @@ static int tg_mtproto_auth_check_password_text(const char *host,
     }
     random_a[TG_MTPROTO_SRP_VALUE_LENGTH -
              TG_MTPROTO_SRP_PRIVATE_EXPONENT_BYTES] |= 0x80U;
+    /* 0.0.95: the slow part first, with the connection closed. The PBKDF2
+       derivation takes some forty minutes on a stock 14 MHz 68020, and by
+       then both the challenge fetched above (srp_id, srp_B) and an idle
+       connection are gone. So: keep the session, close, derive, then
+       reconnect and ask for a fresh challenge, which only the last
+       exponentiation needs. */
+    session_status = tg_mtproto_session_save_authorization(
+        auth_file, &context.session, context.auth_key, 1);
+    tg_mtproto_close_auth_context(&context);
+    if (session_status != TG_MTPROTO_SESSION_OK) {
+        tg_mtproto_secure_zero(random_a, sizeof(random_a));
+        tg_mtproto_secure_zero(password_text, sizeof(password_text));
+        fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                tg_mtproto_session_status_name(session_status));
+        return 2;
+    }
     fprintf(stream, "Verifying password");
     fflush(stream);
     tg_login_progress_stream = stream;
     tg_mtproto_set_progress_hook(tg_login_progress_dot);
-    if (tg_mtproto_srp_make_proof(&password,
-                                  (const unsigned char *)password_text,
-                                  password_length, random_a, &proof) !=
-        TG_MTPROTO_TL_OK) {
-        tg_mtproto_set_progress_hook(0);
-        tg_login_progress_stream = 0;
-        fputc('\n', stream);
-        tg_mtproto_close_auth_context(&context);
-        tg_mtproto_secure_zero(random_a, sizeof(random_a));
-        tg_mtproto_secure_zero(password_text, sizeof(password_text));
-        fprintf(stream, "%s: srp-proof-build-failed\n", label);
-        return 2;
-    }
+    srp_status = tg_mtproto_srp_prepare(&password,
+                                        (const unsigned char *)password_text,
+                                        password_length, random_a, &prepared);
     tg_mtproto_set_progress_hook(0);
     tg_login_progress_stream = 0;
     fputc('\n', stream);
     fflush(stream);
     tg_mtproto_secure_zero(random_a, sizeof(random_a));
     tg_mtproto_secure_zero(password_text, sizeof(password_text));
+    if (srp_status != TG_MTPROTO_TL_OK) {
+        tg_mtproto_secure_zero(&prepared, sizeof(prepared));
+        fprintf(stream, "%s: srp-proof-build-failed\n", label);
+        return 2;
+    }
+    fprintf(stream, "Key ready. Asking Telegram to check it.\n");
+    fflush(stream);
+    if (tg_mtproto_load_auth_context(host, port, auth_file, &context, stream,
+                                     label) != 0) {
+        tg_mtproto_secure_zero(&prepared, sizeof(prepared));
+        return 2;
+    }
+    context.session.dc_id = (unsigned long)dc_id;
+    if (tg_mtproto_check_password_fetch(&context, api_id, auth_file,
+                                        &password, stream, label) != 0) {
+        tg_mtproto_secure_zero(&prepared, sizeof(prepared));
+        return 2;
+    }
+    if (!tg_mtproto_srp_same_password(&prepared, &password)) {
+        tg_mtproto_close_auth_context(&context);
+        tg_mtproto_secure_zero(&prepared, sizeof(prepared));
+        fprintf(stream, "The account's password changed while this one was "
+                "being checked. Sign in again with the new one.\n");
+        return 2;
+    }
+    srp_status = tg_mtproto_srp_finish(&prepared, &password, &proof);
+    tg_mtproto_secure_zero(&prepared, sizeof(prepared));
+    if (srp_status != TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_auth_context(&context);
+        tg_mtproto_secure_zero(&proof, sizeof(proof));
+        fprintf(stream, "%s: srp-proof-build-failed\n", label);
+        return 2;
+    }
 
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     if (tg_mtproto_build_auth_check_password_srp(
@@ -5324,13 +5385,11 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
     if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
         fprintf(stream,
                 "2FA password required.\n"
-                "WARNING: two-step verification derives the key with PBKDF2 "
-                "(100000 iterations of SHA-512). On a slow 68k -- e.g. a stock "
-                "14 MHz 68020 -- this takes about 40 minutes, long enough for "
-                "Telegram to drop the login before it finishes. If this machine "
-                "is slow, disable Two-Step Verification on your account "
-                "(Telegram app: Settings > Privacy and Security > Two-Step "
-                "Verification) and sign in again. To try anyway, enter the "
+                "Checking it derives a key with PBKDF2 (100000 rounds of "
+                "SHA-512). On a slow 68k, such as a stock 14 MHz 68020, that "
+                "takes half an hour or more; the dots show it working. Once "
+                "the key is ready the client asks Telegram for a fresh "
+                "challenge, so the wait does not lose the login. Enter the "
                 "password (empty to abort).\n");
         for (;;) {
             if (tg_mtproto_prompt_hidden_line("2FA password, empty to abort: ",
