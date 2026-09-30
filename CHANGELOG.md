@@ -8,14 +8,17 @@ lanes unless noted.
 ## [Unreleased]
 
 ### Added
-- On AmigaOS 3.x the text client takes its commands from a script or a
-  redirection (`TelegramAmiga <commands ...`) as well as from a console.
+- The text client takes its commands from a script or a redirection
+  (`TelegramAmiga <commands ...`) as well as from a console, on every lane.
   WaitForChar() only answers for consoles, so on any other input it always
   said "nothing yet" and a scripted chat never read a line; such input now
   counts as ready, since a read there returns data or the end at once. NIL:
-  is left as it was, so a detached client does not take an empty input for
-  one that has ended. This is what let the transfer measurements run on a
-  real Vampire without anyone at the keyboard.
+  is left as it was on AmigaOS 3.x, AmigaOS 4 and MorphOS, so a detached
+  client does not take an empty input for one that has ended. AROS keeps
+  its file handles private, so there a client given NIL: for input reads
+  the end at once and says "Input closed." instead of waiting for keys that
+  cannot come. This is what let the transfer measurements run on a real
+  Vampire without anyone at the keyboard.
 
 ### Changed
 - SHA-256 works on 32-bit words. Every message the client receives is

@@ -212,10 +212,32 @@ void tg_platform_sleep_seconds(unsigned long seconds)
     }
 }
 
+/* True for input that a script or a redirection supplies: a file, a pipe.
+   WaitForChar() only speaks for consoles, so on such input it always
+   answered "nothing yet" and a scripted chat never read a line. A Read()
+   there returns data or the end at once, so it counts as always ready.
+   NIL: stays as it was, never ready: a detached client has no input at
+   all, not an input that has already ended. NIL: has no handler behind
+   it, so its fh_Type is NULL. */
+static int tg_morphos_input_is_stream(void)
+{
+    BPTR in = Input();
+    struct FileHandle *fh;
+
+    if (in == 0 || IsInteractive(in)) {
+        return 0;
+    }
+    fh = (struct FileHandle *)BADDR(in);
+    return fh->fh_Type != 0;
+}
+
 int tg_platform_stdin_readable(unsigned long timeout_seconds)
 {
     unsigned long long timeout_microseconds;
 
+    if (tg_morphos_input_is_stream()) {
+        return 1;
+    }
     timeout_microseconds = (unsigned long long)timeout_seconds * 1000000ULL;
     if (timeout_microseconds > 2147000000ULL) {
         timeout_microseconds = 2147000000ULL;
@@ -272,7 +294,8 @@ int tg_platform_stdin_read_char(unsigned long timeout_seconds, char *out_char)
     if (timeout_microseconds > 2147000000ULL) {
         timeout_microseconds = 2147000000ULL;
     }
-    if (WaitForChar(Input(), (long)timeout_microseconds) == 0) {
+    if (!tg_morphos_input_is_stream() &&
+        WaitForChar(Input(), (long)timeout_microseconds) == 0) {
         return 0;
     }
     got = Read(Input(), &ch, 1);

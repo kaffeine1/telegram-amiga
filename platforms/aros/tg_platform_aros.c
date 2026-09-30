@@ -258,11 +258,31 @@ void tg_platform_sleep_seconds(unsigned long seconds)
     }
 }
 
+#if defined(__AROS__)
+/* True for input that a script or a redirection supplies: a file, a pipe.
+   WaitForChar() only speaks for consoles, so on such input it always
+   answered "nothing yet" and a scripted chat never read a line. A Read()
+   there returns data or the end at once, so it counts as always ready.
+   AROS keeps its FileHandle private, so NIL: is not told apart here as it
+   is on the other lanes: a client given NIL: for input reads the end at
+   once and says "Input closed." instead of waiting for keys that cannot
+   come. */
+static int tg_aros_input_is_stream(void)
+{
+    BPTR in = Input();
+
+    return in != 0 && !IsInteractive(in);
+}
+#endif
+
 int tg_platform_stdin_readable(unsigned long timeout_seconds)
 {
 #if defined(__AROS__)
     unsigned long long timeout_microseconds;
 
+    if (tg_aros_input_is_stream()) {
+        return 1;
+    }
     timeout_microseconds = (unsigned long long)timeout_seconds * 1000000ULL;
     if (timeout_microseconds > 2147000000ULL) {
         timeout_microseconds = 2147000000ULL;
@@ -328,7 +348,8 @@ int tg_platform_stdin_read_char(unsigned long timeout_seconds, char *out_char)
     if (timeout_microseconds > 2147000000ULL) {
         timeout_microseconds = 2147000000ULL;
     }
-    if (WaitForChar(Input(), (long)timeout_microseconds) == 0) {
+    if (!tg_aros_input_is_stream() &&
+        WaitForChar(Input(), (long)timeout_microseconds) == 0) {
         return 0;
     }
     got = Read(Input(), &ch, 1);
