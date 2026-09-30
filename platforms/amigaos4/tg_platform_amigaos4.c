@@ -75,6 +75,7 @@
 #include "tg_platform.h"
 #include "tg_mtproto_crypto.h"
 #include "tg_file.h"
+#include "tg_version.h"
 
 #if defined(__amigaos4__)
 struct Library *SocketBase = 0;
@@ -1531,7 +1532,7 @@ static struct MsgPort *tg_wb_tui_old_ct = 0;
 static void tg_os4_drop_arm(void);
 static void tg_os4_drop_disarm(void);
 
-#define TG_OS4_TUI_TITLE "Telegram Amiga TUI"
+#define TG_OS4_TUI_TITLE TG_APP_TUI_TITLE
 
 int tg_platform_workbench_tui_console(void)
 {

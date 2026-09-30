@@ -25,4 +25,16 @@
    from this header, so nothing is left saying alpha by accident. */
 #define TG_VERSION_CHANNEL "alpha"
 
+/* The name the program shows as its title: window, screen, About, the login
+   screen, the text client. Telegram's API terms (2.3) let an app's title
+   carry the word Telegram only after "Unofficial". File and package names
+   (TelegramAmiga, TelegramAmiga.lha, the drawer) are names, not the title,
+   and stay as they are. The TUI title is also how the platform code finds
+   its console window again, so both come from here. */
+#define TG_APP_TITLE "Unofficial Telegram Amiga"
+#define TG_APP_TUI_TITLE TG_APP_TITLE " TUI"
+/* What the same terms (2.2) ask every client to tell its users, shown under
+   the title where the program introduces itself. */
+#define TG_APP_INTRO_NOTE "A Telegram API client, part of the Telegram ecosystem"
+
 #endif

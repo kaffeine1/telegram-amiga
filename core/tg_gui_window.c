@@ -5148,7 +5148,7 @@ static void tg_gui_window_login_finish(tg_gui_state *state)
     state->composing = 0;
     state->input_masked = 0;
     state->input[0] = '\0';
-    tg_gui_window_copy(state->title, sizeof(state->title), "Telegram Amiga");
+    tg_gui_window_copy(state->title, sizeof(state->title), TG_APP_TITLE);
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Logged in - relaunch to connect");
 }
@@ -5729,10 +5729,12 @@ static void tg_gui_menu_set_photo_cache_limit(struct Menu *menu,
 }
 
 static const char tg_gui_about_text[] =
-    "Telegram Amiga\n"
+    TG_APP_TITLE "\n"
     TG_VERSION_CHANNEL " " TG_VERSION "  (built " __DATE__ ")\n\n"
-    "A native Telegram client for AmigaOS,\n"
-    "MorphOS and AROS.\n\n"
+    "A native client for AmigaOS, MorphOS and AROS.\n"
+    "Unofficial: it uses the Telegram API and is\n"
+    "part of the Telegram ecosystem, but it is not\n"
+    "made by Telegram.\n\n"
     "by Michele Dipace\n"
     "michele.dipace@kaffeine.net\n\n"
     "Contributions: Javier de las Rivas (javierdlr)\n"
@@ -8338,7 +8340,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         stags[s].ti_Tag = SA_LikeWorkbench;
         stags[s++].ti_Data = TRUE;
         stags[s].ti_Tag = SA_Title;
-        stags[s++].ti_Data = TG_GUI_TAG("Telegram Amiga");
+        stags[s++].ti_Data = TG_GUI_TAG(TG_APP_TITLE);
         stags[s].ti_Tag = SA_Pens;
         stags[s++].ti_Data = TG_GUI_TAG(own_pens);
         stags[s].ti_Tag = SA_SharePens;
@@ -8380,7 +8382,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         tags[i++].ti_Data = (ULONG)init_y;
     }
     tags[i].ti_Tag = WA_Title;
-    tags[i++].ti_Data = TG_GUI_TAG("Telegram Amiga - GUI");
+    tags[i++].ti_Data = TG_GUI_TAG(TG_APP_TITLE);
     tags[i].ti_Tag = WA_InnerWidth;
     tags[i++].ti_Data = (ULONG)init_w;
     tags[i].ti_Tag = WA_InnerHeight;
@@ -9528,7 +9530,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                  "About Telegram Amiga",
                                                  tg_gui_about_text);
                         } else if (ud == (APTR)TG_MENU_HELP) {
-                            tg_gui_amiga_easyreq(ctx.window, "Telegram Amiga Help",
+                            tg_gui_amiga_easyreq(ctx.window, TG_APP_TITLE " Help",
                                                  tg_gui_help_text);
                         } else if (ud == (APTR)TG_MENU_REMOVE) {
                             tg_gui_window_remove_selected(state, ctx.window,

@@ -14,6 +14,7 @@
 #include "tg_platform.h"
 #include "tg_text_client.h"
 #include "tg_tls.h"
+#include "tg_version.h"
 
 static const char tg_text_client_console_poll_seconds_text[] = "0";
 static const char tg_text_client_console_max_iterations_text[] = "1";
@@ -1110,7 +1111,7 @@ int tg_text_client_run_human(const tg_text_client_config *client_config)
         selected_chat_id[0] = '\0';
     }
 
-    puts("Telegram Amiga");
+    puts(TG_APP_TITLE);
     puts("Type a message. Empty line checks for replies. Type quit to exit.");
     rc = tg_text_client_poll_once(client_config);
     if (rc != 0) {

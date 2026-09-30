@@ -92,6 +92,7 @@
 #include "tg_platform.h"
 #include "tg_mtproto_crypto.h"
 #include "tg_file.h"
+#include "tg_version.h"
 
 #if defined(__amigaos3__) && TG_AMIGAOS3_ENABLE_AMISSL
 #ifndef TG_AMIGAOS3_AMISSL_API_VERSION
@@ -1524,7 +1525,7 @@ int tg_platform_workbench_tui_console(void)
        3.1 never delivered (two field reports); the farewell pause is ours
        now -- the teardown waits for one keypress, then the window dies
        deterministically with the last Close(). */
-    con = Open((CONST_STRPTR)"CON:20/20/640/440/Telegram Amiga TUI/CLOSE",
+    con = Open((CONST_STRPTR)"CON:20/20/640/440/" TG_APP_TUI_TITLE "/CLOSE",
                MODE_OLDFILE);
     if (con == 0) {
         return 0;
@@ -1756,7 +1757,7 @@ static void tg_wb_drop_arm(void)
     if (tg_wb_window_is_live(win)) {
         tg_wb_drop_diag = "ready (handler window)";
     } else {
-        win = tg_wb_find_window_by_title("Telegram Amiga TUI");
+        win = tg_wb_find_window_by_title(TG_APP_TUI_TITLE);
         tg_wb_drop_diag = "ready (title match)";
     }
     if (win == 0) {

@@ -10,6 +10,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_version.h"
 #include "tg_file.h"
 #include "tg_emoji_sheet.h"
 
@@ -4057,7 +4058,9 @@ static void tg_gui_paint_login(const tg_gui_state *state,
         tg_gui_log("login paint: title+status");
     }
     tg_gui_draw_centered(backend, TG_GUI_PEN_ACCENT, width, mid - (3 * lh),
-                         "Telegram Amiga");
+                         TG_APP_TITLE);
+    tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, mid - (2 * lh),
+                         TG_APP_INTRO_NOTE);
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT, width, mid - lh,
                          state->status);
 

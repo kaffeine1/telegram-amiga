@@ -468,11 +468,12 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 
 write_readme() {
     cat > "$1" <<EOF
-Telegram Amiga - $2 - $CHANNEL $VERSION
-========================================
+Unofficial Telegram Amiga - $2 - $CHANNEL $VERSION
+=====================================================
 
 A from-scratch, native Telegram (MTProto) client. Zero dependencies: no MUI,
-no ixemul, no AmiSSL. One engine:
+no ixemul, no AmiSSL. It is unofficial: it uses the Telegram API and is part
+of the Telegram ecosystem, but it is not made by Telegram. One engine:
 
 $readme_programs
 
@@ -504,8 +505,8 @@ EOF
 
 write_manual_en() {
     cat > "$1" <<EOF
-Telegram Amiga -- User Manual (English)
-=======================================
+Unofficial Telegram Amiga -- User Manual (English)
+==================================================
 
 Platform: $2
 Version: $VERSION   Build: $COMMIT_ID
@@ -513,7 +514,9 @@ Version: $VERSION   Build: $COMMIT_ID
 Telegram Amiga is a from-scratch, native MTProto Telegram client. You log in
 with a normal Telegram account, see your chats and exchange messages. There are
 no external dependencies (no MUI, no ixemul, no AmiSSL): all the cryptography
-(RSA, Diffie-Hellman, SRP/2FA, AES, SHA) is built in.
+(RSA, Diffie-Hellman, SRP/2FA, AES, SHA) is built in. It is an unofficial
+client: it uses the Telegram API and is part of the Telegram ecosystem, but it
+is not made by Telegram.
 
 System requirements
 -------------------
@@ -700,8 +703,8 @@ EOF
 
 write_manual_it() {
     cat > "$1" <<EOF
-Telegram Amiga -- Manuale Utente (Italiano)
-===========================================
+Unofficial Telegram Amiga -- Manuale Utente (Italiano)
+======================================================
 
 Piattaforma: $2
 Versione: $VERSION   Build: $COMMIT_ID
@@ -709,7 +712,9 @@ Versione: $VERSION   Build: $COMMIT_ID
 Telegram Amiga e' un client MTProto per Telegram scritto da zero, nativo. Accedi
 con un normale account Telegram, vedi le tue chat e scambi messaggi. Nessuna
 dipendenza esterna (niente MUI, niente ixemul, niente AmiSSL): tutta la
-crittografia (RSA, Diffie-Hellman, SRP/2FA, AES, SHA) e' integrata.
+crittografia (RSA, Diffie-Hellman, SRP/2FA, AES, SHA) e' integrata. E' un
+client non ufficiale: usa le API di Telegram e fa parte dell'ecosistema
+Telegram, ma non e' fatto da Telegram.
 
 Requisiti di sistema
 --------------------
@@ -983,7 +988,7 @@ write_aminet_readme() {
     # and then the Replaces: line is dropped (an empty one would be refused)
     out=$1; archval=$2; requires=$3; replaces=$4
     cat > "$out" <<EOF
-Short:        Native MTProto Telegram chat client
+Short:        Unofficial native Telegram chat client
 Uploader:     $AMINET_UPLOADER
 Author:       $AMINET_AUTHOR
 Type:         comm/tcp
@@ -994,6 +999,9 @@ Requires:     $requires
 
 WHAT IS THIS?
 -------------
+Unofficial Telegram Amiga: it uses the Telegram API and is part of the
+Telegram ecosystem, but it is not made by Telegram.
+
 Telegram Amiga brings real, live Telegram chat to the Amiga -- not through
 a gateway, a proxy service or a web wrapper, but by speaking Telegram's
 own MTProto protocol natively, from scratch, on your machine. You sign in
@@ -1292,7 +1300,7 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-OS4.lha" ]; then
     cp "$AMINET_ROOT/TelegramAmiga-OS4.lha" "$OS4DEPOT_ROOT/telegramamiga.lha"
     {
         printf 'name:TelegramAmiga\n'
-        printf 'description:Native MTProto Telegram chat client\n'
+        printf 'description:Unofficial native MTProto Telegram chat client\n'
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'
@@ -1345,7 +1353,7 @@ write_arosarchives_pair() {
     cp "$aa_src" "$AROSARCHIVES_ROOT/$2.lha"
     {
         printf 'name:TelegramAmiga\n'
-        printf 'description:Native MTProto Telegram chat client\n'
+        printf 'description:Unofficial native MTProto Telegram chat client\n'
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'

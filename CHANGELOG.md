@@ -8,6 +8,18 @@ lanes unless noted.
 ## [Unreleased]
 
 ### Changed
+- The program calls itself Unofficial Telegram Amiga, and says what it is.
+  Telegram's API terms let an app's title carry the word Telegram only after
+  "Unofficial" (2.3), and ask every client to tell its users that it uses
+  the Telegram API and is part of the Telegram ecosystem (2.2). The title
+  changes in the window, on the screen, in About, on the login screen and in
+  the text client, all from one definition, which is also how the platform
+  code finds the console window again. The login screen, About, the manuals,
+  the README and the readme of every channel carry the sentence the terms
+  ask for, and the channel listings start their description with
+  "Unofficial". File and package names do not change: TelegramAmiga,
+  TelegramAmiga.lha and the drawers are names, not the title, and renaming
+  them would break updates.
 - AES works a column at a time. Every byte that crosses the connection
   goes through AES-256 in IGE mode, and the client did it one byte at a
   time: SubBytes, ShiftRows and MixColumns as three passes over the state

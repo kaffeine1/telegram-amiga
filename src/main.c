@@ -60,7 +60,7 @@ static int tg_main_cpu_is_supported(int workbench)
         IntuitionBase = (struct IntuitionBase *)ib;
         es.es_StructSize = (ULONG)sizeof(es);
         es.es_Flags = 0UL;
-        es.es_Title = (STRPTR)"Telegram Amiga";
+        es.es_Title = (STRPTR)TG_APP_TITLE;
         es.es_TextFormat =
             (STRPTR)"This build needs a 68020 or better CPU.\n\n"
                     "On a plain 68000 use the AmigaOS 3.x (68000)\n"

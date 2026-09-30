@@ -3,12 +3,15 @@ Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 SPDX-License-Identifier: MIT
 -->
 
-# Telegram Amiga
+# Unofficial Telegram Amiga
 
 A from-scratch, native **MTProto Telegram client** for Amiga-family systems —
 log in with a normal Telegram account, list your chats and exchange messages.
 **Zero external dependencies**: no MUI, no ixemul, no AmiSSL. All the
 cryptography (RSA, Diffie-Hellman, SRP/2FA, AES, SHA) is built in.
+
+It is an unofficial client: it uses the Telegram API and is part of the
+Telegram ecosystem, but it is not made by Telegram.
 
 Two front-ends share one engine:
 

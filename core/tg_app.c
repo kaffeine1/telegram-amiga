@@ -4214,7 +4214,7 @@ int tg_app_run(int argc, char **argv)
             }
         }
         if (gui->mode == TG_GUI_MODE_LOGIN_PHONE) {
-            strcpy(gui->title, "Telegram Amiga");
+            strcpy(gui->title, TG_APP_TITLE);
             strcpy(gui->status, "Enter your phone number (+...)");
         } else {
             if (gui->chat_count > 0) {
@@ -4228,7 +4228,7 @@ int tg_app_run(int argc, char **argv)
                 }
                 gui->title[k] = '\0';
             } else {
-                strcpy(gui->title, "Telegram Amiga");
+                strcpy(gui->title, TG_APP_TITLE);
             }
             strcpy(gui->status, rc == 0 ? "Live - F1-F10 chats, Q quits"
                                        : "Offline (cache) - Q quits");
@@ -4322,7 +4322,7 @@ int tg_app_run(int argc, char **argv)
             gui->title[k] = '\0';
             strcpy(gui->status, "Read-only - F1-F10 chats, Q quits");
         } else {
-            strcpy(gui->title, "Telegram Amiga");
+            strcpy(gui->title, TG_APP_TITLE);
             strcpy(gui->status, missing ? "Cache chat non trovata"
                                        : "Nessuna chat in cache");
         }

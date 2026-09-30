@@ -21,6 +21,7 @@
 #endif
 
 #include "tg_mtproto_auth.h"
+#include "tg_version.h"
 #include "tg_mtproto_dc.h"
 #include "tg_mtproto_bigint.h"
 #include "tg_mtproto_encrypted.h"
@@ -5075,6 +5076,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                                     stream, label) != 0) {
         return 2;
     }
+    fprintf(stream, "%s\n%s\n\n", TG_APP_TITLE, TG_APP_INTRO_NOTE);
     fprintf(stream, "Connecting to Telegram.\n");
     fflush(stream);
 
@@ -12126,9 +12128,9 @@ static void tg_mtproto_chat_tui_status(const char *peer_label)
     }
     if (peer_label != 0 && peer_label[0] != '\0') {
         tg_mtproto_cache_text_to_display(peer_label, shown, sizeof(shown));
-        sprintf(status, " Telegram Amiga - %.60s ", shown);
+        sprintf(status, " " TG_APP_TITLE " - %.60s ", shown);
     } else {
-        sprintf(status, " Telegram Amiga ");
+        sprintf(status, " " TG_APP_TITLE " ");
     }
     tg_console_tui_status(tg_chat_tui_stream, status);
 }
@@ -20789,7 +20791,7 @@ int tg_gui_session_login_activate(tg_gui_state *state, FILE *stream)
         (void)tg_gui_session_open_chat(
             state->chats[state->selected_chat].index, stream);
     } else {
-        tg_gui_login_copy(state->title, sizeof(state->title), "Telegram Amiga");
+        tg_gui_login_copy(state->title, sizeof(state->title), TG_APP_TITLE);
     }
     tg_gui_login_copy(state->status, sizeof(state->status),
                       "Live - F1-F10 chats, Q quits");
