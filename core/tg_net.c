@@ -32,6 +32,8 @@ static unsigned long tg_xfer_sum[TG_XFER_COUNT];
 static unsigned long tg_xfer_began[TG_XFER_COUNT];
 static int tg_xfer_armed[TG_XFER_COUNT];
 static unsigned long tg_xfer_mark;
+long tg_net_xfer_sndbuf = -1L;
+long tg_net_xfer_rcvbuf = -1L;
 
 /* Microseconds, wrapping every 71 minutes: only differences are used. */
 static unsigned long tg_xfer_now(void)
@@ -175,6 +177,15 @@ tg_net_status tg_net_connect(tg_net_connection *connection, const char *host, co
         st = tg_platform_tcp_connect(connection, host, port, error_buffer,
                                      error_buffer_size);
         TG_NET_DIAG("connect done rc", (unsigned long)st);
+#if defined(TG_DIAG_XFER)
+        if (st == TG_NET_OK) {
+            char line[80];
+
+            sprintf(line, "xfer net: sndbuf=%ld rcvbuf=%ld",
+                    tg_net_xfer_sndbuf, tg_net_xfer_rcvbuf);
+            tg_gui_log(line);
+        }
+#endif
         return st;
     }
 }

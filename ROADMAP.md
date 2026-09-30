@@ -144,17 +144,23 @@ Features are therefore grouped by the work they share.
   build once it lands. The first of them, repainting only the status
   line during a transfer, already shipped in 0.0.94. Keep several
   requests in flight in both directions, so no part waits for Telegram
-  to answer the one before it: downloads do it now on main (a 4 MB file
-  in 1.8 s instead of 8.6 on a desktop, 97 KB/s to 191 on a Vampire),
-  uploads are next. On the Vampire the time of a part now goes to
-  decryption: 36 ms of AES and 26 of the SHA-256 that checks every
-  message, after a word-at-a-time SHA-256 that only gained 4 ms (the
-  compiler had done well with the old one), then 45 ms of socket reads.
+  to answer the one before it: both directions do it now on main
+  (downloads: a 4 MB file in 1.8 s instead of 8.6 on a desktop, 97 KB/s
+  to 191 on a Vampire; uploads: 776 KB/s to 4.75 MB/s on a desktop, 112
+  to 213 KB/s on a Vampire). On the Vampire the time of a part now goes
+  to the CPU: decryption takes 36 ms of AES and 26 of the SHA-256 that
+  checks every message, after a word-at-a-time SHA-256 that only gained
+  4 ms (the compiler had done well with the old one), then the socket
+  reads; an upload part spends 67 ms in encryption and about as much in
+  the TCP/IP stack on the same processor.
   A word-at-a-time AES with 32-bit tables in place of the byte-at-a-time
   reference code, now on main: on a Vampire a 32 KB part takes 34 ms to
   decrypt instead of 128, and 39 ms to encrypt instead of 183. Larger
   socket buffers: a MorphOS upload blocks 79 ms per part inside the
-  send. Open the window before the key exchange with the datacenter that
+  send. On the Vampire, Roadshow's 32 KB each way made no difference
+  against 64 and 128 KB (the CPU is the limit there), so the switch
+  stays off until MorphOS, with its faster processor, is measured with
+  it. Open the window before the key exchange with the datacenter that
   serves avatars, which is 74 of the 89 seconds a first start takes on a
   14 MHz 68030. And -O2 for the 68k files of pure computation (the JPEG
   decoder, image scaling, inflate, the TL parser), one at a time, away

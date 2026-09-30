@@ -14723,6 +14723,7 @@ static int tg_mtproto_sent_code_text_self_test(void);   /* defined with the logi
 #endif
 
 static int tg_mtproto_download_window_self_test(void);
+static int tg_mtproto_upload_window_self_test(void);
 
 int tg_mtproto_probe_self_test(void)
 {
@@ -15554,6 +15555,9 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_photo_queue_reset();
     }
     if (tg_mtproto_download_window_self_test() != 0) {
+        return 2;
+    }
+    if (tg_mtproto_upload_window_self_test() != 0) {
         return 2;
     }
 
@@ -17842,6 +17846,53 @@ const char *tg_gui_session_last_transfer_error(void)
     return tg_mtproto_upload_failure_text(tg_mtproto_query_fail);
 }
 
+/* Parts in flight during an upload (0.0.95): the same window as downloads.
+   Telegram acknowledges saveFilePart parts in any order and a part can be
+   sent again at no cost, so nothing is parked: the data goes out with the
+   request and only the part numbers are kept. */
+#ifndef TG_GUI_UL_WINDOW
+#define TG_GUI_UL_WINDOW TG_GUI_DL_WINDOW
+#endif
+/* After this many drops the rest of the upload goes one part at a time: a
+   link that keeps breaking the window only loses time reconnecting. */
+#define TG_GUI_UL_WINDOW_DROPS 4UL
+
+/* A window needs a connection of its own. When the file channel cannot
+   open, a transfer runs on the chat's connection, and there the GUI drains
+   pushes between two steps: it would swallow the replies in flight. */
+static int tg_mtproto_window_allowed(const tg_mtproto_auth_context *context)
+{
+    return context != 0 && context != &tg_gui_session_state.context;
+}
+
+/* Fire a query WITHOUT waiting: the same initConnection + invokeWithLayer
+   wrapper the synchronous path uses, built into `wrapped`, then the raw
+   send. Returns 0 with the msg_id to match the reply against; any failure
+   just means the caller goes synchronous. */
+static int tg_mtproto_pipe_send_query(const tg_mtproto_file_ctx *fc,
+                                      const unsigned char *query,
+                                      unsigned long query_length,
+                                      unsigned char *wrapped,
+                                      unsigned long wrapped_capacity,
+                                      tg_mtproto_message_id *out_id,
+                                      FILE *stream, const char *label)
+{
+    unsigned long api_id;
+    tg_mtproto_tl_writer writer;
+
+    if (fc == 0 || fc->context == 0 || !fc->context->connection_open ||
+        tg_mtproto_parse_ulong_arg(fc->api_id, &api_id) != 0) {
+        return 1;
+    }
+    if (tg_mtproto_build_initialized_query(&writer, wrapped, wrapped_capacity,
+                                           api_id, query, query_length) !=
+        0) {
+        return 1;
+    }
+    return tg_mtproto_send_query_noreply(fc->context, wrapped, writer.length,
+                                         out_id, stream, label);
+}
+
 /* --- 0.0.8 punto 1b: the upload is a state machine too (one engine). ------
    begin() opens the file and resolves the peer, step() sends ONE part (or,
    after the last part, the sendMedia), end() closes up. Same design as the
@@ -17865,6 +17916,17 @@ typedef struct tg_gui_ul_state {
     int part_retry;
     unsigned long got;  /* bytes of the CURRENT part held in part_buf */
     int part_loaded;    /* part_buf holds the current (unacknowledged) part */
+    /* 0.0.95: up to TG_GUI_UL_WINDOW parts in flight, acknowledged in any
+       order. `part` is the lowest part not yet confirmed (what the progress
+       shows), next_part the next one to read and send. After an anomaly the
+       window rewinds to `part` and one part goes the proven synchronous way
+       before it opens again. */
+    unsigned int win_count;
+    tg_mtproto_message_id win_id[TG_GUI_UL_WINDOW];
+    unsigned long win_part[TG_GUI_UL_WINDOW];
+    unsigned long next_part;
+    int sync_next;
+    unsigned long win_drops;
     int rc;
     /* UTF-8 caption for the sendMedia, converted at begin(); empty for none.
        1024 bytes tracks the server's own caption limit for normal accounts.
@@ -18457,8 +18519,155 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
         return 2;
     }
     tg_gui_ul.rc = 1; /* any early break below is a generic failure */
+    tg_gui_ul.sync_next = 1; /* the first part opens the way, one alone */
     tg_gui_ul.active = 1;
     return 0;
+}
+
+/* Drop the upload window: close the connection (which drains it), rewind
+   the file to the lowest part not yet confirmed, and let the next part go
+   the proven synchronous way before the window opens again. */
+static void tg_mtproto_upload_rewind(void)
+{
+    if (tg_gui_ul.win_count > 0U) {
+        tg_mtproto_close_auth_context(tg_gui_ul.fc.context);
+        tg_gui_ul.win_count = 0U;
+        ++tg_gui_ul.win_drops;
+    }
+    tg_gui_ul.next_part = tg_gui_ul.part;
+    tg_gui_ul.part_loaded = 0;
+    tg_gui_ul.sync_next = 1;
+    (void)fseek(tg_gui_ul.f, (long)(tg_gui_ul.part * TG_GUI_DL_CHUNK),
+                SEEK_SET);
+}
+
+/* Part w of the window is confirmed: out of the window, and `part` moves up
+   to the lowest one still unconfirmed. */
+static void tg_mtproto_upload_window_done(unsigned int w)
+{
+    unsigned long base;
+
+    for (++w; w < tg_gui_ul.win_count; ++w) {
+        tg_gui_ul.win_id[w - 1U] = tg_gui_ul.win_id[w];
+        tg_gui_ul.win_part[w - 1U] = tg_gui_ul.win_part[w];
+    }
+    --tg_gui_ul.win_count;
+    base = tg_gui_ul.next_part;
+    for (w = 0U; w < tg_gui_ul.win_count; ++w) {
+        if (tg_gui_ul.win_part[w] < base) {
+            base = tg_gui_ul.win_part[w];
+        }
+    }
+    tg_gui_ul.part = base;
+}
+
+/* One step of the windowed upload: top the window up with the next parts,
+   then take one acknowledgement (and any others the same message carries).
+   Returns like tg_mtproto_upload_step. */
+static int tg_mtproto_upload_window_step(unsigned char *part_buf,
+                                         unsigned long part_buf_size,
+                                         unsigned char *part_query,
+                                         unsigned long part_query_size)
+{
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    unsigned int which = 0U;
+    unsigned int w;
+    int more = 0;
+    int gfrc;
+    unsigned long got;
+    char gl[160];
+
+    while (tg_gui_ul.win_count < TG_GUI_UL_WINDOW &&
+           tg_gui_ul.next_part < tg_gui_ul.parts) {
+        got = (unsigned long)fread(part_buf, 1, TG_GUI_DL_CHUNK, tg_gui_ul.f);
+        if (got == 0UL) {
+            sprintf(tg_mtproto_query_fail, "disk read failed at part %lu",
+                    tg_gui_ul.next_part + 1UL);
+            return 0; /* short read = disk trouble (rc 1) */
+        }
+        tg_mtproto_tl_writer_init(&writer, part_query, part_query_size);
+        if ((tg_gui_ul.big_file
+                 ? tg_mtproto_build_upload_save_big_file_part(
+                       &writer, tg_gui_ul.file_id_hi, tg_gui_ul.file_id_lo,
+                       tg_gui_ul.next_part, tg_gui_ul.parts, part_buf, got)
+                 : tg_mtproto_build_upload_save_file_part(
+                       &writer, tg_gui_ul.file_id_hi, tg_gui_ul.file_id_lo,
+                       tg_gui_ul.next_part, part_buf, got)) !=
+            TG_MTPROTO_TL_OK) {
+            sprintf(tg_mtproto_query_fail, "build failed at part %lu",
+                    tg_gui_ul.next_part + 1UL);
+            return 0; /* local build error: not retryable (rc 1) */
+        }
+        /* part_buf's data is in part_query now: it takes the wrapped copy */
+        if (tg_mtproto_pipe_send_query(
+                &tg_gui_ul.fc, part_query, writer.length, part_buf,
+                part_buf_size, &tg_gui_ul.win_id[tg_gui_ul.win_count],
+                tg_gui_ul.quiet,
+                tg_gui_ul.big_file ? "mtproto saveBigFilePart(window)"
+                                   : "mtproto saveFilePart(window)") != 0) {
+            sprintf(gl, "upload: window send failed at part %lu, falling "
+                    "back", tg_gui_ul.next_part + 1UL);
+            tg_gui_log(gl);
+            tg_mtproto_upload_rewind();
+            return 1;
+        }
+        tg_gui_ul.win_part[tg_gui_ul.win_count] = tg_gui_ul.next_part;
+        ++tg_gui_ul.win_count;
+        ++tg_gui_ul.next_part;
+    }
+    if (tg_gui_ul.win_count == 0U) {
+        tg_gui_ul.part = tg_gui_ul.next_part; /* all in: sendMedia next */
+        return 1;
+    }
+    memset(&result, 0, sizeof(result));
+    gfrc = tg_mtproto_recv_rpc_result_any(
+        tg_gui_ul.fc.context, tg_gui_ul.win_id, tg_gui_ul.win_count, &which,
+        &more, &result, tg_gui_ul.quiet, "mtproto saveFilePart(window)",
+        600U);
+    if (gfrc == 0 && result.result_constructor == 0x997275b5UL) {
+        tg_mtproto_upload_window_done(which);
+        /* one message may carry several acknowledgements */
+        for (w = tg_gui_ul.win_count; w-- > 0U;) {
+            tg_mtproto_rpc_result other;
+
+            if (!tg_mtproto_find_rpc_result(
+                    tg_mtproto_q_decrypted.body,
+                    tg_mtproto_q_decrypted.body_length,
+                    tg_gui_ul.win_id[w].hi, tg_gui_ul.win_id[w].lo,
+                    &other)) {
+                continue;
+            }
+            if (other.result_constructor != 0x997275b5UL) {
+                gfrc = 4; /* an error in the same message: rewind */
+                break;
+            }
+            tg_mtproto_upload_window_done(w);
+        }
+        if (gfrc == 0) {
+            return 1;
+        }
+    }
+    if (gfrc == 0 && result.result_constructor ==
+                         TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+        char emsg[64];
+
+        emsg[0] = '\0';
+        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                         result.result_body_length + 4U,
+                                         &ecode, emsg, sizeof(emsg));
+        sprintf(tg_mtproto_query_fail, "%.60s", emsg);
+    }
+    sprintf(gl, "upload: window at part %lu rc=%d ctor=0x%08lx (%.40s), "
+            "falling back", tg_gui_ul.part + 1UL, gfrc,
+            result.result_constructor, tg_mtproto_query_fail);
+    tg_gui_log(gl);
+    /* No retry count here: the part goes the synchronous way next, and
+       that path decides, with its own retries, whether the upload can go
+       on. */
+    tg_mtproto_upload_rewind();
+    return 1;
 }
 
 /* Send ONE part per call (a failed part retries on the NEXT call, same
@@ -18467,7 +18676,8 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
    finished (rc set); then call tg_mtproto_upload_end(). */
 static int tg_mtproto_upload_step(void)
 {
-    static unsigned char part_buf[TG_GUI_DL_CHUNK];
+    /* holds a part's data, and in the window the wrapped query as well */
+    static unsigned char part_buf[TG_MTPROTO_QUERY_SEND_MAX];
     static unsigned char part_query[TG_GUI_DL_CHUNK + 64UL];
     unsigned char query[512];
     unsigned char rnd[8];
@@ -18532,6 +18742,12 @@ static int tg_mtproto_upload_step(void)
         tg_gui_ul.rc = 0; /* the tick's history poll shows the sent row */
         return 0;
     }
+    if (TG_GUI_UL_WINDOW > 1U && !tg_gui_ul.sync_next &&
+        tg_gui_ul.win_drops < TG_GUI_UL_WINDOW_DROPS &&
+        tg_mtproto_window_allowed(tg_gui_ul.fc.context)) {
+        return tg_mtproto_upload_window_step(part_buf, sizeof(part_buf),
+                                             part_query, sizeof(part_query));
+    }
     if (!tg_gui_ul.part_loaded) {
         tg_gui_ul.got = (unsigned long)fread(part_buf, 1, TG_GUI_DL_CHUNK,
                                              tg_gui_ul.f);
@@ -18569,23 +18785,27 @@ static int tg_mtproto_upload_step(void)
         result.result_constructor == 0x997275b5UL /* boolTrue */) {
         ++tg_gui_ul.part;
         tg_gui_ul.part_loaded = 0;
+        tg_gui_ul.next_part = tg_gui_ul.part;
+        tg_gui_ul.sync_next = 0; /* the window may open again */
         return 1; /* next call: next part (or the sendMedia) */
     }
     /* Part failed (a lost chunk / slow-link timeout / non-boolTrue).
        Re-send the SAME part next call: saveFilePart is idempotent for
        (file_id, part) and part_buf still holds the data, so no re-read. */
     if (++tg_gui_ul.part_retry > TG_GUI_DL_CHUNK_RETRIES) {
-        char pf[80];
+        /* Bounded to the 64 bytes of tg_mtproto_query_fail: four-digit
+           part counts and a long reason used to run one byte past it. */
+        char pf[112];
 
         sprintf(pf, "part %lu/%lu: %.48s", tg_gui_ul.part + 1UL,
                 tg_gui_ul.parts,
                 tg_mtproto_query_fail[0] != '\0'
                     ? tg_mtproto_query_fail : "no reply");
-        strcpy(tg_mtproto_query_fail, pf);
+        sprintf(tg_mtproto_query_fail, "%.63s", pf);
         return 0; /* rc 1 */
     }
     {
-        char rl[96];
+        char rl[128];
         sprintf(rl, "upload: retry %d part %lu/%lu (%.32s)",
                 tg_gui_ul.part_retry, tg_gui_ul.part + 1UL, tg_gui_ul.parts,
                 tg_mtproto_query_fail);
@@ -18613,7 +18833,18 @@ static void tg_mtproto_upload_cancel(void)
 static int tg_mtproto_upload_end(void)
 {
     int rc = tg_gui_ul.rc;
+    char ul[128];
 
+    TG_XFER_REPORT("ul-end", tg_gui_ul.part);
+    if (tg_gui_ul.win_count > 0U) {
+        /* replies still on their way must not meet the next query */
+        tg_mtproto_close_auth_context(tg_gui_ul.fc.context);
+        tg_gui_ul.win_count = 0U;
+    }
+    sprintf(ul, "upload: end rc=%d, parts %lu, window %u, fallbacks %lu", rc,
+            tg_gui_ul.parts, (unsigned int)TG_GUI_UL_WINDOW,
+            tg_gui_ul.win_drops);
+    tg_gui_log(ul);
     if (tg_gui_ul.f != 0) {
         fclose(tg_gui_ul.f);
         tg_gui_ul.f = 0;
@@ -18625,6 +18856,101 @@ static int tg_mtproto_upload_end(void)
     tg_gui_ul.active = 0;
     return rc;
 }
+
+#if !defined(TG_NO_SELFTEST)
+/* 0.0.95: the upload window's bookkeeping. Acknowledgements in any order
+   move `part` up to the lowest part still out; a rewind goes back there,
+   file position included, and gives the next part to the synchronous way. */
+static int tg_mtproto_upload_window_self_test(void)
+{
+    static const char path[] = "telegram-mtproto-upload-self-test.tmp";
+    static tg_mtproto_auth_context ctx;
+    unsigned char *block;
+    unsigned int w;
+    int c;
+    int ok;
+
+    memset(&ctx, 0, sizeof(ctx));
+    if (tg_mtproto_window_allowed(&tg_gui_session_state.context) ||
+        !tg_mtproto_window_allowed(&ctx)) {
+        puts("probe self-test: upload window: chat connection not guarded");
+        return 2;
+    }
+    if (TG_GUI_UL_WINDOW < 3U) {
+        return 0; /* the out-of-order case needs three parts out */
+    }
+    memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+    tg_gui_ul.fc.context = &ctx; /* never opened: close is a no-op */
+    /* parts 4, 5, 6 out and 7 next: 5 and 6 come back before 4 */
+    tg_gui_ul.part = 4UL;
+    tg_gui_ul.next_part = 7UL;
+    tg_gui_ul.win_count = 3U;
+    for (w = 0U; w < 3U; ++w) {
+        tg_gui_ul.win_part[w] = 4UL + w;
+        tg_gui_ul.win_id[w].hi = 0x6abc0000UL;
+        tg_gui_ul.win_id[w].lo = 0x100UL + (4UL + w) * 4UL;
+    }
+    tg_mtproto_upload_window_done(1U);
+    ok = tg_gui_ul.part == 4UL && tg_gui_ul.win_count == 2U &&
+         tg_gui_ul.win_part[1] == 6UL &&
+         tg_gui_ul.win_id[1].lo == 0x100UL + 6UL * 4UL;
+    tg_mtproto_upload_window_done(1U);
+    ok = ok && tg_gui_ul.part == 4UL && tg_gui_ul.win_count == 1U &&
+         tg_gui_ul.win_part[0] == 4UL;
+    tg_mtproto_upload_window_done(0U);
+    ok = ok && tg_gui_ul.part == 7UL && tg_gui_ul.win_count == 0U;
+    if (!ok) {
+        puts("probe self-test: upload window: out-of-order acks miscounted");
+        memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+        return 2;
+    }
+
+    /* a rewind with parts 2 and 3 out goes back to part 2 of the file */
+    block = (unsigned char *)malloc((size_t)TG_GUI_DL_CHUNK);
+    if (block == 0) {
+        memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+        return 0; /* no room to test here: not a failure of the code */
+    }
+    tg_gui_ul.f = fopen(path, "wb");
+    ok = tg_gui_ul.f != 0;
+    for (c = 0; ok && c < 3; ++c) {
+        memset(block, 'a' + c, (size_t)TG_GUI_DL_CHUNK);
+        ok = fwrite(block, 1, (size_t)TG_GUI_DL_CHUNK, tg_gui_ul.f) ==
+             TG_GUI_DL_CHUNK;
+    }
+    if (tg_gui_ul.f != 0) {
+        ok = fclose(tg_gui_ul.f) == 0 && ok;
+    }
+    tg_gui_ul.f = ok ? fopen(path, "rb") : 0;
+    ok = ok && tg_gui_ul.f != 0 &&
+         fread(block, 1, (size_t)TG_GUI_DL_CHUNK, tg_gui_ul.f) ==
+             TG_GUI_DL_CHUNK;
+    if (ok) {
+        tg_gui_ul.part = 1UL;
+        tg_gui_ul.next_part = 3UL;
+        tg_gui_ul.win_count = 2U;
+        tg_gui_ul.win_part[0] = 2UL; /* part 1 acked, 2 still out */
+        tg_gui_ul.win_part[1] = 1UL;
+        tg_mtproto_upload_window_done(1U);
+        ok = tg_gui_ul.part == 2UL;
+        tg_mtproto_upload_rewind();
+        ok = ok && tg_gui_ul.win_count == 0U && tg_gui_ul.win_drops == 1UL &&
+             tg_gui_ul.next_part == 2UL && tg_gui_ul.sync_next &&
+             !tg_gui_ul.part_loaded && fgetc(tg_gui_ul.f) == 'c';
+    }
+    if (tg_gui_ul.f != 0) {
+        fclose(tg_gui_ul.f);
+    }
+    memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+    (void)remove(path);
+    free(block);
+    if (!ok) {
+        puts("probe self-test: upload window: rewind lost its place");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 /* Blocking wrapper over the state machine (TUI and legacy callers). */
 static int tg_mtproto_file_send(const tg_mtproto_file_ctx *fc,
@@ -18987,20 +19313,10 @@ static int tg_mtproto_pipe_send_getfile(const tg_mtproto_file_ctx *fc,
                                         FILE *stream)
 {
     static unsigned char wrapped[768]; /* a getFile is small; not a part */
-    unsigned long api_id;
-    tg_mtproto_tl_writer writer;
 
-    if (fc == 0 || fc->context == 0 || !fc->context->connection_open ||
-        tg_mtproto_parse_ulong_arg(fc->api_id, &api_id) != 0) {
-        return 1;
-    }
-    if (tg_mtproto_build_initialized_query(&writer, wrapped, sizeof(wrapped),
-                                           api_id, query, query_length) != 0) {
-        return 1;
-    }
-    return tg_mtproto_send_query_noreply(fc->context, wrapped, writer.length,
-                                         out_id, stream,
-                                         "mtproto getFile(prefetch)");
+    return tg_mtproto_pipe_send_query(fc, query, query_length, wrapped,
+                                      sizeof(wrapped), out_id, stream,
+                                      "mtproto getFile(window)");
 }
 
 /* Drop whatever is in flight: the connection is closed (which is what
@@ -19281,6 +19597,9 @@ static void tg_mtproto_download_window_fill(void)
 
     if (tg_gui_dl.doc.size_hi == 0UL && tg_gui_dl.doc.size_lo == 0UL) {
         return; /* size unknown: one request at a time */
+    }
+    if (!tg_mtproto_window_allowed(tg_gui_dl.fc_file.context)) {
+        return; /* on the chat's connection: one request at a time */
     }
     while (tg_gui_dl.win_count < tg_gui_dl.win_max) {
         next = tg_gui_dl.win_count == 0U

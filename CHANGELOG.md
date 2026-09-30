@@ -50,6 +50,29 @@ lanes unless noted.
   one and Telegram refused it. A self-test checks the parking order, that a
   reset gives every buffer back, and the ids; each check fails when the code
   it covers is broken.
+- Uploads keep several parts in flight too, with the same window as
+  downloads. Every saveFilePart used to wait for its acknowledgement before
+  the next part went out. Telegram may confirm the parts in any order and a
+  part can be sent twice at no cost, so nothing is parked here: the client
+  only remembers which parts are still unconfirmed. After anything unusual
+  it closes the connection, goes back to the lowest of them, and sends the
+  next part the old way, alone, before the window opens again; the first
+  part of every upload goes that way too, to open the connection. On a
+  desktop a 4 MB file goes up at 4.75 MB/s instead of 776 KB/s, and a file
+  over 10 MB (saveBigFilePart) at 4.6 MB/s. On a Vampire, from the text
+  client, 2 MB go up at 213 KB/s instead of 112. Every test file was
+  downloaded back and compared with the original. There the time of a
+  32 KB part is now the CPU's: 67 ms of encryption and about as much for
+  the TCP/IP stack, which runs on the same processor. Socket buffers of 64
+  and 128 KB, in place of the 32 KB Roadshow gives, changed nothing that
+  stood out from the network's own swings, so the stack keeps its sizes.
+  A self-test checks acknowledgements taken out of order and a rewind to
+  the right place in the file; each check fails when the code it covers is
+  broken.
+- Neither window opens when a transfer runs on the chat's own connection,
+  which happens when the separate file connection cannot open. Between two
+  steps of a transfer the GUI reads that connection for new messages, and
+  it would take the replies still on their way.
 - The program calls itself Unofficial Telegram Amiga, and says what it is.
   Telegram's API terms let an app's title carry the word Telegram only after
   "Unofficial" (2.3), and ask every client to tell its users that it uses
@@ -75,6 +98,12 @@ lanes unless noted.
   fails when either direction is broken. `--mtproto-crypto-bench` reports the
   cost per 32 KB part on the machine it runs on, and a build with the
   self-tests also times the byte form for comparison.
+
+### Fixed
+- When an upload gave up on a part, the reason it reported ("part N of M"
+  and what went wrong) could run one byte past its 64-byte buffer, with a
+  file of a thousand parts or more and a long enough reason. It is now cut
+  to fit.
 
 ## [0.0.94] - 2026-09-25
 

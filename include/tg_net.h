@@ -141,6 +141,10 @@ void tg_net_xfer_start(int slot);
 void tg_net_xfer_stop(int slot);
 void tg_net_xfer_report(const char *what, unsigned long offset);
 unsigned long tg_net_xfer_clock_ms(void); /* for the log's time stamps */
+/* The TCP buffers the stack gave the last connection, as the platform read
+   them back (-1 = not known); logged once per connect. */
+extern long tg_net_xfer_sndbuf;
+extern long tg_net_xfer_rcvbuf;
 #define TG_XFER_RESET() tg_net_xfer_reset()
 #define TG_XFER_ADD(slot, value) tg_net_xfer_add((slot), (unsigned long)(value))
 #define TG_XFER_START(slot) tg_net_xfer_start(slot)

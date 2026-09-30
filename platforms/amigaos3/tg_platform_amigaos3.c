@@ -727,6 +727,14 @@ static int tg_amigaos3_socket_open(char *error_buffer, unsigned long error_buffe
 }
 #endif
 
+/* The TCP buffers of one connection, in bytes (0.0.95 measurement switch;
+   0 leaves the stack's own sizes alone). Asked before connect, so that a
+   receive window over 64 KB can be scaled; a stack that refuses keeps its
+   own size. */
+#ifndef TG_NET_SOCKET_BUFFER
+#define TG_NET_SOCKET_BUFFER 0
+#endif
+
 tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char *host,
                                       const char *port, char *error_buffer,
                                       unsigned long error_buffer_size)
@@ -773,6 +781,29 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
         tg_platform_set_error(error_buffer, error_buffer_size, "socket open failed");
         return TG_NET_CONNECT_FAILED;
     }
+#if TG_NET_SOCKET_BUFFER > 0
+    {
+        LONG size = TG_NET_SOCKET_BUFFER;
+
+        (void)setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+        (void)setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+    }
+#endif
+#if defined(TG_DIAG_XFER)
+    {
+        LONG size = -1;
+        socklen_t length = sizeof(size);
+
+        tg_net_xfer_sndbuf =
+            getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &size, &length) == 0
+                ? (long)size : -1L;
+        size = -1;
+        length = sizeof(size);
+        tg_net_xfer_rcvbuf =
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, &length) == 0
+                ? (long)size : -1L;
+    }
+#endif
 
     rc = connect(sock, (struct sockaddr *)&address, sizeof(address));
     if (rc == 0) {
