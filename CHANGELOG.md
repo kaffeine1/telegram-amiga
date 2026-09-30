@@ -7,6 +7,16 @@ lanes unless noted.
 
 ## [Unreleased]
 
+### Added
+- On AmigaOS 3.x the text client takes its commands from a script or a
+  redirection (`TelegramAmiga <commands ...`) as well as from a console.
+  WaitForChar() only answers for consoles, so on any other input it always
+  said "nothing yet" and a scripted chat never read a line; such input now
+  counts as ready, since a read there returns data or the end at once. NIL:
+  is left as it was, so a detached client does not take an empty input for
+  one that has ended. This is what let the transfer measurements run on a
+  real Vampire without anyone at the keyboard.
+
 ### Changed
 - Downloads keep several requests in flight. Every getFile used to wait for
   its reply before the next one went out, and that wait was most of each
@@ -16,6 +26,9 @@ lanes unless noted.
   them out of order about half the time, a chunk that comes early is parked
   in a buffer and written when its turn comes. On a desktop a 4 MB file now
   comes in 1.8 s instead of 8.6 with a window of 4, and in 0.85 s with 8.
+  On a Vampire, from the text client, it doubles: 97 KB/s before, 191 with
+  the 68k's window of 4, and the wait for Telegram fell from 147 ms of each
+  32 KB part to 1.
   Two things changed underneath. The wait for a reply accepts any of the
   requests out, and lets through the acknowledgements the server sends on
   their own when several are pending. And the client's message ids no
