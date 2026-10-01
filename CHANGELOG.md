@@ -146,7 +146,9 @@ lanes unless noted.
   challenge and finished with another is the one the second alone gives,
   and that a changed salt is caught; each check fails when the code it
   covers is broken, and the test passes on the host and on a Vampire. A
-  login on a slow machine with a real account is still to come.
+  real login with Two-Step Verification then went through on a stock
+  A1200, from the text client. The manuals no longer send such accounts to
+  a faster machine, or tell them to turn Two-Step Verification off.
 - A key exchange could fail on a slow 68k before it had really begun. It
   opens with pq, a product of two primes below 2^32 that the client must
   split before it can answer, and the client split it with 64-bit

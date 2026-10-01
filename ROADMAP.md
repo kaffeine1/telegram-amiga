@@ -171,7 +171,7 @@ Features are therefore grouped by the work they share.
   from the compiler bug that pinned the rest to -O0. Plus the open
   defects: the two MorphOS popup glitches, photo speed under AfA_OS
   and the full-size photo preference. Two-step verification on a slow
-  68k is on main, waiting for a login on a stock 1200.
+  68k is on main, and a login went through on a stock A1200.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -220,9 +220,9 @@ and after the fresh `account.getPassword` only one exponentiation is left
 (about a second on a Vampire, half a minute on a 14 MHz 68020). The
 connection is closed during the wait, with the session saved, and opened
 again for the fresh challenge; if the salts changed in between, the
-password was changed elsewhere and the client says so. What remains is the
-proof on the machine itself: a login with Two-Step Verification on a stock
-1200.
+password was changed elsewhere and the client says so. Confirmed on
+2026-10-01: a login with Two-Step Verification went through on a stock
+A1200, from the text client.
 
 ## Done in 0.0.92: link previews
 

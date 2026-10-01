@@ -191,12 +191,11 @@ TelegramAmiga (or TelegramAmiga-TUI). First run signs you in (phone -> code -> 2
    TelegramAmiga-TUI: it reuses that login and goes straight to the chats.
    The same account stays usable on both machines.
 
-If your account has Two-Step Verification, pick a machine that is genuinely
-fast for step 1: a 68030 or better, an emulator with JIT, or a PPC/AROS
-system. Checking the cloud password derives a key with 100000 iterations of
-SHA-512, about forty minutes on a stock 68020 -- long enough for Telegram to
-expire the challenge, so the login never completes there. Turning Two-Step
-Verification off for the few minutes of the login also works.
+If your account has Two-Step Verification, checking the cloud password
+derives a key with 100000 iterations of SHA-512: about half an hour on a
+stock A1200 (68020), much less on a faster machine. The dots show it
+working, and once the key is ready the client asks Telegram for a fresh
+challenge, so the login completes even on the slow machine.
 
 Why not log in here? The first login runs a Diffie-Hellman key exchange:
 it is the heaviest thing this program does, and a plain 68000 cannot
@@ -213,13 +212,12 @@ the route above is the supported one."
    TelegramAmiga-TUI: riusa quel login e va dritto alle chat. Lo stesso
    account resta utilizzabile su entrambe le macchine.
 
-Se il tuo account ha la verifica in due passaggi, per il punto 1 scegli una
-macchina davvero veloce: un 68030 o superiore, un emulatore con JIT oppure
-un sistema PPC/AROS. Il controllo della password cloud deriva una chiave con
-100000 iterazioni di SHA-512, circa quaranta minuti su un 68020 liscio: il
-tempo che Telegram faccia scadere la richiesta, e li' l'accesso non si
-completa. In alternativa disattiva la verifica in due passaggi per i pochi
-minuti dell'accesso.
+Se il tuo account ha la verifica in due passaggi, il controllo della
+password cloud deriva una chiave con 100000 iterazioni di SHA-512: circa
+mezz'ora su un A1200 liscio (68020), molto meno su una macchina piu'
+veloce. I puntini mostrano che sta lavorando, e quando la chiave e' pronta
+il client chiede a Telegram una richiesta nuova, quindi l'accesso si
+completa anche sulla macchina lenta.
 
 Perche' non accedere qui? Il primo login esegue uno scambio di chiavi
 Diffie-Hellman: e' la cosa piu' pesante che il programma faccia, e un
@@ -371,7 +369,8 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 ---------------------
 - Photo messages show an instant blurred preview from the message itself, then
   refine from a small bounded download. Decoded pixels are cached for reopen.
-- The cloud-password (2FA) step is heavy on a 68k (PBKDF2) and can take a while.
+- The cloud-password (2FA) step is heavy on a 68k (PBKDF2): about half an
+  hour on a stock A1200. The login completes; the dots show it working.
 - First login: the DH key exchange is heavy on a 68k, so the first start
   takes a while (it happens once -- the session is saved afterwards).
 - Emoji are drawn as text emoticons (:) :D <3); the console has no emoji font."
@@ -385,8 +384,9 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 --------------------
 - Le foto mostrano subito l'anteprima sfocata inclusa nel messaggio, poi si
   rifiniscono con un download limitato. I pixel decodificati restano in cache.
-- Il passo della password cloud (2FA) e' pesante su 68k (PBKDF2) e puo' metterci
-  un po'.
+- Il passo della password cloud (2FA) e' pesante su 68k (PBKDF2): circa
+  mezz'ora su un A1200 liscio. L'accesso si completa; i puntini mostrano che
+  sta lavorando.
 - Primo accesso: lo scambio di chiavi DH e' pesante su 68k, quindi il primo
   avvio richiede un po' di pazienza (succede una volta sola: la sessione
   viene poi salvata)."
