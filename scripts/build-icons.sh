@@ -30,10 +30,13 @@ mkdir -p "$OUT/amigaos4" "$OUT/amigaos3" "$OUT/amigaos3-68000" "$OUT/morphos" "$
 # 68000 build asks for 384 KB of stack, not 1 MB: a 2 MB machine cannot
 # spare the megabyte and the binary's cookie says so.
 "$PY" scripts/make_os35_icon.py "$SRC/OS4/OS4-1.info" "$OUT/amigaos3/TelegramAmiga.info" --project --frameless --colors 256 --size 44 --canvas 46
-# The drawer keeps the cabinet Carlo drew for 3.x (46 pixels, his call).
-"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3/drawer.info" --drawer --frameless --colors 256
+# The drawer keeps the cabinet Carlo drew for 3.x (46 pixels, his call). Its
+# four-pen image (3.0/3.1, four-colour Workbenches) is drawn with --planar
+# ordered: dithered by error diffusion, the shaded cabinet was a cloud of
+# stray pixels on a stock A1200.
+"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3/drawer.info" --drawer --frameless --colors 256 --planar ordered
 "$PY" scripts/make_os35_icon.py "$SRC/OS4/OS4-1.info" "$OUT/amigaos3-68000/TelegramAmiga.info" --project --frameless --colors 256 --size 44 --canvas 46 --stack 393216
-"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3-68000/drawer.info" --drawer --frameless --colors 256 --stack 393216
+"$PY" scripts/make_os35_icon.py "$SRC/OS3/OS3-2.info" "$OUT/amigaos3-68000/drawer.info" --drawer --frameless --colors 256 --stack 393216 --planar ordered
 
 # MorphOS and AROS: PNG icons, the icOn chunk rewritten.
 # In the MorphOS set Carlo drew the DRAWER as Mos1 and the program badge as

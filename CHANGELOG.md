@@ -117,6 +117,15 @@ lanes unless noted.
   self-tests also times the byte form for comparison.
 
 ### Fixed
+- The drawer icon of the AmigaOS 3.x packages looked like a cloud of stray
+  pixels where the Workbench draws the four-colour image an icon carries
+  besides its colour one, as AmigaOS 3.0 and 3.1 do; a stock A1200 showed
+  it so. That image was made from Carlo Spadoni's shaded cabinet by error
+  diffusion in the four Workbench pens, which suits the flat program icon
+  but turns soft gradients into scattered dots. It is now drawn with a
+  black outline, brightness levels and a regular 2x2 texture, and no
+  longer keeps the faint dots of the selected state's glow. The colour
+  image is Carlo's as before, and the program icons do not change.
 - Two-step verification can now finish on a slow 68k. Checking the
   password derives a key with PBKDF2, 100000 rounds of SHA-512: 54 s on a
   Vampire, 27 minutes on a 14 MHz 68030 under WinUAE, and 31 on a stock

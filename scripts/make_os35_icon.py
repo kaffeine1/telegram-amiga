@@ -28,13 +28,16 @@ Usage:
   make_os35_icon.py IN.png OUT.info --project [--tool TelegramAmiga] [--stack N]
   make_os35_icon.py IN.png OUT.info --drawer
   options: --selected SEL.png  --colors 64  --frameless  --matte 170,170,170
-           --alpha-cut 32  --no-argb  --size 44  --canvas 46
+           --alpha-cut 32  --no-argb  --size 44  --canvas 46  --planar fs|ordered
 The rim of the drawing is blended over --matte (the Workbench grey) since a
 palette icon has no alpha; pixels under --alpha-cut stay transparent. Unless
 --no-argb, the file also carries the drawing with its alpha as OS4 ARGB
 chunks, which icon.library versions that know them blend over any backdrop.
 --size resamples the artwork to that many pixels a side first, and --canvas
-centres the result on a larger transparent frame.
+centres the result on a larger transparent frame. --planar picks how the
+four-pen image for 3.0/3.1 and four-colour Workbenches is drawn: fs
+(Floyd-Steinberg, the default, fine for flat artwork) or ordered (outline,
+brightness levels and a regular 2x2 texture, for shaded artwork).
 """
 import io
 import struct
@@ -248,14 +251,58 @@ def argb_chunk_body(im):
     return struct.pack(">IIH", 1, len(z) - 1, 0) + z
 
 
-def planar(im, matte, alpha_cut):
-    """Two bitplanes in the four Workbench pens, dithered; transparent = pen 0."""
-    w, h = im.size
+def planar_pens_fs(im, matte, alpha_cut):
+    """The four Workbench pens, Floyd-Steinberg dithered; transparent = pen
+    0. Right for flat artwork, such as the program icon."""
     pal = Image.new("P", (1, 1))
     pal.putpalette(sum([list(c) for c in WB_PENS], []) + [0] * (768 - 12))
     q = matte_over(im, matte).quantize(palette=pal, dither=Image.Dither.FLOYDSTEINBERG)
     alpha = list(im.split()[3].tobytes())
-    pens = [0 if alpha[k] < alpha_cut else v for k, v in enumerate(q.tobytes())]
+    return [0 if alpha[k] < alpha_cut else v for k, v in enumerate(q.tobytes())]
+
+
+def planar_pens_ordered(im, matte):
+    """The four Workbench pens for shaded artwork. Error diffusion turns soft
+    gradients into scattered dots in four colours (a 3.x Workbench showed
+    the drawer cabinet as a cloud of stray pixels), so: a black outline on
+    the silhouette, then each pixel by brightness (black, blue for the
+    bluish middle tones, grey, white) with a fixed 2x2 pattern added to the
+    brightness, which renders a gradient as a regular texture. Pixels under
+    half opacity stay transparent, so a soft glow leaves no dots behind."""
+    w, h = im.size
+    rgb = matte_over(im, matte).tobytes()
+    inside = [a >= 128 for a in im.split()[3].tobytes()]
+    bayer = ((0, 2), (3, 1))
+    pens = []
+    for k in range(w * h):
+        if not inside[k]:
+            pens.append(0)
+            continue
+        x, y = k % w, k // w
+        if any(not (0 <= xx < w and 0 <= yy < h) or not inside[yy * w + xx]
+               for xx, yy in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))):
+            pens.append(1)
+            continue
+        r, g, b = rgb[3 * k], rgb[3 * k + 1], rgb[3 * k + 2]
+        lum = 0.299 * r + 0.587 * g + 0.114 * b + (bayer[y & 1][x & 1] - 1.5) * 18
+        if lum < 72:
+            pens.append(1)
+        elif lum > 200:
+            pens.append(2)
+        elif b > r + 20 and lum < 150:
+            pens.append(3)
+        else:
+            pens.append(0)
+    return pens
+
+
+def planar(im, matte, alpha_cut, style="fs"):
+    """Two bitplanes in the four Workbench pens; transparent = pen 0."""
+    w, h = im.size
+    if style == "ordered":
+        pens = planar_pens_ordered(im, matte)
+    else:
+        pens = planar_pens_fs(im, matte, alpha_cut)
     rowbytes = ((w + 15) // 16) * 2
     planes = bytearray()
     for plane in range(2):
@@ -272,7 +319,8 @@ def chunk(cid, body):
     return cid + struct.pack(">I", len(body)) + body + (b"\x00" if len(body) & 1 else b"")
 
 
-def build(images, do_type, tool, stack, colors, frameless, drawer, matte, alpha_cut, argb):
+def build(images, do_type, tool, stack, colors, frameless, drawer, matte, alpha_cut, argb,
+          planar_style="fs"):
     w, h = images[0].size
     for im in images[1:]:
         if im.size != (w, h):
@@ -305,7 +353,8 @@ def build(images, do_type, tool, stack, colors, frameless, drawer, matte, alpha_
     if drawer:
         out += classic.DEFAULT_DRAWERDATA
     for im in images:
-        out += struct.pack(">hhhhhIBBI", 0, 0, w, h, 2, 1, 3, 0, 0) + planar(im, matte, alpha_cut)
+        out += struct.pack(">hhhhhIBBI", 0, 0, w, h, 2, 1, 3, 0, 0) + planar(im, matte, alpha_cut,
+                                                                            planar_style)
     if tool:
         s = tool.encode("latin-1") + b"\x00"
         out += struct.pack(">I", len(s)) + s
@@ -320,7 +369,7 @@ def main(argv):
     opts = {}
     for i, a in enumerate(argv):
         if a in ("--tool", "--stack", "--selected", "--colors", "--matte", "--alpha-cut",
-                 "--size", "--canvas") and i + 1 < len(argv):
+                 "--size", "--canvas", "--planar") and i + 1 < len(argv):
             opts[a] = argv[i + 1]
     args = [a for a in args if a not in opts.values()]
     if len(args) < 2 or not ({"--project", "--drawer"} & set(flags)):
@@ -338,6 +387,10 @@ def main(argv):
         sys.stderr.write("matte must be R,G,B\n")
         return 2
     alpha_cut = int(opts.get("--alpha-cut", "32"))
+    planar_style = opts.get("--planar", "fs")
+    if planar_style not in ("fs", "ordered"):
+        sys.stderr.write("planar must be fs or ordered\n")
+        return 2
     images = load_states(args[0], opts.get("--selected"))
     if "--size" in opts:
         size = int(opts["--size"])
@@ -347,7 +400,8 @@ def main(argv):
             return 2
         images = [shrink(im, size, canvas) for im in images]
     out = build(images, classic.WBDRAWER if drawer else classic.WBPROJECT, tool, stack,
-                colors, "--frameless" in flags, drawer, matte, alpha_cut, "--no-argb" not in flags)
+                colors, "--frameless" in flags, drawer, matte, alpha_cut, "--no-argb" not in flags,
+                planar_style)
     back = classic.parse(out)
     if classic.serialize(back) != out:
         sys.stderr.write("FATAL: the icon does not walk back as written\n")
