@@ -86,6 +86,19 @@ lanes unless noted.
   and the exchange then took 41 s with the faster pq split. A self-test
   checks which datacenter is left waiting and that nothing is offered
   without a session, and fails when that check is broken.
+- The text client no longer prints a placeholder for an emoji it has no
+  emoticon for. Such an emoji is left out together with the space before
+  it, as the GUI already did, so "ciao <emoji> mondo" reads "ciao mondo";
+  a message of nothing but such emoji shows "(emoji)" rather than an empty
+  line. The common emoji keep their emoticons (":)", "<3", "(y)"), letters
+  of other alphabets still show as "?" so a word does not vanish, and both
+  clients learn a few more symbols: the euro becomes "EUR", a bullet the
+  middle dot, "TM", "!!" and "!?" their plain forms, the play and back
+  triangles "> " and "<", typographic spaces a space, and the invisible
+  parts of keycap digits, subdivision flags and combining accents drop
+  out instead of showing as "?". The console's text path is now compiled
+  in the host build too, and a self-test runs it on twelve cases; dropping
+  the rule that a left-out emoji takes its space fails it.
 - Neither window opens when a transfer runs on the chat's own connection,
   which happens when the separate file connection cannot open. Between two
   steps of a transfer the GUI reads that connection for new messages, and

@@ -6088,7 +6088,11 @@ int tg_mtproto_display_codepoint_is_invisible(unsigned long cp)
     return (cp >= 0xfe00UL && cp <= 0xfe0fUL) || /* variation selectors */
            (cp >= 0x200bUL && cp <= 0x200fUL) || /* ZW space/joiner/marks */
            (cp >= 0x1f3fbUL && cp <= 0x1f3ffUL) || /* skin tones */
-           cp == 0x2060UL || cp == 0xfeffUL;       /* word joiner / BOM */
+           cp == 0x2060UL || cp == 0xfeffUL ||     /* word joiner / BOM */
+           cp == 0x20e3UL ||                      /* keycap: "1" + it */
+           (cp >= 0xe0020UL && cp <= 0xe007fUL) || /* tags: subdivision
+                                                     flags (England...) */
+           (cp >= 0x0300UL && cp <= 0x036fUL);    /* combining accents */
 }
 
 /* Symbol/emoji blocks with no Latin-1 shape: one neutral placeholder. */
@@ -6098,7 +6102,76 @@ static int tg_mtproto_display_is_symbol_block(unsigned long cp)
            (cp >= 0x2600UL && cp <= 0x27bfUL) ||
            (cp >= 0x2b00UL && cp <= 0x2bffUL) ||
            (cp >= 0x2190UL && cp <= 0x21ffUL) ||
-           (cp >= 0x2300UL && cp <= 0x23ffUL);
+           (cp >= 0x2300UL && cp <= 0x23ffUL) ||
+           (cp >= 0x2460UL && cp <= 0x24ffUL) || /* enclosed: circled M */
+           (cp >= 0x25a0UL && cp <= 0x25ffUL) || /* geometric shapes */
+           (cp >= 0x2900UL && cp <= 0x297fUL) || /* curved arrows */
+           cp == 0x2139UL || cp == 0x3030UL || cp == 0x303dUL ||
+           cp == 0x3297UL || cp == 0x3299UL;
+}
+
+/* Symbols that are not letters but have a plain rendition: typographic
+   spaces and dashes, list bullets, the euro, comparison signs and the
+   emoji-style punctuation. The bullet becomes the Latin-1 middle dot. */
+static const char *tg_mtproto_display_symbol_fold(unsigned long cp)
+{
+    if (cp >= 0x2000UL && cp <= 0x200aUL) {
+        return " "; /* en, em, thin and hair spaces */
+    }
+    switch (cp) {
+    case 0x202fUL:
+    case 0x205fUL:
+        return " ";
+    case 0x2010UL:
+    case 0x2011UL:
+    case 0x2012UL:
+    case 0x2015UL:
+        return "-";
+    case 0x201aUL:
+        return ",";
+    case 0x201eUL:
+    case 0x2033UL:
+        return "\"";
+    case 0x2032UL:
+        return "'";
+    case 0x2039UL:
+        return "<";
+    case 0x203aUL:
+        return ">";
+    case 0x2022UL:
+    case 0x2023UL:
+    case 0x2043UL:
+    case 0x25e6UL:
+        return "\xb7";
+    case 0x20acUL:
+        return "EUR";
+    case 0x2122UL:
+        return "(TM)";
+    case 0x203cUL:
+        return "!!";
+    case 0x2049UL:
+        return "!?";
+    case 0x2264UL:
+        return "<=";
+    case 0x2265UL:
+        return ">=";
+    case 0x2260UL:
+        return "!=";
+    case 0x2248UL:
+        return "~";
+    case 0x21d2UL:
+        return "=>";
+    case 0x25b6UL:
+    case 0x25b8UL:
+    case 0x25baUL:
+        return ">";
+    case 0x25c0UL:
+    case 0x25c2UL:
+    case 0x25c4UL:
+        return "<";
+    default:
+        return 0;
+    }
 }
 
 /* Letters outside Latin-1, folded to their base letter.
@@ -6220,6 +6293,23 @@ unsigned long tg_mtproto_display_codepoint_to_latin1(unsigned long cp,
             return n;
         }
     }
+    {
+        const char *sym = tg_mtproto_display_symbol_fold(cp);
+
+        if (sym != 0) {
+            unsigned long n;
+
+            n = 0UL;
+            while (sym[n] != '\0') {
+                if (n >= cap) {
+                    return 0UL;
+                }
+                out[n] = sym[n];
+                ++n;
+            }
+            return n;
+        }
+    }
     if (tg_mtproto_display_codepoint_is_invisible(cp)) {
         return 0UL;
     }
@@ -6250,7 +6340,7 @@ unsigned long tg_mtproto_display_codepoint_to_latin1(unsigned long cp,
     return 0UL;
 }
 
-#if TG_MTPROTO_DISPLAY_LATIN1
+#if TG_MTPROTO_DISPLAY_LATIN1 || !defined(TG_NO_SELFTEST)
 static unsigned long tg_mtproto_utf8_read_codepoint(const char *text,
                                                     unsigned long *index)
 {
@@ -6296,69 +6386,131 @@ static unsigned long tg_mtproto_utf8_read_codepoint(const char *text,
     *index = i + 1UL;
     return bytes[i];
 }
+#endif
 
-static void tg_mtproto_print_display_codepoint(FILE *stream, unsigned long cp)
+/* UTF-8 text in the console's Latin-1, as the GUI draws it: what has a
+   Latin-1 or plain rendition prints as that (accents, folded letters,
+   emoticons, the symbol folds); an emoji or symbol with none is left out
+   together with the space before it, so "ciao <emoji> mondo" reads "ciao
+   mondo" rather than showing a placeholder; modifiers vanish; a letter of
+   another alphabet stays a '?', so a word does not silently disappear. A
+   text of nothing but such emoji prints "(emoji)", not an empty line.
+   keep_lines: a message body keeps its line breaks (indented under the
+   sender); names and previews flatten them to spaces. Built where the
+   console path uses it (the Amiga lanes) and wherever the self-tests run. */
+#if TG_MTPROTO_DISPLAY_LATIN1 || !defined(TG_NO_SELFTEST)
+static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
+                                         int keep_lines)
 {
-    const char *emoticon;
+    unsigned long i;
+    unsigned long cp;
+    unsigned long n;
+    char out[8];
+    int pending_space = 0;
+    int shown = 0;
+    int omitted = 0;
 
-    if (cp == '\r' || cp == '\n' || cp == '\t') {
-        fputc(' ', stream);
+    if (stream == 0 || text == 0) {
         return;
     }
-    if (cp < 0x100UL) {
-        fputc((unsigned char)cp, stream);
-        return;
+    i = 0UL;
+    while (text[i] != '\0') {
+        cp = tg_mtproto_utf8_read_codepoint(text, &i);
+        if (cp == '\r') {
+            continue;
+        }
+        if (cp == '\n' && keep_lines) {
+            pending_space = 0;
+            tg_console_ui_end_line(stream);
+            fputs("  ", stream);
+            continue;
+        }
+        n = tg_mtproto_display_codepoint_to_latin1(cp, out, sizeof(out));
+        if (n == 1UL && out[0] == ' ') {
+            if (pending_space) {
+                fputc(' ', stream); /* a run of spaces keeps its length */
+            }
+            pending_space = 1;
+            continue;
+        }
+        if (n > 0UL) {
+            if (pending_space) {
+                fputc(' ', stream);
+                pending_space = 0;
+            }
+            (void)fwrite(out, 1, (size_t)n, stream);
+            shown = 1;
+            continue;
+        }
+        if (tg_mtproto_display_codepoint_is_invisible(cp)) {
+            continue; /* hangs off the character before: keeps the space */
+        }
+        if (cp >= 0x100UL && tg_mtproto_display_is_symbol_block(cp)) {
+            pending_space = 0; /* the symbol takes its space with it */
+            omitted = 1;
+            continue;
+        }
+        if (pending_space) {
+            fputc(' ', stream);
+            pending_space = 0;
+        }
+        fputc('?', stream);
+        shown = 1;
     }
-    switch (cp) {
-    case 0x2018UL:
-    case 0x2019UL:
-    case 0x02bcUL:
-        fputc('\'', stream);
-        return;
-    case 0x201cUL:
-    case 0x201dUL:
-        fputc('"', stream);
-        return;
-    case 0x2013UL:
-    case 0x2014UL:
-    case 0x2212UL:
-        fputc('-', stream);
-        return;
-    case 0x2026UL:
-        fputs("...", stream);
-        return;
-    default:
-        break;
+    if (!shown && omitted) {
+        fputs("(emoji)", stream);
     }
-    {
-        const char *fold = tg_mtproto_display_latin_fold(cp);
+}
+#endif
 
-        if (fold != 0) {
-            fputs(fold, stream);
-            return;
+#if !defined(TG_NO_SELFTEST)
+/* 0.0.95: the console's Latin-1 text. Escapes keep the source ASCII:
+   brick, keycap one, euro, bullet, Cyrillic, thumbs up, the England flag
+   (black flag plus tags), e with a combining acute, play button, e acute. */
+static int tg_mtproto_display_text_self_test(void)
+{
+    static const char *const cases[][2] = {
+        {"ciao \xf0\x9f\xa7\xb1 mondo", "ciao mondo"},
+        {"\xf0\x9f\xa7\xb1\xf0\x9f\xa7\xb1", "(emoji)"},
+        {"1\xef\xb8\x8f\xe2\x83\xa3 2", "1 2"},
+        {"10\xe2\x82\xac", "10EUR"},
+        {"\xe2\x80\xa2 voce", "\xb7 voce"},
+        {"\xd0\x9f\xd1\x80\xd0\xb8", "???"},
+        {"ok \xf0\x9f\x91\x8d", "ok (y)"},
+        {"\xf0\x9f\x8f\xb4\xf3\xa0\x81\xa7\xf3\xa0\x81\xa2\xf3\xa0\x81\xa5"
+         "\xf3\xa0\x81\xae\xf3\xa0\x81\xa7\xf3\xa0\x81\xbf", "(emoji)"},
+        {"e\xcc\x81", "e"},
+        {"a  b", "a  b"},
+        {"\xe2\x96\xb6\xef\xb8\x8f Video", "> Video"},
+        {"perch\xc3\xa9", "perch\xe9"}
+    };
+    char got[64];
+    unsigned int k;
+    size_t n;
+    FILE *f;
+
+    for (k = 0U; k < sizeof(cases) / sizeof(cases[0]); ++k) {
+        f = tg_mtproto_open_quiet_stream(stdout);
+        if (f == stdout) {
+            puts("probe self-test: display text: no temporary file");
+            return 2;
+        }
+        tg_mtproto_print_latin1_text(f, cases[k][0], 0);
+        rewind(f);
+        n = fread(got, 1, sizeof(got) - 1U, f);
+        got[n] = '\0';
+        tg_mtproto_close_quiet_stream(f, stdout);
+        if (strcmp(got, cases[k][1]) != 0) {
+            printf("probe self-test: display text case %u gave \"%s\"\n", k,
+                   got);
+            return 2;
         }
     }
-    if (tg_mtproto_display_codepoint_is_invisible(cp)) {
-        return;
-    }
-    /* Flag emoji are pairs of regional indicators: print them as the two
-       country letters ("IT", "DE"), which is exactly the information. */
-    if (cp >= 0x1f1e6UL && cp <= 0x1f1ffUL) {
-        fputc((int)('A' + (int)(cp - 0x1f1e6UL)), stream);
-        return;
-    }
-    emoticon = tg_mtproto_display_emoticon(cp);
-    if (emoticon != 0) {
-        fputs(emoticon, stream);
-        return;
-    }
-    if (tg_mtproto_display_is_symbol_block(cp)) {
-        fputc(0xa4, stream); /* generic-symbol placeholder ('¤') */
-        return;
-    }
-    fputc('?', stream);
+    return 0;
 }
+#endif
 
+#if TG_MTPROTO_DISPLAY_LATIN1
 /* Encode an ISO-8859-1 (Amiga console/keymap) line as UTF-8 for the MTProto
    wire. 0x00-0x7F pass through; 0x80-0xFF -> two-byte UTF-8. Output can be up to
    twice the input length. Returns 1 on success, 0 if it would overflow dst (dst
@@ -6429,9 +6581,6 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 static void tg_mtproto_print_cache_text(FILE *stream, const char *text)
 {
 #if TG_MTPROTO_DISPLAY_LATIN1
-    unsigned long i;
-    unsigned long cp;
-
     if (stream == 0 || text == 0) {
         return;
     }
@@ -6440,11 +6589,7 @@ static void tg_mtproto_print_cache_text(FILE *stream, const char *text)
         tg_mtproto_write_cache_text(stream, text);
         return;
     }
-    i = 0UL;
-    while (text[i] != '\0') {
-        cp = tg_mtproto_utf8_read_codepoint(text, &i);
-        tg_mtproto_print_display_codepoint(stream, cp);
-    }
+    tg_mtproto_print_latin1_text(stream, text, 0);
 #else
     tg_mtproto_write_cache_text(stream, text);
 #endif
@@ -6468,18 +6613,7 @@ static void tg_mtproto_print_message_text(FILE *stream, const char *text)
     i = 0UL;
 #if TG_MTPROTO_DISPLAY_LATIN1
     if (!tg_mtproto_display_utf8()) {
-        while (text[i] != '\0') {
-            cp = tg_mtproto_utf8_read_codepoint(text, &i);
-            if (cp == '\r') {
-                continue;
-            }
-            if (cp == '\n') {
-                tg_console_ui_end_line(stream);
-                fputs("  ", stream);
-                continue;
-            }
-            tg_mtproto_print_display_codepoint(stream, cp);
-        }
+        tg_mtproto_print_latin1_text(stream, text, 1);
         return;
     }
 #endif
@@ -14784,6 +14918,7 @@ static int tg_mtproto_sent_code_text_self_test(void);   /* defined with the logi
 static int tg_mtproto_download_window_self_test(void);
 static int tg_mtproto_upload_window_self_test(void);
 static int tg_mtproto_first_contact_self_test(void);
+static int tg_mtproto_display_text_self_test(void);
 
 int tg_mtproto_probe_self_test(void)
 {
@@ -15621,6 +15756,9 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_mtproto_first_contact_self_test() != 0) {
+        return 2;
+    }
+    if (tg_mtproto_display_text_self_test() != 0) {
         return 2;
     }
 

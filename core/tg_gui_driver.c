@@ -987,6 +987,13 @@ int tg_gui_driver_self_test(void)
             printf("gui driver self-test: sticker fallback left \"%s\"\n", out);
             return 2;
         }
+        /* 0.0.95: symbols with a plain rendition (the euro, a bullet) */
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "10\xe2\x82\xac \xe2\x80\xa2 x");
+        if (strcmp(out, "10EUR \xb7 x") != 0) {
+            printf("gui driver self-test: symbol fold left \"%s\"\n", out);
+            return 2;
+        }
         /* One the glyph sheet knows keeps its space and becomes the two byte
            pair the picker inserts (0.0.93), so a received face and a sent
            one are one thing on screen; the backend draws it as a picture or
