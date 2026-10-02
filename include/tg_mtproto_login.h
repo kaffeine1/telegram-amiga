@@ -425,9 +425,18 @@ typedef struct tg_mtproto_messages_summary {
     int is_channel_messages;
 } tg_mtproto_messages_summary;
 
+/* A message's text as it arrives, in UTF-8. Telegram's 4096 characters take
+   up to 8 KB when each is two bytes (accented letters, Cyrillic, Greek,
+   emoji), so the PPC and AROS lanes keep 8 KB and show such a message
+   whole. The 68k keeps 4 KB for its memory budget: a longer text ends with
+   " [...]" there, cut on a character boundary. */
 #ifndef TG_MTPROTO_MESSAGE_TEXT_MAX /* overridable: the 68000 LOWMEM build
                                        shrinks the per-message text buffer */
+#if defined(__m68k__)
 #define TG_MTPROTO_MESSAGE_TEXT_MAX 4096U
+#else
+#define TG_MTPROTO_MESSAGE_TEXT_MAX 8192U
+#endif
 #endif
 /* How many messages one getHistory read parses into the static list (TWO live
    instances). This caps the GUI open-backlog -- it was 8, far too few. Each entry

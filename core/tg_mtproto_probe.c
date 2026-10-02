@@ -574,7 +574,16 @@ static void tg_chat_notify_collect_one(const unsigned char *body,
     entry->from_id_lo = sender_lo;
     copy_length = text_length;
     if (copy_length >= TG_CHAT_NOTIFY_TEXT) {
+        unsigned int back;
+
         copy_length = TG_CHAT_NOTIFY_TEXT - 1UL;
+        /* a preview, but not half a character: back to where the sequence
+           the cut fell in starts */
+        for (back = 0U; back < 3U && copy_length > 0UL &&
+                        (text[copy_length] & 0xC0U) == 0x80U;
+             ++back) {
+            --copy_length;
+        }
     }
     memcpy(entry->text, text, copy_length);
     entry->text[copy_length] = '\0';
@@ -15296,6 +15305,51 @@ int tg_mtproto_probe_self_test(void)
             return 2;
         }
         (void)remove(rep_path);
+    }
+
+    /* 0.0.95: a pushed message's preview is cut to its buffer on a character
+       boundary. "ab" and U+00E9 from there on: the 95 bytes the preview has
+       end inside an e, so it keeps 94. */
+    {
+        tg_chat_notify cut_nq;
+        unsigned char cut_push[256];
+        char cut_text[200];
+        unsigned long ci;
+        int ok;
+
+        memset(&cut_nq, 0, sizeof(cut_nq));
+        tg_chat_notify_reset(&cut_nq, 1);
+        tg_chat_nq = &cut_nq;
+        cut_text[0] = 'a';
+        cut_text[1] = 'b';
+        for (ci = 2UL; ci + 2UL < sizeof(cut_text); ci += 2UL) {
+            cut_text[ci] = (char)0xC3;
+            cut_text[ci + 1UL] = (char)0xA9;
+        }
+        cut_text[ci] = '\0';
+        tg_mtproto_tl_writer_init(&writer, cut_push, sizeof(cut_push));
+        ok = tg_mtproto_tl_write_u32(&writer,
+                 TG_MTPROTO_UPDATE_SHORT_MESSAGE_L214_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 0UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 4242UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u64(&writer, 0UL, 0x77UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_bytes(&writer,
+                                       (const unsigned char *)cut_text,
+                                       (unsigned long)strlen(cut_text)) ==
+                 TG_MTPROTO_TL_OK;
+        if (ok) {
+            tg_chat_notify_collect_one(cut_push, writer.length);
+        }
+        tg_chat_nq = 0;
+        if (!ok || cut_nq.count != 1UL ||
+            strlen(cut_nq.queue[0].text) != TG_CHAT_NOTIFY_TEXT - 2UL ||
+            (unsigned char)cut_nq.queue[0]
+                    .text[TG_CHAT_NOTIFY_TEXT - 3UL] != 0xA9U) {
+            puts("probe self-test: a pushed preview keeps half a character");
+            return 2;
+        }
     }
 
     /* Live "is typing" parse (updateShort -> *UserTyping -> typing action). The

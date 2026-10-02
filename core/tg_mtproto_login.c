@@ -163,15 +163,25 @@ static tg_mtproto_tl_status tg_write_string(tg_mtproto_tl_writer *writer,
                                      (unsigned long)strlen(text));
 }
 
-static tg_mtproto_tl_status tg_read_string_copy(tg_mtproto_tl_reader *reader,
-                                                char *buffer,
-                                                unsigned long buffer_size)
+/* Copies a TL string, cut to the buffer when it is longer. The cut falls on a
+   character boundary: half a UTF-8 sequence at the end used to show as a
+   stray letter ("\xc3" is an A with a tilde in Latin-1). *was_cut, when
+   given, says whether anything was left out. */
+static tg_mtproto_tl_status tg_read_string_copy_cut(
+    tg_mtproto_tl_reader *reader,
+    char *buffer,
+    unsigned long buffer_size,
+    int *was_cut)
 {
     const unsigned char *bytes;
     unsigned long length;
     unsigned long copy_length;
+    unsigned int back;
     tg_mtproto_tl_status status;
 
+    if (was_cut != 0) {
+        *was_cut = 0;
+    }
     if (buffer == 0 || buffer_size == 0UL) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
@@ -183,10 +193,28 @@ static tg_mtproto_tl_status tg_read_string_copy(tg_mtproto_tl_reader *reader,
     copy_length = length;
     if (copy_length >= buffer_size) {
         copy_length = buffer_size - 1UL;
+        /* bytes[copy_length] is the first byte left out: while it continues
+           a sequence, the sequence started inside the copy, so leave its
+           start out too (three steps at most in valid UTF-8) */
+        for (back = 0U; back < 3U && copy_length > 0UL &&
+                        (bytes[copy_length] & 0xC0U) == 0x80U;
+             ++back) {
+            --copy_length;
+        }
+        if (was_cut != 0) {
+            *was_cut = 1;
+        }
     }
     memcpy(buffer, bytes, (size_t)copy_length);
     buffer[copy_length] = '\0';
     return TG_MTPROTO_TL_OK;
+}
+
+static tg_mtproto_tl_status tg_read_string_copy(tg_mtproto_tl_reader *reader,
+                                                char *buffer,
+                                                unsigned long buffer_size)
+{
+    return tg_read_string_copy_cut(reader, buffer, buffer_size, 0);
 }
 
 static tg_mtproto_tl_status tg_read_bytes_copy(
@@ -4194,6 +4222,60 @@ static unsigned long tg_utf8_step(const unsigned char *s,
     return 1UL;
 }
 
+/* A message body longer than its buffer ends with this, so the reader knows
+   the rest is there on the other clients. */
+#define TG_MSG_CUT_MARK " [...]"
+
+/* Ends a cut body with TG_MSG_CUT_MARK. Room is left after it for the style
+   markers of every entity, so the styling pass cannot push it out again.
+   Returns the UTF-16 length of the text kept before the mark. */
+static unsigned long tg_mark_cut_text(char *text, unsigned long size)
+{
+    const unsigned long room =
+        (unsigned long)sizeof(TG_MSG_CUT_MARK) + (2UL * TG_MSG_ENTITY_MAX);
+    unsigned long n;
+    unsigned long i;
+    unsigned long units;
+    unsigned long step_units;
+    unsigned int back;
+
+    n = (unsigned long)strlen(text);
+    if (size <= room) {
+        return 0UL;
+    }
+    if (n + room > size) {
+        n = size - room;
+        for (back = 0U; back < 3U && n > 0UL &&
+                        ((unsigned char)text[n] & 0xC0U) == 0x80U;
+             ++back) {
+            --n;
+        }
+    }
+    units = 0UL;
+    for (i = 0UL; i < n;) {
+        i += tg_utf8_step((const unsigned char *)text + i, &step_units);
+        units += step_units;
+    }
+    memcpy(text + n, TG_MSG_CUT_MARK, sizeof(TG_MSG_CUT_MARK));
+    return units;
+}
+
+/* Keeps the styled spans of a cut body inside the part that was kept, so no
+   marker lands in the cut mark. */
+static void tg_clamp_entities(tg_msg_entity *ents, int count,
+                              unsigned long kept_units)
+{
+    int e;
+
+    for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
+        if (ents[e].off >= kept_units) {
+            ents[e].len = 0UL;
+        } else if (ents[e].len > kept_units - ents[e].off) {
+            ents[e].len = kept_units - ents[e].off;
+        }
+    }
+}
+
 /* Rewrite text in place, inserting open/close markers around styled spans. The
    "opened" bookkeeping guarantees balanced markers even if a malformed entity
    reaches past the end of the body. */
@@ -4240,10 +4322,13 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
             unsigned long n = tg_utf8_step((const unsigned char *)text + ti,
                                            &units);
             unsigned long k;
+            if (bi + n >= sizeof(buf)) {
+                /* the character does not fit whole: the text stops
+                   before it rather than keep half of it */
+                break;
+            }
             for (k = 0UL; k < n && text[ti] != '\0'; ++k) {
-                if (bi + 1UL < sizeof(buf)) {
-                    buf[bi++] = text[ti];
-                }
+                buf[bi++] = text[ti];
                 ++ti;
             }
             u16 += units;
@@ -5151,6 +5236,8 @@ static tg_mtproto_tl_status tg_read_common_message_text(
     unsigned long scratch_hi;
     unsigned long scratch_lo;
     tg_mtproto_dialog_peer peer;
+    int text_cut = 0;            /* the body was longer than out->text */
+    unsigned long kept_units = 0UL; /* its UTF-16 length before the mark */
 
     if (out == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
@@ -5232,9 +5319,12 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         out->has_reply = 1;
     }
     if (tg_mtproto_tl_read_u32(reader, &out->date) != TG_MTPROTO_TL_OK ||
-        tg_read_string_copy(reader, out->text, sizeof(out->text)) !=
-            TG_MTPROTO_TL_OK) {
+        tg_read_string_copy_cut(reader, out->text, sizeof(out->text),
+                                &text_cut) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (text_cut) {
+        kept_units = tg_mark_cut_text(out->text, sizeof(out->text));
     }
     out->has_text = out->text[0] != '\0';
     /*
@@ -5326,6 +5416,9 @@ static tg_mtproto_tl_status tg_read_common_message_text(
             return TG_MTPROTO_TL_OK;
         }
         if (ent_count > 0 && out->has_text) {
+            if (text_cut) {
+                tg_clamp_entities(ents, ent_count, kept_units);
+            }
             tg_apply_entity_markers(out->text, sizeof(out->text), ents,
                                     ent_count);
             out->has_text = out->text[0] != '\0';
@@ -5993,6 +6086,126 @@ static int tg_entity_marker_case(const char *in, const tg_msg_entity *ents,
     return strcmp(buf, expect) == 0;
 }
 
+/* 0.0.95: texts longer than their buffers. A cut keeps whole characters, a
+   message body says it was cut, and its styles stay inside the part kept;
+   each check fails when the code it covers is taken out. */
+static int tg_message_cut_self_test(void)
+{
+    static unsigned char rpc[TG_MTPROTO_MESSAGE_TEXT_MAX + 512U];
+    static char body[TG_MTPROTO_MESSAGE_TEXT_MAX + 1U];
+    static char styled[TG_MTPROTO_MESSAGE_TEXT_MAX];
+    static tg_mtproto_message_text_list list;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_reader reader;
+    tg_msg_entity e[2];
+    char small[5];
+    const char *t;
+    unsigned long n;
+    unsigned long k;
+    int cut;
+
+    /* "abc" and U+00E9 in a five-byte buffer: "abc", not half the e */
+    tg_mtproto_tl_writer_init(&writer, rpc, sizeof(rpc));
+    if (tg_write_string(&writer, "abc\xC3\xA9") != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "abcd") != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    tg_mtproto_tl_reader_init(&reader, rpc, writer.length);
+    if (tg_read_string_copy_cut(&reader, small, sizeof(small), &cut) !=
+            TG_MTPROTO_TL_OK ||
+        strcmp(small, "abc") != 0 || !cut) {
+        puts("login self-test: a cut string keeps half a character");
+        return 2;
+    }
+    if (tg_read_string_copy_cut(&reader, small, sizeof(small), &cut) !=
+            TG_MTPROTO_TL_OK ||
+        strcmp(small, "abcd") != 0 || cut) {
+        puts("login self-test: a string that fits is reported cut");
+        return 2;
+    }
+
+    /* A body of U+00E9 longer than the buffer, bold from end to end: it
+       ends "* [...]", the bold closing before the mark, with whole
+       characters in between. */
+    for (k = 0UL; k + 1UL < sizeof(body); k += 2UL) {
+        body[k] = (char)0xC3;
+        body[k + 1UL] = (char)0xA9;
+    }
+    body[sizeof(body) - 1UL] = '\0';
+    tg_mtproto_tl_writer_init(&writer, rpc, sizeof(rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 128UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1004UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2225UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, body) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0xbd610bc9UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 100000UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           rpc, writer.length, &list) !=
+            TG_MTPROTO_TL_OK ||
+        list.count != 1UL) {
+        puts("login self-test: the long message does not parse");
+        return 2;
+    }
+    t = list.messages[0].text;
+    n = (unsigned long)strlen(t);
+    if (n < 8UL || n + 64UL < TG_MTPROTO_MESSAGE_TEXT_MAX || t[0] != '*' ||
+        strcmp(t + n - 7UL, "* [...]") != 0) {
+        puts("login self-test: a cut message does not end with \"* [...]\"");
+        return 2;
+    }
+    for (k = 1UL; k + 7UL < n; k += 2UL) {
+        if ((unsigned char)t[k] != 0xC3U ||
+            (unsigned char)t[k + 1UL] != 0xA9U) {
+            puts("login self-test: a cut message keeps half a character");
+            return 2;
+        }
+    }
+
+    /* A body that fits until the styles make it overflow: the styled text
+       stops before the character that no longer fits whole. */
+    for (k = 0UL; k + 2UL < sizeof(styled); k += 2UL) {
+        styled[k] = (char)0xC3;
+        styled[k + 1UL] = (char)0xA9;
+    }
+    styled[k] = '\0';
+    e[0].type = TG_MSG_ENT_BOLD;
+    e[0].off = 0UL;
+    e[0].len = 1UL;
+    e[1].type = TG_MSG_ENT_BOLD;
+    e[1].off = 1UL;
+    e[1].len = 1UL;
+    tg_apply_entity_markers(styled, sizeof(styled), e, 2);
+    n = (unsigned long)strlen(styled);
+    if (strncmp(styled, "*\xC3\xA9**\xC3\xA9*", 8U) != 0 ||
+        n != TG_MTPROTO_MESSAGE_TEXT_MAX - 2UL ||
+        (unsigned char)styled[n - 1UL] != 0xA9U) {
+        puts("login self-test: the styled text keeps half a character");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
@@ -6031,7 +6244,7 @@ static int tg_entity_marker_self_test(void)
                                "\xF0\x9F\x98\x80" "*X*")) {
         return 2;
     }
-    return 0;
+    return tg_message_cut_self_test();
 }
 
 int tg_mtproto_login_self_test(void)

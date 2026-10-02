@@ -215,6 +215,22 @@ lanes unless noted.
   longest caption and file name and, where the text is Latin-1, converts
   1024 accented characters into the caption; each part fails with the old
   size.
+- A long message that arrives is no longer cut inside a letter, and a cut
+  one says so. Its text comes in UTF-8 and was kept in 4096 bytes, which
+  hold Telegram's 4096 characters only in plain ASCII: accented letters
+  and emoji take two bytes or more, so a long Italian message could lose
+  its last words. The cut fell wherever the 4096th byte was, often in the
+  middle of a letter, which then showed as a stray A with a tilde at the
+  end. On the PowerPC and AROS lanes the text now has 8 KB, enough for
+  4096 characters of two bytes, for 528 KB more memory; the 68k keeps
+  4 KB. Every string the client reads, names and the previews of pushed
+  messages included, is now cut between characters, and a message that
+  does not fit ends with " [...]", its bold, italic and code kept inside
+  the part shown. On the host a 4096-character message of accented
+  letters (7888 bytes) came back whole with 8 KB, and with the 68k's 4 KB
+  as its first 2112 characters and " [...]". Self-tests cut a string, a
+  long styled message, a styled text that overflows and a pushed preview;
+  each fails when the code it covers is taken out.
 
 ## [0.0.94] - 2026-09-25
 
