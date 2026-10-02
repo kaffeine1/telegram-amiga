@@ -222,7 +222,7 @@ connection is closed during the wait, with the session saved, and opened
 again for the fresh challenge; if the salts changed in between, the
 password was changed elsewhere and the client says so. Confirmed on
 2026-10-01: a login with Two-Step Verification went through on a stock
-A1200, from the text client.
+A1200, from the text client, in 35 minutes.
 
 ## Done in 0.0.92: link previews
 

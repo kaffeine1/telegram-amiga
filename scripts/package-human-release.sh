@@ -192,7 +192,7 @@ TelegramAmiga (or TelegramAmiga-TUI). First run signs you in (phone -> code -> 2
    The same account stays usable on both machines.
 
 If your account has Two-Step Verification, checking the cloud password
-derives a key with 100000 iterations of SHA-512: about half an hour on a
+derives a key with 100000 iterations of SHA-512: about 35 minutes on a
 stock A1200 (68020), much less on a faster machine. The dots show it
 working, and once the key is ready the client asks Telegram for a fresh
 challenge, so the login completes even on the slow machine.
@@ -214,7 +214,7 @@ the route above is the supported one."
 
 Se il tuo account ha la verifica in due passaggi, il controllo della
 password cloud deriva una chiave con 100000 iterazioni di SHA-512: circa
-mezz'ora su un A1200 liscio (68020), molto meno su una macchina piu'
+35 minuti su un A1200 liscio (68020), molto meno su una macchina piu'
 veloce. I puntini mostrano che sta lavorando, e quando la chiave e' pronta
 il client chiede a Telegram una richiesta nuova, quindi l'accesso si
 completa anche sulla macchina lenta.
@@ -369,8 +369,8 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 ---------------------
 - Photo messages show an instant blurred preview from the message itself, then
   refine from a small bounded download. Decoded pixels are cached for reopen.
-- The cloud-password (2FA) step is heavy on a 68k (PBKDF2): about half an
-  hour on a stock A1200. The login completes; the dots show it working.
+- The cloud-password (2FA) step is heavy on a 68k (PBKDF2): about 35
+  minutes on a stock A1200. The login completes; the dots show it working.
 - First login: the DH key exchange is heavy on a 68k, so the first start
   takes a while (it happens once -- the session is saved afterwards).
 - Emoji are drawn as text emoticons (:) :D <3); the console has no emoji font."
@@ -385,8 +385,8 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 - Le foto mostrano subito l'anteprima sfocata inclusa nel messaggio, poi si
   rifiniscono con un download limitato. I pixel decodificati restano in cache.
 - Il passo della password cloud (2FA) e' pesante su 68k (PBKDF2): circa
-  mezz'ora su un A1200 liscio. L'accesso si completa; i puntini mostrano che
-  sta lavorando.
+  35 minuti su un A1200 liscio. L'accesso si completa; i puntini mostrano
+  che sta lavorando.
 - Primo accesso: lo scambio di chiavi DH e' pesante su 68k, quindi il primo
   avvio richiede un po' di pazienza (succede una volta sola: la sessione
   viene poi salvata)."

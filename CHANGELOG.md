@@ -147,7 +147,7 @@ lanes unless noted.
   and that a changed salt is caught; each check fails when the code it
   covers is broken, and the test passes on the host and on a Vampire. A
   real login with Two-Step Verification then went through on a stock
-  A1200, from the text client. The manuals no longer send such accounts to
+  A1200, from the text client, in 35 minutes. The manuals no longer send such accounts to
   a faster machine, or tell them to turn Two-Step Verification off.
 - A key exchange could fail on a slow 68k before it had really begun. It
   opens with pq, a product of two primes below 2^32 that the client must
