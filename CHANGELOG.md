@@ -201,6 +201,20 @@ lanes unless noted.
   and what went wrong) could run one byte past its 64-byte buffer, with a
   file of a thousand parts or more and a long enough reason. It is now cut
   to fit.
+- A photo or file sent with a long caption no longer fails once it has
+  gone up. The sendMedia that attaches the uploaded parts was built in 512
+  bytes, which left a caption from about 140 to 420 bytes, depending on the
+  file name; with a longer one, from the GUI's send dialog or from /photo
+  in the text client, it failed to build after every part had been sent,
+  and the transfer ended as failed. It now has room for the longest
+  caption and file name. The caption itself held 1024 bytes, which
+  Telegram's limit of 1024 characters fills only in plain ASCII; it now
+  holds 1024 characters as UTF-8. The text client, whose line now reaches
+  4096 characters, says before uploading when a caption is longer than
+  Telegram takes. A self-test builds the three kinds of sendMedia with the
+  longest caption and file name and, where the text is Latin-1, converts
+  1024 accented characters into the caption; each part fails with the old
+  size.
 
 ## [0.0.94] - 2026-09-25
 

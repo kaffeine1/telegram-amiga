@@ -120,6 +120,8 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 /* Seconds of keyboard quiet before a parked draft lets background polls
    resume (they stay fully suspended while keys are actually flowing). */
 #define TG_MTPROTO_CHAT_DRAFT_QUIET_SECONDS 5UL
+/* The longest caption Telegram takes on a normal account, in characters. */
+#define TG_MTPROTO_CAPTION_MAX 1024U
 #define TG_MTPROTO_CHAT_OPEN_HISTORY_ATTEMPTS 3U
 /* First login on OS3 can be slow, but a blocking recv() must not leave the
    user staring at progress dots for minutes. This is deliberately wider than
@@ -13596,6 +13598,16 @@ int tg_mtproto_auth_chat_file(const char *host,
                         stream, send_as_photo
                             ? "Usage: /photo <jpeg-or-png-path> [caption]"
                             : "Usage: /sendfile <path>");
+                } else if (send_as_photo && fcaption != 0 &&
+                           strlen(fcaption) > TG_MTPROTO_CAPTION_MAX) {
+                    /* said before the upload, not after every part has
+                       gone up and Telegram has refused the caption */
+                    char cap_note[80];
+
+                    sprintf(cap_note,
+                            "A caption holds %u characters at most.",
+                            (unsigned int)TG_MTPROTO_CAPTION_MAX);
+                    tg_mtproto_chat_print_system_line(stream, cap_note);
                 } else {
                     tg_mtproto_file_ctx fc;
                     int frc;
@@ -18193,10 +18205,19 @@ typedef struct tg_gui_ul_state {
     unsigned long win_drops;
     int rc;
     /* UTF-8 caption for the sendMedia, converted at begin(); empty for none.
-       1024 bytes tracks the server's own caption limit for normal accounts.
-       The photo-over-10-MiB document fallback carries it too. */
-    char caption[1024];
+       Telegram's limit is 1024 characters, which take up to two bytes each
+       once Latin-1 becomes UTF-8 (it was 1024 bytes, so an accented caption
+       near the limit no longer fitted). The photo-over-10-MiB document
+       fallback carries it too. */
+    char caption[(TG_MTPROTO_CAPTION_MAX * 2U) + 1U];
 } tg_gui_ul_state;
+
+/* The sendMedia that attaches the parts: the longest caption above, the
+   file name twice (a document repeats it in its attributes) and the fixed
+   fields, which take about a hundred bytes. */
+#define TG_GUI_UL_MEDIA_QUERY_MAX \
+    (((TG_MTPROTO_CAPTION_MAX * 2U) + 1U) + (2U * TG_MTPROTO_DOC_NAME_MAX) + \
+     256U)
 
 static tg_gui_ul_state tg_gui_ul;
 
@@ -18943,7 +18964,10 @@ static int tg_mtproto_upload_step(void)
     /* holds a part's data, and in the window the wrapped query as well */
     static unsigned char part_buf[TG_MTPROTO_QUERY_SEND_MAX];
     static unsigned char part_query[TG_GUI_DL_CHUNK + 64UL];
-    unsigned char query[512];
+    /* the sendMedia: 512 bytes left a caption from about 140 to 420 bytes,
+       depending on the file name, and a longer one failed to build after
+       every part had gone up */
+    static unsigned char query[TG_GUI_UL_MEDIA_QUERY_MAX];
     unsigned char rnd[8];
     tg_mtproto_tl_writer writer;
     tg_mtproto_rpc_result result;
@@ -19139,6 +19163,62 @@ static int tg_mtproto_upload_window_self_test(void)
         !tg_mtproto_window_allowed(&ctx)) {
         puts("probe self-test: upload window: chat connection not guarded");
         return 2;
+    }
+    {
+        /* The sendMedia holds the longest caption the upload keeps and the
+           longest file name, for a photo and both kinds of document: with
+           the old 512 bytes none of them built. Where the composer text is
+           Latin-1, 1024 accented characters also fit the caption itself. */
+        static unsigned char mq[TG_GUI_UL_MEDIA_QUERY_MAX];
+        static char cap[sizeof(tg_gui_ul.caption)];
+        char name[TG_MTPROTO_DOC_NAME_MAX];
+        tg_mtproto_tl_writer mw;
+        tg_mtproto_tl_status st;
+        unsigned long k;
+        int kind;
+
+        for (k = 0UL; k + 2UL < sizeof(cap); k += 2UL) {
+            cap[k] = (char)0xc3; /* U+00E9 in UTF-8 */
+            cap[k + 1UL] = (char)0xa9;
+        }
+        cap[k] = '\0';
+        memset(name, 'n', sizeof(name) - 1U);
+        name[sizeof(name) - 1U] = '\0';
+        for (kind = 0; kind < 3; ++kind) {
+            tg_mtproto_tl_writer_init(&mw, mq, sizeof(mq));
+            if (kind == 0) {
+                st = tg_mtproto_build_messages_send_media_photo(
+                    &mw, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 1UL, 2UL, 3UL,
+                    4UL, 1, 5UL, 6UL, 3000UL, name, cap, 7UL, 8UL);
+            } else if (kind == 1) {
+                st = tg_mtproto_build_messages_send_media_document(
+                    &mw, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 1UL, 2UL, 3UL,
+                    4UL, 1, 5UL, 6UL, 3000UL, name,
+                    "application/octet-stream", cap, 7UL, 8UL);
+            } else {
+                st = tg_mtproto_build_messages_send_media_big_document(
+                    &mw, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 1UL, 2UL, 3UL,
+                    4UL, 1, 5UL, 6UL, 3000UL, name,
+                    "application/octet-stream", cap, 7UL, 8UL);
+            }
+            if (st != TG_MTPROTO_TL_OK) {
+                printf("probe self-test: upload: a %lu-byte caption does not "
+                       "fit sendMedia %d\n",
+                       (unsigned long)strlen(cap), kind);
+                return 2;
+            }
+        }
+#if TG_MTPROTO_DISPLAY_LATIN1
+        memset(cap, (char)0xe9, TG_MTPROTO_CAPTION_MAX);
+        cap[TG_MTPROTO_CAPTION_MAX] = '\0';
+        if (!tg_mtproto_latin1_to_utf8(cap, tg_gui_ul.caption,
+                                       sizeof(tg_gui_ul.caption))) {
+            puts("probe self-test: upload: 1024 accented characters do not "
+                 "fit the caption");
+            return 2;
+        }
+        tg_gui_ul.caption[0] = '\0';
+#endif
     }
     if (TG_GUI_UL_WINDOW < 3U) {
         return 0; /* the out-of-order case needs three parts out */
