@@ -9392,6 +9392,16 @@ int tg_mtproto_auth_send_self(const char *host,
     return 0;
 }
 
+
+/* The longest text either composer sends, in UTF-8: the GUI's and the
+   text client's (Telegram's 4096 characters), two bytes a character at
+   most once Latin-1 is encoded. */
+#if TG_GUI_MSG_TEXT_MAX > TG_CONSOLE_TUI_MESSAGE_MAX
+#define TG_MTPROTO_SEND_UTF8_MAX (TG_GUI_MSG_TEXT_MAX * 2)
+#else
+#define TG_MTPROTO_SEND_UTF8_MAX (TG_CONSOLE_TUI_MESSAGE_MAX * 2)
+#endif
+
 int tg_mtproto_auth_send_peer_file(const char *host,
                                    const char *port,
                                    const char *api_file,
@@ -9405,11 +9415,11 @@ int tg_mtproto_auth_send_peer_file(const char *host,
     /* The whole sendMessage query, text included, has to fit here. It was
        512 bytes, which quietly capped a message at roughly 460 characters:
        anything longer failed to build and the client refused to send it,
-       which is what a pasted text file runs into (issue #14). Size it from
-       the composer instead, doubled for the Latin-1 to UTF-8 growth, plus
-       room for the envelope. Static, not on the stack: the 68000 profile
-       runs on a fraction of the usual stack. */
-    static unsigned char query[(TG_GUI_MSG_TEXT_MAX * 2) + 128];
+       which is what a pasted text file runs into (issue #14). Sized from
+       the longer of the two composers, doubled for the Latin-1 to UTF-8
+       growth, plus room for the envelope. Static, not on the stack: the
+       68000 profile runs on a fraction of the usual stack. */
+    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128];
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
@@ -9512,11 +9522,11 @@ static int tg_mtproto_auth_send_peer_on_context(
     /* The whole sendMessage query, text included, has to fit here. It was
        512 bytes, which quietly capped a message at roughly 460 characters:
        anything longer failed to build and the client refused to send it,
-       which is what a pasted text file runs into (issue #14). Size it from
-       the composer instead, doubled for the Latin-1 to UTF-8 growth, plus
-       room for the envelope. Static, not on the stack: the 68000 profile
-       runs on a fraction of the usual stack. */
-    static unsigned char query[(TG_GUI_MSG_TEXT_MAX * 2) + 128];
+       which is what a pasted text file runs into (issue #14). Sized from
+       the longer of the two composers, doubled for the Latin-1 to UTF-8
+       growth, plus room for the envelope. Static, not on the stack: the
+       68000 profile runs on a fraction of the usual stack. */
+    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128];
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
@@ -10249,6 +10259,11 @@ static int tg_chat_input_raw = 0;
    File-static like the history because the line editor is called once per key and
    the caret must persist across calls. Used only on the full-screen TUI. */
 static unsigned long tg_chat_caret = 0UL;
+/* 1 once the message line hit Telegram's limit and the user was told; back to
+   0 as soon as the line is shorter again. */
+static int tg_chat_line_full_noted = 0;
+static void tg_mtproto_chat_print_system_line(FILE *stream,
+                                              const char *text);
 
 static void tg_chat_history_reset(void)
 {
@@ -10266,6 +10281,12 @@ static void tg_chat_history_add(const char *text)
     }
     if (tg_chat_history_count > 0UL &&
         strcmp(tg_chat_history[tg_chat_history_count - 1UL], text) == 0) {
+        tg_chat_history_recall = -1L;
+        return;
+    }
+    if (strlen(text) >= TG_CHAT_HISTORY_LEN) {
+        /* longer than a recall slot: kept out rather than recalled cut
+           short, which Enter would then send as if it were the message */
         tg_chat_history_recall = -1L;
         return;
     }
@@ -10392,9 +10413,24 @@ static int tg_mtproto_chat_read_line_edit(char *line,
         if (tg_console_tui_active() && tg_chat_tui_stream != 0) {
             /* Push the submitted line into the transcript so the dialogue
                keeps reading naturally, then clear the input row. */
-            char echo_line[640];
+            char echo_line[512];
+            unsigned long echo_length = 0UL;
+            const char *ep;
+            unsigned long ek;
 
-            sprintf(echo_line, "%.90s%.500s", tg_console_tui_prompt(), line);
+            /* piece by piece: a long message wraps onto as many transcript
+               lines as it needs (it was cut at 500 characters) */
+            for (ep = tg_console_tui_prompt(); ep != 0 && *ep != '\0'; ++ep) {
+                echo_length = tg_console_tui_line_push(
+                    tg_chat_tui_stream, echo_line, sizeof(echo_line),
+                    echo_length, *ep);
+            }
+            for (ek = 0UL; ek < *line_length; ++ek) {
+                echo_length = tg_console_tui_line_push(
+                    tg_chat_tui_stream, echo_line, sizeof(echo_line),
+                    echo_length, line[ek]);
+            }
+            echo_line[echo_length] = '\0';
             tg_console_tui_line(tg_chat_tui_stream, echo_line);
             tg_console_tui_input(tg_chat_tui_stream,
                                  tg_console_tui_prompt(), 0, 0UL);
@@ -10650,6 +10686,32 @@ static int tg_mtproto_chat_read_line_edit(char *line,
                     fflush(stream);
                 }
             }
+        }
+        tg_chat_line_full_noted = 0;
+    } else if (line_size > TG_CONSOLE_TUI_MESSAGE_MAX &&
+               !tg_chat_line_full_noted) {
+        /* The message line is full. Say so once: a paste or a long text
+           used to stop at the limit without a word. Short prompts share
+           this editor and keep their silence. */
+        char note[96];
+
+        tg_chat_line_full_noted = 1;
+        sprintf(note, "That is %u characters, the most one message holds.",
+                (unsigned int)TG_CONSOLE_TUI_MESSAGE_MAX);
+        if (tg_console_tui_active() && tg_chat_tui_stream != 0) {
+            tg_mtproto_chat_print_system_line(stream, note);
+            tg_console_tui_input_caret(
+                tg_chat_tui_stream, tg_console_tui_prompt(), line,
+                *line_length, tg_chat_caret);
+        } else if (raw) {
+            /* linear-raw flavour, as the command hint: the note on its own
+               line, then the typed text echoed again below it */
+            fputc('\n', stream);
+            tg_mtproto_chat_print_system_line(stream, note);
+            fwrite(line, 1, (size_t)*line_length, stream);
+            fflush(stream);
+        } else {
+            tg_mtproto_chat_print_system_line(stream, note);
         }
     }
     return 0;
@@ -12776,9 +12838,10 @@ int tg_mtproto_auth_chat_file(const char *host,
     char forward_id_text[32];
     char forward_extra[2];
     char api_id[32];
-    char line[512];
+    char line[TG_CONSOLE_TUI_MESSAGE_MAX + 1U]; /* a whole message */
 #if TG_MTPROTO_DISPLAY_LATIN1
-    char send_line[1024];
+    /* the typed line in UTF-8: up to two bytes a character (static: 8 KB) */
+    static char send_line[(TG_CONSOLE_TUI_MESSAGE_MAX * 2U) + 1U];
 #endif
     const char *peer_arg;
     const char *username_arg;

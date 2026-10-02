@@ -128,6 +128,21 @@ lanes unless noted.
   fails when either direction is broken. `--mtproto-crypto-bench` reports the
   cost per 32 KB part on the machine it runs on, and a build with the
   self-tests also times the byte form for comparison.
+- The text client writes a message up to Telegram's own limit, 4096
+  characters. Its line stopped at 511 without a word, so a longer text or
+  a paste lost its end, and the line it sent was echoed into the
+  transcript cut at 500. The line now holds 4096 characters, the
+  composer's three rows show the part around the cursor, the echo wraps
+  onto as many lines as the message needs, and when the line is full the
+  client says once that 4096 is the most one message holds. Recall with
+  the arrow keys keeps lines up to 511 characters and leaves longer ones
+  out, rather than recall them cut short for Enter to send as if whole.
+  The sendMessage buffers are sized for the longer of the two composers,
+  two bytes a character once Latin-1 becomes UTF-8. On the host, with the
+  Amiga's Latin-1 text path, a 4096-character line of accented letters
+  (7888 bytes of UTF-8) went to Saved Messages and Telegram kept it whole.
+  A self-test lays out a 4000-character line in the composer and fails
+  with the old 640-byte buffer.
 
 ### Fixed
 - The drawer icon of the AmigaOS 3.x packages looked like a cloud of stray

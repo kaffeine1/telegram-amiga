@@ -18,6 +18,10 @@
 #ifndef TG_CONSOLE_TUI_H
 #define TG_CONSOLE_TUI_H
 
+/* The longest message the text client composes: Telegram's limit for one
+   message, 4096 characters (one byte each in the Amiga's Latin-1). */
+#define TG_CONSOLE_TUI_MESSAGE_MAX 4096U
+
 #include <stdio.h>
 
 /* Master switch: when disabled, tg_console_tui_enter always declines and

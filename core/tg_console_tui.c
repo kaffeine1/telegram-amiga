@@ -1168,7 +1168,9 @@ void tg_console_tui_line(FILE *stream, const char *text)
     fflush(stream);
 }
 
-#define TG_TUI_INPUT_TEXT_MAX 640U
+/* The prompt and a whole message: the composer shows three rows of it
+   around the caret, but lays out the text it has in full. */
+#define TG_TUI_INPUT_TEXT_MAX (TG_CONSOLE_TUI_MESSAGE_MAX + 160U)
 
 typedef struct tg_tui_composer_plan {
     unsigned long total_pieces;
@@ -1401,7 +1403,7 @@ int tg_console_tui_input_backspace(FILE *stream,
                                    const char *pending,
                                    unsigned long pending_length)
 {
-    char text[TG_TUI_INPUT_TEXT_MAX];
+    static char text[TG_TUI_INPUT_TEXT_MAX]; /* 4 KB: off the stack */
     unsigned long caret_offset;
     tg_tui_composer_layout next;
     tg_tui_composer_plan *old_plan;
@@ -1454,7 +1456,7 @@ void tg_console_tui_input_caret(FILE *stream,
                                 unsigned long pending_length,
                                 unsigned long pending_caret)
 {
-    char text[TG_TUI_INPUT_TEXT_MAX];
+    static char text[TG_TUI_INPUT_TEXT_MAX]; /* 4 KB: off the stack */
     unsigned long caret_offset;
     unsigned long piece_index;
     unsigned int row;
@@ -2204,6 +2206,29 @@ int tg_console_tui_layout_self_test(void)
     if (plan.rows != 1U || plan.first_piece != 0UL) {
         puts("tui layout self-test: composer shrink mismatch");
         return 2;
+    }
+    /* 0.0.95: a message near Telegram's limit is laid out whole (the text
+       used to stop at 640 bytes, prompt included), and the three rows
+       shown are the ones around the caret at its end. */
+    {
+        static char pending[4001];
+        static char built[TG_TUI_INPUT_TEXT_MAX];
+        unsigned long caret = 0UL;
+        unsigned long length;
+
+        for (i = 0U; i < 4000U; ++i) {
+            pending[i] = (char)((i % 10U) == 9U ? ' ' : 'a' + (int)(i % 26U));
+        }
+        pending[4000] = '\0';
+        length = tg_tui_build_input_text(built, "Me> ", pending, 4000UL,
+                                         4000UL, &caret);
+        tg_tui_make_composer_plan(built, caret, 39U, &plan);
+        if (length != 4004UL || caret != 4004UL || plan.rows != 3U ||
+            plan.caret_piece + 1UL != plan.total_pieces ||
+            plan.first_piece + 3UL != plan.total_pieces) {
+            puts("tui layout self-test: a long message does not fit the composer");
+            return 2;
+        }
     }
     if (!tg_tui_composer_incremental_self_test()) {
         return 2;
