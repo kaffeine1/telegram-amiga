@@ -172,8 +172,8 @@ unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
    size so long messages are not truncated at ingestion. It holds the GUI's own
    form of the text, Latin-1 with two-byte emoji pairs, about a byte a
    character: PPC/AROS keep 4096 for Telegram's 4096 characters (the UTF-8 the
-   MTProto parse hands over, TG_MTPROTO_MESSAGE_TEXT_MAX, is 8 KB there); m68k
-   is capped lower for its 2 MB box. 64 of these live in tg_gui_state, which
+   MTProto parse hands over, TG_MTPROTO_MESSAGE_TEXT_MAX, is 8 KB); m68k is
+   capped lower for its 2 MB box. 64 of these live in tg_gui_state, which
    the gui-live path keeps STATIC (off the stack). */
 #ifndef TG_GUI_MSG_TEXT_MAX /* overridable: host ASan runs can force the m68k
                                profile (see TG_MTPROTO_MESSAGE_TEXT_LIST_MAX) */

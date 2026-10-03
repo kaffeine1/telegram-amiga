@@ -221,14 +221,15 @@ lanes unless noted.
   and emoji take two bytes or more, so a long Italian message could lose
   its last words. The cut fell wherever the 4096th byte was, often in the
   middle of a letter, which then showed as a stray A with a tilde at the
-  end. On the PowerPC and AROS lanes the text now has 8 KB, enough for
-  4096 characters of two bytes, for 528 KB more memory; the 68k keeps
-  4 KB. Every string the client reads, names and the previews of pushed
-  messages included, is now cut between characters, and a message that
-  does not fit ends with " [...]", its bold, italic and code kept inside
-  the part shown. On the host a 4096-character message of accented
-  letters (7888 bytes) came back whole with 8 KB, and with the 68k's 4 KB
-  as its first 2112 characters and " [...]". Self-tests cut a string, a
+  end. The text now has 8 KB on every lane, enough for 4096 characters of
+  two bytes: 528 KB more memory on the PowerPC and AROS lanes, 272 KB on
+  the 68k, and the low-memory 68000 build keeps its 2 KB. Every string the
+  client reads, names and the previews of pushed messages included, is
+  now cut between characters, and a message that does not fit ends with
+  " [...]", its bold, italic and code kept inside the part shown. On the
+  host a 4096-character message of accented letters (7888 bytes) came
+  back whole with 8 KB, and with 4 KB as its first 2112 characters and
+  " [...]". Self-tests cut a string, a
   long styled message, a styled text that overflows and a pushed preview;
   each fails when the code it covers is taken out.
 - A text of several lines pasted into the text client no longer goes out
