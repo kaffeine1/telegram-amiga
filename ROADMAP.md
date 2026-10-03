@@ -851,12 +851,32 @@ label with the count, "TelegramAmiga (3)", where AddAppIcon allows a
 text change or through a remove and re-add otherwise. Double-clicking
 the icon, as now, brings the window back on the chat with the news.
 
-Kept out on purpose: raising the screen or the window, and any hover
-popup or ARexx or commodities integration for now. If people ask for a
-hook, a simple one exists later, running a user command such as a sound
-player on the first unread; it is a preference away, not a design.
+Pop-ups where the system has a service for them. Users have since asked
+for the notification the desktop client shows, and on every lane but
+AROS the system, or a commodity the user installs, can draw one without
+our window coming forward: AmigaOS 4 has Ringhio through
+application.library, MorphOS has MagicBeacon, and AmigaOS 3.x now has
+Herald (Aminet util/cdity), a commodity with a public port named HERALD
+that takes commands with no ARexx interpreter running and answers what
+it understands. The client looks for the service when a notification is
+due and does without it when it is missing, so nothing is linked and
+nothing has to be installed: title and beep stay the floor, and AROS,
+which has no such service that we know of, stays there. One pop-up per
+chat and burst, from the GUI and from the text client, never for the
+chat open in front of the user and never for a muted one. It carries the
+chat and the sender, and the text only when the user wants it (the
+desktop client's "show message preview"), its emoji as the emoticons the
+text client already uses or, for Herald, as its :shortcodes:. The same
+path can tell the end of a download or an upload that ran while the user
+was elsewhere.
 
-Settings entry: "Notify: Title | Title + beep | Off". Fits the 0.0.9x
+Still kept out: raising the screen or the window ourselves. Herald brings
+the sender forward on a double-click, which is the user's own gesture.
+A hook running a user command, such as a sound player on the first
+unread, remains a preference away if anyone asks.
+
+Settings entry: "Notify: Title | Title + beep | Pop-up | Off", the pop-up
+falling back to title and beep where no service answers. Fits the 0.0.9x
 polish line and touches nothing in the protocol.
 
 ## Planned: select several messages, then delete or forward them
