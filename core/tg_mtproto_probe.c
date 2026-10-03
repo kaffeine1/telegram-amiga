@@ -10273,6 +10273,9 @@ static unsigned long tg_chat_caret = 0UL;
 /* 1 once the message line hit Telegram's limit and the user was told; back to
    0 as soon as the line is shorter again. */
 static int tg_chat_line_full_noted = 0;
+/* 1 right after a pasted CR was kept as a line break: an LF behind it is the
+   other half of the same break. */
+static int tg_chat_paste_cr = 0;
 static void tg_mtproto_chat_print_system_line(FILE *stream,
                                               const char *text);
 
@@ -10346,6 +10349,8 @@ static int tg_mtproto_chat_read_line_edit(char *line,
     long idx;
     int direction;
     unsigned long fkey;
+    int paste_break = 0;
+    int after_paste_cr;
 
     if (line == 0 || line_size == 0UL || line_length == 0 || stream == 0) {
         return -1;
@@ -10405,6 +10410,23 @@ static int tg_mtproto_chat_read_line_edit(char *line,
            break signal: treat it as end-of-input so every prompt can quit. */
         return -1;
     }
+    after_paste_cr = tg_chat_paste_cr;
+    tg_chat_paste_cr = 0;
+    if (ch == '\n' && after_paste_cr) {
+        return 0; /* the LF of a pasted CR LF: one break, already kept */
+    }
+    if ((ch == '\r' || ch == '\n') && raw && use_history &&
+        tg_platform_stdin_readable(0UL)) {
+        /* A line break with more text already waiting behind it comes from
+           a paste, not from the Return key: it stays in the message as a
+           line break. A paste of several lines used to go out as one
+           message a line. Return itself still sends, and so does the break
+           that ends a paste, with nothing behind it. Only in the message
+           editor of an interactive console: a script's lines stay lines. */
+        tg_chat_paste_cr = ch == '\r';
+        ch = '\n';
+        paste_break = 1;
+    }
     if (ch == '\t' && raw && use_history) {
         /* Tab on an empty line jumps back to the previous chat; mid-line it
            is ignored (a literal tab inside a message helps nobody). */
@@ -10416,7 +10438,7 @@ static int tg_mtproto_chat_read_line_edit(char *line,
         }
         return 0;
     }
-    if (ch == '\r' || ch == '\n') {
+    if ((ch == '\r' || ch == '\n') && !paste_break) {
         if (*line_length >= line_size) {
             *line_length = line_size - 1UL;
         }
@@ -10437,6 +10459,13 @@ static int tg_mtproto_chat_read_line_edit(char *line,
                     echo_length, *ep);
             }
             for (ek = 0UL; ek < *line_length; ++ek) {
+                if (line[ek] == '\n') {
+                    /* a line break of the message ends a transcript line */
+                    echo_line[echo_length] = '\0';
+                    tg_console_tui_line(tg_chat_tui_stream, echo_line);
+                    echo_length = 0UL;
+                    continue;
+                }
                 echo_length = tg_console_tui_line_push(
                     tg_chat_tui_stream, echo_line, sizeof(echo_line),
                     echo_length, line[ek]);

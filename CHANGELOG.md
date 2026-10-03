@@ -231,6 +231,19 @@ lanes unless noted.
   as its first 2112 characters and " [...]". Self-tests cut a string, a
   long styled message, a styled text that overflows and a pushed preview;
   each fails when the code it covers is taken out.
+- A text of several lines pasted into the text client no longer goes out
+  as one message a line. Every line break of the paste reached the client
+  as the Return key. A break with more of the text already waiting behind
+  it now stays in the message as a line break, shown in the composer as a
+  pilcrow, and the transcript echoes each line on its own; Return itself
+  still sends, and so does the break that ends a paste, with nothing
+  behind it. A CR LF pair counts as one break. This holds for the message
+  line of an interactive console only: the lines of a script stay lines,
+  and so do the short prompts. On the host, three pasted lines went to
+  Saved Messages as one message with its two line breaks; there the raw
+  console now leaves Return as a CR, the way an Amiga console sends it, so
+  the same path runs. A self-test checks that a break takes one cell in
+  the composer and fails when it does not.
 
 ## [0.0.94] - 2026-09-25
 

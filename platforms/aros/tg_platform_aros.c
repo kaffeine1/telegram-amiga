@@ -483,6 +483,9 @@ int tg_platform_stdin_set_raw(int enabled)
         saved_valid = 1;
         raw = saved;
         raw.c_lflag &= ~(tcflag_t)(ICANON | ECHO);
+        /* Return arrives as CR, as from an Amiga console: the editor then
+           sees a pasted CR LF the way the Amiga lanes do */
+        raw.c_iflag &= ~(tcflag_t)ICRNL;
         raw.c_cc[VMIN] = 1;
         raw.c_cc[VTIME] = 0;
         if (tcsetattr(0, TCSANOW, &raw) != 0) {

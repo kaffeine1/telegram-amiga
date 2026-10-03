@@ -1205,7 +1205,9 @@ static unsigned long tg_tui_build_input_text(
         for (i = 0UL; i < pending_length &&
                           length + 1UL < TG_TUI_INPUT_TEXT_MAX;
              ++i) {
-            out[length++] = pending[i];
+            /* a line break of a pasted text shows as a pilcrow, one cell
+               like any letter, so the rows and the caret stay in place */
+            out[length++] = pending[i] == '\n' ? (char)0xB6 : pending[i];
         }
     }
     out[length] = '\0';
@@ -2227,6 +2229,13 @@ int tg_console_tui_layout_self_test(void)
             plan.caret_piece + 1UL != plan.total_pieces ||
             plan.first_piece + 3UL != plan.total_pieces) {
             puts("tui layout self-test: a long message does not fit the composer");
+            return 2;
+        }
+        /* a pasted line break: one pilcrow cell, the caret after it */
+        length = tg_tui_build_input_text(built, "> ", "ab\ncd", 5UL, 3UL,
+                                         &caret);
+        if (length != 7UL || built[4] != (char)0xB6 || caret != 5UL) {
+            puts("tui layout self-test: a line break does not show as one cell");
             return 2;
         }
     }
