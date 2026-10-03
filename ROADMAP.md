@@ -166,9 +166,12 @@ Features are therefore grouped by the work they share.
   that start also showed the exchange itself failing there, the server
   closing while the client still split pq; the split in Montgomery form,
   also on main, takes 6.5 s instead of minutes, and the exchange 41 s.
-  And -O2 for the 68k files of pure computation (the JPEG
-  decoder, image scaling, inflate, the TL parser), one at a time, away
-  from the compiler bug that pinned the rest to -O0. Plus the open
+  And -O2 for the 68k files of pure computation, one at a time, away
+  from the compiler bug that pinned the rest to -O0: the JPEG decoder,
+  the image scaling and inflate run at -O2 on main, two to three times
+  faster on a stock A1200 with byte-identical results (an avatar in
+  0.93 s instead of 2.39), while the TL reader gained 3% and stays at
+  -O0. Plus the open
   defects: the two MorphOS popup glitches, photo speed under AfA_OS
   and the full-size photo preference. Two-step verification on a slow
   68k is on main, and a login went through on a stock A1200.

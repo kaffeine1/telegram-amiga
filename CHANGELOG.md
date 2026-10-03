@@ -143,6 +143,22 @@ lanes unless noted.
   (7888 bytes of UTF-8) went to Saved Messages and Telegram kept it whole.
   A self-test lays out a 4000-character line in the composer and fails
   with the old 640-byte buffer.
+- On AmigaOS 3.x the JPEG decoder, the image scaling around it and inflate
+  are built at -O2. The 68k lane builds at -O0, since this compiler has
+  miscompiled the program at higher levels before, and only code the
+  self-tests prove correct goes faster. These three now do: on a stock
+  A1200 (68EC020, cycle-exact under WinUAE) an avatar decodes in 0.93 s
+  instead of 2.39, a 640x480 photo is scaled into a message in 8.9 s
+  instead of 20.9, a bilinear upscale takes 3.1 s instead of 9.3, and
+  inflating a 9 KB answer 146 ms instead of 366, every result identical
+  byte for byte. The TL reader gained 3% and stays at -O0, being on the
+  network path as well, and the plain-68000 build keeps all three at -O0
+  until it is measured on a 68000. `--media-bench <drawer>` times this
+  work on any machine, on three files scripts/make-media-bench.py makes,
+  and prints a checksum of each result. A self-test now inflates a
+  stored, a fixed and a dynamic deflate block, and fails when the branch
+  of the inflater for any of them is broken; it passes, with the others,
+  on the emulated 68020.
 
 ### Fixed
 - The drawer icon of the AmigaOS 3.x packages looked like a cloud of stray

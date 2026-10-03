@@ -34,6 +34,14 @@
 #include "tg_platform.h"
 #include "tg_telegram.h"
 #include "tg_text_client.h"
+#include "tg_mtproto_login.h"
+#include <sys/time.h>
+#if TG_ENABLE_GZIP_PUFF
+#include "puff.h"
+#if !defined(TG_NO_GUI)
+#include "tg_avatar.h"
+#endif
+#endif
 #include "tg_tls.h"
 
 #define TG_STATE_MAX_UPDATES 5UL
@@ -3929,6 +3937,304 @@ static tg_gui_state *tg_app_gui_state_zeroed(void)
 }
 #endif /* !TG_NO_GUI */
 
+/* --media-bench: what the computation around a chat costs on this machine,
+   away from the network. Three files in one drawer (scripts/make-media-
+   bench.py makes them): avatar.jpg, decoded into an avatar cell as the chat
+   list does; photo.jpg, decoded and scaled for a message the two ways the
+   photo path scales; history.gz, a gzip-packed messages.messages, inflated
+   and then parsed. Every line ends with a checksum of what was produced, so
+   two builds of the same code (a file at -O0, then at -O2) may differ in
+   their times and nowhere else. */
+static unsigned long tg_app_bench_us(void)
+{
+    struct timeval tv;
+
+    if (gettimeofday(&tv, 0) != 0) {
+        return 0UL;
+    }
+    return (unsigned long)tv.tv_sec * 1000000UL + (unsigned long)tv.tv_usec;
+}
+
+static unsigned long tg_app_bench_fnv(unsigned long h,
+                                      const unsigned char *p,
+                                      unsigned long n)
+{
+    unsigned long i;
+
+    for (i = 0UL; i < n; ++i) {
+        h ^= (unsigned long)p[i];
+        h = (h * 16777619UL) & 0xffffffffUL;
+    }
+    return h;
+}
+
+static unsigned char *tg_app_bench_load(const char *dir, const char *name,
+                                        unsigned long *length)
+{
+    char path[512];
+    unsigned long n;
+    long size;
+    unsigned char *data;
+    FILE *f;
+
+    n = (unsigned long)strlen(dir);
+    if (n + (unsigned long)strlen(name) + 2UL > sizeof(path)) {
+        return 0;
+    }
+    memcpy(path, dir, (size_t)n);
+    if (n > 0UL && path[n - 1UL] != ':' && path[n - 1UL] != '/') {
+        path[n++] = '/';
+    }
+    strcpy(path + n, name);
+    f = fopen(path, "rb");
+    if (f == 0) {
+        return 0;
+    }
+    size = -1L;
+    if (fseek(f, 0L, SEEK_END) == 0) {
+        size = ftell(f);
+    }
+    if (size <= 0L || fseek(f, 0L, SEEK_SET) != 0) {
+        fclose(f);
+        return 0;
+    }
+    data = (unsigned char *)malloc((size_t)size);
+    if (data == 0) {
+        fclose(f);
+        return 0;
+    }
+    if (fread(data, 1, (size_t)size, f) != (size_t)size) {
+        free(data);
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    *length = (unsigned long)size;
+    return data;
+}
+
+static void tg_app_bench_report(FILE *stream, const char *what,
+                                unsigned long t0, unsigned long t1,
+                                unsigned int runs, unsigned long sum)
+{
+    unsigned long each;
+
+    each = (t1 - t0) / (unsigned long)runs;
+    fprintf(stream, "media bench: %s %lu.%lu ms, sum %08lx\n", what,
+            each / 1000UL, (each % 1000UL) / 100UL, sum & 0xffffffffUL);
+    fflush(stream);
+}
+
+static int tg_app_media_bench(const char *dir, FILE *stream)
+{
+    int rc = 0;
+#if TG_ENABLE_GZIP_PUFF
+    unsigned long t0;
+    unsigned long t1;
+    unsigned long sum;
+    unsigned long length;
+    unsigned char *data;
+    unsigned int r;
+#endif
+
+#if TG_ENABLE_GZIP_PUFF && !defined(TG_NO_GUI)
+    data = tg_app_bench_load(dir, "avatar.jpg", &length);
+    if (data == 0) {
+        fprintf(stream, "media bench: no avatar.jpg in %s\n", dir);
+        rc = 1;
+    } else {
+        static unsigned char cell[40 * 40 * 3];
+
+        t0 = tg_app_bench_us();
+        for (r = 0U; r < 3U; ++r) {
+            if (tg_avatar_decode_jpeg(data, length, cell, 40, 40) != 0) {
+                rc = 1;
+                break;
+            }
+        }
+        t1 = tg_app_bench_us();
+        if (rc == 0) {
+            tg_app_bench_report(stream, "avatar to 40x40, each", t0, t1, 3U,
+                                tg_app_bench_fnv(2166136261UL, cell,
+                                                 sizeof(cell)));
+        } else {
+            fputs("media bench: avatar.jpg did not decode\n", stream);
+        }
+        {
+            /* the bilinear scaler only runs on the way up, as when a small
+               picture fills a larger frame */
+            unsigned char *big = (unsigned char *)malloc(240U * 240U * 3U);
+
+            if (big != 0) {
+                t0 = tg_app_bench_us();
+                r = (unsigned int)tg_image_decode_jpeg_bilinear_scaled(
+                    data, length, big, 240, 240, 1024);
+                t1 = tg_app_bench_us();
+                if (r == 0U) {
+                    tg_app_bench_report(stream, "avatar up to 240x240, bilinear",
+                                        t0, t1, 1U,
+                                        tg_app_bench_fnv(2166136261UL, big,
+                                                         240UL * 240UL * 3UL));
+                } else {
+                    rc = 1;
+                }
+                free(big);
+            }
+        }
+        free(data);
+    }
+    data = tg_app_bench_load(dir, "photo.jpg", &length);
+    if (data == 0) {
+        fprintf(stream, "media bench: no photo.jpg in %s\n", dir);
+        rc = 1;
+    } else {
+        unsigned char *rgb = (unsigned char *)malloc(300U * 225U * 3U);
+
+        if (rgb == 0) {
+            rc = 1;
+        } else {
+            t0 = tg_app_bench_us();
+            r = (unsigned int)tg_image_decode_jpeg_scaled(
+                data, length, rgb, 300, 225, 1024);
+            t1 = tg_app_bench_us();
+            if (r == 0U) {
+                tg_app_bench_report(stream, "photo to 300x225", t0,
+                                    t1, 1U,
+                                    tg_app_bench_fnv(2166136261UL, rgb,
+                                                     300UL * 225UL * 3UL));
+            } else {
+                fputs("media bench: photo.jpg did not decode\n", stream);
+                rc = 1;
+            }
+            free(rgb);
+        }
+        free(data);
+    }
+#else
+    fputs("media bench: this build has no JPEG decoder\n", stream);
+#endif
+#if TG_ENABLE_GZIP_PUFF
+    data = tg_app_bench_load(dir, "history.gz", &length);
+    if (data == 0) {
+        fprintf(stream, "media bench: no history.gz in %s\n", dir);
+        rc = 1;
+    } else {
+        unsigned long pos = 10UL;
+        unsigned long size = 0UL;
+        unsigned char *plain = 0;
+        tg_mtproto_message_text_list *list = 0;
+
+        if (length >= 18UL && data[0] == 0x1fU && data[1] == 0x8bU &&
+            data[2] == 8U) {
+            if ((data[3] & 4U) != 0U && pos + 2UL <= length) {
+                pos += 2UL + ((unsigned long)data[pos] |
+                              ((unsigned long)data[pos + 1UL] << 8));
+            }
+            if ((data[3] & 8U) != 0U) {
+                while (pos < length && data[pos++] != 0U) {
+                }
+            }
+            if ((data[3] & 16U) != 0U) {
+                while (pos < length && data[pos++] != 0U) {
+                }
+            }
+            if ((data[3] & 2U) != 0U) {
+                pos += 2UL;
+            }
+            size = (unsigned long)data[length - 4UL] |
+                   ((unsigned long)data[length - 3UL] << 8) |
+                   ((unsigned long)data[length - 2UL] << 16) |
+                   ((unsigned long)data[length - 1UL] << 24);
+        }
+        if (pos + 8UL < length && size > 4UL && size < 0x1000000UL) {
+            plain = (unsigned char *)malloc((size_t)size);
+        }
+        if (plain == 0) {
+            fputs("media bench: history.gz is not a gzip file\n", stream);
+            rc = 1;
+        } else {
+            unsigned long out_len = 0UL;
+            unsigned long in_len;
+
+            t0 = tg_app_bench_us();
+            for (r = 0U; r < 3U; ++r) {
+                out_len = size;
+                in_len = length - pos - 8UL;
+                if (puff(plain, &out_len, data + pos, &in_len) != 0 ||
+                    out_len != size) {
+                    rc = 1;
+                    break;
+                }
+            }
+            t1 = tg_app_bench_us();
+            if (rc != 0) {
+                fputs("media bench: history.gz did not inflate\n", stream);
+            } else {
+                char what[64];
+
+                sprintf(what, "inflate %lu KB, each", size / 1024UL);
+                tg_app_bench_report(stream, what, t0, t1, 3U,
+                                    tg_app_bench_fnv(2166136261UL, plain,
+                                                     size));
+                list = (tg_mtproto_message_text_list *)malloc(sizeof(*list));
+            }
+            if (list != 0) {
+                unsigned long constructor =
+                    (unsigned long)plain[0] |
+                    ((unsigned long)plain[1] << 8) |
+                    ((unsigned long)plain[2] << 16) |
+                    ((unsigned long)plain[3] << 24);
+                unsigned long i;
+
+                t0 = tg_app_bench_us();
+                for (r = 0U; r < 3U; ++r) {
+                    if (tg_mtproto_parse_message_text_list(
+                            constructor, plain + 4, size - 4UL, list) !=
+                        TG_MTPROTO_TL_OK) {
+                        rc = 1;
+                        break;
+                    }
+                }
+                t1 = tg_app_bench_us();
+                if (rc != 0) {
+                    fputs("media bench: history did not parse\n", stream);
+                } else {
+                    char what[64];
+
+                    sum = 2166136261UL;
+                    for (i = 0UL; i < list->count; ++i) {
+                        unsigned char id[4];
+
+                        id[0] = (unsigned char)(list->messages[i].id & 0xffUL);
+                        id[1] = (unsigned char)((list->messages[i].id >> 8) &
+                                                0xffUL);
+                        id[2] = (unsigned char)((list->messages[i].id >> 16) &
+                                                0xffUL);
+                        id[3] = (unsigned char)((list->messages[i].id >> 24) &
+                                                0xffUL);
+                        sum = tg_app_bench_fnv(sum, id, 4UL);
+                        sum = tg_app_bench_fnv(
+                            sum,
+                            (const unsigned char *)list->messages[i].text,
+                            (unsigned long)strlen(list->messages[i].text));
+                    }
+                    sprintf(what, "parse %lu messages, each",
+                            list->count > 999UL ? 999UL : list->count);
+                    tg_app_bench_report(stream, what, t0, t1, 3U, sum);
+                }
+                free(list);
+            }
+            free(plain);
+        }
+        free(data);
+    }
+#else
+    fputs("media bench: this build has no inflate\n", stream);
+#endif
+    (void)dir;
+    return rc;
+}
+
 int tg_app_run(int argc, char **argv)
 {
     tg_config config;
@@ -4066,7 +4372,7 @@ int tg_app_run(int argc, char **argv)
        on the host binary; on a release binary they are dead weight, felt the
        most on the 68000 package). Field diagnostics stay in: --net-test,
        --http-test, --https-test, --platform-rng-test, --mtproto-2fa-bench,
-       --mtproto-crypto-bench.
+       --mtproto-crypto-bench, --media-bench.
        Saying so beats silently ignoring the flag. */
     if (config.run_http_post_self_test || config.run_gui_self_test ||
         config.run_chat_engine_self_test || config.run_chat_render_self_test ||
@@ -4358,6 +4664,10 @@ int tg_app_run(int argc, char **argv)
 
     if (config.run_mtproto_crypto_bench) {
         return tg_mtproto_crypto_bench(stdout);
+    }
+
+    if (config.media_bench_dir != 0) {
+        return tg_app_media_bench(config.media_bench_dir, stdout);
     }
 
     if (config.run_mtproto_req_pq_probe) {

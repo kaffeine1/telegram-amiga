@@ -79,14 +79,28 @@ all: $(TARGET)
 # modexp (documented above) and -- found on real m68k -- the live auth/network
 # path (sendCode hung when the whole program was built -O2, even though the
 # offline self-tests passed). So -O0 is the safe default, and -O2 is applied
-# ONLY to the crypto units the self-tests verify correct at -O2 (AES, SHA/PBKDF2,
-# SRP, message crypto): the per-message + login hot path. CFLAGS keeps -O0; the
+# ONLY to units the self-tests verify correct at -O2: the crypto (AES,
+# SHA/PBKDF2, SRP, message crypto), the per-message + login hot path, and
+# from 0.0.95 the picture and inflate code below. CFLAGS keeps -O0; the
 # trailing per-object -O wins.
 OBJDIR := build/amigaos3-clib2/obj
 OBJS := $(patsubst %.c,$(OBJDIR)/%.o,$(SRC))
 OPT := -O0
 O2_OBJS := $(OBJDIR)/core/tg_mtproto_rsa.o $(OBJDIR)/core/tg_mtproto_crypto.o \
            $(OBJDIR)/core/tg_mtproto_srp.o $(OBJDIR)/core/tg_mtproto_encrypted.o
+# 0.0.95: the pure computation behind pictures and compressed answers too,
+# the JPEG decoder, the image scaling around it and inflate. --media-bench
+# on a stock A1200 (68EC020, cycle-exact under WinUAE), with byte-identical
+# output: an avatar in 0.93 s instead of 2.39, a 640x480 photo scaled in
+# 8.9 s instead of 20.9, a bilinear upscale in 3.1 s instead of 9.3, inflate
+# in 146 ms per 9 KB instead of 366. The self-tests pass on the 68k with
+# them. The TL reader gained 3% and stays at -O0, being on the network
+# path as well. The plain-68000 build keeps them at -O0 until it is
+# measured on a 68000.
+ifneq ($(M68K_CPU),68000)
+O2_OBJS += $(OBJDIR)/third_party/tjpgd/tjpgd.o $(OBJDIR)/core/tg_avatar.o \
+           $(OBJDIR)/third_party/puff/puff.o
+endif
 $(O2_OBJS): OPT := -O2
 
 # Release lanes ship without the offline self-tests (decision 2026-08-07):
