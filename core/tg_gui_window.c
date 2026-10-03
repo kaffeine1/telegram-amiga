@@ -493,6 +493,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_CACHE_CLEAR 22
 #define TG_MENU_EMOJI 23
 #define TG_MENU_ENABLEEMOJI 24
+#define TG_MENU_FULLPHOTOS 25
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -1132,6 +1133,12 @@ static int tg_gui_av_rich = 0;        /* seed: cube+greys vs greys only */
 #define TG_GUI_PHOTO_VIEWER_JPEG_MAX (768UL * 1024UL)
 #define TG_GUI_PHOTO_VIEWER_CANONICAL_CAP 512
 #define TG_GUI_PHOTO_VIEWER_DECODE_CAP 768
+/* "Full-size photos": the viewer draws up to the screen, at most this edge,
+   from the largest copy the decoder can read, decoded at up to twice that
+   edge and scaled down block by block (no full-size frame is ever held). */
+#define TG_GUI_PHOTO_FULL_JPEG_MAX (4UL * 1024UL * 1024UL)
+#define TG_GUI_PHOTO_FULL_CANONICAL_CAP 1024
+#define TG_GUI_PHOTO_FULL_DECODE_CAP 2048
 #define TG_GUI_PHOTO_PREVIEW_CAP 128
 #define TG_GUI_PHOTO_VIEWER_PREVIEW_CAP 160
 #define TG_GUI_PHOTO_CACHE_MIN (16UL * 1024UL)
@@ -1150,6 +1157,9 @@ static int tg_gui_av_rich = 0;        /* seed: cube+greys vs greys only */
 #define TG_GUI_PHOTO_VIEWER_JPEG_MAX (2UL * 1024UL * 1024UL)
 #define TG_GUI_PHOTO_VIEWER_CANONICAL_CAP 768
 #define TG_GUI_PHOTO_VIEWER_DECODE_CAP 1024
+#define TG_GUI_PHOTO_FULL_JPEG_MAX (16UL * 1024UL * 1024UL)
+#define TG_GUI_PHOTO_FULL_CANONICAL_CAP 2048
+#define TG_GUI_PHOTO_FULL_DECODE_CAP 4096
 #define TG_GUI_PHOTO_PREVIEW_CAP 192
 #define TG_GUI_PHOTO_VIEWER_PREVIEW_CAP 256
 #define TG_GUI_PHOTO_CACHE_MIN (384UL * 1024UL)
@@ -1233,13 +1243,34 @@ typedef struct tg_gui_photo_viewer {
     unsigned long source_w;
     unsigned long source_h;
     char title[TG_GUI_NAME_MAX];
+    int kind; /* TG_GUI_PHOTO_KIND_LARGE, or _FULL with full-size photos */
 } tg_gui_photo_viewer;
+
+/* The viewer's kind for the canonical cache it writes, which happens deep in
+   the shared quality pipeline where only "viewer or inline" is known. One
+   viewer exists at a time. */
+static int tg_gui_photo_viewer_cache_kind = TG_GUI_PHOTO_KIND_LARGE;
+
+static int tg_gui_photo_viewer_cap(const tg_gui_photo_viewer *viewer)
+{
+    return viewer != 0 && viewer->kind == TG_GUI_PHOTO_KIND_FULL
+               ? TG_GUI_PHOTO_FULL_CANONICAL_CAP
+               : TG_GUI_PHOTO_VIEWER_CANONICAL_CAP;
+}
+
+static int tg_gui_photo_viewer_decode_cap(const tg_gui_photo_viewer *viewer)
+{
+    return viewer != 0 && viewer->kind == TG_GUI_PHOTO_KIND_FULL
+               ? TG_GUI_PHOTO_FULL_DECODE_CAP
+               : TG_GUI_PHOTO_VIEWER_DECODE_CAP;
+}
 
 typedef struct tg_gui_photo_save_job {
     int pending;
     int last_percent;
     unsigned long id_hi;
     unsigned long id_lo;
+    int kind; /* the TG_GUI_PHOTO_KIND_* being fetched for the save */
 } tg_gui_photo_save_job;
 
 static tg_gui_photo_slot tg_gui_photo_slots[TG_GUI_PHOTO_SLOTS];
@@ -2781,7 +2812,7 @@ static int tg_gui_photo_canonical_load_start(tg_gui_photo_slot *slot,
     slot->canonical_file = file;
     slot->canonical_size = payload_size;
     slot->canonical_loaded = 0UL;
-    slot->canonical_large = large ? 1 : 0;
+    slot->canonical_large = large;
     slot->canonical_from_disk = 1;
     slot->pass_scale = 0;
     slot->final_scale = 0;
@@ -2849,7 +2880,8 @@ static int tg_gui_photo_commit_quality_pass(tg_gui_amiga_ctx *ctx,
 
         if (tg_gui_session_photo_canonical_cache_path(
                 cache_path, sizeof(cache_path), slot->id_hi, slot->id_lo,
-                viewer_scope) == 0) {
+                viewer_scope ? tg_gui_photo_viewer_cache_kind
+                             : TG_GUI_PHOTO_KIND_INLINE) == 0) {
             if (tg_image_canonical_cache_write(
                     cache_path, slot->stage_rgb,
                     slot->decode_w, slot->decode_h) == 0) {
@@ -5607,6 +5639,8 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Show inline photos", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_INLINEPHOTOS },
+    { NM_ITEM,  (STRPTR)"Full-size photos", 0, CHECKIT | MENUTOGGLE, 0,
+      (APTR)TG_MENU_FULLPHOTOS },
     { NM_ITEM,  (STRPTR)"Enable emoji", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_ENABLEEMOJI },
     { NM_ITEM,  (STRPTR)"Photo dithering", 0, 0, 0, 0 },
@@ -6568,6 +6602,26 @@ static int tg_gui_photo_cached_image(char *path, unsigned long path_size,
     return 0;
 }
 
+/* The cached JPEG a save of this kind can copy. The viewer's kind keeps the
+   old rule, any cached copy will do unless `large_only`; the full-size kinds
+   want exactly their own file. */
+static int tg_gui_photo_kind_cached(char *path, unsigned long path_size,
+                                    unsigned long id_hi, unsigned long id_lo,
+                                    int kind, int large_only)
+{
+    if (kind == TG_GUI_PHOTO_KIND_LARGE) {
+        return tg_gui_photo_cached_image(path, path_size, id_hi, id_lo,
+                                         large_only);
+    }
+    if (tg_gui_session_photo_cache_path(path, path_size, id_hi, id_lo,
+                                        kind) == 0 &&
+        tg_gui_photo_file_exists(path)) {
+        return 1;
+    }
+    path[0] = '\0';
+    return 0;
+}
+
 /* Copy through a sibling temporary file. When replacing, keep a backup until
    the final rename succeeds so a disk error cannot destroy the old file. */
 static int tg_gui_photo_copy_atomic(const char *source,
@@ -6767,6 +6821,7 @@ static void tg_gui_photo_save_begin(tg_gui_state *state,
                                     unsigned long id_lo)
 {
     char source[64];
+    int kind;
 
     if (job->pending) {
         tg_gui_photo_save_status(state, backend,
@@ -6778,11 +6833,13 @@ static void tg_gui_photo_save_begin(tg_gui_state *state,
                                  "A transfer is already running");
         return;
     }
-    if (tg_gui_photo_cached_image(source, sizeof(source), id_hi, id_lo, 0)) {
+    kind = tg_gui_session_save_photo_kind(id_hi, id_lo);
+    if (tg_gui_photo_kind_cached(source, sizeof(source), id_hi, id_lo, kind,
+                                 0)) {
         tg_gui_photo_save_ready(state, win, backend, source, id_hi, id_lo);
         return;
     }
-    if (tg_gui_session_request_photo_jpeg(id_hi, id_lo, 1) == 0) {
+    if (tg_gui_session_request_photo_jpeg(id_hi, id_lo, kind) == 0) {
         tg_gui_photo_save_status(state, backend,
                                  "That photo is not available now");
         return;
@@ -6791,6 +6848,7 @@ static void tg_gui_photo_save_begin(tg_gui_state *state,
     job->last_percent = -1;
     job->id_hi = id_hi;
     job->id_lo = id_lo;
+    job->kind = kind;
     tg_gui_photo_save_status(state, backend,
                              "Fetching photo... (ESC cancels)");
 }
@@ -6810,14 +6868,15 @@ static int tg_gui_photo_save_tick(tg_gui_state *state,
     if (!job->pending) {
         return 0;
     }
-    if (tg_gui_photo_cached_image(source, sizeof(source), job->id_hi,
-                                 job->id_lo, 1)) {
+    if (tg_gui_photo_kind_cached(source, sizeof(source), job->id_hi,
+                                 job->id_lo, job->kind, 1)) {
         tg_gui_photo_save_ready(state, win, backend, source, job->id_hi,
                                 job->id_lo);
         memset(job, 0, sizeof(*job));
         return 1;
     }
-    pending = tg_gui_session_request_photo_jpeg(job->id_hi, job->id_lo, 1);
+    pending = tg_gui_session_request_photo_jpeg(job->id_hi, job->id_lo,
+                                                job->kind);
     if (pending == 0) {
         memset(job, 0, sizeof(*job));
         tg_gui_photo_save_status(state, backend,
@@ -6826,7 +6885,8 @@ static int tg_gui_photo_save_tick(tg_gui_state *state,
     }
     done = total = 0UL;
     if (tg_gui_session_photo_fetch_progress(
-            job->id_hi, job->id_lo, 1, &done, &total) && total != 0UL) {
+            job->id_hi, job->id_lo, job->kind, &done, &total) &&
+        total != 0UL) {
         if (total > 42949672UL) {
             percent = done / (total / 100UL);
         } else {
@@ -7809,11 +7869,11 @@ static int tg_gui_photo_viewer_open_window(tg_gui_photo_viewer *viewer,
     screen = main_ctx->window->WScreen;
     max_w = (int)screen->Width - 48;
     max_h = (int)screen->Height - 64;
-    if (max_w > TG_GUI_PHOTO_VIEWER_CANONICAL_CAP) {
-        max_w = TG_GUI_PHOTO_VIEWER_CANONICAL_CAP;
+    if (max_w > tg_gui_photo_viewer_cap(viewer)) {
+        max_w = tg_gui_photo_viewer_cap(viewer);
     }
-    if (max_h > TG_GUI_PHOTO_VIEWER_CANONICAL_CAP) {
-        max_h = TG_GUI_PHOTO_VIEWER_CANONICAL_CAP;
+    if (max_h > tg_gui_photo_viewer_cap(viewer)) {
+        max_h = tg_gui_photo_viewer_cap(viewer);
     }
     if (max_w < 80) {
         max_w = 80;
@@ -7929,14 +7989,17 @@ static int tg_gui_photo_viewer_show(tg_gui_photo_viewer *viewer,
         return 1;
     }
     same = viewer->slot.id_hi == message->photo_id_hi &&
-           viewer->slot.id_lo == message->photo_id_lo;
+           viewer->slot.id_lo == message->photo_id_lo &&
+           viewer->kind == tg_gui_session_viewer_photo_kind();
     if (!same) {
         tg_gui_photo_slot_clear(&viewer->slot);
         viewer->slot.id_hi = message->photo_id_hi;
         viewer->slot.id_lo = message->photo_id_lo;
         viewer->source_w = message->photo_width;
         viewer->source_h = message->photo_height;
+        viewer->kind = tg_gui_session_viewer_photo_kind();
     }
+    tg_gui_photo_viewer_cache_kind = viewer->kind;
     tg_gui_window_copy(viewer->title, sizeof(viewer->title),
                        message->sender[0] != '\0' ? message->sender : "Photo");
     if (tg_gui_session_request_viewer_photo(
@@ -7974,7 +8037,8 @@ static void tg_gui_photo_viewer_reject(tg_gui_photo_viewer *viewer,
     id_hi = viewer->slot.id_hi;
     id_lo = viewer->slot.id_lo;
     if (bad_cache) {
-        tg_gui_session_photo_decode_failed_variant(id_hi, id_lo, 1);
+        tg_gui_session_photo_decode_failed_variant(id_hi, id_lo,
+                                                   viewer->kind);
     }
     if (tg_gui_log_is_enabled()) {
         sprintf(line, "photo: viewer decode fail rc=%d", decode_rc);
@@ -8024,7 +8088,7 @@ static int tg_gui_photo_viewer_decode_start(tg_gui_photo_viewer *viewer)
     }
     canonical_w = canonical_h = 0;
     if (tg_image_canonical_size(viewer->source_w, viewer->source_h,
-                                TG_GUI_PHOTO_VIEWER_CANONICAL_CAP,
+                                tg_gui_photo_viewer_cap(viewer),
                                 &canonical_w, &canonical_h) != 0) {
         tg_gui_photo_diag("photo: viewer cache geometry failed");
         return 0;
@@ -8034,12 +8098,12 @@ static int tg_gui_photo_viewer_decode_start(tg_gui_photo_viewer *viewer)
         return 0;
     }
     if (tg_gui_photo_canonical_load_start(
-            &viewer->slot, canonical_w, canonical_h, 1)) {
+            &viewer->slot, canonical_w, canonical_h, viewer->kind)) {
         return 1;
     }
     if (tg_gui_session_photo_cache_path(
             path, sizeof(path), viewer->slot.id_hi,
-            viewer->slot.id_lo, 1) != 0) {
+            viewer->slot.id_lo, viewer->kind) != 0) {
         tg_gui_photo_pipeline_release(&viewer->slot);
         return 0;
     }
@@ -8068,7 +8132,10 @@ static int tg_gui_photo_viewer_decode_start(tg_gui_photo_viewer *viewer)
         return 0;
     }
     flen = ftell(file);
-    if (flen <= 0L || (unsigned long)flen > TG_GUI_PHOTO_VIEWER_JPEG_MAX ||
+    if (flen <= 0L ||
+        (unsigned long)flen > (viewer->kind == TG_GUI_PHOTO_KIND_FULL
+                                   ? TG_GUI_PHOTO_FULL_JPEG_MAX
+                                   : TG_GUI_PHOTO_VIEWER_JPEG_MAX) ||
         fseek(file, 0L, SEEK_SET) != 0) {
         fclose(file);
         tg_gui_photo_viewer_reject(viewer, 2, 1);
@@ -8091,7 +8158,8 @@ static int tg_gui_photo_viewer_decode_start(tg_gui_photo_viewer *viewer)
     viewer->slot.decode_h = canonical_h;
     viewer->slot.state = 2;
     if (!tg_gui_photo_begin_quality_sequence(
-            &viewer->slot, TG_GUI_PHOTO_VIEWER_DECODE_CAP, &decode_rc)) {
+            &viewer->slot, tg_gui_photo_viewer_decode_cap(viewer),
+            &decode_rc)) {
         tg_gui_photo_viewer_reject(viewer, decode_rc, 1);
         return 0;
     }
@@ -8164,7 +8232,7 @@ static int tg_gui_photo_viewer_decode_tick(tg_gui_photo_viewer *viewer,
     }
     changed = tg_gui_photo_quality_tick(
         &viewer->ctx, slot, mcu_budget, pen_row_budget, cache_budget,
-        TG_GUI_PHOTO_VIEWER_DECODE_CAP, 1, &decode_rc, work_kind);
+        tg_gui_photo_viewer_decode_cap(viewer), 1, &decode_rc, work_kind);
     if (changed < 0) {
         tg_gui_photo_viewer_reject(viewer, decode_rc, 1);
         return 1;
@@ -8552,6 +8620,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 if (state->inline_photos) {
                     struct MenuItem *it2 = tg_gui_menu_find_userdata(
                         menu, (APTR)TG_MENU_INLINEPHOTOS);
+
+                    if (it2 != 0) {
+                        it2->Flags |= CHECKED;
+                    }
+                }
+                if (state->photo_full_size) {
+                    struct MenuItem *it2 = tg_gui_menu_find_userdata(
+                        menu, (APTR)TG_MENU_FULLPHOTOS);
 
                     if (it2 != 0) {
                         it2->Flags |= CHECKED;
@@ -9845,6 +9921,30 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                    state->emoji_enabled
                                                        ? "Emoji enabled"
                                                        : "Emoji disabled");
+                            }
+                            tg_gui_window_paint(state, &backend);
+                        } else if (ud == (APTR)TG_MENU_FULLPHOTOS) {
+                            state->photo_full_size = !state->photo_full_size;
+                            tg_gui_session_set_photo_full_size(
+                                state->photo_full_size);
+                            if (tg_gui_photo_preferences_save_full(
+                                    "data/telegram-photos.txt",
+                                    state->inline_photos,
+                                    state->inline_photos_explicit,
+                                    state->photo_dither,
+                                    state->photo_cache_limit_mb,
+                                    state->photo_full_size) != 0) {
+                                tg_gui_window_copy(state->status,
+                                                   sizeof(state->status),
+                                                   "Could not save photo setting");
+                            } else {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    state->photo_full_size
+                                        ? "Full-size photos on: the viewer "
+                                          "and Save photo as... take the "
+                                          "largest copy"
+                                        : "Full-size photos off");
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_INLINEPHOTOS) {

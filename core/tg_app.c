@@ -4462,11 +4462,13 @@ int tg_app_run(int argc, char **argv)
 
         memset(gui, 0, sizeof(*gui));
         gui->theme = TG_GUI_THEME_DARK;
-        tg_gui_photo_preferences_load("data/telegram-photos.txt",
-                                      &gui->inline_photos,
-                                      &gui->inline_photos_explicit,
-                                      &gui->photo_dither,
-                                      &gui->photo_cache_limit_mb);
+        tg_gui_photo_preferences_load_full("data/telegram-photos.txt",
+                                           &gui->inline_photos,
+                                           &gui->inline_photos_explicit,
+                                           &gui->photo_dither,
+                                           &gui->photo_cache_limit_mb,
+                                           &gui->photo_full_size);
+        tg_gui_session_set_photo_full_size(gui->photo_full_size);
         gui->selected_msg = -1; /* no transcript row highlighted at start */
         if (config.run_gui_live_debug) {
             tg_gui_log_enable();

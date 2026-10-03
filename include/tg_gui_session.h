@@ -65,6 +65,24 @@ void tg_gui_session_photo_cache_clear_finish(void);
 int tg_gui_session_request_inline_photo(unsigned long photo_id_hi,
                                         unsigned long photo_id_lo);
 
+/* What a photo request asks for, the `large` argument below: the copy a
+   message shows, the viewer's copy, and with "Full-size photos" on, the
+   largest copy the decoder can show and the original for saving. Each kind
+   has its own cache file, so turning the preference on or off never leaves
+   the viewer with the other kind's picture. */
+#define TG_GUI_PHOTO_KIND_INLINE 0
+#define TG_GUI_PHOTO_KIND_LARGE 1
+#define TG_GUI_PHOTO_KIND_FULL 2
+#define TG_GUI_PHOTO_KIND_ORIGINAL 3
+void tg_gui_session_set_photo_full_size(int enabled);
+/* The kind the viewer asks for now: FULL with the preference on, else LARGE. */
+int tg_gui_session_viewer_photo_kind(void);
+/* The kind Save photo as... fetches: LARGE without the preference; with it
+   the original, or FULL when the original is the very copy the viewer uses
+   (a baseline JPEG), so one download serves both. */
+int tg_gui_session_save_photo_kind(unsigned long photo_id_hi,
+                                   unsigned long photo_id_lo);
+
 /* Queue the larger representation for the reusable photo viewer. Returns 0
    when metadata exists (cached or queued), non-zero when the photo is unknown.
    The selected source dimensions are returned for the fixed viewer geometry. */
@@ -84,7 +102,9 @@ int tg_gui_session_photo_fetch_progress(unsigned long photo_id_hi,
                                         unsigned long *total);
 
 /* Stable on-disk cache name shared by the session and native window backend.
-   `large` selects photos/tgph<id>-l.jpg instead of the inline JPEG. */
+   `large` is a TG_GUI_PHOTO_KIND_*: photos/tgph<id>.jpg for the inline copy,
+   -l.jpg for the viewer's, -f.jpg for the full-size one, -o.jpg for the
+   original. */
 int tg_gui_session_photo_cache_path(char *path, unsigned long path_size,
                                     unsigned long photo_id_hi,
                                     unsigned long photo_id_lo, int large);
@@ -93,7 +113,8 @@ int tg_gui_session_photo_thumb_cache_path(char *path,
                                           unsigned long path_size,
                                           unsigned long photo_id_hi,
                                           unsigned long photo_id_lo);
-/* Versioned RGB888 canonical cache; `large` selects the viewer variant. */
+/* Versioned RGB888 canonical cache; `large` is the kind it was decoded from
+   (inline, viewer or full-size). */
 int tg_gui_session_photo_canonical_cache_path(
     char *path, unsigned long path_size,
     unsigned long photo_id_hi, unsigned long photo_id_lo, int large);

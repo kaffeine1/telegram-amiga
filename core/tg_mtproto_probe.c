@@ -11282,6 +11282,52 @@ static int tg_gui_photo_cache_variant_count;
 static tg_mtproto_photo_meta tg_gui_photo_catalog[TG_GUI_PHOTO_CATALOG_MAX];
 static int tg_gui_photo_catalog_count;
 static int tg_gui_photo_inline_enabled = 1;
+/* "Full-size photos": the viewer takes the largest copy it can decode and
+   Save photo as... the original. Off by default: on a 68k it means a longer
+   download and a few more megabytes while the viewer is open. */
+static int tg_gui_photo_full_size = 0;
+
+/* A request kind as the API passes it: an old boolean `large` still reads as
+   INLINE or LARGE, the two new kinds keep their value. */
+static int tg_gui_photo_kind(int large)
+{
+    if (large == TG_GUI_PHOTO_KIND_FULL ||
+        large == TG_GUI_PHOTO_KIND_ORIGINAL) {
+        return large;
+    }
+    return large ? TG_GUI_PHOTO_KIND_LARGE : TG_GUI_PHOTO_KIND_INLINE;
+}
+
+/* The largest size the photo comes in, by its longer edge and then by bytes;
+   with `baseline_only` the largest one tjpgd can decode. */
+static const tg_mtproto_photo_variant *tg_gui_photo_largest_variant(
+    const tg_mtproto_photo_meta *photo, int baseline_only)
+{
+    const tg_mtproto_photo_variant *best = 0;
+    unsigned long best_edge = 0UL;
+    unsigned long i;
+
+    if (photo == 0) {
+        return 0;
+    }
+    for (i = 0UL; i < photo->variant_count && i < TG_MTPROTO_PHOTO_VARIANT_MAX;
+         ++i) {
+        const tg_mtproto_photo_variant *variant = &photo->variants[i];
+        unsigned long edge = variant->width > variant->height
+                                 ? variant->width : variant->height;
+
+        if (variant->type[0] == '\0' || edge == 0UL || variant->size == 0UL ||
+            (baseline_only && variant->progressive)) {
+            continue;
+        }
+        if (best == 0 || edge > best_edge ||
+            (edge == best_edge && variant->size > best->size)) {
+            best = variant;
+            best_edge = edge;
+        }
+    }
+    return best;
+}
 static int tg_gui_photo_cache_paused;
 static tg_gui_photo_fetch_state tg_gui_photo_fetch;
 static int tg_gui_photo_queue_pop(tg_gui_photo_queue_entry *entry);
@@ -11315,9 +11361,20 @@ int tg_gui_session_photo_cache_path(char *path, unsigned long path_size,
     if (path == 0 || path_size < 40UL || (id_hi == 0UL && id_lo == 0UL)) {
         return 1;
     }
-    sprintf(path, large ? "photos/tgph%08lx%08lx-l.jpg"
-                        : "photos/tgph%08lx%08lx.jpg",
-            id_hi, id_lo);
+    switch (tg_gui_photo_kind(large)) {
+    case TG_GUI_PHOTO_KIND_LARGE:
+        sprintf(path, "photos/tgph%08lx%08lx-l.jpg", id_hi, id_lo);
+        break;
+    case TG_GUI_PHOTO_KIND_FULL:
+        sprintf(path, "photos/tgph%08lx%08lx-f.jpg", id_hi, id_lo);
+        break;
+    case TG_GUI_PHOTO_KIND_ORIGINAL:
+        sprintf(path, "photos/tgph%08lx%08lx-o.jpg", id_hi, id_lo);
+        break;
+    default:
+        sprintf(path, "photos/tgph%08lx%08lx.jpg", id_hi, id_lo);
+        break;
+    }
     return 0;
 }
 
@@ -11340,9 +11397,17 @@ int tg_gui_session_photo_canonical_cache_path(
     if (path == 0 || path_size < 42UL || (id_hi == 0UL && id_lo == 0UL)) {
         return 1;
     }
-    sprintf(path, large ? "photos/tgph%08lx%08lx-l.pgc"
-                        : "photos/tgph%08lx%08lx.pgc",
-            id_hi, id_lo);
+    switch (tg_gui_photo_kind(large)) {
+    case TG_GUI_PHOTO_KIND_INLINE:
+        sprintf(path, "photos/tgph%08lx%08lx.pgc", id_hi, id_lo);
+        break;
+    case TG_GUI_PHOTO_KIND_FULL:
+        sprintf(path, "photos/tgph%08lx%08lx-f.pgc", id_hi, id_lo);
+        break;
+    default:
+        sprintf(path, "photos/tgph%08lx%08lx-l.pgc", id_hi, id_lo);
+        break;
+    }
     return 0;
 }
 
@@ -11455,7 +11520,7 @@ static int tg_gui_photo_was_tried(unsigned long id_hi, unsigned long id_lo,
     for (i = 0; i < tg_gui_photo_tried_count; ++i) {
         if (tg_gui_photo_tried_hi[i] == id_hi &&
             tg_gui_photo_tried_lo[i] == id_lo &&
-            tg_gui_photo_tried_large[i] == (unsigned char)(large ? 1 : 0) &&
+            tg_gui_photo_tried_large[i] == (unsigned char)tg_gui_photo_kind(large) &&
             strcmp(tg_gui_photo_tried_type[i], type) == 0) {
             return 1;
         }
@@ -11490,7 +11555,7 @@ static void tg_gui_photo_remember_tried(unsigned long id_hi,
     }
     tg_gui_photo_tried_hi[at] = id_hi;
     tg_gui_photo_tried_lo[at] = id_lo;
-    tg_gui_photo_tried_large[at] = (unsigned char)(large ? 1 : 0);
+    tg_gui_photo_tried_large[at] = (unsigned char)tg_gui_photo_kind(large);
     strcpy(tg_gui_photo_tried_type[at], type);
 }
 
@@ -11509,7 +11574,7 @@ static void tg_gui_photo_cache_variant_remember(unsigned long id_hi,
         if (tg_gui_photo_cache_variants[i].id_hi == id_hi &&
             tg_gui_photo_cache_variants[i].id_lo == id_lo &&
             tg_gui_photo_cache_variants[i].large ==
-                (unsigned char)(large ? 1 : 0)) {
+                (unsigned char)tg_gui_photo_kind(large)) {
             strcpy(tg_gui_photo_cache_variants[i].type, type);
             return;
         }
@@ -11527,7 +11592,7 @@ static void tg_gui_photo_cache_variant_remember(unsigned long id_hi,
     tg_gui_photo_cache_variants[at].id_hi = id_hi;
     tg_gui_photo_cache_variants[at].id_lo = id_lo;
     tg_gui_photo_cache_variants[at].large =
-        (unsigned char)(large ? 1 : 0);
+        (unsigned char)tg_gui_photo_kind(large);
     strcpy(tg_gui_photo_cache_variants[at].type, type);
 }
 
@@ -11546,7 +11611,7 @@ static int tg_gui_photo_cache_variant_forget(unsigned long id_hi,
         if (tg_gui_photo_cache_variants[i].id_hi == id_hi &&
             tg_gui_photo_cache_variants[i].id_lo == id_lo &&
             tg_gui_photo_cache_variants[i].large ==
-                (unsigned char)(large ? 1 : 0)) {
+                (unsigned char)tg_gui_photo_kind(large)) {
             if (type != 0 && type_size != 0UL) {
                 strncpy(type, tg_gui_photo_cache_variants[i].type,
                         type_size - 1UL);
@@ -11579,8 +11644,22 @@ static int tg_gui_photo_prepare_queue_entry(
     }
     memset(entry, 0, sizeof(*entry));
     entry->photo = *source;
-    entry->large = large ? 1 : 0;
-    if (entry->large && source->has_large) {
+    entry->large = tg_gui_photo_kind(large);
+    if (entry->large == TG_GUI_PHOTO_KIND_FULL ||
+        entry->large == TG_GUI_PHOTO_KIND_ORIGINAL) {
+        /* no byte cap and no target edge: the largest copy, one the decoder
+           can show for the viewer, any of them for saving */
+        const tg_mtproto_photo_variant *pick = tg_gui_photo_largest_variant(
+            source, entry->large == TG_GUI_PHOTO_KIND_FULL);
+
+        if (pick == 0) {
+            return 0;
+        }
+        strcpy(entry->photo.thumb_type, pick->type);
+        entry->photo.width = pick->width;
+        entry->photo.height = pick->height;
+        entry->photo.size = pick->size;
+    } else if (entry->large && source->has_large) {
         strcpy(entry->photo.thumb_type, source->large_thumb_type);
         entry->photo.width = source->large_width;
         entry->photo.height = source->large_height;
@@ -11843,24 +11922,39 @@ int tg_gui_session_request_viewer_photo(unsigned long id_hi,
 {
     tg_mtproto_photo_meta *photo;
 
+    int kind = tg_gui_session_viewer_photo_kind();
+
     photo = tg_gui_photo_catalog_find(id_hi, id_lo);
     if (photo == 0) {
         /* A cached large JPEG remains useful after the bounded per-chat
            metadata catalog has rotated. Keep the caller's dimensions in that
            case: the viewer can still decode and fit the cached image. */
-        return (tg_gui_photo_cache_exists(id_hi, id_lo, 1) ||
-                tg_gui_photo_canonical_cache_exists(id_hi, id_lo, 1))
+        return (tg_gui_photo_cache_exists(id_hi, id_lo, kind) ||
+                tg_gui_photo_canonical_cache_exists(id_hi, id_lo, kind))
                    ? 0 : 1;
     }
-    if (source_w != 0) {
-        *source_w = photo->has_large ? photo->large_width : photo->width;
+    if (kind == TG_GUI_PHOTO_KIND_FULL) {
+        const tg_mtproto_photo_variant *pick =
+            tg_gui_photo_largest_variant(photo, 1);
+
+        if (source_w != 0 && pick != 0) {
+            *source_w = pick->width;
+        }
+        if (source_h != 0 && pick != 0) {
+            *source_h = pick->height;
+        }
+    } else {
+        if (source_w != 0) {
+            *source_w = photo->has_large ? photo->large_width : photo->width;
+        }
+        if (source_h != 0) {
+            *source_h = photo->has_large ? photo->large_height
+                                         : photo->height;
+        }
     }
-    if (source_h != 0) {
-        *source_h = photo->has_large ? photo->large_height : photo->height;
-    }
-    if (!tg_gui_photo_cache_exists(id_hi, id_lo, 1) &&
-        !tg_gui_photo_canonical_cache_exists(id_hi, id_lo, 1)) {
-        tg_gui_photo_queue_offer(photo, 1);
+    if (!tg_gui_photo_cache_exists(id_hi, id_lo, kind) &&
+        !tg_gui_photo_canonical_cache_exists(id_hi, id_lo, kind)) {
+        tg_gui_photo_queue_offer(photo, kind);
     }
     return 0;
 }
@@ -11872,7 +11966,7 @@ int tg_gui_session_request_photo_jpeg(unsigned long id_hi,
     tg_gui_photo_queue_entry entry;
     int i;
 
-    large = large ? 1 : 0;
+    large = tg_gui_photo_kind(large);
     if (tg_gui_photo_cache_exists(id_hi, id_lo, large)) {
         return 2;
     }
@@ -11911,7 +12005,7 @@ int tg_gui_session_photo_fetch_progress(unsigned long id_hi,
     if (total != 0) {
         *total = 0UL;
     }
-    large = large ? 1 : 0;
+    large = tg_gui_photo_kind(large);
     if (tg_gui_photo_fetch.active && tg_gui_photo_fetch.large == large &&
         tg_gui_photo_fetch.photo.id_hi == id_hi &&
         tg_gui_photo_fetch.photo.id_lo == id_lo) {
@@ -11934,6 +12028,41 @@ int tg_gui_session_photo_fetch_progress(unsigned long id_hi,
         }
     }
     return 0;
+}
+
+void tg_gui_session_set_photo_full_size(int enabled)
+{
+    tg_gui_photo_full_size = enabled ? 1 : 0;
+}
+
+int tg_gui_session_viewer_photo_kind(void)
+{
+    return tg_gui_photo_full_size ? TG_GUI_PHOTO_KIND_FULL
+                                  : TG_GUI_PHOTO_KIND_LARGE;
+}
+
+int tg_gui_session_save_photo_kind(unsigned long id_hi, unsigned long id_lo)
+{
+    tg_mtproto_photo_meta *photo;
+    const tg_mtproto_photo_variant *original;
+    const tg_mtproto_photo_variant *full;
+
+    if (!tg_gui_photo_full_size) {
+        return TG_GUI_PHOTO_KIND_LARGE;
+    }
+    photo = tg_gui_photo_catalog_find(id_hi, id_lo);
+    if (photo == 0) {
+        /* no sizes known any more: whichever full copy is on disk */
+        return tg_gui_photo_cache_exists(id_hi, id_lo,
+                                         TG_GUI_PHOTO_KIND_ORIGINAL)
+                   ? TG_GUI_PHOTO_KIND_ORIGINAL : TG_GUI_PHOTO_KIND_FULL;
+    }
+    original = tg_gui_photo_largest_variant(photo, 0);
+    full = tg_gui_photo_largest_variant(photo, 1);
+    if (original != 0 && full != 0 && strcmp(original->type, full->type) == 0) {
+        return TG_GUI_PHOTO_KIND_FULL;
+    }
+    return TG_GUI_PHOTO_KIND_ORIGINAL;
 }
 
 void tg_gui_session_set_inline_photos(int enabled)
@@ -15974,6 +16103,105 @@ int tg_mtproto_probe_self_test(void)
             return 2;
         }
         tg_gui_photo_queue_reset();
+    }
+    /* 0.0.95, full-size photos: the viewer's full kind takes the largest copy
+       the decoder can read with no byte cap, the save kind the largest of
+       all, every kind has a file of its own, and a save shares the viewer's
+       download when the original is that very copy. */
+    {
+        static const char *const types[5] = { "s", "m", "x", "y", "w" };
+        static const unsigned long edges[5] = { 90UL, 320UL, 800UL, 1280UL,
+                                                2560UL };
+        static const unsigned char progressive[5] = { 0U, 0U, 1U, 0U, 1U };
+        tg_mtproto_photo_meta photo;
+        tg_gui_photo_queue_entry e;
+        char kind_path[64];
+        int i;
+        int ok;
+
+        tg_gui_photo_queue_reset();
+        memset(&photo, 0, sizeof(photo));
+        photo.has_photo = 1;
+        photo.id_hi = 0xf0095001UL;
+        photo.id_lo = 2UL;
+        photo.file_reference_len = 1UL;
+        photo.file_reference[0] = 0x5aU;
+        strcpy(photo.thumb_type, "m");
+        photo.width = 320UL;
+        photo.height = 240UL;
+        photo.size = 32000UL;
+        photo.has_large = 1;
+        strcpy(photo.large_thumb_type, "y");
+        photo.large_width = 1280UL;
+        photo.large_height = 960UL;
+        photo.large_size = 128000UL;
+        photo.variant_count = 5UL;
+        for (i = 0; i < 5; ++i) {
+            strcpy(photo.variants[i].type, types[i]);
+            photo.variants[i].width = edges[i];
+            photo.variants[i].height = (edges[i] * 3UL) / 4UL;
+            photo.variants[i].size = edges[i] * 100UL;
+            photo.variants[i].progressive = progressive[i];
+        }
+        tg_gui_photo_catalog_offer(&photo);
+        ok = tg_gui_photo_prepare_queue_entry(&photo, TG_GUI_PHOTO_KIND_FULL,
+                                              &e) &&
+             strcmp(e.photo.thumb_type, "y") == 0 &&
+             e.photo.size == 128000UL &&
+             e.large == TG_GUI_PHOTO_KIND_FULL;
+        ok = ok &&
+             tg_gui_photo_prepare_queue_entry(
+                 &photo, TG_GUI_PHOTO_KIND_ORIGINAL, &e) &&
+             strcmp(e.photo.thumb_type, "w") == 0 &&
+             e.photo.width == 2560UL &&
+             e.large == TG_GUI_PHOTO_KIND_ORIGINAL;
+        if (!ok) {
+            tg_gui_photo_queue_reset();
+            puts("probe self-test: full-size photo picks wrong");
+            return 2;
+        }
+        ok = tg_gui_session_photo_cache_path(kind_path, sizeof(kind_path),
+                                             photo.id_hi, photo.id_lo,
+                                             TG_GUI_PHOTO_KIND_FULL) == 0 &&
+             strstr(kind_path, "-f.jpg") != 0;
+        ok = ok &&
+             tg_gui_session_photo_cache_path(kind_path, sizeof(kind_path),
+                                             photo.id_hi, photo.id_lo,
+                                             TG_GUI_PHOTO_KIND_ORIGINAL) == 0 &&
+             strstr(kind_path, "-o.jpg") != 0;
+        ok = ok &&
+             tg_gui_session_photo_cache_path(kind_path, sizeof(kind_path),
+                                             photo.id_hi, photo.id_lo, 1) ==
+                 0 &&
+             strstr(kind_path, "-l.jpg") != 0;
+        ok = ok &&
+             tg_gui_session_photo_canonical_cache_path(
+                 kind_path, sizeof(kind_path), photo.id_hi, photo.id_lo,
+                 TG_GUI_PHOTO_KIND_FULL) == 0 &&
+             strstr(kind_path, "-f.pgc") != 0;
+        if (!ok) {
+            tg_gui_photo_queue_reset();
+            puts("probe self-test: full-size photo cache names wrong");
+            return 2;
+        }
+        tg_gui_session_set_photo_full_size(1);
+        ok = tg_gui_session_viewer_photo_kind() == TG_GUI_PHOTO_KIND_FULL &&
+             tg_gui_session_save_photo_kind(photo.id_hi, photo.id_lo) ==
+                 TG_GUI_PHOTO_KIND_ORIGINAL;
+        photo.variants[4].progressive = 0U; /* the original is baseline */
+        tg_gui_photo_catalog_offer(&photo);
+        ok = ok && tg_gui_session_save_photo_kind(photo.id_hi, photo.id_lo) ==
+                       TG_GUI_PHOTO_KIND_FULL;
+        tg_gui_session_set_photo_full_size(0);
+        ok = ok &&
+             tg_gui_session_viewer_photo_kind() == TG_GUI_PHOTO_KIND_LARGE &&
+             tg_gui_session_save_photo_kind(photo.id_hi, photo.id_lo) ==
+                 TG_GUI_PHOTO_KIND_LARGE;
+        tg_gui_photo_queue_reset();
+        if (!ok) {
+            puts("probe self-test: full-size photo kinds wrong");
+            return 2;
+        }
     }
     if (tg_mtproto_download_window_self_test() != 0) {
         return 2;

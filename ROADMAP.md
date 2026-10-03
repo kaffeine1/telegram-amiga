@@ -172,8 +172,8 @@ Features are therefore grouped by the work they share.
   faster on a stock A1200 with byte-identical results (an avatar in
   0.93 s instead of 2.39), while the TL reader gained 3% and stays at
   -O0. Plus the open
-  defects: the two MorphOS popup glitches, photo speed under AfA_OS
-  and the full-size photo preference. Two-step verification on a slow
+  defects: the two MorphOS popup glitches and photo speed under AfA_OS;
+  the full-size photo preference is on main. Two-step verification on a slow
   68k is on main, and a login went through on a stock A1200.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
@@ -777,7 +777,7 @@ the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
 
-## Planned: a preference for full-size photos in the viewer and on save
+## Done for 0.0.95: full-size photos in the viewer and on save
 
 A field question on 0.0.92: clicking a picture opens what looks like a
 reduced copy of a much larger image, and it is. Photos come in tiers
@@ -794,7 +794,15 @@ with no byte cap. The decoder already scales, so showing a 2560 pixel
 JPEG on a 68k is a download and a wait rather than a memory problem,
 which is exactly why it should be a choice and not the default. Saving
 would then write the original bytes Telegram holds, which is what a user
-who asks for the full image wants. A 0.0.95 item.
+who asks for the full image wants.
+
+Done on main as a "Full-size photos" setting, off by default. Building it
+showed that the source size was only half the story: the viewer also stops
+drawing at 512 pixels on the 68k and 768 elsewhere, so the setting raises
+that to the screen's size, at most 1024 and 2048, and decodes the largest
+baseline copy at up to twice that edge. Save photo as... fetches the true
+original, progressive or not, and shares the viewer's download when they
+are the same copy. Each kind of copy has its own cache file.
 
 ## Planned: mentions in basic groups, and on MorphOS
 

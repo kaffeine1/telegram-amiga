@@ -129,18 +129,31 @@ void tg_gui_photo_preferences_load(const char *path, int *inline_photos,
                                    int *photo_dither,
                                    unsigned long *photo_cache_limit_mb)
 {
+    tg_gui_photo_preferences_load_full(path, inline_photos,
+                                       inline_photos_explicit, photo_dither,
+                                       photo_cache_limit_mb, 0);
+}
+
+void tg_gui_photo_preferences_load_full(const char *path, int *inline_photos,
+                                        int *inline_photos_explicit,
+                                        int *photo_dither,
+                                        unsigned long *photo_cache_limit_mb,
+                                        int *photo_full_size)
+{
     FILE *file;
     char value[64];
     int enabled;
     int explicit_choice;
     int dither;
     unsigned long cache_limit;
+    int full_size;
     int first_line;
 
     enabled = 1;
     explicit_choice = 0;
     dither = TG_GUI_PHOTO_DITHER_FULL;
     cache_limit = TG_GUI_PHOTO_CACHE_DEFAULT_MB;
+    full_size = 0;
     file = (path != 0 && path[0] != '\0') ? fopen(path, "rb") : 0;
     if (file != 0) {
         first_line = 1;
@@ -155,6 +168,8 @@ void tg_gui_photo_preferences_load(const char *path, int *inline_photos,
                 dither = tg_gui_photo_dither_parse(value + 7);
             } else if (strncmp(value, "cache_limit=", 12UL) == 0) {
                 cache_limit = tg_gui_photo_cache_limit_parse(value + 12);
+            } else if (strncmp(value, "full_size=", 10UL) == 0) {
+                full_size = tg_gui_photo_pref_word(value + 10, "on");
             }
             first_line = 0;
         }
@@ -172,12 +187,29 @@ void tg_gui_photo_preferences_load(const char *path, int *inline_photos,
     if (photo_cache_limit_mb != 0) {
         *photo_cache_limit_mb = cache_limit;
     }
+    if (photo_full_size != 0) {
+        *photo_full_size = full_size;
+    }
 }
 
 int tg_gui_photo_preferences_save(const char *path, int inline_photos,
                                   int inline_photos_explicit,
                                   int photo_dither,
                                   unsigned long photo_cache_limit_mb)
+{
+    int full_size = 0;
+
+    tg_gui_photo_preferences_load_full(path, 0, 0, 0, 0, &full_size);
+    return tg_gui_photo_preferences_save_full(
+        path, inline_photos, inline_photos_explicit, photo_dither,
+        photo_cache_limit_mb, full_size);
+}
+
+int tg_gui_photo_preferences_save_full(const char *path, int inline_photos,
+                                       int inline_photos_explicit,
+                                       int photo_dither,
+                                       unsigned long photo_cache_limit_mb,
+                                       int photo_full_size)
 {
     FILE *file;
     char tmp[288];
@@ -213,7 +245,9 @@ int tg_gui_photo_preferences_save(const char *path, int inline_photos,
              fputs("dither=", file) == EOF || fputs(dither, file) == EOF ||
              fputc('\n', file) == EOF ||
              fputs("cache_limit=", file) == EOF ||
-             fputs(cache_limit, file) == EOF || fputc('\n', file) == EOF;
+             fputs(cache_limit, file) == EOF || fputc('\n', file) == EOF ||
+             fputs(photo_full_size ? "full_size=on\n" : "full_size=off\n",
+                   file) == EOF;
     if (fclose(file) != 0) {
         failed = 1;
     }
@@ -6085,6 +6119,54 @@ int tg_gui_self_test(void)
             (void)remove(pref);
             puts("gui self-test: explicit photo preference mismatch");
             return 2;
+        }
+        /* 0.0.95: full_size=on is kept, also when the plain save writes
+           another photo setting, and off turns it off */
+        {
+            int full = 0;
+
+            if (tg_gui_photo_preferences_save_full(
+                    pref, 0, 1, TG_GUI_PHOTO_DITHER_OFF, 10UL, 1) != 0) {
+                (void)remove(pref);
+                puts("gui self-test: full-size photo save failed");
+                return 2;
+            }
+            tg_gui_photo_preferences_load_full(pref, &enabled,
+                                               &explicit_choice, &dither,
+                                               &cache_limit, &full);
+            if (!full || enabled || dither != TG_GUI_PHOTO_DITHER_OFF) {
+                (void)remove(pref);
+                puts("gui self-test: full-size photo round-trip mismatch");
+                return 2;
+            }
+            full = 0;
+            if (tg_gui_photo_preferences_save(
+                    pref, 1, 1, TG_GUI_PHOTO_DITHER_FULL, 50UL) != 0) {
+                (void)remove(pref);
+                puts("gui self-test: photo save beside full-size failed");
+                return 2;
+            }
+            tg_gui_photo_preferences_load_full(pref, &enabled,
+                                               &explicit_choice, &dither,
+                                               &cache_limit, &full);
+            if (!full || !enabled || dither != TG_GUI_PHOTO_DITHER_FULL ||
+                cache_limit != 50UL) {
+                (void)remove(pref);
+                puts("gui self-test: another photo save lost full-size");
+                return 2;
+            }
+            if (tg_gui_photo_preferences_save_full(
+                    pref, 1, 1, TG_GUI_PHOTO_DITHER_FULL, 50UL, 0) != 0) {
+                (void)remove(pref);
+                puts("gui self-test: full-size photo off save failed");
+                return 2;
+            }
+            tg_gui_photo_preferences_load_full(pref, 0, 0, 0, 0, &full);
+            if (full) {
+                (void)remove(pref);
+                puts("gui self-test: full-size photo stayed on");
+                return 2;
+            }
         }
         file = tg_file_fopen_replace(pref, "wb");
         if (file == 0) {

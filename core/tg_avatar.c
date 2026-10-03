@@ -561,8 +561,11 @@ static tg_image_jpeg_decoder *tg_image_jpeg_decoder_begin_scale_internal(
     if (actual_scale != 0) {
         *actual_scale = TG_IMAGE_JPEG_SCALE_AUTO;
     }
+    /* The cap only bounds the scale tjpgd decodes at: blocks are scaled
+       straight into dst_rgb, so a larger cap costs time, not a frame. 4096
+       lets full-size photos decode a 2560 copy at 1/2 for a 1024 view. */
     if (jpeg == 0 || jpeg_len == 0UL || dst_rgb == 0 || dw <= 0 || dh <= 0 ||
-        source_edge_cap <= 0 || source_edge_cap > 1024 ||
+        source_edge_cap <= 0 || source_edge_cap > 4096 ||
         requested_scale < TG_IMAGE_JPEG_SCALE_AUTO || requested_scale > 3) {
         return 0;
     }
@@ -1087,6 +1090,15 @@ int tg_avatar_self_test(void)
                                         scaled, 16, 8, 32) != 0 ||
             memcmp(scaled, scaled + ((16 * 8 - 1) * 3), 3) == 0) {
             puts("avatar self-test: canonical photo geometry failed");
+            return 2;
+        }
+        /* 0.0.95: full-size photos decode at up to 4096 (a 2560 copy at 1/2
+           for a 1024 view); the cap used to stop at 1024 */
+        if (tg_image_decode_jpeg_scaled(photo_jpeg, sizeof(photo_jpeg),
+                                        native_rgb, 8, 4, 4096) != 0 ||
+            tg_image_decode_jpeg_scaled(photo_jpeg, sizeof(photo_jpeg),
+                                        native_rgb, 8, 4, 4097) == 0) {
+            puts("avatar self-test: full-size decode cap wrong");
             return 2;
         }
         if (tg_image_decode_jpeg_scaled(

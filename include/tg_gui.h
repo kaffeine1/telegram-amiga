@@ -271,6 +271,8 @@ typedef struct tg_gui_state {
     int emoji_default_resolved;
     int photo_dither;      /* TG_GUI_PHOTO_DITHER_*; default full */
     unsigned long photo_cache_limit_mb; /* 0 unlimited; default 50 MiB */
+    int photo_full_size;   /* viewer and Save photo as... take the largest
+                              copy; off by default */
     /* Scrollbar geometry the painter caches each frame for the event loop's
        knob-drag / track-click (only the painter has the backend to size the
        transcript). *_max == 0 means no bar / nothing to drag. */
@@ -520,6 +522,19 @@ int tg_gui_photo_preferences_save(const char *path, int inline_photos,
                                   int inline_photos_explicit,
                                   int photo_dither,
                                   unsigned long photo_cache_limit_mb);
+/* The same with "full_size=on|off" (0.0.95). The plain save keeps the value
+   the file already holds, so changing another photo setting never turns
+   full-size photos off. */
+void tg_gui_photo_preferences_load_full(const char *path, int *inline_photos,
+                                        int *inline_photos_explicit,
+                                        int *photo_dither,
+                                        unsigned long *photo_cache_limit_mb,
+                                        int *photo_full_size);
+int tg_gui_photo_preferences_save_full(const char *path, int inline_photos,
+                                       int inline_photos_explicit,
+                                       int photo_dither,
+                                       unsigned long photo_cache_limit_mb,
+                                       int photo_full_size);
 /* Shared photo/emoji policy: explicit user choice wins. Otherwise classic
    Amiga hardware needs a 68040-class CPU (or PPC) and an actual RTG screen. */
 int tg_gui_graphics_resolve(int explicit_choice, int explicit_value,

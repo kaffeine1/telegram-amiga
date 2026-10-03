@@ -20,6 +20,24 @@ lanes unless noted.
   cannot come. This is what let the transfer measurements run on a real
   Vampire without anyone at the keyboard.
 
+- A "Full-size photos" setting in the Settings menu, off by default. With
+  it on, the photo viewer opens the largest copy of a picture the decoder
+  can read, with no byte cap, and draws it up to the size of the screen,
+  at most 1024 pixels on the 68k and 2048 elsewhere instead of 512 and
+  768. Save photo as... writes the original, the largest copy Telegram
+  keeps (2560 pixels for some uploads), even when it is a progressive JPEG
+  the viewer cannot show; when the original is the viewer's copy, one
+  download serves both. The big copy is decoded at up to twice the view's
+  edge and scaled down block by block, so no full-size frame is ever held:
+  on a 68k the price is the longer download and a few megabytes while the
+  viewer is open, which is why it is a choice. Each kind of copy has a
+  cache file of its own, so switching the setting never shows the other
+  kind's picture, and the choice is kept in data/telegram-photos.txt as
+  full_size=, which older versions skip. Self-tests check the picks, the
+  file names, which copy a save takes, the setting's round trip (also
+  through a save of another photo setting) and the decoder's new limit,
+  and each fails when the code it covers is broken.
+
 ### Changed
 - SHA-256 works on 32-bit words. Every message the client receives is
   hashed whole to check its message key, so a 32 KB download part costs
