@@ -29,6 +29,7 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <dos/dos.h>
+#include <dos/stdio.h>
 
 struct Library *SocketBase = 0;
 /* NB: CloseSocket() is already available as a macro from the AROS bsdsocket
@@ -233,11 +234,24 @@ static void tg_aros_close_socket_library(void);
 void tg_platform_shutdown(void)
 {
 #if defined(__AROS__)
+    BPTR out;
+
     /* bsdsocket.library is opened once (first connect) and owned process-wide:
        closing it per-connection zeroed the shared SocketBase under live
        connections (GUI keeps several open), and the next send() was an LVO
        call through a NULL base -> the x86_64 relaunch bus-fault. */
     tg_aros_close_socket_library();
+    /* Hand the Shell its console back the way dos.library opened it. Here the
+       C runtime's setvbuf() is SetVBuf() on the very handle the Shell prints
+       with, so the _IONBF set at start outlived the program: the Shell then
+       wrote its prompt a character at a time, the console met each ESC on
+       its own and printed the colour codes as text ("[42m[31m9."). Open()
+       makes an interactive handle BUF_LINE, so that is what goes back. A
+       Workbench start has no Output() left here. */
+    out = Output();
+    if (out != 0 && IsInteractive(out)) {
+        (void)SetVBuf(out, NULL, BUF_LINE, -1);
+    }
 #endif
 }
 

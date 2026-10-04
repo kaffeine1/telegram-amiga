@@ -284,6 +284,15 @@ lanes unless noted.
   console now leaves Return as a CR, the way an Amiga console sends it, so
   the same path runs. A self-test checks that a break takes one cell in
   the composer and fails when it does not.
+- On AROS the Shell that started the client no longer prints its colour
+  codes as text afterwards ("[42m[31m9." instead of a coloured prompt).
+  The client turns its output buffering off at start, and on AROS the C
+  library does that on the Shell's own console handle, so the change
+  outlived the program: the Shell then wrote its prompt a character at a
+  time, and the console dropped each lone ESC and printed the rest. On
+  the way out the client now gives the handle back the line buffering
+  dos.library opens a console with. Seen on the i386 VM after the window
+  closed, and gone with the fix; the same Shell came back to colour.
 
 ## [0.0.94] - 2026-09-25
 
