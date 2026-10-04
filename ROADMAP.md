@@ -1174,14 +1174,14 @@ bitmap before the blit rather than to the window.
 
 ## Planned: photo speed under AfA_OS
 
-Rows are handed to cybergraphics in blocks of 8 on the 68k line, which took
+Rows were handed to cybergraphics in blocks of 8 on the 68k line, which took
 the per-slice cost from 220-820 ms down to 0-20 ms on a Vampire. AmiKit still
-shows a tail of slow slices (180-620 ms), so the per-call overhead there is
-higher than elsewhere. First move, cheap and mechanical: raise
-TG_GUI_PHOTO_REPLAY_ROWS from 8 to 16 on m68k (about 12 KB more of staging
-buffer) and measure again from the log's "pace replay budget" lines. If the
-tail survives that, the cost is not the call count and the investigation
-below is the real answer.
+showed a tail of slow slices (180-620 ms), so the per-call overhead there is
+higher than elsewhere. First move, cheap and mechanical, is on main:
+TG_GUI_PHOTO_REPLAY_ROWS is 16 on m68k as well (12 KB more of staging
+buffer). Next, measure again under AmiKit from the log's "pace replay
+budget" lines. If the tail survives that, the cost is not the call count
+and the investigation below is the real answer.
 
 
 Same PiStorm board, two operating systems, two very different speeds: photo

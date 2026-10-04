@@ -3609,12 +3609,10 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
    call. One row per call cost 220-820 ms per slice on a 68k with P96/AfA (the
    library overhead dwarfed the pixel work, field report 2026-08-07): the
    photo crawled and the pacer, seeing slow slices, shrank its budget on top.
-   A block of rows turns that into one call per block. */
-#if defined(__m68k__)
-#define TG_GUI_PHOTO_REPLAY_ROWS 8
-#else
+   A block of rows turns that into one call per block. The 68k started with
+   blocks of 8, and AfA_OS still showed a tail of slow slices (180-620 ms),
+   so it stages 16 like the other lines: 24 KB of buffer there. */
 #define TG_GUI_PHOTO_REPLAY_ROWS 16
-#endif
 
 /* Replay canonical RGB888 through cybergraphics in blocks of scaled rows.
    Horizontal/vertical nearest scaling is CPU-cheap and never touches JPEG or

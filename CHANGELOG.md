@@ -177,6 +177,11 @@ lanes unless noted.
   stored, a fixed and a dynamic deflate block, and fails when the branch
   of the inflater for any of them is broken; it passes, with the others,
   on the emulated 68020.
+- On the 68k a photo reaches a truecolor screen 16 rows per cybergraphics
+  call instead of 8, as on the other lines. Under AfA_OS each call costs
+  more than elsewhere, and with blocks of 8 a tail of slow slices was left
+  (180-620 ms each, against 0-20 on a Vampire). The staging buffer grows
+  by 12 KB.
 
 ### Fixed
 - The drawer icon of the AmigaOS 3.x packages looked like a cloud of stray
