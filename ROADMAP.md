@@ -158,9 +158,11 @@ Features are therefore grouped by the work they share.
   decrypt instead of 128, and 39 ms to encrypt instead of 183. Larger
   socket buffers: a MorphOS upload blocks 79 ms per part inside the
   send. On the Vampire, Roadshow's 32 KB each way made no difference
-  against 64 and 128 KB (the CPU is the limit there), so the switch
-  stays off until MorphOS, with its faster processor, is measured with
-  it. The window now opens before the key exchange with the datacenter
+  against 64 and 128 KB (the CPU is the limit there), and MorphOS,
+  measured on real hardware with the windows in place, says the same:
+  its 32 KB out and 64 KB in against 128 KB each way gave 1.35-1.39
+  and 1.27-1.59 MB/s down, 588 and 531 KB/s up, nothing beyond the
+  network's swings. The switch stays off. The window now opens before the key exchange with the datacenter
   that serves avatars, which was 74 of the 89 seconds a first start took
   on a 14 MHz 68030: 14 s to the window under WinUAE, now on main. Timing
   that start also showed the exchange itself failing there, the server

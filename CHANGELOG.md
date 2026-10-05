@@ -62,7 +62,10 @@ lanes unless noted.
   comes in 1.8 s instead of 8.6 with a window of 4, and in 0.85 s with 8.
   On a Vampire, from the text client, it doubles: 97 KB/s before, 191 with
   the 68k's window of 4, and the wait for Telegram fell from 147 ms of each
-  32 KB part to 1.
+  32 KB part to 1. On a real MorphOS machine, from the text client, a 4 MB
+  file comes in at 1.35 to 1.6 MB/s: a 64 KB part takes about 37 ms, nearly
+  all of it reading the stream, where in September 88 ms of a part went on
+  waiting for Telegram.
   Two things changed underneath. The wait for a reply accepts any of the
   requests out, and lets through the acknowledgements the server sends on
   their own when several are pending. And the client's message ids no
@@ -84,9 +87,14 @@ lanes unless noted.
   client, 2 MB go up at 213 KB/s instead of 112. Every test file was
   downloaded back and compared with the original. There the time of a
   32 KB part is now the CPU's: 67 ms of encryption and about as much for
-  the TCP/IP stack, which runs on the same processor. Socket buffers of 64
-  and 128 KB, in place of the 32 KB Roadshow gives, changed nothing that
-  stood out from the network's own swings, so the stack keeps its sizes.
+  the TCP/IP stack, which runs on the same processor. On MorphOS, from
+  the text client, 4 MB go up at 530 to 590 KB/s, against 210 KB/s with
+  one part at a time in September, and the file downloaded back matched
+  the original. Socket
+  buffers of 64 and 128 KB, in place of the 32 KB Roadshow gives, changed
+  nothing that stood out from the network's own swings, and 128 KB on
+  MorphOS (32 KB out and 64 KB in by default) did no better, so the stacks
+  keep their sizes.
   A self-test checks acknowledgements taken out of order and a rewind to
   the right place in the file; each check fails when the code it covers is
   broken.
