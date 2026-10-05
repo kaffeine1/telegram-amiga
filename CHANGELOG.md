@@ -186,10 +186,11 @@ lanes unless noted.
   of the inflater for any of them is broken; it passes, with the others,
   on the emulated 68020.
 - On the 68k a photo reaches a truecolor screen 16 rows per cybergraphics
-  call instead of 8, as on the other lines. Under AfA_OS each call costs
-  more than elsewhere, and with blocks of 8 a tail of slow slices was left
-  (180-620 ms each, against 0-20 on a Vampire). The staging buffer grows
-  by 12 KB.
+  call instead of 8, as on the other lines, halving the calls for 12 KB
+  more of staging buffer. It was meant for a tail of slow slices under
+  AfA_OS; measured there, the tail stayed, and the log showed its real
+  causes (the viewer's cache write and the cost of a full repaint under
+  AfA), now in the roadmap.
 
 ### Fixed
 - The drawer icon of the AmigaOS 3.x packages looked like a cloud of stray

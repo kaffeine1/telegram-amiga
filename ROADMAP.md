@@ -1181,9 +1181,24 @@ the per-slice cost from 220-820 ms down to 0-20 ms on a Vampire. AmiKit still
 showed a tail of slow slices (180-620 ms), so the per-call overhead there is
 higher than elsewhere. First move, cheap and mechanical, is on main:
 TG_GUI_PHOTO_REPLAY_ROWS is 16 on m68k as well (12 KB more of staging
-buffer). Next, measure again under AmiKit from the log's "pace replay
-budget" lines. If the tail survives that, the cost is not the call count
-and the investigation below is the real answer.
+buffer).
+
+Measured on the PiStorm under AmiKit (October 2026): the tail survives, so
+the cost is not the call count. The log says where it is instead:
+
+- The slow slices (280, 320 and 600 ms in one run) all fall on the photo
+  viewer's last quality pass, the turn that also writes the photo's cache
+  file to disk. The pacer books that write as replay and halves the replay
+  budget for a while. Moving the write to a turn of its own, as the cache
+  read already has, would keep the two apart.
+- A full repaint of the window costs about 300 ms there (15 ticks at
+  50 Hz), with photos on screen or without them: 17 repaints with photo
+  rows and 7 without, the same median. The photo rows are a small part of
+  it; the text, drawn through the AfA bitmap-text compatibility path, is
+  the rest. And every quality pass of an inline photo repaints the whole
+  window today. Repainting only the photo's rectangle on a pass, and
+  making the text path cheaper under AfA, are the two moves that would
+  actually be felt.
 
 
 Same PiStorm board, two operating systems, two very different speeds: photo
