@@ -293,6 +293,16 @@ lanes unless noted.
   the way out the client now gives the handle back the line buffering
   dos.library opens a console with. Seen on the i386 VM after the window
   closed, and gone with the fix; the same Shell came back to colour.
+- Photos keep their colours after the window comes back from an iconify
+  or from a switch to its own screen and back. Each time the window
+  closes it gives back cybergraphics.library, and a flag meant to try
+  opening it once per window stayed set, so the window that opened next
+  never tried again and drew every photo through palette pens, on a
+  truecolor screen too. A debug log on MorphOS showed it: the first
+  window replayed photos in RGB, the window after the switch used pens
+  on the same 32-bit screen. The flag now goes back with the
+  library. Present since true-colour photos came to AmigaOS 3.x RTG in
+  0.0.9.
 
 ## [0.0.94] - 2026-09-25
 

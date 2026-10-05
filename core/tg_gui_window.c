@@ -288,6 +288,12 @@ static void tg_gui_amiga_close_cybergraphics(void)
         CloseLibrary(CyberGfxBase);
         CyberGfxBase = 0;
     }
+    /* One try per window, not per run: every exit closes the library,
+       the iconify and the own-screen switch too, and the window they open
+       again must try once more. With the flag left set it never did, and
+       drew every photo through palette pens on a truecolor screen (field
+       report, MorphOS after the own-screen switch). */
+    tg_gui_cgx_open_attempted = 0;
 }
 #else
 static int tg_gui_amiga_open_cybergraphics(void)
