@@ -5,7 +5,7 @@ SPDX-License-Identifier: MIT
 
 # Unofficial Telegram Amiga
 
-A from-scratch, native **MTProto Telegram client** for Amiga-family systems —
+A from-scratch, native **MTProto Telegram client** for Amiga-family systems:
 log in with a normal Telegram account, list your chats and exchange messages.
 **Zero external dependencies**: no MUI, no ixemul, no AmiSSL. All the
 cryptography (RSA, Diffie-Hellman, SRP/2FA, AES, SHA) is built in.
@@ -15,7 +15,7 @@ Telegram ecosystem, but it is not made by Telegram.
 
 Two front-ends share one engine:
 
-- **TelegramAmiga** — a native Intuition/GadTools GUI: chat list with real
+- **TelegramAmiga** is a native Intuition/GadTools GUI: chat list with real
   avatars and persistent unread badges, conversation view, scrollbars (wheel,
   knob drag, arrow keys, pixel scroll), scroll-to-top history paging,
   click-to-compose with multi-line wrap, online chat search, drag-and-drop
@@ -23,7 +23,7 @@ Two front-ends share one engine:
   file sharing and a pinned Saved Messages chat. A double-click starts it with
   no flashing console and no launcher script. Drawn by the client itself on a
   RastPort.
-- **TelegramAmiga-TUI** — the text/console client, at home on a 68030 with a
+- **TelegramAmiga-TUI** is the text/console client, at home on a 68030 with a
   serial console: same engine, launched from the second icon.
 
 ![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
@@ -51,14 +51,14 @@ several requests in flight to a faster AES. Work there is unreleased and
 remains subject to real-system validation on all six platforms; see
 [ROADMAP.md](ROADMAP.md).
 
-License: MIT — a non-commercial community project, a gift to the Amiga
+License: MIT. A non-commercial community project, a gift to the Amiga
 community. Development diary:
 <https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/>
 
 ## Platforms & releases
 
 Each package bundles both clients, icons, a public `telegram-api.txt` and
-per-architecture IT/EN manuals — and **no private files**.
+per-architecture IT/EN manuals, and **no private files**.
 
 | Platform | CPU | Release |
 |---|---|---|
@@ -69,8 +69,8 @@ per-architecture IT/EN manuals — and **no private files**.
 | AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.94) |
 | AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.94](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.94) |
 
-All releases: <https://github.com/kaffeine1/telegram-amiga/releases> —
-full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
+All releases: <https://github.com/kaffeine1/telegram-amiga/releases>.
+Full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
 as `CHANGELOG.txt`).
 
 AmigaOS 3.x is a native clib2 build (no ixemul, no AmiSSL) and needs a 68020 or
@@ -82,9 +82,9 @@ build. AROS aarch64 (ABIv1) runs on the native AROS image for the Raspberry Pi
 ## Quick start
 
 1. Download your platform's package and copy the drawer to a **writable**
-   volume (e.g. `Work:`) — it writes its files next to itself, so not the CD.
-2. Double-click **TelegramAmiga** — it opens the GUI directly, with no flashing
-   console window — or **TelegramAmiga-TUI** for the console client.
+   volume (e.g. `Work:`): it writes its files next to itself, so not the CD.
+2. Double-click **TelegramAmiga**, which opens the GUI directly with no
+   flashing console window, or **TelegramAmiga-TUI** for the console client.
 3. First run signs you in: phone number → login code → optional 2FA password. A
    `telegram-auth.bin` session is saved; later runs go straight to your chats.
 
@@ -102,7 +102,7 @@ Full IT/EN instructions are inside each package.
 
 - MTProto auth-key creation, phone/code login wizard, 2FA, saved session.
 - Chat list (users, basic groups, channels/supergroups): the full list is
-  fetched once on first login, then your curation wins — drag-reorder, remove
+  fetched once on first login, then your curation wins: drag-reorder, remove
   (menu / Del / right-Amiga+R), online search to add, persistent unread badges.
 - Reading history with scroll-to-top paging (load older on demand) and sending
   long, multi-line text where the account has permission.
@@ -141,18 +141,18 @@ telegram-auth.bin   phone-code-hash.txt   telegram-password.txt
 telegram-peers.txt  telegram-seed.bin     telegram-token.txt
 ```
 
-`telegram-auth.bin` is your logged-in Telegram session — anyone who gets it can
-access your account; if it leaks, treat the account as compromised.
+`telegram-auth.bin` is your logged-in Telegram session: anyone who gets it can
+access your account. If it leaks, treat the account as compromised.
 
 On targets without a system CSPRNG/TLS, the crypto secrets come from an in-tree
 DRBG seeded from local entropy (timer jitter, keystrokes, a persisted
 `telegram-seed.bin`). A first login in a fresh emulator/VM is the weakest
-moment — prefer real hardware, or an AmiSSL/OpenSSL target, if your threat model
+moment: prefer real hardware, or an AmiSSL/OpenSSL target, if your threat model
 needs it.
 
 ## Build (developers)
 
-Six lanes — see the `Makefile.*` files and `docs/`: AmigaOS 3.x (m68k clib2),
+Six lanes (see the `Makefile.*` files and `docs/`): AmigaOS 3.x (m68k clib2),
 AmigaOS 4 (PPC), MorphOS (PPC), AROS i386, AROS x86_64, AROS aarch64 (Raspberry
 Pi, built on a Linux host with the AROS crosstools). Host smoke test:
 
@@ -175,5 +175,5 @@ implementation, packaging, docs, test prep). Local diaries, transcripts and
 secrets stay out of Git.
 
 Useful bug reports: platform + version, real/emulated, CPU, TCP/IP stack, and
-what failed — secrets removed. Never post tokens, auth files, phone numbers,
+what failed, with secrets removed. Never post tokens, auth files, phone numbers,
 login codes, 2FA passwords or private message text.
