@@ -12,6 +12,16 @@
 #include "tg_console_ui.h"
 #include "tg_platform.h"
 
+#if defined(TG_DIAG_TRACE)
+/* Diagnostic builds trace the window-size handshake: it is the first time
+   the chat waits on the console, right after the last marker a 68000 field
+   report reached. */
+void tg_gui_log(const char *msg);
+#define TG_TUI_DIAG(text) tg_gui_log(text)
+#else
+#define TG_TUI_DIAG(text) ((void)0)
+#endif
+
 static int tg_tui_active = 0;
 static int tg_tui_enabled = 1;
 static int tg_tui_resize_flag = 0;
@@ -159,7 +169,9 @@ int tg_console_tui_query_size(FILE *stream,
        console.device descendant (OS3/OS4/MorphOS, AROS i386). */
     fputs(TG_UI_CSI "0 q", stream);
     fflush(stream);
+    TG_TUI_DIAG("diag: tui size query sent (window status request)");
     if (tg_tui_read_csi_report('r', values, &value_count)) {
+        TG_TUI_DIAG("diag: tui window status answered");
         if (value_count < 4UL || values[2] < TG_TUI_MIN_ROWS ||
             values[3] < TG_TUI_MIN_COLUMNS || values[2] > 300UL ||
             values[3] > 1000UL) {
@@ -175,9 +187,11 @@ int tg_console_tui_query_size(FILE *stream,
        window edge) and ask for its position -- the CSI <row>;<col> R report
        IS the window size. No cursor restore needed: the caller either paints
        the full-screen chrome right away or the linear flow scrolls on. */
+    TG_TUI_DIAG("diag: tui window status unanswered, trying the DSR");
     fputs(TG_UI_CSI "9999;9999H" TG_UI_CSI "6n", stream);
     fflush(stream);
     if (tg_tui_read_csi_report('R', values, &value_count)) {
+        TG_TUI_DIAG("diag: tui DSR answered");
         if (value_count < 2UL || values[0] < TG_TUI_MIN_ROWS ||
             values[1] < TG_TUI_MIN_COLUMNS || values[0] > 300UL ||
             values[1] > 1000UL) {
@@ -187,6 +201,7 @@ int tg_console_tui_query_size(FILE *stream,
         *columns = (unsigned int)values[1];
         return 1;
     }
+    TG_TUI_DIAG("diag: tui size: no answer, linear layout");
     return 0;
 }
 

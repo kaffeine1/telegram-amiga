@@ -42,6 +42,7 @@
 #include <dos/dostags.h> /* SYS_Input/SYS_Output for the URL opener */
 #include <proto/dos.h>
 #include <proto/exec.h>
+#include <exec/memory.h>
 #include <dos/dos.h>
 #include <proto/timer.h>
 #include <devices/timer.h>
@@ -240,7 +241,32 @@ void tg_platform_log(const char *level, const char *message)
 
 void tg_platform_debug(const char *message)
 {
+#if defined(TG_DIAG_TRACE) && defined(__amigaos3__)
+    /* Diagnostic builds: show every trace line in the console window too,
+       with the free memory at that moment. The log file cannot say where a
+       machine froze: the last lines it was given may still sit in the file
+       system's buffers when it stops. A line in the window is on the screen
+       at once, so a photo shows the last step really reached. Only the
+       "diag:" markers: the network lines would flood a 7 MHz console. Before
+       the Workbench console exists Output() is zero and nothing is written. */
+    BPTR out = Output();
+
+    if (message != 0 && strncmp(message, "diag:", 5) == 0 && out != 0 &&
+        IsInteractive(out)) {
+        char tail[96];
+
+        sprintf(tail, "  {fast %lu/%lu chip %lu}\n",
+                (unsigned long)AvailMem(MEMF_FAST),
+                (unsigned long)AvailMem(MEMF_FAST | MEMF_LARGEST),
+                (unsigned long)AvailMem(MEMF_CHIP));
+        (void)Write(out, (APTR)"[", 1);
+        (void)Write(out, (APTR)message, (LONG)strlen(message));
+        (void)Write(out, (APTR)"]", 1);
+        (void)Write(out, (APTR)tail, (LONG)strlen(tail));
+    }
+#else
     (void)message; /* no dedicated kernel-debug channel used here */
+#endif
 }
 
 void tg_platform_sleep_seconds(unsigned long seconds)
