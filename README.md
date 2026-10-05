@@ -88,11 +88,13 @@ build. AROS aarch64 (ABIv1) runs on the native AROS image for the Raspberry Pi
 3. First run signs you in: phone number → login code → optional 2FA password. A
    `telegram-auth.bin` session is saved; later runs go straight to your chats.
 
-> **2FA on a slow 68k:** Telegram's two-step key derivation is PBKDF2 (100000×
-> SHA-512) — about 40 minutes on a stock 14 MHz 68020, long enough that Telegram
-> drops the login first. On such machines disable Two-Step Verification (Telegram
-> app → Settings → Privacy and Security) before signing in. The client warns at
-> the password prompt rather than blocking, so faster/accelerated 68k can still try.
+> **2FA on a slow 68k:** checking a Two-Step Verification password takes a
+> PBKDF2 key derivation (100000 rounds of SHA-512): under a minute on a Vampire,
+> about half an hour on a stock 14 MHz 68020. Up to 0.0.94 Telegram dropped the
+> login before a slow machine was done. From 0.0.95 the client does that work
+> with the connection closed, then connects again for a fresh challenge and
+> finishes: a real login went through on a stock A1200 in 35 minutes. Start it
+> and let the machine work; there is no need to turn Two-Step Verification off.
 
 Full IT/EN instructions are inside each package.
 
