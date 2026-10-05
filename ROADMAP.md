@@ -132,7 +132,7 @@ Features are therefore grouped by the work they share.
   so every file the client saves is now replaced instead (chat list,
   random seed, window geometry), and the GUI model moved off the stack
   on 64-bit builds. A link Telegram already knew gets its preview on the
-  message just sent, and the icons are Carlo Spadoni's. The first
+  message just sent, and the icons are ours, optimised by Carlo Spadoni. The first
   measured speed lever came in early, after a Vampire showed the window
   flashing during a download: a transfer repaints the status bar alone.
   The rest of the speed work moved to 0.0.95: the Raspberry Pi cycle

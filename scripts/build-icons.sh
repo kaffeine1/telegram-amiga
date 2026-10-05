@@ -1,6 +1,6 @@
 #!/bin/sh
-# Regenerates the launcher icons of every lane from the artwork in
-# assets/icons/carlo-spadoni/. The result is committed, so this only runs
+# Regenerates the launcher icons of every lane from Carlo Spadoni's versions
+# of our icon in assets/icons/carlo-spadoni/. The result is committed, so this only runs
 # when the artwork or the icon scripts change. The OS3 step needs Pillow:
 # PYTHON=/path/to/python-with-pillow scripts/build-icons.sh
 #

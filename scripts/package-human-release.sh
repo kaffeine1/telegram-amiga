@@ -73,7 +73,7 @@ rm -rf "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP"
 if [ "$AMINET" = "1" ]; then rm -rf "$AMINET_ROOT"; mkdir -p "$AMINET_ROOT"; fi
 
 # Which assets/icons/<lane>/ set a platform ships (scripts/build-icons.sh
-# regenerates them from the artwork by Carlo Spadoni in assets/icons/carlo-spadoni).
+# regenerates them from Carlo Spadoni's versions of our icon in assets/icons/carlo-spadoni).
 icon_lane() {
     case "$1" in
     "AmigaOS 3.x (68000)") echo amigaos3-68000 ;;
@@ -495,8 +495,8 @@ Full instructions:
 
 NEVER share telegram-auth.bin -- once you log in, it holds your Telegram session.
 
-The icons are by Carlo Spadoni, who drew them for Telegram Amiga and let me
-ship them with it.
+The icon is our own design. Carlo Spadoni optimised it for each system, put
+it on a standard drawer for the drawer icon, and let me ship his versions.
 
 Version: $VERSION   Build: $COMMIT_ID
 Author: Michele Dipace <michele.dipace@kaffeine.net>   License: MIT
@@ -688,8 +688,9 @@ credentials. Advanced users may replace it with their own (two lines: api_id
 then api_hash).
 
 Contributions: Javier de las Rivas (javierdlr), and Bohun (bohunamiga), who
-took the build to AROS on ARM. The icons are by Carlo Spadoni, who drew them
-for Telegram Amiga and let me ship them with it.
+took the build to AROS on ARM. The icon is our own design: Carlo Spadoni
+optimised it for each system, put it on a standard drawer for the drawer
+icon, and let me ship his versions.
 Thanks to the testers around the world who run this on real hardware and
 send back what they find -- this client is what it is because of them.
 
@@ -892,8 +893,9 @@ Avanzato: il data/telegram-api.txt incluso contiene credenziali API pubbliche. G
 utenti avanzati possono sostituirlo col proprio (due righe: api_id poi api_hash).
 
 Contributi: Javier de las Rivas (javierdlr) e Bohun (bohunamiga), che ha
-portato la build su AROS ARM. Le icone sono di Carlo Spadoni, che le ha
-disegnate per Telegram Amiga e mi ha permesso di distribuirle con il programma.
+portato la build su AROS ARM. Il disegno dell'icona e' nostro: Carlo Spadoni
+l'ha ottimizzata per ogni sistema, l'ha messa su un cassetto standard per
+l'icona del cassetto e mi ha permesso di distribuire le sue versioni.
 Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
 raccontano quello che trovano: questo client e' com'e' grazie a loro.
 
@@ -1062,8 +1064,9 @@ Bug reports and wishes are very welcome -- testers on real hardware
 (A1200s, A4000s, Pegasos, Sam, FPGA machines) are what moves this
 project forward.
 
-The icons are by Carlo Spadoni, who drew them for Telegram Amiga and let
-me ship them with it.
+The icon is our own design. Carlo Spadoni optimised it for each system,
+put it on a standard drawer for the drawer icon, and let me ship his
+versions.
 
   Source + issues:
   $REPO_URL

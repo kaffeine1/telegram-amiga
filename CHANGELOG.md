@@ -196,8 +196,8 @@ lanes unless noted.
 - The drawer icon of the AmigaOS 3.x packages looked like a cloud of stray
   pixels where the Workbench draws the four-colour image an icon carries
   besides its colour one, as AmigaOS 3.0 and 3.1 do; a stock A1200 showed
-  it so. That image was made from Carlo Spadoni's shaded cabinet by error
-  diffusion in the four Workbench pens, which suits the flat program icon
+  it so. That image was made from the shaded drawer of the colour icon by
+  error diffusion in the four Workbench pens, which suits the flat program icon
   but turns soft gradients into scattered dots. It is now drawn with a
   black outline, brightness levels and a regular 2x2 texture, and no
   longer keeps the faint dots of the selected state's glow. The colour
@@ -324,13 +324,14 @@ lanes unless noted.
   client's own build carries, after a full round on a Raspberry Pi 400:
   login, chats, history, photos, documents and a download, with the chat
   list, the seed and the window geometry surviving the card's FAT handler.
-- Icons by Carlo Spadoni, one set per platform, plus an icon for the drawer
-  itself, which had none. AmigaOS 4, MorphOS and AROS get his files as he
-  drew them, in the format each system reads natively (an ARGB colour icon,
-  PNG icons with the launcher fields written into them). AmigaOS 3.x cannot
-  read PNG icons, so its set becomes AmigaOS 3.5 colour icons of 256
-  colours: the drawer is the cabinet he drew for 3.x, the program his 64
-  pixel drawing shrunk to the size of the 3.x set, which keeps its rim clean
+- Our icon, optimised by Carlo Spadoni, one set per platform, plus an icon
+  for the drawer itself, which had none: a standard drawer with our design
+  on it. AmigaOS 4, MorphOS and AROS get his files as he made them, in the
+  format each system reads natively (an ARGB colour icon, PNG icons with
+  the launcher fields written into them). AmigaOS 3.x cannot read PNG
+  icons, so its set becomes AmigaOS 3.5 colour icons of 256 colours: the
+  drawer is his 3.x drawer, the program his 64 pixel version shrunk to the
+  size of the 3.x set, which keeps its rim clean
   on a real Workbench. The antialiased rim is blended over the Workbench
   grey and the drawing is also carried with its alpha, which the
   icon.library AmiKit ships draws over any backdrop; a planar image in the

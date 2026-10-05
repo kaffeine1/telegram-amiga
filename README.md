@@ -31,8 +31,8 @@ Two front-ends share one engine:
 Status: **alpha 0.0.94** - everyday direct-message and group chat works on all
 six platforms below. 0.0.94 adds the sixth: AROS on ARM64, for the Raspberry
 Pi 4, 400 and 5 running the native AROS image, built from the same commit as
-the other five and checked on a Raspberry Pi 400. Every platform gets icons by
-Carlo Spadoni, with an icon for the drawer too. The client is now safe on FAT
+the other five and checked on a Raspberry Pi 400. Every platform gets our icon,
+optimised by Carlo Spadoni, with an icon for the drawer too. The client is now safe on FAT
 volumes: every file it saves is replaced rather than rewritten in place, so
 the saved login, the chat list and the window geometry survive the AROS FAT
 handler. A download no longer makes the window flash, because the progress
@@ -166,9 +166,10 @@ validation; it is no longer the product direction.
 
 ## Notes
 
-The icons are by Carlo Spadoni, who drew them for Telegram Amiga and let me
-ship them with it. The artwork as delivered is in `assets/icons/carlo-spadoni/`;
-`scripts/build-icons.sh` turns it into one launcher set per platform.
+The icon is our own design. Carlo Spadoni optimised it for each system, put
+it on a standard drawer for the drawer icon, and let me ship his versions with
+the program. His files as delivered are in `assets/icons/carlo-spadoni/`;
+`scripts/build-icons.sh` turns them into one launcher set per platform.
 
 Developed with the help of LLM agents used as engineering tools (analysis,
 implementation, packaging, docs, test prep). Local diaries, transcripts and

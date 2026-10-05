@@ -1,5 +1,6 @@
-Icon artwork by Carlo Spadoni, drawn for Telegram Amiga (September 2026) and
-shipped with his consent. Kept here exactly as delivered, one drawer per
+Carlo Spadoni's versions of the Telegram Amiga icon, which is our own design:
+he optimised it for each system and put it on a standard drawer for the
+drawer icon (September 2026). Shipped with his consent. Kept here exactly as delivered, one drawer per
 platform, "-1"/"1" the program icon and "-2"/"2" the drawer icon:
 
   OS4/    classic .info with an ARGB colour icon (FORM ICON), 64x64,
