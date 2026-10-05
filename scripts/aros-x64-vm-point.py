@@ -176,7 +176,8 @@ class Pointer(object):
 
     US_SHIFTED = {":": "shift-;", "@": "shift-2", ">": "shift-.", "<": "shift-,",
                   "_": "shift--", "?": "shift-/", "!": "shift-1", "(": "shift-9",
-                  ")": "shift-0", "+": "shift-=", '"': "shift-'"}
+                  ")": "shift-0", "+": "shift-=", '"': "shift-'",
+                  "#": "shift-3", "*": "shift-8"}
 
     def type(self, text, dt=0.07):
         """Type through the guest's layout (TG_KEYMAP: it or us)."""
