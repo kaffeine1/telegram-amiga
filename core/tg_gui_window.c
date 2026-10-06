@@ -6731,6 +6731,12 @@ static int tg_gui_photo_pick_destination(struct Window *win,
                                       source) != 0) {
         return -2;
     }
+    /* The requester opens in the download drawer, which a document download
+       creates but nothing else does: before the first download a save there
+       failed with "Could not save that photo". Make it here the same way,
+       icon included (EEXIST is the norm). */
+    (void)mkdir(tg_gui_session_download_dir(), 0777);
+    tg_platform_ensure_drawer_icon(tg_gui_session_download_dir());
     AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38L);
     if (AslBase == 0) {
         return -1;

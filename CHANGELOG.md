@@ -312,6 +312,14 @@ lanes unless noted.
   on the same 32-bit screen. The flag now goes back with the
   library. Present since true-colour photos came to AmigaOS 3.x RTG in
   0.0.9.
+- Save photo as... works before anything has been downloaded. Its
+  requester opens in the download drawer, and only a file download made
+  that drawer, so on a fresh install the first save failed with "Could not
+  save that photo". The client now makes the drawer, with its icon, before
+  the requester opens, as a download does. Found under MorphOS in QEMU
+  while saving the original of a 2560x1920 test photo; with the drawer in
+  place the saved file was the 2560x1920 JPEG Telegram keeps. Present
+  since Save photo as... came in August.
 
 ## [0.0.94] - 2026-09-25
 
