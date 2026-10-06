@@ -239,6 +239,21 @@ void tg_platform_log(const char *level, const char *message)
     printf("[amigaos3:%s] %s\n", level, message);
 }
 
+#if defined(TG_DIAG_TRACE) && defined(__amigaos3__)
+/* The free memory at this moment, for diagnostic trace lines: fast total,
+   the largest fast block and chip total. */
+void tg_platform_diag_memory(char *out, unsigned long out_size)
+{
+    if (out == 0 || out_size < 64UL) {
+        return;
+    }
+    sprintf(out, "  {fast %lu/%lu chip %lu}",
+            (unsigned long)AvailMem(MEMF_FAST),
+            (unsigned long)AvailMem(MEMF_FAST | MEMF_LARGEST),
+            (unsigned long)AvailMem(MEMF_CHIP));
+}
+#endif
+
 void tg_platform_debug(const char *message)
 {
 #if defined(TG_DIAG_TRACE) && defined(__amigaos3__)
@@ -255,10 +270,8 @@ void tg_platform_debug(const char *message)
         IsInteractive(out)) {
         char tail[96];
 
-        sprintf(tail, "  {fast %lu/%lu chip %lu}\n",
-                (unsigned long)AvailMem(MEMF_FAST),
-                (unsigned long)AvailMem(MEMF_FAST | MEMF_LARGEST),
-                (unsigned long)AvailMem(MEMF_CHIP));
+        tg_platform_diag_memory(tail, sizeof(tail) - 1UL);
+        strcat(tail, "\n");
         (void)Write(out, (APTR)"[", 1);
         (void)Write(out, (APTR)message, (LONG)strlen(message));
         (void)Write(out, (APTR)"]", 1);

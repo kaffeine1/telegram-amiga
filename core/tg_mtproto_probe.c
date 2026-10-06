@@ -16387,6 +16387,10 @@ static struct {
    Work:TGh, which survives a MorphOS reboot, not RAM:). Off by default. */
 static int tg_gui_log_on = 0;
 
+#if defined(TG_DIAG_TRACE) && defined(__amigaos3__)
+void tg_platform_diag_memory(char *out, unsigned long out_size);
+#endif
+
 void tg_gui_log_enable(void)
 {
     tg_gui_log_on = 1;
@@ -16451,6 +16455,15 @@ void tg_gui_log(const char *msg)
         fprintf(f, "[%05lu] ", t); /* gaps between lines = where time went */
 #endif
         fputs(msg, f);
+#if defined(TG_DIAG_TRACE) && defined(__amigaos3__)
+        {
+            /* the free memory at this step, as the console echo shows it */
+            char mem[64];
+
+            tg_platform_diag_memory(mem, sizeof(mem));
+            fputs(mem, f);
+        }
+#endif
         fputc('\n', f);
         fflush(f);
         fclose(f);
