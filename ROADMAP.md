@@ -1006,12 +1006,13 @@ box from the font's real ascent, and the circles are boxes. Two call
 sites change, no new metric and nothing platform-specific; the
 horizontal centring, which measures the text, is already right.
 
-## Planned: avatars in full colour, with a smooth edge
+## Planned: avatars and emoji in full colour, with a smooth edge
 
 Field note: the round pictures in the chat list and in the chat header
 look poster-like and their edge is jagged, on MorphOS, AmigaOS 4 and
-AROS as much as on a 68k. Photos on the same screens are already drawn
-in full 24-bit colour; avatars never took that path.
+AROS as much as on a 68k, and on a 32-colour AGA Workbench the emoji
+come out brown. Photos on the same screens are already drawn in full
+24-bit colour; avatars and emoji never took that path.
 
 Three things cost them their quality today. Every avatar goes through a
 pool of shared palette pens: on a truecolor screen at most 160 colours
@@ -1033,17 +1034,31 @@ pixels are kept per avatar, so a repaint copies them and decodes
 nothing.
 
 On a 68k without RTG the result depends on the screen the client
-opened, in steps. An AGA screen of 256 colours gets a larger pen pool
-with ordered dithering, as photos already have, and an edge blended in
-pen space; a screen of 16 colours or fewer keeps today's lean grid, or
-the initials when the pens run out. The step is chosen from the screen
-actually opened, never from the machine, so a 68k on RTG gets the full
-path and an AGA screen on a fast accelerator gets the AGA one.
+opened, in steps chosen from that screen, never from the machine, so a
+68k on RTG gets the full path and an AGA screen on a fast accelerator
+gets the AGA one:
 
-It touches the avatar cache and the two places that draw avatars, the
-chat list and the header, and nothing in the network path. It fits the
-0.0.9x line in a slot after the 0.0.95 speed release, the
-next-generation systems first and the 68k steps after them.
+- 256 colours: a larger pen pool with ordered dithering, as photos
+  already have, and the edge blended in pen space.
+- 32 colours, the most common Workbench on AGA and the step to get
+  right. The palette there is the Workbench's and few pens, if any, are
+  free, so asking the system for each colour returns the nearest one it
+  already has: that is where a yellow face turns brown, for the emoji
+  and the avatars alike, since both go through the same pens. The
+  client reads the colours the screen really has, claims the few free
+  pens for the shades that matter most (skin, yellow, red, blue,
+  green), and mixes two pens with an ordered dither where no single one
+  is close, choosing by hue before brightness, so that yellow becomes a
+  dithered yellow rather than a solid brown.
+- 16 colours or fewer: today's lean grid, or the initials when the pens
+  run out; emoji fall back to their text emoticons, as on a screen where
+  they are turned off.
+
+It touches the avatar cache, the two places that draw avatars (the
+chat list and the header), the pens of the emoji sheet, and nothing in
+the network path. It fits the 0.0.9x line in a slot after the 0.0.95
+speed release, the next-generation systems first and the 68k steps
+after them, the 32-colour one first among those.
 
 ## Planned: say where Telegram sent the login code (0.0.92)
 
