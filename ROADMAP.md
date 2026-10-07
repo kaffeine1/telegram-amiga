@@ -139,44 +139,26 @@ Features are therefore grouped by the work they share.
   took the room, and a measured speed release is worth more than a
   rushed one. Validated on real AmigaOS 3 and MorphOS, on a Raspberry Pi
   400 and in the OS4, AROS i386 and AROS x86_64 VMs.
-- **0.0.95, speed and open defects.** The levers the measurements of
-  2026-09-23 found, each one measured again with the same instrumented
-  build once it lands. The first of them, repainting only the status
-  line during a transfer, already shipped in 0.0.94. Keep several
-  requests in flight in both directions, so no part waits for Telegram
-  to answer the one before it: both directions do it now on main
-  (downloads: a 4 MB file in 1.8 s instead of 8.6 on a desktop, 97 KB/s
-  to 191 on a Vampire; uploads: 776 KB/s to 4.75 MB/s on a desktop, 112
-  to 213 KB/s on a Vampire). On the Vampire the time of a part now goes
-  to the CPU: decryption takes 36 ms of AES and 26 of the SHA-256 that
-  checks every message, after a word-at-a-time SHA-256 that only gained
-  4 ms (the compiler had done well with the old one), then the socket
-  reads; an upload part spends 67 ms in encryption and about as much in
-  the TCP/IP stack on the same processor.
-  A word-at-a-time AES with 32-bit tables in place of the byte-at-a-time
-  reference code, now on main: on a Vampire a 32 KB part takes 34 ms to
-  decrypt instead of 128, and 39 ms to encrypt instead of 183. Larger
-  socket buffers: a MorphOS upload blocks 79 ms per part inside the
-  send. On the Vampire, Roadshow's 32 KB each way made no difference
-  against 64 and 128 KB (the CPU is the limit there), and MorphOS,
-  measured on real hardware with the windows in place, says the same:
-  its 32 KB out and 64 KB in against 128 KB each way gave 1.35-1.39
-  and 1.27-1.59 MB/s down, 588 and 531 KB/s up, nothing beyond the
-  network's swings. The switch stays off. The window now opens before the key exchange with the datacenter
-  that serves avatars, which was 74 of the 89 seconds a first start took
-  on a 14 MHz 68030: 14 s to the window under WinUAE, now on main. Timing
-  that start also showed the exchange itself failing there, the server
-  closing while the client still split pq; the split in Montgomery form,
-  also on main, takes 6.5 s instead of minutes, and the exchange 41 s.
-  And -O2 for the 68k files of pure computation, one at a time, away
-  from the compiler bug that pinned the rest to -O0: the JPEG decoder,
-  the image scaling and inflate run at -O2 on main, two to three times
-  faster on a stock A1200 with byte-identical results (an avatar in
-  0.93 s instead of 2.39), while the TL reader gained 3% and stays at
-  -O0. Plus the open
-  defects: the two MorphOS popup glitches and photo speed under AfA_OS;
-  the full-size photo preference is on main. Two-step verification on a slow
-  68k is on main, and a login went through on a stock A1200.
+- **0.0.95, speed and open defects.** RELEASED 2026-10-07. The levers
+  the measurements of 2026-09-23 found, each measured again on the machine
+  it was meant for. Several requests in flight in both directions:
+  downloads went from 97 to 199 KB/s on a Vampire and reach 1.35 to 1.6
+  MB/s on a real MorphOS machine, uploads from 112 to 213 KB/s on the
+  Vampire and 530 to 590 KB/s on MorphOS. AES works a column at a time (a
+  32 KB part decrypts in 34 ms on a Vampire instead of 128) and SHA-256 on
+  words; larger socket buffers changed nothing on either machine, so the
+  stacks keep their sizes. A cold start shows its window before the key
+  exchange with the datacenter of the pictures (14 s instead of 89 on a
+  14 MHz 68030), pq is split in Montgomery form, and two-step verification
+  now completes on a stock A1200. The JPEG decoder, the image scaling and
+  inflate run at -O2 on the 68k. Of the open defects, the two MorphOS
+  popup glitches are gone on real hardware; photo speed under AfA_OS was
+  measured, and its causes, the viewer's cache write and the cost of a
+  full repaint, are in the section on it below. The full-size photo
+  setting and the text client's long messages and multi-line paste came
+  along. Validated on a Vampire, on real MorphOS and, for the text client
+  and two-step verification, on a stock A1200, and in the OS4, AROS i386,
+  AROS ARM and MorphOS VMs.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
