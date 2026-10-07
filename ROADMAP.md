@@ -933,6 +933,40 @@ Only the GUI gets it: the text client already prints the path it saved
 to. It fits the 0.0.9x line in a slot after the 0.0.95 speed release,
 next to the multiple selection, which works on the same popup.
 
+## Planned: write to a group member in private
+
+In a group, the desktop client takes you from someone's message to a
+private chat with them in one step. Here that means leaving the group,
+finding the person with /add or the search, and hoping the name is
+unique.
+
+The right-click popup on a group message from a user gets "Message
+<name>", and so does a right-click on the row with the sender's name
+above a run of their messages. If that chat is already in the list it
+opens; otherwise it joins the list and opens empty, ready for the first
+message. The entry is left out where there is nobody to write to: your
+own messages, posts a channel signs as itself, an anonymous admin
+writing as the group, and deleted accounts.
+
+The menu entry is the small part. Opening a chat with a user needs
+their access hash, and today the client keeps only the sender's id for
+each message. The history already brings the senders' user objects
+along, so the hash can be kept with them. In supergroups those objects
+are often "min" ones, whose hash cannot be used on its own; for those
+the client asks users.getUsers with inputUserFromMessage (the group,
+the message id and the user id) and receives the full user. The new
+chat is written to the chat list like any other, name included, so it
+is still there after a restart. Telegram can still refuse the first
+message, for instance when the person takes messages only from
+contacts and Premium users; the client then says why in words instead
+of showing a bare error code.
+
+The text client gets the same through a command that takes a message
+id, as /forward already does, since the engine part is shared. It fits
+the 0.0.9x line in a slot after the 0.0.95 speed release, next to the
+multiple selection and the downloaded-file entries, which work on the
+same popup.
+
 ## Planned: the send-photo dialog's preview, done right
 
 The dialog shipped with a pixel preview and lost it: three MorphOS
