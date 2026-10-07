@@ -1006,6 +1006,45 @@ box from the font's real ascent, and the circles are boxes. Two call
 sites change, no new metric and nothing platform-specific; the
 horizontal centring, which measures the text, is already right.
 
+## Planned: avatars in full colour, with a smooth edge
+
+Field note: the round pictures in the chat list and in the chat header
+look poster-like and their edge is jagged, on MorphOS, AmigaOS 4 and
+AROS as much as on a 68k. Photos on the same screens are already drawn
+in full 24-bit colour; avatars never took that path.
+
+Three things cost them their quality today. Every avatar goes through a
+pool of shared palette pens: on a truecolor screen at most 160 colours
+for all of them together, seeded with a 4x4x4 cube and a grey ramp, so
+a face is rounded to the nearest of a few dozen shades, with no dither.
+The disc is cut row by row, each pixel either inside or outside, with
+nothing in between. And the picture is decoded from Telegram's
+160-pixel JPEG at a quarter of its size, 40 pixels, before being scaled
+to the 32-pixel circle, which throws away detail the source had.
+
+On the next-generation systems (MorphOS, AmigaOS 4, AROS), and on any
+68k running a truecolor RTG screen, an avatar goes the way photos go.
+Its RGB is written to the window through cybergraphics; the edge pixels
+are blended with the row's background by how much of each pixel the
+circle covers (the background colour is known, so the system needs no
+alpha channel); and the source is decoded at half size, 80 pixels, and
+reduced to the circle by averaging rather than by picking. The finished
+pixels are kept per avatar, so a repaint copies them and decodes
+nothing.
+
+On a 68k without RTG the result depends on the screen the client
+opened, in steps. An AGA screen of 256 colours gets a larger pen pool
+with ordered dithering, as photos already have, and an edge blended in
+pen space; a screen of 16 colours or fewer keeps today's lean grid, or
+the initials when the pens run out. The step is chosen from the screen
+actually opened, never from the machine, so a 68k on RTG gets the full
+path and an AGA screen on a fast accelerator gets the AGA one.
+
+It touches the avatar cache and the two places that draw avatars, the
+chat list and the header, and nothing in the network path. It fits the
+0.0.9x line in a slot after the 0.0.95 speed release, the
+next-generation systems first and the 68k steps after them.
+
 ## Planned: say where Telegram sent the login code (0.0.92)
 
 A first-time user could not find his code and wrote in. The answer was
