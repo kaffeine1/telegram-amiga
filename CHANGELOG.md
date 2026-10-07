@@ -5,7 +5,7 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386, x86_64 and, from 0.0.94,
 aarch64). Dates use YYYY-MM-DD. Each release ships on all six platform
 lanes unless noted.
 
-## [Unreleased]
+## [0.0.95] - 2026-10-07
 
 ### Added
 - The text client takes its commands from a script or a redirection
@@ -36,7 +36,9 @@ lanes unless noted.
   full_size=, which older versions skip. Self-tests check the picks, the
   file names, which copy a save takes, the setting's round trip (also
   through a save of another photo setting) and the decoder's new limit,
-  and each fails when the code it covers is broken.
+  and each fails when the code it covers is broken. Checked on a Vampire
+  and on MorphOS in QEMU, where Save photo as... wrote the 2560x1920
+  original of a test upload.
 
 ### Changed
 - SHA-256 works on 32-bit words. Every message the client receives is
@@ -90,11 +92,10 @@ lanes unless noted.
   the TCP/IP stack, which runs on the same processor. On MorphOS, from
   the text client, 4 MB go up at 530 to 590 KB/s, against 210 KB/s with
   one part at a time in September, and the file downloaded back matched
-  the original. Socket
-  buffers of 64 and 128 KB, in place of the 32 KB Roadshow gives, changed
-  nothing that stood out from the network's own swings, and 128 KB on
-  MorphOS (32 KB out and 64 KB in by default) did no better, so the stacks
-  keep their sizes.
+  the original. Socket buffers of 64 and 128 KB, in place of the 32 KB
+  Roadshow gives, changed nothing that stood out from the network's own
+  swings, and 128 KB on MorphOS (32 KB out and 64 KB in by default) did
+  no better, so the stacks keep their sizes.
   A self-test checks acknowledgements taken out of order and a rewind to
   the right place in the file; each check fails when the code it covers is
   broken.
@@ -149,11 +150,12 @@ lanes unless noted.
   and a few XORs per block, with decryption through the equivalent inverse
   cipher; the tables (8 KB) are built from the S-box when first needed. On
   a Vampire a 32 KB part now takes 34 ms to decrypt instead of 128, and 39
-  ms to encrypt instead of 183. A self-test checks the new code against the FIPS-197 vector and against
-  the byte form on random keys, IVs and lengths in both directions, and
-  fails when either direction is broken. `--mtproto-crypto-bench` reports the
-  cost per 32 KB part on the machine it runs on, and a build with the
-  self-tests also times the byte form for comparison.
+  ms to encrypt instead of 183. A self-test checks the new code against
+  the FIPS-197 vector and against the byte form on random keys, IVs and
+  lengths in both directions, and fails when either direction is broken.
+  `--mtproto-crypto-bench` reports the cost per 32 KB part on the machine
+  it runs on, and a build with the self-tests also times the byte form
+  for comparison.
 - The text client writes a message up to Telegram's own limit, 4096
   characters. Its line stopped at 511 without a word, so a longer text or
   a paste lost its end, and the line it sent was echoed into the
@@ -223,8 +225,9 @@ lanes unless noted.
   and that a changed salt is caught; each check fails when the code it
   covers is broken, and the test passes on the host and on a Vampire. A
   real login with Two-Step Verification then went through on a stock
-  A1200, from the text client, in 35 minutes. The manuals no longer send such accounts to
-  a faster machine, or tell them to turn Two-Step Verification off.
+  A1200, from the text client, in 35 minutes. The manuals no longer send
+  such accounts to a faster machine, or tell them to turn Two-Step
+  Verification off.
 - A key exchange could fail on a slow 68k before it had really begun. It
   opens with pq, a product of two primes below 2^32 that the client must
   split before it can answer, and the client split it with 64-bit
@@ -277,9 +280,9 @@ lanes unless noted.
   " [...]", its bold, italic and code kept inside the part shown. On the
   host a 4096-character message of accented letters (7888 bytes) came
   back whole with 8 KB, and with 4 KB as its first 2112 characters and
-  " [...]". Self-tests cut a string, a
-  long styled message, a styled text that overflows and a pushed preview;
-  each fails when the code it covers is taken out.
+  " [...]". Self-tests cut a string, a long styled message, a styled text
+  that overflows and a pushed preview; each fails when the code it covers
+  is taken out.
 - A text of several lines pasted into the text client no longer goes out
   as one message a line. Every line break of the paste reached the client
   as the Return key. A break with more of the text already waiting behind
@@ -301,7 +304,8 @@ lanes unless noted.
   time, and the console dropped each lone ESC and printed the rest. On
   the way out the client now gives the handle back the line buffering
   dos.library opens a console with. Seen on the i386 VM after the window
-  closed, and gone with the fix; the same Shell came back to colour.
+  closed, and gone with the fix there and on the ARM VM; the same Shell
+  came back to colour.
 - Photos keep their colours after the window comes back from an iconify
   or from a switch to its own screen and back. Each time the window
   closes it gives back cybergraphics.library, and a flag meant to try
@@ -309,8 +313,9 @@ lanes unless noted.
   never tried again and drew every photo through palette pens, on a
   truecolor screen too. A debug log on MorphOS showed it: the first
   window replayed photos in RGB, the window after the switch used pens
-  on the same 32-bit screen. The flag now goes back with the
-  library. Present since true-colour photos came to AmigaOS 3.x RTG in
+  on the same 32-bit screen. The flag now goes back with the library,
+  and on a real MorphOS machine the photos kept their colours through
+  both. Present since true-colour photos came to AmigaOS 3.x RTG in
   0.0.9.
 - Save photo as... works before anything has been downloaded. Its
   requester opens in the download drawer, and only a file download made

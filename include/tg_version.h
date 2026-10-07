@@ -10,9 +10,9 @@
 #ifndef TG_VERSION_H
 #define TG_VERSION_H
 
-#define TG_VERSION "0.0.94"
+#define TG_VERSION "0.0.95"
 /* Release date for the Amiga $VER tag (dd.mm.yyyy) -- bump WITH the version. */
-#define TG_VERSION_DATE "25.09.2026"
+#define TG_VERSION_DATE "07.10.2026"
 
 /* "alpha" while the number has three components, "beta" from 0.1 on.
    THE BETA STARTS AT 0.1, NOT AT 0.1.0. An AmigaOS version cookie is two
