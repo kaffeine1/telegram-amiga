@@ -16,10 +16,12 @@ WS="$OS4_CROSS/work/telegram-amiga"
 
 [ -x "$OS4_CROSS/bin/os4-run" ] || { echo "ERROR: os4-cross not at $OS4_CROSS (set OS4_CROSS=...)" >&2; exit 1; }
 
-echo "rsync -> $WS"
-rsync -a --delete --exclude='.git' --exclude='build' --exclude='*.local.md' \
-  --exclude='telegram-auth*.bin' --exclude='telegram-peers*.txt' --exclude='telegram-api.txt' \
-  --exclude='phone-code-hash.txt' --exclude='*.token' "$ROOT_DIR/" "$WS/"
+# Only the files git tracks go across: the workspace is mounted into a
+# third-party container, and an exclude list let private files through
+# (a phone number, a login code, a token file, avatars, local notes).
+echo "sync tracked files -> $WS"
+mkdir -p "$WS"
+git -C "$ROOT_DIR" ls-files -z | rsync -a --from0 --files-from=- "$ROOT_DIR/" "$WS/"
 
 rm -f "$WS/build/amigaos4/TelegramAmiga"
 cd "$OS4_CROSS"
