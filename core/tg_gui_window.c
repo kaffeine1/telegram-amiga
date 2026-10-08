@@ -9930,9 +9930,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_menu_set_emoji(menu, state->emoji_enabled);
                                 SetMenuStrip(ctx.window, menu);
                             }
-                            if (tg_gui_emoji_preferences_save(
+                            if (tg_gui_emoji_preferences_save_choice(
                                     "data/telegram-emoji.txt",
-                                    state->emoji_enabled) != 0) {
+                                    state->emoji_enabled,
+                                    state->emoji_explicit) != 0) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
                                                    "Could not save emoji setting");
@@ -9969,9 +9970,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_INLINEPHOTOS) {
-                            state->inline_photos = !state->inline_photos;
-                            state->inline_photos_explicit = 1;
-                            state->inline_photos_default_resolved = 1;
+                            tg_gui_set_inline_photos(state,
+                                                     !state->inline_photos);
                             tg_gui_session_set_inline_photos(
                                 state->inline_photos);
                             tg_gui_photo_slots_reset();

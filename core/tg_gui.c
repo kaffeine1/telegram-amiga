@@ -299,6 +299,11 @@ void tg_gui_graphics_preferences_resolve(tg_gui_state *state, int classic_amiga,
     if (state == 0) {
         return;
     }
+    /* Sampled once, like the defaults: a reopened window keeps it. */
+    if (state->graphics_auto == 0) {
+        state->graphics_auto = tg_gui_graphics_resolve(
+            0, 0, classic_amiga, cpu_at_least_040, has_rtg) ? 2 : 1;
+    }
     if (!state->inline_photos_default_resolved) {
         state->inline_photos = tg_gui_graphics_resolve(
             state->inline_photos_explicit, state->inline_photos,
@@ -325,6 +330,12 @@ void tg_gui_emoji_preferences_load(const char *path, int *enabled,
 
 int tg_gui_emoji_preferences_save(const char *path, int enabled)
 {
+    return tg_gui_emoji_preferences_save_choice(path, enabled, 1);
+}
+
+int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
+                                         int explicit_choice)
+{
     FILE *file;
     char tmp[288];
     unsigned long length;
@@ -343,7 +354,8 @@ int tg_gui_emoji_preferences_save(const char *path, int enabled)
     if (file == 0) {
         return 1;
     }
-    failed = fputs(enabled ? "on\n" : "off\n", file) == EOF;
+    failed = fputs(!explicit_choice ? "auto\n" : enabled ? "on\n" : "off\n",
+                   file) == EOF;
     if (fclose(file) != 0) {
         failed = 1;
     }
@@ -359,13 +371,39 @@ int tg_gui_emoji_preferences_save(const char *path, int enabled)
     return 0;
 }
 
+/* A choice that matches what this machine picks on its own is saved as
+   "auto", so a drawer copied to another kind of machine follows that machine:
+   a fast machine's "on" made a stock A1200 open with inline photos. A choice
+   against the default stays explicit and travels with the drawer. Before the
+   window has sampled the machine, every choice stays explicit. */
+static int tg_gui_graphics_choice_explicit(const tg_gui_state *state,
+                                           int value)
+{
+    if (state->graphics_auto == 0) {
+        return 1;
+    }
+    return (value ? 2 : 1) != state->graphics_auto;
+}
+
+void tg_gui_set_inline_photos(tg_gui_state *state, int enabled)
+{
+    if (state == 0) {
+        return;
+    }
+    state->inline_photos = enabled ? 1 : 0;
+    state->inline_photos_explicit =
+        tg_gui_graphics_choice_explicit(state, state->inline_photos);
+    state->inline_photos_default_resolved = 1;
+}
+
 void tg_gui_set_emoji_enabled(tg_gui_state *state, int enabled)
 {
     if (state == 0) {
         return;
     }
     state->emoji_enabled = enabled ? 1 : 0;
-    state->emoji_explicit = 1;
+    state->emoji_explicit =
+        tg_gui_graphics_choice_explicit(state, state->emoji_enabled);
     state->emoji_default_resolved = 1;
     if (!state->emoji_enabled) {
         tg_gui_emoji_close(state);
@@ -6269,6 +6307,87 @@ int tg_gui_self_test(void)
                 puts("gui self-test: graphics choice changed during window reopen");
                 return 2;
             }
+        }
+    }
+
+    /* A menu choice equal to the sampled machine default is saved as "auto",
+       so a drawer copied to another kind of machine follows that machine; a
+       choice against the default stays explicit. Both files round-trip it. */
+    {
+        static const int cases[][4] = {
+            /* Classic, 040+/PPC, RTG, what the machine picks on its own */
+            {1, 0, 0, 0},
+            {1, 1, 0, 0},
+            {1, 1, 1, 1},
+            {0, 0, 0, 1}
+        };
+        tg_gui_state *prefs = tg_gui_test_scratch_state();
+        const char *emoji_path = "tg-gui-emoji-auto-self-test.tmp";
+        const char *photo_path = "tg-gui-photo-auto-self-test.tmp";
+        unsigned long i;
+        int value;
+
+        for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+            const int *c = cases[i];
+
+            for (value = 0; value <= 1; ++value) {
+                int want_explicit = value != c[3];
+                int enabled;
+                int explicit_choice;
+
+                memset(prefs, 0, sizeof(*prefs));
+                tg_gui_graphics_preferences_resolve(prefs, c[0], c[1], c[2]);
+                tg_gui_set_inline_photos(prefs, value);
+                tg_gui_set_emoji_enabled(prefs, value);
+                if (prefs->inline_photos != value ||
+                    prefs->emoji_enabled != value ||
+                    prefs->inline_photos_explicit != want_explicit ||
+                    prefs->emoji_explicit != want_explicit) {
+                    printf("gui self-test: auto choice case %lu/%d failed\n",
+                           i, value);
+                    return 2;
+                }
+                if (tg_gui_emoji_preferences_save_choice(
+                        emoji_path, prefs->emoji_enabled,
+                        prefs->emoji_explicit) != 0 ||
+                    tg_gui_photo_preferences_save_full(
+                        photo_path, prefs->inline_photos,
+                        prefs->inline_photos_explicit,
+                        TG_GUI_PHOTO_DITHER_FULL, 50UL, 0) != 0) {
+                    (void)remove(emoji_path);
+                    (void)remove(photo_path);
+                    puts("gui self-test: auto choice save failed");
+                    return 2;
+                }
+                tg_gui_emoji_preferences_load(emoji_path, &enabled,
+                                              &explicit_choice);
+                if (explicit_choice != want_explicit ||
+                    (want_explicit && enabled != value)) {
+                    (void)remove(emoji_path);
+                    (void)remove(photo_path);
+                    puts("gui self-test: emoji auto choice round-trip failed");
+                    return 2;
+                }
+                tg_gui_photo_preferences_load(photo_path, &enabled,
+                                              &explicit_choice, 0, 0);
+                if (explicit_choice != want_explicit ||
+                    (want_explicit && enabled != value)) {
+                    (void)remove(emoji_path);
+                    (void)remove(photo_path);
+                    puts("gui self-test: photo auto choice round-trip failed");
+                    return 2;
+                }
+            }
+        }
+        (void)remove(emoji_path);
+        (void)remove(photo_path);
+        /* Before a window sampled the machine, every choice stays explicit. */
+        memset(prefs, 0, sizeof(*prefs));
+        tg_gui_set_inline_photos(prefs, 1);
+        tg_gui_set_emoji_enabled(prefs, 0);
+        if (!prefs->inline_photos_explicit || !prefs->emoji_explicit) {
+            puts("gui self-test: unsampled choice was not kept explicit");
+            return 2;
         }
     }
 

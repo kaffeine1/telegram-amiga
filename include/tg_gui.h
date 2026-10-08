@@ -269,6 +269,8 @@ typedef struct tg_gui_state {
     int emoji_enabled;    /* picker and graphical emoji; off keeps text emoticons */
     int emoji_explicit;   /* user saved an on/off choice */
     int emoji_default_resolved;
+    int graphics_auto;    /* what this machine picks for both on its own:
+                             0 not sampled yet, 1 off, 2 on */
     int photo_dither;      /* TG_GUI_PHOTO_DITHER_*; default full */
     unsigned long photo_cache_limit_mb; /* 0 unlimited; default 50 MiB */
     int photo_full_size;   /* viewer and Save photo as... take the largest
@@ -545,6 +547,11 @@ void tg_gui_graphics_preferences_resolve(tg_gui_state *state, int classic_amiga,
 void tg_gui_emoji_preferences_load(const char *path, int *enabled,
                                    int *explicit_choice);
 int tg_gui_emoji_preferences_save(const char *path, int enabled);
+/* explicit_choice 0 writes "auto". */
+int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
+                                         int explicit_choice);
+/* Menu toggles: a choice equal to the sampled machine default is "auto". */
+void tg_gui_set_inline_photos(tg_gui_state *state, int enabled);
 void tg_gui_set_emoji_enabled(tg_gui_state *state, int enabled);
 /* Zero means emoji disabled; otherwise a square of at least 16px. Line
    height and ascent reserve that cell while keeping the actual font intact. */

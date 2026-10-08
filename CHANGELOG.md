@@ -18,6 +18,13 @@ lanes unless noted.
   step waits for a two-second pause before it redraws the window, but only
   where such a redraw measured over 300 ms; fast systems keep showing them
   at once.
+- A drawer copied from a fast machine no longer opens a stock A1200 with
+  inline photos. Turning inline photos or emoji on or off saved that
+  choice for good, even when it only matched what the machine picks by
+  itself, and the choice travelled with the drawer. Such a choice is now
+  saved as "auto", so each machine applies its own default; a choice
+  against the default is still kept and travels as before. A file written
+  by an older version keeps its choice until it is changed once.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
