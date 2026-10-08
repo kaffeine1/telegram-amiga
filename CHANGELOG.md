@@ -7,6 +7,18 @@ lanes unless noted.
 
 ## [Unreleased]
 
+### Fixed
+- Typing in the window keeps up with the keys on a stock A1200. Since 0.0.8
+  only machines running AfA OS redrew just the text field after each key;
+  everywhere else every key redrew the whole window, which on a 14 MHz
+  68EC020 took about three seconds a letter. Every system now
+  redraws the field alone while its height stays the same, the way the
+  blinking cursor already did, and copies only that strip to the screen.
+  While the keys are flowing, a new message, someone typing or a photo
+  step waits for a two-second pause before it redraws the window, but only
+  where such a redraw measured over 300 ms; fast systems keep showing them
+  at once.
+
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
   comm/tcp. Aminet's list of architectures has no ARM entry, so its readme

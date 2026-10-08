@@ -47,6 +47,13 @@
 /* While keys are flowing, drain at most one already-queued MTProto frame each
    second. This path sends no RPC and therefore cannot leave a reply pending. */
 #define TG_GUI_COMPOSE_RECEIVE_SECONDS 1UL
+/* A network-driven full repaint (a new message, someone typing, a photo step)
+   that took longer than this waits, while keys are flowing, until typing has
+   paused TG_GUI_COMPOSE_PAINT_IDLE_SECONDS. On a stock A1200 such a repaint
+   costs seconds and the keys queued up behind it; fast systems repaint well
+   under the threshold and never wait. */
+#define TG_GUI_COMPOSE_PAINT_DEFER_MS 300UL
+#define TG_GUI_COMPOSE_PAINT_IDLE_SECONDS 2UL
 /* While a file transfer is pumping, the FULL live tick (a blocking
    getHistory, ~half a second on a 68080) is throttled to this cadence and
    the light receive_pending drain covers incoming pushes in between --
@@ -4948,12 +4955,12 @@ static void tg_gui_window_paint_caret(const tg_gui_state *state,
         c->origin_x = saved_ox;
         c->origin_y = saved_oy;
 
-        /* AfA needs the bitmap-font fallback, but an ordinary composer edit
-           touches only the bottom input strip. Copying the complete RTG bitmap
-           for every key made a PiStorm feel like a slow 030. Keep the full
-           copy for popups and other modes whose dirty geometry is wider. */
-        if (c->bitmap_text_compat &&
-            state->mode == TG_GUI_MODE_CHAT && !state->search_active &&
+        /* An ordinary composer edit or caret blink touches only the bottom
+           input strip. Copying the complete RTG bitmap for every key made a
+           PiStorm feel like a slow 030, and on a stock A1200 every full copy
+           moves 200 KB of Chip RAM. Keep the full copy for popups and other
+           modes whose dirty geometry is wider. */
+        if (state->mode == TG_GUI_MODE_CHAT && !state->search_active &&
             !state->mention_active && !state->ctx_visible &&
             !state->emoji_active) {
             int input_h;
@@ -5000,11 +5007,11 @@ static void tg_gui_window_paint_caret(const tg_gui_state *state,
     }
 }
 
-/* AfA's bitmap-font fallback is still more expensive than native Text(), even
-   after batching glyphs into run templates. During ordinary composer edits,
-   redraw only the input strip when its height and popup footprint did not
-   change. Other systems retain the established full-paint behaviour; their
-   native buffered Text() path is already fast. */
+/* During ordinary composer edits, redraw only the input strip when its height
+   and popup footprint did not change, on every system. A full paint per key
+   took about 3 s on a stock A1200, where the renderer runs at -O0 on a
+   14 MHz 68020, and AfA's bitmap-font fallback made it slow on fast 68k
+   machines too. The caret blink has always redrawn the input row this way. */
 static void tg_gui_window_paint_composer_edit(tg_gui_state *state,
                                                tg_gui_backend *backend,
                                                int old_input_h,
@@ -5015,7 +5022,7 @@ static void tg_gui_window_paint_composer_edit(tg_gui_state *state,
 
     ctx = (tg_gui_amiga_ctx *)backend->context;
     new_input_h = tg_gui_input_layout_height(state, backend);
-    if (ctx != 0 && ctx->bitmap_text_compat &&
+    if (ctx != 0 &&
         !old_mention_active && !state->mention_active &&
         old_input_h > 0 && old_input_h == new_input_h) {
         tg_gui_window_paint_caret(state, backend);
@@ -8373,6 +8380,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     time_t last_session_poll;
     time_t last_receive_drain;
     time_t last_key_time;
+    int paint_deferred;          /* a network repaint waits for a typing pause */
+    unsigned long full_paint_ms; /* how long the last such repaint took */
     int resize_pending;
     int resize_settle_ticks;
     int photo_defer_ticks;
@@ -8752,6 +8761,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     last_session_poll = time(0);
     last_receive_drain = time(0);
     last_key_time = time(0);
+    paint_deferred = 0;
+    full_paint_ms = 0UL;
     done = 0;
     state->composing = 0;
     state->nav_chat = -1;   /* no arrow-key focus yet (0 would tint row 0) */
@@ -11570,8 +11581,31 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 }
             }
         }
-        if (session_dirty || scroll_dirty) {
-            tg_gui_window_paint(state, &backend);
+        /* While keys are flowing, a slow network-driven repaint waits for a
+           typing pause (TG_GUI_COMPOSE_PAINT_DEFER_MS); a scroll, like every
+           direct user action, still paints at once. */
+        {
+            int typing_now = 0;
+
+            if (state->composing &&
+                full_paint_ms > TG_GUI_COMPOSE_PAINT_DEFER_MS) {
+                time_t pnow = time(0);
+
+                typing_now = pnow != (time_t)-1 && pnow >= last_key_time &&
+                             (unsigned long)(pnow - last_key_time) <
+                                 TG_GUI_COMPOSE_PAINT_IDLE_SECONDS;
+            }
+            if (session_dirty && !scroll_dirty && typing_now) {
+                paint_deferred = 1;
+            } else if (session_dirty || scroll_dirty ||
+                       (paint_deferred && !typing_now)) {
+                unsigned long paint_start = tg_gui_photo_now_ms();
+
+                tg_gui_window_paint(state, &backend);
+                full_paint_ms = tg_gui_photo_elapsed_ms(
+                    paint_start, tg_gui_photo_now_ms());
+                paint_deferred = 0;
+            }
         }
         if (viewer_dirty && viewer.ctx.window != 0) {
             tg_gui_photo_viewer_paint(&viewer);
