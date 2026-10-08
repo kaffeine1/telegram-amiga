@@ -1322,6 +1322,67 @@ void tg_platform_set_executable(const char *path)
 #endif
 }
 
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+/* Free blocks to KB without overflowing 32 bits on a big volume. */
+static unsigned long tg_platform_blocks_kb(unsigned long blocks,
+                                           unsigned long bytes_per_block)
+{
+    if (bytes_per_block >= 1024UL) {
+        unsigned long per = bytes_per_block / 1024UL;
+
+        return blocks > ~0UL / per ? ~0UL : blocks * per;
+    }
+    return bytes_per_block == 0UL ? 0UL : blocks / (1024UL / bytes_per_block);
+}
+#endif
+
+/* Room left on the volume holding `path`, in KB (tg_platform.h). The RAM
+   disk lives in free memory, so its room is what AvailMem() reports, whatever
+   its handler answers: an older ram-handler says it is always full. */
+int tg_platform_volume_free_kb(const char *path, unsigned long *free_kb)
+{
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+    BPTR lock;
+    BPTR ram;
+    struct InfoData info;
+    int rc = 1;
+
+    if (path == 0 || path[0] == '\0' || free_kb == 0) {
+        return 1;
+    }
+    lock = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (lock == 0) {
+        return 1;
+    }
+    ram = Lock((CONST_STRPTR)"RAM:", ACCESS_READ);
+    if (ram != 0) {
+        if (SameLock(lock, ram) != LOCK_DIFFERENT) {
+            *free_kb = (unsigned long)AvailMem(MEMF_ANY) / 1024UL;
+            rc = 0;
+        }
+        UnLock(ram);
+    }
+    if (rc != 0) {
+        memset(&info, 0, sizeof(info));
+        if (Info(lock, &info) && info.id_BytesPerBlock > 0) {
+            *free_kb = info.id_NumBlocks > info.id_NumBlocksUsed
+                ? tg_platform_blocks_kb(
+                      (unsigned long)(info.id_NumBlocks -
+                                      info.id_NumBlocksUsed),
+                      (unsigned long)info.id_BytesPerBlock)
+                : 0UL;
+            rc = 0;
+        }
+    }
+    UnLock(lock);
+    return rc;
+#else
+    (void)path;
+    (void)free_kb;
+    return 1;
+#endif
+}
+
 void tg_platform_display_beep(void)
 {
     /* The screen flash is the Amiga-native notification; a BEL byte lets

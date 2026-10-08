@@ -25,6 +25,15 @@ lanes unless noted.
   saved as "auto", so each machine applies its own default; a choice
   against the default is still kept and travels as before. A file written
   by an older version keeps its choice until it is changed once.
+- A download that cannot fit is refused before its first byte, with the
+  sizes: "Need 4097 KB, only 2130 KB free in RAM:". A 4 MB file into RAM:
+  on a stock A1200 with the window open used to stop at 2.3 MB, minutes
+  in, and the part it had was removed. On the RAM disk the room is the
+  free memory, since an older ram-handler always reports itself full; a
+  volume that reports no room at all is left to try, as it may simply not
+  know. When a write fails on a full volume, the window and the text
+  client now say "RAM: is full, stopped at 2240 KB" instead of "Could not
+  write to RAM:".
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in

@@ -6486,8 +6486,20 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
         } else if (trc == 2) {
             strcpy(line, "File is on another server - not supported yet");
         } else if (trc == 3) {
-            sprintf(line, "Could not write to %.28s",
-                    tg_gui_session_download_dir());
+            /* "RAM: is full, stopped at ... KB" when the volume ran out */
+            if (saved[0] != '\0') {
+                sprintf(line, "%.170s", saved);
+            } else {
+                sprintf(line, "Could not write to %.28s",
+                        tg_gui_session_download_dir());
+            }
+        } else if (trc == 6) {
+            /* refused before the first byte: "Need ... KB, only ... free" */
+            if (saved[0] != '\0') {
+                sprintf(line, "%.170s", saved);
+            } else {
+                strcpy(line, "Not enough room for that file");
+            }
         } else if (trc == 5) {
             strcpy(line, "Download cancelled");
         } else if (trc == 4) {

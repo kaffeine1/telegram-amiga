@@ -13739,8 +13739,15 @@ int tg_mtproto_auth_chat_file(const char *host,
                 } else if (frc == 2) {
                     fprintf(tui_cap,
                             "File is on another server - not supported yet.\n");
+                } else if (frc == 3 && saved_path[0] != '\0') {
+                    fprintf(tui_cap, "%.120s, the part was removed.\n",
+                            saved_path); /* "<volume> is full, stopped at" */
                 } else if (frc == 3) {
                     fprintf(tui_cap, "Could not write to downloads/.\n");
+                } else if (frc == 6) {
+                    fprintf(tui_cap, "%.120s.\n", saved_path[0] != '\0'
+                                                    ? saved_path
+                                                    : "Not enough room for that file");
                 } else if (frc == 4) {
                     if (saved_path[0] != '\0') {
                         fprintf(tui_cap, "Transfer failed: %.110s\n",
@@ -18209,6 +18216,31 @@ static int tg_gui_avfetch_n = 0;
 #define TG_GUI_DL_WBUF (128UL * 1024UL)
 #endif
 #endif
+/* Room for a download: the file, a little filesystem overhead and this
+   reserve, since on the RAM disk the room is the memory the client keeps
+   using. A write that fails with less than TG_GUI_DL_FULL_KB left on the
+   volume is reported as a full volume. */
+#define TG_GUI_DL_ROOM_RESERVE_KB 256UL
+#define TG_GUI_DL_FULL_KB 256UL
+
+/* KB a download needs, when its volume reports some room but too little for
+   the file, its filesystem overhead and the reserve; 0 when it fits or when
+   it cannot be judged (no report, a report of 0, an empty or 4 GB+ size). */
+static unsigned long tg_mtproto_download_room_short(int known,
+                                                    unsigned long free_kb,
+                                                    unsigned long size_hi,
+                                                    unsigned long size_lo)
+{
+    unsigned long need_kb;
+
+    if (!known || free_kb == 0UL || size_hi != 0UL || size_lo == 0UL) {
+        return 0UL;
+    }
+    need_kb = size_lo / 1024UL + 1UL;
+    return free_kb < need_kb + need_kb / 32UL + TG_GUI_DL_ROOM_RESERVE_KB
+               ? need_kb
+               : 0UL;
+}
 
 /* Where downloads land (0.0.8, tester request: an 030 owner wanted them in
    RAM: for speed). Default "downloads" next to the program, as always;
@@ -20078,6 +20110,26 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
                                    harmlessly and are used as they are */
         tg_platform_ensure_drawer_icon(dir); /* visible on Workbench */
         tg_gui_dl_join_path(tg_gui_dl.path, sizeof(tg_gui_dl.path), dir, safe);
+        /* Judge the room before the first byte: a 4 MB file into RAM: on a
+           stock A1200 with the window open stopped at 2.3 MB, minutes in,
+           and the part it had was removed. A volume that reports 0 may just
+           be a handler that cannot tell, so only some-but-too-little room
+           refuses. */
+        {
+            unsigned long free_kb = 0UL;
+            int known = tg_platform_volume_free_kb(dir, &free_kb) == 0;
+            unsigned long need_kb = tg_mtproto_download_room_short(
+                known, free_kb, tg_gui_dl.doc.size_hi, tg_gui_dl.doc.size_lo);
+
+            if (need_kb != 0UL) {
+                sprintf(tg_gui_dl.fail, "Need %lu KB, only %lu KB free in %.16s",
+                        need_kb, free_kb, dir);
+                tg_gui_log("download: not enough room on the volume");
+                tg_mtproto_close_quiet_stream(tg_gui_dl.quiet, stream);
+                tg_gui_dl.quiet = 0;
+                return 6;
+            }
+        }
     }
     tg_gui_dl.f = tg_file_fopen_replace(tg_gui_dl.path, "wb");
     if (tg_gui_dl.f != 0) {
@@ -20188,6 +20240,21 @@ static int tg_mtproto_download_park(unsigned int w,
     return 0;
 }
 
+/* A write that fails on a (nearly) full volume says so: "RAM: is full" is
+   what a stock A1200 needs to read when the RAM disk ran out of memory under
+   a download. Any other write error keeps the generic line. */
+static void tg_mtproto_download_note_full(void)
+{
+    const char *dir = tg_gui_session_download_dir();
+    unsigned long free_kb;
+
+    if (tg_platform_volume_free_kb(dir, &free_kb) == 0 &&
+        free_kb < TG_GUI_DL_FULL_KB) {
+        sprintf(tg_gui_dl.fail, "%.20s is full, stopped at %lu KB", dir,
+                tg_gui_dl.offset / 1024UL);
+    }
+}
+
 /* Write the parked chunks whose turn has come. 0 = keep going; 1 = the file
    is complete (a short chunk was the last); 2 = a write failed (rc set). */
 static int tg_mtproto_download_drain(void)
@@ -20201,6 +20268,7 @@ static int tg_mtproto_download_drain(void)
             fwrite(tg_gui_dl.win_data[0], 1, (size_t)len, tg_gui_dl.f) !=
                 len) {
             tg_gui_dl.rc = 3;
+            tg_mtproto_download_note_full();
             return 2;
         }
         TG_XFER_STOP(TG_XFER_WRITE_US);
@@ -20260,6 +20328,19 @@ static int tg_mtproto_download_window_self_test(void)
     int c;
     unsigned long i;
     int ok;
+
+    /* Room before the first byte: only some-but-too-little room refuses,
+       with the file's own KB; an unknown or zero report never does. */
+    if (tg_mtproto_download_room_short(1, 2130UL, 0UL, 4194304UL) != 4097UL ||
+        tg_mtproto_download_room_short(1, 4480UL, 0UL, 4194304UL) != 4097UL ||
+        tg_mtproto_download_room_short(1, 4481UL, 0UL, 4194304UL) != 0UL ||
+        tg_mtproto_download_room_short(0, 2130UL, 0UL, 4194304UL) != 0UL ||
+        tg_mtproto_download_room_short(1, 0UL, 0UL, 4194304UL) != 0UL ||
+        tg_mtproto_download_room_short(1, 2130UL, 1UL, 4194304UL) != 0UL ||
+        tg_mtproto_download_room_short(1, 2130UL, 0UL, 0UL) != 0UL) {
+        puts("probe self-test: window: download room check");
+        return 2;
+    }
 
     /* msg_id: an older server id keeps ours, a newer one moves it on, and
        a clock of ours running minutes ahead is still pulled back */
@@ -20635,6 +20716,7 @@ static int tg_mtproto_download_step(void)
     if (bytes_len > 0UL &&
         fwrite(bytes, 1, bytes_len, tg_gui_dl.f) != bytes_len) {
         tg_gui_dl.rc = 3;
+        tg_mtproto_download_note_full();
         return 0;
     }
     TG_XFER_STOP(TG_XFER_WRITE_US);
@@ -20794,7 +20876,8 @@ static int tg_mtproto_download_end(char *out_path,
         out_path[0] = '\0';
     }
     if (tg_gui_dl.f != 0 && fclose(tg_gui_dl.f) != 0 && rc == 0) {
-        rc = 3;
+        rc = 3; /* the last buffered bytes did not fit */
+        tg_mtproto_download_note_full();
     }
     tg_gui_dl.f = 0;
     if (rc != 0) {

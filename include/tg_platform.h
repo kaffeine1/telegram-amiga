@@ -245,6 +245,16 @@ void tg_platform_display_beep(void);
  */
 void tg_platform_set_executable(const char *path);
 
+/*
+ * Room left on the volume that holds `path` (an existing file or drawer), in
+ * KB. Returns 0 with *free_kb filled when the volume says; nonzero when it
+ * cannot be told (no AmigaDOS, no lock, a handler without Info()). A volume
+ * may report itself full (0) without being so; on the RAM disk, which lives
+ * in free memory, the room is the free memory. Lets a download that cannot
+ * fit be refused before its first byte instead of failing minutes in.
+ */
+int tg_platform_volume_free_kb(const char *path, unsigned long *free_kb);
+
 /**
  * Platform TCP connect implementation used by tg_net_connect().
  *
