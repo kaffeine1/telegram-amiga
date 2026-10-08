@@ -53,7 +53,7 @@ AROS_AARCH64_BINARY=${AROS_AARCH64_BINARY:-"$ROOT_DIR/build/aros-aarch64/Telegra
 # --- Aminet artifacts (.lha + .readme) --------------------------------------
 # Aminet requires a real LhA ENCODER (the Mac's lhasa is extract-only); we use
 # Koji Arai's lha. Set AMINET=0 to skip the Aminet pass. See the verified
-# procedure in memory/aminet-publishing.md (Type comm/tcp, 5 per-arch uploads,
+# procedure in memory/aminet-publishing.md (Type comm/tcp, 6 per-arch uploads,
 # version in the .readme NOT the filename, FTP upload to /new by Michele).
 AMINET=${AMINET:-1}
 LHA_BIN=${LHA_BIN:-"$HOME/amiga-dev/tools/lha-src/src/lha"}
@@ -933,17 +933,21 @@ aminet_meta() {
     aros-x86_64) archtag="x86_64-aros";  archval="i386-aros"
                  lhaname="TelegramAmiga-AROS64"
                  requires="AROS (x86_64) with a TCP/IP stack (AROSTCP)" ;;
-    # No Aminet page for the ARM64 lane (decision of 2026-09-22: GitHub and
-    # The AROS Archives only), so its lha is staged for the Archives pair and
-    # never listed among the Aminet uploads. Aminet has no aarch64 token
-    # anyway (its enum stops at i386-aros).
-    aros-aarch64) archtag="aarch64-aros"; archval="i386-aros"
+    # The ARM64 lane is an Aminet upload too since 0.0.95 (first one sent on
+    # 2026-10-08). Aminet's architecture list has no ARM token (m68k-amigaos,
+    # ppc-amigaos, ppc-morphos, i386-aros, i386-amithlon, ppc-warpup,
+    # ppc-powerup, generic, other): "other" is the honest one, as Free
+    # Pascal's ARM AROS build uses; i386-aros would send an x86 user an ARM
+    # binary. The file name and Requires: say what it is.
+    aros-aarch64) archtag="aarch64-aros"; archval="other"
                  lhaname="TelegramAmiga-ARM64"
-                 requires="AROS aarch64 ABIv1 (Raspberry Pi 4, 400, 5) with a TCP/IP stack (AROSTCP)"
-                 aminet_upload=0 ;;
+                 requires="AROS aarch64 (ABIv1, Raspberry Pi 4/400/5) with AROSTCP" ;;
     *) echo "aminet_meta: unknown arch $1" >&2; exit 1 ;;
     esac
     if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/$lhaname.lha"; else lhaold=""; fi
+    # AMINET_NEW lists archives Aminet does not have yet (a first upload):
+    # Replaces: must name an archive the site has, so those get none.
+    case " ${AMINET_NEW:-} " in *" $lhaname "*) lhaold="" ;; esac
 }
 
 # The Aminet .readme: machine-readable header (Short/Uploader/Author/Type/
@@ -1284,7 +1288,7 @@ if [ "$AMINET" = "1" ] && ls "$AMINET_ROOT"/TelegramAmiga*.lha >/dev/null 2>&1; 
     echo
     echo "Aminet artifacts ready in: $AMINET_ROOT  (version $VERSION, Type comm/tcp)"
     echo "Upload (Michele): FTP main.aminet.net -> cd /new -> binary -> put each"
-    echo "  TelegramAmiga[<-suffix>].lha AND matching .readme (5 + 5 files)."
+    echo "  TelegramAmiga[<-suffix>].lha AND matching .readme (6 + 6 files)."
     echo "  Web form may be back at https://aminet.net/upload. See memory/aminet-publishing.md"
 fi
 
@@ -1371,7 +1375,7 @@ write_arosarchives_pair() {
         awk 'flip { print } /^$/ && !flip { flip = 1 }' "$aa_readme"
     } > "$AROSARCHIVES_ROOT/${2}_lha.readme"
 }
-if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-AROS64.lha" ] || [ -f "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.lha" ]; }; then
+if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-AROS64.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-ARM64.lha" ]; }; then
     mkdir -p "$AROSARCHIVES_ROOT"
     write_arosarchives_pair TelegramAmiga-AROS telegramamiga.i386-aros \
         "AROS i386 ABIv0 (AROS One, Icaros) with its TCP/IP stack"
@@ -1383,7 +1387,6 @@ if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f
     # network/chat/telegramamiga.aarch64-aros.lha like the other two.
     write_arosarchives_pair TelegramAmiga-ARM64 telegramamiga.aarch64-aros \
         "AROS aarch64 ABIv1 (Raspberry Pi 4, 400 and 5; native image of 2026-08-22 or newer) with its TCP/IP stack"
-    rm -f "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.lha" "$AROSARCHIVES_ROOT/TelegramAmiga-ARM64.readme" # staging copies
     echo
     echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (up to 3 x .lha + _lha.readme)"
     echo "Submit: https://archives.arosworld.org/index.php?function=submit (web form,"

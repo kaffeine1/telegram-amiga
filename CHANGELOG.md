@@ -5,6 +5,16 @@ AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386, x86_64 and, from 0.0.94,
 aarch64). Dates use YYYY-MM-DD. Each release ships on all six platform
 lanes unless noted.
 
+## [Unreleased]
+
+### Changed
+- The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
+  comm/tcp. Aminet's list of architectures has no ARM entry, so its readme
+  says "other", as other ARM AROS programs there do, and the file name and
+  the Requires line say what it is: AROS aarch64 on a Raspberry Pi 4, 400
+  or 5. The 0.0.95 package went up on 2026-10-08 as the first one; from
+  the next release on it replaces itself like the other five.
+
 ## [0.0.95] - 2026-10-07
 
 ### Added
