@@ -34,6 +34,23 @@ lanes unless noted.
   know. When a write fails on a full volume, the window and the text
   client now say "RAM: is full, stopped at 2240 KB" instead of "Could not
   write to RAM:".
+- The window opens at once, on the cached chat list, with "Connecting to
+  Telegram..." in the status bar, and connects from there. It used to
+  connect first and open only afterwards: on a stock A1200 with a stalled
+  link that meant two and a half minutes of nothing, which from Workbench
+  looked like a program that does not start. When the connection fails,
+  the status bar says why, for example "Offline: cannot reach Telegram";
+  the reason used to go to a console that a Workbench launch does not
+  have.
+- Chats hidden from the list stay hidden when the window cannot connect.
+  The offline list read the chat cache directly and showed them again.
+- Avatars no longer hold the window back on a slow machine. On a 68k below
+  the 68040 the first paint shows initials and the avatars are built
+  afterwards, one per idle moment, four at a time on screen; elsewhere a
+  paint builds them for up to 300 ms and leaves the rest for later. Each
+  processed 32x32 avatar is kept next to its JPEG (avatars/*.rgb), so the
+  next start skips the decode that cost about four seconds an avatar on a
+  stock A1200 and kept its window away for a minute.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in

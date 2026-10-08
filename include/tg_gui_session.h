@@ -32,6 +32,17 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
                         const char *peer_cache_file, tg_gui_state *state,
                         FILE *stream);
 
+/* Why the last tg_gui_session_open() failed, in a few words for the status
+   bar ("cannot reach Telegram"); empty when it did not, or nobody knows. */
+const char *tg_gui_session_open_error(void);
+
+/* Projects the cached chat list into the sidebar the way an open session
+   does (hidden chats left out, Saved Messages added), without the network:
+   the window shows it while it connects, and keeps it when it cannot.
+   Returns the number of rows. */
+int tg_gui_session_project_cached(const char *peer_cache_file,
+                                  tg_gui_state *state);
+
 /* One non-blocking poll cycle: a cadence-gated getDifference drain harvests
    inbound messages into the notify queue, which is then dispatched to the GUI
    driver (bumping + flashing the matching sidebar badge). Returns 1 when the

@@ -16698,6 +16698,69 @@ static int tg_gui_hidden_projection_self_test(void)
 }
 #endif /* !TG_NO_SELFTEST */
 
+/* Why the last tg_gui_session_open() failed, in a few words for the status
+   bar: a Workbench launch has no console, so the reason printed there was
+   invisible and a dead link looked like a client that does nothing. */
+static char tg_gui_session_open_why[48];
+
+static void tg_gui_session_note_open_failure(const char *line)
+{
+    const char *text;
+
+    if (line == 0 || line[0] == '\0') {
+        tg_gui_session_open_why[0] = '\0';
+        return;
+    }
+    if (strstr(line, "auth-file-load-failed") != 0) {
+        text = "cannot read telegram-auth.bin";
+    } else if (strstr(line, "connect-failed") != 0 ||
+               strstr(line, "resolve-failed") != 0) {
+        text = "cannot reach Telegram";
+    } else if (strstr(line, "imeout") != 0) {
+        text = "Telegram did not answer";
+    } else if (strstr(line, "transport-init") != 0 ||
+               strstr(line, "closed") != 0 ||
+               strstr(line, "recv-failed") != 0 ||
+               strstr(line, "send-failed") != 0) {
+        text = "the connection dropped";
+    } else {
+        text = strstr(line, ": "); /* drop the "gui session: " label */
+        text = text != 0 ? text + 2 : line;
+    }
+    sprintf(tg_gui_session_open_why, "%.40s", text);
+}
+
+const char *tg_gui_session_open_error(void)
+{
+    return tg_gui_session_open_why;
+}
+
+/* The cached chat list, projected into the sidebar the way a live session
+   does it (hidden chats left out, Saved Messages added), for a window that
+   opens before the connection or stays offline. */
+int tg_gui_session_project_cached(const char *peer_cache_file,
+                                  tg_gui_state *state)
+{
+    tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+    int count;
+    int missing;
+
+    if (peer_cache_file == 0 || state == 0) {
+        return 0;
+    }
+    tg_gui_chat_driver_bind(&tg_gui_session_state.gui_driver, state,
+                            &tg_gui_session_state.driver);
+    missing = 0;
+    count = tg_gui_chat_list_project(peer_cache_file, TG_GUI_HIDDEN_FILE, 0UL,
+                                     rows, TG_CHAT_LIST_MAX, &missing, 0, 0);
+    tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+    if (tg_gui_session_state.driver.on_chat_list_changed != 0 && count > 0) {
+        tg_gui_session_state.driver.on_chat_list_changed(
+            tg_gui_session_state.driver.ctx, rows, count);
+    }
+    return count;
+}
+
 int tg_gui_session_open(const char *api_file, const char *auth_file,
                         const char *peer_cache_file, tg_gui_state *state,
                         FILE *stream)
@@ -16715,10 +16778,12 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
         return 2;
     }
     memset(&tg_gui_session_state, 0, sizeof(tg_gui_session_state));
+    tg_gui_session_open_why[0] = '\0';
     tg_gui_photo_inline_enabled = state->inline_photos ? 1 : 0;
     /* Derive the production endpoint from the saved session's DC. */
     if (tg_mtproto_session_load_authorization(auth_file, &session, auth_key) !=
         TG_MTPROTO_SESSION_OK) {
+        tg_gui_session_note_open_failure("auth-file-load-failed");
         return 2;
     }
     tg_mtproto_secure_zero(auth_key, sizeof(auth_key));
@@ -16784,6 +16849,12 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
                 host, "443", auth_file, dc_id_text,
                 &tg_gui_session_state.context, quiet, label);
         }
+    }
+    if (rc != 0) {
+        char why[128];
+
+        tg_mtproto_capture_quiet_error(quiet, stream, why, sizeof(why));
+        tg_gui_session_note_open_failure(why);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_net_set_connect_timeout_seconds(tg_gui_session_state.saved_timeout);

@@ -790,6 +790,14 @@ int tg_gui_self_test(void);
    place (updating the highlighted row and the header title). */
 int tg_gui_run_window(tg_gui_state *state);
 
+/* A one-shot task the next window runs right after its first paint, before
+   its event loop. The live client connects there, so the window (the cached
+   chats, "Connecting to Telegram...") is on screen while a link is slow; an
+   iconified window that reopens does not run it again. */
+void tg_gui_window_set_startup(int (*task)(tg_gui_state *state));
+/* For that task: show `text` in the status bar at once. */
+void tg_gui_window_startup_status(const char *text);
+
 #if !defined(TG_NO_SELFTEST)
 /* One zeroed scratch model for the self-tests of the GUI and of its chat
    driver: over half a megabyte on a 64-bit build, so never on the stack and

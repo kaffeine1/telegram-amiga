@@ -3935,6 +3935,76 @@ static tg_gui_state *tg_app_gui_state_zeroed(void)
     memset(&tg_app_gui_state, 0, sizeof(tg_app_gui_state));
     return &tg_app_gui_state;
 }
+
+/* The header names the selected chat, or the program before any chat. */
+static void tg_app_gui_title_from_selection(tg_gui_state *gui)
+{
+    const char *name;
+    unsigned long k;
+
+    if (gui->chat_count <= 0 || gui->selected_chat < 0 ||
+        gui->selected_chat >= gui->chat_count) {
+        strcpy(gui->title, TG_APP_TITLE);
+        return;
+    }
+    name = gui->chats[gui->selected_chat].name;
+    for (k = 0UL; k + 1UL < (unsigned long)sizeof(gui->title) &&
+                  name[k] != '\0'; ++k) {
+        gui->title[k] = name[k];
+    }
+    gui->title[k] = '\0';
+}
+
+/* The live window's connection. The window runs it right after its first
+   paint (tg_gui_window_set_startup), so the cached chats and "Connecting to
+   Telegram..." are on screen while a link is slow; the outcome lands in the
+   status bar, with the reason when the session cannot open. */
+static const char *tg_app_gui_api_file;
+static const char *tg_app_gui_auth_file;
+static const char *tg_app_gui_chats_file;
+
+static int tg_app_gui_connect(tg_gui_state *gui)
+{
+    int rc;
+
+    tg_gui_log("live: refresh peers start");
+    tg_mtproto_gui_refresh_peer_cache(tg_app_gui_api_file,
+                                      tg_app_gui_auth_file,
+                                      tg_app_gui_chats_file, stdout);
+    tg_gui_log("live: refresh peers done");
+    tg_gui_log("live: session open start");
+    rc = tg_gui_session_open(tg_app_gui_api_file, tg_app_gui_auth_file,
+                             tg_app_gui_chats_file, gui, stdout);
+    tg_gui_log(rc == 0 ? "live: session open OK" : "live: session open FAIL");
+    if (rc != 0) {
+        const char *why = tg_gui_session_open_error();
+        char line[96];
+
+        /* The cached chats stay, read-only, as before the attempt. */
+        if (why != 0 && why[0] != '\0') {
+            sprintf(line, "Offline: %.36s - Q quits", why);
+        } else {
+            strcpy(line, "Offline (cache) - Q quits");
+        }
+        tg_gui_window_startup_status(line);
+        return rc;
+    }
+    tg_app_gui_title_from_selection(gui);
+    /* Open the selected (first) chat up front so the transcript is
+       populated on launch instead of waiting for the first key press. */
+    if (gui->chat_count > 0) {
+        char line[96];
+
+        sprintf(line, "Opening %.40s...", gui->title);
+        tg_gui_window_startup_status(line);
+        tg_gui_log("live: open first chat start");
+        (void)tg_gui_session_open_chat(
+            gui->chats[gui->selected_chat].index, stdout);
+        tg_gui_log("live: open first chat done");
+    }
+    strcpy(gui->status, "Live - F1-F10 chats, Q quits");
+    return 0;
+}
 #endif /* !TG_NO_GUI */
 
 /* --media-bench: what the computation around a chat costs on this machine,
@@ -4458,6 +4528,7 @@ int tg_app_run(int argc, char **argv)
 
     if (config.run_gui_live) {
         tg_gui_state *gui = tg_app_gui_state_zeroed();
+        FILE *auth_probe;
         int rc;
 
         memset(gui, 0, sizeof(*gui));
@@ -4474,80 +4545,31 @@ int tg_app_run(int argc, char **argv)
             tg_gui_log_enable();
         }
         tg_gui_log("live: start");
-        /* Best-effort network refresh of the chat list, then open the live
-           session (it projects the sidebar and enables the notification poll).
-           If the session cannot open, fall back to a read-only sidebar so the
-           window still shows the cached chats. */
-        tg_gui_log("live: refresh peers start");
-        tg_mtproto_gui_refresh_peer_cache(config.mtproto_auth_api_file,
-                                          config.mtproto_auth_file,
-                                          config.gui_chats_cache_file, stdout);
-        tg_gui_log("live: refresh peers done");
-        tg_gui_log("live: session open start");
-        rc = tg_gui_session_open(config.mtproto_auth_api_file,
-                                 config.mtproto_auth_file,
-                                 config.gui_chats_cache_file, gui, stdout);
-        tg_gui_log(rc == 0 ? "live: session open OK" : "live: session open FAIL");
-        if (rc != 0) {
-            FILE *auth_probe;
-
-            /* No saved session at all -> drive the first-login flow in the
-               window. An existing-but-unusable auth (network down, expired)
-               keeps the read-only cached sidebar instead. */
-            auth_probe = fopen(config.mtproto_auth_file, "rb");
-            if (auth_probe == 0) {
-                tg_gui_log("live: no auth -> login flow");
-                tg_gui_session_login_begin(config.mtproto_auth_api_file,
-                                           config.mtproto_auth_file,
-                                           config.gui_chats_cache_file);
-                gui->mode = TG_GUI_MODE_LOGIN_PHONE;
-            } else {
-                tg_gui_chat_driver gui_driver;
-                tg_chat_driver driver;
-                tg_chat_list_row rows[TG_CHAT_LIST_MAX];
-                int count;
-                int missing;
-
-                fclose(auth_probe);
-                memset(&driver, 0, sizeof(driver));
-                missing = 0;
-                tg_gui_chat_driver_bind(&gui_driver, gui, &driver);
-                count = tg_mtproto_chat_list_parse(config.gui_chats_cache_file,
-                                                   0UL, rows, TG_CHAT_LIST_MAX,
-                                                   &missing);
-                tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
-                if (driver.on_chat_list_changed != 0 && count > 0) {
-                    driver.on_chat_list_changed(driver.ctx, rows, count);
-                }
-            }
-        }
-        if (gui->mode == TG_GUI_MODE_LOGIN_PHONE) {
+        /* The window opens first, on the cached chat list, and connects from
+           there (tg_app_gui_connect): a slow link, or a stock A1200, used to
+           show nothing at all for minutes, which from Workbench looked like a
+           program that does not start. The list comes through the session's
+           own projection, so hidden chats stay hidden even offline. With no
+           saved login at all, the window opens on the first-login flow. */
+        auth_probe = fopen(config.mtproto_auth_file, "rb");
+        if (auth_probe == 0) {
+            tg_gui_log("live: no auth -> login flow");
+            tg_gui_session_login_begin(config.mtproto_auth_api_file,
+                                       config.mtproto_auth_file,
+                                       config.gui_chats_cache_file);
+            gui->mode = TG_GUI_MODE_LOGIN_PHONE;
             strcpy(gui->title, TG_APP_TITLE);
             strcpy(gui->status, "Enter your phone number (+...)");
         } else {
-            if (gui->chat_count > 0) {
-                const char *name;
-                unsigned long k;
-
-                name = gui->chats[0].name;
-                for (k = 0UL; k + 1UL < (unsigned long)sizeof(gui->title) &&
-                              name[k] != '\0'; ++k) {
-                    gui->title[k] = name[k];
-                }
-                gui->title[k] = '\0';
-            } else {
-                strcpy(gui->title, TG_APP_TITLE);
-            }
-            strcpy(gui->status, rc == 0 ? "Live - F1-F10 chats, Q quits"
-                                       : "Offline (cache) - Q quits");
-        }
-        /* Open the selected (first) chat up front so the transcript is
-           populated on launch instead of waiting for the first key press. */
-        if (rc == 0 && gui->chat_count > 0) {
-            tg_gui_log("live: open first chat start");
-            (void)tg_gui_session_open_chat(
-                gui->chats[gui->selected_chat].index, stdout);
-            tg_gui_log("live: open first chat done");
+            fclose(auth_probe);
+            (void)tg_gui_session_project_cached(config.gui_chats_cache_file,
+                                                gui);
+            tg_app_gui_title_from_selection(gui);
+            strcpy(gui->status, "Connecting to Telegram...");
+            tg_app_gui_api_file = config.mtproto_auth_api_file;
+            tg_app_gui_auth_file = config.mtproto_auth_file;
+            tg_app_gui_chats_file = config.gui_chats_cache_file;
+            tg_gui_window_set_startup(tg_app_gui_connect);
         }
         tg_gui_log("live: run_window start");
         rc = tg_gui_run_window(gui);
