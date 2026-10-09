@@ -50,6 +50,11 @@ int tg_gui_session_project_cached(const char *peer_cache_file,
    when no session is open (returns 0). */
 int tg_gui_session_tick(FILE *stream);
 
+/* How many ticks in a row tried the network and lost the connection (a
+   failed query closes it); 0 after a tick that kept it, or before any. The
+   window spaces its next ticks out with it. */
+unsigned long tg_gui_session_link_failures(void);
+
 /* Receive-only live drain for the composer path. It never starts an RPC: when
    the held socket already has an encrypted frame queued, consumes at most one,
    ACKs it and applies typing/read-receipt/edit/notification pushes. Returns 1

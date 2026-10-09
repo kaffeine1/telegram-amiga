@@ -801,21 +801,44 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
         return TG_NET_CONNECT_FAILED;
     }
 
-    FD_ZERO(&write_fds);
-    FD_SET(sock, &write_fds);
-    timeout.tv_sec = (long)timeout_seconds;
-    timeout.tv_usec = 0;
+    /* One-second steps, so a requested break (tg_net_break_requested) ends a
+       connect to a dead link after TG_NET_BREAK_AFTER seconds. */
+    {
+        unsigned long waited = 0UL;
+        int stopped = 0;
 
-    rc = select(sock + 1, 0, &write_fds, 0, &timeout);
-    if (rc <= 0) {
-        (void)fcntl(sock, F_SETFL, flags);
-        if (rc == 0) {
-            tg_platform_set_error(error_buffer, error_buffer_size,
-                                  "socket connect timed out");
-        } else {
-            tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        for (;;) {
+            FD_ZERO(&write_fds);
+            FD_SET(sock, &write_fds);
+            timeout.tv_sec = 1;
+            timeout.tv_usec = 0;
+            rc = select(sock + 1, 0, &write_fds, 0, &timeout);
+            if (rc != 0) {
+                break;
+            }
+            ++waited;
+            if (waited >= timeout_seconds) {
+                break;
+            }
+            if (waited >= TG_NET_BREAK_AFTER && tg_net_break_requested()) {
+                stopped = 1;
+                break;
+            }
         }
-        return TG_NET_CONNECT_FAILED;
+        if (rc <= 0) {
+            (void)fcntl(sock, F_SETFL, flags);
+            if (stopped) {
+                tg_platform_set_error(error_buffer, error_buffer_size,
+                                      "socket connect stopped");
+            } else if (rc == 0) {
+                tg_platform_set_error(error_buffer, error_buffer_size,
+                                      "socket connect timed out");
+            } else {
+                tg_platform_set_error(error_buffer, error_buffer_size,
+                                      strerror(errno));
+            }
+            return TG_NET_CONNECT_FAILED;
+        }
     }
 
     socket_error = 0;

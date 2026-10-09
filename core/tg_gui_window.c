@@ -9123,6 +9123,75 @@ static void tg_gui_wbn_park(void)
     tg_gui_log("window: Workbench reset still pending, reopening anyway");
 }
 
+/* The window the network break check looks at, 0 while there is none. */
+static struct Window *tg_gui_break_window = 0;
+
+/* For tg_net_set_break_check(): a Workbench reset warning, or a click on the
+   close gadget, is waiting in our queues. On a dead link a network wait used
+   to keep both waiting for minutes. Only looks, under Forbid() since the
+   senders append to the same lists: the main loop takes the messages. */
+static int tg_gui_window_break_check(void)
+{
+    struct Node *n;
+    int found = 0;
+
+    Forbid();
+    if (tg_gui_wbn_port != 0 &&
+        tg_gui_wbn_port->mp_MsgList.lh_Head->ln_Succ != 0) {
+        found = 1;
+    }
+    if (!found && tg_gui_break_window != 0 &&
+        tg_gui_break_window->UserPort != 0) {
+        for (n = tg_gui_break_window->UserPort->mp_MsgList.lh_Head;
+             n->ln_Succ != 0; n = n->ln_Succ) {
+            if (((struct IntuiMessage *)n)->Class == IDCMP_CLOSEWINDOW) {
+                found = 1;
+                break;
+            }
+        }
+    }
+    Permit();
+    return found;
+}
+
+/* Seconds the next network tick waits after ticks that lost the link: none
+   after one failure, then 5 s, doubling up to a minute, so a dead link costs
+   the window a stall now and then instead of one after another. */
+static unsigned long tg_gui_tick_backoff_seconds(void)
+{
+    unsigned long n = tg_gui_session_link_failures();
+    unsigned long s = 5UL;
+
+    if (n < 2UL) {
+        return 0UL;
+    }
+    while (n > 2UL && s < 60UL) {
+        s *= 2UL;
+        --n;
+    }
+    return s < 60UL ? s : 60UL;
+}
+
+/* After a network tick: when it lost the link, the next one is counted from
+   now (the tick itself may have taken a minute) and the log says when. */
+static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
+{
+    unsigned long fails = tg_gui_session_link_failures();
+
+    if (fails != 0UL) {
+        char line[80];
+        unsigned long next = tg_gui_tick_backoff_seconds();
+
+        if (next < interval) {
+            next = interval;
+        }
+        *last_poll = time(0);
+        sprintf(line, "tick: link lost %lu in a row, next try in %lu s",
+                fails > 999UL ? 999UL : fails, next > 999UL ? 999UL : next);
+        tg_gui_log(line);
+    }
+}
+
 static int tg_gui_run_window_once(tg_gui_state *state)
 {
     tg_gui_amiga_ctx ctx;
@@ -9546,6 +9615,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     puts("gui window: close gadget or Q to quit.");
     fflush(stdout);
     tg_gui_log("window: opened");
+    /* From here a stalled network wait gives way to a close or a Workbench
+       reset warning (tg_gui_window_break_check), the first connect included. */
+    tg_gui_break_window = ctx.window;
+    tg_net_set_break_check(tg_gui_window_break_check);
 
     /* The live client connects only now, behind a window that already shows
        the cached chats and "Connecting to Telegram...": before, a slow link
@@ -11116,6 +11189,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                pushes flowing; the heavy tick can wait. */
                             eff = TG_GUI_TRANSFER_POLL_SECONDS;
                         }
+                        if (eff < tg_gui_tick_backoff_seconds()) {
+                            eff = tg_gui_tick_backoff_seconds();
+                        }
                         effective_watch = eff;
                     }
                     if (!done && now != (time_t)-1 &&
@@ -11128,6 +11204,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (tg_gui_session_tick(stdout)) {
                             session_dirty = 1;
                         }
+                        tg_gui_tick_after(&last_session_poll,
+                                          effective_watch);
                     }
                 }
             } else if (msg_class == IDCMP_MOUSEBUTTONS &&
@@ -12455,6 +12533,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     hb_eff < TG_GUI_TRANSFER_POLL_SECONDS) {
                     hb_eff = TG_GUI_TRANSFER_POLL_SECONDS;
                 }
+                if (hb_eff < tg_gui_tick_backoff_seconds()) {
+                    hb_eff = tg_gui_tick_backoff_seconds();
+                }
                 if ((state->composing || tg_gui_session_transfer_busy()) &&
                     hb_now != (time_t)-1 &&
                     hb_now >= last_receive_drain &&
@@ -12474,6 +12555,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     if (tg_gui_session_tick(stdout)) {
                         session_dirty = 1;
                     }
+                    tg_gui_tick_after(&last_session_poll, hb_eff);
                 }
             }
         }
@@ -12558,6 +12640,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         }
     }
 
+    tg_net_set_break_check(0); /* it looks at this window's queue */
+    tg_gui_break_window = 0;
     tg_platform_gui_drop_disarm(); /* before the window goes away */
     /* The viewer is a visitor on the same screen. Close it before releasing
        shared pens, the CyberGraphX interface or a private application screen. */

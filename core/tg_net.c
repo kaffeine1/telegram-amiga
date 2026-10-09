@@ -140,6 +140,53 @@ void tg_net_xfer_report(const char *what, unsigned long offset)
 #endif
 
 static unsigned long tg_connect_timeout_seconds = 0;
+static int (*tg_net_break_check)(void) = 0;
+
+void tg_net_set_break_check(int (*check)(void))
+{
+    tg_net_break_check = check;
+}
+
+int tg_net_break_requested(void)
+{
+    if (tg_platform_break_pending()) {
+        return 1;
+    }
+    return tg_net_break_check != 0 && tg_net_break_check() != 0;
+}
+
+/* The platform waits read the timeout at every call, 0 meaning their 30 s.
+   A wait longer than TG_NET_BREAK_AFTER runs as one-second calls instead, so
+   a requested break can end it; returns how many seconds the caller asked
+   for (0 when the wait stays one piece), and *saved gets the setting to put
+   back afterwards. */
+static unsigned long tg_net_steps_begin(unsigned long *saved)
+{
+    unsigned long total;
+
+    *saved = tg_connect_timeout_seconds;
+    total = *saved != 0UL ? *saved : 30UL;
+    if (total <= TG_NET_BREAK_AFTER) {
+        return 0UL;
+    }
+    tg_connect_timeout_seconds = 1UL;
+    return total;
+}
+
+/* After one step that timed out: 1 = wait another second, 0 = give up (the
+   caller's time is spent, or a break was asked for after the first
+   seconds). */
+static int tg_net_steps_more(unsigned long total, unsigned long *waited)
+{
+    ++*waited;
+    if (*waited >= total) {
+        return 0;
+    }
+    if (*waited >= TG_NET_BREAK_AFTER && tg_net_break_requested()) {
+        return 0;
+    }
+    return 1;
+}
 
 void tg_net_connection_init(tg_net_connection *connection)
 {
@@ -170,6 +217,19 @@ tg_net_status tg_net_connect(tg_net_connection *connection, const char *host, co
     }
 
     tg_net_connection_init(connection);
+    if (tg_net_break_requested()) {
+        static const char why[] = "stopped by the user";
+        unsigned long i;
+
+        if (error_buffer != 0 && error_buffer_size > 0UL) {
+            for (i = 0UL; i + 1UL < error_buffer_size && why[i] != '\0';
+                 ++i) {
+                error_buffer[i] = why[i];
+            }
+            error_buffer[i] = '\0';
+        }
+        return TG_NET_CONNECT_FAILED;
+    }
     TG_NET_DIAG("connect begin", 0);
     {
         tg_net_status st;
@@ -207,10 +267,19 @@ tg_net_status tg_net_send(tg_net_connection *connection, const void *data,
     TG_NET_DIAG("send begin", byte_count);
     {
         tg_net_status st;
+        unsigned long saved;
+        unsigned long total;
+        unsigned long waited = 0UL;
 
         TG_XFER_START(TG_XFER_SEND_US);
-        st = tg_platform_tcp_send(connection, data, byte_count, bytes_sent,
-                                  error_buffer, error_buffer_size);
+        total = tg_net_steps_begin(&saved);
+        do {
+            st = tg_platform_tcp_send(connection, data, byte_count,
+                                      bytes_sent, error_buffer,
+                                      error_buffer_size);
+        } while (st == TG_NET_TIMEOUT && total != 0UL &&
+                 tg_net_steps_more(total, &waited));
+        tg_connect_timeout_seconds = saved;
         TG_XFER_STOP(TG_XFER_SEND_US);
         TG_NET_DIAG("send done rc", (unsigned long)st);
         return st;
@@ -234,11 +303,19 @@ tg_net_status tg_net_recv(tg_net_connection *connection, void *buffer,
     TG_NET_DIAG("recv begin", buffer_size);
     {
         tg_net_status st;
+        unsigned long saved;
+        unsigned long total;
+        unsigned long waited = 0UL;
 
         TG_XFER_START(TG_XFER_RECV_US);
-        st = tg_platform_tcp_recv(connection, buffer, buffer_size,
-                                  bytes_received, error_buffer,
-                                  error_buffer_size);
+        total = tg_net_steps_begin(&saved);
+        do {
+            st = tg_platform_tcp_recv(connection, buffer, buffer_size,
+                                      bytes_received, error_buffer,
+                                      error_buffer_size);
+        } while (st == TG_NET_TIMEOUT && total != 0UL &&
+                 tg_net_steps_more(total, &waited));
+        tg_connect_timeout_seconds = saved;
         TG_XFER_STOP(TG_XFER_RECV_US);
         TG_XFER_ADD(TG_XFER_RECV_CALLS, 1);
         TG_XFER_ADD(TG_XFER_RECV_BYTES,

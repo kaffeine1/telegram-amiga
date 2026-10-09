@@ -61,6 +61,30 @@ void tg_net_set_connect_timeout_seconds(unsigned long seconds);
 unsigned long tg_net_connect_timeout_seconds(void);
 
 /**
+ * Network waits run in one-second steps. Once one has lasted
+ * TG_NET_BREAK_AFTER seconds, a requested break ends it as a timeout with
+ * nothing consumed, and while a break is requested no new connection starts.
+ * A link that answers rarely waits that long, so in practice only a stalled
+ * one is cut short.
+ */
+#define TG_NET_BREAK_AFTER 2UL
+
+/**
+ * Installs the check behind tg_net_break_requested() (0 removes it). The GUI
+ * passes one that sees a Workbench reset warning or a click on the close
+ * gadget waiting in its queues, so a dead link cannot hold either for
+ * minutes.
+ */
+void tg_net_set_break_check(int (*check)(void));
+
+/**
+ * Non-zero when the installed check asks the network to stop waiting, or the
+ * user pressed Ctrl+C (tg_platform_break_pending). Only looks: nothing is
+ * cleared.
+ */
+int tg_net_break_requested(void);
+
+/**
  * Opens a TCP connection to host:port.
  *
  * error_buffer is caller-owned and optional; when provided, the platform may

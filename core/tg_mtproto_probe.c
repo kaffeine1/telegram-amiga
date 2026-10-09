@@ -1500,6 +1500,13 @@ static int tg_mtproto_send_encrypted_query_limited(
                    single quiet recv surfaced as "Could not send message". A
                    genuinely wedged session still soft-fails once the budget is
                    spent, and the chat loop's reconnect-on-stall recovers it. */
+                if (tg_net_break_requested()) {
+                    /* The quiet wait was cut short (the window has a Workbench
+                       reset warning or a close waiting, or Ctrl+C). */
+                    sprintf(tg_mtproto_query_fail, "stopped while waiting");
+                    fprintf(stream, "%s: user-break\n", label);
+                    return 2;
+                }
                 net_status = TG_NET_OK;
                 continue;
             }
@@ -1825,6 +1832,11 @@ static int tg_mtproto_recv_rpc_result_any(tg_mtproto_auth_context *context,
             sizeof(tg_mtproto_q_response), &response_length, error_buffer,
             sizeof(error_buffer));
         if (net_status == TG_NET_TIMEOUT) {
+            if (tg_net_break_requested()) {
+                sprintf(tg_mtproto_query_fail, "stopped while waiting");
+                fprintf(stream, "%s: user-break\n", label);
+                return 2;
+            }
             continue; /* quiet interval: budget above decides */
         }
         if (net_status != TG_NET_OK) {
@@ -22123,15 +22135,25 @@ int tg_gui_session_receive_pending(FILE *stream)
     return dirty;
 }
 
+/* Ticks in a row that tried the network and lost the connection. */
+static unsigned long tg_gui_session_link_failed = 0UL;
+
+unsigned long tg_gui_session_link_failures(void)
+{
+    return tg_gui_session_link_failed;
+}
+
 int tg_gui_session_tick(FILE *stream)
 {
     FILE *quiet;
     int dirty;
+    int tried; /* this tick asked the network something */
 
     if (!tg_gui_session_state.open || stream == 0) {
         return 0;
     }
     dirty = 0;
+    tried = 0;
     tg_gui_log("tick: begin");
     quiet = tg_mtproto_open_quiet_stream(stream);
     /* Run the poll on a short leash: a stalled recv must cost a brief hiccup,
@@ -22155,6 +22177,7 @@ int tg_gui_session_tick(FILE *stream)
         unsigned long printed;
 
         printed = 0UL;
+        tried = 1;
         tg_chat_message_driver_override = &tg_gui_session_state.driver;
         (void)tg_mtproto_auth_print_history_text_peer_on_context(
             tg_gui_session_state.host, tg_gui_session_state.port,
@@ -22229,6 +22252,7 @@ int tg_gui_session_tick(FILE *stream)
 #endif
         ++tg_gui_session_state.diff_tick;
         if ((tg_gui_session_state.diff_tick % diff_cadence) == 0UL) {
+            tried = 1;
             /* The drain can sit in a quiet recv; on MorphOS the per-recv select()
                timeout IS the connect timeout, so cap it short here (the history
                poll above keeps the 12s it needs to reconnect). This stops a window
@@ -22261,6 +22285,15 @@ int tg_gui_session_tick(FILE *stream)
         tg_net_set_connect_timeout_seconds(prev_timeout);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
+    /* A failed query closes the connection, so one still open after the
+       tick means the link answered (a quiet chat included). */
+    if (tried) {
+        if (tg_gui_session_state.context.connection_open) {
+            tg_gui_session_link_failed = 0UL;
+        } else if (tg_gui_session_link_failed < 1000UL) {
+            ++tg_gui_session_link_failed;
+        }
+    }
     tg_gui_log("tick: end");
     if (tg_gui_session_apply_pushes(stream, 1)) {
         dirty = 1;
@@ -22270,6 +22303,7 @@ int tg_gui_session_tick(FILE *stream)
 
 void tg_gui_session_close(void)
 {
+    tg_gui_session_link_failed = 0UL;
     tg_mtproto_avatar_store_save(); /* keep the previews for next run */
     tg_gui_photo_queue_reset();
     if (!tg_gui_session_state.open) {

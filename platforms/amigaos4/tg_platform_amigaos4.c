@@ -25,6 +25,7 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/filio.h> /* FIONBIO, for the bounded connect */
 #include <sys/time.h>
 #include <time.h>
 #include <devices/timer.h>
@@ -778,6 +779,78 @@ static void tg_amigaos4_socket_close_library(void)
     }
 }
 
+/* connect() with a bound, as on AmigaOS 3: a blocking connect on a dead link
+   waits for the stack to give up, over a minute, and nothing can end it. The
+   socket goes non-blocking for the connect, the wait runs in one-second
+   steps (a requested break ends it after TG_NET_BREAK_AFTER seconds), and
+   the socket is blocking again after. With no timeout set the call blocks
+   as before; a set one counts at least 15 s, room for two lost SYNs.
+   0 = connected, 1 = failed, 2 = timed out, 3 = stopped. */
+static int tg_amigaos4_connect_socket(int sock, struct sockaddr_in *address)
+{
+    unsigned long total;
+    unsigned long waited;
+    long nonblock;
+    long rc;
+    int result;
+
+    total = tg_net_connect_timeout_seconds();
+    nonblock = 1;
+    if (total == 0UL || IoctlSocket(sock, FIONBIO, (char *)&nonblock) < 0) {
+        return connect(sock, (struct sockaddr *)address, sizeof(*address)) ==
+                       0
+                   ? 0
+                   : 1;
+    }
+    if (total < 15UL) {
+        total = 15UL;
+    }
+    result = 1;
+    rc = connect(sock, (struct sockaddr *)address, sizeof(*address));
+    if (rc == 0) {
+        result = 0;
+    } else {
+        /* No look at errno: a connect refused at once shows up below as a
+           socket that is ready with SO_ERROR set. */
+        for (waited = 0UL;;) {
+            fd_set write_fds;
+            struct timeval timeout;
+
+            FD_ZERO(&write_fds);
+            FD_SET(sock, &write_fds);
+            timeout.tv_sec = 1;
+            timeout.tv_usec = 0;
+            rc = WaitSelect(sock + 1, 0, &write_fds, 0, &timeout, 0);
+            if (rc > 0 && FD_ISSET(sock, &write_fds)) {
+                int soerr = 0;
+                socklen_t length = sizeof(soerr);
+
+                if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr,
+                               &length) == 0 &&
+                    soerr == 0) {
+                    result = 0;
+                }
+                break;
+            }
+            if (rc < 0) {
+                break;
+            }
+            ++waited;
+            if (waited >= total) {
+                result = 2;
+                break;
+            }
+            if (waited >= TG_NET_BREAK_AFTER && tg_net_break_requested()) {
+                result = 3;
+                break;
+            }
+        }
+    }
+    nonblock = 0;
+    (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+    return result;
+}
+
 tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char *host,
                                       const char *port, char *error_buffer,
                                       unsigned long error_buffer_size)
@@ -820,7 +893,7 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
         return TG_NET_CONNECT_FAILED;
     }
 
-    rc = connect(sock, (struct sockaddr *)&address, sizeof(address));
+    rc = tg_amigaos4_connect_socket(sock, &address);
     if (rc == 0) {
         connection->platform_handle = sock;
         connection->is_open = 1;
@@ -828,7 +901,10 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
     }
 
     CloseSocket(sock);
-    tg_platform_set_error(error_buffer, error_buffer_size, "socket connect failed");
+    tg_platform_set_error(error_buffer, error_buffer_size,
+                          rc == 2   ? "socket connect timed out"
+                          : rc == 3 ? "socket connect stopped"
+                                    : "socket connect failed");
     return TG_NET_CONNECT_FAILED;
 }
 

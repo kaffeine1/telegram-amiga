@@ -96,6 +96,17 @@ lanes unless noted.
   is saved without the borders, and the floor for a saved size was the
   window's own 320x200 minimum, which the inside of the smallest window
   never reaches.
+- A link that has gone dead no longer holds the window for minutes. On
+  AmigaOS 3 and 4 opening a connection had no time limit of its own and
+  waited for the TCP stack to give up, over a minute (one poll on a stock
+  A1200 took 84 s); it now stops after 15 s, or the longer limit a step
+  already sets (MorphOS and AROS had one already). Every network wait runs
+  in one-second steps, and once it has lasted two seconds a click on the
+  close gadget or a Workbench reset warning ends it, so the window closes
+  or makes way at once (a Ctrl+C break signal ends it too). When
+  polls lose the connection twice or more in a row, the next one waits
+  longer, from 5 s doubling up to a minute, which leaves the window usable
+  in between.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
