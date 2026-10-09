@@ -76,6 +76,16 @@ lanes unless noted.
   pens where that mix comes much closer. With --gui-live-debug the log
   says how many pens the screen had free and what the main colours became.
   Truecolour screens are unchanged.
+- Changing the Workbench screen mode or colours no longer stalls while the
+  window is open. Intuition must close the Workbench screen for that, and
+  could not while our window stayed on it, so the prefs program kept
+  asking to close all windows. The window now closes when the system warns
+  that the Workbench is about to close, and opens again on the new screen
+  when it is back; the chats and the connection stay as they were. OS4 and
+  AROS warn through Intuition, MorphOS through its screennotify.library.
+  On AmigaOS 3 the warning needs screennotify.library from Aminet
+  (util/libs/ScreenNotify10) in LIBS:; without it nothing changes, and the
+  own screen (Settings > Use own screen) avoids the problem.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in

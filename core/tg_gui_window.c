@@ -8852,6 +8852,197 @@ static int tg_gui_window_user_events_pending(
     return (SetSignal(0UL, 0UL) & mask) != 0UL;
 }
 
+/* --- Workbench resets ------------------------------------------------------
+   Changing the Workbench's screen mode or colours makes Intuition close and
+   reopen the Workbench screen, and the close fails while a program keeps a
+   window there: the prefs program asks to close all windows except drawers.
+   Where the system warns first, the window closes before the reset and opens
+   again on the new screen after it. OS4 and AROS warn through Intuition's
+   screen notification, MorphOS and AmigaOS 3 through screennotify.library,
+   part of MorphOS and a free add-on for AmigaOS 3 (Aminet
+   util/libs/ScreenNotify10). Without either nothing changes. */
+#if defined(__amigaos4__)
+#include <intuition/notify.h>
+#elif defined(__MORPHOS__) || defined(__MORPHOS)
+#include <proto/screennotify.h>
+#elif defined(__amigaos3__)
+#include <inline/macros.h>
+#endif
+
+#if defined(__amigaos3__) || defined(__MORPHOS__) || defined(__MORPHOS)
+#define TG_GUI_WBN_SCREENNOTIFY 1
+/* Opened by hand, so a missing library only means no warning. */
+struct Library *ScreenNotifyBase = 0;
+#if defined(__amigaos3__)
+#define TG_GUI_WBN_ADD(port) \
+    LP2(0x36, APTR, AddWorkbenchClient, struct MsgPort *, (port), a0, \
+        LONG, 0L, d0, , ScreenNotifyBase)
+#define TG_GUI_WBN_REM(handle) \
+    LP1(0x3c, BOOL, RemWorkbenchClient, APTR, (handle), a0, , ScreenNotifyBase)
+#else
+#define TG_GUI_WBN_ADD(port) AddWorkbenchClient((port), 0)
+#define TG_GUI_WBN_REM(handle) RemWorkbenchClient(handle)
+#endif
+/* screennotify.library's message: type 3 is the Workbench, value FALSE
+   "about to close", TRUE "open again". */
+typedef struct tg_gui_wbn_msg {
+    struct Message msg;
+    ULONG type;
+    APTR value;
+} tg_gui_wbn_msg;
+#elif defined(__amigaos4__) || defined(__AROS__)
+#define TG_GUI_WBN_INTUITION 1
+#if defined(__AROS__) && !defined(SNA_Notify)
+/* This SDK has the calls but not the names; AROS keeps OS4's values. */
+#define SNA_Notify (TAG_USER + 0x02)
+#define SNA_MsgPort (TAG_USER + 0x06)
+#define SNA_Priority (TAG_USER + 0x07)
+#define SNOTIFY_AFTER_OPENWB (1 << 2)
+#define SNOTIFY_BEFORE_CLOSEWB (1 << 3)
+#define SNOTIFY_WAIT_REPLY (1 << 15)
+#endif
+/* The head of Intuition's ScreenNotifyMessage: the class says which. */
+typedef struct tg_gui_wbn_msg {
+    struct Message msg;
+    ULONG notify_class;
+} tg_gui_wbn_msg;
+#endif
+
+static struct MsgPort *tg_gui_wbn_port = 0;
+static APTR tg_gui_wbn_handle = 0;
+
+/* 1 = the Workbench is about to close, 2 = it is open again, 0 = other. */
+static int tg_gui_wbn_kind(const struct Message *m)
+{
+#if defined(TG_GUI_WBN_SCREENNOTIFY)
+    const tg_gui_wbn_msg *w = (const tg_gui_wbn_msg *)m;
+
+    if (w->type == 3UL) {
+        return w->value != 0 ? 2 : 1;
+    }
+#elif defined(TG_GUI_WBN_INTUITION)
+    const tg_gui_wbn_msg *w = (const tg_gui_wbn_msg *)m;
+
+    if (w->notify_class == (ULONG)SNOTIFY_BEFORE_CLOSEWB) {
+        return 1;
+    }
+    if (w->notify_class == (ULONG)SNOTIFY_AFTER_OPENWB) {
+        return 2;
+    }
+#else
+    (void)m;
+#endif
+    return 0;
+}
+
+static void tg_gui_wbn_end(void)
+{
+    struct Message *m;
+    int tries;
+
+    if (tg_gui_wbn_handle != 0) {
+        /* the removal refuses while a notice is out: answer and retry */
+        for (tries = 0; tries < 50; ++tries) {
+            BOOL gone = TRUE;
+
+            while (tg_gui_wbn_port != 0 &&
+                   (m = GetMsg(tg_gui_wbn_port)) != 0) {
+                ReplyMsg(m);
+            }
+#if defined(TG_GUI_WBN_SCREENNOTIFY)
+            gone = TG_GUI_WBN_REM(tg_gui_wbn_handle);
+#elif defined(TG_GUI_WBN_INTUITION)
+            gone = EndScreenNotify(tg_gui_wbn_handle);
+#endif
+            if (gone) {
+                break;
+            }
+            Delay(2);
+        }
+        tg_gui_wbn_handle = 0;
+    }
+    if (tg_gui_wbn_port != 0) {
+        while ((m = GetMsg(tg_gui_wbn_port)) != 0) {
+            ReplyMsg(m);
+        }
+        DeleteMsgPort(tg_gui_wbn_port);
+        tg_gui_wbn_port = 0;
+    }
+#if defined(TG_GUI_WBN_SCREENNOTIFY)
+    if (ScreenNotifyBase != 0) {
+        CloseLibrary(ScreenNotifyBase);
+        ScreenNotifyBase = 0;
+    }
+#endif
+}
+
+/* Ask to hear about Workbench resets while this window lives. Returns the
+   signal to wait on, 0 when this system cannot tell. */
+static ULONG tg_gui_wbn_begin(void)
+{
+#if defined(TG_GUI_WBN_SCREENNOTIFY) || defined(TG_GUI_WBN_INTUITION)
+    tg_gui_wbn_port = CreateMsgPort();
+    if (tg_gui_wbn_port == 0) {
+        return 0UL;
+    }
+#if defined(TG_GUI_WBN_SCREENNOTIFY)
+    ScreenNotifyBase = OpenLibrary((CONST_STRPTR)"screennotify.library", 1L);
+    if (ScreenNotifyBase != 0) {
+        tg_gui_wbn_handle = TG_GUI_WBN_ADD(tg_gui_wbn_port);
+    }
+#else
+    {
+        struct TagItem tags[4];
+
+        tags[0].ti_Tag = SNA_Notify;
+        tags[0].ti_Data = (ULONG)(SNOTIFY_WAIT_REPLY | SNOTIFY_BEFORE_CLOSEWB |
+                                  SNOTIFY_AFTER_OPENWB);
+        tags[1].ti_Tag = SNA_MsgPort;
+        tags[1].ti_Data = TG_GUI_TAG(tg_gui_wbn_port);
+        tags[2].ti_Tag = SNA_Priority;
+        tags[2].ti_Data = 0;
+        tags[3].ti_Tag = TAG_END;
+        tags[3].ti_Data = 0;
+        tg_gui_wbn_handle = StartScreenNotifyTagList(tags);
+    }
+#endif
+    if (tg_gui_wbn_handle == 0) {
+        tg_gui_wbn_end();
+        return 0UL;
+    }
+    tg_gui_log("window: Workbench reset warning armed");
+    return 1UL << tg_gui_wbn_port->mp_SigBit;
+#else
+    return 0UL;
+#endif
+}
+
+/* After the window closed for a reset: wait until the Workbench is open
+   again, a Ctrl-C, or 20 s at most, then the window reopens. */
+static void tg_gui_wbn_wait_open(void)
+{
+    int ticks;
+
+    for (ticks = 0; ticks < 80 && tg_gui_wbn_port != 0; ++ticks) {
+        struct Message *m;
+
+        while ((m = GetMsg(tg_gui_wbn_port)) != 0) {
+            int kind = tg_gui_wbn_kind(m);
+
+            ReplyMsg(m);
+            if (kind == 2) {
+                tg_gui_log("window: Workbench open again");
+                return;
+            }
+        }
+        if ((SetSignal(0L, 0L) & SIGBREAKF_CTRL_C) != 0UL) {
+            return;
+        }
+        Delay(12); /* a quarter of a second */
+    }
+    tg_gui_log("window: no Workbench reopen notice, reopening anyway");
+}
+
 static int tg_gui_run_window_once(tg_gui_state *state)
 {
     tg_gui_amiga_ctx ctx;
@@ -8918,6 +9109,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     unsigned long full_paint_ms; /* how long the last such repaint took */
     int avatars_unpainted;       /* built in the background, not shown yet */
     time_t last_input_time;      /* last real window event (not a tick) */
+    ULONG wbn_mask;              /* Workbench reset warnings, 0 = none */
+    struct Message *wbn_close;   /* a close warning answered after CloseWindow */
     int resize_pending;
     int resize_settle_ticks;
     int photo_defer_ticks;
@@ -9390,6 +9583,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         tg_gui_timer_arm(timer_req, 0);
         timer_pending = 1;
     }
+    wbn_mask = tg_gui_wbn_begin();
+    wbn_close = 0;
     while (!done) {
         struct IntuiMessage *msg;
         int session_dirty;
@@ -9446,6 +9641,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 wait_mask |= 1UL << viewer.ctx.window->UserPort->mp_SigBit;
             }
             wait_mask |= (ULONG)tg_platform_gui_drop_sigmask();
+            wait_mask |= wbn_mask;
             /* 0.0.8 1b: while a transfer is active the loop must not sleep --
                each turn drains events, then pumps ONE chunk/part below. The
                network RPC inside the step paces the loop, so this is not a
@@ -9458,6 +9654,23 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             if (timer_ok &&
                 (wake_signals & (1UL << timer_port->mp_SigBit)) != 0UL) {
                 photo_tick = 1;
+            }
+        }
+        /* A Workbench reset coming: on the Workbench screen the window
+           closes, and the warning is answered only after CloseWindow, so the
+           reset waits for it. Our own screen is not affected. */
+        if (wbn_mask != 0UL) {
+            struct Message *wm;
+
+            while ((wm = GetMsg(tg_gui_wbn_port)) != 0) {
+                if (tg_gui_wbn_kind(wm) == 1 && own_scr == 0 &&
+                    wbn_close == 0 && done == 0) {
+                    tg_gui_log("window: Workbench about to close, closing");
+                    wbn_close = wm;
+                    done = 4;
+                } else {
+                    ReplyMsg(wm);
+                }
             }
         }
         tg_gui_photo_viewer_drain(&viewer, &photo_tick,
@@ -12325,10 +12538,18 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         }
         own_scr = 0;
     }
+    if (wbn_close != 0) {
+        /* the window is gone: let the reset go ahead, and come back after */
+        ReplyMsg(wbn_close);
+        wbn_close = 0;
+        tg_gui_wbn_wait_open();
+    }
+    tg_gui_wbn_end();
     tg_gui_amiga_close_core_libs();
     tg_gui_log("window: libraries closed");
-    /* 2 = iconified (park on AppIcon), 3 = reopen (own-screen toggle). */
-    return (done == 2) ? 2 : (done == 3) ? 3 : 0;
+    /* 2 = iconified (park on AppIcon), 3 = reopen (own-screen toggle, or
+       after a Workbench reset). */
+    return (done == 2) ? 2 : (done == 3 || done == 4) ? 3 : 0;
 }
 
 /* Iconified park: an AppIcon on Workbench (our own shipped icon when
