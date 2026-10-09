@@ -8861,6 +8861,7 @@ static int tg_gui_window_user_events_pending(
    screen notification, MorphOS and AmigaOS 3 through screennotify.library,
    part of MorphOS and a free add-on for AmigaOS 3 (Aminet
    util/libs/ScreenNotify10). Without either nothing changes. */
+#include <intuition/intuitionbase.h>
 #if defined(__amigaos4__)
 #include <intuition/notify.h>
 #elif defined(__MORPHOS__) || defined(__MORPHOS)
@@ -8941,8 +8942,11 @@ static void tg_gui_wbn_end(void)
     int tries;
 
     if (tg_gui_wbn_handle != 0) {
-        /* the removal refuses while a notice is out: answer and retry */
-        for (tries = 0; tries < 50; ++tries) {
+        /* The removal refuses while a round of notices is out: answer and
+           retry. The port must outlive its registration, so if the round
+           never ends (another client that never answers) the port and the
+           library stay behind instead of leaving a dead port on the list. */
+        for (tries = 0; tries < 500; ++tries) {
             BOOL gone = TRUE;
 
             while (tg_gui_wbn_port != 0 &&
@@ -8955,11 +8959,20 @@ static void tg_gui_wbn_end(void)
             gone = EndScreenNotify(tg_gui_wbn_handle);
 #endif
             if (gone) {
+                tg_gui_wbn_handle = 0;
                 break;
             }
             Delay(2);
         }
-        tg_gui_wbn_handle = 0;
+        if (tg_gui_wbn_handle != 0) {
+            tg_gui_log("window: Workbench notices still busy, port left open");
+            tg_gui_wbn_handle = 0;
+            tg_gui_wbn_port = 0;
+#if defined(TG_GUI_WBN_SCREENNOTIFY)
+            ScreenNotifyBase = 0;
+#endif
+            return;
+        }
     }
     if (tg_gui_wbn_port != 0) {
         while ((m = GetMsg(tg_gui_wbn_port)) != 0) {
@@ -9017,30 +9030,91 @@ static ULONG tg_gui_wbn_begin(void)
 #endif
 }
 
-/* After the window closed for a reset: wait until the Workbench is open
-   again, a Ctrl-C, or 20 s at most, then the window reopens. */
-static void tg_gui_wbn_wait_open(void)
+/* True while IPrefs has a window of its own open: the requester that names
+   the windows holding a Workbench reset back. IPrefs 47 calls its process
+   "<< IPrefs >>" (with Latin-1 guillemets); under a name not listed here
+   this never sees it. */
+static int tg_gui_wbn_iprefs_asking(void)
 {
-    int ticks;
+    struct Task *iprefs;
+    struct Screen *scr;
+    ULONG ilock;
+    int asking = 0;
 
-    for (ticks = 0; ticks < 80 && tg_gui_wbn_port != 0; ++ticks) {
+    iprefs = FindTask((CONST_STRPTR)"\xab IPrefs \xbb");
+    if (iprefs == 0) {
+        iprefs = FindTask((CONST_STRPTR)"IPrefs");
+    }
+    if (iprefs == 0) {
+        return 0;
+    }
+    ilock = LockIBase(0UL);
+    for (scr = ((struct IntuitionBase *)IntuitionBase)->FirstScreen;
+         scr != 0 && !asking; scr = scr->NextScreen) {
+        struct Window *w;
+
+        for (w = scr->FirstWindow; w != 0; w = w->NextWindow) {
+            if (w->UserPort != 0 &&
+                (void *)w->UserPort->mp_SigTask == (void *)iprefs) {
+                asking = 1;
+                break;
+            }
+        }
+    }
+    UnlockIBase(ilock);
+    return asking;
+}
+
+/* After the window closed for a reset: every later notice is answered at
+   once (nothing waits for a window here), and the window comes back when the
+   Workbench has settled: open again, then three calm seconds with no notice
+   and no IPrefs requester. A Shell or another program can hold the reset
+   back; IPrefs then names it and retries whenever a window comes or goes, so
+   coming back while it asks would only make it try again. With no notice at
+   all for 20 s, or after 5 minutes, the window comes back anyway. */
+static void tg_gui_wbn_park(void)
+{
+    unsigned int ticks;
+    unsigned int calm = 0;
+    int open_seen = 0;
+    int asking_said = 0;
+
+    for (ticks = 0; ticks < 1200U && tg_gui_wbn_port != 0; ++ticks) {
         struct Message *m;
+        int heard = 0;
 
         while ((m = GetMsg(tg_gui_wbn_port)) != 0) {
             int kind = tg_gui_wbn_kind(m);
 
             ReplyMsg(m);
-            if (kind == 2) {
-                tg_gui_log("window: Workbench open again");
-                return;
+            if (kind != 0) {
+                heard = 1;
+                if (kind == 2) {
+                    open_seen = 1;
+                }
             }
         }
         if ((SetSignal(0L, 0L) & SIGBREAKF_CTRL_C) != 0UL) {
             return;
         }
+        if (heard) {
+            calm = 0;
+        } else if (tg_gui_wbn_iprefs_asking()) {
+            calm = 0;
+            if (!asking_said) {
+                tg_gui_log("window: IPrefs asks to close other windows, "
+                           "waiting");
+                asking_said = 1;
+            }
+        } else if (++calm >= (open_seen ? 12U : 80U)) {
+            tg_gui_log(open_seen ? "window: Workbench open again"
+                                 : "window: no Workbench reopen notice, "
+                                   "reopening anyway");
+            return;
+        }
         Delay(12); /* a quarter of a second */
     }
-    tg_gui_log("window: no Workbench reopen notice, reopening anyway");
+    tg_gui_log("window: Workbench reset still pending, reopening anyway");
 }
 
 static int tg_gui_run_window_once(tg_gui_state *state)
@@ -12542,7 +12616,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         /* the window is gone: let the reset go ahead, and come back after */
         ReplyMsg(wbn_close);
         wbn_close = 0;
-        tg_gui_wbn_wait_open();
+        tg_gui_wbn_park();
     }
     tg_gui_wbn_end();
     tg_gui_amiga_close_core_libs();

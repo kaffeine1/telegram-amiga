@@ -81,8 +81,12 @@ lanes unless noted.
   could not while our window stayed on it, so the prefs program kept
   asking to close all windows. The window now closes when the system warns
   that the Workbench is about to close, and opens again on the new screen
-  when it is back; the chats and the connection stay as they were. OS4 and
-  AROS warn through Intuition, MorphOS through its screennotify.library.
+  when it is back; the chats and the connection stay as they were. When
+  another window still holds the reset back (a Shell, for one), the window
+  stays closed while the prefs program names it, and opens again once the
+  reset has gone through or been cancelled: coming back at once only made
+  the prefs program try again and again. OS4 and AROS warn through
+  Intuition, MorphOS through its screennotify.library.
   On AmigaOS 3 the warning needs screennotify.library from Aminet
   (util/libs/ScreenNotify10) in LIBS:; without it nothing changes, and the
   own screen (Settings > Use own screen) avoids the problem.
