@@ -431,6 +431,14 @@ int tg_avatar_decode_jpeg(const unsigned char *jpeg, unsigned long jpeg_len,
     if (scale > 3 || (jd.width >> scale) == 0 || (jd.height >> scale) == 0) {
         return 1;
     }
+    /* A destination that a coarser pass still covers takes it. At 1/8 tjpgd
+       keeps only each block's average and skips the IDCT, and a 160px
+       avatar comes out at exactly the 20px a slow 68k's chat list shows. */
+    while (scale < 3 &&
+           (unsigned int)(jd.width >> (scale + 1)) >= (unsigned int)dw &&
+           (unsigned int)(jd.height >> (scale + 1)) >= (unsigned int)dh) {
+        ++scale;
+    }
     io.w = (unsigned int)(jd.width >> scale);
     io.h = (unsigned int)(jd.height >> scale);
     if (jd_decomp(&jd, tg_avatar_out, (uint8_t)scale) != JDR_OK) {
@@ -439,6 +447,43 @@ int tg_avatar_decode_jpeg(const unsigned char *jpeg, unsigned long jpeg_len,
     return tg_image_scale_rgb_bilinear_stride(
         src_rgb, (int)io.w, (int)io.h, TG_AVATAR_SRC_MAX,
         dst_rgb, dw, dh);
+}
+
+/* Squared channel differences for tg_avatar_nearest, built on first use. */
+static long tg_avatar_sq[511];
+static int tg_avatar_sq_ready;
+
+int tg_avatar_nearest(const unsigned char *pal, int n,
+                      const unsigned char *rgb, long *out_d)
+{
+    const long *sq;
+    long best_d = 0x7fffffffL;
+    int best = -1;
+    int i;
+
+    if (!tg_avatar_sq_ready) {
+        for (i = 0; i < 511; ++i) {
+            long d = (long)i - 255L;
+
+            tg_avatar_sq[i] = d * d;
+        }
+        tg_avatar_sq_ready = 1;
+    }
+    sq = tg_avatar_sq + 255;
+    for (i = 0; i < n; ++i, pal += 3) {
+        long d = sq[(int)pal[0] - (int)rgb[0]] +
+                 sq[(int)pal[1] - (int)rgb[1]] +
+                 sq[(int)pal[2] - (int)rgb[2]];
+
+        if (d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    if (out_d != 0) {
+        *out_d = best_d;
+    }
+    return best;
 }
 
 typedef struct tg_image_jpeg_io {

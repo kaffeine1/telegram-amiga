@@ -320,8 +320,13 @@ static void tg_gui_amiga_close_cybergraphics(void)
    with 14 of them kept the window off the screen for a minute. */
 #define TG_GUI_AV_PAINT_BUDGET_MS 300UL
 #define TG_GUI_AV_STEPS_PER_PAINT 4
+/* Seconds without any input before a background avatar build may start: one
+   build blocks the loop (seconds on a stock A1200), so it must not land in
+   the middle of typing or of a menu. */
+#define TG_GUI_AV_IDLE_SECONDS 2UL
 static unsigned long tg_gui_av_paint_budget_ms = TG_GUI_AV_PAINT_BUDGET_MS;
 static unsigned long tg_gui_av_paint_spent_ms = 0UL;
+static void tg_gui_av_set_lean(int lean); /* with the avatar grid below */
 
 /* Resolve both adaptive defaults only after Intuition selected the screen.
    A library installed on an AGA/ECS/OCS screen is not proof of RTG. */
@@ -356,9 +361,7 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
     tg_gui_log(has_rtg ? "graphics: RTG screen" : "graphics: native screen");
     tg_gui_log(cpu_at_least_040 ? "graphics: cpu >= 040" : "graphics: cpu < 040");
 #endif
-    tg_gui_av_paint_budget_ms = (classic_amiga && !cpu_at_least_040)
-                                    ? 0UL
-                                    : TG_GUI_AV_PAINT_BUDGET_MS;
+    tg_gui_av_set_lean(classic_amiga && !cpu_at_least_040);
     tg_gui_graphics_preferences_resolve(state, classic_amiga,
                                        cpu_at_least_040, has_rtg);
     tg_gui_session_set_inline_photos(state->inline_photos);
@@ -1125,10 +1128,22 @@ typedef struct tg_gui_av_slot {
     unsigned long gen; /* store generation the slot was built at (retry gate) */
     int state; /* 0 free, 1 pens ready, -1 nothing/undecodable (initials),
                   2 waiting for its decode (initials meanwhile) */
+    int grid;  /* side of the pen grid it was built at (tg_gui_av_grid) */
     unsigned char pen[TG_GUI_AV_SZ * TG_GUI_AV_SZ];
 } tg_gui_av_slot;
 static tg_gui_av_slot tg_gui_av_slots[TG_GUI_AV_SLOTS];
 static unsigned long tg_gui_av_evict = 0UL;
+/* The pen grid each avatar is built at. A 68k below the 68040 builds 20x20,
+   the size its chat list draws them at: 400 colour lookups instead of 1024,
+   and the JPEG decoded at 1/8 (block averages, no IDCT). */
+#define TG_GUI_AV_SZ_LEAN 20
+static int tg_gui_av_grid = TG_GUI_AV_SZ;
+
+static void tg_gui_av_set_lean(int lean)
+{
+    tg_gui_av_paint_budget_ms = lean ? 0UL : TG_GUI_AV_PAINT_BUDGET_MS;
+    tg_gui_av_grid = lean ? TG_GUI_AV_SZ_LEAN : TG_GUI_AV_SZ;
+}
 static struct ColorMap *tg_gui_av_cmap = 0;
 static LONG tg_gui_av_pool_pen[TG_GUI_AV_POOL_MAX];
 static unsigned char tg_gui_av_pool_rgb[TG_GUI_AV_POOL_MAX][3];
@@ -1545,24 +1560,14 @@ static void tg_gui_av_seed_pool(void)
    (PRECISION-default like the theme pens), else nearest of what we have. */
 static LONG tg_gui_av_pen_for(const unsigned char *rgb)
 {
-    int i;
-    int best = -1;
-    long best_d = 0x7fffffffL;
+    int best;
+    long best_d;
 
     if (tg_gui_av_pool_n == 0) {
         tg_gui_av_seed_pool(); /* once per screen (reset drops the pool) */
     }
-    for (i = 0; i < tg_gui_av_pool_n; ++i) {
-        long dr = (long)tg_gui_av_pool_rgb[i][0] - (long)rgb[0];
-        long dg = (long)tg_gui_av_pool_rgb[i][1] - (long)rgb[1];
-        long db = (long)tg_gui_av_pool_rgb[i][2] - (long)rgb[2];
-        long d = dr * dr + dg * dg + db * db;
-
-        if (d < best_d) {
-            best_d = d;
-            best = i;
-        }
-    }
+    best = tg_avatar_nearest(&tg_gui_av_pool_rgb[0][0], tg_gui_av_pool_n, rgb,
+                             &best_d);
     if (best >= 0 && best_d <= tg_gui_av_share_d) {
         return tg_gui_av_pool_pen[best]; /* close enough: share */
     }
@@ -1608,7 +1613,6 @@ static LONG tg_gui_photo_pen_for(const tg_gui_amiga_ctx *ctx,
    FNV-1a hash, the grid size, then the RGB. A new JPEG for the peer simply
    stops matching and is decoded (and kept) again. */
 #define TG_GUI_AV_CACHE_HEAD 16UL
-#define TG_GUI_AV_RGB_BYTES ((unsigned long)TG_GUI_AV_SZ * TG_GUI_AV_SZ * 3UL)
 
 static unsigned long tg_gui_av_hash(const unsigned char *data, unsigned long n)
 {
@@ -1623,7 +1627,7 @@ static unsigned long tg_gui_av_hash(const unsigned char *data, unsigned long n)
 }
 
 static void tg_gui_av_cache_head(unsigned char *head, unsigned long len,
-                                 unsigned long hash)
+                                 unsigned long hash, int grid)
 {
     int i;
 
@@ -1632,17 +1636,19 @@ static void tg_gui_av_cache_head(unsigned char *head, unsigned long len,
         head[4 + i] = (unsigned char)((len >> (24 - 8 * i)) & 0xFFUL);
         head[8 + i] = (unsigned char)((hash >> (24 - 8 * i)) & 0xFFUL);
     }
-    head[12] = (unsigned char)TG_GUI_AV_SZ;
+    head[12] = (unsigned char)grid; /* a grid of another size is a miss */
     head[13] = 0U;
     head[14] = 0U;
     head[15] = 0U;
 }
 
 static int tg_gui_av_cache_read(const char *name, unsigned long len,
-                                unsigned long hash, unsigned char *rgb)
+                                unsigned long hash, int grid,
+                                unsigned char *rgb)
 {
     unsigned char want[TG_GUI_AV_CACHE_HEAD];
     unsigned char got[TG_GUI_AV_CACHE_HEAD];
+    size_t bytes = (size_t)grid * (size_t)grid * 3U;
     FILE *f;
     int ok;
 
@@ -1650,20 +1656,21 @@ static int tg_gui_av_cache_read(const char *name, unsigned long len,
     if (f == 0) {
         return 0;
     }
-    tg_gui_av_cache_head(want, len, hash);
+    tg_gui_av_cache_head(want, len, hash, grid);
     ok = fread(got, 1, (size_t)TG_GUI_AV_CACHE_HEAD, f) ==
              (size_t)TG_GUI_AV_CACHE_HEAD &&
          memcmp(got, want, (size_t)TG_GUI_AV_CACHE_HEAD) == 0 &&
-         fread(rgb, 1, (size_t)TG_GUI_AV_RGB_BYTES, f) ==
-             (size_t)TG_GUI_AV_RGB_BYTES;
+         fread(rgb, 1, bytes, f) == bytes;
     fclose(f);
     return ok;
 }
 
 static void tg_gui_av_cache_write(const char *name, unsigned long len,
-                                  unsigned long hash, const unsigned char *rgb)
+                                  unsigned long hash, int grid,
+                                  const unsigned char *rgb)
 {
     unsigned char head[TG_GUI_AV_CACHE_HEAD];
+    size_t bytes = (size_t)grid * (size_t)grid * 3U;
     FILE *f;
     int failed;
 
@@ -1671,11 +1678,10 @@ static void tg_gui_av_cache_write(const char *name, unsigned long len,
     if (f == 0) {
         return; /* a read-only or full volume just decodes next time too */
     }
-    tg_gui_av_cache_head(head, len, hash);
+    tg_gui_av_cache_head(head, len, hash, grid);
     failed = fwrite(head, 1, (size_t)TG_GUI_AV_CACHE_HEAD, f) !=
                  (size_t)TG_GUI_AV_CACHE_HEAD ||
-             fwrite(rgb, 1, (size_t)TG_GUI_AV_RGB_BYTES, f) !=
-                 (size_t)TG_GUI_AV_RGB_BYTES;
+             fwrite(rgb, 1, bytes, f) != bytes;
     if (fclose(f) != 0) {
         failed = 1;
     }
@@ -1694,6 +1700,7 @@ static void tg_gui_av_build(tg_gui_av_slot *slot)
     static unsigned char rgb[TG_GUI_AV_SZ * TG_GUI_AV_SZ * 3];
     static unsigned char jpeg[24576];
     static int timing_lines;
+    int grid = tg_gui_av_grid;
     const char *source;
     unsigned long t_start;
     unsigned long t_read;
@@ -1720,14 +1727,13 @@ static void tg_gui_av_build(tg_gui_av_slot *slot)
             sprintf(name, "avatars/tgav%08lx%08lx.rgb", slot->id_hi,
                     slot->id_lo);
             t_read = tg_gui_photo_now_ms();
-            if (tg_gui_av_cache_read(name, n, hash, rgb)) {
+            if (tg_gui_av_cache_read(name, n, hash, grid, rgb)) {
                 have_rgb = 1;
                 source = "disk";
-            } else if (tg_avatar_decode_jpeg(jpeg, n, rgb, TG_GUI_AV_SZ,
-                                             TG_GUI_AV_SZ) == 0) {
+            } else if (tg_avatar_decode_jpeg(jpeg, n, rgb, grid, grid) == 0) {
                 have_rgb = 1;
                 source = "jpeg";
-                tg_gui_av_cache_write(name, n, hash, rgb);
+                tg_gui_av_cache_write(name, n, hash, grid, rgb);
             }
             t_decode = tg_gui_photo_now_ms();
         }
@@ -1739,8 +1745,8 @@ static void tg_gui_av_build(tg_gui_av_slot *slot)
         if (tg_mtproto_avatar_thumb_lookup(slot->id_hi, slot->id_lo, &thumb,
                                            &thumb_len) &&
             thumb != 0 &&
-            tg_avatar_decode_stripped(thumb, thumb_len, rgb, TG_GUI_AV_SZ,
-                                      TG_GUI_AV_SZ) == 0) {
+            tg_avatar_decode_stripped(thumb, thumb_len, rgb, grid, grid) ==
+                0) {
             have_rgb = 1;
             source = "thumb";
         }
@@ -1752,7 +1758,7 @@ static void tg_gui_av_build(tg_gui_av_slot *slot)
         slot->state = -1; /* nothing/undecodable: initials, no re-probe */
         return;
     }
-    for (px = 0UL; px < TG_GUI_AV_SZ * TG_GUI_AV_SZ; ++px) {
+    for (px = 0UL; px < (unsigned long)grid * (unsigned long)grid; ++px) {
         LONG p = tg_gui_av_pen_for(rgb + px * 3UL);
 
         if (p == -1) { /* pen system exhausted: give up cleanly */
@@ -1761,6 +1767,7 @@ static void tg_gui_av_build(tg_gui_av_slot *slot)
         }
         slot->pen[px] = (unsigned char)p;
     }
+    slot->grid = grid;
     slot->state = 1;
     if (timing_lines < 32 && tg_gui_log_is_enabled()) {
         char line[128];
@@ -1839,7 +1846,8 @@ static int tg_gui_amiga_avatar_image(tg_gui_backend *backend,
        run-length RectFills into the current (buffered) RastPort, each row
        clipped to the disc so the avatar comes out round. */
     for (y = 0; y < rect.h; ++y) {
-        int sy = (y * TG_GUI_AV_SZ) / rect.h;
+        int grid = slot->grid;
+        int sy = (y * grid) / rect.h;
         int row_inset = tg_gui_amiga_disc_inset(y, rect.h);
         int row_end = rect.w - row_inset;
         int x = row_inset;
@@ -1848,13 +1856,12 @@ static int tg_gui_amiga_avatar_image(tg_gui_backend *backend,
             continue;
         }
         while (x < row_end) {
-            int sx = (x * TG_GUI_AV_SZ) / rect.w;
-            unsigned char p = slot->pen[sy * TG_GUI_AV_SZ + sx];
+            int sx = (x * grid) / rect.w;
+            unsigned char p = slot->pen[sy * grid + sx];
             int run = x + 1;
 
             while (run < row_end &&
-                   slot->pen[sy * TG_GUI_AV_SZ +
-                             ((run * TG_GUI_AV_SZ) / rect.w)] == p) {
+                   slot->pen[sy * grid + ((run * grid) / rect.w)] == p) {
                 ++run;
             }
             SetAPen(ctx->rport, (LONG)p);
@@ -1866,6 +1873,16 @@ static int tg_gui_amiga_avatar_image(tg_gui_backend *backend,
         }
     }
     return 1;
+}
+
+/* At least `seconds` since `since` (a time(0) stamp), on a clock that may
+   also fail or step back. */
+static int tg_gui_window_quiet_for(time_t since, unsigned long seconds)
+{
+    time_t now = time(0);
+
+    return now != (time_t)-1 && now >= since &&
+           (unsigned long)(now - since) >= seconds;
 }
 
 /* Avatars left to build after a paint ran out of budget. */
@@ -5026,15 +5043,18 @@ static void tg_gui_window_paint(const tg_gui_state *state,
    into it (tg_gui_paint_caret touches only that strip), then blit the whole
    already-current buffer -- correct and flicker-free; the blink only runs while a
    field is focused, so the 2 Hz full copy is cheap. */
-/* Transfer progress: the status bar alone, rendered in the off-screen buffer
-   and copied to the window as one strip. The full paint replays every inline
-   photo straight onto the window after its copy, so repainting everything for
-   each new percentage made the photos flash several times a second on a
-   Vampire, and cost 260 ms a part. Without a buffer the strip is drawn in
-   place; whenever the bar is not the whole story (a menu open) the full
-   paint runs as before. */
-static void tg_gui_window_paint_status(const tg_gui_state *state,
-                                       tg_gui_backend *backend)
+/* A painter that fills one region on its own and returns its rect, or
+   declines (0) when something else may cover it. */
+typedef int (*tg_gui_area_painter)(const tg_gui_state *state,
+                                   tg_gui_backend *backend,
+                                   tg_gui_rect *out_rect);
+
+/* Repaint just that region: render it into the off-screen buffer and copy
+   only its rect to the window, or fall back to the full paint when the
+   painter declines. */
+static void tg_gui_window_paint_area(const tg_gui_state *state,
+                                     tg_gui_backend *backend,
+                                     tg_gui_area_painter area)
 {
     tg_gui_amiga_ctx *c = (tg_gui_amiga_ctx *)backend->context;
     struct Layer *layer;
@@ -5055,7 +5075,7 @@ static void tg_gui_window_paint_status(const tg_gui_state *state,
         c->rport = &c->buf_rp;
         c->origin_x = 0;
         c->origin_y = 0;
-        ok = tg_gui_paint_status_bar(state, backend, &r);
+        ok = area(state, backend, &r);
         c->rport = saved_rport;
         c->origin_x = saved_ox;
         c->origin_y = saved_oy;
@@ -5092,7 +5112,7 @@ static void tg_gui_window_paint_status(const tg_gui_state *state,
         if (layer != 0) {
             LockLayerRom(layer);
         }
-        ok = tg_gui_paint_status_bar(state, backend, &r);
+        ok = area(state, backend, &r);
         if (layer != 0) {
             UnlockLayerRom(layer);
         }
@@ -5100,6 +5120,37 @@ static void tg_gui_window_paint_status(const tg_gui_state *state,
             tg_gui_window_paint(state, backend);
         }
     }
+}
+
+/* Transfer progress: the status bar alone, rendered in the off-screen buffer
+   and copied to the window as one strip. The full paint replays every inline
+   photo straight onto the window after its copy, so repainting everything for
+   each new percentage made the photos flash several times a second on a
+   Vampire, and cost 260 ms a part. Without a buffer the strip is drawn in
+   place; whenever the bar is not the whole story (a menu open) the full
+   paint runs as before. */
+static void tg_gui_window_paint_status(const tg_gui_state *state,
+                                       tg_gui_backend *backend)
+{
+    tg_gui_window_paint_area(state, backend, tg_gui_paint_status_bar);
+}
+
+/* The context menu's own box: opening it and moving its hover only change
+   the menu, which is opaque and drawn last. A full repaint for every item the
+   pointer crossed cost about three seconds each on a stock A1200 and made the
+   menu hard to aim at. */
+static void tg_gui_window_paint_context_menu(const tg_gui_state *state,
+                                             tg_gui_backend *backend)
+{
+    tg_gui_window_paint_area(state, backend, tg_gui_paint_context_menu_area);
+}
+
+/* The chat list alone, after avatars built in the background: a full paint
+   per batch cost about three seconds on a stock A1200. */
+static void tg_gui_window_paint_sidebar(const tg_gui_state *state,
+                                        tg_gui_backend *backend)
+{
+    tg_gui_window_paint_area(state, backend, tg_gui_paint_sidebar_area);
 }
 
 /* The one-shot startup task (tg_gui.h) and, while it runs, the window it
@@ -8598,6 +8649,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     int paint_deferred;          /* a network repaint waits for a typing pause */
     unsigned long full_paint_ms; /* how long the last such repaint took */
     int avatars_unpainted;       /* built in the background, not shown yet */
+    time_t last_input_time;      /* last real window event (not a tick) */
     int resize_pending;
     int resize_settle_ticks;
     int photo_defer_ticks;
@@ -8999,6 +9051,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     paint_deferred = 0;
     full_paint_ms = 0UL;
     avatars_unpainted = 0;
+    last_input_time = time(0);
     done = 0;
     state->composing = 0;
     state->nav_chat = -1;   /* no arrow-key focus yet (0 would tint row 0) */
@@ -9168,6 +9221,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             } else {
                 /* Any real queued event wins over background image work. */
                 interactive_event = 1;
+                last_input_time = time(0);
             }
             /* Feed REAL user input (keys, clicks, pointer motion) into the
                platform entropy ring -- the DRBG absorbs it on every generate.
@@ -10526,6 +10580,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (mi >= 0 && mi < state->message_count &&
                             !state->messages[mi].is_system &&
                             state->messages[mi].id != 0UL) {
+                            /* A menu still open elsewhere must be erased:
+                               that takes the full paint. */
+                            int was_open = state->ctx_visible;
+
                             state->ctx_visible = 1;
                             state->ctx_msg = mi;
                             state->ctx_x = hx;
@@ -10535,7 +10593,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                label) depends on the clicked message. */
                             state->ctx_w =
                                 tg_gui_context_menu_measure(state, &backend);
-                            tg_gui_window_paint(state, &backend);
+                            if (was_open) {
+                                tg_gui_window_paint(state, &backend);
+                            } else {
+                                tg_gui_window_paint_context_menu(state,
+                                                                 &backend);
+                            }
                         }
                     }
                 } else if (msg_code == SELECTDOWN &&
@@ -11297,7 +11360,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                     if (hv != state->ctx_hover) {
                         state->ctx_hover = hv;
-                        tg_gui_window_paint(state, &backend);
+                        tg_gui_window_paint_context_menu(state, &backend);
                     }
                 }
                 /* Scrollbar knob drag: Intuition reports moves while a button is
@@ -11652,10 +11715,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 photo_stall_reason = TG_GUI_PHOTO_STALL_NONE;
             }
         }
-        /* Avatars a paint had no budget for come first, one per turn. Their
-           repaint waits until the queue is done or a few are ready, since a
-           full paint costs seconds where a decode does. */
-        if (photo_background_turn && tg_gui_window_avatar_pending()) {
+        /* Avatars a paint had no budget for come first, one per turn, but
+           only after TG_GUI_AV_IDLE_SECONDS without input and with no menu or
+           popup open: a build holds the loop, and on a stock A1200 typing or
+           a context menu stalled behind one. A few at a time, only the chat
+           list repaints; once the queue is done, one full paint (which waits
+           for a typing pause) shows an avatar in the open chat's header. */
+        if (photo_background_turn && tg_gui_window_avatar_pending() &&
+            !state->ctx_visible && !state->emoji_active &&
+            !state->mention_active && !state->search_active &&
+            tg_gui_window_quiet_for(last_input_time,
+                                    TG_GUI_AV_IDLE_SECONDS)) {
             if (tg_gui_window_avatar_step()) {
                 ++avatars_unpainted;
             }
@@ -11663,7 +11733,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 (!tg_gui_window_avatar_pending() ||
                  avatars_unpainted >= TG_GUI_AV_STEPS_PER_PAINT)) {
                 avatars_unpainted = 0;
-                session_dirty = 1;
+                tg_gui_window_paint_sidebar(state, &backend);
+                if (!tg_gui_window_avatar_pending()) {
+                    session_dirty = 1;
+                }
             }
         }
         /* Explicit user transfers still win. Otherwise move one bounded cache

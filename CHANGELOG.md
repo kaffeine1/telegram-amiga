@@ -51,6 +51,20 @@ lanes unless noted.
   processed 32x32 avatar is kept next to its JPEG (avatars/*.rgb), so the
   next start skips the decode that cost about four seconds an avatar on a
   stock A1200 and kept its window away for a minute.
+- The context menu follows the pointer on a stock A1200. Opening it and
+  moving to another item redrew the whole window, about three seconds each
+  time, so the highlight trailed far behind and the right item was hard to
+  pick. Both now redraw only the menu's own box.
+- Typing and menus no longer stall while avatars arrive on a slow machine.
+  An avatar is built only after two seconds without input and with no menu
+  or popup open, and then only the chat list is redrawn; one full redraw
+  follows when all of them are done. On a 68k below the 68040 each avatar
+  is built at 20x20, the size the chat list shows, with the JPEG decoded
+  at 1/8 (block averages, no IDCT) and 400 colour lookups instead of 1024.
+  The nearest-colour search behind avatars, photos and emoji now runs in
+  the part of the program the 68k builds compile at -O2, with a table of
+  squares instead of multiplications, and picks exactly the same pens. On
+  a stock A1200 an avatar took 4.5 s: 2.5 s to decode, 1.6 s for colours.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in

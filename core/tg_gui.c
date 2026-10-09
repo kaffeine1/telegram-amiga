@@ -10,6 +10,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_avatar.h"
 #include "tg_version.h"
 #include "tg_file.h"
 #include "tg_emoji_sheet.h"
@@ -4498,6 +4499,40 @@ static void tg_gui_paint_context_menu(const tg_gui_state *state,
     }
 }
 
+/* The open context menu alone, for a paint that changes nothing but the menu
+   (opening it, or the hover moving to another item): the box is opaque and
+   the full paint draws it last, so nothing under it needs redrawing. Returns
+   0 and paints nothing when no menu is open. */
+int tg_gui_paint_context_menu_area(const tg_gui_state *state,
+                                   tg_gui_backend *backend,
+                                   tg_gui_rect *out_rect)
+{
+    int width;
+    int height;
+    int lh;
+    int bx, by, bw, bh, ih, n;
+    const char *labels[TG_GUI_CTX_ITEMS_MAX];
+    int ids[TG_GUI_CTX_ITEMS_MAX];
+
+    if (state == 0 || backend == 0 || state->mode != TG_GUI_MODE_CHAT ||
+        !state->ctx_visible) {
+        return 0;
+    }
+    width = backend->width(backend);
+    height = backend->height(backend);
+    lh = backend->line_height(backend);
+    if (width <= 0 || height <= 0 || lh <= 0) {
+        return 0;
+    }
+    n = tg_gui_context_items(state, labels, ids);
+    tg_gui_context_box(state, n, width, height, lh, &bx, &by, &bw, &bh, &ih);
+    tg_gui_paint_context_menu(state, backend);
+    if (out_rect != 0) {
+        *out_rect = tg_gui_make_rect(bx - 1, by - 1, bw + 2, bh + 2);
+    }
+    return 1;
+}
+
 int tg_gui_context_menu_hit(const tg_gui_state *state, int width, int height,
                             int lh, int x, int y)
 {
@@ -4612,6 +4647,38 @@ int tg_gui_paint_status_bar(const tg_gui_state *state,
     tg_gui_paint_status_strip(state, backend, width, content_h, status_h, lh);
     if (out_rect != 0) {
         *out_rect = tg_gui_make_rect(0, content_h, width, status_h);
+    }
+    return 1;
+}
+
+/* The chat list alone, for a paint that changes nothing else (an avatar
+   built in the background): the sidebar fills its own region. Declines with
+   a context menu open, since the full paint draws that over everything. */
+int tg_gui_paint_sidebar_area(const tg_gui_state *state,
+                              tg_gui_backend *backend, tg_gui_rect *out_rect)
+{
+    int width;
+    int height;
+    int lh;
+    int sidebar_w;
+    int content_h;
+
+    if (state == 0 || backend == 0 || state->mode != TG_GUI_MODE_CHAT ||
+        state->ctx_visible) {
+        return 0;
+    }
+    width = backend->width(backend);
+    height = backend->height(backend);
+    lh = backend->line_height(backend);
+    if (width <= 0 || height <= 0 || lh <= 0) {
+        return 0;
+    }
+    content_h = height - (lh + 6);
+    sidebar_w = tg_gui_sidebar_w(width);
+    ((tg_gui_state *)state)->nav_lh = tg_gui_native_line_height(backend);
+    tg_gui_paint_sidebar(state, backend, sidebar_w, content_h, state->nav_lh);
+    if (out_rect != 0) {
+        *out_rect = tg_gui_make_rect(0, 0, sidebar_w, content_h);
     }
     return 1;
 }
@@ -6662,6 +6729,162 @@ int tg_gui_self_test(void)
         if (tg_gui_paint_status_bar(st, &sb, &r) != 0 || srec.fills != 0 ||
             srec.texts != 0) {
             puts("gui self-test: status bar repaint ignored an open menu");
+            return 2;
+        }
+    }
+
+    /* The context menu repaints alone when it opens or its hover moves: the
+       call paints inside exactly the box the full paint frames as a popup,
+       hover highlight included, and declines when no menu is open. */
+    {
+        tg_gui_state *st = tg_gui_test_scratch_state();
+        tg_gui_record frec;
+        tg_gui_record crec;
+        tg_gui_backend cb = backend;
+        tg_gui_rect r;
+        int cok;
+        int framed;
+        int k;
+
+        tg_gui_demo_state(st);
+        cb.popup_area = tg_gui_rec_popup;
+        memset(&frec, 0, sizeof(frec));
+        frec.width = 640;
+        frec.height = 400;
+        frec.min_x = frec.width;
+        frec.min_y = frec.height;
+        cb.context = &frec;
+        st->ctx_visible = 1;
+        st->ctx_msg = 0;
+        st->ctx_x = 300;
+        st->ctx_y = 120;
+        st->ctx_hover = 1;
+        st->ctx_w = tg_gui_context_menu_measure(st, &cb);
+        tg_gui_paint(st, &cb);
+        memset(&crec, 0, sizeof(crec));
+        crec.width = 640;
+        crec.height = 400;
+        crec.min_x = crec.width;
+        crec.min_y = crec.height;
+        cb.context = &crec;
+        memset(&r, 0, sizeof(r));
+        cok = tg_gui_paint_context_menu_area(st, &cb, &r);
+        framed = 0;
+        for (k = 0; k < frec.popup_count && k < 3; ++k) {
+            if (frec.popup_rects[k].x == r.x && frec.popup_rects[k].y == r.y &&
+                frec.popup_rects[k].w == r.w && frec.popup_rects[k].h == r.h) {
+                framed = 1;
+            }
+        }
+        if (!cok || !framed || crec.fills < 3 || crec.texts < 1 ||
+            crec.min_x < r.x || crec.min_y < r.y ||
+            crec.max_x > r.x + r.w || crec.max_y > r.y + r.h) {
+            puts("gui self-test: context menu repaint left its box");
+            return 2;
+        }
+        st->ctx_visible = 0;
+        memset(&crec, 0, sizeof(crec));
+        crec.width = 640;
+        crec.height = 400;
+        cb.context = &crec;
+        if (tg_gui_paint_context_menu_area(st, &cb, &r) != 0 ||
+            crec.fills != 0 || crec.texts != 0) {
+            puts("gui self-test: context menu repaint drew without a menu");
+            return 2;
+        }
+    }
+
+    /* The chat list repaints alone when only an avatar changed: every fill
+       and text stays inside the sidebar rect, its avatars are all drawn, and
+       the call declines with a context menu open. */
+    {
+        tg_gui_state *st = tg_gui_test_scratch_state();
+        tg_gui_record lrec;
+        tg_gui_backend lb = backend;
+        tg_gui_rect r;
+        int lok;
+
+        tg_gui_demo_state(st);
+        memset(&lrec, 0, sizeof(lrec));
+        lrec.width = 640;
+        lrec.height = 400;
+        lrec.min_x = lrec.width;
+        lrec.min_y = lrec.height;
+        lb.context = &lrec;
+        memset(&r, 0, sizeof(r));
+        lok = tg_gui_paint_sidebar_area(st, &lb, &r);
+        if (!lok || r.x != 0 || r.y != 0 || r.w != tg_gui_sidebar_w(640) ||
+            r.h != 400 - (10 + 6) || lrec.fills < 1 ||
+            lrec.avatars + lrec.avatar_images < st->chat_count ||
+            lrec.min_x < r.x || lrec.min_y < r.y ||
+            lrec.max_x > r.x + r.w || lrec.max_y > r.y + r.h) {
+            puts("gui self-test: chat list repaint left its column");
+            return 2;
+        }
+        st->ctx_visible = 1;
+        memset(&lrec, 0, sizeof(lrec));
+        lrec.width = 640;
+        lrec.height = 400;
+        lb.context = &lrec;
+        if (tg_gui_paint_sidebar_area(st, &lb, &r) != 0 || lrec.fills != 0) {
+            puts("gui self-test: chat list repaint ignored an open menu");
+            return 2;
+        }
+    }
+
+    /* The nearest-colour search behind every avatar, photo and emoji pen
+       moved into tg_avatar.c (compiled at -O2 on the 68k) and lost its
+       multiplications: it must pick exactly what the old loop picked, the
+       first of equal distances included, and say -1 for an empty pool. */
+    {
+        static unsigned char pal[48 * 3];
+        unsigned long seed = 12345UL;
+        unsigned char rgb[3];
+        int i;
+        int round;
+        long d;
+
+        for (i = 0; i < 48 * 3; ++i) {
+            seed = (seed * 1103515245UL + 12345UL) & 0xFFFFFFFFUL;
+            pal[i] = (unsigned char)((seed >> 16) & 0xFFUL);
+        }
+        pal[5 * 3 + 0] = pal[2 * 3 + 0]; /* a duplicate: first one wins */
+        pal[5 * 3 + 1] = pal[2 * 3 + 1];
+        pal[5 * 3 + 2] = pal[2 * 3 + 2];
+        for (round = 0; round < 3000; ++round) {
+            int want = -1;
+            long want_d = 0x7fffffffL;
+            int got;
+
+            for (i = 0; i < 3; ++i) {
+                seed = (seed * 1103515245UL + 12345UL) & 0xFFFFFFFFUL;
+                rgb[i] = (unsigned char)((seed >> 16) & 0xFFUL);
+            }
+            if (round == 7) {
+                rgb[0] = pal[2 * 3 + 0];
+                rgb[1] = pal[2 * 3 + 1];
+                rgb[2] = pal[2 * 3 + 2];
+            }
+            for (i = 0; i < 48; ++i) {
+                long dr = (long)pal[i * 3 + 0] - (long)rgb[0];
+                long dg = (long)pal[i * 3 + 1] - (long)rgb[1];
+                long db = (long)pal[i * 3 + 2] - (long)rgb[2];
+                long dd = dr * dr + dg * dg + db * db;
+
+                if (dd < want_d) {
+                    want_d = dd;
+                    want = i;
+                }
+            }
+            got = tg_avatar_nearest(pal, 48, rgb, &d);
+            if (got != want || d != want_d) {
+                printf("gui self-test: nearest colour %d/%ld, wanted %d/%ld\n",
+                       got, d, want, want_d);
+                return 2;
+            }
+        }
+        if (tg_avatar_nearest(pal, 0, rgb, &d) != -1) {
+            puts("gui self-test: nearest colour in an empty pool");
             return 2;
         }
     }

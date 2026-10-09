@@ -18,10 +18,18 @@ int tg_avatar_expand_stripped(const unsigned char *stripped,
                               unsigned long *out_len);
 
 /* Decode a whole baseline JPEG (e.g. the downloaded 160px avatar), picking the
-   largest 1/2^k tjpgd scale that fits TG_AVATAR_SRC_MAX, then nearest-scale
-   into dst_rgb (dw*dh*3, RGB888). 0 = ok. */
+   largest 1/2^k tjpgd scale that fits TG_AVATAR_SRC_MAX, or a coarser one
+   that still covers dw x dh, then scale into dst_rgb (dw*dh*3, RGB888).
+   0 = ok. */
 int tg_avatar_decode_jpeg(const unsigned char *jpeg, unsigned long jpeg_len,
                           unsigned char *dst_rgb, int dw, int dh);
+
+/* Index of the palette entry nearest to rgb by squared RGB distance (the
+   first of equals wins) and that distance; -1 for an empty palette. pal holds
+   n RGB triples. Kept here, with the decoder, so the 68k builds compile this
+   per-pixel loop at -O2 too: at -O0 it was 1.6 s an avatar on a stock A1200. */
+int tg_avatar_nearest(const unsigned char *pal, int n,
+                      const unsigned char *rgb, long *out_d);
 
 /* General message-photo path: decode a baseline JPEG with tjpgd and scale it
    into caller-owned RGB888. Intermediate memory is allocated only for the

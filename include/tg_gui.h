@@ -650,6 +650,15 @@ int tg_gui_context_menu_hit(const tg_gui_state *state, int width, int height,
 /* Maps a pointer at renderer-space (x, y) to the 0-based context-menu item INDEX
    under it (for hover highlighting), or -1 when the pointer is outside the popup.
    Same geometry as tg_gui_context_menu_hit, which returns the item id instead. */
+/* Paints only the chat list and returns its rect; 0 and nothing painted
+   with a context menu open (the full paint draws it over everything). */
+int tg_gui_paint_sidebar_area(const tg_gui_state *state,
+                              tg_gui_backend *backend, tg_gui_rect *out_rect);
+/* Paints only the open context menu and returns its box (the frame
+   included); 0 and nothing painted when no menu is open. */
+int tg_gui_paint_context_menu_area(const tg_gui_state *state,
+                                   tg_gui_backend *backend,
+                                   tg_gui_rect *out_rect);
 int tg_gui_context_menu_index(const tg_gui_state *state, int width, int height,
                               int lh, int x, int y);
 
