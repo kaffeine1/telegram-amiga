@@ -65,6 +65,17 @@ lanes unless noted.
   the part of the program the 68k builds compile at -O2, with a table of
   squares instead of multiplications, and picks exactly the same pens. On
   a stock A1200 an avatar took 4.5 s: 2.5 s to decode, 1.6 s for colours.
+- Emoji keep their colours on a paletted screen such as a 32- or 64-colour
+  AGA Workbench, where the yellow faces came out brown. The emoji artwork
+  uses 228 colours, mostly anti-aliased shades, and they were requested
+  one by one in palette order until the screen ran out of pens, so the main
+  yellow got whatever brown was left. Now the shades are grouped by tint
+  and weighed by the pixels they cover; the heaviest groups claim pens of
+  their own before the avatars do; and every colour then takes the screen
+  pen nearest in tint, read from the real palette, or a checkerboard of two
+  pens where that mix comes much closer. With --gui-live-debug the log
+  says how many pens the screen had free and what the main colours became.
+  Truecolour screens are unchanged.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in

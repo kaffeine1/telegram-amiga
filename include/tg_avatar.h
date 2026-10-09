@@ -31,6 +31,33 @@ int tg_avatar_decode_jpeg(const unsigned char *jpeg, unsigned long jpeg_len,
 int tg_avatar_nearest(const unsigned char *pal, int n,
                       const unsigned char *rgb, long *out_d);
 
+/* Colour choice for small palettes (the emoji on AGA/ECS): a distance that
+   counts a change of tint (chroma) three times a change of brightness. */
+long tg_avatar_tint_distance(const unsigned char *a, const unsigned char *b);
+/* Groups the used entries of a palette (weight > 0, n <= 256) into shades,
+   heaviest first: each entry joins the first group whose founding colour is
+   closer than `same`, or founds one (up to max_groups <= 64; past that it
+   joins the nearest). group_of[i] gets the group (-1 when unused); per group,
+   in descending total weight, group_rgb its weighted mean colour and
+   group_weight its weight. Returns the number of groups. */
+int tg_avatar_tint_groups(const unsigned char *pal,
+                          const unsigned long *weight, int n, long same,
+                          int max_groups, int *group_of,
+                          unsigned char *group_rgb,
+                          unsigned long *group_weight);
+/* Nearest entry by tint distance among those with usable[i] set (all when
+   usable is 0); -1 when none. */
+int tg_avatar_nearest_tint(const unsigned char *pal,
+                           const unsigned char *usable, int n,
+                           const unsigned char *rgb, long *out_d);
+/* Among the k (<= 8) nearest usable entries, the pair whose half-and-half mix
+   (a checkerboard of the two) is nearest to rgb: its distance, or -1 when
+   fewer than two entries are usable. */
+long tg_avatar_best_tint_pair(const unsigned char *pal,
+                              const unsigned char *usable, int n,
+                              const unsigned char *rgb, int k, int *pa,
+                              int *pb);
+
 /* General message-photo path: decode a baseline JPEG with tjpgd and scale it
    into caller-owned RGB888. Intermediate memory is allocated only for the
    duration of the decode and bounded by source_edge_cap. */

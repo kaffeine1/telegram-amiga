@@ -486,6 +486,230 @@ int tg_avatar_nearest(const unsigned char *pal, int n,
     return best;
 }
 
+/* --- Colour choice for small palettes (the emoji on AGA/ECS screens) -----
+   Luma and the two chroma axes of BT.601 in 0..255 units, with the chroma
+   counted three times: a change of tint costs more than a change of
+   brightness, so a yellow prefers a paler or darker yellow to a brown of the
+   same brightness, which plain RGB distance does not. The offsets keep every
+   division on a positive numerator, so all compilers round alike. */
+static void tg_avatar_ycc(const unsigned char *rgb, long *y, long *cb,
+                          long *cr)
+{
+    long r = (long)rgb[0];
+    long g = (long)rgb[1];
+    long b = (long)rgb[2];
+
+    *y = (77L * r + 150L * g + 29L * b) / 256L;
+    *cb = (-43L * r - 85L * g + 128L * b + 32768L) / 256L - 128L;
+    *cr = (128L * r - 107L * g - 21L * b + 32768L) / 256L - 128L;
+}
+
+long tg_avatar_tint_distance(const unsigned char *a, const unsigned char *b)
+{
+    long ya, ca, ra;
+    long yb, cb, rb;
+    long dy, dc, dr;
+
+    tg_avatar_ycc(a, &ya, &ca, &ra);
+    tg_avatar_ycc(b, &yb, &cb, &rb);
+    dy = ya - yb;
+    dc = ca - cb;
+    dr = ra - rb;
+    return dy * dy + 3L * (dc * dc + dr * dr);
+}
+
+int tg_avatar_tint_groups(const unsigned char *pal,
+                          const unsigned long *weight, int n, long same,
+                          int max_groups, int *group_of,
+                          unsigned char *group_rgb,
+                          unsigned long *group_weight)
+{
+    static int order[256];
+    static int tmp_group[256];
+    static int seed[64];
+    static unsigned long sum[64][3];
+    static unsigned long wsum[64];
+    static int rank[64];
+    static int remap[64];
+    int count = 0;
+    int ng = 0;
+    int i;
+    int j;
+
+    if (pal == 0 || weight == 0 || group_of == 0 || group_rgb == 0 ||
+        group_weight == 0 || n <= 0) {
+        return 0;
+    }
+    if (n > 256) {
+        n = 256;
+    }
+    if (max_groups > 64) {
+        max_groups = 64;
+    }
+    if (max_groups < 1) {
+        max_groups = 1;
+    }
+    /* used entries, heaviest first (insertion sort; ties keep index order) */
+    for (i = 0; i < n; ++i) {
+        group_of[i] = -1;
+        if (weight[i] == 0UL) {
+            continue;
+        }
+        j = count;
+        while (j > 0 && weight[order[j - 1]] < weight[i]) {
+            order[j] = order[j - 1];
+            --j;
+        }
+        order[j] = i;
+        ++count;
+    }
+    for (i = 0; i < count; ++i) {
+        int e = order[i];
+        int g = -1;
+        long best_d = 0x7fffffffL;
+        int nearest = 0;
+
+        for (j = 0; j < ng; ++j) {
+            long d = tg_avatar_tint_distance(pal + e * 3, pal + seed[j] * 3);
+
+            if (d < same) {
+                g = j; /* the first group close enough */
+                break;
+            }
+            if (d < best_d) {
+                best_d = d;
+                nearest = j;
+            }
+        }
+        if (g < 0) {
+            if (ng < max_groups) {
+                g = ng++;
+                seed[g] = e;
+                sum[g][0] = sum[g][1] = sum[g][2] = 0UL;
+                wsum[g] = 0UL;
+            } else {
+                g = nearest;
+            }
+        }
+        tmp_group[e] = g;
+        sum[g][0] += (unsigned long)pal[e * 3 + 0] * weight[e];
+        sum[g][1] += (unsigned long)pal[e * 3 + 1] * weight[e];
+        sum[g][2] += (unsigned long)pal[e * 3 + 2] * weight[e];
+        wsum[g] += weight[e];
+    }
+    /* groups by total weight, heaviest first */
+    for (i = 0; i < ng; ++i) {
+        j = i;
+        while (j > 0 && wsum[rank[j - 1]] < wsum[i]) {
+            rank[j] = rank[j - 1];
+            --j;
+        }
+        rank[j] = i;
+    }
+    for (i = 0; i < ng; ++i) {
+        int g = rank[i];
+
+        remap[g] = i;
+        for (j = 0; j < 3; ++j) {
+            group_rgb[i * 3 + j] =
+                (unsigned char)((sum[g][j] + wsum[g] / 2UL) / wsum[g]);
+        }
+        group_weight[i] = wsum[g];
+    }
+    for (i = 0; i < count; ++i) {
+        group_of[order[i]] = remap[tmp_group[order[i]]];
+    }
+    return ng;
+}
+
+int tg_avatar_nearest_tint(const unsigned char *pal,
+                           const unsigned char *usable, int n,
+                           const unsigned char *rgb, long *out_d)
+{
+    long best_d = 0x7fffffffL;
+    int best = -1;
+    int i;
+
+    for (i = 0; i < n; ++i) {
+        long d;
+
+        if (usable != 0 && !usable[i]) {
+            continue;
+        }
+        d = tg_avatar_tint_distance(pal + i * 3, rgb);
+        if (d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    if (out_d != 0) {
+        *out_d = best_d;
+    }
+    return best;
+}
+
+long tg_avatar_best_tint_pair(const unsigned char *pal,
+                              const unsigned char *usable, int n,
+                              const unsigned char *rgb, int k, int *pa,
+                              int *pb)
+{
+    int near_i[8];
+    long near_d[8];
+    int found = 0;
+    long best_d = -1L;
+    int i;
+    int j;
+
+    if (k > 8) {
+        k = 8;
+    }
+    if (k < 2 || pal == 0 || rgb == 0 || pa == 0 || pb == 0) {
+        return -1L;
+    }
+    /* the k nearest usable entries, kept sorted */
+    for (i = 0; i < n; ++i) {
+        long d;
+
+        if (usable != 0 && !usable[i]) {
+            continue;
+        }
+        d = tg_avatar_tint_distance(pal + i * 3, rgb);
+        if (found < k) {
+            j = found++;
+        } else if (d < near_d[k - 1]) {
+            j = k - 1;
+        } else {
+            continue;
+        }
+        while (j > 0 && near_d[j - 1] > d) {
+            near_d[j] = near_d[j - 1];
+            near_i[j] = near_i[j - 1];
+            --j;
+        }
+        near_d[j] = d;
+        near_i[j] = i;
+    }
+    for (i = 0; i < found; ++i) {
+        for (j = i + 1; j < found; ++j) {
+            const unsigned char *a = pal + near_i[i] * 3;
+            const unsigned char *b = pal + near_i[j] * 3;
+            unsigned char mix[3];
+            long d;
+
+            mix[0] = (unsigned char)(((unsigned int)a[0] + b[0] + 1U) / 2U);
+            mix[1] = (unsigned char)(((unsigned int)a[1] + b[1] + 1U) / 2U);
+            mix[2] = (unsigned char)(((unsigned int)a[2] + b[2] + 1U) / 2U);
+            d = tg_avatar_tint_distance(mix, rgb);
+            if (best_d < 0L || d < best_d) {
+                best_d = d;
+                *pa = near_i[i];
+                *pb = near_i[j];
+            }
+        }
+    }
+    return best_d;
+}
+
 typedef struct tg_image_jpeg_io {
     const unsigned char *data;
     unsigned long size;
@@ -1307,6 +1531,99 @@ int tg_avatar_self_test(void)
             }
         }
     }
+    /* Small-palette colour choice (the emoji on AGA): tint before
+       brightness, shades grouped by pixel weight, the best two-pen mix. */
+    {
+        static const unsigned char yellow[3] = { 251U, 205U, 45U };
+        static const unsigned char brown[3] = { 150U, 90U, 30U };
+        static const unsigned char pale[3] = { 255U, 255U, 170U };
+        static const unsigned char orange[3] = { 230U, 130U, 20U };
+        /* plain RGB distance picks the greenish one, a tint distance the
+           darker yellow: tint before brightness */
+        static const unsigned char darker[3] = { 190U, 150U, 40U };
+        static const unsigned char greenish[3] = { 200U, 220U, 100U };
+        /* three yellow shades, a red, a dark orange shade, an unused slot */
+        static const unsigned char shades[6 * 3] = {
+            254U, 227U, 49U,   239U, 87U, 60U,   251U, 205U, 45U,
+            206U, 141U, 30U,   240U, 204U, 43U,  0U, 0U, 255U
+        };
+        static const unsigned long shade_w[6] = { 8UL, 12UL, 10UL, 3UL,
+                                                  6UL, 0UL };
+        /* what a full Workbench might offer: no yellow at all, a darker
+           yellow nearest, then an orange, then a pale yellow; the best mix
+           pairs the orange with the third nearest, the pale yellow */
+        static const unsigned char screen[5 * 3] = {
+            0U, 0U, 0U,   180U, 150U, 30U,   230U, 130U, 20U,
+            255U, 255U, 170U,   60U, 80U, 200U
+        };
+        /* two greys far enough to found two groups, and one between them
+           close to both: it joins the first, heavier group */
+        static const unsigned char greys[3 * 3] = {
+            180U, 180U, 180U,   230U, 230U, 230U,   205U, 205U, 205U
+        };
+        static const unsigned long grey_w[3] = { 10UL, 5UL, 1UL };
+        unsigned char usable[5] = { 1U, 1U, 1U, 1U, 1U };
+        int group_of[6];
+        unsigned char group_rgb[6 * 3];
+        unsigned long group_weight[6];
+        int groups;
+        int best;
+        int pa = -1;
+        int pb = -1;
+        long d;
+        long dp;
+
+        if (tg_avatar_tint_distance(yellow, yellow) != 0L ||
+            tg_avatar_tint_distance(yellow, pale) !=
+                tg_avatar_tint_distance(pale, yellow) ||
+            tg_avatar_tint_distance(yellow, pale) >=
+                tg_avatar_tint_distance(yellow, brown) ||
+            tg_avatar_tint_distance(yellow, orange) >=
+                tg_avatar_tint_distance(yellow, brown) ||
+            tg_avatar_tint_distance(yellow, darker) >=
+                tg_avatar_tint_distance(yellow, greenish)) {
+            puts("avatar self-test: tint distance does not put tint first");
+            return 2;
+        }
+        groups = tg_avatar_tint_groups(shades, shade_w, 6, 1600L, 64,
+                                       group_of, group_rgb, group_weight);
+        if (groups != 3 || group_weight[0] != 24UL ||
+            group_weight[1] != 12UL || group_weight[2] != 3UL ||
+            group_of[0] != 0 || group_of[2] != 0 || group_of[4] != 0 ||
+            group_of[1] != 1 || group_of[3] != 2 || group_of[5] != -1 ||
+            group_rgb[0] < 240U || group_rgb[1] < 204U ||
+            group_rgb[1] > 227U || group_rgb[2] > 49U) {
+            printf("avatar self-test: shade groups wrong (%d groups)\n",
+                   groups);
+            return 2;
+        }
+        if (tg_avatar_tint_groups(greys, grey_w, 3, 1600L, 64, group_of,
+                                  group_rgb, group_weight) != 2 ||
+            group_of[0] != 0 || group_of[1] != 1 || group_of[2] != 0) {
+            puts("avatar self-test: a shade between groups left the first");
+            return 2;
+        }
+        best = tg_avatar_nearest_tint(screen, usable, 5, yellow, &d);
+        if (best != 1) {
+            printf("avatar self-test: nearest tint picked %d\n", best);
+            return 2;
+        }
+        usable[1] = 0U; /* the darker yellow held exclusively elsewhere */
+        if (tg_avatar_nearest_tint(screen, usable, 5, yellow, &d) != 2) {
+            puts("avatar self-test: nearest tint ignored the usable mask");
+            return 2;
+        }
+        usable[1] = 1U;
+        (void)tg_avatar_nearest_tint(screen, usable, 5, yellow, &d);
+        dp = tg_avatar_best_tint_pair(screen, usable, 5, yellow, 8, &pa, &pb);
+        if (dp < 0L || dp >= d ||
+            !((pa == 2 && pb == 3) || (pa == 3 && pb == 2))) {
+            printf("avatar self-test: best pair %d+%d (%ld vs %ld)\n",
+                   pa, pb, dp, d);
+            return 2;
+        }
+    }
+
     puts("avatar self-test: ok (template 623 bytes, patch h/w, FFD9 tail)");
     return 0;
 }

@@ -725,10 +725,18 @@ static int tg_gui_amiga_emoji_cell(const tg_gui_amiga_ctx *ctx)
     return tg_gui_emoji_inline_size(ctx->state, h);
 }
 
-/* Pens for the sheet palette, resolved once per session through the same
-   colour matching the avatars use. Entry 0 is never drawn (transparent). */
+/* Pens for the sheet palette, resolved once per session. Entry 0 is never
+   drawn (transparent). A truecolour screen sends every colour through the
+   avatar matching; a paletted one (AGA, ECS) gets them planned by
+   tg_gui_emoji_pens_lean, where a colour may be drawn as a checkerboard of
+   two pens. */
 static LONG tg_gui_av_pen_for(const unsigned char *rgb); /* defined with the avatars */
+static int tg_gui_emoji_pens_lean(void); /* likewise; 1 when it planned them */
 static unsigned char tg_gui_emoji_pen[256];
+static unsigned char tg_gui_emoji_pen_b[256];  /* second pen of a dithered one */
+static unsigned char tg_gui_emoji_dither[256]; /* 1: checkerboard pen + pen_b */
+static LONG tg_gui_emoji_held[256]; /* screen pens the lean plan holds */
+static int tg_gui_emoji_held_n;
 static int tg_gui_emoji_pen_ready;
 
 static void tg_gui_amiga_emoji_pens(void)
@@ -738,9 +746,12 @@ static void tg_gui_amiga_emoji_pens(void)
     if (tg_gui_emoji_pen_ready) {
         return;
     }
-    for (k = 0; k < 255; ++k) {
-        tg_gui_emoji_pen[k + 1] =
-            (unsigned char)tg_gui_av_pen_for(tg_emoji_sheet_palette[k]);
+    memset(tg_gui_emoji_dither, 0, sizeof(tg_gui_emoji_dither));
+    if (!tg_gui_emoji_pens_lean()) {
+        for (k = 0; k < 255; ++k) {
+            tg_gui_emoji_pen[k + 1] =
+                (unsigned char)tg_gui_av_pen_for(tg_emoji_sheet_palette[k]);
+        }
     }
     tg_gui_emoji_pen_ready = 1;
 }
@@ -781,11 +792,27 @@ static int tg_gui_amiga_glyph_image(tg_gui_backend *backend,
                       ((run * TG_EMOJI_GLYPH_SIZE) / size)] == v) {
                 ++run;
             }
-            SetAPen(ctx->rport, (LONG)tg_gui_emoji_pen[v]);
-            RectFill(ctx->rport, ctx->origin_x + x + xx,
-                     ctx->origin_y + y_top + y,
-                     ctx->origin_x + x + run - 1,
-                     ctx->origin_y + y_top + y);
+            if (tg_gui_emoji_dither[v]) {
+                /* checkerboard on screen coordinates, so neighbouring runs
+                   and glyphs keep one regular pattern */
+                int ay = ctx->origin_y + y_top + y;
+                int dx;
+
+                for (dx = xx; dx < run; ++dx) {
+                    int ax = ctx->origin_x + x + dx;
+
+                    SetAPen(ctx->rport, (LONG)(((ax + ay) & 1)
+                                                   ? tg_gui_emoji_pen_b[v]
+                                                   : tg_gui_emoji_pen[v]));
+                    WritePixel(ctx->rport, ax, ay);
+                }
+            } else {
+                SetAPen(ctx->rport, (LONG)tg_gui_emoji_pen[v]);
+                RectFill(ctx->rport, ctx->origin_x + x + xx,
+                         ctx->origin_y + y_top + y,
+                         ctx->origin_x + x + run - 1,
+                         ctx->origin_y + y_top + y);
+            }
             xx = run;
         }
     }
@@ -1153,6 +1180,7 @@ static int tg_gui_av_pool_n = 0;
 static int tg_gui_av_pool_cap = 48;   /* 48 paletted / 160 truecolor */
 static long tg_gui_av_share_d = 192L; /* 192 paletted / 48 truecolor */
 static int tg_gui_av_rich = 0;        /* seed: cube+greys vs greys only */
+static int tg_gui_av_depth = 8;       /* the screen's planes: pens < 1<<depth */
 
 /* Message photos share the avatar pen pool but keep only a few CANONICAL pen
    grids. A slot is keyed only by Telegram photo id: bubble geometry never
@@ -1471,6 +1499,10 @@ static void tg_gui_av_release_pool(struct ColorMap *cmap)
 {
     int i;
 
+    for (i = 0; i < tg_gui_emoji_held_n; ++i) {
+        ReleasePen(cmap, tg_gui_emoji_held[i]);
+    }
+    tg_gui_emoji_held_n = 0;
     for (i = 0; i < tg_gui_av_pool_n; ++i) {
         ReleasePen(cmap, tg_gui_av_pool_pen[i]);
     }
@@ -1586,6 +1618,242 @@ static LONG tg_gui_av_pen_for(const unsigned char *rgb)
         }
     }
     return (best >= 0) ? tg_gui_av_pool_pen[best] : -1;
+}
+
+/* --- Emoji on a paletted screen --------------------------------------------
+   The sheet uses 228 colours, the anti-aliased shades of the Noto artwork.
+   Asked one by one in palette order through the avatar pool, they found a
+   64-colour AGA Workbench, colour icons and all, out of pens, and the face
+   yellow came out brown. Here the shades are grouped by tint and weighed by
+   the pixels they cover; the heaviest groups claim pens of their own while
+   the screen has any to give; then every colour takes the screen pen nearest
+   in tint, read from the real palette, or a checkerboard of two pens when
+   that mix is much closer. Truecolour screens keep the avatar path. */
+#define TG_GUI_EMOJI_CLAIM_MAX 16
+#define TG_GUI_EMOJI_SAME_TINT 1600L
+#define TG_GUI_EMOJI_DITHER_FAR 1200L
+
+/* A share of `pen` for the emoji, once; 0 when another program holds it
+   exclusively (its colour may change under us). */
+static int tg_gui_emoji_hold(LONG pen)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_emoji_held_n; ++i) {
+        if (tg_gui_emoji_held[i] == pen) {
+            return 1;
+        }
+    }
+    if (tg_gui_emoji_held_n >= 256 ||
+        (LONG)ObtainPen(tg_gui_av_cmap, (ULONG)pen, 0UL, 0UL, 0UL,
+                        PEN_NO_SETCOLOR) != pen) {
+        return 0;
+    }
+    tg_gui_emoji_held[tg_gui_emoji_held_n++] = pen;
+    return 1;
+}
+
+/* Free pens left on a screen, for the debug log: borrow each exclusively
+   without touching its colour, count them, give them all back. */
+static int tg_gui_count_free_pens(struct ColorMap *cmap)
+{
+    LONG got[256];
+    int n = 0;
+    int i;
+
+    while (n < 256) {
+        LONG p = (LONG)ObtainPen(cmap, (ULONG)-1L, 0UL, 0UL, 0UL,
+                                 PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
+
+        if (p == -1) {
+            break;
+        }
+        got[n++] = p;
+    }
+    for (i = 0; i < n; ++i) {
+        ReleasePen(cmap, got[i]);
+    }
+    return n;
+}
+
+static int tg_gui_emoji_pens_lean(void)
+{
+    static unsigned long weight[255];
+    static int group_of[255];
+    static unsigned char group_rgb[64 * 3];
+    static unsigned long group_weight[64];
+    static ULONG table[256 * 3];
+    static unsigned char scr[256 * 3];
+    static unsigned char usable[256];
+    struct TagItem tags[3];
+    unsigned long total = 0UL;
+    int free_pens = -1;
+    int claimed = 0;
+    int groups;
+    int ncol;
+    int k;
+    int i;
+
+    if (tg_gui_av_cmap == 0 || tg_gui_av_rich) {
+        return 0;
+    }
+    /* only the pens this screen can show: an AGA colour map may hold more
+       entries than its planes reach, and pen 200 on a 64-colour screen would
+       draw as pen 8 */
+    ncol = (int)tg_gui_av_cmap->Count;
+    if (tg_gui_av_depth >= 1 && tg_gui_av_depth <= 8 &&
+        ncol > (1 << tg_gui_av_depth)) {
+        ncol = 1 << tg_gui_av_depth;
+    }
+    if (ncol > 256) {
+        ncol = 256;
+    }
+    if (ncol < 2) {
+        return 0;
+    }
+    /* how many pixels of the sheet each colour covers */
+    memset(weight, 0, sizeof(weight));
+    for (k = 0; k < (int)tg_emoji_sheet_count; ++k) {
+        const unsigned char *px = tg_emoji_sheet_pixels[k];
+
+        for (i = 0; i < TG_EMOJI_GLYPH_SIZE * TG_EMOJI_GLYPH_SIZE; ++i) {
+            if (px[i] != 0U) {
+                ++weight[px[i] - 1U];
+                ++total;
+            }
+        }
+    }
+    groups = tg_avatar_tint_groups(&tg_emoji_sheet_palette[0][0], weight,
+                                   255, TG_GUI_EMOJI_SAME_TINT, 64, group_of,
+                                   group_rgb, group_weight);
+    if (tg_gui_log_is_enabled()) {
+        free_pens = tg_gui_count_free_pens(tg_gui_av_cmap);
+    }
+    /* the heaviest groups claim a close pen of their own, or nothing */
+    tags[0].ti_Tag = OBP_Precision;
+    tags[0].ti_Data = (ULONG)PRECISION_IMAGE;
+    tags[1].ti_Tag = OBP_FailIfBad;
+    tags[1].ti_Data = TRUE;
+    tags[2].ti_Tag = TAG_END;
+    tags[2].ti_Data = 0;
+    for (k = 0; k < groups && claimed < TG_GUI_EMOJI_CLAIM_MAX; ++k) {
+        LONG p = ObtainBestPenA(tg_gui_av_cmap,
+                                tg_gui_amiga_rgb32(group_rgb[k * 3 + 0]),
+                                tg_gui_amiga_rgb32(group_rgb[k * 3 + 1]),
+                                tg_gui_amiga_rgb32(group_rgb[k * 3 + 2]),
+                                tags);
+
+        if (p == -1) {
+            continue;
+        }
+        for (i = 0; i < tg_gui_emoji_held_n; ++i) {
+            if (tg_gui_emoji_held[i] == p) {
+                break;
+            }
+        }
+        if (i < tg_gui_emoji_held_n || tg_gui_emoji_held_n >= 256) {
+            ReleasePen(tg_gui_av_cmap, p); /* one share per pen is enough */
+        } else {
+            tg_gui_emoji_held[tg_gui_emoji_held_n++] = p;
+            ++claimed;
+        }
+    }
+    /* the real palette, claims included */
+    GetRGB32(tg_gui_av_cmap, 0UL, (ULONG)ncol, table);
+    for (i = 0; i < ncol; ++i) {
+        scr[i * 3 + 0] = (unsigned char)(table[i * 3 + 0] >> 24);
+        scr[i * 3 + 1] = (unsigned char)(table[i * 3 + 1] >> 24);
+        scr[i * 3 + 2] = (unsigned char)(table[i * 3 + 2] >> 24);
+        usable[i] = 1U;
+    }
+    for (k = 0; k < 255; ++k) {
+        long d1 = 0L;
+        int best = -1;
+
+        tg_gui_emoji_pen[k + 1] = 1U; /* unused colours are never drawn */
+        tg_gui_emoji_dither[k + 1] = 0U;
+        if (weight[k] == 0UL) {
+            continue;
+        }
+        for (;;) {
+            best = tg_avatar_nearest_tint(scr, usable, ncol,
+                                          tg_emoji_sheet_palette[k], &d1);
+            if (best < 0 || tg_gui_emoji_hold((LONG)best)) {
+                break;
+            }
+            usable[best] = 0U; /* held exclusively elsewhere */
+        }
+        if (best < 0) {
+            continue;
+        }
+        tg_gui_emoji_pen[k + 1] = (unsigned char)best;
+        if (d1 > TG_GUI_EMOJI_DITHER_FAR) {
+            int pa = -1;
+            int pb = -1;
+            long dp = tg_avatar_best_tint_pair(scr, usable, ncol,
+                                               tg_emoji_sheet_palette[k], 8,
+                                               &pa, &pb);
+
+            if (dp >= 0L && dp * 10L < d1 * 6L &&
+                tg_gui_emoji_hold((LONG)pa) && tg_gui_emoji_hold((LONG)pb)) {
+                tg_gui_emoji_pen[k + 1] = (unsigned char)pa;
+                tg_gui_emoji_pen_b[k + 1] = (unsigned char)pb;
+                tg_gui_emoji_dither[k + 1] = 1U;
+            }
+        }
+    }
+    if (tg_gui_log_is_enabled()) {
+        char line[192];
+        int used = 0;
+
+        for (k = 0; k < 255; ++k) {
+            if (weight[k] != 0UL) {
+                ++used;
+            }
+        }
+        sprintf(line, "emoji: %d colours on screen, %d free; %d shades in "
+                "%d groups, %d pens claimed", ncol, free_pens, used, groups,
+                claimed);
+        tg_gui_log(line);
+        /* the three heaviest groups: what their heaviest shade became */
+        for (i = 0; i < groups && i < 3; ++i) {
+            int top = -1;
+            int pa;
+
+            for (k = 0; k < 255; ++k) {
+                if (group_of[k] == i &&
+                    (top < 0 || weight[k] > weight[top])) {
+                    top = k;
+                }
+            }
+            if (top < 0) {
+                continue;
+            }
+            pa = tg_gui_emoji_pen[top + 1];
+            if (tg_gui_emoji_dither[top + 1]) {
+                int pb = tg_gui_emoji_pen_b[top + 1];
+
+                sprintf(line, "emoji: group %d (%u,%u,%u) %lu%% -> pens %d+%d "
+                        "(%u,%u,%u)+(%u,%u,%u) dithered", i + 1,
+                        (unsigned)group_rgb[i * 3], (unsigned)group_rgb[i * 3 + 1],
+                        (unsigned)group_rgb[i * 3 + 2],
+                        (group_weight[i] * 100UL) / (total > 0UL ? total : 1UL),
+                        pa, pb, (unsigned)scr[pa * 3], (unsigned)scr[pa * 3 + 1],
+                        (unsigned)scr[pa * 3 + 2], (unsigned)scr[pb * 3],
+                        (unsigned)scr[pb * 3 + 1], (unsigned)scr[pb * 3 + 2]);
+            } else {
+                sprintf(line, "emoji: group %d (%u,%u,%u) %lu%% -> pen %d "
+                        "(%u,%u,%u)", i + 1, (unsigned)group_rgb[i * 3],
+                        (unsigned)group_rgb[i * 3 + 1],
+                        (unsigned)group_rgb[i * 3 + 2],
+                        (group_weight[i] * 100UL) / (total > 0UL ? total : 1UL),
+                        pa, (unsigned)scr[pa * 3], (unsigned)scr[pa * 3 + 1],
+                        (unsigned)scr[pa * 3 + 2]);
+            }
+            tg_gui_log(line);
+        }
+    }
+    return 1;
 }
 
 /* Configurable Bayer 4x4 ordered dither for the pen-grid fallback. Truecolor
@@ -8862,6 +9130,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                        BMA_DEPTH);
 
         tg_gui_av_rich = av_depth > 8UL;
+        tg_gui_av_depth = (int)av_depth;
         tg_gui_av_pool_cap = tg_gui_av_rich ? TG_GUI_AV_POOL_MAX : 48;
         tg_gui_av_share_d = tg_gui_av_rich ? 48L : 192L;
         ctx.photo_truecolor =
@@ -8967,6 +9236,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
        is locked, so it goes here, after the wrapper has unlocked). Later repaints
        are IDCMP-driven and the IDCMP_REFRESHWINDOW path is bracketed by
        BeginRefresh/EndRefresh, which carries its own layer lock. */
+    /* On a paletted screen the emoji claim their pens before anything else
+       can: the avatars and photos that follow share what is left. */
+    if (state->emoji_enabled && !tg_gui_av_rich) {
+        tg_gui_amiga_emoji_pens();
+    }
     tg_gui_window_paint(state, &backend);
     tg_gui_log("window: first paint done");
     if (own_scr != 0) {
