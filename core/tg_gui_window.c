@@ -7680,7 +7680,12 @@ static void tg_gui_window_remove_selected(tg_gui_state *state,
    for. Format: "w h x y"; older files hold just "w h" and still load (position
    stays -1 = let Intuition place it), and older binaries reading a new file
    simply ignore the trailing x y. A roomier default on first run than the old
-   600x380. */
+   600x380. The saved size is the inner one: a window dragged down to its
+   320x200 minimum keeps a little less than that inside its borders, so the
+   floor for a saved size sits below the minimum (it used to be 320x200 too,
+   and the smallest window was never remembered). */
+#define TG_GUI_GEOM_MIN_W 280
+#define TG_GUI_GEOM_MIN_H 160
 static void tg_gui_window_load_geom(int *w, int *h, int *x, int *y, int *own)
 {
     FILE *f;
@@ -7703,7 +7708,8 @@ static void tg_gui_window_load_geom(int *w, int *h, int *x, int *y, int *own)
     f = fopen("data/telegram-gui-win.txt", "r");
     if (f != 0) {
         got = fscanf(f, "%d %d %d %d", &rw, &rh, &rx, &ry);
-        if (got >= 2 && rw >= 320 && rh >= 200 && rw <= 4096 && rh <= 4096) {
+        if (got >= 2 && rw >= TG_GUI_GEOM_MIN_W && rh >= TG_GUI_GEOM_MIN_H &&
+            rw <= 4096 && rh <= 4096) {
             *w = rw;
             *h = rh;
             if (got == 4 && rx >= 0 && ry >= 0 && rx <= 8192 && ry <= 8192) {
@@ -7726,7 +7732,7 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
 {
     FILE *f;
 
-    if (w < 320 || h < 200) {
+    if (w < TG_GUI_GEOM_MIN_W || h < TG_GUI_GEOM_MIN_H) {
         return;
     }
     if (x < 0) {

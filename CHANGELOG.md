@@ -92,6 +92,10 @@ lanes unless noted.
   screennotify.library. On AmigaOS 3 the warning needs screennotify.library
   from Aminet (util/libs/ScreenNotify10) in LIBS:; without it nothing
   changes, and the own screen (Settings > Use own screen) avoids the problem.
+- A window dragged down to its smallest size is remembered too. The size
+  is saved without the borders, and the floor for a saved size was the
+  window's own 320x200 minimum, which the inside of the smallest window
+  never reaches.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
