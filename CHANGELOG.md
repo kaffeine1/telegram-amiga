@@ -85,11 +85,13 @@ lanes unless noted.
   another window still holds the reset back (a Shell, for one), the window
   stays closed while the prefs program names it, and opens again once the
   reset has gone through or been cancelled: coming back at once only made
-  the prefs program try again and again. OS4 and AROS warn through
-  Intuition, MorphOS through its screennotify.library.
-  On AmigaOS 3 the warning needs screennotify.library from Aminet
-  (util/libs/ScreenNotify10) in LIBS:; without it nothing changes, and the
-  own screen (Settings > Use own screen) avoids the problem.
+  the prefs program try again and again. The window also closes as soon as
+  the warning arrives, without first running a click still queued behind
+  it: on a stalled link such a click kept the reset waiting for minutes.
+  OS4 and AROS warn through Intuition, MorphOS through its
+  screennotify.library. On AmigaOS 3 the warning needs screennotify.library
+  from Aminet (util/libs/ScreenNotify10) in LIBS:; without it nothing
+  changes, and the own screen (Settings > Use own screen) avoids the problem.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in

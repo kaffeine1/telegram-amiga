@@ -9747,6 +9747,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 }
             }
         }
+        if (done == 4) {
+            /* Close straight away: a click still queued could open a chat,
+               and on a stalled link that kept the reset waiting minutes. */
+            continue;
+        }
         tg_gui_photo_viewer_drain(&viewer, &photo_tick,
                                   &interactive_event,
                                   &viewer_save_requested);
