@@ -22052,6 +22052,16 @@ static int tg_gui_session_apply_typing(FILE *stream, int allow_member_fetch)
     return 0;
 }
 
+static unsigned int tg_gui_session_changes = 0U;
+
+unsigned int tg_gui_session_take_changes(void)
+{
+    unsigned int changes = tg_gui_session_changes;
+
+    tg_gui_session_changes = 0U;
+    return changes;
+}
+
 static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
 {
     int dirty;
@@ -22069,8 +22079,12 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     if (tg_gui_session_dispatch_notifications()) {
         dirty = 1;
     }
+    if (dirty) {
+        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+    }
     if (tg_gui_session_apply_typing(stream, allow_member_fetch)) {
         dirty = 1;
+        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_HEADER;
     }
     return dirty;
 }
@@ -22201,6 +22215,7 @@ int tg_gui_session_tick(FILE *stream)
         tg_chat_message_driver_override = 0;
         if (printed > 0UL) {
             dirty = 1;
+            tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
         }
         /* Refresh the peer's read cursor so own messages flip to the double-
            check once the peer reads them. Throttled: read state changes slowly
@@ -22237,6 +22252,7 @@ int tg_gui_session_tick(FILE *stream)
                     if (tg_gui_driver_set_read_outbox_max(
                             &tg_gui_session_state.gui_driver, read_max)) {
                         dirty = 1;
+                        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
                     }
                 }
             }

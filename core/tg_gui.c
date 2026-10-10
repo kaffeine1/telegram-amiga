@@ -2616,6 +2616,86 @@ static int tg_gui_message_height(tg_gui_backend *backend,
            (geo.line_count * lh) + (has_status ? lh : 0) + 6 + 6;
 }
 
+/* Each message keeps the height worked out for it, with a key of everything
+   that height depends on: a repaint used to wrap every loaded message again,
+   twice (the scroll range, then the rows), and in a busy group on a stock
+   A1200 that was some 8500 measurements for 70 texts drawn. The key is a
+   32-bit FNV-1a over the text and the fields that change the bubble's
+   height, seeded with the paint's own metrics (column width, line height,
+   inline photos, and the widths of a few probe strings, which change with
+   the font and with the emoji setting). */
+static unsigned long tg_gui_layout_mix(unsigned long h, unsigned long v)
+{
+    int i;
+
+    for (i = 0; i < 4; ++i) {
+        h = ((h ^ (v & 0xffUL)) * 16777619UL) & 0xffffffffUL;
+        v >>= 8;
+    }
+    return h;
+}
+
+static unsigned long tg_gui_layout_metrics(tg_gui_backend *backend,
+                                           int area_w, int lh,
+                                           int inline_photos)
+{
+    static const char probe[] = "abcdefghij klmnopqrstuvwxyz ABCDEFGHIJ";
+    char pair[2];
+    unsigned long h = 2166136261UL;
+
+    h = tg_gui_layout_mix(h, (unsigned long)area_w);
+    h = tg_gui_layout_mix(h, (unsigned long)lh);
+    h = tg_gui_layout_mix(h, (unsigned long)(inline_photos ? 1 : 0));
+    h = tg_gui_layout_mix(h, (unsigned long)backend->text_width(backend, "M",
+                                                                1UL));
+    h = tg_gui_layout_mix(h, (unsigned long)backend->text_width(
+                                 backend, probe,
+                                 (unsigned long)(sizeof(probe) - 1U)));
+    if (tg_gui_emoji_encode(0UL, pair)) {
+        h = tg_gui_layout_mix(h, (unsigned long)backend->text_width(
+                                     backend, pair, 2UL));
+    }
+    return h;
+}
+
+/* tg_gui_message_height through the message's cache. */
+static int tg_gui_message_height_kept(const tg_gui_state *state,
+                                      tg_gui_backend *backend, int index,
+                                      int area_w, int lh, int grouped,
+                                      unsigned long metrics)
+{
+    tg_gui_message *message = (tg_gui_message *)&state->messages[index];
+    unsigned long key;
+    const char *t;
+
+    if (message->is_system) {
+        return lh + 6;
+    }
+    key = tg_gui_layout_mix(metrics,
+                            (unsigned long)((message->is_own ? 1 : 0) |
+                                            (grouped ? 2 : 0) |
+                                            (message->reply_text[0] ? 4 : 0) |
+                                            (message->has_photo ? 8 : 0) |
+                                            (message->photo_only ? 16 : 0) |
+                                            (message->time[0] ? 32 : 0) |
+                                            (tg_gui_check_count(message) > 0
+                                                 ? 64 : 0)));
+    key = tg_gui_layout_mix(key, message->photo_width);
+    key = tg_gui_layout_mix(key, message->photo_height);
+    for (t = message->text; *t != '\0'; ++t) {
+        key = ((key ^ (unsigned char)*t) * 16777619UL) & 0xffffffffUL;
+    }
+    if (key == 0UL) {
+        key = 1UL;
+    }
+    if (message->layout_key != key) {
+        message->layout_h = tg_gui_message_height(
+            backend, message, area_w, lh, state->inline_photos, grouped);
+        message->layout_key = key;
+    }
+    return message->layout_h;
+}
+
 /* Draws just the bottom composer row: the input box, the typed text (or the
    placeholder / idle text) with the blinking caret, and the Send button.
    Factored out of tg_gui_paint_main so the caret blink (tg_gui_paint_caret) can
@@ -3434,49 +3514,20 @@ static void tg_gui_paint_jump_button(tg_gui_backend *backend, int x, int y,
     }
 }
 
-static void tg_gui_paint_main(const tg_gui_state *state,
-                              tg_gui_backend *backend, int sidebar_w,
-                              int width, int content_h, int lh)
+/* The chat header's height: two text slots and their margins. */
+static int tg_gui_header_h(tg_gui_backend *backend)
 {
-    int area_x;
-    int area_w;
-    int header_h;
-    int input_h;
-    int y;
-    int i;
-    int transcript_bottom;
-    int transcript_top;
-    tg_gui_state *st;
+    return 3 * tg_gui_native_line_height(backend) + 14;
+}
 
-    /* Clear this panel's own background (the sidebar already does the same), so
-       tg_gui_paint no longer needs a leading full-window clear that flashed the
-       entire window on every repaint -- very visible on OS3 planar displays. The
-       sidebar + this main panel + the status bar tile the whole window. */
-    backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
-                       tg_gui_make_rect(sidebar_w, 0, width - sidebar_w,
-                                        content_h));
-
-    area_x = sidebar_w + 12;
-    area_w = width - sidebar_w - 24 - TG_GUI_SCROLLBAR_W;
-    if (area_w < 40) {
-        area_w = 40;
-    }
-    ((tg_gui_state *)state)->tr_area_x = area_x;
-    ((tg_gui_state *)state)->tr_area_w = area_w;
-    /* ANY transcript mutation (generation bump) invalidates a char-range
-       selection AND a latched-but-unreleased press: at a full ring the count
-       stays constant while every index shifts, so a count snapshot lies. */
-    if (state->sel_active &&
-        (state->msg_gen != state->sel_gen_snap || state->sel_msg < 0 ||
-         state->sel_msg >= state->message_count)) {
-        ((tg_gui_state *)state)->sel_active = 0;
-    }
-    if (state->sel_press_armed && state->msg_gen != state->sel_press_gen) {
-        ((tg_gui_state *)state)->sel_press_armed = 0;
-        ((tg_gui_state *)state)->sel_press_char = -1;
-    }
-
-    header_h = 3 * tg_gui_native_line_height(backend) + 14;
+/* The chat header: the open chat's avatar, its title, and the second line,
+   the subtitle or, while someone types, "X is typing...". Painted with the
+   main panel, and on its own (tg_gui_paint_header_area) when only that line
+   changed. */
+static void tg_gui_paint_header(const tg_gui_state *state,
+                                tg_gui_backend *backend, int area_x,
+                                int area_w, int header_h)
+{
     /* The open chat's avatar sits before the title, same drawing as its
        sidebar row (real image first, initials square as the fallback), so
        the header answers "which chat am I in" the way the desktop client
@@ -3537,6 +3588,53 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                                 area_w - (text_x - area_x));
         }
     }
+}
+
+static void tg_gui_paint_main(const tg_gui_state *state,
+                              tg_gui_backend *backend, int sidebar_w,
+                              int width, int content_h, int lh)
+{
+    int area_x;
+    int area_w;
+    int header_h;
+    int input_h;
+    int y;
+    int i;
+    int transcript_bottom;
+    int transcript_top;
+    tg_gui_state *st;
+    unsigned long layout_metrics;
+
+    /* Clear this panel's own background (the sidebar already does the same), so
+       tg_gui_paint no longer needs a leading full-window clear that flashed the
+       entire window on every repaint -- very visible on OS3 planar displays. The
+       sidebar + this main panel + the status bar tile the whole window. */
+    backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
+                       tg_gui_make_rect(sidebar_w, 0, width - sidebar_w,
+                                        content_h));
+
+    area_x = sidebar_w + 12;
+    area_w = width - sidebar_w - 24 - TG_GUI_SCROLLBAR_W;
+    if (area_w < 40) {
+        area_w = 40;
+    }
+    ((tg_gui_state *)state)->tr_area_x = area_x;
+    ((tg_gui_state *)state)->tr_area_w = area_w;
+    /* ANY transcript mutation (generation bump) invalidates a char-range
+       selection AND a latched-but-unreleased press: at a full ring the count
+       stays constant while every index shifts, so a count snapshot lies. */
+    if (state->sel_active &&
+        (state->msg_gen != state->sel_gen_snap || state->sel_msg < 0 ||
+         state->sel_msg >= state->message_count)) {
+        ((tg_gui_state *)state)->sel_active = 0;
+    }
+    if (state->sel_press_armed && state->msg_gen != state->sel_press_gen) {
+        ((tg_gui_state *)state)->sel_press_armed = 0;
+        ((tg_gui_state *)state)->sel_press_char = -1;
+    }
+
+    header_h = tg_gui_header_h(backend);
+    tg_gui_paint_header(state, backend, area_x, area_w, header_h);
 
     input_h = tg_gui_input_h(state, backend, width, sidebar_w, lh);
     ((tg_gui_state *)state)->input_h = input_h; /* cache for the hit-test */
@@ -3558,10 +3656,12 @@ static void tg_gui_paint_main(const tg_gui_state *state,
 
         avail = transcript_bottom - transcript_top;
         total = 0;
+        layout_metrics = tg_gui_layout_metrics(backend, area_w, lh,
+                                               state->inline_photos);
         for (j = 0; j < state->message_count; ++j) {
-            total += tg_gui_message_height(backend, &state->messages[j], area_w,
-                                           lh, state->inline_photos,
-                                           tg_gui_message_grouped(state, j));
+            total += tg_gui_message_height_kept(
+                state, backend, j, area_w, lh,
+                tg_gui_message_grouped(state, j), layout_metrics);
         }
         {
             int real_max = (total > avail) ? (total - avail) : 0;
@@ -3654,9 +3754,9 @@ static void tg_gui_paint_main(const tg_gui_state *state,
         /* Cache this row's top (renderer space, scroll already applied) for the
            click-to-reply hit-test; the bottom is the next row's top. */
         ((tg_gui_state *)state)->msg_top[i] = y;
-        h = tg_gui_message_height(backend, message, area_w, lh,
-                                  state->inline_photos,
-                                  tg_gui_message_grouped(state, i));
+        h = tg_gui_message_height_kept(state, backend, i, area_w, lh,
+                                       tg_gui_message_grouped(state, i),
+                                       layout_metrics);
         /* Draw only messages intersecting the viewport; each part is clipped to
            [transcript_top, transcript_bottom] inside the bubble. */
         if (y + h > transcript_top && y < transcript_bottom) {
@@ -4722,6 +4822,46 @@ int tg_gui_paint_status_bar(const tg_gui_state *state,
 /* The chat list alone, for a paint that changes nothing else (an avatar
    built in the background): the sidebar fills its own region. Declines with
    a context menu open, since the full paint draws that over everything. */
+int tg_gui_paint_header_area(const tg_gui_state *state,
+                             tg_gui_backend *backend, tg_gui_rect *out_rect)
+{
+    int width;
+    int height;
+    int sidebar_w;
+    int area_x;
+    int area_w;
+    int header_h;
+
+    if (state == 0 || backend == 0 || state->mode != TG_GUI_MODE_CHAT ||
+        state->ctx_visible || state->emoji_active || state->mention_active) {
+        return 0;
+    }
+    width = backend->width(backend);
+    height = backend->height(backend);
+    if (width <= 0 || height <= 0 || backend->line_height(backend) <= 0) {
+        return 0;
+    }
+    sidebar_w = tg_gui_sidebar_w(width);
+    area_x = sidebar_w + 12;
+    area_w = width - sidebar_w - 24 - TG_GUI_SCROLLBAR_W;
+    if (area_w < 40) {
+        area_w = 40;
+    }
+    header_h = tg_gui_header_h(backend);
+    if (header_h <= 0 || header_h > height) {
+        return 0;
+    }
+    backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
+                       tg_gui_make_rect(sidebar_w, 0, width - sidebar_w,
+                                        header_h));
+    tg_gui_paint_header(state, backend, area_x, area_w, header_h);
+    if (out_rect != 0) {
+        *out_rect = tg_gui_make_rect(sidebar_w, 0, width - sidebar_w,
+                                     header_h);
+    }
+    return 1;
+}
+
 int tg_gui_paint_sidebar_area(const tg_gui_state *state,
                               tg_gui_backend *backend, tg_gui_rect *out_rect)
 {
@@ -5197,10 +5337,36 @@ static int tg_gui_wrap_linear(tg_gui_backend *backend, const char *text,
     return line;
 }
 
+/* The kept-height test's font: the wrap test's widths, except that an emoji
+   pair measures as a long text emoticon while tg_gui_kept_test_emoji is 0,
+   as the real backends do with the emoji off (wide enough to move the line
+   breaks, which is when a kept height would go stale). */
+static int tg_gui_kept_test_emoji = 1;
+static unsigned long tg_gui_wrap_test_chars;
+
+static int tg_gui_kept_test_width(tg_gui_backend *backend, const char *text,
+                                  unsigned long length)
+{
+    unsigned long i;
+    int w = 0;
+
+    (void)backend;
+    tg_gui_wrap_test_chars += length;
+    for (i = 0UL; i < length;) {
+        if (tg_gui_emoji_pair_at(text, length, i, 0)) {
+            w += tg_gui_kept_test_emoji ? 16 : 96;
+            i += 2UL;
+        } else {
+            w += 3 + (int)((unsigned char)text[i] % 7U);
+            i += 1UL;
+        }
+    }
+    return w;
+}
+
 /* A proportional font for the wrap comparison: 3 to 9 px a character, an
    emoji pair a 16 px cell. It counts the characters it was asked to measure,
    the cost that grows with them (TextLength and the emoji scan). */
-static unsigned long tg_gui_wrap_test_chars;
 
 static int tg_gui_wrap_test_width(tg_gui_backend *backend, const char *text,
                                   unsigned long length)
@@ -5536,6 +5702,102 @@ int tg_gui_self_test(void)
     backend.avatar_fill = tg_gui_rec_avatar;
     backend.draw_text = tg_gui_rec_text;
     backend.set_style = 0; /* recorder renders plain; markers are just skipped */
+    /* Each message keeps its height: a repaint with the kept heights places
+       every row exactly where one working everything out again does, after
+       an edit, at another width and with the emoji off too, and a second
+       repaint of the same chat measures a fraction of the first. */
+    {
+        static const char *words =
+            "the quick brown fox jumps over the lazy dog while a stock "
+            "A1200 lays out a busy group one line at a time ";
+        tg_gui_state *kept = tg_gui_test_scratch_state();
+        static int tops[TG_GUI_MAX_MESSAGES];
+        tg_gui_record rec;
+        tg_gui_backend kb = backend;
+        unsigned long first;
+        unsigned long second;
+        int step;
+        int m;
+
+        tg_gui_demo_state(kept);
+        for (m = 0; m < 12 && m < TG_GUI_MAX_MESSAGES; ++m) {
+            tg_gui_message *msg = &kept->messages[m];
+            unsigned long len = 40UL + (unsigned long)m * 23UL;
+            unsigned long k;
+
+            memset(msg, 0, sizeof(*msg));
+            strcpy(msg->sender, (m % 3) ? "Lallo" : "Henry Out");
+            strcpy(msg->time, "09:14");
+            msg->is_own = (m % 4) == 1;
+            msg->read_state = msg->is_own ? TG_GUI_READ_SEEN : 0;
+            if (m == 5) {
+                strcpy(msg->reply_text, "an earlier line");
+            }
+            for (k = 0UL; k < len && k + 1UL < sizeof(msg->text); ++k) {
+                msg->text[k] = words[k % strlen(words)];
+                if ((m % 2) == 0 && k % 37UL == 20UL &&
+                    k + 2UL < len && k + 2UL < sizeof(msg->text)) {
+                    tg_gui_emoji_encode((unsigned long)m, msg->text + k);
+                    ++k;
+                }
+            }
+            msg->text[k] = '\0';
+        }
+        kept->message_count = m;
+        kept->transcript_scroll = 0;
+        kb.text_width = tg_gui_kept_test_width;
+        tg_gui_kept_test_emoji = 1;
+        for (step = 0; step < 4; ++step) {
+            int cold_max;
+
+            memset(&rec, 0, sizeof(rec));
+            rec.width = step >= 2 ? 520 : 640; /* step 3: only the emoji */
+            rec.height = 480;
+            rec.min_x = rec.width;
+            rec.min_y = rec.height;
+            kb.context = &rec;
+            if (step == 1) {
+                strcat(kept->messages[3].text, " and one more line");
+            }
+            if (step == 3) {
+                tg_gui_set_emoji_enabled(kept, 0);
+                tg_gui_kept_test_emoji = 0;
+            }
+            /* the kept heights, then everything worked out again */
+            tg_gui_wrap_test_chars = 0UL;
+            tg_gui_paint(kept, &kb);
+            first = tg_gui_wrap_test_chars;
+            memcpy(tops, kept->msg_top, sizeof(int) * (size_t)m);
+            cold_max = kept->sb_tr_max;
+            tg_gui_wrap_test_chars = 0UL;
+            tg_gui_paint(kept, &kb);
+            second = tg_gui_wrap_test_chars;
+            if (memcmp(tops, kept->msg_top, sizeof(int) * (size_t)m) != 0 ||
+                cold_max != kept->sb_tr_max) {
+                printf("gui self-test: kept heights moved rows (step %d)\n",
+                       step);
+                return 2;
+            }
+            for (m = 0; m < kept->message_count; ++m) {
+                kept->messages[m].layout_key = 0UL;
+            }
+            tg_gui_paint(kept, &kb);
+            if (memcmp(tops, kept->msg_top,
+                       sizeof(int) * (size_t)kept->message_count) != 0 ||
+                cold_max != kept->sb_tr_max) {
+                printf("gui self-test: kept heights differ from fresh ones "
+                       "(step %d)\n", step);
+                return 2;
+            }
+            m = kept->message_count;
+            if (step == 0 && second * 2UL > first) {
+                printf("gui self-test: a repaint with kept heights measured "
+                       "%lu characters, the first %lu\n", second, first);
+                return 2;
+            }
+        }
+    }
+
     /* Literal URL punctuation must count towards the click target, even
        when a photo, reply or sender band precedes the body. Narrow windows
        force the URL across lines; emoji on/off changes the text line height. */
@@ -7119,6 +7381,61 @@ int tg_gui_self_test(void)
             puts("gui self-test: chat list repaint ignored an open menu");
             return 2;
         }
+    }
+
+    /* The chat header repaints alone when only the typing line changed:
+       everything stays inside the header band, the typing line is drawn
+       (and the subtitle once it is gone), and the call declines with a
+       context menu, the emoji picker or the mention list open. */
+    {
+        tg_gui_state *st = tg_gui_test_scratch_state();
+        tg_gui_record hrec;
+        tg_gui_backend hb = backend;
+        tg_gui_rect r;
+        int band;
+        int pass;
+
+        tg_gui_demo_state(st);
+        for (pass = 0; pass < 2; ++pass) {
+            strcpy(st->typing, pass == 0 ? "Lallo is typing..." : "");
+            memset(&hrec, 0, sizeof(hrec));
+            hrec.width = 640;
+            hrec.height = 400;
+            hrec.min_x = hrec.width;
+            hrec.min_y = hrec.height;
+            hrec.watch_text[0] = pass == 0 ? st->typing : st->subtitle;
+            hrec.watch_text[1] = st->title;
+            hb.context = &hrec;
+            memset(&r, 0, sizeof(r));
+            band = 3 * tg_gui_native_line_height(&hb) + 14;
+            if (!tg_gui_paint_header_area(st, &hb, &r) ||
+                r.x != tg_gui_sidebar_w(640) || r.y != 0 ||
+                r.w != 640 - tg_gui_sidebar_w(640) || r.h != band ||
+                hrec.watch_hits[0] != 1 || hrec.watch_hits[1] != 1 ||
+                hrec.min_x < r.x || hrec.min_y < r.y ||
+                hrec.max_x > r.x + r.w || hrec.max_y > r.y + r.h) {
+                printf("gui self-test: header repaint left its band "
+                       "(pass %d)\n", pass);
+                return 2;
+            }
+        }
+        for (pass = 0; pass < 3; ++pass) {
+            st->ctx_visible = pass == 0;
+            st->emoji_active = pass == 1;
+            st->mention_active = pass == 2;
+            memset(&hrec, 0, sizeof(hrec));
+            hrec.width = 640;
+            hrec.height = 400;
+            hb.context = &hrec;
+            if (tg_gui_paint_header_area(st, &hb, &r) != 0 ||
+                hrec.fills != 0 || hrec.texts != 0) {
+                puts("gui self-test: header repaint ignored an open popup");
+                return 2;
+            }
+        }
+        st->ctx_visible = 0;
+        st->emoji_active = 0;
+        st->mention_active = 0;
     }
 
     /* The nearest-colour search behind every avatar, photo and emoji pen

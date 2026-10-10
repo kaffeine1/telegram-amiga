@@ -50,6 +50,15 @@ int tg_gui_session_project_cached(const char *peer_cache_file,
    when no session is open (returns 0). */
 int tg_gui_session_tick(FILE *stream);
 
+/* What made the window dirty since it last asked: only the typing line in
+   the chat header (TG_GUI_SESSION_CHANGE_HEADER), anything else
+   (TG_GUI_SESSION_CHANGE_FULL), both, or 0 when nothing said. Taking it
+   clears it. In a busy group the typing line changes every few seconds,
+   and a whole repaint for it cost seconds on a stock A1200. */
+#define TG_GUI_SESSION_CHANGE_HEADER 1U
+#define TG_GUI_SESSION_CHANGE_FULL 2U
+unsigned int tg_gui_session_take_changes(void);
+
 /* How many ticks in a row tried the network and lost the connection (a
    failed query closes it); 0 after a tick that kept it, or before any. The
    window spaces its next ticks out with it. */

@@ -248,6 +248,10 @@ typedef struct tg_gui_message {
     unsigned long photo_height;
     unsigned long pending_webpage_hi;
     unsigned long pending_webpage_lo;
+    /* The renderer's own: the height it worked out for this message and a
+       key of everything that height depends on (0 = none yet). */
+    unsigned long layout_key;
+    int layout_h;
 } tg_gui_message;
 
 typedef struct tg_gui_state {
@@ -665,6 +669,11 @@ int tg_gui_context_menu_hit(const tg_gui_state *state, int width, int height,
    with a context menu open (the full paint draws it over everything). */
 int tg_gui_paint_sidebar_area(const tg_gui_state *state,
                               tg_gui_backend *backend, tg_gui_rect *out_rect);
+/* Paints only the chat header (avatar, title, subtitle or typing line) and
+   returns its rect; 0 and nothing painted while a context menu, the emoji
+   picker or the mention list is open. */
+int tg_gui_paint_header_area(const tg_gui_state *state,
+                             tg_gui_backend *backend, tg_gui_rect *out_rect);
 /* Paints only the open context menu and returns its box (the frame
    included); 0 and nothing painted when no menu is open. */
 int tg_gui_paint_context_menu_area(const tg_gui_state *state,

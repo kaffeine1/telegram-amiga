@@ -5499,6 +5499,26 @@ static void tg_gui_window_paint_sidebar(const tg_gui_state *state,
     tg_gui_window_paint_area(state, backend, tg_gui_paint_sidebar_area);
 }
 
+/* The chat header alone, when only its typing line changed: in a busy group
+   that happens every few seconds, and each whole repaint for it cost about
+   two seconds on a stock A1200. */
+static void tg_gui_window_paint_header(const tg_gui_state *state,
+                                       tg_gui_backend *backend)
+{
+    tg_gui_window_paint_area(state, backend, tg_gui_paint_header_area);
+}
+
+/* A session call reported a change: a typing line alone asks only for the
+   header, anything else (or a change it did not name) for a full paint. */
+static void tg_gui_window_session_changed(int *full, int *header)
+{
+    if (tg_gui_session_take_changes() == TG_GUI_SESSION_CHANGE_HEADER) {
+        *header = 1;
+    } else {
+        *full = 1;
+    }
+}
+
 /* The one-shot startup task (tg_gui.h) and, while it runs, the window it
    reports to. */
 static int (*tg_gui_startup_task)(tg_gui_state *state) = 0;
@@ -9849,6 +9869,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     while (!done) {
         struct IntuiMessage *msg;
         int session_dirty;
+        int header_dirty;   /* only the chat header's typing line changed */
         int scroll_dirty;
         int want_older;     /* a transcript scroll-up reached the top this wake */
         int reveal_older;   /* a fits-window load happened: scroll to show it */
@@ -9861,6 +9882,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         ULONG wake_signals;
 
         session_dirty = 0;
+        header_dirty = 0;
         scroll_dirty = 0;
         want_older = 0;
         reveal_older = 0;
@@ -11298,7 +11320,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             TG_GUI_COMPOSE_RECEIVE_SECONDS) {
                         last_receive_drain = now;
                         if (tg_gui_session_receive_pending(stdout)) {
-                            session_dirty = 1;
+                            tg_gui_window_session_changed(&session_dirty,
+                                                          &header_dirty);
                         }
                     }
                     /* (The online as-you-type debounce is gone: typing now
@@ -11334,7 +11357,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                              TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
                         last_session_poll = now;
                         if (tg_gui_session_tick(stdout)) {
-                            session_dirty = 1;
+                            tg_gui_window_session_changed(&session_dirty,
+                                                          &header_dirty);
                         }
                         tg_gui_tick_after(&last_session_poll,
                                           effective_watch);
@@ -12675,7 +12699,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         TG_GUI_COMPOSE_RECEIVE_SECONDS) {
                     last_receive_drain = hb_now;
                     if (tg_gui_session_receive_pending(stdout)) {
-                        session_dirty = 1;
+                        tg_gui_window_session_changed(&session_dirty,
+                                                      &header_dirty);
                     }
                 }
                 if (hb_now != (time_t)-1 &&
@@ -12685,7 +12710,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                          TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
                     last_session_poll = hb_now;
                     if (tg_gui_session_tick(stdout)) {
-                        session_dirty = 1;
+                        tg_gui_window_session_changed(&session_dirty,
+                                                      &header_dirty);
                     }
                     tg_gui_tick_after(&last_session_poll, hb_eff);
                 }
@@ -12719,6 +12745,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 full_paint_ms = tg_gui_photo_elapsed_ms(
                     paint_start, tg_gui_photo_now_ms());
                 paint_deferred = 0;
+                header_dirty = 0; /* the full paint drew the header too */
+            }
+            /* A typing line alone redraws just the header, at once even while
+               keys flow: it costs next to nothing. */
+            if (header_dirty) {
+                tg_gui_window_paint_header(state, &backend);
             }
         }
         if (viewer_dirty && viewer.ctx.window != 0) {

@@ -119,6 +119,14 @@ lanes unless noted.
   short pause no longer hands the keyboard to it. With --gui-live-debug, a
   repaint of a second or more and a key that took a fifth of a second to
   show each leave a line saying how much text was measured and drawn.
+- A repaint in a long chat measures only what changed. Each message keeps
+  the height worked out for it, with a key of everything that height
+  depends on (its text and parts, the column width, the font and the emoji
+  setting), so a repaint no longer wraps every loaded message again,
+  twice: in a busy group on a stock A1200 that was some 8500 measurements
+  for 70 texts drawn. And when someone in the open chat starts or stops
+  typing, only the chat header is redrawn; in a busy group that happens
+  every few seconds, and each time it cost a whole repaint.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and
