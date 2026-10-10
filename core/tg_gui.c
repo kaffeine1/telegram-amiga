@@ -854,6 +854,50 @@ void tg_gui_demo_state(tg_gui_state *state)
     tg_gui_copy(state->status, sizeof(state->status), "Connected - DC4");
 }
 
+/* How many leading characters of s (len of them) fit in max_width; the first
+   always counts, so a glyph wider than the line still advances. Widths only
+   grow as characters are added, so a doubling probe and a binary search find
+   the point a character-by-character scan finds, in a handful of
+   measurements: the scan measured the line again at every character, n
+   measurements of up to n characters for a line of n, and a busy chat took
+   seconds to lay out on a 14 MHz 68020. */
+static unsigned long tg_gui_wrap_fit(tg_gui_backend *backend, const char *s,
+                                     unsigned long len, int max_width)
+{
+    unsigned long lo;
+    unsigned long hi;
+    unsigned long probe;
+
+    if (len <= 1UL) {
+        return len;
+    }
+    lo = 1UL;
+    hi = len;
+    for (probe = 8UL;; probe *= 2UL) {
+        if (probe >= len) {
+            probe = len;
+        }
+        if (backend->text_width(backend, s, probe) > max_width) {
+            hi = probe - 1UL;
+            break;
+        }
+        lo = probe;
+        if (probe == len) {
+            return len;
+        }
+    }
+    while (lo < hi) {
+        unsigned long mid = lo + (hi - lo + 1UL) / 2UL;
+
+        if (backend->text_width(backend, s, mid) > max_width) {
+            hi = mid - 1UL;
+        } else {
+            lo = mid;
+        }
+    }
+    return lo;
+}
+
 /* Word-wraps text to max_width using the backend's font metrics, filling the
    starts/lengths arrays with up to max_lines segments. Returns the line count.
    Always makes progress (at least one character per line) so a glyph wider than
@@ -864,50 +908,36 @@ static int tg_gui_wrap(tg_gui_backend *backend, const char *text, int max_width,
 {
     unsigned long total;
     unsigned long i;
+    unsigned long nl;
     int line;
 
     total = (unsigned long)strlen(text);
     i = 0UL;
+    nl = 0UL;
     line = 0;
     while (line < max_lines) {
         unsigned long line_start;
-        unsigned long last_space;
-        int have_space;
         unsigned long j;
-        int hard_break;
+        unsigned long k;
 
         line_start = i;
-        last_space = 0UL;
-        have_space = 0;
-        hard_break = 0;
-        j = i;
-        while (j < total) {
-            unsigned long segment;
-
-            if (text[j] == '\n') { /* an explicit line break in the message */
-                hard_break = 1;
-                break;
+        if (line == 0 || nl < line_start) {
+            /* the end of this paragraph: an explicit line break or the end */
+            nl = line_start;
+            while (nl < total && text[nl] != '\n') {
+                ++nl;
             }
-            segment = j - line_start + 1UL;
-            if (j > line_start &&
-                backend->text_width(backend, text + line_start, segment) >
-                    max_width) {
-                break;
-            }
-            if (text[j] == ' ') {
-                last_space = j;
-                have_space = 1;
-            }
-            ++j;
         }
-        if (hard_break) {
+        j = line_start + tg_gui_wrap_fit(backend, text + line_start,
+                                         nl - line_start, max_width);
+        if (j == nl && nl < total) {
             /* Emit up to (not including) the newline, then resume AFTER it --
                so real newlines and bullet lists keep their shape, and a blank
                line between paragraphs stays a blank line. */
             starts[line] = line_start;
-            lengths[line] = j - line_start;
+            lengths[line] = nl - line_start;
             ++line;
-            i = j + 1UL; /* skip the '\n' */
+            i = nl + 1UL; /* skip the '\n' */
             if (i >= total) {
                 break; /* text ended on the newline: no trailing empty line */
             }
@@ -919,10 +949,15 @@ static int tg_gui_wrap(tg_gui_backend *backend, const char *text, int max_width,
             ++line;
             break;
         }
-        if (have_space && last_space > line_start) {
+        /* the last space before the first character that did not fit */
+        k = j;
+        while (k > line_start + 1UL && text[k - 1UL] != ' ') {
+            --k;
+        }
+        if (k > line_start + 1UL) {
             starts[line] = line_start;
-            lengths[line] = last_space - line_start;
-            i = last_space + 1UL;
+            lengths[line] = k - 1UL - line_start;
+            i = k;
         } else {
             /* A forced break inside a word: never between the two bytes of an
                emoji pair, which would draw as two garbage glyphs and send as
@@ -5087,6 +5122,106 @@ static void tg_gui_rec_text(tg_gui_backend *backend, int pen, int x,
     tg_gui_rec_track(record, x + (int)(length * 6UL), baseline);
 }
 
+/* The character-by-character wrap that tg_gui_wrap replaced, kept as the
+   reference the self-test holds the fast one to. */
+static int tg_gui_wrap_linear(tg_gui_backend *backend, const char *text,
+                              int max_width, unsigned long *starts,
+                              unsigned long *lengths, int max_lines)
+{
+    unsigned long total;
+    unsigned long i;
+    int line;
+
+    total = (unsigned long)strlen(text);
+    i = 0UL;
+    line = 0;
+    while (line < max_lines) {
+        unsigned long line_start;
+        unsigned long last_space;
+        int have_space;
+        unsigned long j;
+        int hard_break;
+
+        line_start = i;
+        last_space = 0UL;
+        have_space = 0;
+        hard_break = 0;
+        j = i;
+        while (j < total) {
+            if (text[j] == '\n') {
+                hard_break = 1;
+                break;
+            }
+            if (j > line_start &&
+                backend->text_width(backend, text + line_start,
+                                    j - line_start + 1UL) > max_width) {
+                break;
+            }
+            if (text[j] == ' ') {
+                last_space = j;
+                have_space = 1;
+            }
+            ++j;
+        }
+        if (hard_break) {
+            starts[line] = line_start;
+            lengths[line] = j - line_start;
+            ++line;
+            i = j + 1UL;
+            if (i >= total) {
+                break;
+            }
+            continue;
+        }
+        if (j >= total) {
+            starts[line] = line_start;
+            lengths[line] = total - line_start;
+            ++line;
+            break;
+        }
+        if (have_space && last_space > line_start) {
+            starts[line] = line_start;
+            lengths[line] = last_space - line_start;
+            i = last_space + 1UL;
+        } else {
+            if (j > line_start + 1UL &&
+                tg_gui_emoji_pair_at(text, total, j - 1UL, 0)) {
+                --j;
+            }
+            starts[line] = line_start;
+            lengths[line] = j - line_start;
+            i = j;
+        }
+        ++line;
+    }
+    return line;
+}
+
+/* A proportional font for the wrap comparison: 3 to 9 px a character, an
+   emoji pair a 16 px cell. It counts the characters it was asked to measure,
+   the cost that grows with them (TextLength and the emoji scan). */
+static unsigned long tg_gui_wrap_test_chars;
+
+static int tg_gui_wrap_test_width(tg_gui_backend *backend, const char *text,
+                                  unsigned long length)
+{
+    unsigned long i;
+    int w = 0;
+
+    (void)backend;
+    tg_gui_wrap_test_chars += length;
+    for (i = 0UL; i < length;) {
+        if (tg_gui_emoji_pair_at(text, length, i, 0)) {
+            w += 16;
+            i += 2UL;
+        } else {
+            w += 3 + (int)((unsigned char)text[i] % 7U);
+            i += 1UL;
+        }
+    }
+    return w;
+}
+
 int tg_gui_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -5273,6 +5408,93 @@ int tg_gui_self_test(void)
             return 2;
         }
     }
+    /* The fast wrap breaks exactly where the character-by-character one
+       did: generated texts with words, runs of spaces, newlines and emoji
+       pairs, every width from 1 to 260 px, with the monospaced recording
+       font and a proportional one; and at message widths (from 120 px) it
+       measures well under half the characters (the same texts on every
+       machine: the generator keeps to 32 bits). */
+    {
+        static char text[220];
+        unsigned long fs[TG_GUI_WRAP_MAX_LINES];
+        unsigned long fl[TG_GUI_WRAP_MAX_LINES];
+        unsigned long rs[TG_GUI_WRAP_MAX_LINES];
+        unsigned long rl[TG_GUI_WRAP_MAX_LINES];
+        unsigned long seed = 12345UL;
+        unsigned long fast_chars = 0UL;
+        unsigned long linear_chars = 0UL;
+        tg_gui_backend wb = backend;
+        int round;
+
+        for (round = 0; round < 60; ++round) {
+            unsigned long len;
+            unsigned long n;
+            int font;
+            int width;
+
+            seed = (seed * 1103515245UL + 12345UL) & 0xffffffffUL;
+            len = (seed >> 8) % 200UL;
+            for (n = 0UL; n < len; ++n) {
+                unsigned long r;
+
+                seed = (seed * 1103515245UL + 12345UL) & 0xffffffffUL;
+                r = (seed >> 9) % 40UL;
+                if (r < 6UL) {
+                    text[n] = ' ';
+                } else if (r == 6UL) {
+                    text[n] = '\n';
+                } else if (r == 7UL && n + 1UL < len) {
+                    tg_gui_emoji_encode((seed >> 3) % 50UL, text + n);
+                    ++n;
+                } else {
+                    text[n] = (char)('a' + (int)(r % 26UL));
+                }
+            }
+            text[len] = '\0';
+            for (font = 0; font < 2; ++font) {
+                wb.text_width = font ? tg_gui_wrap_test_width
+                                     : tg_gui_rec_text_width;
+                for (width = 1; width <= 260; width += 7) {
+                    int a;
+                    int b;
+                    int l;
+
+                    tg_gui_wrap_test_chars = 0UL;
+                    a = tg_gui_wrap(&wb, text, width, fs, fl,
+                                    TG_GUI_WRAP_MAX_LINES);
+                    if (font && width >= 120) {
+                        fast_chars += tg_gui_wrap_test_chars;
+                    }
+                    tg_gui_wrap_test_chars = 0UL;
+                    b = tg_gui_wrap_linear(&wb, text, width, rs, rl,
+                                           TG_GUI_WRAP_MAX_LINES);
+                    if (font && width >= 120) {
+                        linear_chars += tg_gui_wrap_test_chars;
+                    }
+                    if (a != b) {
+                        printf("gui self-test: fast wrap gave %d lines, "
+                               "not %d (round %d, width %d)\n",
+                               a, b, round, width);
+                        return 2;
+                    }
+                    for (l = 0; l < a; ++l) {
+                        if (fs[l] != rs[l] || fl[l] != rl[l]) {
+                            printf("gui self-test: fast wrap line %d moved "
+                                   "(round %d, width %d)\n",
+                                   l, round, width);
+                            return 2;
+                        }
+                    }
+                }
+            }
+        }
+        if (fast_chars * 5UL > linear_chars * 2UL) {
+            printf("gui self-test: fast wrap measured %lu characters, the "
+                   "scan %lu\n", fast_chars, linear_chars);
+            return 2;
+        }
+    }
+
     /* Newlines split into real lines (recording backend, wide max_width so
        only the '\n' breaks apply): "a\nbc\n\nd" -> a / bc / (blank) / d. */
     {

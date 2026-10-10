@@ -107,6 +107,18 @@ lanes unless noted.
   polls lose the connection twice or more in a row, the next one waits
   longer, from 5 s doubling up to a minute, which leaves the window usable
   in between.
+- Typing in a busy chat on a stock A1200 no longer stalls behind long
+  repaints. Laying out the conversation measured each line again at every
+  character added, and every measured piece went through a byte-by-byte
+  search for emoji first: with one chat open, a repaint on a cycle-exact
+  A1200 took 6 s and now takes 0.9 s, with the same line breaks (checked
+  against the old way on generated texts). The renderer is also built -O2
+  on the 68020 lane, its self-tests passing on a 68020. While typing, a
+  repaint asked for by a new message or a typing notice now waits for a
+  pause as long as the last repaint took, up to 10 s, instead of 2 s, so a
+  short pause no longer hands the keyboard to it. With --gui-live-debug, a
+  repaint of a second or more and a key that took a fifth of a second to
+  show each leave a line saying how much text was measured and drawn.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and

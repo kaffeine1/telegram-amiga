@@ -49,11 +49,14 @@
 #define TG_GUI_COMPOSE_RECEIVE_SECONDS 1UL
 /* A network-driven full repaint (a new message, someone typing, a photo step)
    that took longer than this waits, while keys are flowing, until typing has
-   paused TG_GUI_COMPOSE_PAINT_IDLE_SECONDS. On a stock A1200 such a repaint
-   costs seconds and the keys queued up behind it; fast systems repaint well
-   under the threshold and never wait. */
+   paused TG_GUI_COMPOSE_PAINT_IDLE_SECONDS, plus a second for every second
+   the last full paint took, up to TG_GUI_COMPOSE_PAINT_IDLE_MAX: in a busy
+   group on a stock A1200 a repaint took 12 s, and a two-second pause in the
+   typing handed the keyboard to it. Fast systems repaint well under the
+   threshold and never wait. */
 #define TG_GUI_COMPOSE_PAINT_DEFER_MS 300UL
 #define TG_GUI_COMPOSE_PAINT_IDLE_SECONDS 2UL
+#define TG_GUI_COMPOSE_PAINT_IDLE_MAX 10UL
 /* While a file transfer is pumping, the FULL live tick (a blocking
    getHistory, ~half a second on a 68080) is throttled to this cadence and
    the light receive_pending drain covers incoming pushes in between --
@@ -824,6 +827,13 @@ static int tg_gui_amiga_glyph_image(tg_gui_backend *backend,
     return 1;
 }
 
+/* What one paint asked of the font, for the slow-paint line of the debug
+   log: measurements and drawn texts, each with its characters. */
+static unsigned long tg_gui_paint_meas_calls;
+static unsigned long tg_gui_paint_meas_chars;
+static unsigned long tg_gui_paint_text_calls;
+static unsigned long tg_gui_paint_text_chars;
+
 static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
                                    unsigned long length)
 {
@@ -834,6 +844,17 @@ static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
     int w = 0;
     int cell = 0;
 
+    ++tg_gui_paint_meas_calls;
+    tg_gui_paint_meas_chars += length;
+    /* Most text holds no emoji pair, and a pair starts with one of two
+       prefix bytes: without one it is a single TextLength, not a function
+       call per byte. memchr does the looking: this file is built -O0 on the
+       68k, where a loop of our own over every measured byte cost more than
+       the measuring. */
+    if (memchr(text, (int)TG_GUI_EMOJI_PREFIX0, (size_t)length) == 0 &&
+        memchr(text, (int)TG_GUI_EMOJI_PREFIX1, (size_t)length) == 0) {
+        return tg_gui_amiga_run_width(ctx, text, length);
+    }
     while (i < length) {
         if (tg_gui_emoji_pair_at(text, length, i, &index)) {
             if (cell == 0) {
@@ -4868,6 +4889,9 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
     unsigned long index;
     int cell = 0;
 
+    ++tg_gui_paint_text_calls;
+    tg_gui_paint_text_chars += length;
+
     while (i < length) {
         if (tg_gui_emoji_pair_at(text, length, i, &index)) {
             int ascent;
@@ -5174,8 +5198,8 @@ static void tg_gui_amiga_buffer_alloc(tg_gui_amiga_ctx *ctx)
    shows complete frames, so the clear-then-draw flicker is gone. Falls back to
    the direct render when no buffer is available (alloc failed / window too
    small). */
-static void tg_gui_window_paint(const tg_gui_state *state,
-                                tg_gui_backend *backend)
+static void tg_gui_window_paint_body(const tg_gui_state *state,
+                                     tg_gui_backend *backend)
 {
     tg_gui_amiga_ctx *c = (tg_gui_amiga_ctx *)backend->context;
     struct Layer *layer;
@@ -5322,6 +5346,43 @@ static void tg_gui_window_paint(const tg_gui_state *state,
         }
     }
     tg_gui_photo_cache_visibility_changed();
+}
+
+/* Up to this many slow paints a session get a line in the debug log; slow
+   means TG_GUI_SLOW_PAINT_MS or more (a measurement build may lower it). */
+#ifndef TG_GUI_SLOW_PAINT_MS
+#define TG_GUI_SLOW_PAINT_MS 1000UL
+#endif
+static int tg_gui_slow_paints_logged;
+
+/* A full paint, timed: with --gui-live-debug one that takes a second or
+   more says where its work went (how much text was measured and drawn), so a
+   field log can tell layout from drawing. */
+static void tg_gui_window_paint(const tg_gui_state *state,
+                                tg_gui_backend *backend)
+{
+    unsigned long start;
+    unsigned long spent;
+
+    tg_gui_paint_meas_calls = 0UL;
+    tg_gui_paint_meas_chars = 0UL;
+    tg_gui_paint_text_calls = 0UL;
+    tg_gui_paint_text_chars = 0UL;
+    start = tg_gui_photo_now_ms();
+    tg_gui_window_paint_body(state, backend);
+    spent = tg_gui_photo_elapsed_ms(start, tg_gui_photo_now_ms());
+    if (spent >= TG_GUI_SLOW_PAINT_MS && tg_gui_log_is_enabled() &&
+        tg_gui_slow_paints_logged < 40) {
+        char line[160];
+
+        ++tg_gui_slow_paints_logged;
+        sprintf(line,
+                "paint: %lu ms, measured %lu texts (%lu chars), drew %lu "
+                "(%lu chars)",
+                spent, tg_gui_paint_meas_calls, tg_gui_paint_meas_chars,
+                tg_gui_paint_text_calls, tg_gui_paint_text_chars);
+        tg_gui_log(line);
+    }
 }
 
 /* Caret-only blink repaint. With the buffer, re-render just the focused strip
@@ -5551,6 +5612,9 @@ static void tg_gui_window_paint_caret(const tg_gui_state *state,
    took about 3 s on a stock A1200, where the renderer runs at -O0 on a
    14 MHz 68020, and AfA's bitmap-font fallback made it slow on fast 68k
    machines too. The caret blink has always redrawn the input row this way. */
+/* Up to this many slow key repaints a session get a line in the debug log. */
+static int tg_gui_slow_keys_logged;
+
 static void tg_gui_window_paint_composer_edit(tg_gui_state *state,
                                                tg_gui_backend *backend,
                                                int old_input_h,
@@ -5558,15 +5622,31 @@ static void tg_gui_window_paint_composer_edit(tg_gui_state *state,
 {
     tg_gui_amiga_ctx *ctx;
     int new_input_h;
+    int strip;
+    unsigned long start;
+    unsigned long spent;
 
+    start = tg_gui_photo_now_ms();
     ctx = (tg_gui_amiga_ctx *)backend->context;
     new_input_h = tg_gui_input_layout_height(state, backend);
-    if (ctx != 0 &&
-        !old_mention_active && !state->mention_active &&
-        old_input_h > 0 && old_input_h == new_input_h) {
+    strip = ctx != 0 && !old_mention_active && !state->mention_active &&
+            old_input_h > 0 && old_input_h == new_input_h;
+    if (strip) {
         tg_gui_window_paint_caret(state, backend);
     } else {
         tg_gui_window_paint(state, backend);
+    }
+    /* With --gui-live-debug, a key that took a fifth of a second or more to
+       show says so, and whether the input row alone was redrawn. */
+    spent = tg_gui_photo_elapsed_ms(start, tg_gui_photo_now_ms());
+    if (spent >= 200UL && tg_gui_log_is_enabled() &&
+        tg_gui_slow_keys_logged < 40) {
+        char line[64];
+
+        ++tg_gui_slow_keys_logged;
+        sprintf(line, "key paint: %lu ms (%s)", spent,
+                strip ? "input row" : "whole window");
+        tg_gui_log(line);
     }
 }
 
@@ -12620,10 +12700,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             if (state->composing &&
                 full_paint_ms > TG_GUI_COMPOSE_PAINT_DEFER_MS) {
                 time_t pnow = time(0);
+                unsigned long pause = TG_GUI_COMPOSE_PAINT_IDLE_SECONDS +
+                                      full_paint_ms / 1000UL;
 
+                if (pause > TG_GUI_COMPOSE_PAINT_IDLE_MAX) {
+                    pause = TG_GUI_COMPOSE_PAINT_IDLE_MAX;
+                }
                 typing_now = pnow != (time_t)-1 && pnow >= last_key_time &&
-                             (unsigned long)(pnow - last_key_time) <
-                                 TG_GUI_COMPOSE_PAINT_IDLE_SECONDS;
+                             (unsigned long)(pnow - last_key_time) < pause;
             }
             if (session_dirty && !scroll_dirty && typing_now) {
                 paint_deferred = 1;

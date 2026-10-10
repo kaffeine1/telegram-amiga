@@ -101,6 +101,21 @@ ifneq ($(M68K_CPU),68000)
 O2_OBJS += $(OBJDIR)/third_party/tjpgd/tjpgd.o $(OBJDIR)/core/tg_avatar.o \
            $(OBJDIR)/third_party/puff/puff.o
 endif
+# The renderer as well, from the 0.0.96 cycle: it lays out every loaded
+# message on each repaint. With a chat open on the stock A1200 bench
+# (68EC020, cycle-exact), one repaint took 1140 ms at -O0 and 1060 ms at
+# -O2, after the wrap rewrite had taken it down from 6020 ms; the GUI, chat
+# render, chat list, driver and engine self-tests pass on a 68020 built so.
+# GUI_O2=1 also puts the window code (no self-test of its own) at -O2: 620
+# ms on that bench, a measurement build until it has run on real machines.
+# Like the picture code, not on the plain 68000 until measured there.
+ifneq ($(M68K_CPU),68000)
+O2_OBJS += $(OBJDIR)/core/tg_gui.o
+endif
+GUI_O2 ?= 0
+ifeq ($(GUI_O2),1)
+O2_OBJS += $(OBJDIR)/core/tg_gui_window.o
+endif
 $(O2_OBJS): OPT := -O2
 
 # Release lanes ship without the offline self-tests (decision 2026-08-07):
