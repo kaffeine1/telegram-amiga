@@ -127,6 +127,18 @@ lanes unless noted.
   for 70 texts drawn. And when someone in the open chat starts or stops
   typing, only the chat header is redrawn; in a busy group that happens
   every few seconds, and each time it cost a whole repaint.
+- A window that opens again, after a Workbench reset, from its AppIcon or
+  on switching to or from the own screen, now shows what it will do. Its
+  first frame was drawn from the window that had closed, and only then
+  were the text field and the scroll positions reset: the field still
+  looked active and the status bar still said "Type - ENTER sends, ESC
+  cancels", yet typing no longer reached the field, and a Q or ESC typed
+  into it closed the program. The chat list and the conversation showed
+  one scroll position and took clicks for another, so a click could land
+  on a different chat or message from the one under the pointer. Now the
+  field shows "Write a message..." or the text not yet sent, which ENTER
+  picks up again; the status bar shows the usual keys; an emoji picker left
+  open is closed; and the open chat stays in view in the list.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and

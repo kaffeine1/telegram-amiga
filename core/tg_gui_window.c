@@ -9311,6 +9311,45 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
     }
 }
 
+/* Every window open starts fresh: no keyboard focus in the composer, no
+   arrow-key focus, the transcript at its newest message. A window reopened
+   after a Workbench reset or an AppIcon used to paint its first frame from the
+   state of the window that closed and only then reset it: the composer still
+   looked focused, the status line still said ENTER sends, and the Q and ESC
+   typed into it quit the program. The sidebar showed one scroll position and
+   took clicks for another. So this runs before the first paint. A draft in
+   the composer stays; ENTER picks it up again. */
+static void tg_gui_window_fresh_state(tg_gui_state *state)
+{
+    if (state->composing) {
+        state->composing = 0;
+        state->in_sel_active = 0;
+        state->mention_active = 0;
+        state->mention_count = 0;
+        tg_gui_emoji_close(state);
+        if (state->mode == TG_GUI_MODE_CHAT) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Live - F1-F10 chats, Q quits");
+        }
+    }
+    state->nav_chat = -1;   /* no arrow-key focus yet (0 would tint row 0) */
+    state->in_filter = 0;
+    state->forward_pick_active = 0;
+    state->forward_message_id = 0UL;
+    state->forward_source_index = 0UL;
+    state->history_count = 0;
+    state->history_pos = -1;
+    state->history_draft[0] = '\0';
+    state->chat_scroll = 0;
+    state->chat_scroll_to_sel = 1; /* the open chat stays in view */
+    state->transcript_scroll = 0;
+    state->sb_drag = 0;
+    state->drag_src = -1; /* no row-reorder drag armed */
+    state->drag_active = 0;
+    /* A login screen shows its caret from the first frame. */
+    state->cursor_on = (state->mode != TG_GUI_MODE_CHAT) ? 1 : 0;
+}
+
 static int tg_gui_run_window_once(tg_gui_state *state)
 {
     tg_gui_amiga_ctx ctx;
@@ -9711,6 +9750,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     if (state->emoji_enabled && !tg_gui_av_rich) {
         tg_gui_amiga_emoji_pens();
     }
+    tg_gui_window_fresh_state(state);
     tg_gui_window_paint(state, &backend);
     tg_gui_log("window: first paint done");
     if (own_scr != 0) {
@@ -9801,22 +9841,6 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     avatars_unpainted = 0;
     last_input_time = time(0);
     done = 0;
-    state->composing = 0;
-    state->nav_chat = -1;   /* no arrow-key focus yet (0 would tint row 0) */
-    state->in_filter = 0;
-    state->forward_pick_active = 0;
-    state->forward_message_id = 0UL;
-    state->forward_source_index = 0UL;
-    state->history_count = 0;
-    state->history_pos = -1;
-    state->history_draft[0] = '\0';
-    state->chat_scroll = 0;
-    state->transcript_scroll = 0;
-    state->sb_drag = 0;
-    state->drag_src = -1; /* no row-reorder drag armed */
-    state->drag_active = 0;
-    /* A login screen shows its caret from the first frame. */
-    state->cursor_on = (state->mode != TG_GUI_MODE_CHAT) ? 1 : 0;
     caret_ticks = 0;
     xfer_mark = (time_t)0;
     xfer_bytes = 0UL;
