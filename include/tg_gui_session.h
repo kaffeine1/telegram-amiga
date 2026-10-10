@@ -91,6 +91,10 @@ int tg_gui_session_request_inline_photo(unsigned long photo_id_hi,
 #define TG_GUI_PHOTO_KIND_FULL 2
 #define TG_GUI_PHOTO_KIND_ORIGINAL 3
 void tg_gui_session_set_photo_full_size(int enabled);
+/* The avatars setting: off, opening a chat downloads no profile picture
+   (and makes no first contact with the datacenter one lives on). On until
+   the window says otherwise. */
+void tg_gui_session_set_avatars(int enabled);
 /* The kind the viewer asks for now: FULL with the preference on, else LARGE. */
 int tg_gui_session_viewer_photo_kind(void);
 /* The kind Save photo as... fetches: LARGE without the preference; with it

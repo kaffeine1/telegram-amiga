@@ -269,8 +269,12 @@ typedef struct tg_gui_state {
     int emoji_enabled;    /* picker and graphical emoji; off keeps text emoticons */
     int emoji_explicit;   /* user saved an on/off choice */
     int emoji_default_resolved;
-    int graphics_auto;    /* what this machine picks for both on its own:
-                             0 not sampled yet, 1 off, 2 on */
+    int avatars_enabled;  /* profile pictures in the chat list; off keeps
+                             the coloured initials and fetches nothing */
+    int avatars_explicit; /* user saved an on/off choice */
+    int avatars_default_resolved;
+    int graphics_auto;    /* what this machine picks for all three on its
+                             own: 0 not sampled yet, 1 off, 2 on */
     int photo_dither;      /* TG_GUI_PHOTO_DITHER_*; default full */
     unsigned long photo_cache_limit_mb; /* 0 unlimited; default 50 MiB */
     int photo_full_size;   /* viewer and Save photo as... take the largest
@@ -537,8 +541,9 @@ int tg_gui_photo_preferences_save_full(const char *path, int inline_photos,
                                        int photo_dither,
                                        unsigned long photo_cache_limit_mb,
                                        int photo_full_size);
-/* Shared photo/emoji policy: explicit user choice wins. Otherwise classic
-   Amiga hardware needs a 68040-class CPU (or PPC) and an actual RTG screen. */
+/* Shared photo/emoji/avatar policy: explicit user choice wins. Otherwise
+   classic Amiga hardware needs a 68040-class CPU (or PPC) and an actual RTG
+   screen. */
 int tg_gui_graphics_resolve(int explicit_choice, int explicit_value,
                             int classic_amiga, int cpu_at_least_040, int has_rtg);
 void tg_gui_graphics_preferences_resolve(tg_gui_state *state, int classic_amiga,
@@ -550,9 +555,15 @@ int tg_gui_emoji_preferences_save(const char *path, int enabled);
 /* explicit_choice 0 writes "auto". */
 int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
                                          int explicit_choice);
+/* The avatar choice, in its own file with the same on/off/auto line. */
+void tg_gui_avatar_preferences_load(const char *path, int *enabled,
+                                    int *explicit_choice);
+int tg_gui_avatar_preferences_save_choice(const char *path, int enabled,
+                                          int explicit_choice);
 /* Menu toggles: a choice equal to the sampled machine default is "auto". */
 void tg_gui_set_inline_photos(tg_gui_state *state, int enabled);
 void tg_gui_set_emoji_enabled(tg_gui_state *state, int enabled);
+void tg_gui_set_avatars_enabled(tg_gui_state *state, int enabled);
 /* Zero means emoji disabled; otherwise a square of at least 16px. Line
    height and ascent reserve that cell while keeping the actual font intact. */
 int tg_gui_emoji_inline_size(const tg_gui_state *state, int font_height);

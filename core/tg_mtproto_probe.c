@@ -12047,6 +12047,13 @@ void tg_gui_session_set_photo_full_size(int enabled)
     tg_gui_photo_full_size = enabled ? 1 : 0;
 }
 
+static int tg_gui_session_avatars_on = 1;
+
+void tg_gui_session_set_avatars(int enabled)
+{
+    tg_gui_session_avatars_on = enabled ? 1 : 0;
+}
+
 int tg_gui_session_viewer_photo_kind(void)
 {
     return tg_gui_photo_full_size ? TG_GUI_PHOTO_KIND_FULL
@@ -21587,8 +21594,8 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
     static const char label[] = "mtproto upload.getFile(avatar)";
 
     if (!tg_gui_session_state.open || stream == 0 ||
-        (id_hi == 0UL && id_lo == 0UL)) {
-        return;
+        !tg_gui_session_avatars_on || (id_hi == 0UL && id_lo == 0UL)) {
+        return; /* avatars off: no download, no first contact */
     }
     for (i = 0; i < tg_gui_avfetch_n; ++i) {
         if (tg_gui_avfetch_hi[i] == id_hi && tg_gui_avfetch_lo[i] == id_lo) {
@@ -21736,6 +21743,9 @@ unsigned long tg_gui_session_deferred_contact(void)
 {
     if (!tg_gui_session_state.open || tg_gui_session_transfer_busy()) {
         return 0UL; /* a transfer may hold the channel elsewhere: later */
+    }
+    if (!tg_gui_session_avatars_on) {
+        return 0UL; /* only an avatar asks for it */
     }
     return tg_gui_contact_pending_dc;
 }

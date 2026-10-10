@@ -559,6 +559,10 @@ Using the GUI
 - Chat-list avatars show each peer's real profile picture: a blurred preview
   appears as soon as the chat list loads, and it turns crisp shortly after you
   open that chat (the photo is cached in the avatars/ drawer).
+  "Settings > Show avatars" turns them off: the coloured initials stay and
+  nothing is downloaded or decoded for them. Like the photos and the emoji it
+  starts off on AGA/ECS/OCS screens (including classic OS4) or 68k CPUs below
+  68040; a manual choice overrides it and is remembered.
 - Photos sent in a conversation appear inside their message bubble. The blurred
   preview embedded in the message appears without a network request, then the
   downloaded image replaces it through progressively sharper passes. JPEGs and
@@ -757,6 +761,10 @@ Usare la GUI
 - Gli avatar della lista chat mostrano la vera foto profilo: un'anteprima
   sfocata appare subito col caricamento della lista, e diventa nitida poco dopo
   che apri quella chat (la foto viene salvata nel cassetto avatars/).
+  "Settings > Show avatars" li spegne: restano le iniziali colorate e non si
+  scarica ne' decodifica nulla per loro. Come foto ed emoji parte spento su
+  schermi AGA/ECS/OCS (anche OS4 classic) oppure con CPU 68k sotto il 68040;
+  una scelta manuale sostituisce il default e resta memorizzata.
 - Le foto inviate in conversazione appaiono dentro la loro bolla. L'anteprima
   sfocata inclusa nel messaggio compare senza richieste di rete, poi viene
   sostituita da passate sempre piu' nitide. JPEG e pixel RGB decodificati sono

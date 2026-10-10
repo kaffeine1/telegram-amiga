@@ -317,9 +317,29 @@ void tg_gui_graphics_preferences_resolve(tg_gui_state *state, int classic_amiga,
             classic_amiga, cpu_at_least_040, has_rtg);
         state->emoji_default_resolved = 1;
     }
+    if (!state->avatars_default_resolved) {
+        state->avatars_enabled = tg_gui_graphics_resolve(
+            state->avatars_explicit, state->avatars_enabled,
+            classic_amiga, cpu_at_least_040, has_rtg);
+        state->avatars_default_resolved = 1;
+    }
     if (!state->emoji_enabled) {
         tg_gui_emoji_close(state);
     }
+}
+
+void tg_gui_avatar_preferences_load(const char *path, int *enabled,
+                                    int *explicit_choice)
+{
+    tg_gui_photo_preferences_load(path, enabled, explicit_choice, 0, 0);
+}
+
+int tg_gui_avatar_preferences_save_choice(const char *path, int enabled,
+                                          int explicit_choice)
+{
+    /* The emoji writer only knows the one on/off/auto line. */
+    return tg_gui_emoji_preferences_save_choice(path, enabled,
+                                                explicit_choice);
 }
 
 void tg_gui_emoji_preferences_load(const char *path, int *enabled,
@@ -409,6 +429,17 @@ void tg_gui_set_emoji_enabled(tg_gui_state *state, int enabled)
     if (!state->emoji_enabled) {
         tg_gui_emoji_close(state);
     }
+}
+
+void tg_gui_set_avatars_enabled(tg_gui_state *state, int enabled)
+{
+    if (state == 0) {
+        return;
+    }
+    state->avatars_enabled = enabled ? 1 : 0;
+    state->avatars_explicit =
+        tg_gui_graphics_choice_explicit(state, state->avatars_enabled);
+    state->avatars_default_resolved = 1;
 }
 
 int tg_gui_emoji_inline_size(const tg_gui_state *state, int font_height)
@@ -776,6 +807,7 @@ void tg_gui_demo_state(tg_gui_state *state)
     state->theme = TG_GUI_THEME_DARK;
     state->inline_photos = 1;
     state->emoji_enabled = 1;
+    state->avatars_enabled = 1;
     state->photo_dither = TG_GUI_PHOTO_DITHER_FULL;
     state->photo_cache_limit_mb = TG_GUI_PHOTO_CACHE_DEFAULT_MB;
 
@@ -1594,8 +1626,9 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                 : TG_GUI_PEN_WINDOW;
         /* Real avatar first (decoded stripped thumb, when the backend and the
            store have one); the classic colored-initials square is the fallback
-           and the only path on backends without image support. */
-        if (backend->avatar_image == 0 ||
+           and the only path on backends without image support, or with the
+           avatars setting off. */
+        if (!state->avatars_enabled || backend->avatar_image == 0 ||
             !backend->avatar_image(backend, chat->peer_id_hi,
                                    chat->peer_id_lo,
                                    tg_gui_make_rect(8, avatar_y, avatar,
@@ -3426,7 +3459,7 @@ static void tg_gui_paint_main(const tg_gui_state *state,
             int av_y = (header_h - av) / 2;
 
             backend->round_bg = TG_GUI_PEN_WINDOW;
-            if (backend->avatar_image == 0 ||
+            if (!state->avatars_enabled || backend->avatar_image == 0 ||
                 !backend->avatar_image(backend, open_chat->peer_id_hi,
                                        open_chat->peer_id_lo,
                                        tg_gui_make_rect(area_x, av_y, av, av))) {
@@ -6012,13 +6045,18 @@ int tg_gui_self_test(void)
 
         for (f = 0; f < sizeof(fonts) / sizeof(fonts[0]); ++f) {
             for (enabled = 0; enabled <= 1; ++enabled) {
-                for (images = 0; images <= 1; ++images) {
+                /* images: 0 no image support, 1 images, 2 images with the
+                   avatars setting off (initials, nothing asked for) */
+                for (images = 0; images <= 2; ++images) {
                     tg_gui_record rec;
                     tg_gui_backend b = backend;
                     int w;
 
                     tg_gui_demo_state(draft);
                     tg_gui_set_emoji_enabled(draft, enabled);
+                    if (images == 2) {
+                        draft->avatars_enabled = 0;
+                    }
                     strcpy(draft->chats[0].name, "Row name \x80!");
                     strcpy(draft->chats[0].preview, "Preview \x80!");
                     strcpy(draft->chats[1].name, "Single \x80!");
@@ -6047,7 +6085,7 @@ int tg_gui_self_test(void)
                     b.avatar_image = images ? tg_gui_rec_avatar_image : 0;
                     tg_gui_paint(draft, &b);
                     if (rec.avatars != draft->chat_count + 1 ||
-                        rec.avatar_images != (images ? rec.avatars : 0)) {
+                        rec.avatar_images != (images == 1 ? rec.avatars : 0)) {
                         puts("gui self-test: avatar paths were not painted");
                         return 2;
                     }
@@ -6369,6 +6407,14 @@ int tg_gui_self_test(void)
                 printf("gui self-test: photo/emoji hardware case %lu failed\n", i);
                 return 2;
             }
+            /* Avatars, with no saved choice here, take the machine's own
+               default whatever photos and emoji were set to. */
+            if (prefs->avatars_enabled !=
+                    tg_gui_graphics_resolve(0, 0, c[0], c[1], c[2]) ||
+                prefs->avatars_explicit || !prefs->avatars_default_resolved) {
+                printf("gui self-test: avatar hardware case %lu failed\n", i);
+                return 2;
+            }
             tg_gui_graphics_preferences_resolve(prefs, 0, 1, 1);
             if (prefs->inline_photos != c[7] || prefs->emoji_enabled != c[8]) {
                 puts("gui self-test: graphics choice changed during window reopen");
@@ -6391,6 +6437,7 @@ int tg_gui_self_test(void)
         tg_gui_state *prefs = tg_gui_test_scratch_state();
         const char *emoji_path = "tg-gui-emoji-auto-self-test.tmp";
         const char *photo_path = "tg-gui-photo-auto-self-test.tmp";
+        const char *avatar_path = "tg-gui-avatar-auto-self-test.tmp";
         unsigned long i;
         int value;
 
@@ -6406,10 +6453,13 @@ int tg_gui_self_test(void)
                 tg_gui_graphics_preferences_resolve(prefs, c[0], c[1], c[2]);
                 tg_gui_set_inline_photos(prefs, value);
                 tg_gui_set_emoji_enabled(prefs, value);
+                tg_gui_set_avatars_enabled(prefs, value);
                 if (prefs->inline_photos != value ||
                     prefs->emoji_enabled != value ||
+                    prefs->avatars_enabled != value ||
                     prefs->inline_photos_explicit != want_explicit ||
-                    prefs->emoji_explicit != want_explicit) {
+                    prefs->emoji_explicit != want_explicit ||
+                    prefs->avatars_explicit != want_explicit) {
                     printf("gui self-test: auto choice case %lu/%d failed\n",
                            i, value);
                     return 2;
@@ -6420,10 +6470,24 @@ int tg_gui_self_test(void)
                     tg_gui_photo_preferences_save_full(
                         photo_path, prefs->inline_photos,
                         prefs->inline_photos_explicit,
-                        TG_GUI_PHOTO_DITHER_FULL, 50UL, 0) != 0) {
+                        TG_GUI_PHOTO_DITHER_FULL, 50UL, 0) != 0 ||
+                    tg_gui_avatar_preferences_save_choice(
+                        avatar_path, prefs->avatars_enabled,
+                        prefs->avatars_explicit) != 0) {
                     (void)remove(emoji_path);
                     (void)remove(photo_path);
+                    (void)remove(avatar_path);
                     puts("gui self-test: auto choice save failed");
+                    return 2;
+                }
+                tg_gui_avatar_preferences_load(avatar_path, &enabled,
+                                               &explicit_choice);
+                if (explicit_choice != want_explicit ||
+                    (want_explicit && enabled != value)) {
+                    (void)remove(emoji_path);
+                    (void)remove(photo_path);
+                    (void)remove(avatar_path);
+                    puts("gui self-test: avatar auto choice round-trip failed");
                     return 2;
                 }
                 tg_gui_emoji_preferences_load(emoji_path, &enabled,
@@ -6448,11 +6512,14 @@ int tg_gui_self_test(void)
         }
         (void)remove(emoji_path);
         (void)remove(photo_path);
+        (void)remove(avatar_path);
         /* Before a window sampled the machine, every choice stays explicit. */
         memset(prefs, 0, sizeof(*prefs));
         tg_gui_set_inline_photos(prefs, 1);
         tg_gui_set_emoji_enabled(prefs, 0);
-        if (!prefs->inline_photos_explicit || !prefs->emoji_explicit) {
+        tg_gui_set_avatars_enabled(prefs, 0);
+        if (!prefs->inline_photos_explicit || !prefs->emoji_explicit ||
+            !prefs->avatars_explicit) {
             puts("gui self-test: unsampled choice was not kept explicit");
             return 2;
         }

@@ -341,7 +341,8 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
 #endif
 
     if (state == 0 || window == 0 ||
-        (state->inline_photos_default_resolved && state->emoji_default_resolved)) {
+        (state->inline_photos_default_resolved &&
+         state->emoji_default_resolved && state->avatars_default_resolved)) {
         return;
     }
 #if defined(__amigaos3__) || defined(__amigaos4__)
@@ -376,6 +377,9 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
     }
     if (!state->emoji_explicit && !state->emoji_enabled) {
         tg_gui_log("emoji: default off (native screen or cpu < 040)");
+    }
+    if (!state->avatars_explicit && !state->avatars_enabled) {
+        tg_gui_log("avatars: default off (native screen or cpu < 040)");
     }
 }
 
@@ -523,6 +527,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_EMOJI 23
 #define TG_MENU_ENABLEEMOJI 24
 #define TG_MENU_FULLPHOTOS 25
+#define TG_MENU_AVATARS 26
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -1493,6 +1498,18 @@ static void tg_gui_av_reset(void)
     tg_gui_emoji_pen_ready = 0;
     tg_gui_av_evict = 0UL;
     tg_gui_photo_slots_reset();
+}
+
+/* The avatars setting went off: forget the built grids and the queue. The
+   shared pen pool stays, the emoji draw from it too. */
+static void tg_gui_av_slots_clear(void)
+{
+    int i;
+
+    for (i = 0; i < TG_GUI_AV_SLOTS; ++i) {
+        tg_gui_av_slots[i].state = 0;
+    }
+    tg_gui_av_evict = 0UL;
 }
 
 static void tg_gui_av_release_pool(struct ColorMap *cmap)
@@ -6176,6 +6193,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_FULLPHOTOS },
     { NM_ITEM,  (STRPTR)"Enable emoji", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_ENABLEEMOJI },
+    { NM_ITEM,  (STRPTR)"Show avatars", 0, CHECKIT | MENUTOGGLE, 0,
+      (APTR)TG_MENU_AVATARS },
     { NM_ITEM,  (STRPTR)"Photo dithering", 0, 0, 0, 0 },
     { NM_SUB,   (STRPTR)"Full", 0,
       CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_DITHER_FULL },
@@ -9448,6 +9467,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
     ctx.rport = ctx.window->RPort;
     tg_gui_window_resolve_graphics_defaults(state, ctx.window);
+    tg_gui_session_set_avatars(state->avatars_enabled);
     if (own_scr != 0 && own_scr->RastPort.Font != 0) {
         /* SA_SysFont sets the SCREEN font, but a window RastPort still comes up
            with the fixed-width DefaultFont (autodoc caveat) -- adopt the screen
@@ -9526,6 +9546,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 if (state->photo_full_size) {
                     struct MenuItem *it2 = tg_gui_menu_find_userdata(
                         menu, (APTR)TG_MENU_FULLPHOTOS);
+
+                    if (it2 != 0) {
+                        it2->Flags |= CHECKED;
+                    }
+                }
+                if (state->avatars_enabled) {
+                    struct MenuItem *it2 = tg_gui_menu_find_userdata(
+                        menu, (APTR)TG_MENU_AVATARS);
 
                     if (it2 != 0) {
                         it2->Flags |= CHECKED;
@@ -10878,6 +10906,30 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                    state->emoji_enabled
                                                        ? "Emoji enabled"
                                                        : "Emoji disabled");
+                            }
+                            tg_gui_window_paint(state, &backend);
+                        } else if (ud == (APTR)TG_MENU_AVATARS) {
+                            tg_gui_set_avatars_enabled(state,
+                                                       !state->avatars_enabled);
+                            tg_gui_session_set_avatars(state->avatars_enabled);
+                            if (!state->avatars_enabled) {
+                                tg_gui_av_slots_clear();
+                            }
+                            if (tg_gui_avatar_preferences_save_choice(
+                                    "data/telegram-avatars.txt",
+                                    state->avatars_enabled,
+                                    state->avatars_explicit) != 0) {
+                                tg_gui_window_copy(state->status,
+                                                   sizeof(state->status),
+                                                   "Could not save avatar "
+                                                   "setting");
+                            } else {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    state->avatars_enabled
+                                        ? "Avatars shown"
+                                        : "Avatars off: initials only, "
+                                          "nothing downloaded");
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_FULLPHOTOS) {
@@ -12818,6 +12870,10 @@ int tg_gui_run_window(tg_gui_state *state)
     tg_gui_emoji_preferences_load("data/telegram-emoji.txt",
                                   &state->emoji_enabled, &state->emoji_explicit);
     state->emoji_default_resolved = 0;
+    tg_gui_avatar_preferences_load("data/telegram-avatars.txt",
+                                   &state->avatars_enabled,
+                                   &state->avatars_explicit);
+    state->avatars_default_resolved = 0;
     if (state->photo_cache_limit_mb != TG_GUI_PHOTO_CACHE_UNLIMITED_MB &&
         state->photo_cache_limit_mb != 10UL &&
         state->photo_cache_limit_mb != 50UL &&

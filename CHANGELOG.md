@@ -108,6 +108,17 @@ lanes unless noted.
   longer, from 5 s doubling up to a minute, which leaves the window usable
   in between.
 
+### Added
+- "Settings > Show avatars" turns the profile pictures in the chat list and
+  the chat header on and off. Off, the coloured initials stay, and nothing
+  is downloaded, decoded or matched to the palette for them: on a stock
+  A1200 each picture cost over a second, and one kept on another
+  datacenter could first cost a minute-long key exchange with it.
+  Like the inline photos and the emoji, it starts off on native AGA/ECS/OCS
+  screens and on 68k CPUs below a 68040, on elsewhere, and a choice from the
+  menu is saved in data/telegram-avatars.txt (one equal to the machine's own
+  default is saved as "auto").
+
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
   comm/tcp. Aminet's list of architectures has no ARM entry, so its readme
