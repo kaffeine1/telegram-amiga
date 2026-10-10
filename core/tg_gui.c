@@ -4239,7 +4239,10 @@ static void tg_gui_paint_login_input(const tg_gui_state *state,
         if (text_x < box_x + 6) {
             text_x = box_x + 6;
         }
-        tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT, text_x, box_y + lh + 1,
+        /* Vertically too, like the composer: with emoji on, lh is the taller
+           emoji cell, and a baseline at box_y + lh + 1 sat the digits low. */
+        tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT, text_x,
+                            tg_gui_centred_baseline(backend, box_y, box_h),
                             field, box_x + box_w - 6 - text_x);
         if (state->cursor_on) {
             int caret_x;
@@ -6392,6 +6395,27 @@ int tg_gui_self_test(void)
                                  rec.first_text_x, y) != TG_GUI_HIT_INPUT) {
                 puts("gui self-test: paperclip overlaps input or shifts caret clicks");
                 return 2;
+            }
+            /* The login field centres the same 8-pixel font (baseline 6):
+               as much air above the glyphs as below, emoji cell or not. */
+            {
+                int box_y = rec.height / 2 + 4;
+                int box_h = rec.line_h + 8;
+                int top_gap;
+                int bottom_gap;
+                int saved_mode = draft->mode;
+
+                draft->mode = TG_GUI_MODE_LOGIN_PHONE;
+                rec.texts = 0;
+                tg_gui_paint_login_input(draft, &b);
+                draft->mode = saved_mode;
+                top_gap = rec.first_text_y - 6 - box_y;
+                bottom_gap = box_y + box_h - rec.first_text_y - 2;
+                if (rec.texts == 0 || top_gap - bottom_gap > 1 ||
+                    bottom_gap - top_gap > 1) {
+                    puts("gui self-test: login field text is not centred");
+                    return 2;
+                }
             }
             if (enabled) {
                 char pair[2];

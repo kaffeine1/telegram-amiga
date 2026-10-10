@@ -139,6 +139,11 @@ lanes unless noted.
   field shows "Write a message..." or the text not yet sent, which ENTER
   picks up again; the status bar shows the usual keys; an emoji picker left
   open is closed; and the open chat stays in view in the list.
+- What you type on the login screen (phone number, code, password) sits in
+  the middle of its field. With emoji on, a line is as tall as an emoji and
+  the text was placed from the top of that taller line, which left it four
+  pixels low in the field; it is now centred the way the message field
+  already was.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and
