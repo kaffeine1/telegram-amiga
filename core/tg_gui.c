@@ -2080,6 +2080,10 @@ typedef struct tg_gui_bubble_geom {
     int photo_w;
     int photo_h;
     int photo_gap;
+    int top_pad;    /* inside the fill, above the first line */
+    int status_gap; /* between the last line and the time row */
+    int status_h;   /* the time row: native letters, not the emoji cell */
+    int bottom_pad; /* inside the fill, below the time row */
     int line_count;
     unsigned long starts[TG_GUI_WRAP_MAX_LINES];
     unsigned long lengths[TG_GUI_WRAP_MAX_LINES];
@@ -2303,6 +2307,22 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
        and keeps a hair of air so the run still reads as separate bubbles. */
     geo->header_h = (message->is_own || grouped) ? 0 : (lh + (lh / 2));
     geo->reply_h = (message->reply_text[0] != '\0') ? lh : 0;
+    /* Vertical air is measured from the letters. With emoji on, a line is
+       an emoji tall and small letters already float in its middle: the
+       first line used to start on the fill's top edge, which left text a
+       few pixels from it, while the time sat at the foot of another
+       emoji-tall row, which left a wide gap above it. So the padding
+       above shrinks by what the cell already gives, and the time row is
+       as tall as the letters it holds. */
+    {
+        int nlh = tg_gui_native_line_height(backend);
+        int slack = (lh > nlh) ? (lh - nlh) / 2 : 0;
+
+        geo->top_pad = (slack < 2) ? 3 - slack : 1;
+        geo->status_gap = (slack < 1) ? 1 : 0;
+        geo->status_h = nlh;
+        geo->bottom_pad = 3;
+    }
 }
 
 /* The bubble fill with its corners clipped: a three-row step (3,1,1) above
@@ -2367,6 +2387,11 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
     int photo_w;
     int photo_h;
     int photo_gap;
+    int top_pad;
+    int status_gap;
+    int status_h;
+    int bottom_pad;
+    int content_y;
     int check_count;
     int read_mark_w;
     int has_mark;
@@ -2390,8 +2415,13 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
         photo_w = geo.photo_w;
         photo_h = geo.photo_h;
         photo_gap = geo.photo_gap;
+        top_pad = geo.top_pad;
+        status_gap = geo.status_gap;
+        status_h = geo.status_h;
+        bottom_pad = geo.bottom_pad;
         bubble_x = geo.bubble_x;
     }
+    content_y = y + header_h + top_pad; /* reply, photo and text start here */
     has_time = (message->time[0] != '\0');
     time_w = has_time ? backend->text_width(backend, message->time,
                                             (unsigned long)strlen(message->time))
@@ -2407,8 +2437,9 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
     /* Reserve a line inside the bubble for the timestamp / read-receipt mark so
        it stays on the coloured background instead of spilling out below it, plus
        one for the quoted-reply reference line when present. */
-    bubble_h = header_h + reply_h + photo_h + photo_gap +
-               (line_count * lh) + (has_status ? lh : 0) + 6;
+    bubble_h = header_h + top_pad + reply_h + photo_h + photo_gap +
+               (line_count * lh) + (has_status ? status_gap + status_h : 0) +
+               bottom_pad;
 
     if (message->is_own) {
         fill_pen = TG_GUI_PEN_ACCENT;
@@ -2461,8 +2492,8 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
     if (has_reply) {
         int reply_baseline;
 
-        reply_baseline = tg_gui_centred_baseline(backend, y + header_h, lh);
-        if (y + header_h >= top && y + header_h + lh <= bottom) {
+        reply_baseline = tg_gui_centred_baseline(backend, content_y, lh);
+        if (content_y >= top && content_y + lh <= bottom) {
             char line[TG_GUI_REPLY_MAX + 4];
 
             line[0] = '>';
@@ -2482,7 +2513,7 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
         int drawn;
 
         photo_rect = tg_gui_make_rect(bubble_x + pad,
-                                      y + header_h + reply_h + 2,
+                                      content_y + reply_h + 2,
                                       photo_w, photo_h);
         if (out_photo != 0) {
             *out_photo = photo_rect;
@@ -2512,7 +2543,7 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
         int baseline;
         int line_top;
 
-        line_top = y + header_h + reply_h + photo_h + photo_gap + (k * lh);
+        line_top = content_y + reply_h + photo_h + photo_gap + (k * lh);
         baseline = tg_gui_centred_baseline(backend, line_top, lh);
         if (line_top >= top && line_top + lh <= bottom) {
             /* Mouse selection: tint the selected char range of THIS visual
@@ -2562,18 +2593,21 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
         backend->set_style(backend, 0); /* reset before time / next bubble */
     }
     if (has_status) {
+        int status_top;
         int status_baseline;
         int status_x;
 
-        /* One line below the last text line, right-aligned, inside the fill:
-           timestamp then (for own messages) the read-receipt mark. */
-        status_baseline = y + header_h + reply_h + photo_h + photo_gap +
-                          (line_count * lh) + lh;
+        /* Its own row below the last text line, right-aligned, inside the
+           fill: timestamp then (for own messages) the read-receipt mark. */
+        status_top = content_y + reply_h + photo_h + photo_gap +
+                     (line_count * lh) + status_gap;
+        status_baseline =
+            tg_gui_navigation_baseline(backend, status_top, status_h);
         status_x = bubble_x + bubble_w - pad - status_w;
         if (status_x < bubble_x + pad) {
             status_x = bubble_x + pad;
         }
-        if (status_baseline <= bottom && status_baseline - lh >= top) {
+        if (status_top + status_h <= bottom && status_baseline - lh >= top) {
             if (has_time) {
                 backend->draw_text(backend, time_pen, status_x, status_baseline,
                                    message->time,
@@ -2612,8 +2646,10 @@ static int tg_gui_message_height(tg_gui_backend *backend,
        when it has no timestamp (the optimistic echo). */
     has_status = has_time || (tg_gui_check_count(message) > 0);
     /* bubble_h + 6, mirroring tg_gui_paint_bubble's return (incl. reply line). */
-    return geo.header_h + geo.reply_h + geo.photo_h + geo.photo_gap +
-           (geo.line_count * lh) + (has_status ? lh : 0) + 6 + 6;
+    return geo.header_h + geo.top_pad + geo.reply_h + geo.photo_h +
+           geo.photo_gap + (geo.line_count * lh) +
+           (has_status ? geo.status_gap + geo.status_h : 0) + geo.bottom_pad +
+           6;
 }
 
 /* Each message keeps the height worked out for it, with a key of everything
@@ -3906,8 +3942,8 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
     tg_gui_bubble_geometry(backend, message, state->tr_area_x,
                            state->tr_area_w, lh, state->inline_photos,
                            tg_gui_message_grouped(state, msg_index), &geo);
-    ty = y - (state->msg_top[msg_index] + geo.header_h + geo.reply_h +
-              geo.photo_h + geo.photo_gap);
+    ty = y - (state->msg_top[msg_index] + geo.header_h + geo.top_pad +
+              geo.reply_h + geo.photo_h + geo.photo_gap);
     if (ty < 0) {
         return 0; /* header band or above: clamp to the start */
     }
@@ -6417,9 +6453,45 @@ int tg_gui_self_test(void)
                     return 2;
                 }
             }
+            /* A bubble keeps air above its text and below its time, with no
+               wide hole between them, in the emoji cell or not. The letters
+               of the 8-pixel font run from baseline - 6 to baseline + 1. */
+            {
+                tg_gui_backend bb = b;
+                int ret;
+                int text_top;
+                int time_top;
+                int fill_bottom;
+
+                rec.font_h = 8;
+                bb.font_height = tg_gui_rec_font_height;
+                memset(&draft->messages[0], 0, sizeof(draft->messages[0]));
+                draft->messages[0].is_own = 1;
+                strcpy(draft->messages[0].text, "abc");
+                strcpy(draft->messages[0].time, "12:34");
+                rec.texts = 0;
+                rec.watch_text[0] = "12:34";
+                rec.watch_hits[0] = 0;
+                ret = tg_gui_paint_bubble(&bb, &draft->messages[0], 10, 480,
+                                          10, rec.line_h, 0, 200, 0, 0, 1, 0,
+                                          0);
+                rec.watch_text[0] = 0;
+                rec.font_h = 0;
+                text_top = rec.first_text_y - 6;
+                time_top = rec.watch_y[0] - 6;
+                fill_bottom = 10 + ret - 6;
+                if (rec.texts == 0 || rec.watch_hits[0] != 1 ||
+                    text_top - 10 < 3 ||
+                    fill_bottom - (rec.watch_y[0] + 2) < 3 ||
+                    time_top - (rec.first_text_y + 2) > (text_top - 10) + 4) {
+                    puts("gui self-test: bubble text and time unevenly spaced");
+                    return 2;
+                }
+            }
             if (enabled) {
                 char pair[2];
                 int glyph_bottom;
+                int reply_band;
 
                 /* Clicking the last pixel of the first line's tall emoji
                    must stay on that line, not select the next wrapped row. */
@@ -6448,8 +6520,17 @@ int tg_gui_self_test(void)
                 rec.texts = 0;
                 (void)tg_gui_paint_bubble(&b, &draft->messages[0], 10, 480,
                                           10, rec.line_h, 0, 200, 0, 0, 1, 0, 0);
-                if (rec.first_text_y - rec.ascent < 10 ||
-                    rec.first_text_y - rec.ascent + 16 > 10 + rec.line_h) {
+                {
+                    tg_gui_bubble_geom rgeo;
+
+                    /* The reply band starts below the bubble's top padding. */
+                    tg_gui_bubble_geometry(&b, &draft->messages[0], 10, 480,
+                                           rec.line_h, 0, 0, &rgeo);
+                    reply_band = 10 + rgeo.header_h + rgeo.top_pad;
+                }
+                if (rec.first_text_y - rec.ascent < reply_band ||
+                    rec.first_text_y - rec.ascent + 16 >
+                        reply_band + rec.line_h) {
                     puts("gui self-test: tall reply emoji overlaps the message body");
                     return 2;
                 }

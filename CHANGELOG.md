@@ -144,6 +144,14 @@ lanes unless noted.
   the text was placed from the top of that taller line, which left it four
   pixels low in the field; it is now centred the way the message field
   already was.
+- A message bubble has as much room above its text as below its time, and
+  the time sits just under the text. With emoji on, every line is as tall
+  as an emoji: the first line started on the bubble's top edge, which left
+  small letters a few pixels from it, and the time sat at the foot of
+  another emoji-tall row, with a wide empty band above it. The padding now
+  takes into account the room the taller line already gives, and the time
+  row is as tall as its letters, so bubbles are also shorter with emoji on.
+  Without emoji the text no longer touches the top edge either.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and
