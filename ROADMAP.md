@@ -173,9 +173,8 @@ Features are therefore grouped by the work they share.
   a machine whose clock nobody set, and gets its bubbles back on a 16-bit
   AmigaOS 4 Workbench. Validated on a stock A1200, a Vampire and a
   PiStorm under AfA OS, in the OS4, MorphOS, AROS i386, x86_64 and ARM
-  VMs, and for the 68k lanes on WinUAE. The text client for the plain
-  68000 is ready as a seventh package and follows once its tester has
-  checked the final build.
+  VMs, and for the 68k lanes on WinUAE. A seventh package brings the
+  text client to the plain 68000, the end of a long hunt on one A600.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -190,9 +189,8 @@ Features are therefore grouped by the work they share.
   the beta look like a downgrade to the system.
 
 Two things run outside this list. The plain-68000 lane has its own
-rhythm, since it depends on field logs from one machine: the client now
-runs on that A600, and its package goes out once its tester has checked
-the final build. And emoji
+rhythm, since it depends on field logs from one machine: the client runs
+on that A600 now and ships as a package of its own from 0.0.96. And emoji
 drawn inside the transcript, the part that has to split text runs in
 the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce

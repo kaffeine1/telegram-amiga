@@ -29,7 +29,7 @@ Two front-ends share one engine:
 ![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
 
 Status: **alpha 0.0.96** - everyday direct-message and group chat works on all
-six platforms below. 0.0.96 makes the window at home on a stock A1200: typing
+the platforms below. 0.0.96 makes the window at home on a stock A1200: typing
 keeps up with the keys instead of taking three seconds a letter, a repaint in
 a busy chat takes under a second instead of six, the window opens at once on
 the saved chat list and connects from there, and avatars are kept ready on
@@ -37,8 +37,10 @@ disk, or switched off with Settings > Show avatars. Changing the Workbench
 screen mode or colours no longer stalls with the window open: it makes way
 and comes back on the new screen. Quitting is Amiga+Q or the close gadget,
 message times show even on a machine whose clock nobody set, and a 16-bit
-AmigaOS 4 Workbench gets the message bubbles back. A text client for the plain
-68000 (A500, A600) follows as soon as its tester has checked the final build.
+AmigaOS 4 Workbench gets the message bubbles back. A seventh package brings the
+text client to the plain 68000 (A500, A600), thanks to Paolo Arus (DaRkHoRaCe):
+without his tenacity in testing, round after round on his A600, it would never
+have come out.
 
 It retains 0.0.95's faster transfers and full-size photos, 0.0.94's sixth
 platform, its icons and its fixes for FAT volumes, 0.0.93's emoji panel,
@@ -58,12 +60,14 @@ community. Development diary:
 
 ## Platforms & releases
 
-Each package bundles both clients, icons, a public `telegram-api.txt` and
-per-architecture IT/EN manuals, and **no private files**.
+Each package bundles both clients (the plain-68000 one the text client alone),
+icons, a public `telegram-api.txt` and per-architecture IT/EN manuals, and
+**no private files**.
 
 | Platform | CPU | Release |
 |---|---|---|
 | AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.96) |
+| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-alpha-0.0.96) |
 | AmigaOS 4.x | PPC | [os4-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.96) |
 | MorphOS | PPC | [morphos-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.96) |
 | AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.96) |
@@ -75,7 +79,8 @@ Full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
 as `CHANGELOG.txt`).
 
 AmigaOS 3.x is a native clib2 build (no ixemul, no AmiSSL) and needs a 68020 or
-better. AROS x86_64 targets trunk-SDK-matched systems (AROS One v0.38 pairs a
+better; the plain-68000 package runs the text client in about 2 MB of free fast
+RAM, with its first login made on a faster Amiga or in an emulator. AROS x86_64 targets trunk-SDK-matched systems (AROS One v0.38 pairs a
 different kickstart and will not run it); AROS i386 ABIv0 is the broadest AROS
 build. AROS aarch64 (ABIv1) runs on the native AROS image for the Raspberry Pi
 4, 400 and 5, from the image of 2026-08-22 on.
