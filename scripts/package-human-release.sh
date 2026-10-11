@@ -39,9 +39,11 @@ fi
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 
 AMIGAOS3_BINARY=${AMIGAOS3_BINARY:-"$ROOT_DIR/build/amigaos3-clib2/TelegramAmiga"}
-# Plain-68000 variant (A500/A600/A1000/CDTV class): built with M68K_CPU=68000
-# and the LOWMEM caps. Packaged only when that binary exists.
-AMIGAOS3_68000_BINARY=${AMIGAOS3_68000_BINARY:-"$ROOT_DIR/build/amigaos3-68000/TelegramAmiga"}
+# Plain-68000 variant (A500/A600/A1000/CDTV class): the text client with the
+# LOWMEM caps, built by scripts/build-68000-lowmem.sh into its own folder
+# (build/amigaos3-68000/ is where any other 68000 build lands). Packaged only
+# when that binary exists, and refused below unless it is that recipe.
+AMIGAOS3_68000_BINARY=${AMIGAOS3_68000_BINARY:-"$ROOT_DIR/build/amigaos3-68000-lowmem/TelegramAmiga"}
 MORPHOS_BINARY=${MORPHOS_BINARY:-"$ROOT_DIR/build/morphos-cross/TelegramAmiga"}
 AMIGAOS4_BINARY=${AMIGAOS4_BINARY:-"$ROOT_DIR/build/amigaos4/TelegramAmiga"}
 AROS_I386_BINARY=${AROS_I386_BINARY:-"$ROOT_DIR/build/aros-i386-abiv0/TelegramAmiga"}
@@ -925,6 +927,8 @@ EOF
 # still passed with them in September 2026).
 aminet_meta() {
     aminet_upload=1 # 0 = the lha is built for The AROS Archives only
+    aminet_short="Unofficial native Telegram chat client"
+    aminet_kind=full
     case "$1" in
     amigaos3)    archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
                  lhaname="TelegramAmiga"
@@ -950,6 +954,14 @@ aminet_meta() {
     aros-aarch64) archtag="aarch64-aros"; archval="other"
                  lhaname="TelegramAmiga-ARM64"
                  requires="AROS aarch64 (ABIv1, Raspberry Pi 4/400/5) with AROSTCP" ;;
+    # The plain-68000 text client, on Aminet from 0.0.96 under its own name:
+    # sharing TelegramAmiga with the 68020 package would replace that one.
+    # Its first upload goes with AMINET_NEW=TelegramAmiga-68000 (no Replaces:).
+    amigaos3-68000) archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
+                 lhaname="TelegramAmiga-68000"
+                 aminet_short="Unofficial Telegram text client, 68000"
+                 aminet_kind=tui68k
+                 requires="68000, 2 MB fast RAM, TCP/IP, login made on a faster Amiga" ;;
     *) echo "aminet_meta: unknown arch $1" >&2; exit 1 ;;
     esac
     if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/$lhaname.lha"; else lhaold=""; fi
@@ -997,12 +1009,98 @@ changelog_section_text() {
     '
 }
 
+# The two readme sections that differ between the window client and the
+# plain-68000 text client; every other lane keeps the first text as it was.
+aminet_features_text() {
+    if [ "$aminet_kind" = "tui68k" ]; then
+        cat <<'EOT'
+WHAT CAN I ACTUALLY DO WITH IT?
+-------------------------------
+This archive is the text client alone, built for a plain 68000 Amiga
+(A500, A600, A1000, A2000, CDTV) with about 2 MB of free fast RAM: the
+window, its renderer and the JPEG decoder are left out of the build, so
+the whole program loads in about 1.5 MB.
+
+Read and send messages in private chats, groups and channels, in a
+full-screen console with colours and a word-wrapping composer of up to
+three rows. Pick a chat from the list or with the F-keys, receive new
+messages live, reply, edit and delete your own messages, see read
+receipts, download received files (/getfile) and send files from disk
+(/sendfile). The pinned Saved Messages chat doubles as a transfer drawer
+between the Amiga and your phone or PC.
+
+Limits of this build: 12 chats in the list, 8 messages per page, message
+text up to 2 KB, downloads in 16 KB pieces. With a 68020 or better, take
+the AmigaOS 3.x archive (TelegramAmiga.lha) instead: it has the window,
+inline photos and emoji.
+EOT
+        return
+    fi
+    cat <<EOT
+WHAT CAN I ACTUALLY DO WITH IT?
+-------------------------------
+Read and send messages in private chats, groups and channels. Download a
+received file (right-click -> Download) or send one from disk, up to
+$upload_limit on this build, including files over 10 MiB.
+Photos appear immediately as blurred previews, refine from a bounded download
+and reuse decoded pixels from disk when reopened. Click one for a larger
+progressive viewer, or disable inline loading on a slower machine and open
+only the images you choose. Forward one message to Saved Messages in a
+click, or choose another destination through chat search.
+Use the pinned Saved Messages chat as a cloud transfer drawer between the
+Amiga and your phone or PC. Reply to a specific message (right-click it).
+Edit or delete your own messages. See
+real delivery state: one tick = sent, two blue ticks = read, updating
+live. See who is typing. Search for chats. Send messages from your desk
+at work and find the conversation already synced when you get home to
+the Amiga -- and the other way round.
+
+Message times follow your Amiga clock. Unread badges and your chat order
+survive restarts. The window remembers where you left it, and can open
+on its own screen if you prefer a dedicated page for chatting.
+EOT
+}
+
+aminet_start_text() {
+    if [ "$aminet_kind" = "tui68k" ]; then
+        cat <<'EOT'
+GETTING STARTED
+---------------
+1. Log in once on a FASTER Amiga (68020 or better) or in an emulator with
+   the normal archive: the login's key exchange is too much for a 68000.
+2. Copy this drawer to a WRITABLE volume of the 68000 machine, then copy
+   telegram-auth.bin and the data drawer from the faster setup into it.
+3. Double-click TelegramAmiga-TUI. The same account can stay logged in on
+   both machines.
+
+telegram-auth.bin holds your login. Treat that file like a house key:
+NEVER share it -- anyone who has it has your Telegram session. Full EN and
+IT manuals are in the archive, including notes for the plain 68000.
+EOT
+        return
+    fi
+    cat <<EOT
+GETTING STARTED
+---------------
+1. Copy this drawer to a WRITABLE volume (not from the archive directly).
+2. Double-click TelegramAmiga (or TelegramAmiga-TUI on very low-end setups).
+3. First run walks you through the normal Telegram login: phone number,
+   the code Telegram sends you, and your cloud password if you use
+   two-factor. That is all -- next time it goes straight to your chats.
+
+The login is stored in telegram-auth.bin next to the program. Treat that
+file like a house key: NEVER copy it around or share it -- anyone who has
+it has your Telegram session. Full EN and IT manuals are in the archive,
+including per-platform notes and troubleshooting.
+EOT
+}
+
 write_aminet_readme() {
     # $4 = the Aminet path this upload replaces; empty for a first upload,
     # and then the Replaces: line is dropped (an empty one would be refused)
     out=$1; archval=$2; requires=$3; replaces=$4
     cat > "$out" <<EOF
-Short:        Unofficial native Telegram chat client
+Short:        $aminet_short
 Uploader:     $AMINET_UPLOADER
 Author:       $AMINET_AUTHOR
 Type:         comm/tcp
@@ -1030,40 +1128,9 @@ beyond your system's own bsdsocket stack.
 
 $aminet_programs
 
-WHAT CAN I ACTUALLY DO WITH IT?
--------------------------------
-Read and send messages in private chats, groups and channels. Download a
-received file (right-click -> Download) or send one from disk, up to
-$upload_limit on this build, including files over 10 MiB.
-Photos appear immediately as blurred previews, refine from a bounded download
-and reuse decoded pixels from disk when reopened. Click one for a larger
-progressive viewer, or disable inline loading on a slower machine and open
-only the images you choose. Forward one message to Saved Messages in a
-click, or choose another destination through chat search.
-Use the pinned Saved Messages chat as a cloud transfer drawer between the
-Amiga and your phone or PC. Reply to a specific message (right-click it).
-Edit or delete your own messages. See
-real delivery state: one tick = sent, two blue ticks = read, updating
-live. See who is typing. Search for chats. Send messages from your desk
-at work and find the conversation already synced when you get home to
-the Amiga -- and the other way round.
+$(aminet_features_text)
 
-Message times follow your Amiga clock. Unread badges and your chat order
-survive restarts. The window remembers where you left it, and can open
-on its own screen if you prefer a dedicated page for chatting.
-
-GETTING STARTED
----------------
-1. Copy this drawer to a WRITABLE volume (not from the archive directly).
-2. Double-click TelegramAmiga (or TelegramAmiga-TUI on very low-end setups).
-3. First run walks you through the normal Telegram login: phone number,
-   the code Telegram sends you, and your cloud password if you use
-   two-factor. That is all -- next time it goes straight to your chats.
-
-The login is stored in telegram-auth.bin next to the program. Treat that
-file like a house key: NEVER copy it around or share it -- anyone who has
-it has your Telegram session. Full EN and IT manuals are in the archive,
-including per-platform notes and troubleshooting.
+$(aminet_start_text)
 
 WHAT IS NEW IN $VERSION
 $(printf '%*s' $((15 + ${#VERSION})) '' | tr ' ' '-')
@@ -1123,6 +1190,20 @@ package_one() {
             fi
             ;;
     esac
+
+    # The 68000 package must hold the low-memory text client: a 68000 build
+    # with the window inside, or a tester's diagnostic build, looks the same
+    # to `file` and would ship without a word.
+    if [ "$suffix" = "amigaos3-68000" ]; then
+        if ! strings "$binary" | grep -F '$STACK:393216' >/dev/null; then
+            echo "ERROR $platform: not the low-memory build (no 384 KB stack cookie); run scripts/build-68000-lowmem.sh" >&2
+            exit 1
+        fi
+        if strings "$binary" | grep -E 'gui window: open|diag: ' >/dev/null; then
+            echo "ERROR $platform: binary carries the GUI or the diagnostic trace; run scripts/build-68000-lowmem.sh" >&2
+            exit 1
+        fi
+    fi
 
     # Staleness guard: a binary OLDER than the sources means a forgotten rebuild
     # -- exactly how 0.0.2 shipped the previous OS4 binary. Override: ALLOW_STALE=1.
@@ -1215,18 +1296,16 @@ package_one() {
     # --- Aminet: TelegramAmiga<suffix>.lha + matching .readme ----------------
     # Reuses the assembled drawer ($dest, incl. LICENSE) but under a clean
     # top-level name ($AMINET_DRAWER) so unpacking yields one tidy directory.
-    # The 68000 text-only package is not an Aminet upload (it is the
-    # experimental low-memory variant, GitHub zip only): building its lha here
-    # would land on aminet/TelegramAmiga.lha, the name of the AmigaOS 3.x
-    # package, and silently replace it when both lanes run in one call (seen
-    # in the 0.0.94 test round; the published 0.0.93 archive was untouched
-    # because that release never packaged the 68000 lane).
-    if [ "$AMINET" = "1" ] && [ "$suffix" != "amigaos3-68000" ]; then
+    # Each lane has its own Aminet name, looked up by the package suffix: the
+    # 68000 package (an Aminet upload from 0.0.96) once took the AmigaOS 3.x
+    # name and would have replaced that lha when both lanes ran in one call
+    # (seen in the 0.0.94 test round, before it was kept off Aminet).
+    if [ "$AMINET" = "1" ]; then
         if [ ! -x "$LHA_BIN" ]; then
             echo "ERROR $platform: LhA encoder not found at $LHA_BIN (build jca02266/lha or set LHA_BIN=, or AMINET=0)" >&2
             exit 1
         fi
-        aminet_meta "$expected"
+        aminet_meta "$suffix"
         amiwork="$AMINET_ROOT/$AMINET_DRAWER"
         lhafile="$AMINET_ROOT/$lhaname.lha"
         rm -rf "$amiwork" "$amiwork.info"; mkdir -p "$amiwork"

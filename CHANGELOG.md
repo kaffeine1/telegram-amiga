@@ -170,6 +170,13 @@ lanes unless noted.
   screens and on 68k CPUs below a 68040, on elsewhere, and a choice from the
   menu is saved in data/telegram-avatars.txt (one equal to the machine's own
   default is saved as "auto").
+- A package for the plain 68000 (A500, A600, A1000, A2000, CDTV): the text
+  client alone, built to load in about 1.5 MB, so it runs with about 2 MB
+  of free fast RAM. It goes to GitHub and, as TelegramAmiga-68000.lha, to
+  Aminet. The first login is made on a faster Amiga or in an emulator, as
+  its manual explains, and telegram-auth.bin and the data drawer are then
+  copied over. A tester's A600 (68000, 2 MB chip and 4 MB fast, network on
+  a PCMCIA card) runs it.
 
 ### Changed
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
