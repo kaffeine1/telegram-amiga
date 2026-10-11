@@ -11010,8 +11010,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     /* The composer took what it could hold.
                                        Saying so beats dropping the rest in
                                        silence, which read as a broken paste
-                                       (issue #14). */
-                                    char cut[64];
+                                       (issue #14). Sized for two 64-bit
+                                       counts. */
+                                    char cut[80];
 
                                     sprintf(cut,
                                             "Pasted %lu of %lu characters "
