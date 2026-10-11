@@ -2,10 +2,11 @@
 
 Telegram Amiga, a from-scratch native MTProto Telegram client for
 AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386, x86_64 and, from 0.0.94,
-aarch64). Dates use YYYY-MM-DD. Each release ships on all six platform
-lanes unless noted.
+aarch64). Dates use YYYY-MM-DD. Each release ships on every platform lane
+of its time unless noted: six from 0.0.94, seven from 0.0.96, which adds
+the text client for the plain 68000.
 
-## [Unreleased]
+## [0.0.96] - 2026-10-11
 
 ### Fixed
 - Typing in the window keeps up with the keys on a stock A1200. Since 0.0.8
@@ -89,9 +90,11 @@ lanes unless noted.
   the warning arrives, without first running a click still queued behind
   it: on a stalled link such a click kept the reset waiting for minutes.
   OS4 and AROS warn through Intuition, MorphOS through its
-  screennotify.library. On AmigaOS 3 the warning needs screennotify.library
-  from Aminet (util/libs/ScreenNotify10) in LIBS:; without it nothing
-  changes, and the own screen (Settings > Use own screen) avoids the problem.
+  screennotify.library. On AROS Intuition says at once when another window
+  keeps the Workbench open, so there the window comes straight back. On
+  AmigaOS 3 the warning needs screennotify.library from Aminet
+  (util/libs/ScreenNotify10) in LIBS:; without it nothing changes, and the
+  own screen (Settings > Use own screen) avoids the problem.
 - A window dragged down to its smallest size is remembered too. The size
   is saved without the borders, and the floor for a saved size was the
   window's own 320x200 minimum, which the inside of the smallest window
