@@ -16,6 +16,12 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PACKAGE_ROOT=${PACKAGE_ROOT:-"$ROOT_DIR/build/human-releases"}
+# A relative root stopped the 0.0.96 run silently after the first zip: some
+# steps run from inside other directories. Anchor it where it was given.
+case $PACKAGE_ROOT in
+    /*) ;;
+    *) PACKAGE_ROOT="$(pwd)/$PACKAGE_ROOT" ;;
+esac
 DATE_STAMP=${DATE_STAMP:-$(date +%Y%m%d)}
 COMMIT_ID=${COMMIT_ID:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)}
 # Single source of truth: the version the binary itself reports (About box /
@@ -1385,8 +1391,9 @@ if [ "$AMINET" = "1" ] && ls "$AMINET_ROOT"/TelegramAmiga*.lha >/dev/null 2>&1; 
     ( cd "$AMINET_ROOT" && sha_cmd TelegramAmiga*.lha TelegramAmiga*.readme > SHA256SUMS-aminet.txt )
     echo
     echo "Aminet artifacts ready in: $AMINET_ROOT  (version $VERSION, Type comm/tcp)"
+    aminet_pairs=$(ls "$AMINET_ROOT"/TelegramAmiga*.lha | wc -l | tr -d ' ')
     echo "Upload (Michele): FTP main.aminet.net -> cd /new -> binary -> put each"
-    echo "  TelegramAmiga[<-suffix>].lha AND matching .readme (6 + 6 files)."
+    echo "  TelegramAmiga[<-suffix>].lha AND matching .readme ($aminet_pairs + $aminet_pairs files)."
     echo "  Web form may be back at https://aminet.net/upload. See memory/aminet-publishing.md"
 fi
 
