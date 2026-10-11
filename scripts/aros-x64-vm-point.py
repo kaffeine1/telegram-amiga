@@ -218,7 +218,11 @@ def main(argv):
     try:
         if cmd in ("click", "double", "move"):
             x, y = int(argv[2]), int(argv[3])
-            p.land(x, y)
+            if p.land(x, y) is None:
+                # a click where the arrow was lost lands anywhere: on the
+                # x86_64 guest one opened the Input prefs from the dock
+                print("no click: arrow lost")
+                return 1
             if cmd == "click":
                 p.click()
             elif cmd == "double":
