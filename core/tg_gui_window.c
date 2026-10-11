@@ -26,6 +26,7 @@
 #include "tg_platform.h"
 #include "tg_version.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -9018,7 +9019,10 @@ typedef struct tg_gui_wbn_msg {
 } tg_gui_wbn_msg;
 #elif defined(__amigaos4__) || defined(__AROS__)
 #define TG_GUI_WBN_INTUITION 1
-#if defined(__AROS__) && !defined(SNA_Notify)
+#if defined(__AROS__) && defined(SNA_Notify)
+/* The names come with struct ScreenNotifyMessage, checked below. */
+#define TG_GUI_WBN_AROS_SDK 1
+#elif defined(__AROS__)
 /* This SDK has the calls but not the names; AROS keeps OS4's values. */
 #define SNA_Notify (TAG_USER + 0x02)
 #define SNA_MsgPort (TAG_USER + 0x06)
@@ -9028,10 +9032,35 @@ typedef struct tg_gui_wbn_msg {
 #define SNOTIFY_WAIT_REPLY (1 << 15)
 #endif
 /* The head of Intuition's ScreenNotifyMessage: the class says which. */
+#if defined(__AROS__)
+/* AROS heads it with a MagicMessage, a Message with two more ULONGs: read
+   with the OS4 head, the class came from mn_Magic, so every notice looked
+   unknown and was replied at once with our window still open. Spelled out
+   because not every SDK defines it, and nested like the original: on 64
+   bit the whole head pads to 8 bytes. */
+typedef struct tg_gui_wbn_head {
+    struct Node node;
+    struct MsgPort *reply_port;
+    UWORD length;
+    ULONG magic;
+    ULONG version;
+} tg_gui_wbn_head;
+typedef struct tg_gui_wbn_msg {
+    tg_gui_wbn_head head;
+    ULONG notify_class;
+} tg_gui_wbn_msg;
+#if defined(TG_GUI_WBN_AROS_SDK)
+/* Where the SDK has the real struct, a layout slip stops the build. */
+typedef char tg_gui_wbn_layout_check[
+    (offsetof(tg_gui_wbn_msg, notify_class) ==
+     offsetof(struct ScreenNotifyMessage, snm_Class)) ? 1 : -1];
+#endif
+#else
 typedef struct tg_gui_wbn_msg {
     struct Message msg;
     ULONG notify_class;
 } tg_gui_wbn_msg;
+#endif
 #endif
 
 static struct MsgPort *tg_gui_wbn_port = 0;
