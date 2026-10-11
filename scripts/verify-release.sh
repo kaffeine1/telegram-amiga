@@ -45,7 +45,12 @@ verify() {
     want=$(md5of "$ROOT_DIR/$localbin"); got=$(md5of "$TMP/bin")
     arch=$(file "$TMP/bin" | grep -c "$archpat" || true)
     leak=$(unzip -l "$TMP/$tag.zip" | grep -icE "telegram-(auth|peers|seed|password|token)|phone-code-hash" || true)
-    icon=$(unzip -p "$TMP/$tag.zip" "*/TelegramAmiga.info" 2>/dev/null | strings | grep -c "^TelegramAmiga$" || true)
+    # The 68000 package ships the TUI icon alone (no window in that build).
+    case $tag in
+    os3-68000-*) iconfile="TelegramAmiga-TUI.info" ;;
+    *)           iconfile="TelegramAmiga.info" ;;
+    esac
+    icon=$(unzip -p "$TMP/$tag.zip" "*/$iconfile" 2>/dev/null | strings | grep -c "^TelegramAmiga$" || true)
     # Since 0.0.9 the TUI marker and its icon ship on the 68k lane only (the
     # other platforms reach the TUI from a Shell), so the expected file count
     # is one higher there. Everything else is identical on every lane.
@@ -58,7 +63,7 @@ verify() {
     [ "$want" = "$got" ] || { echo "FAIL $tag: published binary $got != local build $want"; ok=0; }
     [ "$arch" -ge 1 ]    || { echo "FAIL $tag: wrong architecture"; ok=0; }
     [ "$leak" = 0 ]      || { echo "FAIL $tag: SESSION FILE LEAK"; ok=0; }
-    [ "$icon" -ge 1 ]    || { echo "FAIL $tag: TelegramAmiga.info not flashless"; ok=0; }
+    [ "$icon" -ge 1 ]    || { echo "FAIL $tag: $iconfile not flashless"; ok=0; }
     [ "$files" = "$want_files" ] || { echo "FAIL $tag: $files/$want_files expected files"; ok=0; }
     if [ "$ok" = 1 ]; then echo "OK   $tag  [bin $(printf %.8s "$got")]"; else fail=1; fi
 }
@@ -69,6 +74,7 @@ verify "morphos-$CHANNEL-$VERSION"    "*morphos*"    build/morphos-cross/Telegra
 verify "aros-i386-$CHANNEL-$VERSION"  "*aros-i386*"  build/aros-i386-abiv0/TelegramAmiga "80386"
 verify "aros-x86_64-$CHANNEL-$VERSION" "*x86_64*"    build/aros-x86_64/TelegramAmiga     "x86-64"
 verify "aros-aarch64-$CHANNEL-$VERSION" "*aarch64*"  build/aros-aarch64/TelegramAmiga    "aarch64"
+verify "os3-68000-$CHANNEL-$VERSION"  "*amigaos3-68000*" build/amigaos3-68000-lowmem/TelegramAmiga "AmigaOS"
 
 if [ "$fail" = 0 ]; then
     echo "All published $VERSION assets match the local builds."

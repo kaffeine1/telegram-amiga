@@ -375,7 +375,12 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
   minutes on a stock A1200. The login completes; the dots show it working.
 - First login: the DH key exchange is heavy on a 68k, so the first start
   takes a while (it happens once -- the session is saved afterwards).
-- Emoji are drawn as text emoticons (:) :D <3); the console has no emoji font."
+- Emoji are drawn as text emoticons (:) :D <3); the console has no emoji font.
+- Changing the Workbench screen mode or colours with the window open needs
+  screennotify.library in LIBS: (Aminet util/libs/ScreenNotify10): with it
+  the window closes when the system asks and comes back on the new screen.
+  Without it the prefs program keeps asking to close the windows; use
+  Settings > Use own screen, or quit before changing the prefs."
         req_it="- AmigaOS 3.x (3.1 / 3.1.4 / 3.2) con uno stack TCP/IP (Roadshow, AmiTCP,
   Miami/MiamiDx) che fornisca bsdsocket.library, e una connessione internet.
 - Una CPU 68020 o superiore (questa build usa la moltiplicazione 32x32 del
@@ -391,7 +396,13 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
   che sta lavorando.
 - Primo accesso: lo scambio di chiavi DH e' pesante su 68k, quindi il primo
   avvio richiede un po' di pazienza (succede una volta sola: la sessione
-  viene poi salvata)."
+  viene poi salvata).
+- Per cambiare modo schermo o colori del Workbench con la finestra aperta
+  serve screennotify.library in LIBS: (Aminet util/libs/ScreenNotify10):
+  con la libreria la finestra si chiude quando il sistema lo chiede e torna
+  sul nuovo schermo. Senza, il programma delle preferenze continua a
+  chiedere di chiudere le finestre: usa Settings > Use own screen, oppure
+  esci prima di cambiare le preferenze."
         ;;
     "MorphOS")
         upload_limit="250 MiB"
