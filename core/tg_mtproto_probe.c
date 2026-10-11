@@ -669,6 +669,30 @@ static long tg_mtproto_local_clock_skew(void)
     return -(long)(lib_now - local_now);
 }
 
+/* Time zones run from UTC-12 to UTC+14, plus an hour of summer time: a wall
+   clock more than 15 hours away from the server is wrong, not elsewhere. */
+#define TG_MTPROTO_CLOCK_OFF_SECONDS 54000L
+
+/*
+ * The delta the display subtracts from a server date: server UTC minus the
+ * wall clock. A machine without a battery clock (a stock A1200 or A600)
+ * starts on 1 January 1978 when nothing sets the date. Anchored on that, a
+ * message older than the boot fell before 1978, and clib2's gmtime() turns
+ * any such time into 1978-01-01 00:00: every time read 00:00. A clock
+ * further off than any time zone can be is not the time of day, so the
+ * server time is shown with the Locale time zone (the skew) instead.
+ */
+static long tg_mtproto_display_delta(long server_delta, long skew)
+{
+    long delta = server_delta - skew;
+
+    if (delta > TG_MTPROTO_CLOCK_OFF_SECONDS ||
+        delta < -TG_MTPROTO_CLOCK_OFF_SECONDS) {
+        return -skew;
+    }
+    return delta;
+}
+
 static void tg_mtproto_sync_time_from_server(
     tg_mtproto_auth_context *context,
     const tg_mtproto_encrypted_message *message)
@@ -12341,8 +12365,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
            already (locale-offset) UTC, so that delta loses the timezone and any
            DST gap leaks through as an "off by an hour" display. Subtracting the
            wall-clock-vs-time() skew rebases the delta on the Workbench clock. */
-        display_delta = context->server_time_delta_seconds
-                      - tg_mtproto_local_clock_skew();
+        display_delta = tg_mtproto_display_delta(
+            context->server_time_delta_seconds, tg_mtproto_local_clock_skew());
         while (i > 0UL) {
             --i;
             if (texts.messages[i].id > max_seen_message_id) {
@@ -15300,6 +15324,17 @@ int tg_mtproto_probe_self_test(void)
     int has_access_hash;
     FILE *quiet;
     tg_mtproto_tl_writer writer;
+
+    /* Message times: a set clock in summer time with a Locale that says
+       UTC+1 keeps its two hours; a clock left on 1978, or a day off, falls
+       back to the Locale zone instead of anchoring the times on it. */
+    if (tg_mtproto_display_delta(-3600L, 3600L) != -7200L ||
+        tg_mtproto_display_delta(1539240700L, 3600L) != -3600L ||
+        tg_mtproto_display_delta(-90000L, 3600L) != -3600L ||
+        tg_mtproto_display_delta(54000L, 0L) != 54000L) {
+        puts("probe self-test: an unset clock still anchors message times");
+        return 2;
+    }
 
     tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
     if (tg_mtproto_build_req_pq_multi(&writer, 0x6777e5ebUL, 0x00059760UL,

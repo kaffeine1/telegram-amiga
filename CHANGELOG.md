@@ -152,6 +152,13 @@ lanes unless noted.
   takes into account the room the taller line already gives, and the time
   row is as tall as its letters, so bubbles are also shorter with emoji on.
   Without emoji the text no longer touches the top edge either.
+- Message times on a machine whose clock nobody set, such as a stock A1200
+  or A600 without a battery clock, show the time of day instead of 00:00.
+  Times follow the Workbench clock, and such a clock starts on 1 January
+  1978: every message older than the last boot fell before that date, which
+  the C library turns into midnight. When the clock is further off than any
+  time zone could be, the times now come from Telegram's clock with the
+  time zone set in the Locale preferences, without summer time.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and
