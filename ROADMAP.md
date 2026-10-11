@@ -159,6 +159,23 @@ Features are therefore grouped by the work they share.
   along. Validated on a Vampire, on real MorphOS and, for the text client
   and two-step verification, on a stock A1200, and in the OS4, AROS i386,
   AROS ARM and MorphOS VMs.
+- **0.0.96, the stock A1200 and the Workbench.** RELEASED 2026-10-11. A
+  round of field reports from a stock A1200 (68EC020, AGA, 8 MB fast)
+  made the window practical there: typing redraws the text field alone
+  instead of the whole window, which took about three seconds a letter;
+  a repaint in a busy chat went from 6 s to 0.9 s on a cycle-exact A1200;
+  the window opens at once on the saved chat list and connects from
+  there; avatars are kept processed on disk, or switched off; menus
+  follow the pointer and emoji keep their colours on a 32-colour
+  Workbench. The window also makes way for a Workbench reset (Intuition
+  tells it on OS4 and AROS, screennotify.library on MorphOS and AmigaOS
+  3), quits with Amiga+Q or its close gadget only, shows message times on
+  a machine whose clock nobody set, and gets its bubbles back on a 16-bit
+  AmigaOS 4 Workbench. Validated on a stock A1200, a Vampire and a
+  PiStorm under AfA OS, in the OS4, MorphOS, AROS i386, x86_64 and ARM
+  VMs, and for the 68k lanes on WinUAE. The text client for the plain
+  68000 is ready as a seventh package and follows once its tester has
+  checked the final build.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -172,8 +189,10 @@ Features are therefore grouped by the work they share.
   alphas keep their three-part numbers; mapping 0.0.93 onto 0.93 would make
   the beta look like a downgrade to the system.
 
-Two things run outside this list. The plain-68000 crash hunt has its
-own rhythm, since it depends on field logs from one machine. And emoji
+Two things run outside this list. The plain-68000 lane has its own
+rhythm, since it depends on field logs from one machine: the client now
+runs on that A600, and its package goes out once its tester has checked
+the final build. And emoji
 drawn inside the transcript, the part that has to split text runs in
 the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce

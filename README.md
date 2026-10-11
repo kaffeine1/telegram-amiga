@@ -28,24 +28,24 @@ Two front-ends share one engine:
 
 ![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.95** - everyday direct-message and group chat works on all
-six platforms below. 0.0.95 is the speed release. Downloads and uploads keep
-several parts in flight instead of waiting for each one, and AES and SHA-256
-work on whole words: on a Vampire downloads went from 97 to 199 KB/s and
-uploads from 112 to 213 KB/s, and a real MorphOS machine takes in a 4 MB file
-at up to 1.6 MB/s. A first start shows its window before the key exchange
-with the datacenter of the pictures, and two-step verification now completes
-on a stock A1200. A Full-size photos setting opens the largest copy of a
-picture in the viewer, and Save photo as... then writes the original. The
-text client writes messages up to Telegram's 4096 characters and keeps a
-pasted text of several lines in one message; long captions no longer fail,
-and long messages that arrive are no longer cut inside a letter.
+Status: **alpha 0.0.96** - everyday direct-message and group chat works on all
+six platforms below. 0.0.96 makes the window at home on a stock A1200: typing
+keeps up with the keys instead of taking three seconds a letter, a repaint in
+a busy chat takes under a second instead of six, the window opens at once on
+the saved chat list and connects from there, and avatars are kept ready on
+disk, or switched off with Settings > Show avatars. Changing the Workbench
+screen mode or colours no longer stalls with the window open: it makes way
+and comes back on the new screen. Quitting is Amiga+Q or the close gadget,
+message times show even on a machine whose clock nobody set, and a 16-bit
+AmigaOS 4 Workbench gets the message bubbles back. A text client for the plain
+68000 (A500, A600) follows as soon as its tester has checked the final build.
 
-It retains 0.0.94's sixth platform, its icons and its fixes for FAT volumes,
-0.0.93's emoji panel, attachment chooser and working logins, 0.0.92's link
-previews, video frames and attachment labels, 0.0.9's photo pipeline, and the
-messaging, file sharing, replies, editing, read receipts and avatars delivered
-by earlier releases.
+It retains 0.0.95's faster transfers and full-size photos, 0.0.94's sixth
+platform, its icons and its fixes for FAT volumes, 0.0.93's emoji panel,
+attachment chooser and working logins, 0.0.92's link previews, video frames
+and attachment labels, 0.0.9's photo pipeline, and the messaging, file
+sharing, replies, editing, read receipts and avatars delivered by earlier
+releases.
 
 Development on `main` now heads for the 0.1 beta, through the slots the
 roadmap keeps for field reports and for the features waiting there. Work there
@@ -63,12 +63,12 @@ per-architecture IT/EN manuals, and **no private files**.
 
 | Platform | CPU | Release |
 |---|---|---|
-| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.95](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.95) |
-| AmigaOS 4.x | PPC | [os4-alpha-0.0.95](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.95) |
-| MorphOS | PPC | [morphos-alpha-0.0.95](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.95) |
-| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.95](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.95) |
-| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.95](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.95) |
-| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.95](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.95) |
+| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.96) |
+| AmigaOS 4.x | PPC | [os4-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.96) |
+| MorphOS | PPC | [morphos-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.96) |
+| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.96) |
+| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.96) |
+| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.96](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.96) |
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases>.
 Full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
