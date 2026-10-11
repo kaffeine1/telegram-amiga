@@ -1367,7 +1367,7 @@ void tg_config_print_usage(FILE *stream, const char *program_name)
     fprintf(stream, "                         Open the native demo GUI window (Amiga; host prints a notice)\n");
     fprintf(stream, "      --gui-chats [peer-cache-file]\n");
     fprintf(stream, "                         Open the GUI window over a real peer cache (default telegram-peers.txt);\n");
-    fprintf(stream, "                         the sidebar shows your chats. F1-F10 select (Shift for 11-20), Q quits\n");
+    fprintf(stream, "                         the sidebar shows your chats. F1-F10 select (Shift for 11-20), Amiga+Q quits\n");
     fprintf(stream, "      --gui-chats-live [peer-cache-file]\n");
     fprintf(stream, "                         Like --gui-chats but first refreshes the cache from the network\n");
     fprintf(stream, "                         (telegram-api.txt + telegram-auth.bin), so the sidebar is live\n");

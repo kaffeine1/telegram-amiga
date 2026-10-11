@@ -3982,9 +3982,9 @@ static int tg_app_gui_connect(tg_gui_state *gui)
 
         /* The cached chats stay, read-only, as before the attempt. */
         if (why != 0 && why[0] != '\0') {
-            sprintf(line, "Offline: %.36s - Q quits", why);
+            sprintf(line, "Offline: %.38s", why); /* the reason fills the bar */
         } else {
-            strcpy(line, "Offline (cache) - Q quits");
+            strcpy(line, "Offline (cache) - Amiga+Q quits");
         }
         tg_gui_window_startup_status(line);
         return rc;
@@ -4002,7 +4002,7 @@ static int tg_app_gui_connect(tg_gui_state *gui)
             gui->chats[gui->selected_chat].index, stdout);
         tg_gui_log("live: open first chat done");
     }
-    strcpy(gui->status, "Live - F1-F10 chats, Q quits");
+    strcpy(gui->status, "Live - F1-F10 chats, Amiga+Q quits");
     return 0;
 }
 #endif /* !TG_NO_GUI */
@@ -4650,7 +4650,7 @@ int tg_app_run(int argc, char **argv)
                 gui->title[k] = name[k];
             }
             gui->title[k] = '\0';
-            strcpy(gui->status, "Read-only - F1-F10 chats, Q quits");
+            strcpy(gui->status, "Read-only - F1-F10 chats, Amiga+Q quits");
         } else {
             strcpy(gui->title, TG_APP_TITLE);
             strcpy(gui->status, missing ? "Cache chat non trovata"

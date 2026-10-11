@@ -179,6 +179,10 @@ lanes unless noted.
   a PCMCIA card) runs it.
 
 ### Changed
+- The window quits with Amiga+Q, as Amiga programs do, and the status bar
+  now says so. A plain Q quit too while the text field was not active, so a
+  message typed before clicking into the field closed the program at its
+  first q; it no longer does. ESC still quits when no field is active.
 - The AROS ARM64 package goes to Aminet too, as TelegramAmiga-ARM64.lha in
   comm/tcp. Aminet's list of architectures has no ARM entry, so its readme
   says "other", as other ARM AROS programs there do, and the file name and

@@ -22691,6 +22691,6 @@ int tg_gui_session_login_activate(tg_gui_state *state, FILE *stream)
         tg_gui_login_copy(state->title, sizeof(state->title), TG_APP_TITLE);
     }
     tg_gui_login_copy(state->status, sizeof(state->status),
-                      "Live - F1-F10 chats, Q quits");
+                      "Live - F1-F10 chats, Amiga+Q quits");
     return 0;
 }

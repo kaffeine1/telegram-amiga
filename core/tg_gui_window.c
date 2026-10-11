@@ -8309,7 +8309,7 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
             state->search_active = 0;
             state->search_query[0] = '\0';
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Live - F1-F10 chats, Q quits");
+                               "Live - F1-F10 chats, Amiga+Q quits");
         }
     } else if (cnt >= 1) {
         /* Show the matches in the sidebar; keep the search box focused so ESC
@@ -9329,7 +9329,7 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
         tg_gui_emoji_close(state);
         if (state->mode == TG_GUI_MODE_CHAT) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Live - F1-F10 chats, Q quits");
+                               "Live - F1-F10 chats, Amiga+Q quits");
         }
     }
     state->nav_chat = -1;   /* no arrow-key focus yet (0 would tint row 0) */
@@ -10169,7 +10169,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         }
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Q quits");
+                                           "Live - F1-F10 chats, Amiga+Q quits");
                     }
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 8) { /* BACKSPACE: delete BEFORE the caret */
@@ -10225,7 +10225,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                                     stdout);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Q quits");
+                                "Live - F1-F10 chats, Amiga+Q quits");
                             tg_gui_window_paint(state, &backend);
                         }
                     } else if (state->in_filter && state->chat_count > 0 &&
@@ -10244,7 +10244,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->chats[state->selected_chat].index);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Q quits");
+                                "Live - F1-F10 chats, Amiga+Q quits");
                             tg_gui_window_paint(state, &backend);
                         }
                     } else {
@@ -10346,7 +10346,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->reply_snippet[0] = '\0';
                     state->edit_to_id = 0UL;
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Live - F1-F10 chats, Q quits");
+                                       "Live - F1-F10 chats, Amiga+Q quits");
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 8) { /* BACKSPACE: delete BEFORE the caret */
                     unsigned long n;
@@ -10430,7 +10430,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     }
                 }
             } else if (msg_class == IDCMP_VANILLAKEY) {
-                if (msg_code == 'q' || msg_code == 'Q' || msg_code == 27) {
+                /* Quitting is Amiga+Q (the menu action, mapped above), as
+                   everywhere on the Amiga. A plain Q here closed the program
+                   as soon as a word was typed before clicking the text
+                   field. ESC still closes it. */
+                if (msg_code == 27) {
                     done = 1;
                 } else if ((msg_code == 13 || msg_code == 10) &&
                            state->nav_chat >= 0 &&
@@ -11725,7 +11729,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->history_pos = -1;
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Live - F1-F10 chats, Q quits");
+                                                   "Live - F1-F10 chats, Amiga+Q quits");
                             }
                             if (hit >= 0 && hit < state->chat_count &&
                                 hit != state->selected_chat) {
@@ -11914,7 +11918,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             (void)tg_gui_session_search_open_result(hit, stdout);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Q quits");
+                                "Live - F1-F10 chats, Amiga+Q quits");
                             tg_gui_window_paint(state, &backend);
                         }
                         picked_secs = msg_secs;   /* swallow the second click */
@@ -11939,7 +11943,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             picked_micros = msg_micros;
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Live - F1-F10 chats, Q quits");
+                                               "Live - F1-F10 chats, Amiga+Q quits");
                             tg_gui_window_paint(state, &backend);
                         }
                     } else if (hit >= 0) {
