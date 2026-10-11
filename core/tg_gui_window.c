@@ -10430,13 +10430,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     }
                 }
             } else if (msg_class == IDCMP_VANILLAKEY) {
-                /* Quitting is Amiga+Q (the menu action, mapped above), as
-                   everywhere on the Amiga. A plain Q here closed the program
-                   as soon as a word was typed before clicking the text
-                   field. ESC still closes it. */
-                if (msg_code == 27) {
-                    done = 1;
-                } else if ((msg_code == 13 || msg_code == 10) &&
+                /* Quitting is Amiga+Q (the menu action, mapped above) or the
+                   close gadget, as everywhere on the Amiga. A plain Q here
+                   closed the program as soon as a word was typed before
+                   clicking the text field, and ESC after the ESC that
+                   cancels typing closed it too. */
+                if ((msg_code == 13 || msg_code == 10) &&
                            state->nav_chat >= 0 &&
                            state->nav_chat != state->selected_chat &&
                            state->nav_chat < state->chat_count &&
