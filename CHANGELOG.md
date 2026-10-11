@@ -159,6 +159,17 @@ lanes unless noted.
   the C library turns into midnight. When the clock is further off than any
   time zone could be, the times now come from Telegram's clock with the
   time zone set in the Locale preferences, without summer time.
+- On a 16-bit Workbench under AmigaOS 4 the message bubbles, the chat
+  column and the text field have their own background colour. The window
+  asked for its colours with the default precision, which lets the system
+  hand out an existing pen that is merely close, and there the window and
+  the surface colours both got the same pen: everything drawn on the
+  surface vanished into the window. On a screen with more than 256
+  colours, where pens are plentiful, the window's colours, the tints
+  behind the initials and the soft corners are now asked for exactly;
+  screens with a palette keep sharing pens as before. With
+  --gui-live-debug the log names the pens the window, the surface and the
+  selection got.
 
 ### Added
 - "Settings > Show avatars" turns the profile pictures in the chat list and

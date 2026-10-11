@@ -987,22 +987,40 @@ static struct ColorMap *tg_gui_av_cmap;
 static int tg_gui_av_rich;
 static ULONG tg_gui_amiga_rgb32(unsigned char component);
 
+/* A truecolour screen has pens to spare, so there a colour of ours is asked
+   for exactly. With the default precision the system may hand out an
+   existing pen that is merely near: on the OS4 16-bit Workbench the window
+   and surface colours both got one (32,36,32) pen, and the bubbles and the
+   chat column vanished into the background. Paletted screens keep the
+   default, where sharing a near pen leaves pens for everything else. */
+static LONG tg_gui_amiga_obtain_rgb(struct ColorMap *cmap, const tg_gui_rgb *c,
+                                    int exact)
+{
+    struct TagItem tags[2];
+
+    tags[0].ti_Tag = OBP_Precision;
+    tags[0].ti_Data = (ULONG)PRECISION_EXACT;
+    tags[1].ti_Tag = TAG_END;
+    tags[1].ti_Data = 0;
+    return ObtainBestPenA(cmap, tg_gui_amiga_rgb32(c->r),
+                          tg_gui_amiga_rgb32(c->g), tg_gui_amiga_rgb32(c->b),
+                          exact ? tags : 0);
+}
+
 static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
 {
     ULONG key;
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
+    tg_gui_rgb mix;
     int i;
     LONG p;
 
     if (!tg_gui_av_rich || tg_gui_av_cmap == 0 || fg == 0 || bg == 0) {
         return -1;
     }
-    r = (unsigned char)(((int)fg->r + (int)bg->r) / 2);
-    g = (unsigned char)(((int)fg->g + (int)bg->g) / 2);
-    b = (unsigned char)(((int)fg->b + (int)bg->b) / 2);
-    key = ((ULONG)r << 16) | ((ULONG)g << 8) | (ULONG)b;
+    mix.r = (unsigned char)(((int)fg->r + (int)bg->r) / 2);
+    mix.g = (unsigned char)(((int)fg->g + (int)bg->g) / 2);
+    mix.b = (unsigned char)(((int)fg->b + (int)bg->b) / 2);
+    key = ((ULONG)mix.r << 16) | ((ULONG)mix.g << 8) | (ULONG)mix.b;
     for (i = 0; i < tg_gui_blend_count; ++i) {
         if (tg_gui_blend_pens[i].rgb == key) {
             return tg_gui_blend_pens[i].pen;
@@ -1011,8 +1029,7 @@ static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
     if (tg_gui_blend_count >= TG_GUI_BLEND_PENS) {
         return -1;
     }
-    p = ObtainBestPenA(tg_gui_av_cmap, tg_gui_amiga_rgb32(r),
-                       tg_gui_amiga_rgb32(g), tg_gui_amiga_rgb32(b), 0);
+    p = tg_gui_amiga_obtain_rgb(tg_gui_av_cmap, &mix, 1); /* truecolour only */
     if (p == -1) {
         return -1;
     }
@@ -4961,9 +4978,12 @@ static void tg_gui_amiga_obtain_pens(tg_gui_amiga_ctx *ctx,
                                      struct ColorMap *cmap)
 {
     struct DrawInfo *dri;
+    int exact;
     int i;
 
     ctx->pens_held = 0;
+    exact = GetBitMapAttr(ctx->window->WScreen->RastPort.BitMap, BMA_DEPTH) >
+            8UL;
     /* The MENU_* pens track the SCREEN's own menu colours (same DrawInfo the
        new-look menubar uses), so the context popup matches the user's theme
        on every lane -- OS4.1 dark menus stay dark, classic grey stays grey.
@@ -4992,9 +5012,7 @@ static void tg_gui_amiga_obtain_pens(tg_gui_amiga_ctx *ctx,
            the drawing value falls back to a stock pen when obtain fails, but
            that fallback must never be passed to ReleasePen. */
         ctx->pens_obtained[i] =
-            ObtainBestPenA(cmap, tg_gui_amiga_rgb32(tg_gui_dark_pens[i].r),
-                           tg_gui_amiga_rgb32(tg_gui_dark_pens[i].g),
-                           tg_gui_amiga_rgb32(tg_gui_dark_pens[i].b), 0);
+            tg_gui_amiga_obtain_rgb(cmap, &tg_gui_dark_pens[i], exact);
         ctx->pens[i] = (ctx->pens_obtained[i] == -1)
                            ? ((i == TG_GUI_PEN_WINDOW) ? 0L : 1L)
                            : ctx->pens_obtained[i];
@@ -5004,13 +5022,21 @@ static void tg_gui_amiga_obtain_pens(tg_gui_amiga_ctx *ctx,
     }
     for (i = 0; i < TG_GUI_AVATAR_COLORS; ++i) {
         ctx->avatar_obtained[i] =
-            ObtainBestPenA(cmap, tg_gui_amiga_rgb32(tg_gui_avatar_rgb[i].r),
-                           tg_gui_amiga_rgb32(tg_gui_avatar_rgb[i].g),
-                           tg_gui_amiga_rgb32(tg_gui_avatar_rgb[i].b), 0);
+            tg_gui_amiga_obtain_rgb(cmap, &tg_gui_avatar_rgb[i], exact);
         ctx->avatar_pens[i] =
             (ctx->avatar_obtained[i] == -1) ? 1L : ctx->avatar_obtained[i];
     }
     ctx->pens_held = 1;
+    if (tg_gui_log_is_enabled()) {
+        char line[128];
+
+        /* Two roles on one pen flatten the window: say so in the log. */
+        sprintf(line, "window: %s pens, window %ld surface %ld select %ld",
+                exact ? "exact" : "shared", (long)ctx->pens[TG_GUI_PEN_WINDOW],
+                (long)ctx->pens[TG_GUI_PEN_SURFACE],
+                (long)ctx->pens[TG_GUI_PEN_SELECT]);
+        tg_gui_log(line);
+    }
 }
 
 static void tg_gui_amiga_release_pens(tg_gui_amiga_ctx *ctx,
