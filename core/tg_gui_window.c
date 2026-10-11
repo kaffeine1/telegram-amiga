@@ -9809,7 +9809,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
     fflush(stdout);
 
-    puts("gui window: close gadget or Q to quit.");
+    puts("gui window: close gadget or Amiga+Q to quit.");
     fflush(stdout);
     tg_gui_log("window: opened");
     /* From here a stalled network wait gives way to a close or a Workbench

@@ -180,7 +180,8 @@ lanes unless noted.
 
 ### Changed
 - The window quits with Amiga+Q or its close gadget, as Amiga programs do,
-  and the status bar now says so. A plain Q quit too while the text field
+  and the status bar now says so, as does the line the program prints in
+  the Shell when the window opens. A plain Q quit too while the text field
   was not active, so a message typed before clicking into the field closed
   the program at its first q, and so did ESC one press after the ESC that
   cancels typing; neither quits any longer. On the login screen ESC still
