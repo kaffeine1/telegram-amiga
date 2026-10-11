@@ -105,6 +105,23 @@ fill_platform_text() {
     "AmigaOS 3.x") tui_icon=1; gui_icon=1 ;;
     *) tui_icon=0; gui_icon=1 ;;
     esac
+    # The plain-68000 package thanks the tester who made it possible. Empty
+    # elsewhere, so the other packages' texts stay exactly as they were.
+    if [ "$1" = "AmigaOS 3.x (68000)" ]; then
+        thanks68k_line_en="Thanks to Paolo Arus (DaRkHoRaCe): without his tenacity in testing,
+round after round on his A600, the 68000 version would never have come
+out.
+"
+        thanks68k_para_en="$thanks68k_line_en
+"
+        thanks68k_line_it="Grazie a Paolo Arus (DaRkHoRaCe): senza la sua tenacia nei test, giro
+dopo giro sul suo A600, la versione 68000 non sarebbe mai uscita.
+"
+    else
+        thanks68k_line_en=""
+        thanks68k_para_en=""
+        thanks68k_line_it=""
+    fi
     gui_entry_en="- TelegramAmiga -- the native Intuition/GadTools GUI (chat list + conversation).
   Double-click it: it starts the GUI directly, with no flashing console window.
 "
@@ -514,7 +531,7 @@ Full instructions:
 
 NEVER share telegram-auth.bin -- once you log in, it holds your Telegram session.
 
-The icon is our own design. Carlo Spadoni optimised it for each system, put
+${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system, put
 it on a standard drawer for the drawer icon, and let me ship his versions.
 
 Version: $VERSION   Build: $COMMIT_ID
@@ -714,7 +731,7 @@ Contributions: Javier de las Rivas (javierdlr), and Bohun (bohunamiga), who
 took the build to AROS on ARM. The icon is our own design: Carlo Spadoni
 optimised it for each system, put it on a standard drawer for the drawer
 icon, and let me ship his versions.
-Thanks to the testers around the world who run this on real hardware and
+${thanks68k_line_en}Thanks to the testers around the world who run this on real hardware and
 send back what they find -- this client is what it is because of them.
 
 The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
@@ -923,7 +940,7 @@ Contributi: Javier de las Rivas (javierdlr) e Bohun (bohunamiga), che ha
 portato la build su AROS ARM. Il disegno dell'icona e' nostro: Carlo Spadoni
 l'ha ottimizzata per ogni sistema, l'ha messa su un cassetto standard per
 l'icona del cassetto e mi ha permesso di distribuire le sue versioni.
-Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
+${thanks68k_line_it}Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
 raccontano quello che trovano: questo client e' com'e' grazie a loro.
 
 Licenza: MIT -- progetto di comunita' non commerciale. Diario:
@@ -1160,7 +1177,7 @@ Bug reports and wishes are very welcome -- testers on real hardware
 (A1200s, A4000s, Pegasos, Sam, FPGA machines) are what moves this
 project forward.
 
-The icon is our own design. Carlo Spadoni optimised it for each system,
+${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system,
 put it on a standard drawer for the drawer icon, and let me ship his
 versions.
 
