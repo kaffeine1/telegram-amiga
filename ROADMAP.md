@@ -882,14 +882,28 @@ text client already uses or, for Herald, as its :shortcodes:. The same
 path can tell the end of a download or an upload that ran while the user
 was elsewhere.
 
+A sound for new messages, asked for since by a user, with two wishes of
+his own: a sound per chat, and no ringing on and on. It plays through the
+system's sound datatype, so a short sample shipped with the client works
+out of the box and any sound the system reads (IFF 8SVX everywhere, WAV
+where a datatype is installed) can take its place; the beep stays for
+those who prefer it. Who rings is decided per chat: a chat muted in
+Telegram on the phone stays silent here too, since the dialogs Telegram
+sends carry each chat's notify settings; the chat's context menu adds
+Mute and a sound of its own; and groups and channels start silent until
+the user lets them ring. One sound per chat and burst, then a quiet spell
+before that chat can ring again, and none for the chat open in front of
+the user, for messages Telegram marks as silent, or for the user's own
+messages sent from another device.
+
 Still kept out: raising the screen or the window ourselves. Herald brings
 the sender forward on a double-click, which is the user's own gesture.
-A hook running a user command, such as a sound player on the first
-unread, remains a preference away if anyone asks.
 
-Settings entry: "Notify: Title | Title + beep | Pop-up | Off", the pop-up
-falling back to title and beep where no service answers. Fits the 0.0.9x
-polish line and touches nothing in the protocol.
+Settings entries: "Notify: Title | Title + beep | Pop-up | Off", the
+pop-up falling back to title and beep where no service answers, and
+"Sound on new messages" with a requester for the sound file. Fits the
+0.0.9x polish line; the per-chat mute reads the notify settings the
+dialogs already carry.
 
 ## Planned: select several messages, then delete or forward them
 
