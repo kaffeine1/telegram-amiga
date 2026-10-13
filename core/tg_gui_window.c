@@ -328,6 +328,9 @@ static void tg_gui_amiga_close_cybergraphics(void)
    build blocks the loop (seconds on a stock A1200), so it must not land in
    the middle of typing or of a menu. */
 #define TG_GUI_AV_IDLE_SECONDS 2UL
+/* Seconds between two avatar downloads for chats never opened: one getFile
+   each, in the background, so the list fills in without crowding the link. */
+#define TG_GUI_AV_PREFETCH_GAP_SECONDS 4UL
 static unsigned long tg_gui_av_paint_budget_ms = TG_GUI_AV_PAINT_BUDGET_MS;
 static unsigned long tg_gui_av_paint_spent_ms = 0UL;
 static void tg_gui_av_set_lean(int lean); /* with the avatar grid below */
@@ -9478,6 +9481,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     unsigned long full_paint_ms; /* how long the last such repaint took */
     int avatars_unpainted;       /* built in the background, not shown yet */
     time_t last_input_time;      /* last real window event (not a tick) */
+    time_t last_avatar_prefetch; /* last list-avatar download (quiet turns) */
     ULONG wbn_mask;              /* Workbench reset warnings, 0 = none */
     struct Message *wbn_close;   /* a close warning answered after CloseWindow */
     int resize_pending;
@@ -9906,6 +9910,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     full_paint_ms = 0UL;
     avatars_unpainted = 0;
     last_input_time = time(0);
+    last_avatar_prefetch = last_input_time;
     done = 0;
     caret_ticks = 0;
     xfer_mark = (time_t)0;
@@ -12637,6 +12642,31 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 if (!tg_gui_window_avatar_pending()) {
                     session_dirty = 1;
                 }
+            }
+        }
+        /* Chats never opened: one avatar JPEG per quiet spell, a few seconds
+           apart, so the list trades its blurred thumbs for pictures without
+           every chat being opened; the build step above then draws them.
+           Not tied to photo_background_turn, which only comes while photo
+           or avatar work is queued: this runs when there is none. It waits
+           for quiet, no queued input, no menu or typing, and a link that
+           answered its last poll. */
+        if (!interactive_event && !resize_pending &&
+            !ctx.photo_resize_active && !tg_gui_window_avatar_pending() &&
+            state->mode == TG_GUI_MODE_CHAT && !state->composing &&
+            !state->ctx_visible && !state->emoji_active &&
+            !state->mention_active && !state->search_active &&
+            tg_gui_session_link_failures() == 0UL &&
+            tg_gui_window_quiet_for(last_input_time,
+                                    TG_GUI_AV_IDLE_SECONDS) &&
+            tg_gui_window_quiet_for(last_avatar_prefetch,
+                                    TG_GUI_AV_PREFETCH_GAP_SECONDS) &&
+            !tg_gui_window_user_events_pending(&ctx, &viewer)) {
+            last_avatar_prefetch = time(0);
+            if (tg_gui_session_prefetch_list_avatar(stdout)) {
+                /* the download dropped the row's old grid: repaint the list
+                   so it is built again from the JPEG */
+                tg_gui_window_paint_sidebar(state, &backend);
             }
         }
         /* Explicit user transfers still win. Otherwise move one bounded cache

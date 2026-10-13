@@ -30,6 +30,15 @@ the text client for the plain 68000.
   for them exactly on screens with more than 256 colours, but on 64-bit
   AROS that request was read as something else, so every colour fell to the
   nearest one the screen had, black, and the whole window came out black.
+- The chat list shows the real picture of chats you have not opened. Only
+  an open chat fetched its picture, so the others kept the blurred preview
+  Telegram sends with the list. In quiet moments the window now fetches
+  one every few seconds, the most recent chats first. A picture kept on a
+  datacenter the window has not talked to yet still waits for its chat to
+  be opened, as that first contact costs a key exchange. Nothing changes
+  where avatars are off (Settings > Show avatars), as on slow machines by
+  default. Seen in the AROS x86_64 VM: within a minute and a half most of
+  the list had its pictures.
 
 ## [0.0.96] - 2026-10-11
 

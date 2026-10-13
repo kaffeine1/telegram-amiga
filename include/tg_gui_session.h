@@ -391,6 +391,14 @@ int tg_gui_session_is_open(void);
 unsigned long tg_gui_session_deferred_contact(void);
 void tg_gui_session_run_deferred_contact(FILE *stream);
 
+/* The avatar of one chat in the list per call, for chats never opened: only
+   an open chat fetched its picture, so their rows kept the blurred stripped
+   thumb. Takes the first of the most recent rows with no JPEG on disk and no
+   try this session, on the home datacenter or on the one the file channel
+   already points at (never a first contact). The window calls it on quiet
+   turns; 1 when it tried one, 0 when nothing is left to do now. */
+int tg_gui_session_prefetch_list_avatar(FILE *stream);
+
 /* Closes the held connection and unbinds the notification queue. */
 void tg_gui_session_close(void);
 

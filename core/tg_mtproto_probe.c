@@ -21651,13 +21651,18 @@ int tg_gui_session_transfer_end(char *out_path, unsigned long out_path_size)
 }
 
 
-static void tg_gui_session_fetch_open_avatar(FILE *stream)
+/* Downloads the 160 px avatar of one peer into avatars/, and returns 1 once
+   it has tried (marked: never again this session), 0 when it left the peer
+   for later. allow_first_contact = 0 skips a photo on a datacenter never
+   contacted, whose key exchange only the open chat's avatar pays. */
+static int tg_gui_session_fetch_avatar(const char *peer_index_text,
+                                       unsigned long id_hi,
+                                       unsigned long id_lo,
+                                       int allow_first_contact, FILE *stream)
 {
     /* Also on MorphOS: open_chat already runs the same class of bounded
        on-context RPCs there (getHistory, getPeerDialogs) without issue -- the
        historic freezes were getDialogs/tick races, not one-shot queries. */
-    unsigned long id_hi = tg_gui_session_state.open_peer_id_hi;
-    unsigned long id_lo = tg_gui_session_state.open_peer_id_lo;
     unsigned long photo_hi;
     unsigned long photo_lo;
     unsigned long dc;
@@ -21680,11 +21685,11 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
 
     if (!tg_gui_session_state.open || stream == 0 ||
         !tg_gui_session_avatars_on || (id_hi == 0UL && id_lo == 0UL)) {
-        return; /* avatars off: no download, no first contact */
+        return 0; /* avatars off: no download, no first contact */
     }
     for (i = 0; i < tg_gui_avfetch_n; ++i) {
         if (tg_gui_avfetch_hi[i] == id_hi && tg_gui_avfetch_lo[i] == id_lo) {
-            return; /* already tried this session */
+            return 0; /* already tried this session */
         }
     }
     /* A cached photo on disk is good enough: re-downloading on every chat
@@ -21703,15 +21708,15 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
                 tg_gui_avfetch_lo[tg_gui_avfetch_n] = id_lo;
                 ++tg_gui_avfetch_n;
             }
-            return;
+            return 0;
         }
     }
     if (!tg_mtproto_avatar_meta_lookup(id_hi, id_lo, &photo_hi, &photo_lo,
                                        &dc)) {
-        return; /* no capture yet (peer straight from the file cache) */
+        return 0; /* no capture yet (peer straight from the file cache) */
     }
     if (photo_hi == 0UL && photo_lo == 0UL) {
-        return; /* no profile photo */
+        return 0; /* no profile photo */
     }
     /* 0.0.8 1c-bis: a foreign-DC avatar now downloads through the same
        foreign file channel the document downloads use (the old guard just
@@ -21728,15 +21733,18 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
         av_foreign = (home != 0UL && dc != 0UL && dc != home);
         if (av_foreign && tg_gui_session_transfer_busy() &&
             tg_gui_foreign_dc != dc) {
-            return; /* do not retarget the channel under a live transfer;
+            return 0; /* do not retarget the channel under a live transfer;
                        unmarked, so a later chat open retries */
         }
         if (av_foreign && !tg_gui_contact_running &&
             tg_gui_session_needs_first_contact(dc)) {
+            if (!allow_first_contact) {
+                return 0; /* the list's walk never pays it */
+            }
             tg_gui_contact_pending_dc = dc;
             tg_gui_log("avatar: first contact with its DC left for the "
                        "window");
-            return; /* unmarked: the window's call fetches it */
+            return 0; /* unmarked: the window's call fetches it */
         }
     }
     /* Mark BEFORE the attempt: any failure must not retry this session. */
@@ -21747,18 +21755,18 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
     }
     if (tg_mtproto_load_peer_cache_peer(
             tg_gui_session_state.peer_cache_file,
-            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            peer_index_text, &pc, &ph, &pl, &ahh,
             &ahl, &hah, stream, label) != 0) {
-        return;
+        return 1;
     }
     if (ph != id_hi || pl != id_lo) {
-        return; /* stale open state: never fetch the wrong peer */
+        return 1; /* stale row: never fetch the wrong peer */
     }
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     if (tg_mtproto_build_upload_get_peer_photo(&writer, pc, ph, pl, ahh, ahl,
                                                hah, photo_hi, photo_lo, 0UL,
                                                65536UL) != TG_MTPROTO_TL_OK) {
-        return;
+        return 1;
     }
     quiet = tg_mtproto_open_quiet_stream(stream);
     memset(&result, 0, sizeof(result));
@@ -21776,7 +21784,7 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
                 av_fc.dc_id_text, av_fc.context, query, writer.length,
                 &result, quiet, label, 600U) != 0) {
             tg_mtproto_close_quiet_stream(quiet, stream);
-            return; /* channel or query failed: the thumb stays */
+            return 1; /* channel or query failed: the thumb stays */
         }
     } else if (tg_mtproto_send_saved_query_on_context(
             tg_gui_session_state.host, tg_gui_session_state.port,
@@ -21784,12 +21792,12 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
             tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
             query, writer.length, &result, quiet, label, 600U) != 0) {
         tg_mtproto_close_quiet_stream(quiet, stream);
-        return;
+        return 1;
     }
     if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
         tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
         tg_mtproto_close_quiet_stream(quiet, stream);
-        return; /* FILE_MIGRATE / FLOOD / reference expired: thumb stays */
+        return 1; /* FILE_MIGRATE / FLOOD / reference expired: thumb stays */
     }
     if (tg_mtproto_parse_upload_file(result.result_constructor,
                                      result.result_body,
@@ -21797,7 +21805,7 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
                                      &bytes_len, &cdn) != TG_MTPROTO_TL_OK ||
         cdn || bytes_len == 0UL || bytes_len >= 65536UL) {
         tg_mtproto_close_quiet_stream(quiet, stream);
-        return; /* cdn redirect / empty / suspiciously full chunk: skip */
+        return 1; /* cdn redirect / empty / suspiciously full chunk: skip */
     }
     {
         char name[48];
@@ -21817,6 +21825,76 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
         }
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
+    return 1;
+}
+
+static void tg_gui_session_fetch_open_avatar(FILE *stream)
+{
+    (void)tg_gui_session_fetch_avatar(
+        tg_gui_session_state.current_peer_index,
+        tg_gui_session_state.open_peer_id_hi,
+        tg_gui_session_state.open_peer_id_lo, 1, stream);
+}
+
+/* The rows the list's prefetch looks at: the most recent chats, about two
+   screens of the sidebar. */
+#define TG_GUI_PREFETCH_ROWS 30
+
+int tg_gui_session_prefetch_list_avatar(FILE *stream)
+{
+    tg_gui_state *gs = tg_gui_session_state.gui_driver.state;
+    unsigned long home = 0UL;
+    const char *p = tg_gui_session_state.dc_id_text;
+    int r;
+
+    if (!tg_gui_session_state.open || gs == 0 || stream == 0 ||
+        !tg_gui_session_avatars_on || tg_gui_session_transfer_busy() ||
+        gs->in_filter || gs->in_search || gs->forward_pick_active ||
+        tg_gui_avfetch_n >= TG_GUI_AVFETCH_MAX) {
+        return 0;
+    }
+    while (*p >= '0' && *p <= '9') {
+        home = home * 10UL + (unsigned long)(*p - '0');
+        ++p;
+    }
+    for (r = 0; r < gs->chat_count && r < TG_GUI_PREFETCH_ROWS; ++r) {
+        const tg_gui_chat *c = &gs->chats[r];
+        unsigned long photo_hi;
+        unsigned long photo_lo;
+        unsigned long dc;
+        char index_text[24];
+        int k;
+
+        if (c->index == TG_GUI_SAVED_PEER_INDEX ||
+            (c->peer_id_hi == 0UL && c->peer_id_lo == 0UL)) {
+            continue;
+        }
+        for (k = 0; k < tg_gui_avfetch_n; ++k) {
+            if (tg_gui_avfetch_hi[k] == c->peer_id_hi &&
+                tg_gui_avfetch_lo[k] == c->peer_id_lo) {
+                break;
+            }
+        }
+        if (k < tg_gui_avfetch_n) {
+            continue; /* tried, or found on disk, this session */
+        }
+        /* A photo on another datacenter only when the file channel already
+           points there: the walk never moves it under the photo pipeline
+           or pays a first contact. Those wait for their chat to open. */
+        if (tg_mtproto_avatar_meta_lookup(c->peer_id_hi, c->peer_id_lo,
+                                          &photo_hi, &photo_lo, &dc) &&
+            home != 0UL && dc != 0UL && dc != home &&
+            (tg_gui_foreign_dc != dc ||
+             !tg_gui_foreign_context.connection_open)) {
+            continue;
+        }
+        sprintf(index_text, "%lu", c->index);
+        if (tg_gui_session_fetch_avatar(index_text, c->peer_id_hi,
+                                        c->peer_id_lo, 0, stream)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int tg_gui_session_is_open(void)
