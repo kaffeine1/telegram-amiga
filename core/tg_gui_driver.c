@@ -154,6 +154,23 @@ int tg_gui_driver_color_for(const char *name)
     return (int)(hash % (unsigned long)TG_GUI_AVATAR_COLORS);
 }
 
+/* The bubble's HH:MM, from the row's local epoch when it has one. */
+static void tg_gui_driver_set_time(tg_gui_message *message,
+                                   const tg_chat_message_row *row)
+{
+    time_t when;
+    struct tm *parts;
+
+    if (!row->has_time) {
+        return;
+    }
+    when = (time_t)row->local_epoch;
+    parts = gmtime(&when);
+    if (parts != 0) {
+        sprintf(message->time, "%02d:%02d", parts->tm_hour, parts->tm_min);
+    }
+}
+
 static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
 {
     /* any outcome below mutates or may mutate the transcript layout */
@@ -198,6 +215,13 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                         m->pending_webpage_lo = row->pending_webpage_lo;
                     }
                 }
+                /* The echo of a message sent from here takes its id from the
+                   send reply, so the next poll lands here: without this it
+                   kept no time until the chat was opened again. */
+                if (m->time[0] == '\0' && row->has_time) {
+                    tg_gui_driver_set_time(m, row);
+                    state->msg_gen++;
+                }
                 return; /* already shown (server id match) */
             }
             if (row->is_out && m->is_own && m->id == 0UL) {
@@ -213,6 +237,10 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                     if (m->id <= state->open_read_outbox_max) {
                         m->read_state = TG_GUI_READ_SEEN;
                     }
+                    if (m->time[0] == '\0' && row->has_time) {
+                        tg_gui_driver_set_time(m, row); /* and its time */
+                    }
+                    state->msg_gen++;
                     return;
                 }
             }
@@ -318,16 +346,7 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                 : TG_GUI_READ_SENT;
     }
 
-    if (row->has_time) {
-        time_t when;
-        struct tm *parts;
-
-        when = (time_t)row->local_epoch;
-        parts = gmtime(&when);
-        if (parts != 0) {
-            sprintf(message->time, "%02d:%02d", parts->tm_hour, parts->tm_min);
-        }
-    }
+    tg_gui_driver_set_time(message, row);
     /* message_count was advanced by the prepend/append prologue above. */
 }
 
@@ -1407,14 +1426,24 @@ int tg_gui_driver_self_test(void)
 
         /* Echo of a 1:1 send (server id known) + a re-fetch of it via the poll. */
         tg_gui_driver_append_own(&dg, "ciao", "Io", 0, 500UL);
+        if (ds->messages[0].time[0] != '\0') {
+            puts("gui driver self-test: an echo starts without a time");
+            return 2;
+        }
         memset(&row, 0, sizeof(row));
         row.own_label = "Io";
         row.is_out = 1;
         row.id = 500UL;
         row.text = "ciao";
+        row.has_time = 1;
+        row.local_epoch = 1700000000UL; /* 22:13 */
         dd.on_message(dd.ctx, &row); /* same id -> deduped */
         if (ds->message_count != 1) {
             puts("gui driver self-test: re-fetched own echo must dedup by id");
+            return 2;
+        }
+        if (strcmp(ds->messages[0].time, "22:13") != 0) {
+            puts("gui driver self-test: the re-fetch must give the echo its time");
             return 2;
         }
         /* A message sent from ANOTHER session (unknown id) -> appended. */
@@ -1437,6 +1466,10 @@ int tg_gui_driver_self_test(void)
         dd.on_message(dd.ctx, &row);
         if (ds->message_count != 3 || ds->messages[2].id != 700UL) {
             puts("gui driver self-test: id-less echo must reconcile by text");
+            return 2;
+        }
+        if (strcmp(ds->messages[2].time, "22:13") != 0) {
+            puts("gui driver self-test: a reconciled echo must take its time");
             return 2;
         }
         /* Edit: update a shown message's text by id (ds has ids 500,600,700).

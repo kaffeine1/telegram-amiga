@@ -6,6 +6,15 @@ aarch64). Dates use YYYY-MM-DD. Each release ships on every platform lane
 of its time unless noted: six from 0.0.94, seven from 0.0.96, which adds
 the text client for the plain 68000.
 
+## [Unreleased]
+
+### Fixed
+- A message you send shows its time as soon as the next update comes in.
+  Its bubble stayed without a time until the chat was opened again: the
+  bubble takes its number from the send itself, so when the update brought
+  the message back with its time, the window took it for a copy already on
+  screen and dropped it, time included.
+
 ## [0.0.96] - 2026-10-11
 
 ### Fixed
