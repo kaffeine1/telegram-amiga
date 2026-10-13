@@ -26,6 +26,10 @@ the text client for the plain 68000.
 - On a screen with few colours, such as a 4-colour Workbench, the arrow-key
   focus in the chat list shows: the row is framed. Its tint got the
   background's own colour there, so nothing marked where ENTER would land.
+- On AROS x86_64 and aarch64 the window has its colours again. 0.0.96 asked
+  for them exactly on screens with more than 256 colours, but on 64-bit
+  AROS that request was read as something else, so every colour fell to the
+  nearest one the screen had, black, and the whole window came out black.
 
 ## [0.0.96] - 2026-10-11
 
