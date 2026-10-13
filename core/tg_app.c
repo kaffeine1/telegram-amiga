@@ -3945,6 +3945,7 @@ static void tg_app_gui_title_from_selection(tg_gui_state *gui)
     if (gui->chat_count <= 0 || gui->selected_chat < 0 ||
         gui->selected_chat >= gui->chat_count) {
         strcpy(gui->title, TG_APP_TITLE);
+        gui->open_chat_valid = 0;
         return;
     }
     name = gui->chats[gui->selected_chat].name;
@@ -3953,6 +3954,7 @@ static void tg_app_gui_title_from_selection(tg_gui_state *gui)
         gui->title[k] = name[k];
     }
     gui->title[k] = '\0';
+    tg_gui_note_open_chat(gui);
 }
 
 /* The live window's connection. The window runs it right after its first

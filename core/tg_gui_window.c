@@ -5101,6 +5101,7 @@ static void tg_gui_window_apply_selection(tg_gui_state *state)
         state->title[i] = name[i];
     }
     state->title[i] = '\0';
+    tg_gui_note_open_chat(state);
 }
 
 /* Serialize every direct render against Intuition's layer machinery.
@@ -5858,6 +5859,7 @@ static void tg_gui_window_login_finish(tg_gui_state *state)
     state->input_masked = 0;
     state->input[0] = '\0';
     tg_gui_window_copy(state->title, sizeof(state->title), TG_APP_TITLE);
+    state->open_chat_valid = 0;
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Logged in - relaunch to connect");
 }
@@ -7816,6 +7818,7 @@ static void tg_gui_window_remove_selected(tg_gui_state *state,
         state->msg_gen++;
         state->title[0] = '\0';
         state->subtitle[0] = '\0';
+        state->open_chat_valid = 0;
         tg_gui_window_paint(state, backend);
     }
 }

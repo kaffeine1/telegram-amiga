@@ -260,6 +260,12 @@ typedef struct tg_gui_state {
     int selected_chat;
     char title[TG_GUI_NAME_MAX];
     char subtitle[TG_GUI_NAME_MAX];
+    /* The chat open in the transcript, as its sidebar row was when it was
+       opened (tg_gui_note_open_chat). While the sidebar shows other rows (the
+       local filter, online results, a forward picker) chats[selected_chat] is
+       the highlighted one, so the header draws its avatar from here. */
+    tg_gui_chat open_chat;
+    int open_chat_valid;
     tg_gui_message messages[TG_GUI_MAX_MESSAGES];
     int message_count;
     int chat_scroll;       /* first visible chat row in the sidebar (0 = top) */
@@ -657,6 +663,9 @@ int tg_gui_photo_save_allowed(int destination_exists,
    the server clears the out flag on every message (nothing in Saved Messages
    is "outgoing"), yet everything is yours: Edit/Delete gate on this too. */
 int tg_gui_open_chat_is_self(const tg_gui_state *state);
+/* Remembers chats[selected_chat] as the chat open in the transcript, for the
+   header; called wherever a chat is opened and its title set. */
+void tg_gui_note_open_chat(tg_gui_state *state);
 /* Maps a click at renderer-space (x, y) to a context-menu item id
    (TG_GUI_CTX_REPLY/EDIT/DELETE) when the popup is open, or -1 when the click is
    outside it (the caller then dismisses the menu). */

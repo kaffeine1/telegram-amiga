@@ -64,6 +64,7 @@
 #define tg_gui_driver_apply_webpage(gui, page, ready) ((void)0, (void)(page), (void)(ready), 0)
 #define tg_gui_driver_remove_by_id(gui, message_id) (0)
 #define tg_gui_driver_mark_photo_ready(gui, id_hi, id_lo) (0)
+#define tg_gui_note_open_chat(state) ((void)0)
 /* The composer's emoji escape pairs exist only in the GUI, so the text-only
    build never meets one: an outgoing 0x80/0x81 byte is plain Latin-1 here. */
 #define tg_gui_emoji_pair_at(text, len, i, out) ((void)(out), 0)
@@ -17669,6 +17670,7 @@ static int tg_gui_search_open_entry(const tg_mtproto_peer_cache_entry *selected,
                     gs->title[ti] = nm[ti];
                 }
                 gs->title[ti] = '\0';
+                tg_gui_note_open_chat(gs);
             }
         }
         (void)tg_gui_session_open_chat(idx, stream);

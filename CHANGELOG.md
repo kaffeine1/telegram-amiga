@@ -20,6 +20,9 @@ the text client for the plain 68000.
   looked received, grey and on the left, while the one just sent stood on
   the right. As the official clients do, every message there is now yours
   unless it was forwarded in, which keeps the look of where it came from.
+- While the chat list shows search results, the header keeps the picture of
+  the chat open below. It showed the picture of the row the arrow was on,
+  next to the name of the open chat.
 
 ## [0.0.96] - 2026-10-11
 

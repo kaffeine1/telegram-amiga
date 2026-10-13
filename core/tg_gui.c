@@ -3573,10 +3573,22 @@ static void tg_gui_paint_header(const tg_gui_state *state,
         int text_x = area_x;
         int slot_h = tg_gui_native_line_height(backend) + 6;
         int text_top = (header_h - 2 * slot_h) / 2;
+        const tg_gui_chat *open_chat = 0;
 
-        if (state->selected_chat >= 0 &&
-            state->selected_chat < state->chat_count) {
-            const tg_gui_chat *open_chat = &state->chats[state->selected_chat];
+        if (state->in_filter || state->in_search ||
+            state->forward_pick_active) {
+            /* The sidebar shows other rows and selected_chat is the one
+               highlighted there, while the title and the messages below are
+               still the open chat's: its avatar comes from the copy taken
+               when it was opened. */
+            if (state->open_chat_valid) {
+                open_chat = &state->open_chat;
+            }
+        } else if (state->selected_chat >= 0 &&
+                   state->selected_chat < state->chat_count) {
+            open_chat = &state->chats[state->selected_chat];
+        }
+        if (open_chat != 0) {
             int av = tg_gui_avatar_size(backend, 1);
             int av_y = (header_h - av) / 2;
 
@@ -4407,6 +4419,16 @@ void tg_gui_paint_caret(const tg_gui_state *state, tg_gui_backend *backend)
 /* Items shown for the open menu, by target message: Reply always; Edit + Delete
    only on an OWN message with a server id. Fills labels[]/ids[] (each sized
    TG_GUI_CTX_ITEMS_MAX) and returns the count. */
+void tg_gui_note_open_chat(tg_gui_state *state)
+{
+    if (state == 0 || state->selected_chat < 0 ||
+        state->selected_chat >= state->chat_count) {
+        return;
+    }
+    state->open_chat = state->chats[state->selected_chat];
+    state->open_chat_valid = 1;
+}
+
 int tg_gui_open_chat_is_self(const tg_gui_state *state)
 {
     return state != 0 && state->selected_chat >= 0 &&
@@ -5001,6 +5023,7 @@ typedef struct tg_gui_record {
     tg_gui_rect first_avatar;
     tg_gui_rect second_avatar;
     tg_gui_rect last_avatar;
+    int last_avatar_color; /* colour index of the last avatar fill */
     const char *watch_text[5];
     int watch_y[5];
     int watch_hits[5];
@@ -5164,7 +5187,6 @@ static void tg_gui_rec_avatar(tg_gui_backend *backend, int color_index,
 {
     tg_gui_record *record;
 
-    (void)color_index;
     record = (tg_gui_record *)backend->context;
     if (record->avatars == 0) {
         record->first_avatar = rect;
@@ -5172,6 +5194,7 @@ static void tg_gui_rec_avatar(tg_gui_backend *backend, int color_index,
         record->second_avatar = rect;
     }
     record->last_avatar = rect;
+    record->last_avatar_color = color_index;
     record->avatars += 1;
     tg_gui_rec_track(record, rect.x, rect.y);
     tg_gui_rec_track(record, rect.x + rect.w, rect.y + rect.h);
@@ -7596,6 +7619,41 @@ int tg_gui_self_test(void)
         }
         if (tg_avatar_nearest(pal, 0, rgb, &d) != -1) {
             puts("gui self-test: nearest colour in an empty pool");
+            return 2;
+        }
+    }
+    /* While the sidebar shows filter results, the header keeps the avatar of
+       the chat open below, not that of the highlighted result. */
+    {
+        tg_gui_state *draft = tg_gui_test_scratch_state();
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+
+        tg_gui_demo_state(draft); /* "Sviluppo AmigaIta", colour 0, open */
+        tg_gui_note_open_chat(draft);
+        draft->in_filter = 1;
+        tg_gui_set_chat(&draft->chats[0], "Search Telegram...", "", "", ">",
+                        1, 0);
+        tg_gui_set_chat(&draft->chats[1], "Anna", "", "", "A", 3, 0);
+        draft->chat_count = 2;
+        draft->selected_chat = 1; /* the arrow is on Anna */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 400;
+        b.context = &rec;
+        b.avatar_image = 0;
+        tg_gui_paint(draft, &b);
+        if (rec.avatars == 0 || rec.last_avatar_color != 0) {
+            puts("gui self-test: the header took a filter result's avatar");
+            return 2;
+        }
+        draft->in_filter = 0; /* back on the chat list: the selection is open */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 400;
+        tg_gui_paint(draft, &b);
+        if (rec.last_avatar_color != 3) {
+            puts("gui self-test: the header lost the open chat's avatar");
             return 2;
         }
     }
