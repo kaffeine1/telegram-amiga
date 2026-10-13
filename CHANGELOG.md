@@ -26,10 +26,6 @@ the text client for the plain 68000.
 - On a screen with few colours, such as a 4-colour Workbench, the arrow-key
   focus in the chat list shows: the row is framed. Its tint got the
   background's own colour there, so nothing marked where ENTER would land.
-- On AROS x86_64 and aarch64 the window has its colours again. 0.0.96 asked
-  for them exactly on screens with more than 256 colours, but on 64-bit
-  AROS that request was read as something else, so every colour fell to the
-  nearest one the screen had, black, and the whole window came out black.
 - The chat list shows the real picture of chats you have not opened. Only
   an open chat fetched its picture, so the others kept the blurred preview
   Telegram sends with the list. In quiet moments the window now fetches
@@ -43,6 +39,11 @@ the text client for the plain 68000.
 ## [0.0.96] - 2026-10-11
 
 ### Fixed
+- On AROS x86_64 and aarch64 the window shows its colours. The first
+  0.0.96 packages for those two systems, out on 2026-10-11, drew the
+  whole window black: the colours were asked for exactly with a value
+  that 64-bit AROS reads as something else, so each fell to black. Those
+  two packages were rebuilt on 2026-10-13 with this fix alone.
 - Typing in the window keeps up with the keys on a stock A1200. Since 0.0.8
   only machines running AfA OS redrew just the text field after each key;
   everywhere else every key redrew the whole window, which on a 14 MHz
