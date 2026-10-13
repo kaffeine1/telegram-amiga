@@ -999,7 +999,11 @@ static LONG tg_gui_amiga_obtain_rgb(struct ColorMap *cmap, const tg_gui_rgb *c,
     struct TagItem tags[2];
 
     tags[0].ti_Tag = OBP_Precision;
-    tags[0].ti_Data = (ULONG)PRECISION_EXACT;
+    /* No (ULONG) cast: on 64-bit AROS ti_Data is 64 bits wide and (ULONG)-1
+       is 0xFFFFFFFF there, which AROS does not take for PRECISION_EXACT.
+       Every colour then fell to the nearest pen the screen had, black, and
+       the whole window came out black on x86_64 and aarch64 in 0.0.96. */
+    tags[0].ti_Data = PRECISION_EXACT;
     tags[1].ti_Tag = TAG_END;
     tags[1].ti_Data = 0;
     return ObtainBestPenA(cmap, tg_gui_amiga_rgb32(c->r),
