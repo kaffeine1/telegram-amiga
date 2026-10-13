@@ -23,6 +23,9 @@ the text client for the plain 68000.
 - While the chat list shows search results, the header keeps the picture of
   the chat open below. It showed the picture of the row the arrow was on,
   next to the name of the open chat.
+- On a screen with few colours, such as a 4-colour Workbench, the arrow-key
+  focus in the chat list shows: the row is framed. Its tint got the
+  background's own colour there, so nothing marked where ENTER would land.
 
 ## [0.0.96] - 2026-10-11
 

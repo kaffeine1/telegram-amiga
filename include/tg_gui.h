@@ -329,6 +329,9 @@ typedef struct tg_gui_state {
     int in_search;
     int in_filter;   /* sidebar shows the LOCAL search filter; the final row
                         (index 0) is "Search Telegram..." = go online */
+    int focus_tint_unseen; /* the screen gave the row tint the background's
+                              own pen (too few colours): the arrow focus gets
+                              a frame, as the tint alone would not show */
     int nav_chat;    /* arrow-key focus row in the sidebar (-1 = none);
                         ENTER opens it. Distinct from selected_chat, which
                         is the chat actually OPEN in the transcript. */

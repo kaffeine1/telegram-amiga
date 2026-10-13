@@ -1640,9 +1640,23 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                tg_gui_make_rect(0, y, 3, row_h));
         } else if (i == state->nav_chat) {
             /* Arrow-key focus: tint only (the OPEN chat keeps its accent
-               bar), so "where ENTER will land" reads at a glance. */
+               bar), so "where ENTER will land" reads at a glance. On a
+               screen with too few colours the tint got the background's own
+               pen and the focus vanished, so there the row is also framed. */
             backend->fill_rect(backend, TG_GUI_PEN_SELECT,
                                tg_gui_make_rect(0, y, sidebar_w, row_h));
+            if (state->focus_tint_unseen) {
+                backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                                   tg_gui_make_rect(0, y, sidebar_w, 1));
+                backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                                   tg_gui_make_rect(0, y + row_h - 1,
+                                                    sidebar_w, 1));
+                backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                                   tg_gui_make_rect(0, y, 1, row_h));
+                backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                                   tg_gui_make_rect(sidebar_w - 1, y, 1,
+                                                    row_h));
+            }
         }
         /* The row being dragged for reorder gets a tint so it reads as "lifted". */
         if (state->drag_active && i == state->drag_src) {
@@ -5053,6 +5067,7 @@ typedef struct tg_gui_record {
     int max_x;
     int max_y;
     int read_marks; /* set when a fill in the READ pen (the read double-check) drew */
+    int thin_dim_fills; /* 1-pixel lines in the TEXT_DIM pen (frames, rules) */
     const char *forbidden; /* a string that must NEVER be drawn (e.g. a password) */
     int forbidden_hits;    /* how many draw_text calls contained `forbidden` */
 } tg_gui_record;
@@ -5166,6 +5181,9 @@ static void tg_gui_rec_fill(tg_gui_backend *backend, int pen, tg_gui_rect rect)
        just set the flag idempotently). */
     if (pen == TG_GUI_PEN_READ) {
         record->read_marks = 1;
+    }
+    if (pen == TG_GUI_PEN_TEXT_DIM && (rect.w == 1 || rect.h == 1)) {
+        record->thin_dim_fills += 1;
     }
     tg_gui_rec_track(record, rect.x, rect.y);
     tg_gui_rec_track(record, rect.x + rect.w, rect.y + rect.h);
@@ -7654,6 +7672,33 @@ int tg_gui_self_test(void)
         tg_gui_paint(draft, &b);
         if (rec.last_avatar_color != 3) {
             puts("gui self-test: the header lost the open chat's avatar");
+            return 2;
+        }
+    }
+    /* The arrow focus is a tint; where the tint shares the background's pen
+       (a 4-colour screen) the row also gets a frame of four 1-pixel lines. */
+    {
+        tg_gui_state *draft = tg_gui_test_scratch_state();
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int plain;
+
+        tg_gui_demo_state(draft);
+        draft->nav_chat = 2; /* the arrow on a row other than the open one */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 400;
+        b.context = &rec;
+        tg_gui_paint(draft, &b);
+        plain = rec.thin_dim_fills;
+        draft->focus_tint_unseen = 1;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 400;
+        tg_gui_paint(draft, &b);
+        if (rec.thin_dim_fills != plain + 4) {
+            puts("gui self-test: the arrow focus has no frame where its tint "
+                 "cannot show");
             return 2;
         }
     }

@@ -9680,6 +9680,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
     cmap = ctx.window->WScreen->ViewPort.ColorMap;
     tg_gui_amiga_obtain_pens(&ctx, cmap);
+    /* With too few colours the row tint can share the background's pen; the
+       sidebar then frames the arrow focus, which is a tint alone elsewhere. */
+    state->focus_tint_unseen =
+        ctx.pens[TG_GUI_PEN_SELECT] == ctx.pens[TG_GUI_PEN_WINDOW];
     tg_gui_av_reset();          /* pens are per-screen: drop stale avatar pens */
     tg_gui_av_cmap = cmap;      /* arms the real-avatar path */
     {
