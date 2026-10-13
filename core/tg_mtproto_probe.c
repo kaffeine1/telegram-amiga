@@ -693,6 +693,25 @@ static long tg_mtproto_display_delta(long server_delta, long skew)
     return delta;
 }
 
+/*
+ * Whether a message is the user's own, for its bubble. In Saved Messages the
+ * history came back without the outgoing flag on what this account wrote
+ * there from another session or device, so after a reload those bubbles
+ * stood on the left as received, while the echo of a message just sent
+ * stood on the right. As the official clients do, every message there is
+ * the user's unless it was forwarded in (flags.2): that one keeps the look
+ * of where it came from.
+ */
+static int tg_mtproto_message_is_own(const tg_mtproto_message_text *message,
+                                     unsigned long peer_constructor)
+{
+    if (message->is_out) {
+        return 1;
+    }
+    return peer_constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR &&
+           (message->flags & 4UL) == 0UL;
+}
+
 static void tg_mtproto_sync_time_from_server(
     tg_mtproto_auth_context *context,
     const tg_mtproto_encrypted_message *message)
@@ -12387,11 +12406,14 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
             {
                 const char *sender = 0;
                 tg_chat_message_row row;
+                /* Drawn as the user's own; the filter above stays on the
+                   server's flag, as the text client prints its own echo. */
+                int own = tg_mtproto_message_is_own(&texts.messages[i],
+                                                    peer_constructor);
 
                 memset(&row, 0, sizeof(row));
 
-                if (!texts.messages[i].is_out &&
-                    texts.messages[i].from_constructor != 0UL) {
+                if (!own && texts.messages[i].from_constructor != 0UL) {
                     for (k = 0UL; k < sender_cache.count; ++k) {
                         if (sender_cache.entries[k].peer_constructor ==
                                 texts.messages[i].from_constructor &&
@@ -12417,7 +12439,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                               texts.messages[i].date,
                               display_delta)
                         : 0UL;
-                row.is_out = texts.messages[i].is_out;
+                row.is_out = own;
                 row.is_group = is_group;
                 row.peer_label = peer_label;
                 row.own_label = own_label;
@@ -15334,6 +15356,32 @@ int tg_mtproto_probe_self_test(void)
         tg_mtproto_display_delta(54000L, 0L) != 54000L) {
         puts("probe self-test: an unset clock still anchors message times");
         return 2;
+    }
+    /* Saved Messages: what the user wrote there is theirs without the
+       server's outgoing flag; a forwarded message keeps its source. */
+    {
+        static tg_mtproto_message_text own_probe;
+
+        memset(&own_probe, 0, sizeof(own_probe));
+        if (!tg_mtproto_message_is_own(&own_probe,
+                                       TG_MTPROTO_PEER_SELF_CONSTRUCTOR) ||
+            tg_mtproto_message_is_own(&own_probe,
+                                      TG_MTPROTO_PEER_USER_CONSTRUCTOR)) {
+            puts("probe self-test: Saved Messages are not the user's own");
+            return 2;
+        }
+        own_probe.flags = 4UL; /* forwarded in */
+        if (tg_mtproto_message_is_own(&own_probe,
+                                      TG_MTPROTO_PEER_SELF_CONSTRUCTOR)) {
+            puts("probe self-test: a forwarded saved message became own");
+            return 2;
+        }
+        own_probe.is_out = 1;
+        if (!tg_mtproto_message_is_own(&own_probe,
+                                       TG_MTPROTO_PEER_USER_CONSTRUCTOR)) {
+            puts("probe self-test: the outgoing flag stopped counting");
+            return 2;
+        }
     }
 
     tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));

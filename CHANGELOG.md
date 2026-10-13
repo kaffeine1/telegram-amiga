@@ -14,6 +14,12 @@ the text client for the plain 68000.
   bubble takes its number from the send itself, so when the update brought
   the message back with its time, the window took it for a copy already on
   screen and dropped it, time included.
+- In Saved Messages what you wrote stands on the right, as yours. Telegram
+  returns that history without the outgoing mark on what your account wrote
+  there from another session or device, so after a reload those messages
+  looked received, grey and on the left, while the one just sent stood on
+  the right. As the official clients do, every message there is now yours
+  unless it was forwarded in, which keeps the look of where it came from.
 
 ## [0.0.96] - 2026-10-11
 
