@@ -240,4 +240,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    # vncdotool's reactor thread outlives the disconnect, so a plain exit
+    # waits for it forever: leave at once instead.
+    rc = main(sys.argv)
+    sys.stdout.flush()
+    os._exit(rc)
