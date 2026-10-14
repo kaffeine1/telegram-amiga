@@ -450,6 +450,17 @@ static void tg_mont_mul_w(unsigned int *out, const unsigned int *a,
         tg_w_sub(out, m, nw);
     }
 }
+static void tg_mtproto_secure_zero(void *data, unsigned long length)
+{
+    volatile unsigned char *bytes;
+
+    bytes = (volatile unsigned char *)data;
+    while (length > 0UL) {
+        *bytes = 0U;
+        ++bytes;
+        --length;
+    }
+}
 #endif /* !TG_MTPROTO_BIGINT_USE_OPENSSL */
 
 void tg_mtproto_bigint_mod_exp(
@@ -568,14 +579,58 @@ void tg_mtproto_bigint_mod_exp(
         }
     }
 
-    /* left-to-right square-and-multiply in Montgomery form */
-    for (bit = top; bit >= 0L; --bit) {
-        tg_mont_mul_w(tmp, x, x, m_w, n_inv0, nw);
-        memcpy(x, tmp, sizeof(tmp));
-        if (tg_bigint_bit(exponent, exponent_length, (unsigned long)bit)) {
-            tg_mont_mul_w(tmp, x, mont_base, m_w, n_inv0, nw);
+    if (top < 64L) {
+        /* Small exponent (e.g. RSA e=65537): 1-bit left-to-right avoids table setup. */
+        for (bit = top; bit >= 0L; --bit) {
+            tg_mont_mul_w(tmp, x, x, m_w, n_inv0, nw);
             memcpy(x, tmp, sizeof(tmp));
+            if (tg_bigint_bit(exponent, exponent_length, (unsigned long)bit)) {
+                tg_mont_mul_w(tmp, x, mont_base, m_w, n_inv0, nw);
+                memcpy(x, tmp, sizeof(tmp));
+            }
         }
+    } else {
+        /* 4-bit fixed window in Montgomery form: cuts ~1024 multiplies down to
+           14 precomputations + <=512 window multiplies for 2048-bit DH/SRP. */
+        static unsigned int mont_pow[16][TG_BN_WORDS];
+        unsigned int w;
+
+        memcpy(mont_pow[1], mont_base, sizeof(mont_base));
+        for (w = 2U; w < 16U; ++w) {
+            tg_mont_mul_w(mont_pow[w], mont_pow[w - 1U], mont_base,
+                          m_w, n_inv0, nw);
+        }
+        bit = top;
+        while (bit >= 3L) {
+            unsigned int win =
+                (tg_bigint_bit(exponent, exponent_length,
+                               (unsigned long)bit) ? 8U : 0U) |
+                (tg_bigint_bit(exponent, exponent_length,
+                               (unsigned long)(bit - 1L)) ? 4U : 0U) |
+                (tg_bigint_bit(exponent, exponent_length,
+                               (unsigned long)(bit - 2L)) ? 2U : 0U) |
+                (tg_bigint_bit(exponent, exponent_length,
+                               (unsigned long)(bit - 3L)) ? 1U : 0U);
+            tg_mont_mul_w(tmp, x, x, m_w, n_inv0, nw);
+            tg_mont_mul_w(x, tmp, tmp, m_w, n_inv0, nw);
+            tg_mont_mul_w(tmp, x, x, m_w, n_inv0, nw);
+            tg_mont_mul_w(x, tmp, tmp, m_w, n_inv0, nw);
+            if (win != 0U) {
+                tg_mont_mul_w(tmp, x, mont_pow[win], m_w, n_inv0, nw);
+                memcpy(x, tmp, sizeof(tmp));
+            }
+            bit -= 4L;
+        }
+        while (bit >= 0L) {
+            tg_mont_mul_w(tmp, x, x, m_w, n_inv0, nw);
+            memcpy(x, tmp, sizeof(tmp));
+            if (tg_bigint_bit(exponent, exponent_length, (unsigned long)bit)) {
+                tg_mont_mul_w(tmp, x, mont_pow[1], m_w, n_inv0, nw);
+                memcpy(x, tmp, sizeof(tmp));
+            }
+            --bit;
+        }
+        tg_mtproto_secure_zero(mont_pow, sizeof(mont_pow));
     }
 
     /* leave Montgomery form: result = x * R^-1 mod m = mont_mul(x, 1) */
@@ -587,6 +642,10 @@ void tg_mtproto_bigint_mod_exp(
         output[p + 2UL] = (unsigned char)(tmp[k] >> 8);
         output[p + 3UL] = (unsigned char)tmp[k];
     }
+    tg_mtproto_secure_zero(base_w, sizeof(base_w));
+    tg_mtproto_secure_zero(mont_base, sizeof(mont_base));
+    tg_mtproto_secure_zero(x, sizeof(x));
+    tg_mtproto_secure_zero(tmp, sizeof(tmp));
 #endif /* TG_MTPROTO_BIGINT_USE_OPENSSL */
 }
 
@@ -720,6 +779,22 @@ int tg_mtproto_bigint_self_test(void)
     tg_mtproto_bigint_mod_exp(a, exp, sizeof(exp), m, out);
     if (out[TG_MTPROTO_BIGINT_SIZE - 1U] != 4U) {
         return 1;
+    }
+    /* Exercise the >=64-bit 4-bit windowed Montgomery path + tail bits:
+       mod 13 has totient 12, where 2^even == 4 (mod 12) and 2^odd == 8 (mod 12).
+       exp = 2^74 + 2^33 + 5 == (4 + 8 + 5) mod 12 == 5 (mod 12),
+       so 2^exp mod 13 == 2^5 mod 13 == 6. */
+    {
+        unsigned char exp_large[10];
+        tg_mtproto_bigint_from_u32(13UL, m);
+        memset(exp_large, 0, sizeof(exp_large));
+        exp_large[0] = 0x04U; /* bit 74 (even): 2^74 mod 12 == 4 */
+        exp_large[5] = 0x02U; /* bit 33 (odd):  2^33 mod 12 == 8 */
+        exp_large[9] = 0x05U; /* + 5 -> total exponent mod 12 == 5 */
+        tg_mtproto_bigint_mod_exp(a, exp_large, sizeof(exp_large), m, out);
+        if (out[TG_MTPROTO_BIGINT_SIZE - 1U] != 6U) {
+            return 1;
+        }
     }
 
     tg_mtproto_bigint_from_u32(3UL, a);
