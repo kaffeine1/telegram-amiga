@@ -694,6 +694,26 @@ static void tg_aros_close_socket_library(void)
 }
 #endif
 
+/* AROS does not tie the C library's errno to bsdsocket.library, so after a
+   failed socket call strerror(errno) printed whatever errno last held: a
+   refused connection read "No error" or "No such file or directory". The
+   socket's own error comes from Errno(); a wait cut short by a break (Ctrl-C
+   ends WaitSelect with EINTR) reads as the caller's "stopped" line. */
+static void tg_platform_socket_error(char *error_buffer,
+                                     unsigned long error_buffer_size,
+                                     const char *stopped)
+{
+#if defined(__AROS__)
+    int err = (int)Errno();
+#else
+    int err = errno;
+#endif
+
+    tg_platform_set_error(error_buffer, error_buffer_size,
+                          err == EINTR && stopped != 0 ? stopped
+                                                       : strerror(err));
+}
+
 static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *address,
                                                 char *error_buffer,
                                                 unsigned long error_buffer_size)
@@ -716,7 +736,8 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
         if (rc == 0) {
             return TG_NET_OK;
         }
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        tg_platform_socket_error(error_buffer, error_buffer_size,
+                                 "socket connect stopped");
         return TG_NET_CONNECT_FAILED;
     }
 
@@ -730,7 +751,8 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
         if (rc == 0) {
             return TG_NET_OK;
         }
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        tg_platform_socket_error(error_buffer, error_buffer_size,
+                                 "socket connect stopped");
         return TG_NET_CONNECT_FAILED;
     }
     rc = connect(sock, (struct sockaddr *)address, sizeof(*address));
@@ -746,7 +768,7 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
             nonblock = 0;
             (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
             tg_platform_set_error(error_buffer, error_buffer_size,
-                                  strerror(bsd_err != 0 ? bsd_err : errno));
+                                  strerror(bsd_err));
             return TG_NET_CONNECT_FAILED;
         }
     }
@@ -798,12 +820,8 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
             }
         }
         if (rc <= 0) {
-#if defined(__AROS__)
-            nonblock = 0;
-            (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
-#else
-            (void)fcntl(sock, F_SETFL, flags);
-#endif
+            /* The reason first: restoring blocking mode is a socket call
+               of its own. */
             if (stopped) {
                 tg_platform_set_error(error_buffer, error_buffer_size,
                                       "socket connect stopped");
@@ -811,9 +829,15 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
                 tg_platform_set_error(error_buffer, error_buffer_size,
                                       "socket connect timed out");
             } else {
-                tg_platform_set_error(error_buffer, error_buffer_size,
-                                      strerror(errno));
+                tg_platform_socket_error(error_buffer, error_buffer_size,
+                                         "socket connect stopped");
             }
+#if defined(__AROS__)
+            nonblock = 0;
+            (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+#else
+            (void)fcntl(sock, F_SETFL, flags);
+#endif
             return TG_NET_CONNECT_FAILED;
         }
     }
@@ -822,13 +846,13 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
     socket_error_size = sizeof(socket_error);
     if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &socket_error,
                    &socket_error_size) != 0) {
+        tg_platform_socket_error(error_buffer, error_buffer_size, 0);
 #if defined(__AROS__)
         nonblock = 0;
         (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
 #else
         (void)fcntl(sock, F_SETFL, flags);
 #endif
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
         return TG_NET_CONNECT_FAILED;
     }
     if (socket_error != 0) {
@@ -899,7 +923,7 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        tg_platform_socket_error(error_buffer, error_buffer_size, 0);
         return TG_NET_CONNECT_FAILED;
     }
 
@@ -963,16 +987,20 @@ tg_net_status tg_platform_tcp_send(tg_net_connection *connection, const void *da
                      &timeout);
         if (src <= 0 || !FD_ISSET((int)connection->platform_handle,
                                   &write_fds)) {
-            tg_platform_set_error(error_buffer, error_buffer_size,
-                                  src == 0 ? "socket send timed out"
-                                           : strerror(errno));
+            if (src == 0) {
+                tg_platform_set_error(error_buffer, error_buffer_size,
+                                      "socket send timed out");
+            } else {
+                tg_platform_socket_error(error_buffer, error_buffer_size,
+                                         "socket send stopped");
+            }
             return src == 0 ? TG_NET_TIMEOUT : TG_NET_SEND_FAILED;
         }
     }
 
     rc = send((int)connection->platform_handle, data, byte_count, 0);
     if (rc < 0) {
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        tg_platform_socket_error(error_buffer, error_buffer_size, 0);
         return TG_NET_SEND_FAILED;
     }
     if (bytes_sent != 0) {
@@ -1025,15 +1053,15 @@ tg_net_status tg_platform_tcp_recv(tg_net_connection *connection, void *buffer,
             tg_platform_set_error(error_buffer, error_buffer_size,
                                   "socket receive timed out");
         } else {
-            tg_platform_set_error(error_buffer, error_buffer_size,
-                                  strerror(errno));
+            tg_platform_socket_error(error_buffer, error_buffer_size,
+                                     "socket receive stopped");
         }
         return rc == 0 ? TG_NET_TIMEOUT : TG_NET_RECV_FAILED;
     }
 
     rc = recv((int)connection->platform_handle, buffer, buffer_size, 0);
     if (rc < 0) {
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        tg_platform_socket_error(error_buffer, error_buffer_size, 0);
         return TG_NET_RECV_FAILED;
     }
     if (rc == 0) {
@@ -1075,7 +1103,7 @@ int tg_platform_tcp_poll_readable(tg_net_connection *connection,
     rc = select((int)connection->platform_handle + 1, &read_fds, 0, 0,
                 &timeout);
     if (rc < 0) {
-        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        tg_platform_socket_error(error_buffer, error_buffer_size, 0);
         return -1;
     }
     return rc > 0 &&

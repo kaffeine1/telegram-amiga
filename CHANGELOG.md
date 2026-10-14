@@ -83,7 +83,9 @@ the text client for the plain 68000.
 - On AROS a connection to a server that does not answer gives up after the
   same time as on the other systems and can be interrupted; it could hang for
   a long time. A connection refused at once, as with the network down, still
-  fails at once.
+  fails at once. Network errors there say what happened, such as "Connection
+  refused", or "socket connect stopped" after Ctrl-C, instead of "No error"
+  or "No such file or directory".
 
 ### Changed
 - Less memory: the 68000 text client needs 1.32 MB to load instead of 1.53,
