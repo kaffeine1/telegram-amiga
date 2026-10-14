@@ -224,7 +224,8 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                 }
                 return; /* already shown (server id match) */
             }
-            if (row->is_out && m->is_own && m->id == 0UL) {
+            if (row->is_out && !row->is_service && m->is_own &&
+                m->id == 0UL) {
                 if (!have_l1) {
                     tg_gui_driver_copy_latin1(row_latin1, sizeof(row_latin1),
                                               row->text);
@@ -301,8 +302,10 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     }
     memset(message, 0, sizeof(*message));
 
-    message->is_own = row->is_out ? 1 : 0;
-    message->is_system = 0;
+    /* A service line ("Anna added Marco") stands centred for everyone, the
+       user's own actions included. */
+    message->is_own = (row->is_out && !row->is_service) ? 1 : 0;
+    message->is_system = row->is_service ? 1 : 0;
     message->has_document = row->has_document; /* F9: gates the Download item */
     message->has_photo = row->has_photo;
     message->photo_ready = row->photo_ready;
@@ -317,7 +320,9 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     /* Sender label: own name when outgoing; the resolved sender otherwise; the
        1:1 peer name as the fallback; empty for an unresolved group author (the
        GUI shows the bubble without a name rather than a "?:" marker). */
-    if (row->is_out) {
+    if (row->is_service) {
+        who = ""; /* the line names who acted */
+    } else if (row->is_out) {
         who = (row->own_label != 0 && row->own_label[0] != '\0') ? row->own_label
                                                                  : "";
     } else if (row->sender != 0) {
@@ -1118,6 +1123,24 @@ int tg_gui_driver_self_test(void)
             !ps->messages[0].photo_ready ||
             tg_gui_driver_mark_photo_ready(&pg, 0x12UL, 0x34UL) != 0) {
             puts("gui driver self-test: inline photo projection mismatch");
+            return 2;
+        }
+        /* A service row is a centred system line: no name over it and never
+           the user's own bubble, though the action was the user's. */
+        memset(ps, 0, sizeof(*ps));
+        tg_gui_chat_driver_bind(&pg, ps, &pd);
+        memset(&prow, 0, sizeof(prow));
+        prow.id = 900UL;
+        prow.text = "You added Marco";
+        prow.is_out = 1;
+        prow.is_group = 1;
+        prow.own_label = "Io";
+        prow.is_service = 1;
+        pd.on_message(pd.ctx, &prow);
+        if (ps->message_count != 1 || !ps->messages[0].is_system ||
+            ps->messages[0].is_own || ps->messages[0].sender[0] != '\0' ||
+            strcmp(ps->messages[0].text, "You added Marco") != 0) {
+            puts("gui driver self-test: service row is not a system line");
             return 2;
         }
     }

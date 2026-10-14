@@ -713,6 +713,33 @@ static int tg_mtproto_message_is_own(const tg_mtproto_message_text *message,
            (message->flags & 4UL) == 0UL;
 }
 
+/* A user's name from the users that came with a page, NULL when absent. */
+static const char *tg_mtproto_cache_user_name(
+    const tg_mtproto_peer_cache *cache, unsigned long id_hi,
+    unsigned long id_lo)
+{
+    unsigned long k;
+
+    if (cache == 0 || (id_hi == 0UL && id_lo == 0UL)) {
+        return 0;
+    }
+    for (k = 0UL; k < cache->count; ++k) {
+        if (cache->entries[k].peer_constructor ==
+                TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+            cache->entries[k].id_hi == id_hi &&
+            cache->entries[k].id_lo == id_lo) {
+            if (cache->entries[k].title[0] != '\0') {
+                return cache->entries[k].title;
+            }
+            if (cache->entries[k].username[0] != '\0') {
+                return cache->entries[k].username;
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+
 static void tg_mtproto_sync_time_from_server(
     tg_mtproto_auth_context *context,
     const tg_mtproto_encrypted_message *message)
@@ -3332,7 +3359,10 @@ static void tg_chat_notify_push_message(const tg_mtproto_message_text *message,
     tg_chat_notify_entry *entry;
     unsigned long copy_length;
 
+    /* A service message ("Anna joined the group") never notified: the parser
+       used to stop on it, and its line needs the names it is shown with. */
     if (message == 0 || !message->has_text || message->is_out ||
+        message->service_action != 0UL ||
         tg_chat_notify_seen(tg_chat_nq, message->id)) {
         return;
     }
@@ -3465,7 +3495,8 @@ static void tg_chat_edit_parse_update(tg_mtproto_tl_reader *reader)
     if (tg_chat_edit_target == 0 ||
         tg_mtproto_read_update_message_text(reader, &message, &dest) !=
             TG_MTPROTO_TL_OK ||
-        message.id == 0UL || dest.peer_constructor == 0UL) {
+        message.id == 0UL || dest.peer_constructor == 0UL ||
+        message.service_action != 0UL) {
         return;
     }
     entry = 0;
@@ -11061,6 +11092,18 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         tg_console_ui_reset(stream);
         fputc(' ', stream);
     }
+    if (row->is_service) {
+        /* "* Anna added Marco": the line already names who acted. Only the
+           mark takes the colour, like a sender's name, so the body stays
+           plain for the MorphOS console. */
+        tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
+        fputc('*', stream);
+        tg_console_ui_reset(stream);
+        fputc(' ', stream);
+        tg_mtproto_print_message_text(stream, row->text);
+        tg_console_ui_end_line(stream);
+        return;
+    }
     if (row->is_out) {
         tg_console_ui_role(stream, TG_UI_ROLE_OWN);
         if (row->own_label != 0 && row->own_label[0] != '\0') {
@@ -11261,6 +11304,32 @@ int tg_mtproto_chat_render_self_test(void)
         fclose(qcap);
         if (strstr(qbuf, "[> ciao]") == 0) {
             printf("chat render self-test: reply quote MISMATCH: %s\n", qbuf);
+            return 2;
+        }
+        /* A service row: time and group as any row, then the marked line
+           with no sender before it, even when it is the user's own action. */
+        qcap = tmpfile();
+        if (qcap == 0) {
+            puts("chat render self-test: cannot open temp file");
+            return 2;
+        }
+        memset(&qrow, 0, sizeof(qrow));
+        qrow.text = "You added Marco";
+        qrow.has_time = 1;
+        qrow.local_epoch = 1700000000UL;
+        qrow.is_out = 1;
+        qrow.is_group = 1;
+        qrow.peer_label = "Sviluppo";
+        qrow.own_label = "Io";
+        qrow.is_service = 1;
+        qday = 0UL;
+        tg_mtproto_chat_render_message(qcap, &qrow, &qday);
+        rewind(qcap);
+        qn = fread(qbuf, 1, sizeof(qbuf) - 1U, qcap);
+        qbuf[qn] = '\0';
+        fclose(qcap);
+        if (strcmp(qbuf, "[22:13] [Sviluppo] * You added Marco\n") != 0) {
+            printf("chat render self-test: service row MISMATCH: %s\n", qbuf);
             return 2;
         }
     }
@@ -12433,6 +12502,25 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                     }
                 }
                 row.text = texts.messages[i].text;
+                if (texts.messages[i].service_action != 0UL) {
+                    /* "Anna added Marco": written here, where the page's
+                       users give the names. In a 1:1 chat the peer is who
+                       acted when the message names nobody. */
+                    static char service_line[256];
+                    const char *actor = sender;
+
+                    if (actor == 0 && !own && !is_group) {
+                        actor = peer_label;
+                    }
+                    tg_mtproto_service_text(
+                        &texts.messages[i], actor, own,
+                        tg_mtproto_cache_user_name(
+                            &sender_cache, texts.messages[i].service_user_hi,
+                            texts.messages[i].service_user_lo),
+                        service_line, sizeof(service_line));
+                    row.text = service_line;
+                    row.is_service = 1;
+                }
                 row.has_time = (texts.messages[i].date != 0UL);
                 row.local_epoch =
                     row.has_time
@@ -12449,7 +12537,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                    extra round-trip); else no reference line. */
                 row.reply_quote =
                     (texts.messages[i].has_reply &&
-                     texts.messages[i].reply_quote[0] != '\0')
+                     texts.messages[i].reply_quote[0] != '\0' &&
+                     !row.is_service) /* a pin quotes in its own line */
                         ? texts.messages[i].reply_quote
                         : 0;
                 row.pending_webpage_hi = texts.messages[i].pending_webpage_hi;

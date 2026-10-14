@@ -8,6 +8,16 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Added
+- Service messages show in the chat, centred on a pill as the official
+  clients draw them: "Anna added Marco", "Marco left the group", "You
+  pinned a message", a new group name or photo, calls with their length,
+  video chats, the auto-delete timer, "Marco joined Telegram". An action
+  the client has no words for reads "Service message". A chat whose only
+  message was one of these, such as a new contact's "joined Telegram",
+  opened empty, and in groups they were skipped without a trace. The text
+  client prints them as "* Anna added Marco". They do not notify.
+
 ### Fixed
 - A message you send shows its time as soon as the next update comes in.
   Its bubble stayed without a time until the chat was opened again: the

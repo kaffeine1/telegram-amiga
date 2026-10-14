@@ -120,6 +120,65 @@
 #define TG_MESSAGE_EMPTY_CONSTRUCTOR 0x90a6ca84UL
 #define TG_MESSAGE_CONSTRUCTOR 0x9815cec8UL
 #define TG_MESSAGE_SERVICE_CONSTRUCTOR 0x7a800e0aUL
+/* MessageAction, layer 214 (TDLib telegram_api.tl at its "Update layer to
+   214" commit 9581c74309): the actions a service message is read through to
+   its end. The rest get a generic line, and the history walk resyncs past
+   them as it does past a media tail. */
+#define TG_ACTION_EMPTY 0xb6aef7b0UL
+#define TG_ACTION_CHAT_CREATE 0xbd47cbadUL
+#define TG_ACTION_CHAT_EDIT_TITLE 0xb5a1ce5aUL
+#define TG_ACTION_CHAT_EDIT_PHOTO 0x7fcb13a8UL
+#define TG_ACTION_CHAT_DELETE_PHOTO 0x95e3fbefUL
+#define TG_ACTION_CHAT_ADD_USER 0x15cefd00UL
+#define TG_ACTION_CHAT_DELETE_USER 0xa43f30ccUL
+#define TG_ACTION_CHAT_JOINED_BY_LINK 0x031224c3UL
+#define TG_ACTION_CHANNEL_CREATE 0x95d2ac92UL
+#define TG_ACTION_CHAT_MIGRATE_TO 0xe1037f92UL
+#define TG_ACTION_CHANNEL_MIGRATE_FROM 0xea3948e9UL
+#define TG_ACTION_PIN_MESSAGE 0x94bd38edUL
+#define TG_ACTION_HISTORY_CLEAR 0x9fbab604UL
+#define TG_ACTION_GAME_SCORE 0x92a72876UL
+#define TG_ACTION_PAYMENT_SENT_ME 0xffa00cccUL
+#define TG_ACTION_PAYMENT_SENT 0xc624b16eUL
+#define TG_ACTION_PHONE_CALL 0x80e11a7fUL
+#define TG_ACTION_SCREENSHOT_TAKEN 0x4792929bUL
+#define TG_ACTION_CUSTOM 0xfae69f56UL
+#define TG_ACTION_BOT_ALLOWED 0xc516d679UL
+#define TG_ACTION_CONTACT_SIGN_UP 0xf3f25f76UL
+#define TG_ACTION_GROUP_CALL 0x7a0d7f42UL
+#define TG_ACTION_INVITE_TO_GROUP_CALL 0x502f92f7UL
+#define TG_ACTION_SET_MESSAGES_TTL 0x3c134d7bUL
+#define TG_ACTION_GROUP_CALL_SCHEDULED 0xb3a07661UL
+#define TG_ACTION_SET_CHAT_THEME 0xb91bbd3aUL
+#define TG_ACTION_CHAT_JOINED_BY_REQUEST 0xebbca3cbUL
+#define TG_ACTION_WEB_VIEW_DATA_SENT_ME 0x47dd8079UL
+#define TG_ACTION_WEB_VIEW_DATA_SENT 0xb4c38cb5UL
+#define TG_ACTION_GIFT_PREMIUM 0x6c6274faUL
+#define TG_ACTION_TOPIC_CREATE 0x0d999256UL
+#define TG_ACTION_TOPIC_EDIT 0xc0944820UL
+#define TG_ACTION_SUGGEST_PROFILE_PHOTO 0x57de635eUL
+#define TG_ACTION_SET_CHAT_WALLPAPER 0x5060a3f4UL
+#define TG_ACTION_GIFT_CODE 0x56d03994UL
+#define TG_ACTION_GIVEAWAY_LAUNCH 0xa80f51e4UL
+#define TG_ACTION_GIVEAWAY_RESULTS 0x87e2f155UL
+#define TG_ACTION_BOOST_APPLY 0xcc02aa6dUL
+#define TG_ACTION_PAYMENT_REFUNDED 0x41b3e202UL
+#define TG_ACTION_GIFT_STARS 0x45d5b021UL
+#define TG_ACTION_PRIZE_STARS 0xb00c47a2UL
+#define TG_ACTION_STAR_GIFT 0xf24de7faUL
+#define TG_ACTION_STAR_GIFT_UNIQUE 0x34f762f3UL
+#define TG_ACTION_CONFERENCE_CALL 0x2ffe2f7aUL
+#define TG_ACTION_TODO_COMPLETIONS 0xcc7c5c89UL
+#define TG_ACTION_TODO_APPEND_TASKS 0xc7edbc83UL
+#define TG_ACTION_GIFT_TON 0xa8a3c699UL
+#define TG_INPUT_GROUP_CALL 0xd8aa840fUL
+#define TG_INPUT_GROUP_CALL_SLUG 0xfe06823fUL
+#define TG_INPUT_GROUP_CALL_INVITE_MESSAGE 0x8c10603fUL
+#define TG_CALL_DISCARD_MISSED 0x85e42301UL
+#define TG_CALL_DISCARD_DISCONNECT 0xe095c1a0UL
+#define TG_CALL_DISCARD_HANGUP 0x57adc690UL
+#define TG_CALL_DISCARD_BUSY 0xfaf7e8c9UL
+#define TG_CALL_DISCARD_MIGRATE_CONFERENCE 0x9fbbf1f7UL
 #define TG_MESSAGE_FWD_HEADER_CONSTRUCTOR 0x4e4df4bbUL
 #define TG_MESSAGE_REPLY_HEADER_CONSTRUCTOR 0x6917560bUL
 #define TG_MESSAGE_REPLIES_CONSTRUCTOR 0x83d60fc2UL
@@ -4692,6 +4751,317 @@ static tg_mtproto_tl_status tg_skip_message_reactions(
     return TG_MTPROTO_TL_OK;
 }
 
+static tg_mtproto_tl_status tg_skip_input_group_call(
+    tg_mtproto_tl_reader *reader)
+{
+    unsigned long constructor;
+
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (constructor == TG_INPUT_GROUP_CALL) {
+        return tg_skip_u32s(reader, 4UL); /* id:long access_hash:long */
+    }
+    if (constructor == TG_INPUT_GROUP_CALL_SLUG) {
+        return tg_skip_string(reader);
+    }
+    if (constructor == TG_INPUT_GROUP_CALL_INVITE_MESSAGE) {
+        return tg_skip_u32s(reader, 1UL);
+    }
+    return TG_MTPROTO_TL_INVALID_DATA;
+}
+
+/* users:Vector<long> of an action: the first id, and how many there are. */
+static tg_mtproto_tl_status tg_read_action_users(tg_mtproto_tl_reader *reader,
+                                                 tg_mtproto_message_text *out)
+{
+    unsigned long count;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long i;
+
+    if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+        count > 4096UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    out->service_user_count = count;
+    for (i = 0UL; i < count; ++i) {
+        if (tg_mtproto_tl_read_u64(reader, &hi, &lo) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if (i == 0UL) {
+            out->service_user_hi = hi;
+            out->service_user_lo = lo;
+        }
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+static tg_mtproto_tl_status tg_read_action_user(tg_mtproto_tl_reader *reader,
+                                                tg_mtproto_message_text *out)
+{
+    out->service_user_count = 1UL;
+    return tg_mtproto_tl_read_u64(reader, &out->service_user_hi,
+                                  &out->service_user_lo);
+}
+
+/* The MessageAction of a service message. *complete says the reader now
+   stands just past it; an action whose wording is known but whose fields
+   are not walked here leaves it 0, and the caller stops at its line. */
+static tg_mtproto_tl_status tg_read_message_action(
+    tg_mtproto_tl_reader *reader, tg_mtproto_message_text *out,
+    int *complete)
+{
+    static tg_mtproto_photo_meta photo; /* only skipped: off the stack */
+    unsigned long flags;
+    unsigned long scratch;
+    unsigned long hi;
+    unsigned long lo;
+    tg_mtproto_tl_status status;
+
+    *complete = 0;
+    if (tg_mtproto_tl_read_u32(reader, &out->service_action) !=
+        TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    status = TG_MTPROTO_TL_OK;
+    switch (out->service_action) {
+    case TG_ACTION_EMPTY:
+    case TG_ACTION_CHAT_DELETE_PHOTO:
+    case TG_ACTION_PIN_MESSAGE:
+    case TG_ACTION_HISTORY_CLEAR:
+    case TG_ACTION_SCREENSHOT_TAKEN:
+    case TG_ACTION_CONTACT_SIGN_UP:
+    case TG_ACTION_CHAT_JOINED_BY_REQUEST:
+        break;
+    case TG_ACTION_CHAT_CREATE:
+        status = tg_read_string_copy(reader, out->text, sizeof(out->text));
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_read_action_users(reader, out);
+        }
+        break;
+    case TG_ACTION_CHAT_EDIT_TITLE:
+    case TG_ACTION_CHANNEL_CREATE:
+    case TG_ACTION_CUSTOM:
+        status = tg_read_string_copy(reader, out->text, sizeof(out->text));
+        break;
+    case TG_ACTION_CHAT_EDIT_PHOTO:
+    case TG_ACTION_SUGGEST_PROFILE_PHOTO:
+        status = tg_mtproto_read_photo(reader, &photo);
+        break;
+    case TG_ACTION_CHAT_ADD_USER:
+        status = tg_read_action_users(reader, out);
+        break;
+    case TG_ACTION_CHAT_DELETE_USER:
+    case TG_ACTION_CHAT_JOINED_BY_LINK:
+        status = tg_read_action_user(reader, out);
+        break;
+    case TG_ACTION_CHAT_MIGRATE_TO:
+        status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        break;
+    case TG_ACTION_CHANNEL_MIGRATE_FROM:
+        status = tg_read_string_copy(reader, out->text, sizeof(out->text));
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        }
+        break;
+    case TG_ACTION_GAME_SCORE:
+        status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_read_u32(reader, &out->service_value);
+        }
+        break;
+    case TG_ACTION_PHONE_CALL:
+        /* flags:# video:flags.2?true call_id:long
+           reason:flags.0?PhoneCallDiscardReason duration:flags.1?int */
+        status = tg_mtproto_tl_read_u32(reader, &out->service_flags);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        }
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 1UL) != 0UL) {
+            status = tg_mtproto_tl_read_u32(reader, &out->service_reason);
+            if (status == TG_MTPROTO_TL_OK &&
+                out->service_reason == TG_CALL_DISCARD_MIGRATE_CONFERENCE) {
+                status = tg_skip_string(reader);
+            } else if (status == TG_MTPROTO_TL_OK &&
+                       out->service_reason != TG_CALL_DISCARD_MISSED &&
+                       out->service_reason != TG_CALL_DISCARD_DISCONNECT &&
+                       out->service_reason != TG_CALL_DISCARD_HANGUP &&
+                       out->service_reason != TG_CALL_DISCARD_BUSY) {
+                status = TG_MTPROTO_TL_INVALID_DATA;
+            }
+        }
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 2UL) != 0UL) {
+            status = tg_mtproto_tl_read_u32(reader, &out->service_value);
+        }
+        break;
+    case TG_ACTION_BOT_ALLOWED:
+        /* flags:# domain:flags.0?string app:flags.2?BotApp: a BotApp is not
+           walked, so the line stands there */
+        status = tg_mtproto_tl_read_u32(reader, &flags);
+        if (status == TG_MTPROTO_TL_OK && (flags & 4UL) != 0UL) {
+            return TG_MTPROTO_TL_OK;
+        }
+        if (status == TG_MTPROTO_TL_OK && (flags & 1UL) != 0UL) {
+            status = tg_skip_string(reader);
+        }
+        break;
+    case TG_ACTION_GROUP_CALL:
+        /* flags:# call:InputGroupCall duration:flags.0?int */
+        status = tg_mtproto_tl_read_u32(reader, &out->service_flags);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_skip_input_group_call(reader);
+        }
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 1UL) != 0UL) {
+            status = tg_mtproto_tl_read_u32(reader, &out->service_value);
+        }
+        break;
+    case TG_ACTION_INVITE_TO_GROUP_CALL:
+        status = tg_skip_input_group_call(reader);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_read_action_users(reader, out);
+        }
+        break;
+    case TG_ACTION_SET_MESSAGES_TTL:
+        /* flags:# period:int auto_setting_from:flags.0?long */
+        status = tg_mtproto_tl_read_u32(reader, &flags);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_read_u32(reader, &out->service_value);
+        }
+        if (status == TG_MTPROTO_TL_OK && (flags & 1UL) != 0UL) {
+            status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        }
+        break;
+    case TG_ACTION_GROUP_CALL_SCHEDULED:
+        status = tg_skip_input_group_call(reader);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_read_u32(reader, &scratch);
+        }
+        break;
+    case TG_ACTION_TOPIC_CREATE:
+        /* flags:# title:string icon_color:int icon_emoji_id:flags.0?long */
+        status = tg_mtproto_tl_read_u32(reader, &flags);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_read_string_copy(reader, out->text, sizeof(out->text));
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_read_u32(reader, &scratch);
+        }
+        if (status == TG_MTPROTO_TL_OK && (flags & 1UL) != 0UL) {
+            status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        }
+        break;
+    case TG_ACTION_TOPIC_EDIT:
+        /* flags:# title:flags.0?string icon_emoji_id:flags.1?long
+           closed:flags.2?Bool hidden:flags.3?Bool */
+        status = tg_mtproto_tl_read_u32(reader, &out->service_flags);
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 1UL) != 0UL) {
+            status = tg_read_string_copy(reader, out->text, sizeof(out->text));
+        }
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 2UL) != 0UL) {
+            status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
+        }
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 4UL) != 0UL) {
+            status = tg_skip_bool(reader);
+        }
+        if (status == TG_MTPROTO_TL_OK && (out->service_flags & 8UL) != 0UL) {
+            status = tg_skip_bool(reader);
+        }
+        break;
+    case TG_ACTION_BOOST_APPLY:
+        status = tg_mtproto_tl_read_u32(reader, &out->service_value);
+        break;
+    case TG_ACTION_WEB_VIEW_DATA_SENT:
+        status = tg_skip_string(reader);
+        break;
+    case TG_ACTION_WEB_VIEW_DATA_SENT_ME:
+        status = tg_skip_string(reader);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_skip_string(reader);
+        }
+        break;
+    default:
+        /* gifts, payments, giveaways and whatever comes next: a generic line,
+           and the walk resyncs past the fields */
+        return TG_MTPROTO_TL_OK;
+    }
+    if (status != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    *complete = 1;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* messageService#7a800e0a flags:# ... id:int from_id:flags.8?Peer
+   peer_id:Peer saved_peer_id:flags.28?Peer reply_to:flags.3?MessageReplyHeader
+   date:int action:MessageAction reactions:flags.20?MessageReactions
+   ttl_period:flags.25?int (layer 214), read after its constructor. It is
+   kept as a message with a line to show (has_text), even when the action
+   carries no string. *complete as for tg_read_message_action. */
+static tg_mtproto_tl_status tg_read_service_message(
+    tg_mtproto_tl_reader *reader, tg_mtproto_message_text *out,
+    tg_mtproto_dialog_peer *out_dest, int *complete)
+{
+    unsigned long flags;
+    unsigned long scratch;
+    tg_mtproto_dialog_peer peer;
+    int action_complete;
+
+    *complete = 0;
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &out->id) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    out->flags = flags;
+    out->is_out = (flags & 2UL) != 0UL;
+    if ((flags & (1UL << 8)) != 0UL) {
+        if (tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        out->from_constructor = peer.peer_constructor;
+        out->from_id_hi = peer.id_hi;
+        out->from_id_lo = peer.id_lo;
+    }
+    if (tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (out_dest != 0) {
+        *out_dest = peer;
+    }
+    if ((flags & (1UL << 28)) != 0UL &&
+        tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 8UL) != 0UL) {
+        if (tg_read_message_reply_header(reader, &out->reply_to_msg_id,
+                                         out->reply_quote,
+                                         sizeof(out->reply_quote)) !=
+            TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        out->has_reply = 1;
+    }
+    if (tg_mtproto_tl_read_u32(reader, &out->date) != TG_MTPROTO_TL_OK ||
+        tg_read_message_action(reader, out, &action_complete) !=
+            TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    out->has_text = 1;
+    if (!action_complete) {
+        return TG_MTPROTO_TL_OK;
+    }
+    if ((flags & (1UL << 20)) != 0UL &&
+        tg_skip_message_reactions(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_OK;
+    }
+    if ((flags & (1UL << 25)) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_OK;
+    }
+    *complete = 1;
+    return TG_MTPROTO_TL_OK;
+}
+
 static tg_mtproto_tl_status tg_skip_common_message(
     tg_mtproto_tl_reader *reader)
 {
@@ -4718,30 +5088,16 @@ static tg_mtproto_tl_status tg_skip_common_message(
         return TG_MTPROTO_TL_OK;
     }
     if (constructor == TG_MESSAGE_SERVICE_CONSTRUCTOR) {
-        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-            tg_mtproto_tl_read_u32(reader, &scratch_lo) !=
-                TG_MTPROTO_TL_OK) {
+        static tg_mtproto_message_text service; /* only skipped: off the stack */
+        int complete;
+
+        memset(&service, 0, sizeof(service));
+        if (tg_read_service_message(reader, &service, 0, &complete) !=
+                TG_MTPROTO_TL_OK ||
+            !complete) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
-        if ((flags & (1UL << 8)) != 0UL &&
-            tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        if (tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        if ((flags & (1UL << 28)) != 0UL &&
-            tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        if ((flags & 8UL) != 0UL) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        if (tg_mtproto_tl_read_u32(reader, &scratch_lo) !=
-            TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        return TG_MTPROTO_TL_INVALID_DATA;
+        return TG_MTPROTO_TL_OK;
     }
     if (constructor != TG_MESSAGE_CONSTRUCTOR) {
         return TG_MTPROTO_TL_INVALID_DATA;
@@ -5261,6 +5617,14 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         }
         return TG_MTPROTO_TL_OK;
     }
+    if (constructor == TG_MESSAGE_SERVICE_CONSTRUCTOR) {
+        int complete;
+
+        /* A service message used to stop the walk here, and a chat whose
+           page held only one (a group just created, "joined Telegram")
+           opened empty. */
+        return tg_read_service_message(reader, out, out_dest, &complete);
+    }
     if (constructor != TG_MESSAGE_CONSTRUCTOR) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
@@ -5490,7 +5854,10 @@ static int tg_message_text_resync(tg_mtproto_tl_reader *reader,
     pos = (start_offset + 3UL) & ~3UL;
     while (pos + 4UL <= reader->length) {
         constructor = tg_read_u32_le(reader->buffer + pos);
-        if (constructor == TG_MESSAGE_CONSTRUCTOR) {
+        /* A service message is a landing point too: skipping to the next
+           ordinary one dropped every "joined" and "pinned" line between. */
+        if (constructor == TG_MESSAGE_CONSTRUCTOR ||
+            constructor == TG_MESSAGE_SERVICE_CONSTRUCTOR) {
             /* A bare 4-byte constructor match is not enough: the same bytes occur
                by chance inside a skipped photo/document/keyboard payload, and the
                id-only check still let garbage through (Amici showed "60/60 r=17/17"
@@ -5940,6 +6307,329 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
     return TG_MTPROTO_TL_OK;
 }
 
+static void tg_service_put(char *out, unsigned long out_size,
+                           unsigned long *length, const char *text)
+{
+    if (text == 0) {
+        return;
+    }
+    while (*text != '\0' && *length + 1UL < out_size) {
+        out[(*length)++] = *text++;
+    }
+    out[*length] = '\0';
+}
+
+/* m:ss, or h:mm:ss from an hour on */
+static void tg_service_duration(char *out, unsigned long seconds)
+{
+    if (seconds >= 3600UL) {
+        sprintf(out, "%lu:%02lu:%02lu", (seconds / 3600UL) % 1000UL,
+                (seconds / 60UL) % 60UL, seconds % 60UL);
+    } else {
+        sprintf(out, "%lu:%02lu", seconds / 60UL, seconds % 60UL);
+    }
+}
+
+/* An auto-delete period the way the clients offer it: 1 day, 1 week... */
+static void tg_service_period(char *out, unsigned long period)
+{
+    unsigned long n;
+    const char *unit;
+
+    if (period % 86400UL == 0UL &&
+        (period / 86400UL == 30UL || period / 86400UL == 31UL)) {
+        strcpy(out, "1 month");
+        return;
+    }
+    if (period % 604800UL == 0UL) {
+        n = period / 604800UL;
+        unit = "week";
+    } else if (period % 86400UL == 0UL) {
+        n = period / 86400UL;
+        unit = "day";
+    } else if (period % 3600UL == 0UL) {
+        n = period / 3600UL;
+        unit = "hour";
+    } else if (period % 60UL == 0UL) {
+        n = period / 60UL;
+        unit = "minute";
+    } else {
+        n = period;
+        unit = "second";
+    }
+    sprintf(out, "%lu %s%s", n % 100000UL, unit, n == 1UL ? "" : "s");
+}
+
+void tg_mtproto_service_text(const tg_mtproto_message_text *message,
+                             const char *actor, int actor_is_self,
+                             const char *target, char *out,
+                             unsigned long out_size)
+{
+    const char *who;
+    const char *whom;
+    int post;
+    int self_named;
+    int video;
+    unsigned long length = 0UL;
+    char number[40];
+
+    if (out == 0 || out_size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (message == 0) {
+        return;
+    }
+    who = actor_is_self ? "You"
+          : (actor != 0 && actor[0] != '\0') ? actor : "Someone";
+    whom = (target != 0 && target[0] != '\0') ? target : 0;
+    post = (message->flags & (1UL << 14)) != 0UL; /* a channel's own post */
+    /* the one user the action names is the one who acted: joined, left */
+    self_named = message->service_user_count == 1UL &&
+                 message->from_constructor != 0UL &&
+                 message->from_id_hi == message->service_user_hi &&
+                 message->from_id_lo == message->service_user_lo;
+    video = (message->service_flags & 4UL) != 0UL;
+#define TG_SERVICE_PUT(s) tg_service_put(out, out_size, &length, (s))
+    switch (message->service_action) {
+    case TG_ACTION_CHAT_CREATE:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" created the group \"");
+        TG_SERVICE_PUT(message->text);
+        TG_SERVICE_PUT("\"");
+        break;
+    case TG_ACTION_CHAT_EDIT_TITLE:
+        if (post) {
+            TG_SERVICE_PUT("Channel renamed to \"");
+        } else {
+            TG_SERVICE_PUT(who);
+            TG_SERVICE_PUT(" changed the group name to \"");
+        }
+        TG_SERVICE_PUT(message->text);
+        TG_SERVICE_PUT("\"");
+        break;
+    case TG_ACTION_CHAT_EDIT_PHOTO:
+        if (post) {
+            TG_SERVICE_PUT("Channel photo updated");
+        } else {
+            TG_SERVICE_PUT(who);
+            TG_SERVICE_PUT(" changed the group photo");
+        }
+        break;
+    case TG_ACTION_CHAT_DELETE_PHOTO:
+        if (post) {
+            TG_SERVICE_PUT("Channel photo removed");
+        } else {
+            TG_SERVICE_PUT(who);
+            TG_SERVICE_PUT(" removed the group photo");
+        }
+        break;
+    case TG_ACTION_CHAT_ADD_USER:
+        TG_SERVICE_PUT(who);
+        if (self_named || message->service_user_count == 0UL) {
+            TG_SERVICE_PUT(" joined the group");
+        } else if (whom != 0) {
+            TG_SERVICE_PUT(" added ");
+            TG_SERVICE_PUT(whom);
+            if (message->service_user_count > 1UL) {
+                sprintf(number, " and %lu more",
+                        (message->service_user_count - 1UL) % 10000UL);
+                TG_SERVICE_PUT(number);
+            }
+        } else if (message->service_user_count > 1UL) {
+            sprintf(number, " added %lu members",
+                    message->service_user_count % 10000UL);
+            TG_SERVICE_PUT(number);
+        } else {
+            TG_SERVICE_PUT(" added a member");
+        }
+        break;
+    case TG_ACTION_CHAT_DELETE_USER:
+        TG_SERVICE_PUT(who);
+        if (self_named) {
+            TG_SERVICE_PUT(" left the group");
+        } else {
+            TG_SERVICE_PUT(" removed ");
+            TG_SERVICE_PUT(whom != 0 ? whom : "a member");
+        }
+        break;
+    case TG_ACTION_CHAT_JOINED_BY_LINK:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" joined the group via invite link");
+        break;
+    case TG_ACTION_CHAT_JOINED_BY_REQUEST:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" joined the group");
+        break;
+    case TG_ACTION_CHANNEL_CREATE:
+        TG_SERVICE_PUT("Channel \"");
+        TG_SERVICE_PUT(message->text);
+        TG_SERVICE_PUT("\" created");
+        break;
+    case TG_ACTION_CHAT_MIGRATE_TO:
+    case TG_ACTION_CHANNEL_MIGRATE_FROM:
+        TG_SERVICE_PUT("The group was upgraded to a supergroup");
+        break;
+    case TG_ACTION_PIN_MESSAGE:
+        TG_SERVICE_PUT(who);
+        if (message->reply_quote[0] != '\0') {
+            TG_SERVICE_PUT(" pinned \"");
+            TG_SERVICE_PUT(message->reply_quote);
+            TG_SERVICE_PUT("\"");
+        } else {
+            TG_SERVICE_PUT(" pinned a message");
+        }
+        break;
+    case TG_ACTION_HISTORY_CLEAR:
+        TG_SERVICE_PUT("History was cleared");
+        break;
+    case TG_ACTION_GAME_SCORE:
+        TG_SERVICE_PUT(who);
+        sprintf(number, " scored %lu", message->service_value % 1000000000UL);
+        TG_SERVICE_PUT(number);
+        break;
+    case TG_ACTION_PHONE_CALL:
+        if ((message->service_flags & 2UL) != 0UL &&
+            message->service_value > 0UL) {
+            TG_SERVICE_PUT(message->is_out ? "Outgoing " : "Incoming ");
+            TG_SERVICE_PUT(video ? "video call (" : "call (");
+            tg_service_duration(number, message->service_value);
+            TG_SERVICE_PUT(number);
+            TG_SERVICE_PUT(")");
+        } else if (message->is_out) {
+            TG_SERVICE_PUT(video ? "Cancelled video call" : "Cancelled call");
+        } else {
+            TG_SERVICE_PUT(video ? "Missed video call" : "Missed call");
+        }
+        break;
+    case TG_ACTION_SCREENSHOT_TAKEN:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" took a screenshot");
+        break;
+    case TG_ACTION_CUSTOM:
+        TG_SERVICE_PUT(message->text);
+        break;
+    case TG_ACTION_BOT_ALLOWED:
+        TG_SERVICE_PUT("You allowed this bot to message you");
+        break;
+    case TG_ACTION_CONTACT_SIGN_UP:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" joined Telegram");
+        break;
+    case TG_ACTION_GROUP_CALL:
+        if ((message->service_flags & 1UL) != 0UL) {
+            TG_SERVICE_PUT("Video chat ended (");
+            tg_service_duration(number, message->service_value);
+            TG_SERVICE_PUT(number);
+            TG_SERVICE_PUT(")");
+        } else if (post) {
+            TG_SERVICE_PUT("Live stream started");
+        } else {
+            TG_SERVICE_PUT(who);
+            TG_SERVICE_PUT(" started a video chat");
+        }
+        break;
+    case TG_ACTION_INVITE_TO_GROUP_CALL:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" invited ");
+        TG_SERVICE_PUT(whom != 0 ? whom : "members");
+        TG_SERVICE_PUT(" to the video chat");
+        break;
+    case TG_ACTION_SET_MESSAGES_TTL:
+        TG_SERVICE_PUT(who);
+        if (message->service_value == 0UL) {
+            TG_SERVICE_PUT(" turned off auto-delete");
+        } else {
+            TG_SERVICE_PUT(" set messages to auto-delete after ");
+            tg_service_period(number, message->service_value);
+            TG_SERVICE_PUT(number);
+        }
+        break;
+    case TG_ACTION_GROUP_CALL_SCHEDULED:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" scheduled a video chat");
+        break;
+    case TG_ACTION_SET_CHAT_THEME:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" changed the chat theme");
+        break;
+    case TG_ACTION_SET_CHAT_WALLPAPER:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" changed the chat wallpaper");
+        break;
+    case TG_ACTION_TOPIC_CREATE:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" created the topic \"");
+        TG_SERVICE_PUT(message->text);
+        TG_SERVICE_PUT("\"");
+        break;
+    case TG_ACTION_TOPIC_EDIT:
+        TG_SERVICE_PUT(who);
+        if (message->text[0] != '\0') {
+            TG_SERVICE_PUT(" renamed the topic to \"");
+            TG_SERVICE_PUT(message->text);
+            TG_SERVICE_PUT("\"");
+        } else {
+            TG_SERVICE_PUT(" edited the topic");
+        }
+        break;
+    case TG_ACTION_SUGGEST_PROFILE_PHOTO:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" suggested a profile photo");
+        break;
+    case TG_ACTION_BOOST_APPLY:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" boosted the group");
+        if (message->service_value > 1UL) {
+            sprintf(number, " %lu times", message->service_value % 100000UL);
+            TG_SERVICE_PUT(number);
+        }
+        break;
+    case TG_ACTION_WEB_VIEW_DATA_SENT:
+    case TG_ACTION_WEB_VIEW_DATA_SENT_ME:
+        TG_SERVICE_PUT("Data sent to the bot");
+        break;
+    case TG_ACTION_GIFT_PREMIUM:
+    case TG_ACTION_GIFT_CODE:
+    case TG_ACTION_GIFT_STARS:
+    case TG_ACTION_PRIZE_STARS:
+    case TG_ACTION_STAR_GIFT:
+    case TG_ACTION_STAR_GIFT_UNIQUE:
+    case TG_ACTION_GIFT_TON:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" sent a gift");
+        break;
+    case TG_ACTION_GIVEAWAY_LAUNCH:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" started a giveaway");
+        break;
+    case TG_ACTION_GIVEAWAY_RESULTS:
+        TG_SERVICE_PUT("Giveaway results");
+        break;
+    case TG_ACTION_PAYMENT_SENT:
+        TG_SERVICE_PUT("Payment sent");
+        break;
+    case TG_ACTION_PAYMENT_SENT_ME:
+        TG_SERVICE_PUT("Payment received");
+        break;
+    case TG_ACTION_PAYMENT_REFUNDED:
+        TG_SERVICE_PUT("Payment refunded");
+        break;
+    case TG_ACTION_CONFERENCE_CALL:
+        TG_SERVICE_PUT("Group call");
+        break;
+    case TG_ACTION_TODO_COMPLETIONS:
+    case TG_ACTION_TODO_APPEND_TASKS:
+        TG_SERVICE_PUT(who);
+        TG_SERVICE_PUT(" updated a checklist");
+        break;
+    default:
+        TG_SERVICE_PUT("Service message");
+        break;
+    }
+#undef TG_SERVICE_PUT
+}
+
 tg_mtproto_tl_status tg_mtproto_parse_updates_summary(
     unsigned long constructor,
     const unsigned char *body,
@@ -6206,6 +6896,219 @@ static int tg_message_cut_self_test(void)
     return 0;
 }
 
+static int tg_service_line_case(const tg_mtproto_message_text *m,
+                                const char *actor, int actor_is_self,
+                                const char *target, const char *expect)
+{
+    char line[128];
+
+    tg_mtproto_service_text(m, actor, actor_is_self, target, line,
+                            sizeof(line));
+    if (strcmp(line, expect) != 0) {
+        printf("login self-test: service line \"%s\", wanted \"%s\"\n", line,
+               expect);
+        return 0;
+    }
+    return 1;
+}
+
+/* 0.0.97: service messages. A page of five, newest first: an ordinary
+   message whose media tail is not walked (the walk resyncs, and must land
+   on the service message after it, not skip to the next ordinary one), a
+   "joined Telegram", an add with two users and a ttl_period, a gift whose
+   fields are not walked, an ordinary message. Every one is kept, and the
+   lines read the way the clients write them. */
+static int tg_service_message_self_test(void)
+{
+    static unsigned char rpc[512];
+    static tg_mtproto_message_text_list list;
+    static tg_mtproto_message_text m;
+    tg_mtproto_tl_writer w;
+    char small[8];
+    int ok = 1;
+
+#define TG_SVC_W32(v) \
+    (ok = ok && tg_mtproto_tl_write_u32(&w, (v)) == TG_MTPROTO_TL_OK)
+#define TG_SVC_W64(h, l) \
+    (ok = ok && tg_mtproto_tl_write_u64(&w, (h), (l)) == TG_MTPROTO_TL_OK)
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    TG_SVC_W32(TG_VECTOR_CONSTRUCTOR);
+    TG_SVC_W32(5UL);
+    /* 501: media of an unknown kind, then bytes the reader does not walk */
+    TG_SVC_W32(TG_MESSAGE_CONSTRUCTOR);
+    TG_SVC_W32(512UL);
+    TG_SVC_W32(0UL);
+    TG_SVC_W32(501UL);
+    TG_SVC_W32(TG_PEER_CHAT_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 55UL);
+    TG_SVC_W32(3001UL);
+    ok = ok && tg_write_string(&w, "") == TG_MTPROTO_TL_OK;
+    TG_SVC_W32(0x0badc0deUL);
+    TG_SVC_W32(0x44444444UL);
+    TG_SVC_W32(0x55555555UL);
+    /* 500: "joined Telegram" in a 1:1 chat, without from_id */
+    TG_SVC_W32(TG_MESSAGE_SERVICE_CONSTRUCTOR);
+    TG_SVC_W32(0UL);
+    TG_SVC_W32(500UL);
+    TG_SVC_W32(TG_PEER_USER_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 777UL);
+    TG_SVC_W32(3000UL);
+    TG_SVC_W32(TG_ACTION_CONTACT_SIGN_UP);
+    /* 499: user 10 added users 11 and 12; a ttl_period follows the action */
+    TG_SVC_W32(TG_MESSAGE_SERVICE_CONSTRUCTOR);
+    TG_SVC_W32((1UL << 8) | (1UL << 25));
+    TG_SVC_W32(499UL);
+    TG_SVC_W32(TG_PEER_USER_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 10UL);
+    TG_SVC_W32(TG_PEER_CHAT_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 55UL);
+    TG_SVC_W32(2999UL);
+    TG_SVC_W32(TG_ACTION_CHAT_ADD_USER);
+    TG_SVC_W32(TG_VECTOR_CONSTRUCTOR);
+    TG_SVC_W32(2UL);
+    TG_SVC_W64(0UL, 11UL);
+    TG_SVC_W64(0UL, 12UL);
+    TG_SVC_W32(86400UL);
+    /* 498: a gift, its fields not walked */
+    TG_SVC_W32(TG_MESSAGE_SERVICE_CONSTRUCTOR);
+    TG_SVC_W32(1UL << 8);
+    TG_SVC_W32(498UL);
+    TG_SVC_W32(TG_PEER_USER_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 10UL);
+    TG_SVC_W32(TG_PEER_CHAT_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 55UL);
+    TG_SVC_W32(2998UL);
+    TG_SVC_W32(TG_ACTION_STAR_GIFT);
+    TG_SVC_W32(0x11111111UL);
+    TG_SVC_W32(0x22222222UL);
+    /* 497: an ordinary message */
+    TG_SVC_W32(TG_MESSAGE_CONSTRUCTOR);
+    TG_SVC_W32(0UL);
+    TG_SVC_W32(0UL);
+    TG_SVC_W32(497UL);
+    TG_SVC_W32(TG_PEER_CHAT_CONSTRUCTOR);
+    TG_SVC_W64(0UL, 55UL);
+    TG_SVC_W32(2997UL);
+    ok = ok && tg_write_string(&w, "after") == TG_MTPROTO_TL_OK;
+    TG_SVC_W32(TG_VECTOR_CONSTRUCTOR);
+    TG_SVC_W32(0UL);
+    TG_SVC_W32(TG_VECTOR_CONSTRUCTOR);
+    TG_SVC_W32(0UL);
+#undef TG_SVC_W32
+#undef TG_SVC_W64
+    if (!ok ||
+        tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           rpc, w.length, &list) !=
+            TG_MTPROTO_TL_OK) {
+        puts("login self-test: the service page does not parse");
+        return 2;
+    }
+    if (list.count != 5UL || list.messages[0].id != 501UL ||
+        list.messages[1].id != 500UL ||
+        list.messages[1].service_action != TG_ACTION_CONTACT_SIGN_UP ||
+        list.messages[1].date != 3000UL || !list.messages[1].has_text ||
+        list.messages[2].id != 499UL ||
+        list.messages[2].service_action != TG_ACTION_CHAT_ADD_USER ||
+        list.messages[2].service_user_count != 2UL ||
+        list.messages[2].service_user_lo != 11UL ||
+        list.messages[2].from_id_lo != 10UL ||
+        list.messages[3].id != 498UL ||
+        list.messages[3].service_action != TG_ACTION_STAR_GIFT ||
+        list.messages[4].id != 497UL ||
+        list.messages[4].service_action != 0UL ||
+        strcmp(list.messages[4].text, "after") != 0) {
+        printf("login self-test: service page kept %lu messages\n",
+               list.count);
+        return 2;
+    }
+    if (!tg_service_line_case(&list.messages[1], "Marco", 0, 0,
+                              "Marco joined Telegram") ||
+        !tg_service_line_case(&list.messages[2], "Anna", 0, "Marco",
+                              "Anna added Marco and 1 more") ||
+        !tg_service_line_case(&list.messages[2], "Anna", 0, 0,
+                              "Anna added 2 members") ||
+        !tg_service_line_case(&list.messages[3], "Anna", 0, 0,
+                              "Anna sent a gift") ||
+        !tg_service_line_case(&list.messages[3], 0, 0, 0,
+                              "Someone sent a gift")) {
+        return 2;
+    }
+    memset(&m, 0, sizeof(m));
+    m.from_constructor = TG_PEER_USER_CONSTRUCTOR;
+    m.from_id_lo = 10UL;
+    m.service_action = TG_ACTION_CHAT_ADD_USER;
+    m.service_user_count = 1UL;
+    m.service_user_lo = 10UL;
+    if (!tg_service_line_case(&m, "Anna", 0, "Anna",
+                              "Anna joined the group")) {
+        return 2;
+    }
+    m.service_action = TG_ACTION_CHAT_DELETE_USER;
+    if (!tg_service_line_case(&m, "Anna", 0, "Anna", "Anna left the group")) {
+        return 2;
+    }
+    m.service_user_lo = 11UL;
+    if (!tg_service_line_case(&m, "Anna", 0, "Marco", "Anna removed Marco") ||
+        !tg_service_line_case(&m, "Anna", 0, 0, "Anna removed a member")) {
+        return 2;
+    }
+    memset(&m, 0, sizeof(m));
+    m.service_action = TG_ACTION_PIN_MESSAGE;
+    if (!tg_service_line_case(&m, "Anna", 1, 0, "You pinned a message")) {
+        return 2;
+    }
+    m.service_action = TG_ACTION_PHONE_CALL;
+    m.service_flags = 2UL;
+    m.service_value = 307UL;
+    m.is_out = 1;
+    if (!tg_service_line_case(&m, 0, 1, 0, "Outgoing call (5:07)")) {
+        return 2;
+    }
+    m.service_flags = 6UL;
+    m.service_value = 3605UL;
+    m.is_out = 0;
+    if (!tg_service_line_case(&m, 0, 0, 0,
+                              "Incoming video call (1:00:05)")) {
+        return 2;
+    }
+    m.service_flags = 1UL;
+    m.service_reason = TG_CALL_DISCARD_MISSED;
+    m.service_value = 0UL;
+    if (!tg_service_line_case(&m, 0, 0, 0, "Missed call")) {
+        return 2;
+    }
+    m.service_action = TG_ACTION_SET_MESSAGES_TTL;
+    m.service_value = 604800UL;
+    if (!tg_service_line_case(&m, "Anna", 0, 0,
+                              "Anna set messages to auto-delete after 1 week")) {
+        return 2;
+    }
+    m.service_value = 0UL;
+    if (!tg_service_line_case(&m, "Anna", 0, 0,
+                              "Anna turned off auto-delete")) {
+        return 2;
+    }
+    m.service_action = TG_ACTION_CHAT_EDIT_TITLE;
+    m.flags = 1UL << 14; /* a channel's post */
+    strcpy(m.text, "News");
+    if (!tg_service_line_case(&m, "Anna", 0, 0,
+                              "Channel renamed to \"News\"")) {
+        return 2;
+    }
+    m.service_action = 0x12345678UL;
+    if (!tg_service_line_case(&m, "Anna", 0, 0, "Service message")) {
+        return 2;
+    }
+    /* a short buffer keeps what fits and ends there */
+    m.service_action = TG_ACTION_CONTACT_SIGN_UP;
+    tg_mtproto_service_text(&m, "Marco", 0, 0, small, sizeof(small));
+    if (strcmp(small, "Marco j") != 0) {
+        puts("login self-test: a service line runs past its buffer");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
@@ -6244,7 +7147,10 @@ static int tg_entity_marker_self_test(void)
                                "\xF0\x9F\x98\x80" "*X*")) {
         return 2;
     }
-    return tg_message_cut_self_test();
+    if (tg_message_cut_self_test() != 0) {
+        return 2;
+    }
+    return tg_service_message_self_test();
 }
 
 int tg_mtproto_login_self_test(void)

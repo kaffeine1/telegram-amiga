@@ -3652,6 +3652,62 @@ static void tg_gui_paint_header(const tg_gui_state *state,
     }
 }
 
+/* A service line ("Anna added Marco", "You pinned a message"): centred in the
+   transcript on a pill of the bubble colour, as the official clients show it,
+   and cut with "..." when wider than the column. It takes the row height of
+   any system line (lh + 6) and is drawn only while the whole pill is in
+   view; it used to start a quarter in, plain, and was never filled. */
+static void tg_gui_paint_system_line(tg_gui_backend *backend,
+                                     const tg_gui_message *message,
+                                     int area_x, int area_w, int y, int lh,
+                                     int transcript_top, int transcript_bottom)
+{
+    char line[TG_GUI_MSG_TEXT_MAX];
+    unsigned long length;
+    int pad = lh / 2;
+    int pill_y = y + 2;
+    int pill_h = lh + 2;
+    int max_w;
+    int pill_w;
+    int pill_x;
+
+    max_w = area_w - (2 * pad) - 8;
+    if (max_w <= 0 || pill_y < transcript_top ||
+        pill_y + pill_h > transcript_bottom) {
+        return;
+    }
+    length = (unsigned long)strlen(message->text);
+    if (length >= sizeof(line)) {
+        length = sizeof(line) - 1UL;
+    }
+    memcpy(line, message->text, (size_t)length);
+    line[length] = '\0';
+    if (length > 0UL && backend->text_width(backend, line, length) > max_w) {
+        int dots_w = backend->text_width(backend, "...", 3UL);
+        unsigned long keep = 0UL;
+
+        if (max_w > dots_w) {
+            keep = tg_gui_wrap_fit(backend, line, length, max_w - dots_w);
+        }
+        if (keep > 0UL && tg_gui_emoji_pair_at(line, length, keep - 1UL, 0)) {
+            --keep; /* never half an emoji pair */
+        }
+        if (keep + 3UL >= sizeof(line)) {
+            keep = sizeof(line) - 4UL;
+        }
+        memcpy(line + keep, "...", 4U);
+        length = keep + 3UL;
+    }
+    pill_w = backend->text_width(backend, line, length) + (2 * pad);
+    pill_x = area_x + ((area_w - pill_w) / 2);
+    backend->round_bg = TG_GUI_PEN_WINDOW;
+    tg_gui_fill_pill(backend, TG_GUI_PEN_SURFACE,
+                     tg_gui_make_rect(pill_x, pill_y, pill_w, pill_h));
+    backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, pill_x + pad,
+                       tg_gui_centred_baseline(backend, pill_y, pill_h), line,
+                       length);
+}
+
 static void tg_gui_paint_main(const tg_gui_state *state,
                               tg_gui_backend *backend, int sidebar_w,
                               int width, int content_h, int lh)
@@ -3840,12 +3896,9 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                 }
             }
             if (message->is_system) {
-                if (y + lh > transcript_top && y + lh <= transcript_bottom) {
-                    backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM,
-                                       area_x + (area_w / 4), y + lh,
-                                       message->text,
-                                       (unsigned long)strlen(message->text));
-                }
+                tg_gui_paint_system_line(backend, message, area_x, area_w, y,
+                                         lh, transcript_top,
+                                         transcript_bottom);
             } else {
                 long sel_lo = -1;
                 long sel_hi = -1;
@@ -5040,7 +5093,10 @@ typedef struct tg_gui_record {
     int last_avatar_color; /* colour index of the last avatar fill */
     const char *watch_text[5];
     int watch_y[5];
+    int watch_x[5];
     int watch_hits[5];
+    tg_gui_rect last_surface;     /* the latest fill in the bubble pen */
+    tg_gui_rect watch_surface[5]; /* ...as it stood when the text was drawn */
     const tg_gui_state *link_state;
     const char *link_text;
     unsigned long link_chars;
@@ -5185,6 +5241,24 @@ static void tg_gui_rec_fill(tg_gui_backend *backend, int pen, tg_gui_rect rect)
     if (pen == TG_GUI_PEN_TEXT_DIM && (rect.w == 1 || rect.h == 1)) {
         record->thin_dim_fills += 1;
     }
+    if (pen == TG_GUI_PEN_SURFACE) {
+        tg_gui_rect *s = &record->last_surface;
+
+        /* rows of one rounded shape join into the shape's own box */
+        if (s->w > 0 && rect.y == s->y + s->h && rect.x < s->x + s->w &&
+            rect.x + rect.w > s->x) {
+            int right = (rect.x + rect.w > s->x + s->w) ? rect.x + rect.w
+                                                        : s->x + s->w;
+
+            if (rect.x < s->x) {
+                s->x = rect.x;
+            }
+            s->w = right - s->x;
+            s->h += rect.h;
+        } else {
+            *s = rect;
+        }
+    }
     tg_gui_rec_track(record, rect.x, rect.y);
     tg_gui_rec_track(record, rect.x + rect.w, rect.y + rect.h);
 }
@@ -5312,6 +5386,8 @@ static void tg_gui_rec_text(tg_gui_backend *backend, int pen, int x,
         if (watched != 0 && length == (unsigned long)strlen(watched) &&
             memcmp(text, watched, length) == 0) {
             record->watch_y[w] = baseline;
+            record->watch_x[w] = x;
+            record->watch_surface[w] = record->last_surface;
             ++record->watch_hits[w];
         }
     }
@@ -7699,6 +7775,39 @@ int tg_gui_self_test(void)
         if (rec.thin_dim_fills != plain + 4) {
             puts("gui self-test: the arrow focus has no frame where its tint "
                  "cannot show");
+            return 2;
+        }
+    }
+    /* A service line (the demo's "Marco e' entrato nel gruppo") stands
+       centred in the transcript, on a pill of the bubble colour wider than
+       the line; it used to start a quarter in, with nothing behind it. */
+    {
+        tg_gui_state *draft = tg_gui_test_scratch_state();
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        static const char line[] = "Marco e' entrato nel gruppo";
+        tg_gui_rect pill;
+        int text_w;
+        int centre;
+
+        tg_gui_demo_state(draft);
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 400;
+        rec.watch_text[0] = line;
+        b.context = &rec;
+        tg_gui_paint(draft, &b);
+        text_w = b.text_width(&b, line, (unsigned long)(sizeof(line) - 1U));
+        centre = draft->tr_area_x + (draft->tr_area_w / 2);
+        pill = rec.watch_surface[0];
+        if (rec.watch_hits[0] != 1 ||
+            rec.watch_x[0] + (text_w / 2) < centre - 1 ||
+            rec.watch_x[0] + (text_w / 2) > centre + 1 ||
+            pill.w <= text_w || pill.x + (pill.w / 2) < centre - 1 ||
+            pill.x + (pill.w / 2) > centre + 1) {
+            printf("gui self-test: the service line is not centred on its "
+                   "pill (text at %d, pill %d+%d, centre %d)\n",
+                   rec.watch_x[0], pill.x, pill.w, centre);
             return 2;
         }
     }

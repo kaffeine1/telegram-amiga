@@ -476,6 +476,17 @@ typedef struct tg_mtproto_message_text {
     int photo_only;
     unsigned long pending_webpage_hi;
     unsigned long pending_webpage_lo;
+    /* A service message (someone joined, a message was pinned, a call...):
+       the MessageAction constructor, 0 for an ordinary message. text then
+       holds only the action's own string (a title, a custom line); the line
+       shown is written with the names by tg_mtproto_service_text. */
+    unsigned long service_action;
+    unsigned long service_user_hi;  /* the user the action names, if any */
+    unsigned long service_user_lo;
+    unsigned long service_user_count;
+    unsigned long service_value;    /* seconds, timer period, score, boosts */
+    unsigned long service_flags;    /* the action's own flags */
+    unsigned long service_reason;   /* a call's PhoneCallDiscardReason */
 } tg_mtproto_message_text;
 
 typedef struct tg_mtproto_message_text_list {
@@ -898,6 +909,16 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
     const unsigned char *body,
     unsigned long body_length,
     tg_mtproto_message_text_list *out);
+
+/* The line a service message reads as, in the words of the official clients:
+   "Anna added Marco", "You pinned a message", "Marco joined Telegram".
+   actor is who acted (NULL or "" when unknown), actor_is_self makes it "You",
+   target is the user the action names (NULL or "" when unknown). An action
+   without a wording of its own still gives a short generic line. */
+void tg_mtproto_service_text(const tg_mtproto_message_text *message,
+                             const char *actor, int actor_is_self,
+                             const char *target, char *out,
+                             unsigned long out_size);
 
 /*
  * Extracts users/chats/channels referenced by a messages.* response into a peer
