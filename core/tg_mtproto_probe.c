@@ -239,8 +239,11 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_UPDATE_CHAT_USER_TYPING_CONSTRUCTOR 0x83487af0UL
 #define TG_MTPROTO_UPDATE_CHANNEL_USER_TYPING_CONSTRUCTOR 0x8c88c923UL
 /* updateReadHistoryOutbox#2f2f21bf: the peer read OUR messages up to max_id --
-   real-time read receipts (5c). Parser/reader live in tg_mtproto_login.c. */
+   real-time read receipts (5c). Parser/reader live in tg_mtproto_login.c.
+   updateReadChannelOutbox#b75f99a9 channel_id:long max_id:int = Update
+   carries the same cursor for channels and supergroups. */
 #define TG_MTPROTO_UPDATE_READ_HISTORY_OUTBOX_CONSTRUCTOR 0x2f2f21bfUL
+#define TG_MTPROTO_UPDATE_READ_CHANNEL_OUTBOX_CONSTRUCTOR 0xb75f99a9UL
 #define TG_MTPROTO_SEND_MESSAGE_TYPING_ACTION_CONSTRUCTOR 0x16bf744eUL
 /* A typing action is refreshed by the server every ~5s while active; clear the
    indicator a hair later so it stays lit during real typing and drops soon
@@ -3629,6 +3632,53 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_webpage_parse_update(&reader, constructor);
+        } else if (constructor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
+                   constructor ==
+                       TG_MTPROTO_UPDATE_NEW_CHANNEL_MESSAGE_CONSTRUCTOR) {
+            static tg_mtproto_message_text message;
+            tg_mtproto_dialog_peer dest;
+
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            if (tg_mtproto_read_update_message_text(&reader, &message, &dest) ==
+                TG_MTPROTO_TL_OK) {
+                tg_chat_notify_push_message(&message, &dest);
+            }
+        } else if (constructor ==
+                       TG_MTPROTO_UPDATE_READ_HISTORY_OUTBOX_CONSTRUCTOR &&
+                   tg_chat_read_outbox_target != 0) {
+            tg_mtproto_dialog_peer peer;
+            unsigned long max_id;
+
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            if (tg_mtproto_read_update_read_history_outbox(&reader, &peer,
+                                                           &max_id) ==
+                    TG_MTPROTO_TL_OK &&
+                max_id != 0UL && reader.length - reader.offset >= 8UL) {
+                tg_chat_read_outbox_target->peer_id_hi = peer.id_hi;
+                tg_chat_read_outbox_target->peer_id_lo = peer.id_lo;
+                tg_chat_read_outbox_target->max_id = max_id;
+                tg_chat_read_outbox_target->pending = 1;
+            }
+        } else if (constructor ==
+                       TG_MTPROTO_UPDATE_READ_CHANNEL_OUTBOX_CONSTRUCTOR &&
+                   tg_chat_read_outbox_target != 0) {
+            unsigned long id_hi;
+            unsigned long id_lo;
+            unsigned long max_id;
+
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            if (tg_mtproto_tl_read_u64(&reader, &id_hi, &id_lo) ==
+                    TG_MTPROTO_TL_OK &&
+                tg_mtproto_tl_read_u32(&reader, &max_id) == TG_MTPROTO_TL_OK &&
+                (id_hi != 0UL || id_lo != 0UL) && max_id != 0UL) {
+                tg_chat_read_outbox_target->peer_id_hi = id_hi;
+                tg_chat_read_outbox_target->peer_id_lo = id_lo;
+                tg_chat_read_outbox_target->max_id = max_id;
+                tg_chat_read_outbox_target->pending = 1;
+            }
         }
         offset += 4UL;
     }
@@ -3660,6 +3710,23 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
                 TG_MTPROTO_TL_OK) {
             tg_chat_read_outbox_target->peer_id_hi = peer.id_hi;
             tg_chat_read_outbox_target->peer_id_lo = peer.id_lo;
+            tg_chat_read_outbox_target->max_id = max_id;
+            tg_chat_read_outbox_target->pending = 1;
+        }
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_READ_CHANNEL_OUTBOX_CONSTRUCTOR) {
+        unsigned long id_hi;
+        unsigned long id_lo;
+        unsigned long max_id;
+
+        if (tg_chat_read_outbox_target != 0 &&
+            tg_mtproto_tl_read_u64(reader, &id_hi, &id_lo) ==
+                TG_MTPROTO_TL_OK &&
+            tg_mtproto_tl_read_u32(reader, &max_id) == TG_MTPROTO_TL_OK &&
+            max_id != 0UL) {
+            tg_chat_read_outbox_target->peer_id_hi = id_hi;
+            tg_chat_read_outbox_target->peer_id_lo = id_lo;
             tg_chat_read_outbox_target->max_id = max_id;
             tg_chat_read_outbox_target->pending = 1;
         }
@@ -3732,6 +3799,8 @@ static void tg_chat_notify_collect_updates(const unsigned char *body,
                 TG_MTPROTO_UPDATE_CHANNEL_USER_TYPING_CONSTRUCTOR &&
             item_constructor !=
                 TG_MTPROTO_UPDATE_READ_HISTORY_OUTBOX_CONSTRUCTOR &&
+            item_constructor !=
+                TG_MTPROTO_UPDATE_READ_CHANNEL_OUTBOX_CONSTRUCTOR &&
             item_constructor != TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR &&
             item_constructor !=
                 TG_MTPROTO_UPDATE_NEW_CHANNEL_MESSAGE_CONSTRUCTOR &&
@@ -16058,6 +16127,131 @@ int tg_mtproto_probe_self_test(void)
             tg_chat_edit_target = 0;
             puts("probe self-test: Saved Messages bundled edit wrong");
             return 2;
+        }
+
+        /* Multi-item updates container: a preceding update followed by
+           updateNewMessage must still deliver the new message notification. */
+        tg_chat_notify_reset(&typing_nq, 1);
+        tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+        ok = tg_mtproto_tl_write_u32(
+                 &writer, TG_MTPROTO_UPDATES_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(
+                 &writer, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 2UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 0xdeadbeefUL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 0UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(
+                 &writer, TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, TG_MTPROTO_MESSAGE_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 1UL << 8) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 0UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 88UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(
+                 &writer, TG_MTPROTO_PEER_USER_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u64(&writer, 0UL, 0x55UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(
+                 &writer, TG_MTPROTO_PEER_USER_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u64(&writer, 0UL, 0x55UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 1700000003UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_bytes(
+                 &writer, (const unsigned char *)"second item", 11UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 12UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 1UL) == TG_MTPROTO_TL_OK;
+        if (ok) {
+            tg_chat_notify_collect(payload, writer.length);
+        }
+        if (!ok || typing_nq.count != 1UL ||
+            typing_nq.queue[0].peer_id_lo != 0x55UL ||
+            strcmp(typing_nq.queue[0].text, "second item") != 0) {
+            tg_chat_nq = 0;
+            tg_chat_typing_target = 0;
+            tg_chat_edit_target = 0;
+            puts("probe self-test: bundled updateNewMessage missed");
+            return 2;
+        }
+
+        /* updateReadChannelOutbox#b75f99a9 channel_id:long max_id:int = Update
+           must populate tg_chat_read_outbox_target in both updateShort and a
+           multi-item updates container. */
+        {
+            tg_chat_read_outbox_sink ro_sink;
+
+            memset(&ro_sink, 0, sizeof(ro_sink));
+            tg_chat_read_outbox_target = &ro_sink;
+            tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+            ok = tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer,
+                     TG_MTPROTO_UPDATE_READ_CHANNEL_OUTBOX_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u64(&writer, 0x11UL, 0x22334455UL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 1234UL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 1700000004UL) ==
+                     TG_MTPROTO_TL_OK;
+            if (ok) {
+                tg_chat_notify_collect(payload, writer.length);
+            }
+            if (!ok || !ro_sink.pending ||
+                ro_sink.peer_id_hi != 0x11UL ||
+                ro_sink.peer_id_lo != 0x22334455UL ||
+                ro_sink.max_id != 1234UL) {
+                tg_chat_nq = 0;
+                tg_chat_typing_target = 0;
+                tg_chat_edit_target = 0;
+                tg_chat_read_outbox_target = 0;
+                puts("probe self-test: updateReadChannelOutbox short wrong");
+                return 2;
+            }
+
+            memset(&ro_sink, 0, sizeof(ro_sink));
+            tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+            ok = tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATES_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 2UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 0xdeadbeefUL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 0UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer,
+                     TG_MTPROTO_UPDATE_READ_CHANNEL_OUTBOX_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u64(&writer, 0x22UL, 0x66778899UL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 5678UL) == TG_MTPROTO_TL_OK;
+            if (ok) {
+                tg_chat_notify_collect(payload, writer.length);
+            }
+            tg_chat_read_outbox_target = 0;
+            if (!ok || !ro_sink.pending ||
+                ro_sink.peer_id_hi != 0x22UL ||
+                ro_sink.peer_id_lo != 0x66778899UL ||
+                ro_sink.max_id != 5678UL) {
+                tg_chat_nq = 0;
+                tg_chat_typing_target = 0;
+                tg_chat_edit_target = 0;
+                puts("probe self-test: updateReadChannelOutbox vector wrong");
+                return 2;
+            }
         }
 
         tg_chat_nq = 0;
