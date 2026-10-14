@@ -44,6 +44,7 @@
 #endif
 #include "tg_tls.h"
 
+#if !defined(TG_NO_LEGACY_BOT)
 #define TG_STATE_MAX_UPDATES 5UL
 
 typedef enum tg_read_output_mode {
@@ -62,6 +63,7 @@ static const char tg_default_poll_seconds_text[] = "5";
 static const char tg_default_max_iterations_text[] = "10";
 static const char tg_console_poll_seconds_text[] = "0";
 static const char tg_console_max_iterations_text[] = "1";
+#endif /* !TG_NO_LEGACY_BOT */
 
 static int tg_mtproto_production_endpoint_for_dc(unsigned long dc_id,
                                                  const char **host,
@@ -528,6 +530,44 @@ static int tg_run_http_post_self_test(void)
 }
 #endif /* !TG_NO_SELFTEST */
 
+static int tg_is_decimal_text(const char *text)
+{
+    if (text == 0 || text[0] == '\0') {
+        return 0;
+    }
+    while (*text != '\0') {
+        if (*text < '0' || *text > '9') {
+            return 0;
+        }
+        ++text;
+    }
+    return 1;
+}
+
+static int tg_parse_decimal_ulong(const char *text, unsigned long *value)
+{
+    unsigned long result;
+    unsigned long digit;
+
+    if (value == 0 || !tg_is_decimal_text(text)) {
+        return 1;
+    }
+
+    result = 0;
+    while (*text != '\0') {
+        digit = (unsigned long)(*text - '0');
+        if (result > (ULONG_MAX - digit) / 10UL) {
+            return 1;
+        }
+        result = result * 10UL + digit;
+        ++text;
+    }
+
+    *value = result;
+    return 0;
+}
+
+#if !defined(TG_NO_LEGACY_BOT)
 static int tg_run_json_test(const tg_config *config)
 {
     tg_json_status json_status;
@@ -1073,43 +1113,6 @@ static int tg_build_echo_text(const tg_bot_update_summary *update,
     if (json_status != TG_JSON_OK) {
         return 1;
     }
-    return 0;
-}
-
-static int tg_is_decimal_text(const char *text)
-{
-    if (text == 0 || text[0] == '\0') {
-        return 0;
-    }
-    while (*text != '\0') {
-        if (*text < '0' || *text > '9') {
-            return 0;
-        }
-        ++text;
-    }
-    return 1;
-}
-
-static int tg_parse_decimal_ulong(const char *text, unsigned long *value)
-{
-    unsigned long result;
-    unsigned long digit;
-
-    if (value == 0 || !tg_is_decimal_text(text)) {
-        return 1;
-    }
-
-    result = 0;
-    while (*text != '\0') {
-        digit = (unsigned long)(*text - '0');
-        if (result > (ULONG_MAX - digit) / 10UL) {
-            return 1;
-        }
-        result = result * 10UL + digit;
-        ++text;
-    }
-
-    *value = result;
     return 0;
 }
 
@@ -3921,6 +3924,7 @@ static int tg_run_telegram_send_last_default(const tg_config *config)
         "1",
         config->telegram_send_last_default_text);
 }
+#endif /* !TG_NO_LEGACY_BOT */
 
 #if !defined(TG_NO_GUI)
 /* The GUI model tg_app_run hands to the window, the demo and the two chat
@@ -4613,7 +4617,7 @@ int tg_app_run(int argc, char **argv)
         tg_gui_state *gui = tg_app_gui_state_zeroed();
         tg_gui_chat_driver gui_driver;
         tg_chat_driver driver;
-        tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+        static tg_chat_list_row rows[TG_CHAT_LIST_MAX];
         int count;
         int missing;
 
@@ -5040,6 +5044,13 @@ int tg_app_run(int argc, char **argv)
         return tg_run_telegram_tls_status();
     }
 
+#if !defined(TG_NO_LEGACY_BOT)
+#if !defined(TG_NO_SELFTEST)
+    if (config.run_telegram_text_client_self_test) {
+        return tg_text_client_self_test();
+    }
+#endif /* !TG_NO_SELFTEST */
+
     if (config.run_json_test) {
         return tg_run_json_test(&config);
     }
@@ -5196,12 +5207,6 @@ int tg_app_run(int argc, char **argv)
     }
 #endif /* !TG_NO_SELFTEST */
 
-#if !defined(TG_NO_SELFTEST)
-    if (config.run_telegram_text_client_self_test) {
-        return tg_text_client_self_test();
-    }
-#endif /* !TG_NO_SELFTEST */
-
     if (config.run_telegram_client) {
         return tg_run_telegram_client(&config);
     }
@@ -5285,6 +5290,66 @@ int tg_app_run(int argc, char **argv)
     if (config.run_telegram_send_last_default) {
         return tg_run_telegram_send_last_default(&config);
     }
+#else
+    if (config.run_telegram_text_client_self_test ||
+        config.run_json_test ||
+        config.run_telegram_json_test ||
+        config.run_telegram_json_self_test ||
+        config.run_telegram_path_test ||
+        config.run_telegram_http_self_test ||
+        config.run_telegram_token_file_path_test ||
+        config.run_telegram_default_token_file_path_test ||
+        config.run_telegram_preflight ||
+        config.run_telegram_get_me_self_test ||
+        config.run_telegram_get_me ||
+        config.run_telegram_get_me_default ||
+        config.run_telegram_get_updates_self_test ||
+        config.run_telegram_get_updates ||
+        config.run_telegram_get_updates_default ||
+        config.run_telegram_read_once_state_self_test ||
+        config.run_telegram_read_once_state ||
+        config.run_telegram_read_once_state_default ||
+        config.run_telegram_read_loop ||
+        config.run_telegram_read_loop_default ||
+        config.run_telegram_inbox_self_test ||
+        config.run_telegram_inbox ||
+        config.run_telegram_inbox_default ||
+        config.run_telegram_inbox_loop ||
+        config.run_telegram_inbox_loop_default ||
+        config.run_telegram_session ||
+        config.run_telegram_session_default ||
+        config.run_telegram_session_loop ||
+        config.run_telegram_session_loop_default ||
+        config.run_telegram_manual_client ||
+        config.run_telegram_manual_client_default ||
+        config.run_telegram_offset_state_self_test ||
+        config.run_telegram_console_self_test ||
+        config.run_telegram_client_state_self_test ||
+        config.run_telegram_client_self_test ||
+        config.run_telegram_client ||
+        config.run_telegram_client_default ||
+        config.run_telegram_client_console ||
+        config.run_telegram_human_chat ||
+        config.run_telegram_chats ||
+        config.run_telegram_chats_default ||
+        config.run_telegram_echo_once_self_test ||
+        config.run_telegram_echo_once ||
+        config.run_telegram_echo_once_default ||
+        config.run_telegram_echo_once_state ||
+        config.run_telegram_echo_once_state_default ||
+        config.run_telegram_echo_loop ||
+        config.run_telegram_echo_loop_default ||
+        config.run_telegram_send_message_self_test ||
+        config.run_telegram_send_message ||
+        config.run_telegram_send_message_default ||
+        config.run_telegram_send_chat ||
+        config.run_telegram_send_chat_default ||
+        config.run_telegram_reply_default ||
+        config.run_telegram_send_last_default) {
+        puts("Legacy Bot-API commands are not compiled into this build.");
+        return 2;
+    }
+#endif /* !TG_NO_LEGACY_BOT */
 
     return 0;
 }

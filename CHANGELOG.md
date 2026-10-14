@@ -64,6 +64,41 @@ the text client for the plain 68000.
   code saw only "...auth.sendCode: rpc-error 40". An expired code no longer
   reads as a wrong one: the window goes back to the number, already typed,
   so ENTER asks for a new code, and the text client asks for it by itself.
+- A chat holding an unsent draft, typed here or on another device, no longer
+  hides itself and the chats below it. Telegram sends the drafts with the
+  chat list, and a draft the client could not read stopped the list at that
+  chat: the chats below kept old unread counts, a new chat there did not
+  appear, and in an open chat with a draft your messages could miss their
+  second tick. Plain drafts are now read through, and a draft with
+  formatting, a reply or a photo is stepped over to the next chat.
+- In supergroups and channels the second tick also comes from Telegram's live
+  notice, as in private chats, instead of only from the next check a few
+  seconds later.
+- A new message in another chat that arrives bundled with other updates marks
+  its chat at once. When another update came first in the bundle, it waited
+  for the periodic catch-up, a minute or more.
+- On AmigaOS 3 the keys typed at the first login feed the random numbers of
+  the new session key with their real timing. Until the first random number
+  was drawn the timer was not open, and they were timed to the second.
+- On AROS a connection to a server that does not answer gives up after the
+  same time as on the other systems and can be interrupted; it could hang for
+  a long time. A connection refused at once, as with the network down, still
+  fails at once.
+
+### Changed
+- Less memory: the 68000 text client needs 1.32 MB to load instead of 1.53,
+  and the AmigaOS 3 window build about 500 KB less, by sharing buffers that
+  are never in use at the same time.
+- The key exchange at the first login and the two-step password check take
+  about 17% fewer big-number multiplications (about 2560 instead of 3072 for
+  each 2048-bit power).
+- telegram-auth.bin is written only when Telegram changes the session's salt,
+  no longer after every request.
+- The 68000 build leaves out the old Bot API commands, which need HTTPS that
+  build does not have; asking for one says so.
+- The "Send photo" window opens centred over the main window and takes the
+  focus only after its first drawing; the blinking cursor of the login screen
+  redraws only its field.
 
 ## [0.0.96] - 2026-10-11
 

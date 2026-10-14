@@ -21,9 +21,11 @@ CPPFLAGS += -DTG_ENABLE_GZIP_PUFF=1 -Ithird_party/puff
 SRC += core/tg_avatar.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c core/tg_emoji_sheet.c
 endif
 
+HEADERS := $(wildcard include/*.h) $(wildcard third_party/*/*.h)
+
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(SRC) $(HEADERS)
 	mkdir -p "$(BUILD_DIR)"
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o "$(TARGET)" $(SRC)
 

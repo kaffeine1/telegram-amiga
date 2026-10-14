@@ -71,6 +71,12 @@ CFLAGS += -DTG_NO_GUI=1
 SRC := $(filter-out core/tg_gui.c core/tg_gui_window.c core/tg_gui_driver.c core/tg_avatar.c third_party/tjpgd/tjpgd.c,$(SRC))
 endif
 
+NO_LEGACY_BOT ?= $(NO_GUI)
+ifeq ($(NO_LEGACY_BOT),1)
+CFLAGS += -DTG_NO_LEGACY_BOT=1
+SRC := $(filter-out core/tg_bot.c core/tg_client_state.c core/tg_offset_state.c core/tg_text_client.c core/tg_telegram.c core/tg_json.c,$(SRC))
+endif
+
 .PHONY: all clean
 
 all: $(TARGET)

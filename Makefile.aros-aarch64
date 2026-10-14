@@ -49,11 +49,13 @@ endif
 SRC += core/tg_avatar.c core/tg_emoji_sheet.c third_party/tjpgd/tjpgd.c third_party/puff/puff.c
 endif
 
+HEADERS := $(wildcard include/*.h) $(wildcard third_party/*/*.h)
+
 .PHONY: all clean
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(SRC) $(HEADERS)
 	mkdir -p "$(BUILD_DIR)"
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o "$@" $(SRC)
 	@grep -aq '$$STACK:1048576' "$@" || { \

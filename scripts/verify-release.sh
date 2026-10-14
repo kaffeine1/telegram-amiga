@@ -34,14 +34,18 @@ md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 fail=0
+skipped=0
 
 verify() {
     tag=$1; zippat=$2; localbin=$3; archpat=$4
-    if [ ! -f "$ROOT_DIR/$localbin" ]; then echo "SKIP $tag: no local build $localbin"; return; fi
+    if [ ! -f "$ROOT_DIR/$localbin" ]; then echo "SKIP $tag: no local build $localbin"; skipped=1; return; fi
     if ! gh release download "$tag" --repo "$REPO" --pattern "$zippat" -O "$TMP/$tag.zip" >/dev/null 2>&1; then
         echo "FAIL $tag: download failed"; fail=1; return
     fi
-    unzip -p "$TMP/$tag.zip" "*/TelegramAmiga" > "$TMP/bin" 2>/dev/null
+    rm -f "$TMP/bin"
+    if ! unzip -p "$TMP/$tag.zip" "*/TelegramAmiga" > "$TMP/bin" 2>/dev/null || [ ! -s "$TMP/bin" ]; then
+        echo "FAIL $tag: missing inner TelegramAmiga binary"; fail=1; return
+    fi
     want=$(md5of "$ROOT_DIR/$localbin"); got=$(md5of "$TMP/bin")
     arch=$(file "$TMP/bin" | grep -c "$archpat" || true)
     leak=$(unzip -l "$TMP/$tag.zip" | grep -icE "telegram-(auth|peers|seed|password|token)|phone-code-hash" || true)
@@ -76,8 +80,56 @@ verify "aros-x86_64-$CHANNEL-$VERSION" "*x86_64*"    build/aros-x86_64/TelegramA
 verify "aros-aarch64-$CHANNEL-$VERSION" "*aarch64*"  build/aros-aarch64/TelegramAmiga    "aarch64"
 verify "os3-68000-$CHANNEL-$VERSION"  "*amigaos3-68000*" build/amigaos3-68000-lowmem/TelegramAmiga "AmigaOS"
 
+LHA_BIN=${LHA_BIN:-"$HOME/amiga-dev/tools/lha-src/src/lha"}
+PACKAGE_ROOT=${PACKAGE_ROOT:-"$ROOT_DIR/build/human-releases"}
+AMINET_ROOT=${AMINET_ROOT:-"$PACKAGE_ROOT/aminet"}
+OS4DEPOT_ROOT=${OS4DEPOT_ROOT:-"$PACKAGE_ROOT/os4depot"}
+AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"}
+
+verify_lha() {
+    lhafile=$1; lhalabel=$2; localbin=$3; archpat=$4
+    if [ ! -f "$lhafile" ]; then echo "SKIP $lhalabel: $lhafile not found"; skipped=1; return; fi
+    if [ ! -f "$ROOT_DIR/$localbin" ]; then echo "SKIP $lhalabel: $localbin not found"; skipped=1; return; fi
+    rm -rf "$TMP/lha" && mkdir -p "$TMP/lha"
+    if ! ( cd "$TMP/lha" && "$LHA_BIN" xq "$lhafile" >/dev/null 2>&1 ); then
+        echo "FAIL $lhalabel: extract failed"; fail=1; return
+    fi
+    if [ ! -f "$TMP/lha/TelegramAmiga/TelegramAmiga" ]; then
+        echo "FAIL $lhalabel: missing inner TelegramAmiga/TelegramAmiga"; fail=1; return
+    fi
+    want=$(md5of "$ROOT_DIR/$localbin"); got=$(md5of "$TMP/lha/TelegramAmiga/TelegramAmiga")
+    arch=$(file "$TMP/lha/TelegramAmiga/TelegramAmiga" | grep -c "$archpat" || true)
+    leak=$("$LHA_BIN" l "$lhafile" | grep -icE "telegram-(auth|peers|seed|password|token)|phone-code-hash" || true)
+    ok=1
+    [ "$want" = "$got" ] || { echo "FAIL $lhalabel: packaged binary $got != local build $want"; ok=0; }
+    [ "$arch" -ge 1 ]    || { echo "FAIL $lhalabel: wrong architecture"; ok=0; }
+    [ "$leak" = 0 ]      || { echo "FAIL $lhalabel: SESSION FILE LEAK"; ok=0; }
+    if [ "$ok" = 1 ]; then echo "OK   $lhalabel  [bin $(printf %.8s "$got")]"; else fail=1; fi
+}
+
+if [ ! -x "$LHA_BIN" ]; then
+    echo "SKIP LhA archives: no executable LHA_BIN ($LHA_BIN)"
+    skipped=1
+else
+    verify_lha "$AMINET_ROOT/TelegramAmiga.lha"        "aminet/TelegramAmiga.lha"        build/amigaos3-clib2/TelegramAmiga        "AmigaOS"
+    verify_lha "$AMINET_ROOT/TelegramAmiga-OS4.lha"    "aminet/TelegramAmiga-OS4.lha"    build/amigaos4/TelegramAmiga              "PowerPC"
+    verify_lha "$AMINET_ROOT/TelegramAmiga-MOS.lha"    "aminet/TelegramAmiga-MOS.lha"    build/morphos-cross/TelegramAmiga         "PowerPC"
+    verify_lha "$AMINET_ROOT/TelegramAmiga-AROS.lha"   "aminet/TelegramAmiga-AROS.lha"   build/aros-i386-abiv0/TelegramAmiga       "80386"
+    verify_lha "$AMINET_ROOT/TelegramAmiga-AROS64.lha" "aminet/TelegramAmiga-AROS64.lha" build/aros-x86_64/TelegramAmiga           "x86-64"
+    verify_lha "$AMINET_ROOT/TelegramAmiga-ARM64.lha"  "aminet/TelegramAmiga-ARM64.lha"  build/aros-aarch64/TelegramAmiga          "aarch64"
+    verify_lha "$AMINET_ROOT/TelegramAmiga-68000.lha"  "aminet/TelegramAmiga-68000.lha"  build/amigaos3-68000-lowmem/TelegramAmiga "AmigaOS"
+    verify_lha "$OS4DEPOT_ROOT/telegramamiga.lha"      "os4depot/telegramamiga.lha"      build/amigaos4/TelegramAmiga              "PowerPC"
+    verify_lha "$AROSARCHIVES_ROOT/telegramamiga.i386-aros.lha"       "arosarchives/telegramamiga.i386-aros.lha"       build/aros-i386-abiv0/TelegramAmiga "80386"
+    verify_lha "$AROSARCHIVES_ROOT/telegramamiga.x86_64-aros-v11.lha" "arosarchives/telegramamiga.x86_64-aros-v11.lha" build/aros-x86_64/TelegramAmiga     "x86-64"
+    verify_lha "$AROSARCHIVES_ROOT/telegramamiga.aarch64-aros.lha"    "arosarchives/telegramamiga.aarch64-aros.lha"    build/aros-aarch64/TelegramAmiga    "aarch64"
+fi
+
 if [ "$fail" = 0 ]; then
-    echo "All published $VERSION assets match the local builds."
+    if [ "$skipped" = 1 ]; then
+        echo "Checked $VERSION assets match the local builds (some checks were skipped)."
+    else
+        echo "All published $VERSION assets match the local builds."
+    fi
 else
     echo "VERIFICATION FAILED -- re-upload the offending asset(s)." >&2
     exit 1

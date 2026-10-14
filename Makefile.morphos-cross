@@ -43,13 +43,19 @@ ifeq ($(NO_SELFTEST),1)
 CFLAGS += -DTG_NO_SELFTEST=1
 endif
 
+HEADERS := $(wildcard include/*.h) $(wildcard third_party/*/*.h)
+
 .PHONY: all clean
 
 all: $(TARGET)
 
-$(TARGET): $(SRC) include/tg_app.h include/tg_bot.h include/tg_config.h include/tg_console.h include/tg_client_state.h include/tg_offset_state.h include/tg_text_client.h include/tg_file.h include/tg_http.h include/tg_https.h include/tg_json.h include/tg_telegram.h include/tg_log.h include/tg_mtproto.h include/tg_mtproto_auth.h include/tg_mtproto_bigint.h include/tg_mtproto_dc.h include/tg_mtproto_envelope.h include/tg_mtproto_encrypted.h include/tg_mtproto_login.h include/tg_mtproto_message_id.h include/tg_mtproto_probe.h include/tg_mtproto_rsa.h include/tg_mtproto_crypto.h include/tg_mtproto_session.h include/tg_mtproto_srp.h include/tg_mtproto_tl.h include/tg_mtproto_transport.h include/tg_net.h include/tg_platform.h include/tg_tls.h third_party/puff/puff.h
+$(TARGET): $(SRC) $(HEADERS)
 	mkdir -p "$(dir $(TARGET))"
 	$(CC) $(CFLAGS) -o "$@" $(SRC) $(LDLIBS)
+	@strings "$@" | grep -F '$$STACK:1048576' >/dev/null || { \
+		echo "ERROR: $@ is missing the 1 MiB AmigaDOS stack cookie" >&2; \
+		rm -f "$@"; exit 1; \
+	}
 
 clean:
 	rm -f "$(TARGET)"
