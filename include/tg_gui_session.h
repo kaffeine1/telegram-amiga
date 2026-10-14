@@ -416,6 +416,7 @@ void tg_gui_session_close(void);
 #define TG_GUI_LOGIN_BAD_PASSWORD 3 /* the 2FA password was wrong -- re-prompt */
 #define TG_GUI_LOGIN_BAD_PHONE    4 /* the number was rejected -- re-prompt */
 #define TG_GUI_LOGIN_ERROR        5 /* network/other error -- retry */
+#define TG_GUI_LOGIN_CODE_EXPIRED 6 /* the code expired -- ask for a new one */
 
 /* Stores the file paths the login + the eventual session need. Call once before
    entering a login screen (paths must outlive the session). */
@@ -440,9 +441,15 @@ int tg_gui_session_login_resend_code(FILE *stream);
    in (call activate); TG_GUI_LOGIN_BAD_PASSWORD = re-prompt. */
 int tg_gui_session_login_check_password(const char *password, FILE *stream);
 
-/* The real reason the last send_code/sign_in failed (the GUI has no console:
-   stdout is NIL: on a Workbench launch). Empty string if none captured. */
+/* Why the last step failed, in words (the GUI has no console: stdout is NIL:
+   on a Workbench launch): a short line for the status, and what to do about
+   it for the line under the field. Empty strings if none. */
 const char *tg_gui_session_login_last_error(void);
+const char *tg_gui_session_login_last_hint(void);
+
+/* The number the code was asked for, digits only after a "+", for the field
+   when the code has to be asked for again. Empty before send_code. */
+const char *tg_gui_session_login_phone(void);
 
 /* After a successful login, brings the window live: refreshes the peer cache,
    opens the session into `state`, sets the title/status and opens the first

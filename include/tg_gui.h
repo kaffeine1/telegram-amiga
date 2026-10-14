@@ -307,6 +307,9 @@ typedef struct tg_gui_state {
     int drag_cur_y;
     char input[TG_GUI_MSG_TEXT_MAX];
     char status[TG_GUI_NAME_MAX];
+    /* Login screen: what to do about the line in status, under the field
+       ("Type it with the country code, e.g. +39 3331234567"); "" = none. */
+    char status_hint[96];
     int theme;
     int composing;  /* the input field is focused */
     int input_caret; /* caret byte offset into input[] (0..strlen); chat composer */

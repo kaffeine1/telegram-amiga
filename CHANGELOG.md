@@ -55,6 +55,15 @@ the text client for the plain 68000.
   in view went from 2.7-3.0 seconds to 0.45; the copy takes about a quarter
   of a second to make when the photo appears. Screens with more colours
   write photos in true colour and are unchanged.
+- The login says what went wrong in plain words, with what to do under the
+  field: "That number is not valid" over "Type it with the country code,
+  e.g. +39 3331234567", "Too many attempts" over "Telegram asks to wait 5
+  minutes", "Could not reach Telegram" over "Check the network connection
+  and try again". It showed Telegram's own error line instead, cut to the
+  width of the status: a user who typed the number without its country
+  code saw only "...auth.sendCode: rpc-error 40". An expired code no longer
+  reads as a wrong one: the window goes back to the number, already typed,
+  so ENTER asks for a new code, and the text client asks for it by itself.
 
 ## [0.0.96] - 2026-10-11
 

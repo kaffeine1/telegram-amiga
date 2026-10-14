@@ -4397,6 +4397,7 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     int height;
     int lh;
     int mid;
+    int footer;
 
     width = backend->width(backend);
     height = backend->height(backend);
@@ -4431,7 +4432,15 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     if (!tg_gui_first_paint_logged) {
         tg_gui_log("login paint: footer");
     }
-    tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, mid + (3 * lh),
+    /* What to do about a failure, just under the field (whose box ends at
+       mid + lh + 12); the key hints then move one line down. */
+    footer = mid + (3 * lh);
+    if (state->status_hint[0] != '\0') {
+        tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width,
+                             mid + (2 * lh) + 12, state->status_hint);
+        footer = mid + (3 * lh) + 16; /* one line under the hint */
+    }
+    tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, footer,
                          "ENTER confirms   ESC quits");
     if (state->mode == TG_GUI_MODE_LOGIN_CODE) {
         /* When Telegram named another route, say how to ask for it: the
@@ -4444,7 +4453,7 @@ static void tg_gui_paint_login(const tg_gui_state *state,
 
             sprintf(hint, "No code? Press S to get it %.24s", route);
             tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width,
-                                 mid + (4 * lh) + 2, hint);
+                                 footer + lh + 2, hint);
         }
     }
     if (!tg_gui_first_paint_logged) {
@@ -7808,6 +7817,45 @@ int tg_gui_self_test(void)
             printf("gui self-test: the service line is not centred on its "
                    "pill (text at %d, pill %d+%d, centre %d)\n",
                    rec.watch_x[0], pill.x, pill.w, centre);
+            return 2;
+        }
+    }
+    /* After a failed login step the screen says what to do under the field
+       (whose box ends at mid + lh + 12), and the key hints step down a line
+       for it; without one they stay where they always were. */
+    {
+        tg_gui_state *draft = tg_gui_test_scratch_state();
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        static const char keys[] = "ENTER confirms   ESC quits";
+        static const char hint[] = "Type it with the country code";
+        int lh;
+        int mid = 200;
+        int plain_y;
+
+        draft->mode = TG_GUI_MODE_LOGIN_PHONE;
+        tg_gui_copy(draft->status, sizeof(draft->status),
+                    "That number is not valid");
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 2 * mid;
+        rec.watch_text[0] = keys;
+        b.context = &rec;
+        lh = b.line_height(&b);
+        tg_gui_paint(draft, &b);
+        plain_y = rec.watch_y[0];
+        tg_gui_copy(draft->status_hint, sizeof(draft->status_hint), hint);
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 2 * mid;
+        rec.watch_text[0] = keys;
+        rec.watch_text[1] = hint;
+        tg_gui_paint(draft, &b);
+        if (plain_y != mid + (3 * lh) || rec.watch_hits[1] != 1 ||
+            rec.watch_y[1] - (lh - 2) < mid + lh + 12 ||
+            rec.watch_y[0] < rec.watch_y[1] + lh) {
+            printf("gui self-test: login hint at %d, keys at %d (plain %d)\n",
+                   rec.watch_y[1], rec.watch_y[0], plain_y);
             return 2;
         }
     }

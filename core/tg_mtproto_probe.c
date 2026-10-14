@@ -106,6 +106,10 @@ static char tg_mtproto_query_fail[64];
 /* Defined by the upload engine further down; the text client and the GUI
    session accessor both put a server refusal into words. */
 static const char *tg_mtproto_upload_failure_text(const char *raw);
+static void tg_mtproto_login_failure_text(const char *raw, char *line,
+                                          unsigned long line_size,
+                                          char *hint,
+                                          unsigned long hint_size);
 #if TG_MTPROTO_DISPLAY_LATIN1
 static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
                                      unsigned long dst_size);
@@ -4599,6 +4603,9 @@ int tg_mtproto_auth_resend_code(const char *host,
                                        &resend_error_code, resend_error,
                                        sizeof(resend_error)) ==
             TG_MTPROTO_TL_OK) {
+            /* the refusals answered here never reach print_rpc_error: keep
+               their name for the window all the same */
+            sprintf(tg_mtproto_query_fail, "%.63s", resend_error);
             if (strcmp(resend_error, "SEND_CODE_UNAVAILABLE") == 0) {
                 fputs("Resend failed: no other way to send it\n", stream);
                 return 2;
@@ -5366,6 +5373,19 @@ int tg_mtproto_auth_check_password_file(const char *host,
     return rc;
 }
 
+/* A login step failed: under the technical line the step printed, what
+   happened and what to do, in words. */
+static void tg_mtproto_print_login_failure(FILE *stream)
+{
+    char why[96];
+    char what[96];
+
+    tg_mtproto_login_failure_text(tg_mtproto_query_fail, why, sizeof(why),
+                                  what, sizeof(what));
+    fprintf(stream, "%s. %s.\n", why, what);
+    fflush(stream);
+}
+
 int tg_mtproto_auth_login_wizard_file(const char *host,
                                       const char *port,
                                       const char *dc_id_text,
@@ -5439,6 +5459,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             fprintf(stream, "Using phone number %s.\n", phone);
             fprintf(stream, "Sending login code request.\n");
             fflush(stream);
+            tg_mtproto_query_fail[0] = '\0';
             rc = tg_mtproto_auth_send_code_file(current_host, port,
                                                 current_dc_id_text, api_file,
                                                 phone, auth_file,
@@ -5473,11 +5494,12 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             if (rc == 0) {
                 break;
             }
+            /* What went wrong in words: it used to say "did not accept that
+               number" for a dead network or a flood wait as well. */
+            tg_mtproto_print_login_failure(stream);
             if (phone_attempt < 2) {
-                fprintf(stream,
-                        "Telegram did not accept that number. International "
-                        "format, digits only, country code first (Italy: "
-                        "39 then the mobile number). Empty input aborts.\n");
+                fprintf(stream, "Type the number again (empty input "
+                                "aborts).\n");
             }
         }
     }
@@ -5538,11 +5560,29 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
         }
         fprintf(stream, "Checking Telegram code.\n");
         fflush(stream);
+        tg_mtproto_query_fail[0] = '\0';
         rc = tg_mtproto_auth_sign_in_file(current_host, port, api_file,
                                           auth_file, phone, code_hash_file,
                                           code, current_dc_id_text, stream);
         tg_mtproto_secure_zero(code, sizeof(code));
-        if (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID) {
+        if (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID &&
+            strcmp(tg_mtproto_query_fail, "PHONE_CODE_EXPIRED") == 0) {
+            /* Retyping an expired code cannot work: ask for a new one with
+               the number already given, and go on waiting for that. */
+            fprintf(stream, "That code has expired. Asking Telegram for a "
+                            "new one.\n");
+            fflush(stream);
+            tg_mtproto_query_fail[0] = '\0';
+            if (tg_mtproto_auth_send_code_file(current_host, port,
+                                               current_dc_id_text, api_file,
+                                               phone, auth_file,
+                                               code_hash_file, stream) != 0) {
+                tg_mtproto_print_login_failure(stream);
+                tg_mtproto_secure_zero(phone, sizeof(phone));
+                return 2;
+            }
+            fprintf(stream, "\nTelegram login code received.\n");
+        } else if (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID) {
             fprintf(stream,
                     "That code was not accepted. Check the latest Telegram "
                     "message and try again.\n");
@@ -5570,6 +5610,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                 fprintf(stream, "%s: aborted\n", label);
                 return 2;
             }
+            tg_mtproto_query_fail[0] = '\0';
             rc = tg_mtproto_auth_check_password_text(current_host, port, api_id,
                                                      auth_file,
                                                      current_dc_id_text,
@@ -5584,11 +5625,13 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                     "(empty to abort).\n");
         }
         if (rc != 0) {
+            tg_mtproto_print_login_failure(stream);
             tg_mtproto_secure_zero(phone, sizeof(phone));
             return rc;
         }
     } else if (rc != 0) {
-        /* Any other sign-in failure was already reported by auth.signIn. */
+        /* auth.signIn printed the technical line; say it in words too. */
+        tg_mtproto_print_login_failure(stream);
         tg_mtproto_secure_zero(phone, sizeof(phone));
         return rc;
     }
@@ -15385,6 +15428,7 @@ static int tg_gui_hidden_projection_self_test(void);
 static int tg_mtproto_executable_sniff_self_test(void); /* defined by the download engine */
 static int tg_mtproto_photo_gate_self_test(void);       /* defined by the upload engine */
 static int tg_mtproto_sent_code_text_self_test(void);   /* defined with the login texts */
+static int tg_mtproto_login_failure_text_self_test(void); /* ...as is this */
 #endif
 
 static int tg_mtproto_download_window_self_test(void);
@@ -16059,6 +16103,9 @@ int tg_mtproto_probe_self_test(void)
     if (tg_mtproto_sent_code_text_self_test() != 0) {
         return 2;
     }
+    if (tg_mtproto_login_failure_text_self_test() != 0) {
+        return 2;
+    }
     if (tg_gui_hidden_projection_self_test() != 0) {
         return 2;
     }
@@ -16577,6 +16624,8 @@ static struct {
         char code_hash_file[64];    /* where send_code drops the phone_code_hash */
         char last_error[192];       /* real send_code/sign_in failure, for the GUI
                                        (no console: stdout is NIL: on a WB launch) */
+        char last_hint[96];         /* ...and what to do about it */
+        char phone_shown[66];       /* "+" and the digits, for the field */
     } login;
 } tg_gui_session_state;
 
@@ -19197,7 +19246,155 @@ static const char *tg_mtproto_upload_failure_text(const char *raw)
     return raw;
 }
 
+/* A login failure in words for someone who has never seen an RPC error: a
+   short line saying what happened and a hint saying what to do. raw is the
+   shared failure reason: an RPC name (PHONE_NUMBER_INVALID), a transport
+   reason ("no data for 30s"), or empty when the exchange never got that far.
+   An RPC name with no wording of its own stays in the hint, for a report. */
+static void tg_mtproto_login_failure_text(const char *raw, char *line,
+                                          unsigned long line_size,
+                                          char *hint,
+                                          unsigned long hint_size)
+{
+    static const struct {
+        const char *name;
+        const char *line;
+        const char *hint;
+    } known[] = {
+        {"PHONE_NUMBER_INVALID", "That number is not valid",
+         "Type it with the country code, e.g. +39 3331234567"},
+        {"PHONE_NUMBER_BANNED", "Telegram has banned this number",
+         "Only Telegram can lift the ban"},
+        {"PHONE_NUMBER_FLOOD", "Too many codes asked for this number",
+         "Telegram blocks new codes for a while: try tomorrow"},
+        {"PHONE_PASSWORD_FLOOD", "Too many password attempts",
+         "Wait a while, then try again"},
+        {"PHONE_CODE_INVALID", "Wrong code - try again",
+         "Type the latest code Telegram sent you"},
+        {"PHONE_CODE_EMPTY", "Type the code first",
+         "Telegram sent it to your other devices or by SMS"},
+        {"PHONE_CODE_EXPIRED", "That code has expired",
+         "Press ENTER on your number for a new code"},
+        {"PHONE_NUMBER_UNOCCUPIED", "No Telegram account for this number",
+         "Create one in the Telegram app on a phone first"},
+        {"PHONE_NUMBER_APP_SIGNUP_FORBIDDEN",
+         "No Telegram account for this number",
+         "Create one in the Telegram app on a phone first"},
+        {"PASSWORD_HASH_INVALID", "Wrong password - try again",
+         "It is your Telegram two-step verification password"},
+        {"AUTH_RESTART", "Telegram asks to start over",
+         "Type your number again"},
+        {"SMS_CODE_CREATE_FAILED", "Telegram could not send the code",
+         "Try again in a few minutes"},
+        {"SEND_CODE_UNAVAILABLE", "No other way to send this code",
+         "Look for it in the Telegram app on your phone"},
+        {"API_ID_INVALID", "Telegram refused this program's key",
+         "data/telegram-api.txt is damaged: install the package again"},
+        {"API_ID_PUBLISHED_FLOOD", "Telegram is limiting logins from this app",
+         "Try again later"},
+        {"UPDATE_APP_TO_LOGIN", "Telegram wants a newer app to log in",
+         "Look for a new release of Telegram Amiga"}
+    };
+    unsigned long i;
+    const char *l;
+    const char *h;
+    char wait[48];
+
+    if (line == 0 || line_size == 0UL || hint == 0 || hint_size == 0UL) {
+        return;
+    }
+    if (raw == 0) {
+        raw = "";
+    }
+    l = 0;
+    h = 0;
+    for (i = 0UL; i < sizeof(known) / sizeof(known[0]); ++i) {
+        if (strcmp(raw, known[i].name) == 0) {
+            l = known[i].line;
+            h = known[i].hint;
+            break;
+        }
+    }
+    if (l == 0 && strncmp(raw, "FLOOD_WAIT_", 11) == 0) {
+        unsigned long s = strtoul(raw + 11, 0, 10);
+
+        /* rounded up: "wait 1 minute" must not come back too early */
+        if (s < 120UL) {
+            sprintf(wait, "Telegram asks to wait %lu seconds", s);
+        } else if (s < 7200UL) {
+            sprintf(wait, "Telegram asks to wait %lu minutes",
+                    (s + 59UL) / 60UL);
+        } else {
+            sprintf(wait, "Telegram asks to wait %lu hours",
+                    ((s + 3599UL) / 3600UL) % 1000UL);
+        }
+        l = "Too many attempts";
+        h = wait;
+    }
+    if (l == 0) {
+        int rpc_name = raw[0] >= 'A' && raw[0] <= 'Z';
+
+        for (i = 0UL; raw[i] != '\0' && rpc_name; ++i) {
+            if (!((raw[i] >= 'A' && raw[i] <= 'Z') ||
+                  (raw[i] >= '0' && raw[i] <= '9') || raw[i] == '_')) {
+                rpc_name = 0;
+            }
+        }
+        if (rpc_name) {
+            l = "Telegram refused the login";
+            sprintf(wait, "Try again later (%.24s)", raw);
+            h = wait;
+        } else {
+            /* a transport reason, or nothing at all: the exchange broke */
+            l = "Could not reach Telegram";
+            h = "Check the network connection and try again";
+        }
+    }
+    strncpy(line, l, (size_t)(line_size - 1UL));
+    line[line_size - 1UL] = '\0';
+    strncpy(hint, h, (size_t)(hint_size - 1UL));
+    hint[hint_size - 1UL] = '\0';
+}
+
 #if !defined(TG_NO_SELFTEST)
+/* The login says what happened in words: a number without its country code,
+   a flood wait in minutes rounded up, a refusal it has no words for with its
+   name kept for a report, a dead link; every line fits the 47 characters of
+   the login screen's status. */
+static int tg_mtproto_login_failure_text_self_test(void)
+{
+    static const struct {
+        const char *raw;
+        const char *line;
+        const char *hint_has;
+    } c[] = {
+        {"PHONE_NUMBER_INVALID", "That number is not valid", "+39"},
+        {"FLOOD_WAIT_61", "Too many attempts", "wait 61 seconds"},
+        {"FLOOD_WAIT_300", "Too many attempts", "wait 5 minutes"},
+        {"FLOOD_WAIT_301", "Too many attempts", "wait 6 minutes"},
+        {"FLOOD_WAIT_86400", "Too many attempts", "wait 24 hours"},
+        {"PHONE_CODE_EXPIRED", "That code has expired", "new code"},
+        {"SOMETHING_NEW_42", "Telegram refused the login",
+         "SOMETHING_NEW_42"},
+        {"no data for 30s", "Could not reach Telegram", "network"},
+        {"", "Could not reach Telegram", "network"}
+    };
+    char line[48];
+    char hint[96];
+    unsigned long i;
+
+    for (i = 0UL; i < sizeof(c) / sizeof(c[0]); ++i) {
+        tg_mtproto_login_failure_text(c[i].raw, line, sizeof(line), hint,
+                                      sizeof(hint));
+        if (strcmp(line, c[i].line) != 0 || strstr(hint, c[i].hint_has) == 0) {
+            printf("mtproto self-test: login failure \"%s\" reads \"%s\" / "
+                   "\"%s\"\n", c[i].raw, line, hint);
+            return 2;
+        }
+    }
+    return 0;
+}
+
 /* Host-runnable: the gate says yes to a whole JPEG and a whole PNG, no to a
    truncated one of each, no to a PNG Telegram would refuse for its size, and
    no to plain text, each with the sentence a status line will show. */
@@ -22649,6 +22846,33 @@ static void tg_gui_login_copy(char *dest, unsigned long size, const char *src)
     dest[i] = '\0';
 }
 
+/* A fresh step: no reason left over from the one before, in the window or in
+   the shared failure buffer the reason is read from. */
+static void tg_gui_login_step_begin(void)
+{
+    tg_gui_session_state.login.last_error[0] = '\0';
+    tg_gui_session_state.login.last_hint[0] = '\0';
+    tg_mtproto_query_fail[0] = '\0';
+}
+
+/* A step failed: the console line goes to the debug log, where a report can
+   use it, and the window gets the reason in words. */
+static void tg_gui_login_step_failed(FILE *quiet, FILE *stream)
+{
+    char raw[192];
+    char line[224];
+
+    tg_mtproto_capture_quiet_error(quiet, stream, raw, sizeof(raw));
+    sprintf(line, "login: failed [%.40s] %.150s", tg_mtproto_query_fail,
+            raw);
+    tg_gui_log(line);
+    tg_mtproto_login_failure_text(
+        tg_mtproto_query_fail, tg_gui_session_state.login.last_error,
+        sizeof(tg_gui_session_state.login.last_error),
+        tg_gui_session_state.login.last_hint,
+        sizeof(tg_gui_session_state.login.last_hint));
+}
+
 void tg_gui_session_login_begin(const char *api_file, const char *auth_file,
                                 const char *peer_cache_file)
 {
@@ -22691,13 +22915,17 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
     if (!tg_gui_session_state.login.active || phone == 0 || stream == 0) {
         return TG_GUI_LOGIN_ERROR;
     }
-    tg_gui_session_state.login.last_error[0] = '\0';
+    tg_gui_login_step_begin();
     if (tg_mtproto_load_api_credentials(tg_gui_session_state.login.api_file,
                                         api_id, sizeof(api_id), api_hash,
                                         sizeof(api_hash), stream, label) != 0) {
-        strncpy(tg_gui_session_state.login.last_error,
-                "Cannot read telegram-api.txt",
-                sizeof(tg_gui_session_state.login.last_error) - 1UL);
+        tg_gui_login_copy(tg_gui_session_state.login.last_error,
+                          sizeof(tg_gui_session_state.login.last_error),
+                          "This program's key file is missing");
+        tg_gui_login_copy(tg_gui_session_state.login.last_hint,
+                          sizeof(tg_gui_session_state.login.last_hint),
+                          "data/telegram-api.txt is unreadable: install "
+                          "the package again");
         return TG_GUI_LOGIN_ERROR;
     }
     tg_gui_login_copy(tg_gui_session_state.login.phone,
@@ -22706,9 +22934,12 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
     tg_gui_login_copy(tg_gui_session_state.login.api_id,
                       sizeof(tg_gui_session_state.login.api_id), api_id);
     if (tg_gui_session_state.login.phone[0] == '\0') {
-        strncpy(tg_gui_session_state.login.last_error,
-                "Empty phone number (enter digits with country code)",
-                sizeof(tg_gui_session_state.login.last_error) - 1UL);
+        tg_gui_login_copy(tg_gui_session_state.login.last_error,
+                          sizeof(tg_gui_session_state.login.last_error),
+                          "Type your phone number");
+        tg_gui_login_copy(tg_gui_session_state.login.last_hint,
+                          sizeof(tg_gui_session_state.login.last_hint),
+                          "With the country code, e.g. +39 3331234567");
         tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
         return TG_GUI_LOGIN_BAD_PHONE;
     }
@@ -22748,9 +22979,7 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
     tg_gui_log("login: send_code done");
     tg_gui_log_sent_code_route();
     if (rc != 0) {
-        tg_mtproto_capture_quiet_error(
-            quiet, stream, tg_gui_session_state.login.last_error,
-            sizeof(tg_gui_session_state.login.last_error));
+        tg_gui_login_step_failed(quiet, stream);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_net_set_connect_timeout_seconds(prev_timeout);
@@ -22769,7 +22998,7 @@ int tg_gui_session_login_resend_code(FILE *stream)
         tg_gui_session_state.login.api_id[0] == '\0') {
         return TG_GUI_LOGIN_ERROR;
     }
-    tg_gui_session_state.login.last_error[0] = '\0';
+    tg_gui_login_step_begin();
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(45UL);
     /* Same quiet stream as send_code: no console output during network I/O
@@ -22786,12 +23015,13 @@ int tg_gui_session_login_resend_code(FILE *stream)
     tg_gui_log(rc == 0 ? "login: resend_code done" : "login: resend_code FAIL");
     tg_gui_log_sent_code_route();
     if (rc != 0) {
-        tg_mtproto_capture_quiet_error(
-            quiet, stream, tg_gui_session_state.login.last_error,
-            sizeof(tg_gui_session_state.login.last_error));
+        tg_gui_login_step_failed(quiet, stream);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_net_set_connect_timeout_seconds(prev_timeout);
+    if (rc != 0 && strcmp(tg_mtproto_query_fail, "PHONE_CODE_EXPIRED") == 0) {
+        return TG_GUI_LOGIN_CODE_EXPIRED;
+    }
     return (rc == 0) ? TG_GUI_LOGIN_OK : TG_GUI_LOGIN_ERROR;
 }
 
@@ -22804,7 +23034,7 @@ int tg_gui_session_login_sign_in(const char *code, FILE *stream)
     if (!tg_gui_session_state.login.active || code == 0 || stream == 0) {
         return TG_GUI_LOGIN_ERROR;
     }
-    tg_gui_session_state.login.last_error[0] = '\0';
+    tg_gui_login_step_begin();
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(45UL);
     /* Quiet stream + pacing, as in send_code: no raw CON: output on MorphOS. */
@@ -22817,11 +23047,8 @@ int tg_gui_session_login_sign_in(const char *code, FILE *stream)
                                  tg_gui_session_state.login.code_hash_file, code,
                                  tg_gui_session_state.login.dc_id_text, quiet);
     tg_gui_log("login: sign_in done");
-    if (rc != 0 && rc != TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED &&
-        rc != TG_MTPROTO_SIGN_IN_CODE_INVALID) {
-        tg_mtproto_capture_quiet_error(
-            quiet, stream, tg_gui_session_state.login.last_error,
-            sizeof(tg_gui_session_state.login.last_error));
+    if (rc != 0 && rc != TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        tg_gui_login_step_failed(quiet, stream);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_net_set_connect_timeout_seconds(prev_timeout);
@@ -22832,7 +23059,11 @@ int tg_gui_session_login_sign_in(const char *code, FILE *stream)
         return TG_GUI_LOGIN_NEED_2FA;
     }
     if (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID) {
-        return TG_GUI_LOGIN_BAD_CODE;
+        /* An expired code is no typing error: retyping it cannot work, a new
+           code has to be asked for. */
+        return strcmp(tg_mtproto_query_fail, "PHONE_CODE_EXPIRED") == 0
+                   ? TG_GUI_LOGIN_CODE_EXPIRED
+                   : TG_GUI_LOGIN_BAD_CODE;
     }
     return TG_GUI_LOGIN_ERROR;
 }
@@ -22840,6 +23071,23 @@ int tg_gui_session_login_sign_in(const char *code, FILE *stream)
 const char *tg_gui_session_login_last_error(void)
 {
     return tg_gui_session_state.login.last_error;
+}
+
+const char *tg_gui_session_login_last_hint(void)
+{
+    return tg_gui_session_state.login.last_hint;
+}
+
+const char *tg_gui_session_login_phone(void)
+{
+    tg_gui_session_state.login.phone_shown[0] = '\0';
+    if (tg_gui_session_state.login.phone[0] != '\0') {
+        tg_gui_session_state.login.phone_shown[0] = '+';
+        tg_gui_login_copy(tg_gui_session_state.login.phone_shown + 1,
+                          sizeof(tg_gui_session_state.login.phone_shown) - 1UL,
+                          tg_gui_session_state.login.phone);
+    }
+    return tg_gui_session_state.login.phone_shown;
 }
 
 int tg_gui_session_login_check_password(const char *password, FILE *stream)
@@ -22851,6 +23099,7 @@ int tg_gui_session_login_check_password(const char *password, FILE *stream)
     if (!tg_gui_session_state.login.active || password == 0 || stream == 0) {
         return TG_GUI_LOGIN_ERROR;
     }
+    tg_gui_login_step_begin();
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(45UL);
     /* Quiet stream + pacing, as in send_code: no raw CON: output on MorphOS. */
@@ -22861,6 +23110,9 @@ int tg_gui_session_login_check_password(const char *password, FILE *stream)
         tg_gui_session_state.login.api_id, tg_gui_session_state.login.auth_file,
         tg_gui_session_state.login.dc_id_text, password, quiet);
     tg_gui_log("login: check_password done");
+    if (rc != 0) {
+        tg_gui_login_step_failed(quiet, stream);
+    }
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     if (rc == 0) {

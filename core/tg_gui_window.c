@@ -6098,6 +6098,30 @@ static void tg_gui_window_login_code_prompt(tg_gui_state *state)
     tg_gui_window_copy(state->status, sizeof(state->status), line);
 }
 
+/* A login step failed: what happened over the field, in words, and what to
+   do under it. fallback stands in when the step left no reason. */
+static void tg_gui_window_login_failed(tg_gui_state *state,
+                                       const char *fallback)
+{
+    const char *e = tg_gui_session_login_last_error();
+    const char *h = tg_gui_session_login_last_hint();
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       (e != 0 && e[0] != '\0') ? e : fallback);
+    tg_gui_window_copy(state->status_hint, sizeof(state->status_hint),
+                       h != 0 ? h : "");
+}
+
+/* The code expired, and retyping it cannot help: back to the number, already
+   in the field, so ENTER asks Telegram for a new code. */
+static void tg_gui_window_login_code_expired(tg_gui_state *state)
+{
+    state->mode = TG_GUI_MODE_LOGIN_PHONE;
+    tg_gui_window_login_failed(state, "That code has expired");
+    tg_gui_window_copy(state->input, sizeof(state->input),
+                       tg_gui_session_login_phone());
+}
+
 static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
                                     tg_gui_backend *backend, int *done,
                                     int *caret_ticks)
@@ -6127,9 +6151,14 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         unsigned long wait = tg_mtproto_sent_code_resend_wait();
         char line[TG_GUI_NAME_MAX];
 
+        state->status_hint[0] = '\0';
         if (route == 0) {
             tg_gui_window_copy(state->status, sizeof(state->status),
                                "Telegram offers no other way");
+            tg_gui_window_copy(state->status_hint,
+                               sizeof(state->status_hint),
+                               "Look for the code in the Telegram app on "
+                               "your phone");
         } else if (wait > 0UL) {
             sprintf(line, "Wait %lu s, then press S again",
                     wait > 9999UL ? 9999UL : wait);
@@ -6145,12 +6174,10 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->input[0] = '\0';
             if (rc == TG_GUI_LOGIN_OK) {
                 tg_gui_window_login_code_prompt(state); /* the new route */
+            } else if (rc == TG_GUI_LOGIN_CODE_EXPIRED) {
+                tg_gui_window_login_code_expired(state);
             } else {
-                const char *e = tg_gui_session_login_last_error();
-
-                tg_gui_window_copy(state->status, sizeof(state->status),
-                                   (e != 0 && e[0] != '\0')
-                                       ? e : "Resend failed - try again");
+                tg_gui_window_login_failed(state, "Resend failed - try again");
             }
         }
         state->cursor_on = 1;
@@ -6202,6 +6229,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
        trip blocks the window for several seconds on a slow link. */
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Connecting to Telegram...");
+    state->status_hint[0] = '\0';
     state->cursor_on = 0;
     tg_gui_window_paint(state, backend);
 
@@ -6217,10 +6245,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
                concludes this client is broken (field question). */
             tg_gui_window_login_code_prompt(state);
         } else {
-            const char *e = tg_gui_session_login_last_error();
-            tg_gui_window_copy(state->status, sizeof(state->status),
-                               (e != 0 && e[0] != '\0')
-                                   ? e : "Invalid number - try again");
+            tg_gui_window_login_failed(state, "That number was not accepted");
         }
     } else if (state->mode == TG_GUI_MODE_LOGIN_CODE) {
         int rc;
@@ -6234,15 +6259,13 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->input_masked = 1;
             tg_gui_window_copy(state->status, sizeof(state->status),
                                "2FA password (Enter if you have none)");
+        } else if (rc == TG_GUI_LOGIN_CODE_EXPIRED) {
+            tg_gui_window_login_code_expired(state);
         } else if (rc == TG_GUI_LOGIN_BAD_CODE) {
-            tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Wrong code - try again");
+            tg_gui_window_login_failed(state, "Wrong code - try again");
             state->mode = TG_GUI_MODE_LOGIN_CODE;
         } else {
-            const char *e = tg_gui_session_login_last_error();
-            tg_gui_window_copy(state->status, sizeof(state->status),
-                               (e != 0 && e[0] != '\0')
-                                   ? e : "Error - try the code again");
+            tg_gui_window_login_failed(state, "Error - try the code again");
         }
     } else { /* TG_GUI_MODE_LOGIN_2FA */
         int rc;
@@ -6253,11 +6276,10 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->input_masked = 0;
             tg_gui_window_login_finish(state);
         } else if (rc == TG_GUI_LOGIN_BAD_PASSWORD) {
-            tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Wrong password - try again");
+            tg_gui_window_login_failed(state, "Wrong password - try again");
         } else {
-            tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Error - try the password again");
+            tg_gui_window_login_failed(state,
+                                       "Error - try the password again");
         }
     }
     state->cursor_on = 1;
