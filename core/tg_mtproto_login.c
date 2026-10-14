@@ -90,6 +90,7 @@
 #define TG_NOTIFICATION_SOUND_LOCAL_CONSTRUCTOR 0x830b9ae4UL
 #define TG_NOTIFICATION_SOUND_RINGTONE_CONSTRUCTOR 0xff6c8049UL
 #define TG_DRAFT_MESSAGE_EMPTY_CONSTRUCTOR 0x1b0c841aUL
+#define TG_DRAFT_MESSAGE_CONSTRUCTOR 0x96eaa5ebUL
 #define TG_MSGS_ACK_CONSTRUCTOR 0x62d6b459UL
 #define TG_UPDATES_GET_STATE_CONSTRUCTOR 0xedd4882aUL
 #define TG_UPDATES_STATE_CONSTRUCTOR 0xa56c2a3eUL
@@ -3120,28 +3121,44 @@ static tg_mtproto_tl_status tg_skip_draft_message(
     unsigned long constructor;
     unsigned long flags;
     unsigned long scratch;
+    unsigned long scratch_hi;
 
     if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-    if (constructor != TG_DRAFT_MESSAGE_EMPTY_CONSTRUCTOR) {
-        /* A real draftMessage#3fccf7ef carries reply_to/entities/media that are
-           expensive (and risky) to skip field-by-field. Signal the caller so it
-           can stop walking the dialog vector gracefully and fall back to the
-           whole-body peer scan instead of corrupting the read offset. */
-        return TG_MTPROTO_TL_INVALID_DATA;
+    if (constructor == TG_DRAFT_MESSAGE_EMPTY_CONSTRUCTOR) {
+        /* draftMessageEmpty#1b0c841a flags:# date:flags.0?int. */
+        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if ((flags & 1UL) != 0UL &&
+            tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        return TG_MTPROTO_TL_OK;
     }
-    /* draftMessageEmpty#1b0c841a flags:# date:flags.0?int. Telegram now sends
-       the "empty" draft with a flags word and an optional clear date, so the
-       old zero-field skip desynced every dialog that had ever held a draft. */
-    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_INVALID_DATA;
+    if (constructor == TG_DRAFT_MESSAGE_CONSTRUCTOR) {
+        /* draftMessage#96eaa5eb flags:# no_webpage:flags.1?true
+           invert_media:flags.6?true reply_to:flags.4?InputReplyTo
+           message:string entities:flags.3?Vector<MessageEntity>
+           media:flags.5?InputMedia date:int effect:flags.7?long
+           suggested_post:flags.8?SuggestedPost = DraftMessage;
+           Exact skip when bits 3, 4, 5, 8 (entities, reply_to, media,
+           suggested_post) are absent; otherwise let tg_dialog_resync recover. */
+        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+            (flags & ~(2UL | 64UL | 128UL)) != 0UL ||
+            tg_skip_string(reader) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if ((flags & 128UL) != 0UL &&
+            tg_mtproto_tl_read_u64(reader, &scratch_hi, &scratch) !=
+                TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        return TG_MTPROTO_TL_OK;
     }
-    if ((flags & 1UL) != 0UL &&
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_INVALID_DATA;
-    }
-    return TG_MTPROTO_TL_OK;
+    return TG_MTPROTO_TL_INVALID_DATA;
 }
 
 static tg_mtproto_tl_status tg_read_peer_ref(tg_mtproto_tl_reader *reader,
@@ -3267,6 +3284,9 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
         tg_skip_peer_notify_settings(reader) != TG_MTPROTO_TL_OK) {
+        if (peer != 0) {
+            peer->peer_constructor = 0UL;
+        }
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 1UL) != 0UL &&
@@ -3286,6 +3306,41 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     return TG_MTPROTO_TL_OK;
+}
+
+/* Resyncs the dialog vector reader to the next valid dialog#d58a08c6 or
+   dialogFolder#71bd134c after an unparseable draft tail (e.g. a draft with
+   attached media). Trial-parses each candidate so an accidental 4-byte match
+   inside a draft payload is never mistaken for a real Dialog. */
+static int tg_dialog_resync(tg_mtproto_tl_reader *reader,
+                            unsigned long start_offset)
+{
+    unsigned long pos;
+    unsigned long constructor;
+
+    if (reader == 0 || start_offset >= reader->length) {
+        return 0;
+    }
+    pos = (start_offset + 3UL) & ~3UL;
+    while (pos + 4UL <= reader->length) {
+        constructor = tg_read_u32_le(reader->buffer + pos);
+        if (constructor == TG_DIALOG_CONSTRUCTOR ||
+            constructor == TG_DIALOG_FOLDER_CONSTRUCTOR) {
+            tg_mtproto_tl_reader trial;
+            tg_mtproto_dialog_peer probe;
+
+            memset(&probe, 0, sizeof(probe));
+            trial = *reader;
+            trial.offset = pos;
+            if (tg_read_dialog_peer(&trial, &probe) == TG_MTPROTO_TL_OK ||
+                probe.peer_constructor != 0UL) {
+                reader->offset = pos;
+                return 1;
+            }
+        }
+        pos += 4UL;
+    }
+    return 0;
 }
 
 const char *tg_mtproto_peer_constructor_name(unsigned long constructor)
@@ -3357,6 +3412,7 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_list(
     tg_mtproto_tl_reader reader;
     unsigned long i;
     unsigned long count;
+    unsigned long dialog_start;
     tg_mtproto_dialog_peer peer;
 
     if (body == 0 || out == 0) {
@@ -3386,18 +3442,25 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_list(
         out->total_dialog_count = count;
     }
     for (i = 0UL; i < count; ++i) {
+        int ok;
+
         memset(&peer, 0, sizeof(peer));
-        if (tg_read_dialog_peer(&reader, &peer) != TG_MTPROTO_TL_OK) {
-            break;  /* unparseable dialog: keep what we parsed so far */
+        dialog_start = reader.offset;
+        ok = (tg_read_dialog_peer(&reader, &peer) == TG_MTPROTO_TL_OK);
+        if (peer.peer_constructor != 0UL) {
+            if (out->count < TG_MTPROTO_DIALOG_PEER_MAX) {
+                out->peers[out->count] = peer;
+                ++out->count;
+            } else {
+                out->truncated = 1;
+            }
         }
-        if (peer.peer_constructor == 0UL) {
-            continue;  /* dialogFolder container, not a real peer */
-        }
-        if (out->count < TG_MTPROTO_DIALOG_PEER_MAX) {
-            out->peers[out->count] = peer;
-            ++out->count;
-        } else {
-            out->truncated = 1;
+        if (!ok) {
+            if (i + 1UL < count &&
+                tg_dialog_resync(&reader, dialog_start + 4UL)) {
+                continue;
+            }
+            break; /* unparseable dialog tail: keep what we parsed so far */
         }
     }
     return TG_MTPROTO_TL_OK;
@@ -4341,7 +4404,7 @@ static void tg_clamp_entities(tg_msg_entity *ents, int count,
 static void tg_apply_entity_markers(char *text, unsigned long size,
                                     const tg_msg_entity *ents, int count)
 {
-    char buf[TG_MTPROTO_MESSAGE_TEXT_MAX];
+    static char buf[TG_MTPROTO_MESSAGE_TEXT_MAX];
     char opened[TG_MSG_ENTITY_MAX];
     unsigned long bi = 0UL; /* output byte index */
     unsigned long ti = 0UL; /* input byte index */
@@ -5945,23 +6008,30 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_cache(
         out->total_dialog_count = count;
     }
     for (i = 0UL; i < count; ++i) {
+        unsigned long dialog_start;
+        int ok;
+
         memset(&peer, 0, sizeof(peer));
-        if (tg_read_dialog_peer(&reader, &peer) != TG_MTPROTO_TL_OK) {
-            /* An unparseable dialog (e.g. a real draftMessage with media) would
-               desync the rest of the vector. Stop walking dialogs but keep what
-               we have; the whole-body chat/user scans below still recover the
-               remaining peers. */
+        dialog_start = reader.offset;
+        ok = (tg_read_dialog_peer(&reader, &peer) == TG_MTPROTO_TL_OK);
+        if (peer.peer_constructor != 0UL) {
+            entry = tg_peer_cache_add(out, peer.peer_constructor, peer.id_hi,
+                                      peer.id_lo);
+            if (entry != 0) {
+                entry->top_message = peer.top_message;
+                entry->unread_count = peer.unread_count;
+                entry->from_dialog = 1;
+            }
+        }
+        if (!ok) {
+            /* An unparseable dialog tail (e.g. a draftMessage with media)
+               still leaves the leading peer fields valid above. Resync to the
+               next Dialog constructor if more dialogs follow. */
+            if (i + 1UL < count &&
+                tg_dialog_resync(&reader, dialog_start + 4UL)) {
+                continue;
+            }
             break;
-        }
-        if (peer.peer_constructor == 0UL) {
-            continue;  /* dialogFolder container, not a real peer */
-        }
-        entry = tg_peer_cache_add(out, peer.peer_constructor, peer.id_hi,
-                                  peer.id_lo);
-        if (entry != 0) {
-            entry->top_message = peer.top_message;
-            entry->unread_count = peer.unread_count;
-            entry->from_dialog = 1;
         }
     }
     out->user_count = tg_peer_cache_scan_users(body, body_length, out);
@@ -8691,6 +8761,340 @@ int tg_mtproto_login_self_test(void)
         peer_list.count != 2UL ||
         peer_list.peers[0].read_outbox_max_id != 10UL ||
         peer_list.peers[1].read_outbox_max_id != 20UL) {
+        return 2;
+    }
+    /* Case 1: Plain text draft (draftMessage#96eaa5eb) on dialog 0 of 3.
+       The draft message string embeds a 4-byte-aligned fake dialog#d58a08c6
+       record so only an exact skip of draftMessage#96eaa5eb (not a resync
+       scan) lands on the real dialog 1: all 3 dialogs kept with top_message
+       and unread_count. */
+    {
+        unsigned char fake_dlg_in_draft[55];
+        tg_mtproto_tl_writer dw;
+
+        fake_dlg_in_draft[0] = 'a';
+        fake_dlg_in_draft[1] = 'b';
+        fake_dlg_in_draft[2] = 'c';
+        tg_mtproto_tl_writer_init(&dw, fake_dlg_in_draft + 3,
+                                  sizeof(fake_dlg_in_draft) - 3UL);
+        if (tg_mtproto_tl_write_u32(&dw, TG_DIALOG_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, TG_PEER_USER_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&dw, 0UL, 0xdeadbeefUL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 99UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 99UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 99UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 99UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw,
+                                    TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&dw, 0UL) != TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+            /* Dialog 0: flags=2 (draft), draftMessage#96eaa5eb flags=128 (effect) */
+            tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x11111111UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 10UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 8UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 9UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer,
+                                    TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 128UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_bytes(&writer, fake_dlg_in_draft,
+                                      3UL + dw.length) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1700000000UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0x01020304UL, 0x05060708UL) !=
+                TG_MTPROTO_TL_OK ||
+            /* Dialog 1: clean */
+            tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_PEER_CHAT_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x22222222UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 20UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 18UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 19UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer,
+                                    TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            /* Dialog 2: clean */
+            tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_PEER_CHANNEL_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x33333333UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 30UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 28UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 29UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer,
+                                    TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_dialog_peer_list(TG_MESSAGES_DIALOGS_CONSTRUCTOR,
+                                              peer_rpc, writer.length,
+                                              &peer_list) != TG_MTPROTO_TL_OK ||
+            peer_list.count != 3UL ||
+            peer_list.peers[0].id_lo != 0x11111111UL ||
+            peer_list.peers[0].top_message != 10UL ||
+            peer_list.peers[0].unread_count != 1UL ||
+            peer_list.peers[1].id_lo != 0x22222222UL ||
+            peer_list.peers[1].top_message != 20UL ||
+            peer_list.peers[1].unread_count != 2UL ||
+            peer_list.peers[2].id_lo != 0x33333333UL ||
+            peer_list.peers[2].top_message != 30UL ||
+            peer_list.peers[2].unread_count != 3UL ||
+            tg_mtproto_parse_dialog_peer_cache(TG_MESSAGES_DIALOGS_CONSTRUCTOR,
+                                               peer_rpc, writer.length,
+                                               &peer_cache) !=
+                TG_MTPROTO_TL_OK ||
+            peer_cache.count != 3UL ||
+            peer_cache.entries[0].id_lo != 0x11111111UL ||
+            peer_cache.entries[0].top_message != 10UL ||
+            peer_cache.entries[0].unread_count != 1UL ||
+            peer_cache.entries[1].id_lo != 0x22222222UL ||
+            peer_cache.entries[1].top_message != 20UL ||
+            peer_cache.entries[1].unread_count != 2UL ||
+            peer_cache.entries[2].id_lo != 0x33333333UL ||
+            peer_cache.entries[2].top_message != 30UL ||
+            peer_cache.entries[2].unread_count != 3UL) {
+            return 2;
+        }
+    }
+    /* Case 2: Media draft (flags.5, bit 32) on dialog 1 of 3: resyncs to
+       dialog 2 and keeps all 3 dialogs with top_message and unread_count. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 0: clean */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x11111111UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 10UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 8UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 9UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 1: flags=2 (draft), draftMessage#96eaa5eb flags=32 (media) */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_CHAT_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x22222222UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 20UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 18UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 19UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 32UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0xdeadbeefUL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 2: clean dialog after the resync */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_CHANNEL_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x33333333UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 30UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 28UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 29UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_dialog_peer_list(TG_MESSAGES_DIALOGS_CONSTRUCTOR,
+                                          peer_rpc, writer.length,
+                                          &peer_list) != TG_MTPROTO_TL_OK ||
+        peer_list.count != 3UL ||
+        peer_list.peers[0].id_lo != 0x11111111UL ||
+        peer_list.peers[0].top_message != 10UL ||
+        peer_list.peers[0].unread_count != 1UL ||
+        peer_list.peers[1].id_lo != 0x22222222UL ||
+        peer_list.peers[1].top_message != 20UL ||
+        peer_list.peers[1].unread_count != 2UL ||
+        peer_list.peers[2].id_lo != 0x33333333UL ||
+        peer_list.peers[2].top_message != 30UL ||
+        peer_list.peers[2].unread_count != 3UL ||
+        tg_mtproto_parse_dialog_peer_cache(TG_MESSAGES_DIALOGS_CONSTRUCTOR,
+                                           peer_rpc, writer.length,
+                                           &peer_cache) != TG_MTPROTO_TL_OK ||
+        peer_cache.count != 3UL ||
+        peer_cache.entries[0].id_lo != 0x11111111UL ||
+        peer_cache.entries[0].top_message != 10UL ||
+        peer_cache.entries[0].unread_count != 1UL ||
+        peer_cache.entries[1].id_lo != 0x22222222UL ||
+        peer_cache.entries[1].top_message != 20UL ||
+        peer_cache.entries[1].unread_count != 2UL ||
+        peer_cache.entries[2].id_lo != 0x33333333UL ||
+        peer_cache.entries[2].top_message != 30UL ||
+        peer_cache.entries[2].unread_count != 3UL) {
+        return 2;
+    }
+    /* Case 3: Draft on the LAST dialog (with unparseable media tail), followed
+       by messages/chats/users containing an extra user not in dialogs: both
+       dialogs must be kept, and no extra non-dialog user/chat may be added
+       (from_dialog count == dialog count ==peer_cache.count). */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 0: clean */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x11111111UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 10UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 8UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 9UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 1 (LAST): draft with media (flags.5 = 32) */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x22222222UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 20UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 18UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 19UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 32UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0xdeadbeefUL) != TG_MTPROTO_TL_OK ||
+        /* messages: empty vector; chats: empty vector; users: 1 extra user
+           (0x99999999) that is NOT in dialogs */
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL | 2UL | 4UL | 8UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x99999999UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0x01020304UL, 0x05060708UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "Extra") != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "Sender") != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "extra") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_dialog_peer_cache(TG_MESSAGES_DIALOGS_CONSTRUCTOR,
+                                           peer_rpc, writer.length,
+                                           &peer_cache) != TG_MTPROTO_TL_OK ||
+        peer_cache.count != 2UL ||
+        !peer_cache.entries[0].from_dialog ||
+        !peer_cache.entries[1].from_dialog ||
+        peer_cache.entries[0].id_lo != 0x11111111UL ||
+        peer_cache.entries[1].id_lo != 0x22222222UL ||
+        peer_cache.entries[1].top_message != 20UL ||
+        peer_cache.entries[1].unread_count != 2UL) {
+        return 2;
+    }
+    /* Case 4: getPeerDialogs with a draft: read_outbox_max_id populated. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x44444444UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 50UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 40UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 42UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "peer draft") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1700000001UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_dialog_peer_list(TG_MESSAGES_PEER_DIALOGS_CONSTRUCTOR,
+                                          peer_rpc, writer.length,
+                                          &peer_list) != TG_MTPROTO_TL_OK ||
+        peer_list.count != 1UL ||
+        peer_list.peers[0].id_lo != 0x44444444UL ||
+        peer_list.peers[0].read_outbox_max_id != 42UL) {
         return 2;
     }
 
