@@ -43,6 +43,10 @@ static void tg_store_le32(unsigned char *data, unsigned long value)
 }
 #endif /* !TG_NO_SELFTEST */
 
+/* Shared intermediate buffer for encrypt and decrypt (never active at the
+   same time). */
+static unsigned char tg_mtproto_crypt_scratch[TG_MTPROTO_ENCRYPTED_PACKET_MAX];
+
 static void tg_mtproto_aes_key_iv(
     const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH],
     const unsigned char msg_key[16],
@@ -69,6 +73,10 @@ static void tg_mtproto_aes_key_iv(
     memcpy(aes_iv, sha256_b, 8U);
     memcpy(aes_iv + 8U, sha256_a + 8U, 16U);
     memcpy(aes_iv + 24U, sha256_b + 24U, 8U);
+
+    memset(input, 0, sizeof(input));
+    memset(sha256_a, 0, sizeof(sha256_a));
+    memset(sha256_b, 0, sizeof(sha256_b));
 }
 
 static void tg_mtproto_msg_key(
@@ -78,13 +86,17 @@ static void tg_mtproto_msg_key(
     unsigned int x,
     unsigned char msg_key[16])
 {
-    static unsigned char input[32U + TG_MTPROTO_ENCRYPTED_PACKET_MAX];
+    tg_mtproto_sha256_ctx ctx;
     unsigned char digest[TG_MTPROTO_SHA256_LENGTH];
 
-    memcpy(input, auth_key + 88U + x, 32U);
-    memcpy(input + 32U, plaintext, (size_t)plaintext_length);
-    tg_mtproto_sha256(input, 32UL + plaintext_length, digest);
+    tg_mtproto_sha256_init(&ctx);
+    tg_mtproto_sha256_update(&ctx, auth_key + 88U + x, 32UL);
+    if (plaintext_length > 0UL) {
+        tg_mtproto_sha256_update(&ctx, plaintext, plaintext_length);
+    }
+    tg_mtproto_sha256_final(&ctx, digest);
     memcpy(msg_key, digest + 8U, 16U);
+    memset(digest, 0, sizeof(digest));
 }
 
 void tg_mtproto_auth_key_id(
@@ -151,7 +163,7 @@ tg_mtproto_tl_status tg_mtproto_write_encrypted_message(
     const unsigned char *padding,
     unsigned long padding_length)
 {
-    static unsigned char plaintext[TG_MTPROTO_ENCRYPTED_PACKET_MAX];
+#define plaintext tg_mtproto_crypt_scratch
     unsigned char msg_key[16];
     unsigned char aes_key[32];
     unsigned char aes_iv[32];
@@ -207,6 +219,8 @@ tg_mtproto_tl_status tg_mtproto_write_encrypted_message(
     tg_mtproto_msg_key(auth_key, plaintext, plaintext_length, 0U, msg_key);
     tg_mtproto_aes_key_iv(auth_key, msg_key, 0U, aes_key, aes_iv);
     tg_mtproto_aes256_ige_encrypt(plaintext, plaintext_length, aes_key, aes_iv);
+    memset(aes_key, 0, sizeof(aes_key));
+    memset(aes_iv, 0, sizeof(aes_iv));
     tg_mtproto_auth_key_id(auth_key, &auth_key_id_hi, &auth_key_id_lo);
 
     status = tg_mtproto_tl_write_u64(writer, auth_key_id_hi, auth_key_id_lo);
@@ -217,6 +231,7 @@ tg_mtproto_tl_status tg_mtproto_write_encrypted_message(
         status = tg_mtproto_tl_write_raw(writer, plaintext, plaintext_length);
     }
     return status;
+#undef plaintext
 }
 
 #if defined(TG_DIAG_XFER)
@@ -253,7 +268,7 @@ static tg_mtproto_tl_status tg_mtproto_decrypt_encrypted_message_x(
     unsigned int x,
     tg_mtproto_encrypted_message *out)
 {
-    static unsigned char decrypted[TG_MTPROTO_ENCRYPTED_PACKET_MAX];
+#define decrypted tg_mtproto_crypt_scratch
     unsigned char expected_msg_key[16];
     unsigned char aes_key[32];
     unsigned char aes_iv[32];
@@ -284,6 +299,8 @@ static tg_mtproto_tl_status tg_mtproto_decrypt_encrypted_message_x(
     memcpy(decrypted, payload + 24U, (size_t)encrypted_length);
     tg_mtproto_aes_key_iv(auth_key, payload + 8U, x, aes_key, aes_iv);
     tg_mtproto_aes256_ige_decrypt(decrypted, encrypted_length, aes_key, aes_iv);
+    memset(aes_key, 0, sizeof(aes_key));
+    memset(aes_iv, 0, sizeof(aes_iv));
     tg_mtproto_msg_key(auth_key, decrypted, encrypted_length, x,
                        expected_msg_key);
     if (memcmp(expected_msg_key, payload + 8U, sizeof(expected_msg_key)) != 0) {
@@ -311,6 +328,7 @@ static tg_mtproto_tl_status tg_mtproto_decrypt_encrypted_message_x(
     }
     memcpy(out->body, decrypted + 32U, (size_t)out->body_length);
     return TG_MTPROTO_TL_OK;
+#undef decrypted
 }
 
 tg_mtproto_tl_status tg_mtproto_decrypt_encrypted_message(

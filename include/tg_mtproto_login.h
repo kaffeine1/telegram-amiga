@@ -433,9 +433,9 @@ typedef struct tg_mtproto_messages_summary {
                                        shrinks the per-message text buffer */
 #define TG_MTPROTO_MESSAGE_TEXT_MAX 8192U
 #endif
-/* How many messages one getHistory read parses into the static list (TWO live
-   instances). This caps the GUI open-backlog -- it was 8, far too few. Each entry
-   is ~4KB, so the list is sized per-platform to respect the 8MB OS3 budget while
+/* How many messages one getHistory read parses into the shared static list.
+   This caps the GUI open-backlog -- it was 8, far too few. Each entry is
+   ~4KB, so the list is sized per-platform to respect the 8MB OS3 budget while
    giving the PPC/AROS lanes a deeper backlog. */
 #ifndef TG_MTPROTO_MESSAGE_TEXT_LIST_MAX /* overridable: the host build can
                                             force the m68k profile so ASan

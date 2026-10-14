@@ -3864,25 +3864,28 @@ static int tg_mtproto_build_initialized_query(tg_mtproto_tl_writer *writer,
                                               const unsigned char *query,
                                               unsigned long query_length)
 {
-    static unsigned char initialized_query[TG_MTPROTO_QUERY_SEND_MAX];
-    static unsigned char layered_query[TG_MTPROTO_QUERY_SEND_MAX];
+    unsigned char init_hdr[128];
+    unsigned char layered_hdr[144];
     unsigned long initialized_length;
     unsigned long layered_length;
     tg_mtproto_tl_status status;
 
-    tg_mtproto_tl_writer_init(writer, initialized_query,
-                              sizeof(initialized_query));
+    if (query == 0 || query_length == 0UL) {
+        return 1;
+    }
+
+    tg_mtproto_tl_writer_init(writer, init_hdr, sizeof(init_hdr));
     status = tg_mtproto_build_init_connection(writer, api_id, "Amiga",
                                               "portable", "0.1", "en",
-                                              query, query_length);
+                                              0, 0UL);
     if (status != TG_MTPROTO_TL_OK) {
         return 1;
     }
     initialized_length = writer->length;
 
-    tg_mtproto_tl_writer_init(writer, layered_query, sizeof(layered_query));
+    tg_mtproto_tl_writer_init(writer, layered_hdr, sizeof(layered_hdr));
     status = tg_mtproto_build_invoke_with_layer(writer, 214UL,
-                                                initialized_query,
+                                                init_hdr,
                                                 initialized_length);
     if (status != TG_MTPROTO_TL_OK) {
         return 1;
@@ -3891,12 +3894,15 @@ static int tg_mtproto_build_initialized_query(tg_mtproto_tl_writer *writer,
 
     tg_mtproto_tl_writer_init(writer, wrapped_query, wrapped_capacity);
     if (tg_mtproto_session_updates_wanted) {
-        status = tg_mtproto_tl_write_raw(writer, layered_query,
+        status = tg_mtproto_tl_write_raw(writer, layered_hdr,
                                          layered_length);
     } else {
         status = tg_mtproto_build_invoke_without_updates(writer,
-                                                         layered_query,
+                                                         layered_hdr,
                                                          layered_length);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_raw(writer, query, query_length);
     }
     return status == TG_MTPROTO_TL_OK ? 0 : 1;
 }
@@ -5602,6 +5608,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                                               password, sizeof(password),
                                               stream, label) != 0) {
                 tg_mtproto_secure_zero(phone, sizeof(phone));
+                tg_mtproto_secure_zero(password, sizeof(password));
                 return 2;
             }
             if (password[0] == '\0') {
@@ -7480,14 +7487,13 @@ static int tg_mtproto_load_peer_cache_file(const char *path,
     return cache->count > 0UL || public_count > 0UL ? 0 : 2;
 }
 
+/* Shared static scratch for leaf peer-cache file operations (never on stack). */
+static tg_mtproto_peer_cache tg_peer_cache_scratch;
+
 static int tg_mtproto_peer_cache_available(const char *path)
 {
-    /* static, not on the stack: a peer_cache is ~32 KiB at the raised cap and this
-       runs at startup -- a stack copy here helped overflow the TUI's stack. */
-    static tg_mtproto_peer_cache cache;
-
-    return tg_mtproto_load_peer_cache_file(path, &cache) == 0 &&
-           tg_mtproto_peer_cache_public_count(&cache) > 0UL;
+    return tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) == 0 &&
+           tg_mtproto_peer_cache_public_count(&tg_peer_cache_scratch) > 0UL;
 }
 
 static int tg_mtproto_peer_cache_next_offset(
@@ -8586,10 +8592,13 @@ static void tg_mtproto_chat_list_render_console(FILE *stream,
     }
 }
 
+/* Shared static scratch for chat-list projections (never on stack). */
+static tg_chat_list_row tg_chat_list_scratch[TG_CHAT_LIST_MAX];
+
 static void tg_mtproto_print_peer_cache_public(const char *path, FILE *stream,
                                                const char *current_index_text)
 {
-    tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+    tg_chat_list_row *rows = tg_chat_list_scratch;
     unsigned long current_index;
     const char *digits;
     int count;
@@ -8634,7 +8643,7 @@ static const char tg_chat_list_golden[] =
 int tg_mtproto_chat_list_self_test(void)
 {
     static const char path[] = "tg-chatlist-selftest.tmp";
-    tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+    tg_chat_list_row *rows = tg_chat_list_scratch;
     FILE *file;
     FILE *cap;
     char buf[1024];
@@ -8887,7 +8896,6 @@ static unsigned long tg_mtproto_peer_cache_search_public(
     const char *query,
     FILE *stream)
 {
-    tg_mtproto_peer_cache cache;
     char trimmed_query[128];
     unsigned long i;
     unsigned long public_index;
@@ -8904,15 +8912,15 @@ static unsigned long tg_mtproto_peer_cache_search_public(
         fprintf(stream, "Type something to search for.\n");
         return 0UL;
     }
-    if (tg_mtproto_load_peer_cache_file(path, &cache) != 0 ||
-        tg_mtproto_peer_cache_public_count(&cache) == 0UL) {
+    if (tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0 ||
+        tg_mtproto_peer_cache_public_count(&tg_peer_cache_scratch) == 0UL) {
         fprintf(stream, "No cached chats yet. Add one with /add @username.\n");
         return 0UL;
     }
     public_index = 0UL;
     match_count = 0UL;
-    for (i = 0UL; i < cache.count; ++i) {
-        entry = &cache.entries[i];
+    for (i = 0UL; i < tg_peer_cache_scratch.count; ++i) {
+        entry = &tg_peer_cache_scratch.entries[i];
         if (entry->is_self) {
             continue;
         }
@@ -8942,7 +8950,6 @@ static int tg_mtproto_peer_cache_remove_public_index(
     unsigned long removed_label_size,
     FILE *stream)
 {
-    tg_mtproto_peer_cache cache;
     unsigned long wanted_index;
     unsigned long public_index;
     unsigned long i;
@@ -8957,14 +8964,14 @@ static int tg_mtproto_peer_cache_remove_public_index(
         fprintf(stream, "Use /remove <number>.\n");
         return 2;
     }
-    if (tg_mtproto_load_peer_cache_file(path, &cache) != 0) {
+    if (tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0) {
         fprintf(stream, "No cached chats to remove.\n");
         return 2;
     }
     public_index = 0UL;
-    remove_index = cache.count;
-    for (i = 0UL; i < cache.count; ++i) {
-        if (cache.entries[i].is_self) {
+    remove_index = tg_peer_cache_scratch.count;
+    for (i = 0UL; i < tg_peer_cache_scratch.count; ++i) {
+        if (tg_peer_cache_scratch.entries[i].is_self) {
             continue;
         }
         ++public_index;
@@ -8973,18 +8980,20 @@ static int tg_mtproto_peer_cache_remove_public_index(
             break;
         }
     }
-    if (remove_index >= cache.count) {
+    if (remove_index >= tg_peer_cache_scratch.count) {
         fprintf(stream, "Chat number not found.\n");
         return 2;
     }
-    tg_mtproto_peer_cache_entry_label(&cache.entries[remove_index],
-                                      removed_label, removed_label_size);
-    for (i = remove_index; i + 1UL < cache.count; ++i) {
-        cache.entries[i] = cache.entries[i + 1UL];
+    tg_mtproto_peer_cache_entry_label(
+        &tg_peer_cache_scratch.entries[remove_index],
+        removed_label, removed_label_size);
+    for (i = remove_index; i + 1UL < tg_peer_cache_scratch.count; ++i) {
+        tg_peer_cache_scratch.entries[i] =
+            tg_peer_cache_scratch.entries[i + 1UL];
     }
-    --cache.count;
-    tg_mtproto_recount_peer_cache(&cache);
-    if (tg_mtproto_save_peer_cache_file(path, &cache, 0,
+    --tg_peer_cache_scratch.count;
+    tg_mtproto_recount_peer_cache(&tg_peer_cache_scratch);
+    if (tg_mtproto_save_peer_cache_file(path, &tg_peer_cache_scratch, 0,
                                         "chat cache") != 0) {
         fprintf(stream, "Could not update cached chats.\n");
         return 2;
@@ -9003,8 +9012,7 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     unsigned long dst_public,
     FILE *stream)
 {
-    tg_mtproto_peer_cache cache;
-    unsigned long pub[TG_MTPROTO_PEER_CACHE_MAX];
+    static unsigned long pub[TG_MTPROTO_PEER_CACHE_MAX];
     unsigned long n;
     unsigned long i;
     unsigned long src_arr;
@@ -9017,7 +9025,7 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     if (src_public == dst_public) {
         return 0; /* no-op */
     }
-    if (tg_mtproto_load_peer_cache_file(path, &cache) != 0) {
+    if (tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0) {
         if (stream != 0) {
             fprintf(stream, "No cached chats to reorder.\n");
         }
@@ -9026,8 +9034,8 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     /* Array indices of the non-self entries, in public order (self is at index 0
        after a save/load round-trip and is skipped on save, so it keeps its slot). */
     n = 0UL;
-    for (i = 0UL; i < cache.count; ++i) {
-        if (!cache.entries[i].is_self) {
+    for (i = 0UL; i < tg_peer_cache_scratch.count; ++i) {
+        if (!tg_peer_cache_scratch.entries[i].is_self) {
             if (n < TG_MTPROTO_PEER_CACHE_MAX) {
                 pub[n] = i;
             }
@@ -9040,19 +9048,22 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     }
     src_arr = pub[src_public - 1UL];
     dst_arr = pub[dst_public - 1UL];
-    moved = cache.entries[src_arr];
+    moved = tg_peer_cache_scratch.entries[src_arr];
     if (src_arr < dst_arr) {
         for (i = src_arr; i < dst_arr; ++i) {
-            cache.entries[i] = cache.entries[i + 1UL];
+            tg_peer_cache_scratch.entries[i] =
+                tg_peer_cache_scratch.entries[i + 1UL];
         }
     } else {
         for (i = src_arr; i > dst_arr; --i) {
-            cache.entries[i] = cache.entries[i - 1UL];
+            tg_peer_cache_scratch.entries[i] =
+                tg_peer_cache_scratch.entries[i - 1UL];
         }
     }
-    cache.entries[dst_arr] = moved;
-    tg_mtproto_recount_peer_cache(&cache);
-    if (tg_mtproto_save_peer_cache_file(path, &cache, 0, "chat cache") != 0) {
+    tg_peer_cache_scratch.entries[dst_arr] = moved;
+    tg_mtproto_recount_peer_cache(&tg_peer_cache_scratch);
+    if (tg_mtproto_save_peer_cache_file(path, &tg_peer_cache_scratch, 0,
+                                        "chat cache") != 0) {
         if (stream != 0) {
             fprintf(stream, "Could not save chat order.\n");
         }
@@ -9162,7 +9173,6 @@ static int tg_mtproto_peer_cache_find_username_public_index(
     char *label,
     unsigned long label_size)
 {
-    tg_mtproto_peer_cache cache;
     char username[128];
     unsigned long i;
     unsigned long public_index;
@@ -9179,24 +9189,25 @@ static int tg_mtproto_peer_cache_find_username_public_index(
     }
     tg_mtproto_normalize_username(username_text, username, sizeof(username));
     if (username[0] == '\0' ||
-        tg_mtproto_load_peer_cache_file(path, &cache) != 0) {
+        tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0) {
         return 2;
     }
     public_index = 0UL;
-    for (i = 0UL; i < cache.count; ++i) {
-        if (cache.entries[i].is_self) {
+    for (i = 0UL; i < tg_peer_cache_scratch.count; ++i) {
+        if (tg_peer_cache_scratch.entries[i].is_self) {
             continue;
         }
         ++public_index;
-        if (cache.entries[i].username[0] == '\0' ||
-            strlen(cache.entries[i].username) != strlen(username) ||
-            !tg_mtproto_ascii_contains_ci(cache.entries[i].username,
-                                          username)) {
+        if (tg_peer_cache_scratch.entries[i].username[0] == '\0' ||
+            strlen(tg_peer_cache_scratch.entries[i].username) !=
+                strlen(username) ||
+            !tg_mtproto_ascii_contains_ci(
+                tg_peer_cache_scratch.entries[i].username, username)) {
             continue;
         }
         sprintf(index_text, "%lu", public_index);
-        tg_mtproto_peer_cache_entry_label(&cache.entries[i], label,
-                                          label_size);
+        tg_mtproto_peer_cache_entry_label(&tg_peer_cache_scratch.entries[i],
+                                          label, label_size);
         return 0;
     }
     return 2;
@@ -12321,6 +12332,11 @@ static void tg_gui_photo_queue_reset(void)
     tg_gui_photo_cache_paused = 0;
 }
 
+/* Shared between getHistory(peer) and getHistory(download) -- never active
+   at the same time; guarded by tg_shared_message_texts_busy. */
+static tg_mtproto_message_text_list tg_shared_message_texts;
+static int tg_shared_message_texts_busy = 0;
+
 static int tg_mtproto_auth_print_history_text_peer_on_context(
     const char *host,
     const char *port,
@@ -12355,7 +12371,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     unsigned long printed;
     unsigned long k;
     FILE *quiet;
-    static tg_mtproto_message_text_list texts;
+#define texts tg_shared_message_texts
     static tg_mtproto_peer_cache sender_cache;
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
@@ -12428,10 +12444,16 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
         tg_mtproto_close_quiet_stream(quiet, stream);
         return 2;
     }
+    if (tg_shared_message_texts_busy) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_shared_message_texts_busy = 1;
     if (tg_mtproto_parse_message_text_list(result.result_constructor,
                                            result.result_body,
                                            result.result_body_length,
                                            &texts) != TG_MTPROTO_TL_OK) {
+        tg_shared_message_texts_busy = 0;
         tg_mtproto_close_quiet_stream(quiet, stream);
         return 2;
     }
@@ -12468,6 +12490,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
         *last_seen_message_id : 0UL;
     printed = 0UL;
     if (texts.count == 0UL) {
+        tg_shared_message_texts_busy = 0;
         if (print_empty_status) {
             fprintf(stream, "history refreshed\n");
         }
@@ -12661,7 +12684,9 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     if (printed == 0UL && print_empty_status) {
         fprintf(stream, "history refreshed\n");
     }
+    tg_shared_message_texts_busy = 0;
     return 0;
+#undef texts
 }
 
 static void tg_mtproto_chat_print_input_prompt(FILE *stream,
@@ -16982,7 +17007,7 @@ const char *tg_gui_session_open_error(void)
 int tg_gui_session_project_cached(const char *peer_cache_file,
                                   tg_gui_state *state)
 {
-    tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+    tg_chat_list_row *rows = tg_chat_list_scratch;
     int count;
     int missing;
 
@@ -17166,7 +17191,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
     /* Project the current cache into the sidebar (the caller may have just
        refreshed it from the network). */
     {
-        tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+        tg_chat_list_row *rows = tg_chat_list_scratch;
         int count;
         int missing;
 
@@ -17437,7 +17462,7 @@ int tg_gui_session_load_older(FILE *stream, int allow_drop_newest)
    result was added). Mirrors the projection in tg_gui_session_open. */
 static void tg_gui_session_reload_chats(void)
 {
-    tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+    tg_chat_list_row *rows = tg_chat_list_scratch;
     int count;
     int missing;
 
@@ -17492,7 +17517,7 @@ void tg_gui_session_refresh_chats(void)
    and marked here; the normal sidebar projection above omits them. */
 void tg_gui_session_show_filterable_chats(void)
 {
-    tg_chat_list_row rows[TG_CHAT_LIST_MAX];
+    tg_chat_list_row *rows = tg_chat_list_scratch;
     int count;
     int missing;
 
@@ -17678,7 +17703,6 @@ int tg_gui_session_reorder_chat(unsigned long src_index, unsigned long dst_index
    call after an open or after a notification batch. */
 void tg_gui_session_persist_unread(void)
 {
-    tg_mtproto_peer_cache cache;
     tg_gui_state *gst;
     unsigned long i;
     int changed;
@@ -17691,25 +17715,25 @@ void tg_gui_session_persist_unread(void)
         return;
     }
     if (tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
-                                        &cache) != 0) {
+                                        &tg_gui_probe_cache) != 0) {
         return;
     }
     changed = 0;
-    for (i = 0UL; i < cache.count; ++i) {
+    for (i = 0UL; i < tg_gui_probe_cache.count; ++i) {
         int k;
 
-        if (cache.entries[i].is_self) {
+        if (tg_gui_probe_cache.entries[i].is_self) {
             continue;
         }
         for (k = 0; k < gst->chat_count; ++k) {
-            if (gst->chats[k].peer_id_hi == cache.entries[i].id_hi &&
-                gst->chats[k].peer_id_lo == cache.entries[i].id_lo) {
+            if (gst->chats[k].peer_id_hi == tg_gui_probe_cache.entries[i].id_hi &&
+                gst->chats[k].peer_id_lo == tg_gui_probe_cache.entries[i].id_lo) {
                 unsigned long u = (gst->chats[k].unread > 0)
                                       ? (unsigned long)gst->chats[k].unread
                                       : 0UL;
 
-                if (cache.entries[i].unread_count != u) {
-                    cache.entries[i].unread_count = u;
+                if (tg_gui_probe_cache.entries[i].unread_count != u) {
+                    tg_gui_probe_cache.entries[i].unread_count = u;
                     changed = 1;
                 }
                 break;
@@ -17718,7 +17742,8 @@ void tg_gui_session_persist_unread(void)
     }
     if (changed) {
         (void)tg_mtproto_save_peer_cache_file(
-            tg_gui_session_state.peer_cache_file, &cache, 0, "chat cache");
+            tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache, 0,
+            "chat cache");
     }
 }
 
@@ -18763,10 +18788,14 @@ static int tg_mtproto_file_find_document(const tg_mtproto_file_ctx *fc,
     int hah;
     tg_mtproto_tl_writer writer;
     tg_mtproto_rpc_result result;
-    static tg_mtproto_message_text_list texts;
+#define texts tg_shared_message_texts
     unsigned long i;
     static const char label[] = "mtproto getHistory(download)";
 
+    if (tg_shared_message_texts_busy) {
+        strcpy(tg_dl_diag, "history buffer busy");
+        return 1;
+    }
     if (tg_mtproto_load_peer_cache_peer(
             fc->peer_cache_file,
             fc->peer_index, &pc, &ph, &pl, &ahh,
@@ -18795,10 +18824,15 @@ static int tg_mtproto_file_find_document(const tg_mtproto_file_ctx *fc,
             query, writer.length, &result, quiet, label, 600U) != 0 ||
         result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
         tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
-        tg_mtproto_parse_message_text_list(result.result_constructor,
+        tg_shared_message_texts_busy) {
+        return 1;
+    }
+    tg_shared_message_texts_busy = 1;
+    if (tg_mtproto_parse_message_text_list(result.result_constructor,
                                            result.result_body,
                                            result.result_body_length,
                                            &texts) != TG_MTPROTO_TL_OK) {
+        tg_shared_message_texts_busy = 0;
         return 1;
     }
     for (i = 0UL; i < texts.count; ++i) {
@@ -18809,6 +18843,7 @@ static int tg_mtproto_file_find_document(const tg_mtproto_file_ctx *fc,
             if (msg_id == 0UL) {
                 continue; /* latest-mode: keep scanning the page */
             }
+            tg_shared_message_texts_busy = 0;
             strcpy(tg_dl_diag, "no document on message");
             return 1;
         }
@@ -18817,6 +18852,7 @@ static int tg_mtproto_file_find_document(const tg_mtproto_file_ctx *fc,
                     texts.messages[i].document.dc_id,
                     texts.messages[i].document.size_hi,
                     texts.messages[i].document.size_lo);
+            tg_shared_message_texts_busy = 0;
             return 1;
         }
         *out = texts.messages[i].document;
@@ -18829,11 +18865,14 @@ static int tg_mtproto_file_find_document(const tg_mtproto_file_ctx *fc,
         sprintf(tg_dl_diag, "dc=%lu size=%lu:%lu ref=%lu",
                 out->dc_id, out->size_hi, out->size_lo,
                 out->file_reference_len);
+        tg_shared_message_texts_busy = 0;
         return 0;
     }
+    tg_shared_message_texts_busy = 0;
     strcpy(tg_dl_diag, msg_id != 0UL ? "message not in history page"
                                      : "no recent file in this chat");
     return 1;
+#undef texts
 }
 
 /* F9 upload: stream from disk to the OPEN chat without buffering the whole
@@ -22540,11 +22579,8 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
 
 int tg_gui_session_receive_pending(FILE *stream)
 {
-    static unsigned char response[TG_MTPROTO_REPLY_RECV_MAX];
-    /* static like every other decrypt site in this file: the struct embeds a
-       ~72 KB body on PPC and this runs once a second inside the GUI event
-       loop -- a stack frame that size is a Guru on sub-1MB stacks. */
-    static tg_mtproto_encrypted_message decrypted;
+    /* Reuse the query receive/decrypt static buffers: receive_pending runs
+       only from the main GUI loop, never inside a query. */
     unsigned long response_length;
     unsigned long prev_timeout;
     tg_net_status status;
@@ -22584,22 +22620,27 @@ int tg_gui_session_receive_pending(FILE *stream)
     error_buffer[0] = '\0';
     response_length = 0UL;
     status = tg_mtproto_recv_abridged_packet(
-        &tg_gui_session_state.context.connection, response, sizeof(response),
-        &response_length, error_buffer, sizeof(error_buffer));
+        &tg_gui_session_state.context.connection, tg_mtproto_q_response,
+        sizeof(tg_mtproto_q_response), &response_length, error_buffer,
+        sizeof(error_buffer));
     tg_net_set_connect_timeout_seconds(prev_timeout);
     if (status != TG_NET_OK ||
         tg_mtproto_decrypt_encrypted_message(
-            response, response_length, tg_gui_session_state.context.auth_key,
-            &decrypted) != TG_MTPROTO_TL_OK) {
+            tg_mtproto_q_response, response_length,
+            tg_gui_session_state.context.auth_key,
+            &tg_mtproto_q_decrypted) != TG_MTPROTO_TL_OK) {
         tg_gui_log("receive_pending: frame failed; reconnect on full tick");
         tg_mtproto_close_auth_context(&tg_gui_session_state.context);
         tg_mtproto_close_quiet_stream(quiet, stream);
         return tg_gui_session_apply_pushes(stream, 0);
     }
-    tg_mtproto_sync_time_from_server(&tg_gui_session_state.context, &decrypted);
-    tg_mtproto_ack_encrypted_message(&tg_gui_session_state.context, &decrypted,
-                                     quiet, "gui receive");
-    tg_chat_notify_collect(decrypted.body, decrypted.body_length);
+    tg_mtproto_sync_time_from_server(&tg_gui_session_state.context,
+                                     &tg_mtproto_q_decrypted);
+    tg_mtproto_ack_encrypted_message(&tg_gui_session_state.context,
+                                     &tg_mtproto_q_decrypted, quiet,
+                                     "gui receive");
+    tg_chat_notify_collect(tg_mtproto_q_decrypted.body,
+                           tg_mtproto_q_decrypted.body_length);
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_gui_log("receive_pending: one frame");
     if (tg_gui_session_apply_pushes(stream, 0)) {
