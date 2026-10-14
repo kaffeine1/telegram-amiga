@@ -1735,9 +1735,18 @@ static int tg_mtproto_send_encrypted_query_limited(
                     unpacked_length >= 4UL &&
                     tg_mtproto_read_u32_le(unpacked) ==
                         TG_MTPROTO_RPC_RESULT_CONSTRUCTOR) {
-                    /* Our own result, compressed whole: unpacking it here
-                       would alias the shared scratch buffer, so fail softly
-                       and let the caller reopen and re-ask cleanly. */
+                    if (unpacked_length <= sizeof(decrypted.body)) {
+                        memcpy(decrypted.body, unpacked,
+                               (size_t)unpacked_length);
+                        decrypted.body_length = unpacked_length;
+                        if (tg_mtproto_find_rpc_result(decrypted.body,
+                                                       decrypted.body_length,
+                                                       request_msg_id.hi,
+                                                       request_msg_id.lo,
+                                                       rpc_result)) {
+                            return 0;
+                        }
+                    }
                     sprintf(tg_mtproto_query_fail, "gzipped rpc result");
                     return TG_MTPROTO_QUERY_SOFT_FAIL;
                 }
@@ -3201,6 +3210,26 @@ static int tg_mtproto_gzip_self_test(void)
         memcmp(tg_mtproto_gzip_unpacked, want_dynamic, (size_t)n) != 0) {
         puts("probe self-test: gzip dynamic Huffman block mismatch");
         return 2;
+    }
+    /* Optional header fields (FEXTRA=4 | FNAME=8 | FCOMMENT=16 | FHCRC=2): */
+    {
+        unsigned char gz_flags[55];
+        static const unsigned char hdr_extra[20] = {
+            0x1fU, 0x8bU, 0x08U, 0x1eU, 0x00U, 0x00U, 0x00U, 0x00U,
+            0x02U, 0xffU, 0x02U, 0x00U, 'x',   'y',   'a',   0x00U,
+            'b',   0x00U, 0x12U, 0x34U
+        };
+
+        memcpy(gz_flags, hdr_extra, 20U);
+        memcpy(gz_flags + 20U, gz_fixed + 10U, sizeof(gz_fixed) - 10U);
+        memset(tg_mtproto_gzip_unpacked, 0, sizeof(want_fixed));
+        if (tg_mtproto_gzip_unpack_puff(gz_flags, sizeof(gz_flags), &n) !=
+                0 ||
+            n != sizeof(want_fixed) - 1U ||
+            memcmp(tg_mtproto_gzip_unpacked, want_fixed, (size_t)n) != 0) {
+            puts("probe self-test: gzip optional header flags mismatch");
+            return 2;
+        }
     }
     return 0;
 }
