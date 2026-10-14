@@ -761,8 +761,9 @@ static void tg_gui_amiga_emoji_pens(void)
     memset(tg_gui_emoji_dither, 0, sizeof(tg_gui_emoji_dither));
     if (!tg_gui_emoji_pens_lean()) {
         for (k = 0; k < 255; ++k) {
-            tg_gui_emoji_pen[k + 1] =
-                (unsigned char)tg_gui_av_pen_for(tg_emoji_sheet_palette[k]);
+            LONG p = tg_gui_av_pen_for(tg_emoji_sheet_palette[k]);
+
+            tg_gui_emoji_pen[k + 1] = (unsigned char)(p < 0 ? 0 : p);
         }
     }
     tg_gui_emoji_pen_ready = 1;
@@ -5829,14 +5830,28 @@ static void tg_gui_window_paint_caret(const tg_gui_state *state,
             blit_y = content_h - input_h;
             blit_w = c->inner_w - blit_x - 8;
             blit_h = input_h;
-            if (blit_x < 0 || blit_y < 0 || blit_w <= 0 || blit_h <= 0 ||
-                blit_x + blit_w > c->inner_w ||
-                blit_y + blit_h > c->inner_h) {
-                blit_x = 0;
-                blit_y = 0;
-                blit_w = c->inner_w;
-                blit_h = c->inner_h;
-            }
+        } else if (state->mode == TG_GUI_MODE_CHAT && state->search_active &&
+                   !state->ctx_visible) {
+            blit_x = 0;
+            blit_y = 0;
+            blit_w = tg_gui_sidebar_w(c->inner_w);
+            blit_h = c->line_h + 10;
+        } else if (state->mode != TG_GUI_MODE_CHAT) {
+            tg_gui_rect box = tg_gui_login_input_rect(c->inner_w, c->inner_h,
+                                                      c->line_h);
+
+            blit_x = box.x;
+            blit_y = box.y;
+            blit_w = box.w;
+            blit_h = box.h;
+        }
+        if (blit_x < 0 || blit_y < 0 || blit_w <= 0 || blit_h <= 0 ||
+            blit_x + blit_w > c->inner_w ||
+            blit_y + blit_h > c->inner_h) {
+            blit_x = 0;
+            blit_y = 0;
+            blit_w = c->inner_w;
+            blit_h = c->inner_h;
         }
         if (layer != 0) {
             LockLayerRom(layer);
@@ -6138,7 +6153,9 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         n = (unsigned long)strlen(state->input);
         if (n > 0UL) {
             state->input[n - 1UL] = '\0';
-            tg_gui_window_paint(state, backend);
+            state->cursor_on = 1;
+            *caret_ticks = 0;
+            tg_gui_window_paint_caret(state, backend);
         }
         return;
     }
@@ -6193,7 +6210,9 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             if (n + 1UL < (unsigned long)sizeof(state->input)) {
                 state->input[n] = (char)code;
                 state->input[n + 1UL] = '\0';
-                tg_gui_window_paint(state, backend);
+                state->cursor_on = 1;
+                *caret_ticks = 0;
+                tg_gui_window_paint_caret(state, backend);
             }
         }
         return;
@@ -7094,37 +7113,68 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     ui.cap_y = 8 + lh + 6 + lh + 2;
     ui.btn_y = ui.cap_y + lh + 6 + 10;
     ui.ih = ui.btn_y + lh + 8 + 8;
-    i = 0;
-    tags[i].ti_Tag = WA_Title;
-    tags[i++].ti_Data = TG_GUI_TAG("Send photo");
-    tags[i].ti_Tag = WA_InnerWidth;
-    tags[i++].ti_Data = (ULONG)ui.iw;
-    tags[i].ti_Tag = WA_InnerHeight;
-    tags[i++].ti_Data = (ULONG)ui.ih;
-    tags[i].ti_Tag = WA_Left;
-    tags[i++].ti_Data = (ULONG)(parent->LeftEdge + 40);
-    tags[i].ti_Tag = WA_Top;
-    tags[i++].ti_Data = (ULONG)(parent->TopEdge + 40);
-    tags[i].ti_Tag = WA_DragBar;
-    tags[i++].ti_Data = TRUE;
-    tags[i].ti_Tag = WA_DepthGadget;
-    tags[i++].ti_Data = TRUE;
-    tags[i].ti_Tag = WA_CloseGadget;
-    tags[i++].ti_Data = TRUE;
-    tags[i].ti_Tag = WA_Activate;
-    tags[i++].ti_Data = TRUE;
-    tags[i].ti_Tag = WA_SmartRefresh;
-    tags[i++].ti_Data = TRUE;
-    tags[i].ti_Tag = WA_AutoAdjust;
-    tags[i++].ti_Data = TRUE;
-    tags[i].ti_Tag = WA_IDCMP;
-    tags[i++].ti_Data = IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY |
-                        IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW |
-                        IDCMP_INTUITICKS;
-    tags[i].ti_Tag = WA_CustomScreen;
-    tags[i++].ti_Data = TG_GUI_TAG(screen);
-    tags[i].ti_Tag = TAG_END;
-    tags[i++].ti_Data = 0;
+    {
+        int bor_l = (screen != 0) ? (int)screen->WBorLeft
+                                  : (int)parent->BorderLeft;
+        int bor_r = (screen != 0) ? (int)screen->WBorRight
+                                  : (int)parent->BorderRight;
+        int bor_t = (screen != 0)
+            ? (int)screen->WBorTop +
+              ((screen->Font != 0) ? (int)screen->Font->ta_YSize + 1 : 11)
+            : (int)parent->BorderTop;
+        int bor_b = (screen != 0) ? (int)screen->WBorBottom
+                                  : (int)parent->BorderBottom;
+        int est_w = ui.iw + bor_l + bor_r;
+        int est_h = ui.ih + bor_t + bor_b;
+        int init_l = (int)parent->LeftEdge + (((int)parent->Width - est_w) / 2);
+        int init_t = (int)parent->TopEdge + (((int)parent->Height - est_h) / 2);
+
+        if (screen != 0) {
+            if (init_l + est_w > (int)screen->Width) {
+                init_l = (int)screen->Width - est_w;
+            }
+            if (init_t + est_h > (int)screen->Height) {
+                init_t = (int)screen->Height - est_h;
+            }
+        }
+        if (init_l < 0) {
+            init_l = 0;
+        }
+        if (init_t < 0) {
+            init_t = 0;
+        }
+        i = 0;
+        tags[i].ti_Tag = WA_Title;
+        tags[i++].ti_Data = TG_GUI_TAG("Send photo");
+        tags[i].ti_Tag = WA_InnerWidth;
+        tags[i++].ti_Data = (ULONG)ui.iw;
+        tags[i].ti_Tag = WA_InnerHeight;
+        tags[i++].ti_Data = (ULONG)ui.ih;
+        tags[i].ti_Tag = WA_Left;
+        tags[i++].ti_Data = (ULONG)init_l;
+        tags[i].ti_Tag = WA_Top;
+        tags[i++].ti_Data = (ULONG)init_t;
+        tags[i].ti_Tag = WA_DragBar;
+        tags[i++].ti_Data = TRUE;
+        tags[i].ti_Tag = WA_DepthGadget;
+        tags[i++].ti_Data = TRUE;
+        tags[i].ti_Tag = WA_CloseGadget;
+        tags[i++].ti_Data = TRUE;
+        tags[i].ti_Tag = WA_Activate;
+        tags[i++].ti_Data = FALSE;
+        tags[i].ti_Tag = WA_SmartRefresh;
+        tags[i++].ti_Data = TRUE;
+        tags[i].ti_Tag = WA_AutoAdjust;
+        tags[i++].ti_Data = TRUE;
+        tags[i].ti_Tag = WA_IDCMP;
+        tags[i++].ti_Data = IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY |
+                            IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW |
+                            IDCMP_INTUITICKS;
+        tags[i].ti_Tag = WA_CustomScreen;
+        tags[i++].ti_Data = TG_GUI_TAG(screen);
+        tags[i].ti_Tag = TAG_END;
+        tags[i++].ti_Data = 0;
+    }
     ui.win = OpenWindowTagList(0, tags);
     if (ui.win == 0) {
         return 0;
@@ -7132,8 +7182,7 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
         SetFont(ui.win->RPort, main_ctx->rport->Font);
     }
-    /* Centre the dialog over the main window now that both sizes are real;
-       clamped to the screen so a corner-parked window cannot push it off. */
+    /* Fine-adjust only if the dialog's border metrics differed from screen's. */
     {
         struct Screen *scr = ui.win->WScreen;
         int nl = (int)parent->LeftEdge +
@@ -7155,10 +7204,19 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
         if (nt < 0) {
             nt = 0;
         }
-        MoveWindow(ui.win, (WORD)(nl - (int)ui.win->LeftEdge),
-                   (WORD)(nt - (int)ui.win->TopEdge));
+        if (nl != (int)ui.win->LeftEdge || nt != (int)ui.win->TopEdge) {
+            MoveWindow(ui.win, (WORD)(nl - (int)ui.win->LeftEdge),
+                       (WORD)(nt - (int)ui.win->TopEdge));
+        }
+    }
+    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+        LockLayerRom(ui.win->RPort->Layer);
     }
     tg_gui_sendphoto_paint(&ui);
+    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+        UnlockLayerRom(ui.win->RPort->Layer);
+    }
+    ActivateWindow(ui.win);
     while (!done) {
         struct IntuiMessage *msg;
 
@@ -7183,7 +7241,13 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
                 if (++ui.tick_count >= 5) {
                     ui.tick_count = 0;
                     ui.cursor_on = !ui.cursor_on;
+                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+                        LockLayerRom(ui.win->RPort->Layer);
+                    }
                     tg_gui_sendphoto_caption_row(&ui);
+                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+                        UnlockLayerRom(ui.win->RPort->Layer);
+                    }
                 }
             } else if (cls == IDCMP_VANILLAKEY) {
                 if (code == 13U) {
@@ -7197,14 +7261,26 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
                         --ui.caption_len;
                         ui.caption[ui.caption_len] = '\0';
                         ui.cursor_on = 1;
+                        if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+                            LockLayerRom(ui.win->RPort->Layer);
+                        }
                         tg_gui_sendphoto_caption_row(&ui);
+                        if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+                            UnlockLayerRom(ui.win->RPort->Layer);
+                        }
                     }
                 } else if (code >= 32U && code != 127U &&
                            ui.caption_len + 1UL < ui.caption_size) {
                     ui.caption[ui.caption_len++] = (char)code;
                     ui.caption[ui.caption_len] = '\0';
                     ui.cursor_on = 1;
+                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+                        LockLayerRom(ui.win->RPort->Layer);
+                    }
                     tg_gui_sendphoto_caption_row(&ui);
+                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
+                        UnlockLayerRom(ui.win->RPort->Layer);
+                    }
                 }
             } else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
                 int ix = (int)mx - (int)ui.win->BorderLeft;
@@ -7445,10 +7521,10 @@ static void tg_gui_window_pick_download_dir(tg_gui_state *state,
     }
 #endif
     req = (struct FileRequester *)AllocAslRequestTags(
-        ASL_FileRequest, ASLFR_Window, (unsigned long)win, ASLFR_TitleText,
-        (unsigned long)"Where should downloads go?", ASLFR_DrawersOnly, TRUE,
+        ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win), ASLFR_TitleText,
+        TG_GUI_TAG("Where should downloads go?"), ASLFR_DrawersOnly, TRUE,
         ASLFR_InitialDrawer,
-        (unsigned long)tg_gui_session_download_dir(), TAG_DONE);
+        TG_GUI_TAG(tg_gui_session_download_dir()), TAG_DONE);
     dir[0] = '\0';
     if (req != 0 && AslRequestTags(req, TAG_DONE)) {
         unsigned long n = 0UL;
@@ -7885,16 +7961,16 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
 #endif
     if (as_photo) {
         req = (struct FileRequester *)AllocAslRequestTags(
-            ASL_FileRequest, ASLFR_Window, (unsigned long)win,
-            ASLFR_TitleText, (unsigned long)"Send photo to this chat",
+            ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
+            ASLFR_TitleText, TG_GUI_TAG("Send photo to this chat"),
             /* InitialPattern rather than AcceptPattern (issue #13,
                javierdlr): the pattern then SHOWS in the requester's gadget,
                so the user can see what is being filtered and widen it. */
             ASLFR_DoPatterns, TRUE, ASLFR_InitialPattern,
-            (unsigned long)"#?.(jpg|jpeg|png)", TAG_DONE);
+            TG_GUI_TAG("#?.(jpg|jpeg|png)"), TAG_DONE);
     } else {
         req = (struct FileRequester *)AllocAslRequestTags(
-            ASL_FileRequest, ASLFR_Window, (unsigned long)win,
+            ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
             ASLFR_TitleText, TG_GUI_TAG(mode == 2 ? "Attach to this chat"
                                                    : "Send file to this chat"),
             TAG_DONE);
@@ -9598,6 +9674,55 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
     }
 }
 
+static void tg_gui_window_poll_session(const tg_gui_state *state,
+                                       time_t session_boot,
+                                       unsigned long watch_seconds,
+                                       unsigned long watch_boot_seconds,
+                                       unsigned long watch_boot_grace,
+                                       time_t last_key_time,
+                                       time_t *last_receive_drain,
+                                       time_t *last_session_poll,
+                                       int *session_dirty,
+                                       int *header_dirty)
+{
+    time_t now = time(0);
+    unsigned long eff = watch_seconds;
+
+    if (now == (time_t)-1) {
+        return;
+    }
+    if ((state->composing || tg_gui_session_transfer_busy()) &&
+        now >= *last_receive_drain &&
+        (unsigned long)(now - *last_receive_drain) >=
+            TG_GUI_COMPOSE_RECEIVE_SECONDS) {
+        *last_receive_drain = now;
+        if (tg_gui_session_receive_pending(stdout)) {
+            tg_gui_window_session_changed(session_dirty, header_dirty);
+        }
+    }
+    if (watch_boot_grace && session_boot != (time_t)-1 &&
+        (unsigned long)(now - session_boot) < watch_boot_grace) {
+        eff = watch_boot_seconds;
+    }
+    if (tg_gui_session_transfer_busy() &&
+        eff < TG_GUI_TRANSFER_POLL_SECONDS) {
+        eff = TG_GUI_TRANSFER_POLL_SECONDS;
+    }
+    if (eff < tg_gui_tick_backoff_seconds()) {
+        eff = tg_gui_tick_backoff_seconds();
+    }
+    if ((unsigned long)(now - *last_session_poll) >= eff &&
+        (!state->composing ||
+         (unsigned long)(now - last_key_time) >=
+             TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
+        *last_session_poll = now;
+        if (tg_gui_session_tick(stdout)) {
+            tg_gui_window_session_changed(session_dirty, header_dirty);
+        }
+        tg_gui_tick_after(last_session_poll, eff);
+    }
+}
+
 /* Every window open starts fresh: no keyboard focus in the composer, no
    arrow-key focus, the transcript at its newest message. A window reopened
    after a Workbench reset or an AppIcon used to paint its first frame from the
@@ -9694,7 +9819,6 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     unsigned long watch_seconds;
     unsigned long watch_boot_seconds;
     unsigned long watch_boot_grace;
-    unsigned long effective_watch;
     time_t session_boot;
     time_t last_session_poll;
     time_t last_receive_drain;
@@ -11603,8 +11727,6 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_paint_caret(state, &backend);
                     }
                 } else {
-                    time_t now;
-
                     /* Self-heal the right-button trap from the current pointer
                        position, in case the MOUSEMOVE that should have released
                        it (over the sidebar/menu-bar area) was dropped by the
@@ -11631,58 +11753,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                        defer the (blocking) tick until the composer has been idle
                        for TG_GUI_COMPOSE_IDLE_POLL_SECONDS; skip it entirely when
                        a close/quit is already queued this drain. */
-                    now = time(0);
-                    if (!done &&
-                        (state->composing ||
-                         tg_gui_session_transfer_busy()) &&
-                        now != (time_t)-1 &&
-                        now >= last_receive_drain &&
-                        (unsigned long)(now - last_receive_drain) >=
-                            TG_GUI_COMPOSE_RECEIVE_SECONDS) {
-                        last_receive_drain = now;
-                        if (tg_gui_session_receive_pending(stdout)) {
-                            tg_gui_window_session_changed(&session_dirty,
-                                                          &header_dirty);
-                        }
-                    }
-                    /* (The online as-you-type debounce is gone: typing now
-                       filters the LOCAL cache instantly; the network search
-                       only runs from the explicit "Search Telegram..." row
-                       or ENTER with no local match.) */
-                    /* Effective interval: hold the conservative boot cadence until
-                       the startup network burst has had WATCH_BOOT_GRACE seconds to
-                       settle, then use the faster steady-state interval. */
-                    {
-                        unsigned long eff = watch_seconds;
-                        if (watch_boot_grace &&
-                            session_boot != (time_t)-1 && now != (time_t)-1 &&
-                            (unsigned long)(now - session_boot) < watch_boot_grace) {
-                            eff = watch_boot_seconds;
-                        }
-                        if (tg_gui_session_transfer_busy() &&
-                            eff < TG_GUI_TRANSFER_POLL_SECONDS) {
-                            /* Transfer pumping: the light drain above keeps
-                               pushes flowing; the heavy tick can wait. */
-                            eff = TG_GUI_TRANSFER_POLL_SECONDS;
-                        }
-                        if (eff < tg_gui_tick_backoff_seconds()) {
-                            eff = tg_gui_tick_backoff_seconds();
-                        }
-                        effective_watch = eff;
-                    }
-                    if (!done && now != (time_t)-1 &&
-                        (unsigned long)(now - last_session_poll) >=
-                            effective_watch &&
-                        (!state->composing ||
-                         (unsigned long)(now - last_key_time) >=
-                             TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
-                        last_session_poll = now;
-                        if (tg_gui_session_tick(stdout)) {
-                            tg_gui_window_session_changed(&session_dirty,
-                                                          &header_dirty);
-                        }
-                        tg_gui_tick_after(&last_session_poll,
-                                          effective_watch);
+                    if (!done) {
+                        tg_gui_window_poll_session(
+                            state, session_boot, watch_seconds,
+                            watch_boot_seconds, watch_boot_grace,
+                            last_key_time, &last_receive_drain,
+                            &last_session_poll, &session_dirty, &header_dirty);
                     }
                 }
             } else if (msg_class == IDCMP_MOUSEBUTTONS &&
@@ -13023,44 +13099,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             (void)WaitIO((struct IORequest *)timer_req);
             timer_pending = 0;
             if (!done && state->mode == TG_GUI_MODE_CHAT) {
-                time_t hb_now = time(0);
-                unsigned long hb_eff = watch_seconds;
-
-                if (watch_boot_grace && session_boot != (time_t)-1 &&
-                    hb_now != (time_t)-1 &&
-                    (unsigned long)(hb_now - session_boot) < watch_boot_grace) {
-                    hb_eff = watch_boot_seconds;
-                }
-                if (tg_gui_session_transfer_busy() &&
-                    hb_eff < TG_GUI_TRANSFER_POLL_SECONDS) {
-                    hb_eff = TG_GUI_TRANSFER_POLL_SECONDS;
-                }
-                if (hb_eff < tg_gui_tick_backoff_seconds()) {
-                    hb_eff = tg_gui_tick_backoff_seconds();
-                }
-                if ((state->composing || tg_gui_session_transfer_busy()) &&
-                    hb_now != (time_t)-1 &&
-                    hb_now >= last_receive_drain &&
-                    (unsigned long)(hb_now - last_receive_drain) >=
-                        TG_GUI_COMPOSE_RECEIVE_SECONDS) {
-                    last_receive_drain = hb_now;
-                    if (tg_gui_session_receive_pending(stdout)) {
-                        tg_gui_window_session_changed(&session_dirty,
-                                                      &header_dirty);
-                    }
-                }
-                if (hb_now != (time_t)-1 &&
-                    (unsigned long)(hb_now - last_session_poll) >= hb_eff &&
-                    (!state->composing ||
-                     (unsigned long)(hb_now - last_key_time) >=
-                         TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
-                    last_session_poll = hb_now;
-                    if (tg_gui_session_tick(stdout)) {
-                        tg_gui_window_session_changed(&session_dirty,
-                                                      &header_dirty);
-                    }
-                    tg_gui_tick_after(&last_session_poll, hb_eff);
-                }
+                tg_gui_window_poll_session(
+                    state, session_boot, watch_seconds,
+                    watch_boot_seconds, watch_boot_grace,
+                    last_key_time, &last_receive_drain,
+                    &last_session_poll, &session_dirty, &header_dirty);
             }
         }
         /* While keys are flowing, a slow network-driven repaint waits for a

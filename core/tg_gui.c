@@ -4287,6 +4287,20 @@ static void tg_gui_draw_centered(tg_gui_backend *backend, int pen, int width,
     tg_gui_draw_clipped(backend, pen, x, baseline, text, width - x - 2);
 }
 
+tg_gui_rect tg_gui_login_input_rect(int width, int height, int lh)
+{
+    int box_w;
+
+    box_w = (width - 40 < 280) ? (width - 40) : 280;
+    if (box_w < 40) {
+        box_w = (width > 8) ? (width - 8) : width;
+    }
+    return tg_gui_make_rect((width / 2) - (box_w / 2),
+                            (height / 2) + 4,
+                            box_w,
+                            lh + 8);
+}
+
 /* Draws just the login input box: the SURFACE field, the typed text (masked for
    the 2FA password) centred in the box, and the blinking caret. Factored out of
    tg_gui_paint_login so the caret blink (tg_gui_paint_caret) repaints ONLY this
@@ -4298,8 +4312,7 @@ static void tg_gui_paint_login_input(const tg_gui_state *state,
     int width;
     int height;
     int lh;
-    int cx;
-    int mid;
+    tg_gui_rect box;
     int box_w;
     int box_x;
     int box_y;
@@ -4313,18 +4326,12 @@ static void tg_gui_paint_login_input(const tg_gui_state *state,
     if (width <= 0 || height <= 0 || lh <= 0) {
         return;
     }
-    cx = width / 2;
-    mid = height / 2;
-
-    box_w = (width - 40 < 280) ? (width - 40) : 280;
-    if (box_w < 40) {
-        box_w = (width > 8) ? (width - 8) : width;
-    }
-    box_x = cx - (box_w / 2);
-    box_y = mid + 4;
-    box_h = lh + 8;
-    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
-                       tg_gui_make_rect(box_x, box_y, box_w, box_h));
+    box = tg_gui_login_input_rect(width, height, lh);
+    box_x = box.x;
+    box_y = box.y;
+    box_w = box.w;
+    box_h = box.h;
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE, box);
 
     if (state->input_masked) {
         unsigned long n;

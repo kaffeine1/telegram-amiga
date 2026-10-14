@@ -500,6 +500,10 @@ int tg_gui_emoji_index_of(unsigned long codepoint);
    which was visible as a constant refresh on slow OS3 planar displays. */
 void tg_gui_paint_caret(const tg_gui_state *state, tg_gui_backend *backend);
 
+/* Geometry of the centred login input field for the given window dimensions
+   and line height, shared by the login painter and the partial caret blit. */
+tg_gui_rect tg_gui_login_input_rect(int width, int height, int lh);
+
 /* Current composer footprint for this state/backend geometry. The native
    event loop compares it before/after a text edit so it can repaint only the
    input strip when wrapping did not change the transcript layout. */
