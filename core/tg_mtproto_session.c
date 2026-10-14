@@ -254,74 +254,15 @@ tg_mtproto_session_status tg_mtproto_session_load(const char *path,
     return TG_MTPROTO_SESSION_OK;
 }
 
-tg_mtproto_session_status tg_mtproto_session_save_authorization(
-    const char *path,
-    const tg_mtproto_session *session,
-    const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH],
-    int secure_random_available)
-{
-    char text[1152];
-    char sid[17];
-    char key_hex[(TG_MTPROTO_AUTH_KEY_LENGTH * 2U) + 1U];
-    int written;
-
-    if (path == 0 || path[0] == '\0' || session == 0 || auth_key == 0) {
-        return TG_MTPROTO_SESSION_INVALID_ARGUMENT;
-    }
-    if (!secure_random_available) {
-        return TG_MTPROTO_SESSION_RNG_UNAVAILABLE;
-    }
-
-    tg_mtproto_hex_bytes(sid, session->session_id, sizeof(session->session_id));
-    tg_mtproto_hex_bytes(key_hex, auth_key, TG_MTPROTO_AUTH_KEY_LENGTH);
-    written = sprintf(text,
-                      "mtproto-authorization-v1\n"
-                      "dc_id=%lu\n"
-                      "auth_key_id_hi=%08lx\n"
-                      "auth_key_id_lo=%08lx\n"
-                      "server_salt_hi=%08lx\n"
-                      "server_salt_lo=%08lx\n"
-                      "seq_no=%lu\n"
-                      "last_msg_id_hi=%08lx\n"
-                      "last_msg_id_lo=%08lx\n"
-                      "session_id=%s\n"
-                      "auth_key=%s\n",
-                      session->dc_id,
-                      session->auth_key_id_hi & 0xffffffffUL,
-                      session->auth_key_id_lo & 0xffffffffUL,
-                      session->server_salt_hi & 0xffffffffUL,
-                      session->server_salt_lo & 0xffffffffUL,
-                      session->seq_no,
-                      session->last_msg_id_hi & 0xffffffffUL,
-                      session->last_msg_id_lo & 0xffffffffUL,
-                      sid,
-                      key_hex);
-    if (written <= 0 || written >= (int)sizeof(text)) {
-        return TG_MTPROTO_SESSION_BUFFER_TOO_SMALL;
-    }
-    if (tg_file_write_text(path, text, (unsigned long)written) != TG_FILE_OK) {
-        return TG_MTPROTO_SESSION_FILE_ERROR;
-    }
-    return TG_MTPROTO_SESSION_OK;
-}
-
-tg_mtproto_session_status tg_mtproto_session_load_authorization(
-    const char *path,
+static tg_mtproto_session_status tg_mtproto_session_parse_authorization_text(
+    const char *text,
     tg_mtproto_session *session,
     unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH])
 {
-    char text[1152];
-    unsigned long text_length;
     const char *value;
     tg_mtproto_session loaded;
     unsigned char loaded_key[TG_MTPROTO_AUTH_KEY_LENGTH];
 
-    if (path == 0 || path[0] == '\0' || session == 0 || auth_key == 0) {
-        return TG_MTPROTO_SESSION_INVALID_ARGUMENT;
-    }
-    if (tg_file_read_text(path, text, sizeof(text), &text_length) != TG_FILE_OK) {
-        return TG_MTPROTO_SESSION_FILE_ERROR;
-    }
     if (strncmp(text, "mtproto-authorization-v1\n",
                 strlen("mtproto-authorization-v1\n")) != 0) {
         return TG_MTPROTO_SESSION_PARSE_ERROR;
@@ -372,12 +313,89 @@ tg_mtproto_session_status tg_mtproto_session_load_authorization(
     value = tg_mtproto_line_value(text, "auth_key");
     if (tg_mtproto_parse_hex_bytes(value, loaded_key,
                                    TG_MTPROTO_AUTH_KEY_LENGTH) != 0) {
+        memset(loaded_key, 0, sizeof(loaded_key));
         return TG_MTPROTO_SESSION_PARSE_ERROR;
     }
 
     *session = loaded;
     memcpy(auth_key, loaded_key, TG_MTPROTO_AUTH_KEY_LENGTH);
+    memset(loaded_key, 0, sizeof(loaded_key));
     return TG_MTPROTO_SESSION_OK;
+}
+
+tg_mtproto_session_status tg_mtproto_session_save_authorization(
+    const char *path,
+    const tg_mtproto_session *session,
+    const unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH],
+    int secure_random_available)
+{
+    char text[1152];
+    char sid[17];
+    char key_hex[(TG_MTPROTO_AUTH_KEY_LENGTH * 2U) + 1U];
+    int written;
+
+    if (path == 0 || path[0] == '\0' || session == 0 || auth_key == 0) {
+        return TG_MTPROTO_SESSION_INVALID_ARGUMENT;
+    }
+    if (!secure_random_available) {
+        return TG_MTPROTO_SESSION_RNG_UNAVAILABLE;
+    }
+
+    tg_mtproto_hex_bytes(sid, session->session_id, sizeof(session->session_id));
+    tg_mtproto_hex_bytes(key_hex, auth_key, TG_MTPROTO_AUTH_KEY_LENGTH);
+    written = sprintf(text,
+                      "mtproto-authorization-v1\n"
+                      "dc_id=%lu\n"
+                      "auth_key_id_hi=%08lx\n"
+                      "auth_key_id_lo=%08lx\n"
+                      "server_salt_hi=%08lx\n"
+                      "server_salt_lo=%08lx\n"
+                      "seq_no=%lu\n"
+                      "last_msg_id_hi=%08lx\n"
+                      "last_msg_id_lo=%08lx\n"
+                      "session_id=%s\n"
+                      "auth_key=%s\n",
+                      session->dc_id,
+                      session->auth_key_id_hi & 0xffffffffUL,
+                      session->auth_key_id_lo & 0xffffffffUL,
+                      session->server_salt_hi & 0xffffffffUL,
+                      session->server_salt_lo & 0xffffffffUL,
+                      session->seq_no,
+                      session->last_msg_id_hi & 0xffffffffUL,
+                      session->last_msg_id_lo & 0xffffffffUL,
+                      sid,
+                      key_hex);
+    memset(key_hex, 0, sizeof(key_hex));
+    if (written <= 0 || written >= (int)sizeof(text)) {
+        memset(text, 0, sizeof(text));
+        return TG_MTPROTO_SESSION_BUFFER_TOO_SMALL;
+    }
+    if (tg_file_write_text(path, text, (unsigned long)written) != TG_FILE_OK) {
+        memset(text, 0, sizeof(text));
+        return TG_MTPROTO_SESSION_FILE_ERROR;
+    }
+    memset(text, 0, sizeof(text));
+    return TG_MTPROTO_SESSION_OK;
+}
+
+tg_mtproto_session_status tg_mtproto_session_load_authorization(
+    const char *path,
+    tg_mtproto_session *session,
+    unsigned char auth_key[TG_MTPROTO_AUTH_KEY_LENGTH])
+{
+    char text[1152];
+    unsigned long text_length;
+    tg_mtproto_session_status status;
+
+    if (path == 0 || path[0] == '\0' || session == 0 || auth_key == 0) {
+        return TG_MTPROTO_SESSION_INVALID_ARGUMENT;
+    }
+    if (tg_file_read_text(path, text, sizeof(text), &text_length) != TG_FILE_OK) {
+        return TG_MTPROTO_SESSION_FILE_ERROR;
+    }
+    status = tg_mtproto_session_parse_authorization_text(text, session, auth_key);
+    memset(text, 0, sizeof(text));
+    return status;
 }
 
 const char *tg_mtproto_session_status_name(tg_mtproto_session_status status)
