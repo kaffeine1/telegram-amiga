@@ -1342,6 +1342,17 @@ typedef struct tg_gui_photo_slot {
     unsigned char *rgb;
     unsigned char *stage_pen;
     unsigned char *stage_rgb;
+    unsigned long pen_gen;  /* bumped whenever pen[] changes */
+    /* The pen frame already drawn at the size the transcript shows. On a
+       palette screen a repaint copies it with one blit instead of a RectFill
+       for every run of equal pens, which on a 14 MHz A1200 cost seconds per
+       photo at every repaint. Rebuilt when the size, the depth or the pens
+       change. */
+    struct BitMap *pen_bm;
+    int pen_bm_w;
+    int pen_bm_h;
+    unsigned long pen_bm_depth;
+    unsigned long pen_bm_gen;
 } tg_gui_photo_slot;
 
 typedef struct tg_gui_photo_request {
@@ -1497,11 +1508,21 @@ static void tg_gui_photo_stall_diag(int reason)
     }
 }
 
+static void tg_gui_photo_pen_bm_free(tg_gui_photo_slot *slot)
+{
+    if (slot != 0 && slot->pen_bm != 0) {
+        WaitBlit(); /* the last paint's copy may still be reading it */
+        FreeBitMap(slot->pen_bm);
+        slot->pen_bm = 0;
+    }
+}
+
 static void tg_gui_photo_slot_clear(tg_gui_photo_slot *slot)
 {
     if (slot == 0) {
         return;
     }
+    tg_gui_photo_pen_bm_free(slot);
     tg_gui_photo_pipeline_release(slot);
     if (slot->canonical_file != 0) {
         fclose(slot->canonical_file);
@@ -3141,6 +3162,9 @@ static int tg_gui_photo_map_pen_rows(tg_gui_amiga_ctx *ctx,
     if (end_row > *mapped_rows + max_rows) {
         end_row = *mapped_rows + max_rows;
     }
+    if (pen_grid == &slot->pen && end_row > *mapped_rows) {
+        ++slot->pen_gen; /* the frame drawn from these pens is stale */
+    }
     for (y = *mapped_rows; y < end_row; ++y) {
         int x;
 
@@ -3447,6 +3471,8 @@ static int tg_gui_photo_commit_quality_pass(tg_gui_amiga_ctx *ctx,
         free(slot->pen);
         slot->pen = 0;
         slot->pen_rows = 0;
+        ++slot->pen_gen;
+        tg_gui_photo_pen_bm_free(slot);
     } else {
         if (slot->stage_pen == 0 ||
             slot->stage_pen_rows < slot->decode_h) {
@@ -3456,6 +3482,7 @@ static int tg_gui_photo_commit_quality_pass(tg_gui_amiga_ctx *ctx,
         slot->pen = slot->stage_pen;
         slot->stage_pen = 0;
         slot->pen_rows = slot->decode_h;
+        ++slot->pen_gen;
         free(slot->rgb);
         slot->rgb = 0;
         slot->ready_rows = 0;
@@ -4428,6 +4455,173 @@ static int tg_gui_photo_draw_truecolor(tg_gui_amiga_ctx *ctx,
     return tg_gui_photo_direct_queue(ctx, slot, rect, x0, y0, x1, y1);
 }
 
+/* Chip memory a pen frame must leave free on a planar screen. */
+#define TG_GUI_PHOTO_PEN_BM_CHIP_RESERVE 262144UL
+
+/* Make slot->pen_bm hold the pen grid scaled to rect, as a bitmap of the
+   target's own format, so the caller can copy it with one blit. Returns 0
+   when there is none (no memory, a screen deeper than byte pens), and the
+   caller then draws the runs as before. Built at most once per size, depth
+   and pen generation; WriteChunkyPixels (graphics V40) writes each row in
+   one call, older graphics gets the same runs, drawn once into the frame. */
+static int tg_gui_photo_pen_bm_ensure(tg_gui_amiga_ctx *ctx,
+                                      tg_gui_photo_slot *slot,
+                                      tg_gui_rect rect)
+{
+    struct BitMap *friend_bm;
+    struct RastPort rp;
+    unsigned long depth;
+    unsigned char *row;
+    unsigned short *xmap;
+    unsigned long start;
+    int chunky;
+    int x;
+    int y;
+
+    friend_bm = ctx->rport != 0 ? ctx->rport->BitMap : 0;
+    if (friend_bm == 0 || slot->pen == 0 || slot->w <= 0 || slot->h <= 0 ||
+        rect.w > 4096 || rect.h > 4096) {
+        return 0;
+    }
+    depth = (unsigned long)GetBitMapAttr(friend_bm, BMA_DEPTH);
+    if (depth == 0UL || depth > 8UL) {
+        return 0;
+    }
+    if (slot->pen_bm != 0 && slot->pen_bm_w == rect.w &&
+        slot->pen_bm_h == rect.h && slot->pen_bm_depth == depth &&
+        slot->pen_bm_gen == slot->pen_gen) {
+        return 1;
+    }
+    tg_gui_photo_pen_bm_free(slot);
+    if ((GetBitMapAttr(friend_bm, BMA_FLAGS) & BMF_STANDARD) != 0 &&
+        (unsigned long)AvailMem(MEMF_CHIP | MEMF_LARGEST) <
+            (unsigned long)RASSIZE(rect.w, rect.h) * depth +
+                TG_GUI_PHOTO_PEN_BM_CHIP_RESERVE) {
+        return 0;
+    }
+    /* one row of pens, then (at an even offset) the source column of each x */
+    row = (unsigned char *)malloc((size_t)rect.w * (1U + sizeof(*xmap)) + 2U);
+    if (row == 0) {
+        return 0;
+    }
+    xmap = (unsigned short *)(void *)(row + ((rect.w + 1) & ~1));
+    slot->pen_bm = AllocBitMap((ULONG)rect.w, (ULONG)rect.h, (ULONG)depth,
+                               0UL, friend_bm);
+    if (slot->pen_bm == 0) {
+        free(row);
+        return 0;
+    }
+    start = tg_gui_photo_now_ms();
+    for (x = 0; x < rect.w; ++x) {
+        xmap[x] = (unsigned short)((x * slot->w) / rect.w);
+    }
+    InitRastPort(&rp);
+    rp.BitMap = slot->pen_bm;
+    chunky = ((struct Library *)GfxBase)->lib_Version >= 40;
+    if (chunky && rect.w == slot->w && rect.h == slot->h) {
+        /* shown at its own size: the grid goes in as it is, in one call */
+        WriteChunkyPixels(&rp, 0UL, 0UL, (ULONG)(rect.w - 1),
+                          (ULONG)(rect.h - 1), slot->pen, (LONG)slot->w);
+        y = rect.h;
+    } else {
+        y = 0;
+    }
+    for (; y < rect.h; ++y) {
+        const unsigned char *src;
+
+        src = slot->pen +
+              (unsigned long)((y * slot->h) / rect.h) * (unsigned long)slot->w;
+        for (x = 0; x < rect.w; ++x) {
+            row[x] = src[xmap[x]];
+        }
+        if (chunky) {
+            WriteChunkyPixels(&rp, 0UL, (ULONG)y, (ULONG)(rect.w - 1),
+                              (ULONG)y, row, (LONG)rect.w);
+            continue;
+        }
+        x = 0;
+        while (x < rect.w) {
+            int run = x + 1;
+
+            while (run < rect.w && row[run] == row[x]) {
+                ++run;
+            }
+            SetAPen(&rp, (LONG)row[x]);
+            RectFill(&rp, x, y, run - 1, y);
+            x = run;
+        }
+    }
+    free(row);
+#if defined(TG_GUI_PEN_FRAME_VERIFY)
+    /* measurement build only: the same grid through the old runs, pixel by
+       pixel against the frame */
+    if (chunky && tg_gui_log_is_enabled() &&
+        (ctx->window == 0 || ctx->rport != ctx->window->RPort)) {
+        struct BitMap *check = AllocBitMap((ULONG)rect.w, (ULONG)rect.h,
+                                           (ULONG)depth, 0UL, friend_bm);
+
+        if (check != 0) {
+            struct RastPort crp;
+            long differ = 0L;
+            char vline[96];
+
+            InitRastPort(&crp);
+            crp.BitMap = check;
+            for (y = 0; y < rect.h; ++y) {
+                const unsigned char *src =
+                    slot->pen +
+                    (unsigned long)((y * slot->h) / rect.h) *
+                        (unsigned long)slot->w;
+
+                x = 0;
+                while (x < rect.w) {
+                    unsigned char p = src[(x * slot->w) / rect.w];
+                    int run = x + 1;
+
+                    while (run < rect.w &&
+                           src[(run * slot->w) / rect.w] == p) {
+                        ++run;
+                    }
+                    SetAPen(&crp, (LONG)p);
+                    RectFill(&crp, x, y, run - 1, y);
+                    x = run;
+                }
+            }
+            WaitBlit();
+            for (y = 0; y < rect.h; ++y) {
+                for (x = 0; x < rect.w; ++x) {
+                    if (ReadPixel(&rp, x, y) != ReadPixel(&crp, x, y)) {
+                        ++differ;
+                    }
+                }
+            }
+            sprintf(vline, "photo: pen frame verify %dx%d: %ld pixels differ",
+                    rect.w, rect.h, differ);
+            tg_gui_photo_diag(vline);
+            WaitBlit();
+            FreeBitMap(check);
+        }
+    }
+#endif
+    slot->pen_bm_w = rect.w;
+    slot->pen_bm_h = rect.h;
+    slot->pen_bm_depth = depth;
+    slot->pen_bm_gen = slot->pen_gen;
+    /* Not on the direct path: it paints under LockLayerRom, where DOS I/O
+       can deadlock Intuition. */
+    if (tg_gui_log_is_enabled() &&
+        (ctx->window == 0 || ctx->rport != ctx->window->RPort)) {
+        char line[96];
+
+        sprintf(line, "photo: pen frame %dx%d depth %lu in %lu ms (%s)",
+                rect.w, rect.h, depth,
+                tg_gui_photo_elapsed_ms(start, tg_gui_photo_now_ms()),
+                chunky ? "chunky" : "runs");
+        tg_gui_photo_diag(line);
+    }
+    return 1;
+}
+
 /* Replay one complete canonical quality pass into a clipped rectangle. The
    transcript and popup viewer share this path and runtime CGX fallback, but
    keep separate slot ownership. Hidden decode buffers never reach paint. */
@@ -4500,6 +4694,12 @@ static int tg_gui_photo_draw_slot(tg_gui_amiga_ctx *ctx,
     if (!slot->render_logged) {
         tg_gui_photo_diag("photo: pen path");
         slot->render_logged = 1;
+    }
+    if (tg_gui_photo_pen_bm_ensure(ctx, slot, rect)) {
+        BltBitMapRastPort(slot->pen_bm, x0 - rect.x, y0 - rect.y, ctx->rport,
+                          ctx->origin_x + x0, ctx->origin_y + y0,
+                          x1 - x0, y1 - y0, 0xC0);
+        return 1;
     }
     for (y = y0; y < y1; ++y) {
         int sy;

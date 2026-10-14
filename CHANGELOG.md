@@ -45,6 +45,16 @@ the text client for the plain 68000.
   where avatars are off (Settings > Show avatars), as on slow machines by
   default. Seen in the AROS x86_64 VM: within a minute and a half most of
   the list had its pictures.
+- Inline photos no longer slow every redraw on a screen of 256 colours or
+  fewer, such as a stock A1200's. Each repaint drew every photo again with
+  one fill for every run of equal colour, tens of thousands for one photo;
+  now the photo is drawn once into a picture in the screen's own format and
+  copied with the blitter from then on, drawn again only when it gets
+  sharper, changes size or the screen changes. On an emulated stock A1200
+  (14 MHz 68EC020, 640x512 in 32 colours) a redraw of a chat with one photo
+  in view went from 2.7-3.0 seconds to 0.45; the copy takes about a quarter
+  of a second to make when the photo appears. Screens with more colours
+  write photos in true colour and are unchanged.
 
 ## [0.0.96] - 2026-10-11
 
