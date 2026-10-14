@@ -175,6 +175,18 @@ Features are therefore grouped by the work they share.
   PiStorm under AfA OS, in the OS4, MorphOS, AROS i386, x86_64 and ARM
   VMs, and for the 68k lanes on WinUAE. A seventh package brings the
   text client to the plain 68000, the end of a long hunt on one A600.
+- **0.0.97, notifications and the field fixes.** In progress on `main`.
+  Done: service messages in the chat; inline photos on screens of 256
+  colours or fewer copied with the blitter (a repaint with a photo on an
+  emulated stock A1200 went from about 3 s to 0.45); the login saying
+  what went wrong in plain words; chats holding a draft no longer hidden
+  from the list; about 200 KB less memory for the plain-68000 text
+  client; the key exchange and two-step check about 17% faster; AROS
+  connections that give up and can be interrupted; photos that no longer
+  flash on MorphOS. To come: new-message notifications (the title with
+  the count, a beep, the AppIcon label and our own pop-up, see the
+  section below) and, if it stays small, the simpler text client the
+  plain-68000 user asked for.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -863,24 +875,28 @@ label with the count, "TelegramAmiga (3)", where AddAppIcon allows a
 text change or through a remove and re-add otherwise. Double-clicking
 the icon, as now, brings the window back on the chat with the news.
 
-Pop-ups where the system has a service for them. Users have since asked
-for the notification the desktop client shows, and on every lane but
-AROS the system, or a commodity the user installs, can draw one without
-our window coming forward: AmigaOS 4 has Ringhio through
-application.library, MorphOS has MagicBeacon, and AmigaOS 3.x now has
-Herald (Aminet util/cdity), a commodity with a public port named HERALD
-that takes commands with no ARexx interpreter running and answers what
-it understands. The client looks for the service when a notification is
-due and does without it when it is missing, so nothing is linked and
-nothing has to be installed: title and beep stay the floor, and AROS,
-which has no such service that we know of, stays there. One pop-up per
-chat and burst, from the GUI and from the text client, never for the
-chat open in front of the user and never for a muted one. It carries the
-chat and the sender, and the text only when the user wants it (the
-desktop client's "show message preview"), its emoji as the emoticons the
-text client already uses or, for Herald, as its :shortcodes:. The same
-path can tell the end of a download or an upload that ran while the user
-was elsewhere.
+Our own pop-up, on every lane. Users have since asked for the
+notification the desktop client shows. The systems that have a service
+for it each have a different one (Ringhio on AmigaOS 4, MagicBeacon on
+MorphOS, Herald as a commodity on AmigaOS 3.x) and AROS has none, so the
+client draws its own, with nothing linked and nothing to install: a small
+borderless window in a corner of the screen the client is on, or of the
+Workbench while it is parked on the AppIcon, with the chat, the sender
+and, when the user wants it, the start of the text (the desktop client's
+"show message preview"), its emoji as the emoticons the text client
+already uses. It opens inactive, so whoever is typing elsewhere keeps
+typing, and closes by itself after a few seconds; a click on it opens
+that chat and brings the window forward, which is the user's own
+gesture. One pop-up at a time: news from another chat takes its place,
+a burst from the same chat updates its count. None while the client's
+window is the active one, none for the chat open in front of the user,
+none for the user's own messages from another device. It opens the way
+the Send photo window already does, inactive and with its first drawing
+under the layer lock, because a window drawn while it becomes active is
+what once froze MorphOS. A system service can come later as an option
+where one exists, for users who want the system's do-not-disturb and
+history. The same window can tell the end of a download or an upload
+that ran while the user was elsewhere.
 
 A sound for new messages, asked for since by a user, with two wishes of
 his own: a sound per chat, and no ringing on and on. It plays through the
@@ -896,14 +912,17 @@ before that chat can ring again, and none for the chat open in front of
 the user, for messages Telegram marks as silent, or for the user's own
 messages sent from another device.
 
-Still kept out: raising the screen or the window ourselves. Herald brings
-the sender forward on a double-click, which is the user's own gesture.
+Still kept out: raising the screen or the window ourselves. The pop-up
+brings the window forward only when it is clicked.
 
-Settings entries: "Notify: Title | Title + beep | Pop-up | Off", the
-pop-up falling back to title and beep where no service answers, and
-"Sound on new messages" with a requester for the sound file. Fits the
-0.0.9x polish line; the per-chat mute reads the notify settings the
-dialogs already carry.
+Settings entries: "New messages" with Off, Title, and Title and pop-up,
+and "Beep" on its own beside them; later "Sound on new messages" with a
+requester for the sound file.
+
+In two steps. 0.0.97 brings the title with the count, the beep, the
+AppIcon label with the update poll running while parked, and the pop-up,
+with their settings. 0.0.98 brings the sounds per chat and the per-chat
+mute, which reads the notify settings the dialogs already carry.
 
 ## Planned: select several messages, then delete or forward them
 
