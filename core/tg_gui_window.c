@@ -5383,6 +5383,7 @@ static void tg_gui_amiga_buffer_alloc(tg_gui_amiga_ctx *ctx)
     int w;
     int h;
     unsigned long depth;
+    int minplanes;
 
     tg_gui_amiga_buffer_free(ctx);
     if (ctx->window == 0 || ctx->rport == 0 || ctx->rport->BitMap == 0) {
@@ -5395,17 +5396,44 @@ static void tg_gui_amiga_buffer_alloc(tg_gui_amiga_ctx *ctx)
         return; /* below the window minimum: skip buffering */
     }
     depth = (unsigned long)GetBitMapAttr(src, BMA_DEPTH);
-    bm = AllocBitMap((ULONG)w, (ULONG)h, (ULONG)depth, 0UL, src);
+    /* On a truecolour screen the buffer has to share the screen's pixel
+       format, or cybergraphics will not write the inline photos into it: they
+       were then drawn on the window after the copy, so every full repaint
+       showed their place empty for a moment. On MorphOS the friend bitmap
+       passes on its format only with BMF_MINPLANES (checked: the log went
+       from "window cgx path" to "buffer cgx self-check passed"). AROS already
+       gets it without the flag; the other lanes keep the old call until a
+       field log shows "rtg 0" on a truecolour screen there. */
+    bm = 0;
+    minplanes = 0;
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+    if (depth > 8UL) {
+        bm = AllocBitMap((ULONG)w, (ULONG)h, (ULONG)depth, BMF_MINPLANES,
+                         src);
+        minplanes = bm != 0;
+    }
+#endif
+    if (bm == 0) {
+        bm = AllocBitMap((ULONG)w, (ULONG)h, (ULONG)depth, 0UL, src);
+    }
     if (bm == 0) {
         tg_gui_log("window: double-buffer alloc failed, direct render");
         return;
     }
     {
         /* Sized + depth line for the field log: an RTG setup that dies in the
-           first paint tells us here what pixel format it was running. */
-        char line[64];
+           first paint tells us here what pixel format it was running, and
+           whether cybergraphics sees the buffer as one of its bitmaps. */
+        char line[128];
+        unsigned long rtg = 0UL;
 
-        sprintf(line, "window: double-buffer %dx%d depth %lu", w, h, depth);
+#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
+        if (CyberGfxBase != 0) {
+            rtg = tg_gui_cgx_get_map_attr(bm, CYBRMATTR_ISCYBERGFX) != 0UL;
+        }
+#endif
+        sprintf(line, "window: double-buffer %dx%d depth %lu minplanes %d rtg %lu",
+                w, h, depth, minplanes, rtg);
         tg_gui_log(line);
     }
     InitRastPort(&ctx->buf_rp);

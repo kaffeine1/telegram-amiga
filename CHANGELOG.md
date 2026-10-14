@@ -86,6 +86,12 @@ the text client for the plain 68000.
   fails at once. Network errors there say what happened, such as "Connection
   refused", or "socket connect stopped" after Ctrl-C, instead of "No error"
   or "No such file or directory".
+- On MorphOS inline photos no longer flash when the window redraws, as when
+  a photo you just sent sharpens in steps. The window is drawn off screen and
+  copied in one go, but there the off-screen frame was not in the graphics
+  card's own format, so the photos were painted on the window after the copy
+  and their place showed empty for a moment at every full redraw. The frame
+  now has the card's format and the photos go into it.
 
 ### Changed
 - Less memory: the 68000 text client needs 1.32 MB to load instead of 1.53,
