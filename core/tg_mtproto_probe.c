@@ -4125,6 +4125,8 @@ static int tg_mtproto_send_saved_query_on_context(
     /* static + chunk-sized: the saveFilePart body is a whole file chunk. */
     static unsigned char wrapped_query[TG_MTPROTO_QUERY_SEND_MAX];
     unsigned long api_id;
+    unsigned long prev_salt_hi;
+    unsigned long prev_salt_lo;
     int qrc;
     tg_mtproto_session_status session_status;
     tg_mtproto_tl_writer writer;
@@ -4148,6 +4150,8 @@ static int tg_mtproto_send_saved_query_on_context(
         fprintf(stream, "%s: init-connection-build-failed\n", label);
         return 2;
     }
+    prev_salt_hi = context->session.server_salt_hi;
+    prev_salt_lo = context->session.server_salt_lo;
     qrc = tg_mtproto_send_encrypted_query_limited(
             context, wrapped_query, writer.length, result, stream, label,
             max_receive_attempts, TG_MTPROTO_QUERY_BUDGET_SECONDS);
@@ -4163,12 +4167,18 @@ static int tg_mtproto_send_saved_query_on_context(
         return qrc == TG_MTPROTO_QUERY_SOFT_FAIL ?
             TG_MTPROTO_QUERY_SOFT_FAIL : 2;
     }
-    session_status = tg_mtproto_session_save_authorization(
-        auth_file, &context->session, context->auth_key, 1);
-    if (session_status != TG_MTPROTO_SESSION_OK) {
-        fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
-                tg_mtproto_session_status_name(session_status));
-        return 2;
+    /* Only rewrite the authorization file if server_salt changed (after
+       bad_server_salt). session_id/seq_no/last_msg_id are refreshed on every
+       context load anyway. */
+    if (context->session.server_salt_hi != prev_salt_hi ||
+        context->session.server_salt_lo != prev_salt_lo) {
+        session_status = tg_mtproto_session_save_authorization(
+            auth_file, &context->session, context->auth_key, 1);
+        if (session_status != TG_MTPROTO_SESSION_OK) {
+            fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                    tg_mtproto_session_status_name(session_status));
+            return 2;
+        }
     }
     return 0;
 }
