@@ -183,10 +183,11 @@ Features are therefore grouped by the work they share.
   from the list; about 200 KB less memory for the plain-68000 text
   client; the key exchange and two-step check about 17% faster; AROS
   connections that give up and can be interrupted; photos that no longer
-  flash on MorphOS. To come: new-message notifications (the title with
-  the count, a beep, the AppIcon label and our own pop-up, see the
-  section below) and, if it stays small, the simpler text client the
-  plain-68000 user asked for.
+  flash on MorphOS; new-message notifications (the title with the count,
+  a beep, the AppIcon label with the network read while iconified, and
+  our own pop-up, see the section below), tried in the MorphOS and AROS
+  x86_64 VMs and waiting for the machines. To come, if it stays small:
+  the simpler text client the plain-68000 user asked for.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -915,14 +916,33 @@ messages sent from another device.
 Still kept out: raising the screen or the window ourselves. The pop-up
 brings the window forward only when it is clicked.
 
-Settings entries: "New messages" with Off, Title, and Title and pop-up,
-and "Beep" on its own beside them; later "Sound on new messages" with a
-requester for the sound file.
+Settings entries: "New messages" with Off, Count in title, Count and
+pop-up, and Pop-up with the text, and "Beep" on its own beside them;
+later "Sound on new messages" with a requester for the sound file.
 
 In two steps. 0.0.97 brings the title with the count, the beep, the
 AppIcon label with the update poll running while parked, and the pop-up,
 with their settings. 0.0.98 brings the sounds per chat and the per-chat
 mute, which reads the notify settings the dialogs already carry.
+
+How the first step came out, on `main` for 0.0.97. The pop-up sits in
+the top right corner below the screen bar, a fifth of the screen wide at
+least, with the chat on the screen's fill colour and the count or the
+text below it, in the screen's own pens; it lasts six seconds. When the
+client has its own screen the pop-up goes to the Workbench and the beep
+to every screen, since the user is not where the window is. While the
+window is behind or parked the open chat counts too, without a badge on
+its row, and coming back to the window clears it. A click that only
+activates the pop-up counts as a click, since MorphOS spends the first
+click on an inactive window that way. Parked, the client reads pushes on
+every two-second heartbeat and runs the full network tick every ten
+seconds; with the setting Off it sleeps as before. The AppIcon gets its
+new label by being added again: removed first everywhere, so it keeps
+its place, but on AROS the new one goes in before the old one goes,
+because Wanderer knows an AppIcon by its address and the one added back
+at once got the same address and kept the old label. Not done in this
+step: the sender's name inside a group (the update gives only its id),
+and the end of a transfer in the pop-up.
 
 ## Planned: select several messages, then delete or forward them
 

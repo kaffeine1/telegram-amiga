@@ -736,10 +736,26 @@ static void tg_gui_driver_on_notification(void *ctx,
             chat->peer_id_lo == entry->peer_id_lo) {
             /* Only count/flash what you are NOT reading: the open chat's incoming
                messages are already shown in the transcript, so its badge must not
-               grow while you look at it. */
-            if (i != state->selected_chat) {
-                chat->unread += 1;
-                chat->flash = 1;
+               grow while you look at it. With the window behind or parked the
+               open chat is not in front of you either: its news count for the
+               title and the pop-up, still without a badge on the row. */
+            if (i != state->selected_chat || state->notify_away) {
+                if (i != state->selected_chat) {
+                    chat->unread += 1;
+                    chat->flash = 1;
+                }
+                /* The same message, counted for the title and the pop-up. */
+                tg_gui_notify_count(state, entry->peer_id_hi,
+                                    entry->peer_id_lo);
+                state->notify_last_peer_hi = entry->peer_id_hi;
+                state->notify_last_peer_lo = entry->peer_id_lo;
+                tg_gui_driver_copy(state->notify_last_name,
+                                   sizeof(state->notify_last_name),
+                                   chat->name);
+                tg_gui_driver_copy_latin1(state->notify_last_text,
+                                          sizeof(state->notify_last_text),
+                                          entry->text);
+                state->notify_seq += 1UL;
             }
             return;
         }
@@ -1326,22 +1342,44 @@ int tg_gui_driver_self_test(void)
 
             memset(&note, 0, sizeof(note));
             note.peer_id_lo = 0x200UL; /* Mario Rossi, not selected */
+            strcpy(note.text, "ciao \xc3\xa8 qui");
             driver.on_notification(driver.ctx, &note);
             if (state.chats[1].unread != 3 || state.chats[1].flash != 1) {
                 puts("gui driver self-test: notification did not flash row");
                 return 2;
             }
+            /* The same message counts for the title and the pop-up. */
+            if (tg_gui_notify_total(&state) != 1 || state.notify_seq != 1UL ||
+                state.notify_last_peer_lo != 0x200UL ||
+                strcmp(state.notify_last_name, state.chats[1].name) != 0 ||
+                strcmp(state.notify_last_text, "ciao \xe8 qui") != 0) {
+                puts("gui driver self-test: notification not counted for the title");
+                return 2;
+            }
             note.peer_id_lo = 0x100UL; /* the selected/open chat: no bump, no flash */
             driver.on_notification(driver.ctx, &note);
-            if (state.chats[0].unread != 0 || state.chats[0].flash != 0) {
+            if (state.chats[0].unread != 0 || state.chats[0].flash != 0 ||
+                tg_gui_notify_total(&state) != 1 || state.notify_seq != 1UL) {
                 puts("gui driver self-test: open chat must not bump unread/flash");
                 return 2;
             }
             note.peer_id_lo = 0x999UL; /* not in the sidebar: ignored */
             driver.on_notification(driver.ctx, &note);
             if (state.chats[2].unread != 0 || state.chats[2].flash != 0 ||
-                state.chats[3].unread != 0 || state.chats[3].flash != 0) {
+                state.chats[3].unread != 0 || state.chats[3].flash != 0 ||
+                tg_gui_notify_total(&state) != 1) {
                 puts("gui driver self-test: unknown peer must not touch rows");
+                return 2;
+            }
+            /* The window behind: the open chat counts, still no badge. */
+            state.notify_away = 1;
+            note.peer_id_lo = 0x100UL;
+            driver.on_notification(driver.ctx, &note);
+            state.notify_away = 0;
+            if (state.chats[0].unread != 0 || state.chats[0].flash != 0 ||
+                tg_gui_notify_count_for(&state, 0UL, 0x100UL) != 1 ||
+                state.notify_seq != 2UL) {
+                puts("gui driver self-test: open chat behind not counted");
                 return 2;
             }
         }

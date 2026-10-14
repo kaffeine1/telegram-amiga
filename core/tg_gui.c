@@ -392,6 +392,285 @@ int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
     return 0;
 }
 
+/* data/telegram-notify.txt: "mode=off|title|popup|text" and "beep=on|off",
+   one per line, in any order. */
+void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep)
+{
+    FILE *file;
+    char value[64];
+    int loaded_mode;
+    int loaded_beep;
+
+    loaded_mode = TG_GUI_NOTIFY_TITLE;
+    loaded_beep = 0;
+    file = (path != 0 && path[0] != '\0') ? fopen(path, "rb") : 0;
+    if (file != 0) {
+        while (fgets(value, sizeof(value), file) != 0) {
+            if (strncmp(value, "mode=", 5UL) == 0) {
+                if (tg_gui_photo_pref_word(value + 5, "off")) {
+                    loaded_mode = TG_GUI_NOTIFY_OFF;
+                } else if (tg_gui_photo_pref_word(value + 5, "title")) {
+                    loaded_mode = TG_GUI_NOTIFY_TITLE;
+                } else if (tg_gui_photo_pref_word(value + 5, "popup")) {
+                    loaded_mode = TG_GUI_NOTIFY_POPUP;
+                } else if (tg_gui_photo_pref_word(value + 5, "text")) {
+                    loaded_mode = TG_GUI_NOTIFY_POPUP_TEXT;
+                }
+            } else if (strncmp(value, "beep=", 5UL) == 0) {
+                loaded_beep = tg_gui_photo_pref_word(value + 5, "on");
+            }
+        }
+        fclose(file);
+    }
+    if (mode != 0) {
+        *mode = loaded_mode;
+    }
+    if (beep != 0) {
+        *beep = loaded_beep;
+    }
+}
+
+int tg_gui_notify_preferences_save(const char *path, int mode, int beep)
+{
+    FILE *file;
+    char tmp[288];
+    unsigned long length;
+    const char *word;
+    int failed;
+
+    if (path == 0 || path[0] == '\0') {
+        return 1;
+    }
+    length = (unsigned long)strlen(path);
+    if (length + 5UL >= sizeof(tmp)) {
+        return 1;
+    }
+    memcpy(tmp, path, length);
+    memcpy(tmp + length, ".tmp", 5UL);
+    file = tg_file_fopen_replace(tmp, "wb");
+    if (file == 0) {
+        return 1;
+    }
+    word = mode == TG_GUI_NOTIFY_OFF ? "off" :
+           mode == TG_GUI_NOTIFY_POPUP ? "popup" :
+           mode == TG_GUI_NOTIFY_POPUP_TEXT ? "text" : "title";
+    failed = fputs("mode=", file) == EOF || fputs(word, file) == EOF ||
+             fputc('\n', file) == EOF ||
+             fputs(beep ? "beep=on\n" : "beep=off\n", file) == EOF;
+    if (fclose(file) != 0) {
+        failed = 1;
+    }
+    if (failed) {
+        (void)remove(tmp);
+        return 1;
+    }
+    (void)remove(path);
+    if (rename(tmp, path) != 0) {
+        (void)remove(tmp);
+        return 1;
+    }
+    return 0;
+}
+
+void tg_gui_notify_count(tg_gui_state *state, unsigned long peer_hi,
+                         unsigned long peer_lo)
+{
+    int i;
+
+    if (state == 0) {
+        return;
+    }
+    for (i = 0; i < state->notify_peer_count; ++i) {
+        if (state->notify_peers[i].peer_hi == peer_hi &&
+            state->notify_peers[i].peer_lo == peer_lo) {
+            state->notify_peers[i].count += 1;
+            return;
+        }
+    }
+    if (state->notify_peer_count < TG_GUI_NOTIFY_PEERS) {
+        tg_gui_notify_peer *slot;
+
+        slot = &state->notify_peers[state->notify_peer_count++];
+        slot->peer_hi = peer_hi;
+        slot->peer_lo = peer_lo;
+        slot->count = 1;
+        return;
+    }
+    state->notify_overflow += 1;
+}
+
+void tg_gui_notify_seen(tg_gui_state *state, unsigned long peer_hi,
+                        unsigned long peer_lo)
+{
+    int i;
+
+    if (state == 0) {
+        return;
+    }
+    /* Overflow has no chat to wait for: opening any chat clears it. */
+    state->notify_overflow = 0;
+    for (i = 0; i < state->notify_peer_count; ++i) {
+        if (state->notify_peers[i].peer_hi == peer_hi &&
+            state->notify_peers[i].peer_lo == peer_lo) {
+            state->notify_peer_count -= 1;
+            state->notify_peers[i] =
+                state->notify_peers[state->notify_peer_count];
+            return;
+        }
+    }
+}
+
+int tg_gui_notify_total(const tg_gui_state *state)
+{
+    int total;
+    int i;
+
+    if (state == 0) {
+        return 0;
+    }
+    total = state->notify_overflow;
+    for (i = 0; i < state->notify_peer_count; ++i) {
+        total += state->notify_peers[i].count;
+    }
+    return total;
+}
+
+int tg_gui_notify_count_for(const tg_gui_state *state, unsigned long peer_hi,
+                            unsigned long peer_lo)
+{
+    int i;
+
+    if (state == 0) {
+        return 0;
+    }
+    for (i = 0; i < state->notify_peer_count; ++i) {
+        if (state->notify_peers[i].peer_hi == peer_hi &&
+            state->notify_peers[i].peer_lo == peer_lo) {
+            return state->notify_peers[i].count;
+        }
+    }
+    return 0;
+}
+
+static void tg_gui_notify_label(const tg_gui_state *state, const char *base,
+                                const char *suffix, char *out,
+                                unsigned long size)
+{
+    int total;
+    unsigned long length;
+    char count[32];
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    length = (unsigned long)strlen(base);
+    if (length >= size) {
+        length = size - 1UL;
+    }
+    memcpy(out, base, length);
+    out[length] = '\0';
+    total = tg_gui_notify_total(state);
+    if (state == 0 || state->notify_mode == TG_GUI_NOTIFY_OFF || total <= 0) {
+        return;
+    }
+    if (total > 999) {
+        total = 999;
+    }
+    sprintf(count, " (%d%.8s)", total, suffix);
+    if (length + (unsigned long)strlen(count) < size) {
+        strcpy(out + length, count);
+    }
+}
+
+void tg_gui_notify_title(const tg_gui_state *state, char *out,
+                         unsigned long size)
+{
+    tg_gui_notify_label(state, TG_APP_TITLE, " new", out, size);
+}
+
+void tg_gui_notify_icon_label(const tg_gui_state *state, char *out,
+                              unsigned long size)
+{
+    tg_gui_notify_label(state, "TelegramAmiga", "", out, size);
+}
+
+static void tg_gui_copy(char *dest, unsigned long size, const char *src);
+
+void tg_gui_notify_popup_text(const tg_gui_state *state, char *head,
+                              unsigned long head_size, char *body,
+                              unsigned long body_size)
+{
+    char number[48];
+    unsigned long length;
+    int count;
+    int total;
+
+    if (head == 0 || head_size == 0UL || body == 0 || body_size == 0UL) {
+        return;
+    }
+    head[0] = '\0';
+    body[0] = '\0';
+    if (state == 0) {
+        return;
+    }
+    count = tg_gui_notify_count_for(state, state->notify_last_peer_hi,
+                                    state->notify_last_peer_lo);
+    total = tg_gui_notify_total(state);
+    if (count < 1) {
+        count = 1; /* a chat past the table still has this one */
+    }
+    if (count > 999) {
+        count = 999;
+    }
+    if (total > 999) {
+        total = 999;
+    }
+    tg_gui_copy(head, head_size, state->notify_last_name[0] != '\0'
+                                     ? state->notify_last_name
+                                     : "Telegram");
+    if (state->notify_mode == TG_GUI_NOTIFY_POPUP_TEXT &&
+        state->notify_last_text[0] != '\0') {
+        if (count > 1) {
+            sprintf(number, " (%d)", count);
+            length = (unsigned long)strlen(head);
+            if (length + (unsigned long)strlen(number) < head_size) {
+                strcpy(head + length, number);
+            }
+        }
+        tg_gui_copy(body, body_size, state->notify_last_text);
+        return;
+    }
+    if (count == 1) {
+        strcpy(number, "1 new message");
+    } else {
+        sprintf(number, "%d new messages", count);
+    }
+    if (total > count) {
+        sprintf(number + strlen(number), ", %d in all", total);
+    }
+    tg_gui_copy(body, body_size, number);
+}
+
+int tg_gui_notify_pick(const tg_gui_state *state, unsigned long *peer_hi,
+                       unsigned long *peer_lo)
+{
+    if (state == 0 || peer_hi == 0 || peer_lo == 0) {
+        return 0;
+    }
+    if (tg_gui_notify_count_for(state, state->notify_last_peer_hi,
+                                state->notify_last_peer_lo) > 0) {
+        *peer_hi = state->notify_last_peer_hi;
+        *peer_lo = state->notify_last_peer_lo;
+        return 1;
+    }
+    if (state->notify_peer_count > 0) {
+        *peer_hi = state->notify_peers[0].peer_hi;
+        *peer_lo = state->notify_peers[0].peer_lo;
+        return 1;
+    }
+    return 0;
+}
+
 /* A choice that matches what this machine picks on its own is saved as
    "auto", so a drawer copied to another kind of machine follows that machine:
    a fast machine's "on" made a stock A1200 open with inline photos. A choice
@@ -7244,6 +7523,151 @@ int tg_gui_self_test(void)
             !prefs->avatars_explicit) {
             puts("gui self-test: unsampled choice was not kept explicit");
             return 2;
+        }
+    }
+
+    /* New-message notifications: the count per chat and in total, the
+       title and AppIcon texts, and the setting file's round trip. */
+    {
+        tg_gui_state *ns = tg_gui_test_scratch_state();
+        const char *path = "tg-gui-notify-self-test.tmp";
+        char text[96];
+        int mode;
+        int beep;
+        int i;
+
+        memset(ns, 0, sizeof(*ns));
+        ns->notify_mode = TG_GUI_NOTIFY_TITLE;
+        tg_gui_notify_title(ns, text, sizeof(text));
+        if (strcmp(text, TG_APP_TITLE) != 0) {
+            puts("gui self-test: notify title without news is not plain");
+            return 2;
+        }
+        tg_gui_notify_count(ns, 0UL, 0x10UL);
+        tg_gui_notify_count(ns, 0UL, 0x10UL);
+        tg_gui_notify_count(ns, 0UL, 0x20UL);
+        if (tg_gui_notify_total(ns) != 3 ||
+            tg_gui_notify_count_for(ns, 0UL, 0x10UL) != 2) {
+            puts("gui self-test: notify count per chat wrong");
+            return 2;
+        }
+        tg_gui_notify_title(ns, text, sizeof(text));
+        if (strcmp(text, TG_APP_TITLE " (3 new)") != 0) {
+            printf("gui self-test: notify title \"%s\"\n", text);
+            return 2;
+        }
+        tg_gui_notify_icon_label(ns, text, sizeof(text));
+        if (strcmp(text, "TelegramAmiga (3)") != 0) {
+            printf("gui self-test: notify icon label \"%s\"\n", text);
+            return 2;
+        }
+        ns->notify_mode = TG_GUI_NOTIFY_OFF;
+        tg_gui_notify_title(ns, text, sizeof(text));
+        if (strcmp(text, TG_APP_TITLE) != 0) {
+            puts("gui self-test: notify off still counts in the title");
+            return 2;
+        }
+        ns->notify_mode = TG_GUI_NOTIFY_TITLE;
+        tg_gui_notify_seen(ns, 0UL, 0x10UL);
+        if (tg_gui_notify_total(ns) != 1 ||
+            tg_gui_notify_count_for(ns, 0UL, 0x10UL) != 0) {
+            puts("gui self-test: opening a chat did not clear its news");
+            return 2;
+        }
+        /* A full table spills into the overflow, which any open clears. */
+        for (i = 0; i < TG_GUI_NOTIFY_PEERS + 2; ++i) {
+            tg_gui_notify_count(ns, 1UL, (unsigned long)i);
+        }
+        if (tg_gui_notify_total(ns) != TG_GUI_NOTIFY_PEERS + 3) {
+            puts("gui self-test: notify table overflow lost a count");
+            return 2;
+        }
+        tg_gui_notify_seen(ns, 0UL, 0x20UL);
+        if (tg_gui_notify_total(ns) != TG_GUI_NOTIFY_PEERS - 1) {
+            puts("gui self-test: notify overflow not cleared by an open");
+            return 2;
+        }
+        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT,
+                                           1) != 0) {
+            puts("gui self-test: notify setting save failed");
+            return 2;
+        }
+        tg_gui_notify_preferences_load(path, &mode, &beep);
+        if (mode != TG_GUI_NOTIFY_POPUP_TEXT || beep != 1) {
+            (void)remove(path);
+            puts("gui self-test: notify setting round trip failed");
+            return 2;
+        }
+        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0) != 0) {
+            (void)remove(path);
+            puts("gui self-test: notify setting save failed");
+            return 2;
+        }
+        tg_gui_notify_preferences_load(path, &mode, &beep);
+        (void)remove(path);
+        if (mode != TG_GUI_NOTIFY_OFF || beep != 0) {
+            puts("gui self-test: notify off round trip failed");
+            return 2;
+        }
+        tg_gui_notify_preferences_load(path, &mode, &beep);
+        if (mode != TG_GUI_NOTIFY_TITLE || beep != 0) {
+            puts("gui self-test: notify defaults wrong");
+            return 2;
+        }
+
+        /* The pop-up's lines: the chat and the count, or the text. */
+        {
+            char head[TG_GUI_NAME_MAX + 16];
+            char body[TG_GUI_NOTIFY_TEXT_MAX];
+            unsigned long hi;
+            unsigned long lo;
+
+            memset(ns, 0, sizeof(*ns));
+            ns->notify_mode = TG_GUI_NOTIFY_POPUP;
+            if (tg_gui_notify_pick(ns, &hi, &lo) != 0) {
+                puts("gui self-test: notify pick without news");
+                return 2;
+            }
+            tg_gui_notify_count(ns, 0UL, 0x30UL);
+            tg_gui_notify_count(ns, 0UL, 0x40UL);
+            tg_gui_notify_count(ns, 0UL, 0x40UL);
+            ns->notify_last_peer_lo = 0x40UL;
+            strcpy(ns->notify_last_name, "Mario Rossi");
+            strcpy(ns->notify_last_text, "ciao, ci sei?");
+            tg_gui_notify_popup_text(ns, head, sizeof(head), body,
+                                     sizeof(body));
+            if (strcmp(head, "Mario Rossi") != 0 ||
+                strcmp(body, "2 new messages, 3 in all") != 0) {
+                printf("gui self-test: notify pop-up \"%s\" \"%s\"\n", head,
+                       body);
+                return 2;
+            }
+            ns->notify_mode = TG_GUI_NOTIFY_POPUP_TEXT;
+            tg_gui_notify_popup_text(ns, head, sizeof(head), body,
+                                     sizeof(body));
+            if (strcmp(head, "Mario Rossi (2)") != 0 ||
+                strcmp(body, "ciao, ci sei?") != 0) {
+                printf("gui self-test: notify text pop-up \"%s\" \"%s\"\n",
+                       head, body);
+                return 2;
+            }
+            if (tg_gui_notify_pick(ns, &hi, &lo) != 1 || lo != 0x40UL) {
+                puts("gui self-test: notify pick missed the last chat");
+                return 2;
+            }
+            tg_gui_notify_seen(ns, 0UL, 0x40UL);
+            if (tg_gui_notify_pick(ns, &hi, &lo) != 1 || lo != 0x30UL) {
+                puts("gui self-test: notify pick missed the other chat");
+                return 2;
+            }
+            ns->notify_last_text[0] = '\0';
+            ns->notify_last_peer_lo = 0x30UL;
+            tg_gui_notify_popup_text(ns, head, sizeof(head), body,
+                                     sizeof(body));
+            if (strcmp(body, "1 new message") != 0) {
+                printf("gui self-test: notify empty text \"%s\"\n", body);
+                return 2;
+            }
         }
     }
 

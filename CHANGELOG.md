@@ -17,6 +17,21 @@ the text client for the plain 68000.
   message was one of these, such as a new contact's "joined Telegram",
   opened empty, and in groups they were skipped without a trace. The text
   client prints them as "* Anna added Marco". They do not notify.
+- New messages tell you when you are elsewhere, without taking the focus
+  from whoever is typing. The window title counts what came in the other
+  chats, "Unofficial Telegram Amiga (3 new)", and the count goes when the
+  chat is opened. A pop-up of our own, the same on every system with
+  nothing to install, shows the chat and the count, or the start of the
+  message if you want it, in the top right corner of the screen for a few
+  seconds; a click on it opens that chat and brings the window forward.
+  An optional beep flashes the screen, or plays the sound set up for it,
+  once per run of news. Iconified, the client keeps reading the network:
+  the AppIcon's label counts the news, "TelegramAmiga (3)", the pop-up
+  shows on the Workbench, and a double-click opens the window on the chat
+  with them. With the window behind or iconified the open chat counts as
+  well. Settings > New messages: Off, Count in title (the default), Count
+  and pop-up, Pop-up with the text, and Beep. Off leaves the iconified
+  client asleep, as before.
 
 ### Fixed
 - A message you send shows its time as soon as the next update comes in.

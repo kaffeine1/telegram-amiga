@@ -200,6 +200,21 @@ unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
    Messages is "outgoing", yet everything there is yours to edit/delete). */
 #define TG_GUI_SAVED_PEER_INDEX 0xfffffffeUL
 
+/* New-message notifications: what tells the user about a message in a chat
+   other than the open one. Each mode includes the ones before it. */
+#define TG_GUI_NOTIFY_OFF 0
+#define TG_GUI_NOTIFY_TITLE 1      /* count in the window title / AppIcon */
+#define TG_GUI_NOTIFY_POPUP 2      /* and a pop-up with the chat */
+#define TG_GUI_NOTIFY_POPUP_TEXT 3 /* and the start of the text in it */
+#define TG_GUI_NOTIFY_PEERS 32
+#define TG_GUI_NOTIFY_TEXT_MAX 96
+
+typedef struct tg_gui_notify_peer {
+    unsigned long peer_hi;
+    unsigned long peer_lo;
+    int count;
+} tg_gui_notify_peer;
+
 typedef struct tg_gui_chat {
     char name[TG_GUI_NAME_MAX];
     char preview[TG_GUI_TEXT_MAX];
@@ -289,6 +304,24 @@ typedef struct tg_gui_state {
     unsigned long photo_cache_limit_mb; /* 0 unlimited; default 50 MiB */
     int photo_full_size;   /* viewer and Save photo as... take the largest
                               copy; off by default */
+    /* New-message notifications (0.0.97). The counts live apart from the
+       sidebar rows, which a search or a list reload rewrites: one slot per
+       chat with news this session, cleared when that chat is opened. */
+    int notify_mode;       /* TG_GUI_NOTIFY_*, from data/telegram-notify.txt */
+    int notify_beep;       /* DisplayBeep on the first unseen message of a run */
+    tg_gui_notify_peer notify_peers[TG_GUI_NOTIFY_PEERS];
+    int notify_peer_count;
+    int notify_overflow;   /* news from more chats than the table holds */
+    unsigned long notify_seq; /* bumps once per counted notification */
+    unsigned long notify_last_peer_hi; /* the chat of the last one */
+    unsigned long notify_last_peer_lo;
+    char notify_last_name[TG_GUI_NAME_MAX];
+    char notify_last_text[TG_GUI_NOTIFY_TEXT_MAX]; /* Latin-1 */
+    int notify_away;       /* the window is behind or parked: the open
+                              chat's news count as well */
+    int notify_open_pending; /* reopen on the chat with the news */
+    unsigned long notify_open_hi;
+    unsigned long notify_open_lo;
     /* Scrollbar geometry the painter caches each frame for the event loop's
        knob-drag / track-click (only the painter has the backend to size the
        transcript). *_max == 0 means no bar / nothing to drag. */
@@ -580,6 +613,36 @@ void tg_gui_avatar_preferences_load(const char *path, int *enabled,
                                     int *explicit_choice);
 int tg_gui_avatar_preferences_save_choice(const char *path, int enabled,
                                           int explicit_choice);
+/* New-message notifications. A missing or unreadable file gives the
+   defaults: the count in the title, no beep. */
+void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep);
+int tg_gui_notify_preferences_save(const char *path, int mode, int beep);
+/* Counts one new message in the chat (hi, lo); the caller already skipped
+   the chat open in front of the user. */
+void tg_gui_notify_count(tg_gui_state *state, unsigned long peer_hi,
+                         unsigned long peer_lo);
+/* The chat (hi, lo) was opened: its news are seen. */
+void tg_gui_notify_seen(tg_gui_state *state, unsigned long peer_hi,
+                        unsigned long peer_lo);
+int tg_gui_notify_total(const tg_gui_state *state);
+int tg_gui_notify_count_for(const tg_gui_state *state, unsigned long peer_hi,
+                            unsigned long peer_lo);
+/* "Unofficial Telegram Amiga (3 new)" while there is news and the mode
+   shows it, the plain title otherwise. */
+void tg_gui_notify_title(const tg_gui_state *state, char *out,
+                         unsigned long size);
+/* The AppIcon label while parked: "TelegramAmiga (3)" or "TelegramAmiga". */
+void tg_gui_notify_icon_label(const tg_gui_state *state, char *out,
+                              unsigned long size);
+/* The pop-up's two lines for the last news: the chat, then the count or,
+   with the text mode, the start of the message. */
+void tg_gui_notify_popup_text(const tg_gui_state *state, char *head,
+                              unsigned long head_size, char *body,
+                              unsigned long body_size);
+/* The chat to open for the news: the last one with some, else any other.
+   Returns 0 when nothing waits. */
+int tg_gui_notify_pick(const tg_gui_state *state, unsigned long *peer_hi,
+                       unsigned long *peer_lo);
 /* Menu toggles: a choice equal to the sampled machine default is "auto". */
 void tg_gui_set_inline_photos(tg_gui_state *state, int enabled);
 void tg_gui_set_emoji_enabled(tg_gui_state *state, int enabled);

@@ -535,6 +535,11 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_ENABLEEMOJI 24
 #define TG_MENU_FULLPHOTOS 25
 #define TG_MENU_AVATARS 26
+#define TG_MENU_NOTIFY_OFF 27
+#define TG_MENU_NOTIFY_TITLE 28
+#define TG_MENU_NOTIFY_POPUP 29
+#define TG_MENU_NOTIFY_TEXT 30
+#define TG_MENU_NOTIFY_BEEP 31
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -5982,6 +5987,8 @@ static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
     /* Opening a chat clears its unread badge / flash -- you are now reading it. */
     state->chats[sel].unread = 0;
     state->chats[sel].flash = 0;
+    tg_gui_notify_seen(state, state->chats[sel].peer_id_hi,
+                       state->chats[sel].peer_id_lo);
     tg_gui_window_apply_selection(state);
     if (tg_gui_session_is_open()) {
         state->message_count = 0;
@@ -6591,6 +6598,18 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_OWNSCREEN },
     { NM_ITEM,  (STRPTR)"Download drawer...", 0, 0, 0,
       (APTR)TG_MENU_DLDIR },
+    { NM_ITEM,  (STRPTR)"New messages", 0, 0, 0, 0 },
+    { NM_SUB,   (STRPTR)"Off", 0,
+      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_OFF },
+    { NM_SUB,   (STRPTR)"Count in title", 0,
+      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_TITLE },
+    { NM_SUB,   (STRPTR)"Count and pop-up", 0,
+      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_POPUP },
+    { NM_SUB,   (STRPTR)"Pop-up with the text", 0,
+      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_TEXT },
+    { NM_SUB,   NM_BARLABEL, 0, 0, 0, 0 },
+    { NM_SUB,   (STRPTR)"Beep", 0,
+      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_BEEP },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Show inline photos", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_INLINEPHOTOS },
@@ -6664,6 +6683,35 @@ static void tg_gui_menu_set_emoji(struct Menu *menu, int enabled)
             item->Flags |= ITEMENABLED;
         } else {
             item->Flags &= (UWORD)~ITEMENABLED;
+        }
+    }
+}
+
+static void tg_gui_menu_set_notify(struct Menu *menu, int mode, int beep)
+{
+    static APTR const ids[4] = {
+        (APTR)TG_MENU_NOTIFY_OFF, (APTR)TG_MENU_NOTIFY_TITLE,
+        (APTR)TG_MENU_NOTIFY_POPUP, (APTR)TG_MENU_NOTIFY_TEXT
+    };
+    struct MenuItem *item;
+    int i;
+
+    for (i = 0; i < 4; ++i) {
+        item = tg_gui_menu_find_userdata(menu, ids[i]);
+        if (item != 0) {
+            if (i == mode) {
+                item->Flags |= CHECKED;
+            } else {
+                item->Flags &= (UWORD)~CHECKED;
+            }
+        }
+    }
+    item = tg_gui_menu_find_userdata(menu, (APTR)TG_MENU_NOTIFY_BEEP);
+    if (item != 0) {
+        if (beep) {
+            item->Flags |= CHECKED;
+        } else {
+            item->Flags &= (UWORD)~CHECKED;
         }
     }
 }
@@ -9790,10 +9838,479 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
     state->cursor_on = (state->mode != TG_GUI_MODE_CHAT) ? 1 : 0;
 }
 
+/* Our own new-message pop-up, the same on every lane: nothing to install,
+   nothing linked (Ringhio, MagicBeacon and Herald each live on one system
+   only, and AROS has none). A small borderless window in the top right
+   corner of a screen, opened inactive so whoever types elsewhere keeps
+   typing, and drawn first under the layer lock: the Send photo discipline,
+   since a window drawn while it becomes active once froze MorphOS. It goes
+   by itself after a few seconds; a click opens the chat. One at a time: the
+   next news takes its place. */
+#define TG_GUI_POPUP_SECONDS 6UL
+#define TG_GUI_POPUP_PAD 6
+
+typedef struct tg_gui_popup {
+    struct Window *window;
+    unsigned long peer_hi;  /* the chat it shows */
+    unsigned long peer_lo;
+    time_t shown;           /* when its latest news came */
+    int compat;             /* AfA: glyphs through BltTemplate, not Text() */
+    UWORD pen_back;
+    UWORD pen_text;
+    UWORD pen_shine;
+    UWORD pen_shadow;
+    UWORD pen_fill;
+    UWORD pen_filltext;
+    char head[TG_GUI_NAME_MAX + 16];
+    char body[TG_GUI_NOTIFY_TEXT_MAX];
+} tg_gui_popup;
+
+static int tg_gui_popup_width(tg_gui_popup *popup, struct RastPort *rp,
+                              const char *text, unsigned long length)
+{
+    if (length == 0UL) {
+        return 0;
+    }
+    if (popup->compat) {
+        return tg_gui_amiga_bitmap_text_width(rp, text, length);
+    }
+    return (int)TextLength(rp, (STRPTR)text, (UWORD)length);
+}
+
+/* One line, cut with "..." where it does not fit. */
+static void tg_gui_popup_line(tg_gui_popup *popup, int x, int baseline,
+                              int max_w, const char *text)
+{
+    struct RastPort *rp = popup->window->RPort;
+    unsigned long length = (unsigned long)strlen(text);
+    unsigned long fit = length;
+    int dots = 0;
+
+    if (length == 0UL || max_w <= 0) {
+        return;
+    }
+    if (tg_gui_popup_width(popup, rp, text, length) > max_w) {
+        dots = tg_gui_popup_width(popup, rp, "...", 3UL);
+        while (fit > 0UL &&
+               tg_gui_popup_width(popup, rp, text, fit) + dots > max_w) {
+            --fit;
+        }
+    }
+    if (popup->compat) {
+        tg_gui_amiga_blt_text(rp, x, baseline, text, fit);
+        if (fit < length) {
+            tg_gui_amiga_blt_text(rp, x + tg_gui_popup_width(popup, rp, text,
+                                                             fit),
+                                  baseline, "...", 3UL);
+        }
+        return;
+    }
+    Move(rp, x, baseline);
+    if (fit > 0UL) {
+        Text(rp, (STRPTR)text, (UWORD)fit);
+    }
+    if (fit < length) {
+        Text(rp, (STRPTR)"...", 3);
+    }
+}
+
+/* A raised box in the screen's own pens: the chat on the fill strip, the
+   count or the text below it. */
+static void tg_gui_popup_paint(tg_gui_popup *popup)
+{
+    struct Window *win = popup->window;
+    struct RastPort *rp = win->RPort;
+    int w = (int)win->Width;
+    int h = (int)win->Height;
+    int lh = (int)rp->TxHeight;
+    int base = (int)rp->TxBaseline;
+    int strip = lh + TG_GUI_POPUP_PAD;
+
+    SetDrMd(rp, JAM1);
+    SetAPen(rp, popup->pen_back);
+    RectFill(rp, 1, 1, w - 2, h - 2);
+    SetAPen(rp, popup->pen_fill);
+    RectFill(rp, 1, 1, w - 2, strip);
+    SetAPen(rp, popup->pen_shine);
+    Move(rp, 0, h - 1);
+    Draw(rp, 0, 0);
+    Draw(rp, w - 1, 0);
+    SetAPen(rp, popup->pen_shadow);
+    Move(rp, w - 1, 1);
+    Draw(rp, w - 1, h - 1);
+    Draw(rp, 1, h - 1);
+    SetAPen(rp, popup->pen_filltext);
+    tg_gui_popup_line(popup, TG_GUI_POPUP_PAD,
+                      1 + TG_GUI_POPUP_PAD / 2 + base,
+                      w - 2 * TG_GUI_POPUP_PAD, popup->head);
+    SetAPen(rp, popup->pen_text);
+    tg_gui_popup_line(popup, TG_GUI_POPUP_PAD,
+                      1 + strip + TG_GUI_POPUP_PAD / 2 + base,
+                      w - 2 * TG_GUI_POPUP_PAD, popup->body);
+}
+
+/* A repaint of an open pop-up, outside a refresh: under the layer lock. */
+static void tg_gui_popup_repaint(tg_gui_popup *popup)
+{
+    struct Layer *layer = popup->window->RPort->Layer;
+
+    if (layer != 0) {
+        LockLayerRom(layer);
+    }
+    tg_gui_popup_paint(popup);
+    if (layer != 0) {
+        UnlockLayerRom(layer);
+    }
+}
+
+static void tg_gui_popup_close(tg_gui_popup *popup)
+{
+    if (popup != 0 && popup->window != 0) {
+        CloseWindow(popup->window);
+        popup->window = 0;
+    }
+}
+
+static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
+                             int public_screen)
+{
+    static const char sample[] = "Telegram Amiga, a new message!";
+    struct TagItem tags[16];
+    struct RastPort *srp = &screen->RastPort;
+    struct DrawInfo *dri;
+    struct Window *win;
+    int lh;
+    int w;
+    int h;
+    int left;
+    int top;
+    int i;
+
+    popup->compat = tg_gui_amiga_afa_text_compat();
+    lh = (srp->Font != 0) ? (int)srp->Font->tf_YSize : 8;
+    if (lh < 6) {
+        lh = 8;
+    }
+    w = (srp->Font != 0)
+            ? tg_gui_popup_width(popup, srp, sample,
+                                 (unsigned long)(sizeof(sample) - 1U))
+            : 0;
+    w += 2 * TG_GUI_POPUP_PAD + 2;
+    if (w < (int)screen->Width / 5) {
+        w = (int)screen->Width / 5; /* room for the text on a wide screen */
+    }
+    if (w < 160) {
+        w = 160;
+    }
+    if (w > (int)screen->Width - 16) {
+        w = (int)screen->Width - 16;
+    }
+    h = 2 + 2 * (lh + TG_GUI_POPUP_PAD);
+    left = (int)screen->Width - w - 8;
+    top = (int)screen->BarHeight + 1 + 6;
+    if (left < 0) {
+        left = 0;
+    }
+    if (top + h > (int)screen->Height) {
+        top = 0;
+    }
+    i = 0;
+    tags[i].ti_Tag = WA_Left;
+    tags[i++].ti_Data = (ULONG)left;
+    tags[i].ti_Tag = WA_Top;
+    tags[i++].ti_Data = (ULONG)top;
+    tags[i].ti_Tag = WA_Width;
+    tags[i++].ti_Data = (ULONG)w;
+    tags[i].ti_Tag = WA_Height;
+    tags[i++].ti_Data = (ULONG)h;
+    tags[i].ti_Tag = WA_Borderless;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_Activate;
+    tags[i++].ti_Data = FALSE;
+    tags[i].ti_Tag = WA_SmartRefresh;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_RMBTrap;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_IDCMP;
+    tags[i++].ti_Data = IDCMP_MOUSEBUTTONS | IDCMP_ACTIVEWINDOW |
+                        IDCMP_REFRESHWINDOW;
+    tags[i].ti_Tag = public_screen ? WA_PubScreen : WA_CustomScreen;
+    tags[i++].ti_Data = TG_GUI_TAG(screen);
+    tags[i].ti_Tag = TAG_END;
+    tags[i++].ti_Data = 0;
+    win = OpenWindowTagList(0, tags);
+    if (win == 0) {
+        return 1;
+    }
+    if (srp->Font != 0) {
+        SetFont(win->RPort, srp->Font); /* the font it was measured with */
+    }
+    popup->pen_back = 0;
+    popup->pen_text = 1;
+    popup->pen_shine = 2;
+    popup->pen_shadow = 1;
+    popup->pen_fill = 3;
+    popup->pen_filltext = 1;
+    dri = GetScreenDrawInfo(win->WScreen);
+    if (dri != 0) {
+        if ((int)dri->dri_NumPens > BACKGROUNDPEN) {
+            popup->pen_back = dri->dri_Pens[BACKGROUNDPEN];
+            popup->pen_text = dri->dri_Pens[TEXTPEN];
+            popup->pen_shine = dri->dri_Pens[SHINEPEN];
+            popup->pen_shadow = dri->dri_Pens[SHADOWPEN];
+            popup->pen_fill = dri->dri_Pens[FILLPEN];
+            popup->pen_filltext = dri->dri_Pens[FILLTEXTPEN];
+        }
+        FreeScreenDrawInfo(win->WScreen, dri);
+    }
+    popup->window = win;
+    tg_gui_popup_repaint(popup);
+    {
+        char line[96];
+
+        sprintf(line, "notify: pop-up %dx%d at %d,%d", w, h, left, top);
+        tg_gui_log(line);
+    }
+    return 0;
+}
+
+/* The latest news into the pop-up, opening it when needed. `screen` 0 means
+   the default public screen (the Workbench, as a rule): that is where the
+   user is when the client sits on its own screen or on its AppIcon. */
+static void tg_gui_popup_show(tg_gui_popup *popup, const tg_gui_state *state,
+                              struct Screen *screen)
+{
+    struct Screen *pub = 0;
+
+    if (popup == 0 || state == 0) {
+        return;
+    }
+    tg_gui_notify_popup_text(state, popup->head, sizeof(popup->head),
+                             popup->body, sizeof(popup->body));
+    popup->peer_hi = state->notify_last_peer_hi;
+    popup->peer_lo = state->notify_last_peer_lo;
+    popup->shown = time(0);
+    if (screen == 0) {
+        pub = LockPubScreen(0);
+        if (pub == 0) {
+            return;
+        }
+        screen = pub;
+    }
+    if (popup->window != 0 && popup->window->WScreen != screen) {
+        tg_gui_popup_close(popup);
+    }
+    if (popup->window != 0) {
+        tg_gui_popup_repaint(popup);
+    } else if (tg_gui_popup_open(popup, screen, pub != 0) != 0) {
+        tg_gui_log("notify: pop-up did not open");
+    }
+    if (pub != 0) {
+        UnlockPubScreen(0, pub); /* the open window holds the screen now */
+    }
+}
+
+/* Its messages: 1 when it was clicked, so the chat opens. The window never
+   activates itself, so becoming active with the pointer on it is a click
+   too: MorphOS spends the first click on an inactive window on activating
+   it and delivers no button. */
+static int tg_gui_popup_drain(tg_gui_popup *popup)
+{
+    struct IntuiMessage *msg;
+    int action = 0;
+
+    if (popup == 0 || popup->window == 0) {
+        return 0;
+    }
+    while ((msg = (struct IntuiMessage *)GetMsg(popup->window->UserPort)) !=
+           0) {
+        ULONG cls = msg->Class;
+        UWORD code = msg->Code;
+
+        ReplyMsg((struct Message *)msg);
+        if (cls == IDCMP_REFRESHWINDOW) {
+            BeginRefresh(popup->window);
+            tg_gui_popup_paint(popup);
+            EndRefresh(popup->window, TRUE);
+        } else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
+            tg_gui_log("notify: pop-up clicked");
+            action = 1;
+        } else if (cls == IDCMP_ACTIVEWINDOW) {
+            /* The window's own pointer position, relative to it on every
+               system (a message's may not be, for this class). */
+            WORD mx = popup->window->MouseX;
+            WORD my = popup->window->MouseY;
+            char line[64];
+
+            sprintf(line, "notify: pop-up active, pointer %d,%d", (int)mx,
+                    (int)my);
+            tg_gui_log(line);
+            if (mx >= 0 && my >= 0 && mx < popup->window->Width &&
+                my < popup->window->Height) {
+                action = 1;
+            }
+        }
+    }
+    return action;
+}
+
+static ULONG tg_gui_popup_sigmask(const tg_gui_popup *popup)
+{
+    if (popup == 0 || popup->window == 0 || popup->window->UserPort == 0) {
+        return 0UL;
+    }
+    return 1UL << popup->window->UserPort->mp_SigBit;
+}
+
+/* Gone after its few seconds, or when the setting no longer wants it. */
+static void tg_gui_popup_expire(tg_gui_popup *popup, const tg_gui_state *state)
+{
+    time_t now;
+
+    if (popup == 0 || popup->window == 0) {
+        return;
+    }
+    now = time(0);
+    if (state->notify_mode < TG_GUI_NOTIFY_POPUP || now == (time_t)-1 ||
+        now < popup->shown ||
+        (unsigned long)(now - popup->shown) >= TG_GUI_POPUP_SECONDS) {
+        tg_gui_popup_close(popup);
+    }
+}
+
+/* New-message notification, window open or parked. */
+typedef struct tg_gui_notify_ui {
+    unsigned long seen_seq; /* state->notify_seq already handled */
+    int beeped;             /* this run of news has had its beep */
+    tg_gui_popup popup;
+} tg_gui_notify_ui;
+
+/* Intuition keeps the title pointer, so the text lives here. */
+static char tg_gui_notify_title_text[96];
+
+static void tg_gui_window_notify_title(struct Window *window,
+                                       const tg_gui_state *state)
+{
+    char want[sizeof(tg_gui_notify_title_text)];
+
+    if (window == 0) {
+        return;
+    }
+    tg_gui_notify_title(state, want, sizeof(want));
+    if (window->Title != 0 &&
+        strcmp((const char *)window->Title, want) == 0) {
+        return; /* already showing it: no title bar redraw */
+    }
+    memcpy(tg_gui_notify_title_text, want, sizeof(want));
+    SetWindowTitles(window, (CONST_STRPTR)tg_gui_notify_title_text,
+                    (CONST_STRPTR)~0UL);
+}
+
+/* What a run of news does while the user is away: one beep, then the
+   pop-up with every message. `beep_screen` 0 flashes every screen,
+   `popup_screen` 0 is the default public screen. */
+static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
+                               int away, struct Screen *beep_screen,
+                               struct Screen *popup_screen)
+{
+    if (state->notify_seq == ui->seen_seq) {
+        return;
+    }
+    ui->seen_seq = state->notify_seq;
+    if (!away || state->notify_mode == TG_GUI_NOTIFY_OFF) {
+        return;
+    }
+    /* DisplayBeep is the Amiga's polite "look": a flash, or the sound the
+       user set up. Never a raise. */
+    if (state->notify_beep && !ui->beeped) {
+        DisplayBeep(beep_screen);
+        ui->beeped = 1;
+    }
+    if (state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
+        tg_gui_popup_show(&ui->popup, state, popup_screen);
+    }
+}
+
+static void tg_gui_window_notify_turn(tg_gui_notify_ui *ui,
+                                      tg_gui_state *state,
+                                      struct Window *window,
+                                      struct Window *viewer_window,
+                                      int own_screen)
+{
+    int here;
+
+    if (ui == 0 || state == 0 || window == 0) {
+        return;
+    }
+    here = (window->Flags & WFLG_WINDOWACTIVE) != 0UL ||
+           (viewer_window != 0 &&
+            (viewer_window->Flags & WFLG_WINDOWACTIVE) != 0UL);
+    if (here) {
+        int sel = state->selected_chat;
+
+        /* Back at the window: what came in the open chat meanwhile is in
+           front of the user now, and the pop-up has done its job. */
+        if (state->mode == TG_GUI_MODE_CHAT && !state->in_search &&
+            sel >= 0 && sel < state->chat_count &&
+            tg_gui_notify_count_for(state, state->chats[sel].peer_id_hi,
+                                    state->chats[sel].peer_id_lo) > 0) {
+            tg_gui_notify_seen(state, state->chats[sel].peer_id_hi,
+                               state->chats[sel].peer_id_lo);
+        }
+        ui->beeped = 0;
+        tg_gui_popup_close(&ui->popup);
+    }
+    state->notify_away = !here;
+    /* On its own screen the window is not where the user is: the beep goes
+       to every screen and the pop-up to the Workbench. */
+    tg_gui_notify_news(ui, state, !here, own_screen ? 0 : window->WScreen,
+                       own_screen ? 0 : window->WScreen);
+    if (tg_gui_notify_total(state) == 0) {
+        ui->beeped = 0; /* all seen: the next news may beep again */
+    }
+    tg_gui_popup_expire(&ui->popup, state);
+    tg_gui_window_notify_title(window, state);
+}
+
+/* A click on the pop-up, or the AppIcon double-clicked with news waiting:
+   the chat with the news opens. Not over a draft in the composer, which
+   would then go to the other chat, nor over a search or a forward pick: the
+   window comes forward and the badge shows the way. */
+static void tg_gui_window_notify_open(tg_gui_state *state,
+                                      tg_gui_backend *backend,
+                                      unsigned long peer_hi,
+                                      unsigned long peer_lo)
+{
+    int i;
+
+    if (state->mode != TG_GUI_MODE_CHAT || state->in_search ||
+        state->search_active || state->forward_pick_active ||
+        (state->composing && state->input[0] != '\0')) {
+        return;
+    }
+    for (i = 0; i < state->chat_count; ++i) {
+        if (state->chats[i].peer_id_hi == peer_hi &&
+            state->chats[i].peer_id_lo == peer_lo) {
+            if (i == state->selected_chat) {
+                tg_gui_notify_seen(state, peer_hi, peer_lo);
+                return; /* already open: the news are in the transcript */
+            }
+            if (state->composing) {
+                state->composing = 0;
+                tg_gui_window_copy(state->status, sizeof(state->status),
+                                   "Live - F1-F10 chats, Amiga+Q quits");
+            }
+            tg_gui_window_open_selection(state, i, backend);
+            return;
+        }
+    }
+}
+
 static int tg_gui_run_window_once(tg_gui_state *state)
 {
     tg_gui_amiga_ctx ctx;
     tg_gui_photo_viewer viewer;
+    tg_gui_notify_ui notify_ui;
     tg_gui_photo_save_job photo_save;
     tg_gui_backend backend;
     int init_w;
@@ -9879,6 +10396,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     memset(&ctx, 0, sizeof(ctx));
     ctx.state = state;
     memset(&viewer, 0, sizeof(viewer));
+    memset(&notify_ui, 0, sizeof(notify_ui));
     memset(&photo_save, 0, sizeof(photo_save));
     ctx.photo_dither = state->photo_dither;
     own_scr = 0;
@@ -10143,6 +10661,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     }
                 }
                 tg_gui_menu_set_photo_dither(menu, state->photo_dither);
+                tg_gui_menu_set_notify(menu, state->notify_mode,
+                                       state->notify_beep);
                 tg_gui_menu_set_emoji(menu, state->emoji_enabled);
                 tg_gui_menu_set_photo_cache_limit(
                     menu, state->photo_cache_limit_mb);
@@ -10250,6 +10770,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         tg_gui_startup_backend = 0;
         tg_gui_window_paint(state, &backend);
     }
+    /* Back from the AppIcon, or from a click on a pop-up while parked: the
+       window opens on the chat with the news. */
+    if (state->notify_open_pending) {
+        state->notify_open_pending = 0;
+        tg_gui_window_notify_open(state, &backend, state->notify_open_hi,
+                                  state->notify_open_lo);
+    }
 
     /* When a live session is attached (--gui-live), IDCMP_INTUITICKS (~10/s
        while the window is active) drives the network poll: throttle the actual
@@ -10335,6 +10862,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
     wbn_mask = tg_gui_wbn_begin();
     wbn_close = 0;
+    /* News that came before the window opened are in the title already;
+       only what arrives from here on beeps. */
+    notify_ui.seen_seq = state->notify_seq;
     while (!done) {
         struct IntuiMessage *msg;
         int session_dirty;
@@ -10392,6 +10922,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 viewer.ctx.window->UserPort != 0) {
                 wait_mask |= 1UL << viewer.ctx.window->UserPort->mp_SigBit;
             }
+            wait_mask |= tg_gui_popup_sigmask(&notify_ui.popup);
             wait_mask |= (ULONG)tg_platform_gui_drop_sigmask();
             wait_mask |= wbn_mask;
             /* 0.0.8 1b: while a transfer is active the loop must not sleep --
@@ -10438,6 +10969,21 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             tg_gui_photo_save_begin(state, viewer.ctx.window, &backend,
                                     &photo_save, viewer.slot.id_hi,
                                     viewer.slot.id_lo);
+        }
+        /* A click on the pop-up brings the window forward on that chat:
+           the user's own gesture, never ours. */
+        if (tg_gui_popup_drain(&notify_ui.popup)) {
+            unsigned long popup_hi = notify_ui.popup.peer_hi;
+            unsigned long popup_lo = notify_ui.popup.peer_lo;
+
+            tg_gui_popup_close(&notify_ui.popup);
+            interactive_event = 1;
+            if (own_scr != 0) {
+                ScreenToFront(own_scr);
+            }
+            WindowToFront(ctx.window);
+            ActivateWindow(ctx.window);
+            tg_gui_window_notify_open(state, &backend, popup_hi, popup_lo);
         }
         while ((msg = (struct IntuiMessage *)GetMsg(ctx.window->UserPort)) !=
                0) {
@@ -11554,6 +12100,52 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         : "Inline photos disabled");
                             }
                             tg_gui_window_paint(state, &backend);
+                        } else if (ud == (APTR)TG_MENU_NOTIFY_OFF ||
+                                   ud == (APTR)TG_MENU_NOTIFY_TITLE ||
+                                   ud == (APTR)TG_MENU_NOTIFY_POPUP ||
+                                   ud == (APTR)TG_MENU_NOTIFY_TEXT ||
+                                   ud == (APTR)TG_MENU_NOTIFY_BEEP) {
+                            static const char *const notify_names[4] = {
+                                "New messages: off",
+                                "New messages: count in title",
+                                "New messages: count and pop-up",
+                                "New messages: pop-up with the text"
+                            };
+
+                            if (ud == (APTR)TG_MENU_NOTIFY_BEEP) {
+                                state->notify_beep = !state->notify_beep;
+                            } else {
+                                state->notify_mode =
+                                    ud == (APTR)TG_MENU_NOTIFY_OFF
+                                        ? TG_GUI_NOTIFY_OFF
+                                        : ud == (APTR)TG_MENU_NOTIFY_POPUP
+                                              ? TG_GUI_NOTIFY_POPUP
+                                              : ud == (APTR)TG_MENU_NOTIFY_TEXT
+                                                    ? TG_GUI_NOTIFY_POPUP_TEXT
+                                                    : TG_GUI_NOTIFY_TITLE;
+                            }
+                            tg_gui_menu_set_notify(menu, state->notify_mode,
+                                                   state->notify_beep);
+                            if (tg_gui_notify_preferences_save(
+                                    "data/telegram-notify.txt",
+                                    state->notify_mode,
+                                    state->notify_beep) != 0) {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    "Could not save the new-message setting");
+                            } else if (ud == (APTR)TG_MENU_NOTIFY_BEEP) {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    state->notify_beep
+                                        ? "Beep on new messages: on"
+                                        : "Beep on new messages: off");
+                            } else {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    notify_names[state->notify_mode]);
+                            }
+                            tg_gui_window_notify_title(ctx.window, state);
+                            tg_gui_window_paint_status(state, &backend);
                         } else if (ud == (APTR)TG_MENU_DITHER_FULL ||
                                    ud == (APTR)TG_MENU_DITHER_LIGHT ||
                                    ud == (APTR)TG_MENU_DITHER_OFF) {
@@ -13173,6 +13765,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         if (viewer_dirty && viewer.ctx.window != 0) {
             tg_gui_photo_viewer_paint(&viewer);
         }
+        /* New-message notification: the title counts the news from other
+           chats, and the first of a run beeps while the window is behind. */
+        tg_gui_window_notify_turn(&notify_ui, state, ctx.window,
+                                  viewer.ctx.window, own_scr != 0);
         /* A fits-window load left the older rows above the pinned-newest view: if
            it now overflows, scroll to the top to reveal them (the paint above
            refreshed sb_tr_max). If it still fits, they are already on screen. */
@@ -13231,6 +13827,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     /* The viewer is a visitor on the same screen. Close it before releasing
        shared pens, the CyberGraphX interface or a private application screen. */
     tg_gui_photo_viewer_close(&viewer);
+    tg_gui_popup_close(&notify_ui.popup);
     /* Window going away with a transfer still running (menu Quit, iconify,
        Amiga+Q): cancel and unwind it -- end() closes the file (removing a
        partial download) so session_close finds the engine idle. */
@@ -13306,19 +13903,86 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     return (done == 2) ? 2 : (done == 3 || done == 4) ? 3 : 0;
 }
 
+/* While parked, pushes are read on every heartbeat, at most this many
+   frames each; the full network tick (the open chat, read receipts, the
+   getDifference backstop) runs less often than with the window open. */
+#define TG_GUI_PARK_FRAMES 4
+#define TG_GUI_PARK_TICK_SECONDS 10UL
+
+/* AddAppIcon's label: a const char * on AROS, a UBYTE * on MorphOS, a
+   STRPTR elsewhere. */
+#if defined(__AROS__)
+#define TG_GUI_APPICON_TEXT(text) ((const char *)(text))
+#elif defined(__MORPHOS__) || defined(__MORPHOS)
+#define TG_GUI_APPICON_TEXT(text) ((UBYTE *)(text))
+#else
+#define TG_GUI_APPICON_TEXT(text) ((STRPTR)(text))
+#endif
+
+/* A new label for the parked AppIcon: Workbench takes a new text only with
+   the icon added again. `shown` holds the label and stays valid while the
+   icon lives (AROS keeps the pointer). Returns the icon now showing, 0 when
+   none could be added; a double-click on the old one sets *clicked. */
+static struct AppIcon *tg_gui_appicon_relabel(struct AppIcon *icon,
+                                              struct MsgPort *port,
+                                              struct DiskObject *dobj,
+                                              char *shown, int *clicked)
+{
+    struct AppIcon *fresh;
+    struct Message *m;
+
+#if defined(__AROS__)
+    /* Wanderer knows an AppIcon by its address and keeps the label it read
+       first, and one removed and added again comes back at the same
+       address: the new one goes in before the old one goes. */
+    fresh = AddAppIcon(0UL, 0UL, TG_GUI_APPICON_TEXT(shown), port, 0, dobj,
+                       TAG_DONE);
+    if (fresh == 0) {
+        return icon; /* the old label stays */
+    }
+    RemoveAppIcon(icon);
+#else
+    /* Removed first, so the new one takes the old one's place. */
+    RemoveAppIcon(icon);
+    fresh = AddAppIcon(0UL, 0UL, TG_GUI_APPICON_TEXT(shown), port, 0, dobj,
+                       TAG_DONE);
+#endif
+    while ((m = GetMsg(port)) != 0) {
+        ReplyMsg(m); /* a double-click on the old one still counts */
+        *clicked = 1;
+    }
+    return fresh;
+}
+
 /* Iconified park: an AppIcon on Workbench (our own shipped icon when
    loadable, the default tool icon otherwise); a double-click -- or a
    Ctrl-C break -- wakes us. Returns 1 to reopen the window, 0 to quit.
-   Everything is opened lazily and torn down before returning, so the
-   iconified footprint is just this task, its stack and the AppIcon. */
-static int tg_gui_window_iconify_wait(void)
+   Everything is opened lazily and torn down before returning. Unless the
+   new-message setting is Off the client keeps reading the network while
+   parked: the label counts the news, "TelegramAmiga (3)", the beep and the
+   pop-up come as with the window open, and a double-click or a click on the
+   pop-up reopens the window on the chat with the news. With the setting Off
+   the park stays what it was: this task, its stack and the AppIcon, asleep. */
+static int tg_gui_window_iconify_wait(tg_gui_state *state)
 {
     struct MsgPort *port = 0;
     struct DiskObject *dobj = 0;
     struct AppIcon *icon = 0;
     struct Message *m;
+    struct MsgPort *timer_port = 0;
+    tg_gui_timereq *timer_req = 0;
+    tg_gui_notify_ui ui;
+    char label[40];
+    char shown[40];
+    time_t last_tick;
+    int timer_ok = 0;
+    int timer_pending = 0;
+    int core_libs = 0;
+    int live = 0;
+    int done = 0;
     int reopen = 0;
 
+    memset(&ui, 0, sizeof(ui));
     WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 36L);
     IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36L);
 #if defined(__amigaos4__)
@@ -13353,19 +14017,151 @@ static int tg_gui_window_iconify_wait(void)
     }
     dobj->do_CurrentX = NO_ICON_POSITION;
     dobj->do_CurrentY = NO_ICON_POSITION;
-    icon = AddAppIcon(0UL, 0UL, (STRPTR)"TelegramAmiga", port, 0, dobj,
-                      TAG_DONE);
-    if (icon != 0) {
-        ULONG sigs = Wait((1UL << port->mp_SigBit) | SIGBREAKF_CTRL_C);
-
-        reopen = (sigs & (1UL << port->mp_SigBit)) != 0UL;
-        while ((m = GetMsg(port)) != 0) {
-            ReplyMsg(m);
+    /* Reading on while parked wants Intuition for the beep and the pop-up,
+       and the heartbeat; any of them missing leaves the old quiet park. */
+    if (state != 0 && state->notify_mode != TG_GUI_NOTIFY_OFF &&
+        state->mode == TG_GUI_MODE_CHAT && tg_gui_session_is_open()) {
+        core_libs = tg_gui_amiga_open_core_libs();
+        timer_port = CreateMsgPort();
+        if (timer_port != 0) {
+            timer_req = (tg_gui_timereq *)CreateIORequest(
+                timer_port, sizeof(tg_gui_timereq));
         }
+        if (core_libs && timer_req != 0 &&
+            OpenDevice((CONST_STRPTR)"timer.device", UNIT_VBLANK,
+                       (struct IORequest *)timer_req, 0) == 0) {
+            timer_ok = 1;
+            live = 1;
+        }
+    }
+    if (live) {
+        tg_gui_timer_arm(timer_req, 0);
+        timer_pending = 1;
+        ui.seen_seq = state->notify_seq;
+        state->notify_away = 1;
+        tg_gui_notify_icon_label(state, label, sizeof(label));
+        tg_gui_log("window: parked, reading on");
+    } else {
+        tg_gui_window_copy(label, sizeof(label), "TelegramAmiga");
+    }
+    memcpy(shown, label, sizeof(shown));
+    icon = AddAppIcon(0UL, 0UL, TG_GUI_APPICON_TEXT(shown), port, 0, dobj,
+                      TAG_DONE);
+    last_tick = time(0);
+    while (icon != 0 && !done) {
+        ULONG wait_mask = (1UL << port->mp_SigBit) | SIGBREAKF_CTRL_C;
+        ULONG sigs;
+
+        if (timer_ok) {
+            wait_mask |= 1UL << timer_port->mp_SigBit;
+        }
+        wait_mask |= tg_gui_popup_sigmask(&ui.popup);
+        sigs = Wait(wait_mask);
+        if ((sigs & SIGBREAKF_CTRL_C) != 0UL) {
+            break; /* a clean quit */
+        }
+        while ((m = GetMsg(port)) != 0) {
+            ReplyMsg(m); /* the double-click */
+            reopen = 1;
+            done = 1;
+        }
+        if (tg_gui_popup_drain(&ui.popup) && !done) {
+            state->notify_open_pending = 1;
+            state->notify_open_hi = ui.popup.peer_hi;
+            state->notify_open_lo = ui.popup.peer_lo;
+            reopen = 1;
+            done = 1;
+        }
+        if (done || !timer_ok || !timer_pending ||
+            CheckIO((struct IORequest *)timer_req) == 0) {
+            continue;
+        }
+        (void)WaitIO((struct IORequest *)timer_req);
+        timer_pending = 0;
+        {
+            unsigned long interval = TG_GUI_PARK_TICK_SECONDS;
+            time_t now;
+            int frames;
+
+            for (frames = 0; frames < TG_GUI_PARK_FRAMES; ++frames) {
+                if (!tg_gui_session_receive_pending(stdout)) {
+                    break;
+                }
+            }
+            if (interval < tg_gui_tick_backoff_seconds()) {
+                interval = tg_gui_tick_backoff_seconds();
+            }
+            now = time(0);
+            if (now != (time_t)-1 &&
+                (now < last_tick ||
+                 (unsigned long)(now - last_tick) >= interval)) {
+                last_tick = now;
+                (void)tg_gui_session_tick(stdout);
+                tg_gui_tick_after(&last_tick, interval);
+            }
+        }
+        /* Parked, the user can be on any screen: the beep flashes them all,
+           the pop-up goes to the Workbench where the AppIcon is. */
+        tg_gui_notify_news(&ui, state, 1, 0, 0);
+        if (tg_gui_notify_total(state) == 0) {
+            ui.beeped = 0;
+        }
+        tg_gui_popup_expire(&ui.popup, state);
+        /* The label counts the news. */
+        tg_gui_notify_icon_label(state, label, sizeof(label));
+        if (strcmp(label, shown) != 0) {
+            int clicked = 0;
+
+            memcpy(shown, label, sizeof(shown));
+            icon = tg_gui_appicon_relabel(icon, port, dobj, shown, &clicked);
+            if (clicked) {
+                reopen = 1;
+                done = 1;
+            }
+            if (icon == 0) {
+                /* No AppIcon any more: the window beats a lost client. */
+                tg_gui_log("window: AppIcon label update failed, reopening");
+                reopen = 1;
+                done = 1;
+            }
+        }
+        if (!done) {
+            tg_gui_timer_arm(timer_req, 0);
+            timer_pending = 1;
+        }
+    }
+    /* A double-click with news waiting brings the window back on them. */
+    if (reopen && state != 0 && state->notify_mode != TG_GUI_NOTIFY_OFF &&
+        !state->notify_open_pending &&
+        tg_gui_notify_pick(state, &state->notify_open_hi,
+                           &state->notify_open_lo)) {
+        state->notify_open_pending = 1;
+    }
+    tg_gui_popup_close(&ui.popup);
+    if (icon != 0) {
         RemoveAppIcon(icon);
         while ((m = GetMsg(port)) != 0) {
             ReplyMsg(m);
         }
+    }
+    if (timer_ok) {
+        if (timer_pending) {
+            AbortIO((struct IORequest *)timer_req);
+            (void)WaitIO((struct IORequest *)timer_req);
+        }
+        CloseDevice((struct IORequest *)timer_req);
+    }
+    if (timer_req != 0) {
+        DeleteIORequest((struct IORequest *)timer_req);
+    }
+    if (timer_port != 0) {
+        DeleteMsgPort(timer_port);
+    }
+    if (core_libs) {
+        tg_gui_amiga_close_core_libs();
+    }
+    if (state != 0) {
+        state->notify_away = 0; /* the window decides again once it is up */
     }
 out:
     if (dobj != 0) {
@@ -13407,6 +14203,8 @@ int tg_gui_run_window(tg_gui_state *state)
                                    &state->avatars_enabled,
                                    &state->avatars_explicit);
     state->avatars_default_resolved = 0;
+    tg_gui_notify_preferences_load("data/telegram-notify.txt",
+                                   &state->notify_mode, &state->notify_beep);
     if (state->photo_cache_limit_mb != TG_GUI_PHOTO_CACHE_UNLIMITED_MB &&
         state->photo_cache_limit_mb != 10UL &&
         state->photo_cache_limit_mb != 50UL &&
@@ -13424,7 +14222,7 @@ int tg_gui_run_window(tg_gui_state *state)
             tg_gui_photo_cache_end();
             return rc;
         }
-        if (!tg_gui_window_iconify_wait()) {
+        if (!tg_gui_window_iconify_wait(state)) {
             tg_gui_photo_cache_end();
             return 0; /* AppIcon failed or Ctrl-C: a clean quit */
         }
