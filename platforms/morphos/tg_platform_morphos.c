@@ -71,6 +71,7 @@ unsigned long __stack = 1048576UL;
 #include <proto/wb.h>
 #endif
 #include "tg_platform.h"
+#include "tg_platform_common.h"
 #include "tg_mtproto_crypto.h"
 #include "tg_file.h"
 #include "tg_version.h"
@@ -626,15 +627,6 @@ int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
     return tg_morphos_random_fallback(bytes, byte_count);
 }
 
-static void tg_platform_set_error(char *error_buffer, unsigned long error_buffer_size,
-                                  const char *message)
-{
-    if (error_buffer != 0 && error_buffer_size > 0) {
-        strncpy(error_buffer, message, error_buffer_size - 1);
-        error_buffer[error_buffer_size - 1] = '\0';
-    }
-}
-
 /* Open bsdsocket.library in-process and point its errno at ours. Mirrors the
    OS3 no-ixemul lane (OpenLibrary v4 + SetErrnoPtr); returns 1 on success. */
 static int tg_morphos_open_socket_library(void)
@@ -809,16 +801,17 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
         return TG_NET_CONNECT_FAILED;
     }
 
-    host_entry = gethostbyname((const UBYTE *)host);
-    if (host_entry == 0 || host_entry->h_addr_list == 0 || host_entry->h_addr_list[0] == 0) {
-        tg_platform_set_error(error_buffer, error_buffer_size, "host lookup failed");
-        return TG_NET_RESOLVE_FAILED;
-    }
-
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons((unsigned short)port_number);
-    memcpy(&address.sin_addr, host_entry->h_addr_list[0], sizeof(address.sin_addr));
+    if (!tg_platform_parse_ipv4(host, (unsigned char *)&address.sin_addr.s_addr)) {
+        host_entry = gethostbyname((const UBYTE *)host);
+        if (host_entry == 0 || host_entry->h_addr_list == 0 || host_entry->h_addr_list[0] == 0) {
+            tg_platform_set_error(error_buffer, error_buffer_size, "host lookup failed");
+            return TG_NET_RESOLVE_FAILED;
+        }
+        memcpy(&address.sin_addr, host_entry->h_addr_list[0], sizeof(address.sin_addr));
+    }
 
     sock = (int)socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -1345,20 +1338,6 @@ void tg_platform_set_executable(const char *path)
 #endif
 }
 
-#if defined(__MORPHOS__) || defined(__MORPHOS)
-/* Free blocks to KB without overflowing 32 bits on a big volume. */
-static unsigned long tg_platform_blocks_kb(unsigned long blocks,
-                                           unsigned long bytes_per_block)
-{
-    if (bytes_per_block >= 1024UL) {
-        unsigned long per = bytes_per_block / 1024UL;
-
-        return blocks > ~0UL / per ? ~0UL : blocks * per;
-    }
-    return bytes_per_block == 0UL ? 0UL : blocks / (1024UL / bytes_per_block);
-}
-#endif
-
 /* Room left on the volume holding `path`, in KB (tg_platform.h). The RAM
    disk lives in free memory, so its room is what AvailMem() reports, whatever
    its handler answers: an older ram-handler says it is always full. */
@@ -1544,8 +1523,13 @@ void tg_platform_workbench_tui_console_close(void)
    (gui_window.o owns them); we open them only when still closed and close
    only what we opened. */
 
+#if defined(TG_NO_GUI)
+struct Library *WorkbenchBase = 0;
+struct Library *IconBase = 0;
+#else
 extern struct Library *WorkbenchBase; /* owned by core/tg_gui_window.c */
 extern struct Library *IconBase;
+#endif
 
 static const char *tg_wb_drop_diag = "not armed";
 static unsigned long tg_wb_drop_polls = 0;

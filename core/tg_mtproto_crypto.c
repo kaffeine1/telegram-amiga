@@ -20,13 +20,7 @@ typedef struct tg_sha1_context {
     unsigned long length_lo;
 } tg_sha1_context;
 
-typedef struct tg_sha256_context {
-    unsigned long h[8];
-    unsigned char block[TG_SHA256_BLOCK_SIZE];
-    unsigned long block_used;
-    unsigned long length_hi;
-    unsigned long length_lo;
-} tg_sha256_context;
+typedef tg_mtproto_sha256_ctx tg_sha256_context;
 
 typedef struct tg_sha512_context {
     unsigned long long h[8];
@@ -439,7 +433,7 @@ static void tg_sha256_transform_ref(tg_sha256_context *context,
 }
 #endif /* !TG_NO_SELFTEST */
 
-static void tg_sha256_init(tg_sha256_context *context)
+void tg_mtproto_sha256_init(tg_sha256_context *context)
 {
     context->h[0] = 0x6a09e667UL;
     context->h[1] = 0xbb67ae85UL;
@@ -454,9 +448,9 @@ static void tg_sha256_init(tg_sha256_context *context)
     context->length_lo = 0;
 }
 
-static void tg_sha256_update(tg_sha256_context *context,
-                             const unsigned char *data,
-                             unsigned long data_length)
+void tg_mtproto_sha256_update(tg_sha256_context *context,
+                              const unsigned char *data,
+                              unsigned long data_length)
 {
     unsigned long take;
 
@@ -484,8 +478,8 @@ static void tg_sha256_update(tg_sha256_context *context,
     }
 }
 
-static void tg_sha256_final(tg_sha256_context *context,
-                            unsigned char digest[TG_MTPROTO_SHA256_LENGTH])
+void tg_mtproto_sha256_final(tg_sha256_context *context,
+                             unsigned char digest[TG_MTPROTO_SHA256_LENGTH])
 {
     int i;
 
@@ -507,6 +501,7 @@ static void tg_sha256_final(tg_sha256_context *context,
     for (i = 0; i < 8; ++i) {
         tg_store_be32(digest + (i * 4), context->h[i]);
     }
+    memset(context, 0, sizeof(*context));
 }
 
 void tg_mtproto_sha256(const unsigned char *data, unsigned long data_length,
@@ -514,11 +509,11 @@ void tg_mtproto_sha256(const unsigned char *data, unsigned long data_length,
 {
     tg_sha256_context context;
 
-    tg_sha256_init(&context);
+    tg_mtproto_sha256_init(&context);
     if (data_length > 0) {
-        tg_sha256_update(&context, data, data_length);
+        tg_mtproto_sha256_update(&context, data, data_length);
     }
-    tg_sha256_final(&context, digest);
+    tg_mtproto_sha256_final(&context, digest);
 }
 
 static void tg_hash_add_length_512(tg_sha512_context *context,
@@ -861,6 +856,8 @@ int tg_mtproto_pbkdf2_hmac_sha512(const unsigned char *password,
 }
 
 #if !defined(TG_NO_SELFTEST)
+#include "tg_platform_common.h"
+
 /* xorshift32: the same cases on every lane. */
 static unsigned long tg_sha_test_next(unsigned long *state)
 {
@@ -906,7 +903,7 @@ static int tg_sha256_word_self_test(void)
     }
     seed = 0x9e3779b9UL;
     for (n = 0U; n < 64U; ++n) {
-        tg_sha256_init(&fast);
+        tg_mtproto_sha256_init(&fast);
         for (j = 0U; j < 8U; ++j) {
             fast.h[j] = tg_sha_test_next(&seed);
         }
@@ -928,11 +925,11 @@ static int tg_sha256_word_self_test(void)
             data[i] = (unsigned char)tg_sha_test_next(&seed);
         }
         tg_mtproto_sha256(data, length, one);
-        tg_sha256_init(&fast);
+        tg_mtproto_sha256_init(&fast);
         for (i = 0UL; i < length; ++i) {
-            tg_sha256_update(&fast, data + i, 1UL);
+            tg_mtproto_sha256_update(&fast, data + i, 1UL);
         }
-        tg_sha256_final(&fast, bytewise);
+        tg_mtproto_sha256_final(&fast, bytewise);
         if (memcmp(one, bytewise, sizeof(one)) != 0) {
             return 2;
         }
@@ -1022,6 +1019,30 @@ int tg_mtproto_crypto_self_test(void)
         memcmp(pbkdf2, pbkdf2_expected, sizeof(pbkdf2_expected)) != 0) {
         return 2;
     }
+    {
+        unsigned char state1[TG_MTPROTO_SHA256_LENGTH];
+        unsigned char state2[TG_MTPROTO_SHA256_LENGTH];
+        unsigned char extra1[200];
+        unsigned char extra2[200];
+        unsigned char out1[TG_MTPROTO_SHA256_LENGTH];
+        unsigned char out2[TG_MTPROTO_SHA256_LENGTH];
+
+        memset(state1, 0x42, sizeof(state1));
+        memset(state2, 0x42, sizeof(state2));
+        memset(extra1, 0x11, sizeof(extra1));
+        memset(extra2, 0x11, sizeof(extra2));
+        extra2[180] = 0x22;
+        tg_platform_drbg_calls = 0UL;
+        tg_platform_drbg_step(state1, extra1, sizeof(extra1),
+                              out1, sizeof(out1));
+        tg_platform_drbg_calls = 0UL;
+        tg_platform_drbg_step(state2, extra2, sizeof(extra2),
+                              out2, sizeof(out2));
+        if (memcmp(out1, out2, sizeof(out1)) == 0 ||
+            memcmp(state1, state2, sizeof(state1)) == 0) {
+            return 2;
+        }
+    }
     return tg_sha256_word_self_test();
 }
 
@@ -1031,7 +1052,7 @@ void tg_mtproto_sha256_ref_blocks(const unsigned char *data,
 {
     tg_sha256_context context;
 
-    tg_sha256_init(&context);
+    tg_mtproto_sha256_init(&context);
     while (length >= TG_SHA256_BLOCK_SIZE) {
         tg_sha256_transform_ref(&context, data);
         data += TG_SHA256_BLOCK_SIZE;

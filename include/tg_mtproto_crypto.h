@@ -12,8 +12,22 @@
 #define TG_MTPROTO_SHA256_LENGTH 32
 #define TG_MTPROTO_SHA512_LENGTH 64
 
+typedef struct tg_sha256_context {
+    unsigned long h[8];
+    unsigned char block[64];
+    unsigned long block_used;
+    unsigned long length_hi;
+    unsigned long length_lo;
+} tg_mtproto_sha256_ctx;
+
 void tg_mtproto_sha1(const unsigned char *data, unsigned long data_length,
                      unsigned char digest[TG_MTPROTO_SHA1_LENGTH]);
+void tg_mtproto_sha256_init(tg_mtproto_sha256_ctx *context);
+void tg_mtproto_sha256_update(tg_mtproto_sha256_ctx *context,
+                              const unsigned char *data,
+                              unsigned long data_length);
+void tg_mtproto_sha256_final(tg_mtproto_sha256_ctx *context,
+                             unsigned char digest[TG_MTPROTO_SHA256_LENGTH]);
 void tg_mtproto_sha256(const unsigned char *data, unsigned long data_length,
                        unsigned char digest[TG_MTPROTO_SHA256_LENGTH]);
 void tg_mtproto_sha512(const unsigned char *data, unsigned long data_length,

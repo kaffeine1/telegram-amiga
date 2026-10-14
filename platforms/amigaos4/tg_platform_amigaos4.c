@@ -74,6 +74,7 @@
 #endif
 #endif
 #include "tg_platform.h"
+#include "tg_platform_common.h"
 #include "tg_mtproto_crypto.h"
 #include "tg_file.h"
 #include "tg_version.h"
@@ -579,9 +580,6 @@ static unsigned long tg_os4_entropy_gather(unsigned char *buf, unsigned long cap
     return n;
 }
 
-static void tg_os4_drbg_generate(unsigned char *out, unsigned long n);
-
-
 /*
  * Persistent seed (PROGDIR:data/telegram-seed.bin, Linux random-seed style):
  * entropy accumulates across runs instead of restarting from a cold,
@@ -593,97 +591,37 @@ static void tg_os4_drbg_seed(void)
 {
     unsigned char pool[1024];
     unsigned long len = tg_os4_entropy_gather(pool, sizeof(pool));
-    {
-        FILE *seed_file = tg_file_open_seed("rb");
-        if (seed_file != 0) {
-            unsigned char saved[64];
-            unsigned long got = (unsigned long)fread(saved, 1U,
-                                                     sizeof(saved),
-                                                     seed_file);
-            fclose(seed_file);
-            if (got > 0UL && len + got <= sizeof(pool)) {
-                memcpy(pool + len, saved, got);
-                len += got;
-            }
-        }
-    }
-    tg_mtproto_sha256(pool, len, tg_os4_drbg_state);
-    tg_os4_drbg_ready = 1;
-    {
-        unsigned char fresh[64];
-        FILE *seed_file;
-        tg_os4_drbg_generate(fresh, sizeof(fresh));
-        seed_file = tg_file_open_seed("wb");
-        if (seed_file != 0) {
-            fwrite(fresh, 1U, sizeof(fresh), seed_file);
-            fclose(seed_file);
-        }
-        memset(fresh, 0, sizeof(fresh));
-    }
+
+    tg_platform_drbg_seed_pool(tg_os4_drbg_state, &tg_os4_drbg_ready,
+                               pool, sizeof(pool), len);
+    memset(pool, 0, sizeof(pool));
 }
 
 static void tg_os4_drbg_generate(unsigned char *out, unsigned long n)
 {
-    static unsigned long calls = 0;
-    unsigned char key[TG_MTPROTO_SHA256_LENGTH];
-    unsigned char block[TG_MTPROTO_SHA256_LENGTH];
-    unsigned long off;
-    unsigned long ctr;
+    unsigned char extra[32 + sizeof(tg_os4_key_ring) + sizeof(unsigned long)];
+    unsigned long en = 0UL;
+    struct timeval tv;
+    unsigned long tb;
 
     if (!tg_os4_drbg_ready) {
         tg_os4_drbg_seed();
     }
 
-    /* Derive a per-call working key from the state plus fresh entropy. */
-    {
-        unsigned char work[TG_MTPROTO_SHA256_LENGTH + 32 +
-                           sizeof(tg_os4_key_ring) + sizeof(unsigned long)];
-        unsigned long wn = TG_MTPROTO_SHA256_LENGTH;
-        struct timeval tv;
-        unsigned long tb = tg_os4_timebase();
-        memcpy(work, tg_os4_drbg_state, TG_MTPROTO_SHA256_LENGTH);
-        gettimeofday(&tv, 0);
-        ++calls;
-        memcpy(work + wn, &tv, sizeof(tv)); wn += sizeof(tv);
-        memcpy(work + wn, &tb, sizeof(tb)); wn += sizeof(tb);
-        memcpy(work + wn, &calls, sizeof(calls)); wn += sizeof(calls);
-        /* Keystroke-timing ring: human input collected since the last
-           generate (cheap on the input path, absorbed here). */
-        memcpy(work + wn, tg_os4_key_ring, sizeof(tg_os4_key_ring));
-        wn += sizeof(tg_os4_key_ring);
-        memcpy(work + wn, &tg_os4_key_ring_pos,
-               sizeof(tg_os4_key_ring_pos));
-        wn += sizeof(tg_os4_key_ring_pos);
-        tg_mtproto_sha256(work, wn, key);
-    }
-
-    off = 0;
-    ctr = 0;
-    while (off < n) {
-        unsigned char cb[TG_MTPROTO_SHA256_LENGTH + 4];
-        unsigned long take;
-        memcpy(cb, key, TG_MTPROTO_SHA256_LENGTH);
-        cb[TG_MTPROTO_SHA256_LENGTH + 0] = (unsigned char)((ctr >> 24) & 0xffUL);
-        cb[TG_MTPROTO_SHA256_LENGTH + 1] = (unsigned char)((ctr >> 16) & 0xffUL);
-        cb[TG_MTPROTO_SHA256_LENGTH + 2] = (unsigned char)((ctr >> 8) & 0xffUL);
-        cb[TG_MTPROTO_SHA256_LENGTH + 3] = (unsigned char)(ctr & 0xffUL);
-        tg_mtproto_sha256(cb, sizeof(cb), block);
-        take = n - off;
-        if (take > TG_MTPROTO_SHA256_LENGTH) {
-            take = TG_MTPROTO_SHA256_LENGTH;
-        }
-        memcpy(out + off, block, take);
-        off += take;
-        ++ctr;
-    }
-
-    /* Ratchet the persistent state forward. */
-    {
-        unsigned char rb[TG_MTPROTO_SHA256_LENGTH + 1];
-        memcpy(rb, key, TG_MTPROTO_SHA256_LENGTH);
-        rb[TG_MTPROTO_SHA256_LENGTH] = 0x01;
-        tg_mtproto_sha256(rb, sizeof(rb), tg_os4_drbg_state);
-    }
+    gettimeofday(&tv, 0);
+    tb = tg_os4_timebase();
+    memcpy(extra + en, &tv, sizeof(tv));
+    en += sizeof(tv);
+    memcpy(extra + en, &tb, sizeof(tb));
+    en += sizeof(tb);
+    /* Keystroke-timing ring: human input collected since the last
+       generate (cheap on the input path, absorbed here). */
+    memcpy(extra + en, tg_os4_key_ring, sizeof(tg_os4_key_ring));
+    en += sizeof(tg_os4_key_ring);
+    memcpy(extra + en, &tg_os4_key_ring_pos, sizeof(tg_os4_key_ring_pos));
+    en += sizeof(tg_os4_key_ring_pos);
+    tg_platform_drbg_step(tg_os4_drbg_state, extra, en, out, n);
+    memset(extra, 0, sizeof(extra));
 }
 #endif /* __amigaos4__ */
 
@@ -731,15 +669,6 @@ int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
 }
 
 #if defined(__amigaos4__)
-
-static void tg_platform_set_error(char *error_buffer, unsigned long error_buffer_size,
-                                  const char *message)
-{
-    if (error_buffer != 0 && error_buffer_size > 0) {
-        strncpy(error_buffer, message, error_buffer_size - 1);
-        error_buffer[error_buffer_size - 1] = '\0';
-    }
-}
 
 static int tg_amigaos4_socket_open(char *error_buffer, unsigned long error_buffer_size)
 {
@@ -874,18 +803,19 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
         return TG_NET_CONNECT_FAILED;
     }
 
-    host_entry = gethostbyname((char *)host);
-    if (host_entry == 0 || host_entry->h_addr_list == 0 ||
-        host_entry->h_addr_list[0] == 0) {
-        tg_platform_set_error(error_buffer, error_buffer_size, "host lookup failed");
-        return TG_NET_RESOLVE_FAILED;
-    }
-
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons((unsigned short)port_number);
     address.sin_len = (unsigned char)sizeof(address);
-    memcpy(&address.sin_addr, host_entry->h_addr_list[0], (size_t)host_entry->h_length);
+    if (!tg_platform_parse_ipv4(host, (unsigned char *)&address.sin_addr.s_addr)) {
+        host_entry = gethostbyname((char *)host);
+        if (host_entry == 0 || host_entry->h_addr_list == 0 ||
+            host_entry->h_addr_list[0] == 0) {
+            tg_platform_set_error(error_buffer, error_buffer_size, "host lookup failed");
+            return TG_NET_RESOLVE_FAILED;
+        }
+        memcpy(&address.sin_addr, host_entry->h_addr_list[0], (size_t)host_entry->h_length);
+    }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -1548,20 +1478,6 @@ void tg_platform_set_executable(const char *path)
     (void)path;
 #endif
 }
-
-#if defined(__amigaos4__)
-/* Free blocks to KB without overflowing 32 bits on a big volume. */
-static unsigned long tg_platform_blocks_kb(unsigned long blocks,
-                                           unsigned long bytes_per_block)
-{
-    if (bytes_per_block >= 1024UL) {
-        unsigned long per = bytes_per_block / 1024UL;
-
-        return blocks > ~0UL / per ? ~0UL : blocks * per;
-    }
-    return bytes_per_block == 0UL ? 0UL : blocks / (1024UL / bytes_per_block);
-}
-#endif
 
 /* Room left on the volume holding `path`, in KB (tg_platform.h). The RAM
    disk lives in free memory, so its room is what AvailMem() reports, whatever

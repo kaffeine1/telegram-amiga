@@ -30,6 +30,7 @@
 #include <proto/exec.h>
 #include <dos/dos.h>
 #include <dos/stdio.h>
+#include <sys/ioctl.h> /* FIONBIO, for the bounded connect */
 
 struct Library *SocketBase = 0;
 /* NB: CloseSocket() is already available as a macro from the AROS bsdsocket
@@ -57,6 +58,7 @@ struct Library *SocketBase = 0;
 #endif
 #endif
 #include "tg_platform.h"
+#include "tg_platform_common.h"
 #include "tg_mtproto_crypto.h"
 #include "tg_file.h"
 #include "tg_version.h"
@@ -600,92 +602,36 @@ static void tg_aros_drbg_seed(void)
 {
     unsigned char pool[1024];
     unsigned long len = tg_aros_entropy_gather(pool, sizeof(pool));
-    {
-        FILE *seed_file = tg_file_open_seed("rb");
-        if (seed_file != 0) {
-            unsigned char saved[64];
-            unsigned long got = (unsigned long)fread(saved, 1U,
-                                                     sizeof(saved),
-                                                     seed_file);
-            fclose(seed_file);
-            if (got > 0UL && len + got <= sizeof(pool)) {
-                memcpy(pool + len, saved, got);
-                len += got;
-            }
-        }
-    }
-    tg_mtproto_sha256(pool, len, tg_aros_drbg_state);
-    tg_aros_drbg_ready = 1;
-    {
-        unsigned char fresh[64];
-        FILE *seed_file;
-        tg_aros_drbg_generate(fresh, sizeof(fresh));
-        seed_file = tg_file_open_seed("wb");
-        if (seed_file != 0) {
-            fwrite(fresh, 1U, sizeof(fresh), seed_file);
-            fclose(seed_file);
-        }
-        memset(fresh, 0, sizeof(fresh));
-    }
+
+    tg_platform_drbg_seed_pool(tg_aros_drbg_state, &tg_aros_drbg_ready,
+                               pool, sizeof(pool), len);
+    memset(pool, 0, sizeof(pool));
 }
 
 static void tg_aros_drbg_generate(unsigned char *out, unsigned long n)
 {
-    static unsigned long calls = 0;
-    unsigned char key[TG_MTPROTO_SHA256_LENGTH];
-    unsigned char block[TG_MTPROTO_SHA256_LENGTH];
-    unsigned long off;
-    unsigned long ctr;
+    unsigned char extra[32 + sizeof(tg_aros_key_ring) + sizeof(unsigned long)];
+    unsigned long en = 0UL;
+    struct timeval tv;
+    unsigned long tb;
 
     if (!tg_aros_drbg_ready) {
         tg_aros_drbg_seed();
     }
-    {
-        unsigned char work[TG_MTPROTO_SHA256_LENGTH + 32 +
-                           sizeof(tg_aros_key_ring) + sizeof(unsigned long)];
-        unsigned long wn = TG_MTPROTO_SHA256_LENGTH;
-        struct timeval tv;
-        unsigned long tb = tg_aros_timebase();
-        memcpy(work, tg_aros_drbg_state, TG_MTPROTO_SHA256_LENGTH);
-        gettimeofday(&tv, 0);
-        ++calls;
-        memcpy(work + wn, &tv, sizeof(tv)); wn += sizeof(tv);
-        memcpy(work + wn, &tb, sizeof(tb)); wn += sizeof(tb);
-        memcpy(work + wn, &calls, sizeof(calls)); wn += sizeof(calls);
-        /* Keystroke-timing ring: human input collected since the last
-           generate (cheap on the input path, absorbed here). */
-        memcpy(work + wn, tg_aros_key_ring, sizeof(tg_aros_key_ring));
-        wn += sizeof(tg_aros_key_ring);
-        memcpy(work + wn, &tg_aros_key_ring_pos,
-               sizeof(tg_aros_key_ring_pos));
-        wn += sizeof(tg_aros_key_ring_pos);
-        tg_mtproto_sha256(work, wn, key);
-    }
-    off = 0;
-    ctr = 0;
-    while (off < n) {
-        unsigned char cb[TG_MTPROTO_SHA256_LENGTH + 4];
-        unsigned long take;
-        memcpy(cb, key, TG_MTPROTO_SHA256_LENGTH);
-        cb[TG_MTPROTO_SHA256_LENGTH + 0] = (unsigned char)((ctr >> 24) & 0xffUL);
-        cb[TG_MTPROTO_SHA256_LENGTH + 1] = (unsigned char)((ctr >> 16) & 0xffUL);
-        cb[TG_MTPROTO_SHA256_LENGTH + 2] = (unsigned char)((ctr >> 8) & 0xffUL);
-        cb[TG_MTPROTO_SHA256_LENGTH + 3] = (unsigned char)(ctr & 0xffUL);
-        tg_mtproto_sha256(cb, sizeof(cb), block);
-        take = n - off;
-        if (take > TG_MTPROTO_SHA256_LENGTH) {
-            take = TG_MTPROTO_SHA256_LENGTH;
-        }
-        memcpy(out + off, block, take);
-        off += take;
-        ++ctr;
-    }
-    {
-        unsigned char rb[TG_MTPROTO_SHA256_LENGTH + 1];
-        memcpy(rb, key, TG_MTPROTO_SHA256_LENGTH);
-        rb[TG_MTPROTO_SHA256_LENGTH] = 0x01;
-        tg_mtproto_sha256(rb, sizeof(rb), tg_aros_drbg_state);
-    }
+    gettimeofday(&tv, 0);
+    tb = tg_aros_timebase();
+    memcpy(extra + en, &tv, sizeof(tv));
+    en += sizeof(tv);
+    memcpy(extra + en, &tb, sizeof(tb));
+    en += sizeof(tb);
+    /* Keystroke-timing ring: human input collected since the last
+       generate (cheap on the input path, absorbed here). */
+    memcpy(extra + en, tg_aros_key_ring, sizeof(tg_aros_key_ring));
+    en += sizeof(tg_aros_key_ring);
+    memcpy(extra + en, &tg_aros_key_ring_pos, sizeof(tg_aros_key_ring_pos));
+    en += sizeof(tg_aros_key_ring_pos);
+    tg_platform_drbg_step(tg_aros_drbg_state, extra, en, out, n);
+    memset(extra, 0, sizeof(extra));
 }
 
 int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
@@ -728,15 +674,6 @@ int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
     return 1;
 }
 
-static void tg_platform_set_error(char *error_buffer, unsigned long error_buffer_size,
-                                  const char *message)
-{
-    if (error_buffer != 0 && error_buffer_size > 0) {
-        strncpy(error_buffer, message, error_buffer_size - 1);
-        error_buffer[error_buffer_size - 1] = '\0';
-    }
-}
-
 #if defined(__AROS__)
 static int tg_aros_open_socket_library(void)
 {
@@ -757,18 +694,21 @@ static void tg_aros_close_socket_library(void)
 }
 #endif
 
-#if !defined(__AROS__)
 static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *address,
                                                 char *error_buffer,
                                                 unsigned long error_buffer_size)
 {
     unsigned long timeout_seconds;
-    int flags;
     int rc;
     int socket_error;
     socklen_t socket_error_size;
     fd_set write_fds;
     struct timeval timeout;
+#if defined(__AROS__)
+    long nonblock;
+#else
+    int flags;
+#endif
 
     timeout_seconds = tg_net_connect_timeout_seconds();
     if (timeout_seconds == 0) {
@@ -780,6 +720,37 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
         return TG_NET_CONNECT_FAILED;
     }
 
+#if defined(__AROS__)
+    if (timeout_seconds < 15UL) {
+        timeout_seconds = 15UL;
+    }
+    nonblock = 1;
+    if (IoctlSocket(sock, FIONBIO, (char *)&nonblock) < 0) {
+        rc = connect(sock, (struct sockaddr *)address, sizeof(*address));
+        if (rc == 0) {
+            return TG_NET_OK;
+        }
+        tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
+        return TG_NET_CONNECT_FAILED;
+    }
+    rc = connect(sock, (struct sockaddr *)address, sizeof(*address));
+    if (rc == 0) {
+        nonblock = 0;
+        (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+        return TG_NET_OK;
+    }
+    {
+        int bsd_err = (int)Errno();
+
+        if (bsd_err != EINPROGRESS && bsd_err != EWOULDBLOCK) {
+            nonblock = 0;
+            (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+            tg_platform_set_error(error_buffer, error_buffer_size,
+                                  strerror(bsd_err != 0 ? bsd_err : errno));
+            return TG_NET_CONNECT_FAILED;
+        }
+    }
+#else
     flags = fcntl(sock, F_GETFL, 0);
     if (flags < 0 || fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
         rc = connect(sock, (struct sockaddr *)address, sizeof(*address));
@@ -800,6 +771,7 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
         tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
         return TG_NET_CONNECT_FAILED;
     }
+#endif
 
     /* One-second steps, so a requested break (tg_net_break_requested) ends a
        connect to a dead link after TG_NET_BREAK_AFTER seconds. */
@@ -826,7 +798,12 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
             }
         }
         if (rc <= 0) {
+#if defined(__AROS__)
+            nonblock = 0;
+            (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+#else
             (void)fcntl(sock, F_SETFL, flags);
+#endif
             if (stopped) {
                 tg_platform_set_error(error_buffer, error_buffer_size,
                                       "socket connect stopped");
@@ -845,20 +822,34 @@ static tg_net_status tg_platform_connect_socket(int sock, struct sockaddr_in *ad
     socket_error_size = sizeof(socket_error);
     if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &socket_error,
                    &socket_error_size) != 0) {
+#if defined(__AROS__)
+        nonblock = 0;
+        (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+#else
         (void)fcntl(sock, F_SETFL, flags);
+#endif
         tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
         return TG_NET_CONNECT_FAILED;
     }
     if (socket_error != 0) {
+#if defined(__AROS__)
+        nonblock = 0;
+        (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+#else
         (void)fcntl(sock, F_SETFL, flags);
+#endif
         tg_platform_set_error(error_buffer, error_buffer_size, strerror(socket_error));
         return TG_NET_CONNECT_FAILED;
     }
 
+#if defined(__AROS__)
+    nonblock = 0;
+    (void)IoctlSocket(sock, FIONBIO, (char *)&nonblock);
+#else
     (void)fcntl(sock, F_SETFL, flags);
+#endif
     return TG_NET_OK;
 }
-#endif
 
 tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char *host,
                                       const char *port, char *error_buffer,
@@ -867,7 +858,6 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
     struct hostent *host_entry;
     struct sockaddr_in address;
     long port_number;
-    int rc;
     int sock;
 
     if (error_buffer != 0 && error_buffer_size > 0) {
@@ -890,26 +880,21 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons((unsigned short)port_number);
-    {
-        /* Telegram DC addresses are numeric IPv4 literals. Parse them with
-           inet_addr() and SKIP gethostbyname(): AROS/AROSTCP's gethostbyname()
-           on x86_64 corrupts the socket heap for an IP literal (a freed block
-           ends up holding the IP string -> GURU in soclose/bsd_free when the
-           socket is later closed). Only fall back to DNS for real host names. */
-        unsigned long numeric = (unsigned long)(unsigned int)inet_addr(host);
-        if (numeric != 0xFFFFFFFFUL) {
-            address.sin_addr.s_addr = (unsigned int)numeric;
-        } else {
-            host_entry = gethostbyname(host);
-            if (host_entry == 0 || host_entry->h_addr_list == 0 ||
-                host_entry->h_addr_list[0] == 0) {
-                tg_platform_set_error(error_buffer, error_buffer_size,
-                                      "host lookup failed");
-                return TG_NET_RESOLVE_FAILED;
-            }
-            memcpy(&address.sin_addr, host_entry->h_addr_list[0],
-                   sizeof(address.sin_addr));
+    /* Telegram DC addresses are numeric IPv4 literals. Parse them directly
+       and SKIP gethostbyname(): AROS/AROSTCP's gethostbyname() on x86_64
+       corrupts the socket heap for an IP literal (a freed block ends up
+       holding the IP string -> GURU in soclose/bsd_free when the socket is
+       later closed). Only fall back to DNS for real host names. */
+    if (!tg_platform_parse_ipv4(host, (unsigned char *)&address.sin_addr.s_addr)) {
+        host_entry = gethostbyname(host);
+        if (host_entry == 0 || host_entry->h_addr_list == 0 ||
+            host_entry->h_addr_list[0] == 0) {
+            tg_platform_set_error(error_buffer, error_buffer_size,
+                                  "host lookup failed");
+            return TG_NET_RESOLVE_FAILED;
         }
+        memcpy(&address.sin_addr, host_entry->h_addr_list[0],
+               sizeof(address.sin_addr));
     }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -918,14 +903,8 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
         return TG_NET_CONNECT_FAILED;
     }
 
-#if defined(__AROS__)
-    rc = connect(sock, (struct sockaddr *)&address, sizeof(address));
-    if (rc == 0) {
-#else
-    (void)rc;
     if (tg_platform_connect_socket(sock, &address, error_buffer,
                                    error_buffer_size) == TG_NET_OK) {
-#endif
         connection->platform_handle = sock;
         connection->is_open = 1;
         return TG_NET_OK;
@@ -935,7 +914,6 @@ tg_net_status tg_platform_tcp_connect(tg_net_connection *connection, const char 
     /* CloseSocket(), not close(): close() leaves a failed-connect socket in
        AROSTCP's list and the CloseLibrary below would re-close it and crash. */
     CloseSocket(sock);
-    tg_platform_set_error(error_buffer, error_buffer_size, strerror(errno));
 #else
     close(sock);
 #endif
@@ -1444,20 +1422,6 @@ void tg_platform_set_executable(const char *path)
 #endif
 }
 
-#if defined(__AROS__)
-/* Free blocks to KB without overflowing 32 bits on a big volume. */
-static unsigned long tg_platform_blocks_kb(unsigned long blocks,
-                                           unsigned long bytes_per_block)
-{
-    if (bytes_per_block >= 1024UL) {
-        unsigned long per = bytes_per_block / 1024UL;
-
-        return blocks > ~0UL / per ? ~0UL : blocks * per;
-    }
-    return bytes_per_block == 0UL ? 0UL : blocks / (1024UL / bytes_per_block);
-}
-#endif
-
 /* Room left on the volume holding `path`, in KB (tg_platform.h). The RAM
    disk lives in free memory, so its room is what AvailMem() reports, whatever
    its handler answers: an older ram-handler says it is always full. */
@@ -1653,8 +1617,13 @@ void tg_platform_workbench_tui_console_close(void)
    (gui_window.o owns them); we open them only when still closed and close
    only what we opened. */
 
+#if defined(TG_NO_GUI)
+struct Library *WorkbenchBase = 0;
+struct Library *IconBase = 0;
+#else
 extern struct Library *WorkbenchBase; /* owned by core/tg_gui_window.c */
 extern struct Library *IconBase;
+#endif
 
 static const char *tg_wb_drop_diag = "not armed";
 static unsigned long tg_wb_drop_polls = 0;
