@@ -200,6 +200,11 @@ Features are therefore grouped by the work they share.
   the cookie are the same two integers: 0.1, then 0.2, and one day 1.0. The
   alphas keep their three-part numbers; mapping 0.0.93 onto 0.93 would make
   the beta look like a downgrade to the system.
+- **After the beta: skins and translations.** Colours, fonts and more
+  still to be defined, and the client in other languages through the
+  system's locale.library. Both touch every colour or every word on
+  screen, so they wait until the quiet cycle is over; see the section
+  below.
 
 Two things run outside this list. The plain-68000 lane has its own
 rhythm, since it depends on field logs from one machine: the client runs
@@ -208,6 +213,44 @@ drawn inside the transcript, the part that has to split text runs in
 the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce
 while trying to prove a quiet cycle.
+
+## After the 0.1 beta: skins and translations
+
+Two wishes wait for the beta on purpose. Each touches every colour or
+every word the client shows, which is the opposite of the quiet cycle the
+beta asks for.
+
+Skins. The window has one look today: the colours of its sixteen pen
+roles sit in a table in the code, the context menus follow the screen's
+own menu colours, and every text uses the font the screen hands the
+window. A skin gathers those choices in a small text file, in `data/` or
+in a `Skins` drawer next to the program, which the client reads at start
+and Settings can switch. It names the colour of each part of the window
+(background, chat list, incoming and outgoing bubbles, text, links,
+badges, the selection), so a light theme can sit beside the dark one,
+and one skin can simply take the screen's own pens, the way the menus
+already do. Fonts come in the same step: one for the chat list and one
+for the messages, each with its size, picked with the system's font
+requester instead of the screen font for everything. What else belongs
+in a skin is still to be defined with the users: bubble corners and
+spacing, the shape of the avatars, how dense the list is. One limit stays
+whatever the skin says: on a screen with few colours every pen it takes
+is one less for avatars and photos, so a skin asks for colours and gets
+the nearest the screen can give, as the window does now.
+
+Translations. Every word the client shows is English today and is
+written in the code. The Amiga way to translate is locale.library, which
+all four systems have: the texts move into a catalog description,
+English stays built into the program as the fallback, and a catalog per
+language in a `Catalogs` drawer next to the program translates them. The
+system's Locale preferences pick the language, and nothing new has to
+be installed. Italian comes first, since a good part of the users write
+in it, then any language a user offers to translate: a translation is
+one text file, turned into a catalog without touching the program. The
+text client shares the catalog, and dates and times follow the locale as
+well. Languages written outside Latin-1, such as Polish, Czech, Greek or
+Russian, also wait for the second codepage in "Letters outside Latin-1"
+below: the window has to draw their letters before it can speak them.
 
 ## Done for 0.0.95: two-step verification on slow 68k
 
