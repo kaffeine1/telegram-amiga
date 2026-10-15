@@ -229,6 +229,18 @@ unsigned long tg_platform_gui_drop_sigmask(void);
 int tg_platform_break_pending(void);
 
 /*
+ * Takes Ctrl+C away from the C library for the rest of the run. Its own
+ * check, inside stdio calls, takes the break signal and ends the program on
+ * the spot ("*** BREAK"): with a window open that left the window on the
+ * screen with nobody behind it. Afterwards the signal stays pending until
+ * the caller's own Wait() takes it. clib2 (AmigaOS 3) turns its check off,
+ * newlib.library (AmigaOS 4) leaves the signal alone under SIG_IGN, libnix
+ * (MorphOS) gets a __chkabort() that stays quiet; the AROS C library never
+ * checks, and hosts without the signal have nothing to do.
+ */
+void tg_platform_break_own(void);
+
+/*
  * Flashes the display (Intuition DisplayBeep): the user-visible "bell" that
  * never touches the console byte stream. Console handlers disagree wildly
  * about the BEL byte -- AmiKit's replacement console reacts by clearing the

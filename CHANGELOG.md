@@ -34,6 +34,14 @@ the text client for the plain 68000.
   client asleep, as before.
 
 ### Fixed
+- Ctrl-C with the window open, typed in the Shell that started the client
+  or sent with Break from another Shell, quits as Amiga+Q does: the window
+  closes and the program ends cleanly. The C library caught the break
+  first, at the next write to a file or to the Shell, printed "*** BREAK"
+  and ended the program there, leaving the window on the screen with no
+  program behind it, where a click could bring the system down. On AROS,
+  whose C library does not watch for Ctrl-C, the window ignored it. A
+  network wait stuck on a dead link gives way to it too.
 - A message you send shows its time as soon as the next update comes in.
   Its bubble stayed without a time until the chat was opened again: the
   bubble takes its number from the send itself, so when the update brought

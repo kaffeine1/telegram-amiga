@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/filio.h> /* FIONBIO, for the bounded connect */
@@ -1431,6 +1432,17 @@ int tg_platform_break_pending(void)
     return (SetSignal(0L, 0L) & SIGBREAKF_CTRL_C) != 0L;
 #else
     return 0;
+#endif
+}
+
+void tg_platform_break_own(void)
+{
+#if defined(__amigaos4__)
+    /* newlib.library makes the check inside its stdio calls; under SIG_IGN
+       it leaves the signal set (SDK newlib release notes, changes since
+       AmigaOS 4.0 final: "No longer clears SIGBREAKF_CTRL_C if
+       signal(SIGINT, SIG_IGN) was used"). */
+    (void)signal(SIGINT, SIG_IGN);
 #endif
 }
 

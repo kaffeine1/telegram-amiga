@@ -51,6 +51,10 @@
 #include <unistd.h>
 #endif
 
+#if defined(__CLIB2__)
+#include <dos.h> /* clib2's own: __check_abort_enabled */
+#endif
+
 #if defined(__amigaos3__) && (TG_AMIGAOS3_ENABLE_AMISSL || TG_AMIGAOS3_NOIXEMUL)
 #include <proto/exec.h>
 /* Some BSD headers want a few guard names that ixemul (and a few C libraries)
@@ -1522,6 +1526,16 @@ int tg_platform_break_pending(void)
     return (SetSignal(0L, 0L) & SIGBREAKF_CTRL_C) != 0L;
 #else
     return 0;
+#endif
+}
+
+void tg_platform_break_own(void)
+{
+#if defined(__CLIB2__)
+    /* clib2's documented switch (its dos.h): every stdio call skips the
+       check, which would take the signal with SetSignal() and raise
+       SIGINT. */
+    __check_abort_enabled = FALSE;
 #endif
 }
 

@@ -1406,6 +1406,12 @@ int tg_platform_break_pending(void)
 #endif
 }
 
+void tg_platform_break_own(void)
+{
+    /* The AROS C library never looks at Ctrl+C: the signal already waits
+       for the caller. */
+}
+
 #if defined(__AROS__)
 #include <proto/intuition.h>
 

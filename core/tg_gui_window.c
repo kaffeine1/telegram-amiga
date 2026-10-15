@@ -10744,7 +10744,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
     fflush(stdout);
 
-    puts("gui window: close gadget or Amiga+Q to quit.");
+    puts("gui window: close gadget, Amiga+Q or Ctrl-C to quit.");
     fflush(stdout);
     tg_gui_log("window: opened");
     /* From here a stalled network wait gives way to a close or a Workbench
@@ -10913,7 +10913,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             tg_gui_window_paint(state, &backend); /* the avatar, if it came */
         }
         {
-            ULONG wait_mask = 1UL << ctx.window->UserPort->mp_SigBit;
+            ULONG wait_mask = (1UL << ctx.window->UserPort->mp_SigBit) |
+                              SIGBREAKF_CTRL_C;
 
             if (timer_ok) {
                 wait_mask |= 1UL << timer_port->mp_SigBit;
@@ -10955,6 +10956,18 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     ReplyMsg(wm);
                 }
             }
+        }
+        /* Ctrl-C (Break from a Shell) quits like Amiga+Q. The C library
+           leaves the signal to us (tg_gui_run_window), a network wait cut
+           short by it leaves it set, and while a transfer keeps the loop
+           awake it is taken here. Nothing else runs this turn; a reset
+           warning held above is still answered after CloseWindow, with no
+           coming back. */
+        if ((wake_signals & SIGBREAKF_CTRL_C) != 0UL ||
+            (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0UL) {
+            tg_gui_log("window: Ctrl-C");
+            done = 1;
+            continue;
         }
         if (done == 4) {
             /* Close straight away: a click still queued could open a chat,
@@ -13890,10 +13903,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         own_scr = 0;
     }
     if (wbn_close != 0) {
-        /* the window is gone: let the reset go ahead, and come back after */
+        /* the window is gone: let the reset go ahead, and come back after
+           (after Ctrl-C the program ends here instead) */
         ReplyMsg(wbn_close);
         wbn_close = 0;
-        tg_gui_wbn_park();
+        if (done == 4) {
+            tg_gui_wbn_park(); /* gives way to Ctrl-C too */
+            if ((SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0UL) {
+                tg_gui_log("window: Ctrl-C while the Workbench was away");
+                done = 1;
+            }
+        }
     }
     tg_gui_wbn_end();
     tg_gui_amiga_close_core_libs();
@@ -14196,6 +14216,10 @@ int tg_gui_run_window(tg_gui_state *state)
     if (state == 0) {
         return 2;
     }
+    /* Ctrl-C is ours from here: the window loops quit on it with the full
+       teardown. The C library's own check ended the program from inside a
+       stdio call and left the window on the screen with nobody behind it. */
+    tg_platform_break_own();
     tg_gui_emoji_preferences_load("data/telegram-emoji.txt",
                                   &state->emoji_enabled, &state->emoji_explicit);
     state->emoji_default_resolved = 0;

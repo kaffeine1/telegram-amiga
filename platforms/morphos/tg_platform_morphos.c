@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -1294,6 +1295,25 @@ int tg_platform_break_pending(void)
 {
     /* Peek without clearing: the break stays pending for outer loops. */
     return (SetSignal(0L, 0L) & SIGBREAKF_CTRL_C) != 0L;
+}
+
+static int tg_morphos_break_owned = 0;
+
+/* libnix runs this inside its I/O calls (read, write, lseek): a pending
+   Ctrl+C is taken and raised as SIGINT, whose default prints "***Break" and
+   ends the program. This copy keeps libnix's own out of the link and does
+   the same, until tg_platform_break_own(). */
+void __chkabort(void)
+{
+    if (!tg_morphos_break_owned &&
+        (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0L) {
+        (void)raise(SIGINT);
+    }
+}
+
+void tg_platform_break_own(void)
+{
+    tg_morphos_break_owned = 1;
 }
 
 #include <proto/intuition.h>
