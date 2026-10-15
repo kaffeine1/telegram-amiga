@@ -186,8 +186,11 @@ Features are therefore grouped by the work they share.
   flash on MorphOS; new-message notifications (the title with the count,
   a beep, the AppIcon label with the network read while iconified, and
   our own pop-up, see the section below), tried in the MorphOS and AROS
-  x86_64 VMs and waiting for the machines. To come, if it stays small:
-  the simpler text client the plain-68000 user asked for.
+  x86_64 VMs and waiting for the machines; a simpler text client, as the
+  plain-68000 user asked (three lines of help at start, a prompt naming the
+  chat, "You" for your own lines, news from chats outside the list counted
+  in the top line instead of scrolling past), with Cyrillic and Greek
+  spelled in Latin letters in both clients.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -804,6 +807,13 @@ Two steps, in this order.
   fold stays underneath as the fallback for everything else.
 
 Neither step touches the wire: what goes out has always been UTF-8.
+
+The fold has grown a second table in 0.0.97: Cyrillic and Greek spelled in
+Latin letters, one letter per sound ("Privet", "Ellada"), after a screen
+from the plain-68000 user full of question marks. The other scripts stay
+out of reach: the text client shows one "?" per word and "(another
+alphabet)" for a text with nothing readable, while the window still leaves
+those letters out, which is the next thing to give the same treatment.
 
 The hard half followed at once, because the machinery made it cheap:
 received emoji are pairs too, emitted by the display conversion for any

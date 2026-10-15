@@ -107,8 +107,24 @@ the text client for the plain 68000.
   card's own format, so the photos were painted on the window after the copy
   and their place showed empty for a moment at every full redraw. The frame
   now has the card's format and the photos go into it.
+- Cyrillic and Greek are spelled out in Latin letters, "Privet" and
+  "Ellada", instead of a question mark per letter in the text client and
+  nothing at all in the window. In the text client a word in an alphabet
+  with no such spelling here, such as Hebrew or Chinese, shows a single "?",
+  and a text with nothing readable at all says "(another alphabet)".
 
 ### Changed
+- The text client is simpler to live with, as the plain-68000 user asked.
+  It starts with three lines of help instead of the whole command list, and
+  /help puts the everyday commands first. The prompt names the chat you
+  write to, "[Mario] >", and your own lines read "You:": your account's name
+  stood in both places, and a name written in emoji came out as ":/ ?". A
+  group member the client cannot name reads "someone" instead of "?".
+  Messages from groups that are not in your chat list, from someone not in
+  it either, no longer scroll past one nameless line each: the top line
+  counts them, "(+3 elsewhere)", until /list, and only chats you know make
+  the screen flash. /list and /chats show your chats as /peers does, and the
+  first question asks for a "Chat number".
 - Less memory: the 68000 text client needs 1.32 MB to load instead of 1.53,
   and the AmigaOS 3 window build about 500 KB less, by sharing buffers that
   are never in use at the same time.

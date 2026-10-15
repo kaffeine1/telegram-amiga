@@ -485,6 +485,9 @@ static void tg_mtproto_chat_show_prompt(FILE *stream,
                                         int raw);
 /* Console bell (BEL -> screen flash on Amiga consoles) on notifications. */
 static int tg_chat_bell_enabled = 1;
+/* News from chats that are not in the list, counted in the status bar
+   since the last /list instead of printed one line each. */
+static unsigned long tg_chat_unlisted_news = 0UL;
 /* Gap-handling cursor (updates.getState / getDifference) and the /diff toggle
    now live in the chat engine (tg_chat_engine), a stack-local of
    tg_mtproto_auth_chat_file -- the first slice of the engine extraction. */
@@ -6529,13 +6532,57 @@ static const char tg_mtproto_latin_ext_a_fold[128][3] = {
     "Y", "Z", "z", "Z", "z", "Z", "z", "s"  /* 0178 */
 };
 
-/* The fold above, plus the four Romanian letters with a comma below, which
+/* Cyrillic and Greek, spelled in Latin letters. An Amiga font has neither,
+   so a message in Russian, Ukrainian, Serbian, Bulgarian or Greek printed as
+   a row of question marks in the text client and as nothing at all in the
+   window. A transliteration is not the real thing either, but it reads, and
+   it is what the owners of those names write in Latin letters anyway. One
+   letter per sound, the way most readers expect it: no rule tries to be a
+   national standard. Cyrillic is U+0400..U+045F, five bytes a row for
+   "Shch"; Greek is U+0386..U+03CE, where the empty rows are codepoints
+   Unicode leaves unassigned. */
+static const char tg_mtproto_cyrillic_fold[96][5] = {
+    "E", "Yo", "Dj", "G", "Ye", "Dz", "I", "Yi",       /* 0400 */
+    "J", "Lj", "Nj", "C", "K", "I", "U", "Dz",         /* 0408 */
+    "A", "B", "V", "G", "D", "E", "Zh", "Z",           /* 0410 */
+    "I", "Y", "K", "L", "M", "N", "O", "P",            /* 0418 */
+    "R", "S", "T", "U", "F", "Kh", "Ts", "Ch",         /* 0420 */
+    "Sh", "Shch", "'", "Y", "'", "E", "Yu", "Ya",      /* 0428 */
+    "a", "b", "v", "g", "d", "e", "zh", "z",           /* 0430 */
+    "i", "y", "k", "l", "m", "n", "o", "p",            /* 0438 */
+    "r", "s", "t", "u", "f", "kh", "ts", "ch",         /* 0440 */
+    "sh", "shch", "'", "y", "'", "e", "yu", "ya",      /* 0448 */
+    "e", "yo", "dj", "g", "ye", "dz", "i", "yi",       /* 0450 */
+    "j", "lj", "nj", "c", "k", "i", "u", "dz"          /* 0458 */
+};
+
+static const char tg_mtproto_greek_fold[73][3] = {
+    "A", "\xb7", "E", "I", "I", "", "O", "", "Y", "O", /* 0386 */
+    "i", "A", "V", "G", "D", "E", "Z", "I", "Th", "I",  /* 0390 */
+    "K", "L", "M", "N", "X", "O", "P", "R", "", "S",    /* 039a */
+    "T", "Y", "F", "Ch", "Ps", "O", "I", "Y", "a", "e", /* 03a4 */
+    "i", "i", "y", "a", "v", "g", "d", "e", "z", "i",   /* 03ae */
+    "th", "i", "k", "l", "m", "n", "x", "o", "p", "r",  /* 03b8 */
+    "s", "s", "t", "y", "f", "ch", "ps", "o", "i", "y", /* 03c2 */
+    "o", "y", "o"                                       /* 03cc */
+};
+
+/* The folds above, plus the four Romanian letters with a comma below, which
    live in Latin Extended-B and are the only ones there common enough to be
-   worth a line. Returns 0 when the codepoint is not one of ours. */
+   worth a line, Ukrainian's G with an upturn and the Greek question mark.
+   Returns 0 when the codepoint is not one of ours. */
 static const char *tg_mtproto_display_latin_fold(unsigned long cp)
 {
     if (cp >= 0x100UL && cp <= 0x17fUL) {
         return tg_mtproto_latin_ext_a_fold[cp - 0x100UL];
+    }
+    if (cp >= 0x400UL && cp <= 0x45fUL) {
+        return tg_mtproto_cyrillic_fold[cp - 0x400UL];
+    }
+    if (cp >= 0x386UL && cp <= 0x3ceUL) {
+        const char *fold = tg_mtproto_greek_fold[cp - 0x386UL];
+
+        return fold[0] != '\0' ? fold : 0;
     }
     switch (cp) {
     case 0x0218UL:
@@ -6546,6 +6593,12 @@ static const char *tg_mtproto_display_latin_fold(unsigned long cp)
         return "T";
     case 0x021bUL:
         return "t";
+    case 0x0490UL:
+        return "G";
+    case 0x0491UL:
+        return "g";
+    case 0x037eUL:
+        return "?";
     default:
         break;
     }
@@ -6714,15 +6767,60 @@ static unsigned long tg_mtproto_utf8_read_codepoint(const char *text,
 
 /* UTF-8 text in the console's Latin-1, as the GUI draws it: what has a
    Latin-1 or plain rendition prints as that (accents, folded letters,
-   emoticons, the symbol folds); an emoji or symbol with none is left out
-   together with the space before it, so "ciao <emoji> mondo" reads "ciao
-   mondo" rather than showing a placeholder; modifiers vanish; a letter of
-   another alphabet stays a '?', so a word does not silently disappear. A
-   text of nothing but such emoji prints "(emoji)", not an empty line.
-   keep_lines: a message body keeps its line breaks (indented under the
-   sender); names and previews flatten them to spaces. Built where the
-   console path uses it (the Amiga lanes) and wherever the self-tests run. */
+   Cyrillic and Greek spelled out, emoticons, the symbol folds); an emoji or
+   symbol with none is left out together with the space before it, so "ciao
+   <emoji> mondo" reads "ciao mondo" rather than showing a placeholder;
+   modifiers vanish. A word in another alphabet becomes a single '?', so it
+   does not silently disappear, and a text with nothing readable at all says
+   "(another alphabet)" once instead of a row of question marks (the 68000
+   tester's screen, 2026-10). A text of nothing but such emoji prints
+   "(emoji)", not an empty line. keep_lines: a message body keeps its line
+   breaks (indented under the sender); names and previews flatten them to
+   spaces. Built where the console path uses it (the Amiga lanes) and
+   wherever the self-tests run. */
 #if TG_MTPROTO_DISPLAY_LATIN1 || !defined(TG_NO_SELFTEST)
+/* A letter with no rendition: what prints as '?'. */
+static int tg_mtproto_display_codepoint_unknown(unsigned long cp)
+{
+    char out[8];
+
+    return tg_mtproto_display_codepoint_to_latin1(cp, out, sizeof(out)) ==
+               0UL &&
+           !tg_mtproto_display_codepoint_is_invisible(cp) &&
+           !(cp >= 0x100UL && tg_mtproto_display_is_symbol_block(cp));
+}
+
+/* Nothing in the text a reader could use, and at least one letter we cannot
+   show: the whole text is in another alphabet. */
+static int tg_mtproto_display_text_unreadable(const char *text)
+{
+    unsigned long i;
+    unsigned long cp;
+    unsigned long n;
+    unsigned long k;
+    char out[8];
+    int unknown = 0;
+
+    i = 0UL;
+    while (text[i] != '\0') {
+        cp = tg_mtproto_utf8_read_codepoint(text, &i);
+        n = tg_mtproto_display_codepoint_to_latin1(cp, out, sizeof(out));
+        for (k = 0UL; k < n; ++k) {
+            unsigned char c = (unsigned char)out[k];
+
+            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+                (c >= 'a' && c <= 'z') ||
+                (c >= 0xc0U && c != 0xd7U && c != 0xf7U)) {
+                return 0; /* something readable */
+            }
+        }
+        if (n == 0UL && tg_mtproto_display_codepoint_unknown(cp)) {
+            unknown = 1;
+        }
+    }
+    return unknown;
+}
+
 static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
                                          int keep_lines)
 {
@@ -6733,8 +6831,13 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
     int pending_space = 0;
     int shown = 0;
     int omitted = 0;
+    int in_unknown = 0; /* inside a word we cannot show: one '?' per word */
 
     if (stream == 0 || text == 0) {
+        return;
+    }
+    if (tg_mtproto_display_text_unreadable(text)) {
+        fputs("(another alphabet)", stream);
         return;
     }
     i = 0UL;
@@ -6745,6 +6848,7 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
         }
         if (cp == '\n' && keep_lines) {
             pending_space = 0;
+            in_unknown = 0;
             tg_console_ui_end_line(stream);
             fputs("  ", stream);
             continue;
@@ -6755,6 +6859,7 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
                 fputc(' ', stream); /* a run of spaces keeps its length */
             }
             pending_space = 1;
+            in_unknown = 0;
             continue;
         }
         if (n > 0UL) {
@@ -6764,6 +6869,7 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
             }
             (void)fwrite(out, 1, (size_t)n, stream);
             shown = 1;
+            in_unknown = 0;
             continue;
         }
         if (tg_mtproto_display_codepoint_is_invisible(cp)) {
@@ -6774,12 +6880,16 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
             omitted = 1;
             continue;
         }
+        if (in_unknown) {
+            continue; /* the word already has its '?' */
+        }
         if (pending_space) {
             fputc(' ', stream);
             pending_space = 0;
         }
         fputc('?', stream);
         shown = 1;
+        in_unknown = 1;
     }
     if (!shown && omitted) {
         fputs("(emoji)", stream);
@@ -6788,9 +6898,93 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
 #endif
 
 #if !defined(TG_NO_SELFTEST)
+static void tg_mtproto_chat_print_notify_lines(FILE *stream,
+                                               const char *peer_cache_file,
+                                               const char *current_index_text);
+
+/* 0.0.97: news from a chat in the list keeps its line, and so does a private
+   message from someone new; a group outside the list, from someone not in it
+   either, is only counted. A self-test has no TUI, so the count comes as the
+   plain console's one line. */
+static int tg_mtproto_notify_lines_self_test(void)
+{
+    static const char path[] = "tg-notify-lines-selftest.tmp";
+    static const char want[] =
+        "[1] Amiga Group (group): ciao\n"
+        "[+] new message: hello\n"
+        "(+2 elsewhere)\n";
+    tg_chat_notify queue;
+    tg_chat_notify *saved_queue;
+    unsigned long saved_news;
+    int saved_bell;
+    int saved_color;
+    int saved_theme;
+    char got[256];
+    size_t n;
+    FILE *file;
+
+    file = tg_file_fopen_replace(path, "w");
+    if (file == 0) {
+        puts("probe self-test: notify lines: cannot write the cache");
+        return 2;
+    }
+    fputs("peer 1 type group id 0x0000000000000101 access_hash - top 0 "
+          "unread 0 self no bot no username - title Amiga Group\n", file);
+    fclose(file);
+    memset(&queue, 0, sizeof(queue));
+    queue.count = 4UL;
+    queue.queue[0].is_chat = 1; /* in the list */
+    queue.queue[0].peer_id_lo = 0x101UL;
+    queue.queue[0].from_id_lo = 0x707UL;
+    strcpy(queue.queue[0].text, "ciao");
+    queue.queue[1].is_chat = 1; /* outside the list, sender unknown too */
+    queue.queue[1].peer_id_lo = 0x202UL;
+    queue.queue[1].from_id_lo = 0x303UL;
+    strcpy(queue.queue[1].text, "x");
+    queue.queue[2].is_chat = 0; /* someone new, in private */
+    queue.queue[2].peer_id_lo = 0x404UL;
+    queue.queue[2].from_id_lo = 0x404UL;
+    strcpy(queue.queue[2].text, "hello");
+    queue.queue[3].is_chat = 1; /* another unlisted group */
+    queue.queue[3].peer_id_lo = 0x505UL;
+    strcpy(queue.queue[3].text, "y");
+    saved_queue = tg_chat_nq;
+    saved_news = tg_chat_unlisted_news;
+    saved_bell = tg_chat_bell_enabled;
+    saved_color = tg_console_ui_color_mode();
+    saved_theme = tg_console_ui_theme();
+    tg_chat_nq = &queue;
+    tg_chat_bell_enabled = 0;
+    tg_console_ui_set_color_mode(TG_UI_COLOR_OFF);
+    tg_console_ui_set_theme(TG_UI_THEME_PLAIN);
+    file = tmpfile();
+    if (file != 0) {
+        tg_mtproto_chat_print_notify_lines(file, path, "");
+        rewind(file);
+        n = fread(got, 1, sizeof(got) - 1U, file);
+        got[n] = '\0';
+        fclose(file);
+    } else {
+        got[0] = '\0';
+    }
+    tg_console_ui_set_color_mode(saved_color);
+    tg_console_ui_set_theme(saved_theme);
+    tg_chat_bell_enabled = saved_bell;
+    tg_chat_unlisted_news = saved_news;
+    tg_chat_nq = saved_queue;
+    (void)remove(path);
+    if (strcmp(got, want) != 0 || queue.count != 0UL) {
+        printf("probe self-test: notify lines gave \"%s\"\n", got);
+        return 2;
+    }
+    return 0;
+}
+
 /* 0.0.95: the console's Latin-1 text. Escapes keep the source ASCII:
    brick, keycap one, euro, bullet, Cyrillic, thumbs up, the England flag
-   (black flag plus tags), e with a combining acute, play button, e acute. */
+   (black flag plus tags), e with a combining acute, play button, e acute;
+   0.0.97: Greek, Cyrillic Shch, Hebrew alone, with punctuation and among
+   Latin words. */
 static int tg_mtproto_display_text_self_test(void)
 {
     static const char *const cases[][2] = {
@@ -6799,14 +6993,19 @@ static int tg_mtproto_display_text_self_test(void)
         {"1\xef\xb8\x8f\xe2\x83\xa3 2", "1 2"},
         {"10\xe2\x82\xac", "10EUR"},
         {"\xe2\x80\xa2 voce", "\xb7 voce"},
-        {"\xd0\x9f\xd1\x80\xd0\xb8", "???"},
+        {"\xd0\x9f\xd1\x80\xd0\xb8", "Pri"},
         {"ok \xf0\x9f\x91\x8d", "ok (y)"},
         {"\xf0\x9f\x8f\xb4\xf3\xa0\x81\xa7\xf3\xa0\x81\xa2\xf3\xa0\x81\xa5"
          "\xf3\xa0\x81\xae\xf3\xa0\x81\xa7\xf3\xa0\x81\xbf", "(emoji)"},
         {"e\xcc\x81", "e"},
         {"a  b", "a  b"},
         {"\xe2\x96\xb6\xef\xb8\x8f Video", "> Video"},
-        {"perch\xc3\xa9", "perch\xe9"}
+        {"perch\xc3\xa9", "perch\xe9"},
+        {"\xce\x95\xce\xbb\xce\xbb\xce\xac\xce\xb4\xce\xb1", "Ellada"},
+        {"\xd0\xa9\xd1\x83\xd0\xba\xd0\xb0", "Shchuka"},
+        {"\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d", "(another alphabet)"},
+        {"\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d!", "(another alphabet)"},
+        {"ciao \xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d amico", "ciao ? amico"}
     };
     char got[64];
     unsigned int k;
@@ -10575,12 +10774,12 @@ static long tg_chat_history_recall = -1L;
 /*
  * Whether the interactive chat currently has stdin in raw console mode. Set at
  * the top of the chat loop once tg_platform_stdin_set_raw(1) succeeds, and read
- * by tg_mtproto_chat_prompt_line so the sub-prompts (Peer index, Search, Remove,
- * /add name, search result number) echo and line-edit the same way as the main
- * input loop. Without this, raw mode left those cooked prompts silent -- typing
- * produced nothing on screen, which looked like a dead keyboard. Every caller of
- * tg_mtproto_chat_prompt_line runs inside the chat loop, so setting this once per
- * chat entry is sufficient.
+ * by tg_mtproto_chat_prompt_line so the sub-prompts (Chat number, Search,
+ * Remove, /add name, search result number) echo and line-edit the same way as
+ * the main input loop. Without this, raw mode left those cooked prompts silent
+ * -- typing produced nothing on screen, which looked like a dead keyboard.
+ * Every caller of tg_mtproto_chat_prompt_line runs inside the chat loop, so
+ * setting this once per chat entry is sufficient.
  */
 static int tg_chat_input_raw = 0;
 /* TUI message-input caret: byte offset into the line buffer (0..line_length).
@@ -10637,9 +10836,8 @@ static void tg_chat_history_add(const char *text)
 /* One-line command cheat-sheet shown when a lone '/' starts the input row
    (both the TUI-transcript and the linear-raw printers use it). */
 #define TG_CHAT_SLASH_HINT_TEXT \
-    "Commands: /peers /saved /forward /forwardto /getfile /sendfile /photo\n" \
-    "          /search /add /remove /history /swap /watch /diff /color /bell\n" \
-    "          /help /quit\n"
+    "Commands: /list /search /add /history /getfile /sendfile /photo\n" \
+    "          /forward /forwardto /remove /watch /color /bell /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -10648,7 +10846,7 @@ static void tg_chat_history_add(const char *text)
  * Unrecognised CSI sequences (window close/resize events) are always consumed so
  * they never leak into the typed line. When use_history is 0 the reader still
  * echoes and line-edits but does not record or recall history -- used by the
- * sub-prompts (Peer index, /add name, ...) so answering them does not pollute
+ * sub-prompts (Chat number, /add name, ...) so answering them does not pollute
  * the message history and Up/Down there is simply swallowed. In cooked fallback
  * mode (raw == 0) it just accumulates the line as before, without echo.
  */
@@ -11267,13 +11465,11 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         return;
     }
     if (row->is_out) {
+        /* "You", not the account's name: a name written in emoji or in
+           another alphabet came out as ":/ ?" on the 68000 tester's screen,
+           and the reader knows who they are. */
         tg_console_ui_role(stream, TG_UI_ROLE_OWN);
-        if (row->own_label != 0 && row->own_label[0] != '\0') {
-            tg_mtproto_print_cache_text(stream, row->own_label);
-            fprintf(stream, ":");
-        } else {
-            fprintf(stream, "me:");
-        }
+        fprintf(stream, "You:");
         tg_console_ui_reset(stream);
         fputc(' ', stream);
     } else {
@@ -11288,8 +11484,8 @@ static void tg_mtproto_chat_render_message(FILE *stream,
             fprintf(stream, ":");
         } else if (row->is_group) {
             /* Group sender we could not resolve; the [group] prefix is already
-               shown, so just mark the unknown author. */
-            fprintf(stream, "?:");
+               shown, so just mark the unknown author, in words. */
+            fprintf(stream, "someone:");
         } else {
             fprintf(stream, "them:");
         }
@@ -11335,16 +11531,16 @@ static void tg_chat_console_on_message(void *ctx,
 #if !defined(TG_NO_SELFTEST)
 static const char tg_chat_render_golden[] =
     "[22:13] Mario: Ciao\n"
-    "[22:18] Io: Tutto bene?\n"
+    "[22:18] You: Tutto bene?\n"
     "[23:13] [Sviluppo] Alice: Salve a tutti\n"
-    "[23:18] [Sviluppo] ?: boh\n"
+    "[23:18] [Sviluppo] someone: boh\n"
     "--- 15 Nov ---\n"
     "[23:13] Mario: Nuovo giorno\n"
     "--- 16 Nov ---\n"
     "[00:13] [Sviluppo Server..] Bob: ok\n"
     "Mario: senza data\n"
     "them: anon\n"
-    "me: io anon\n"
+    "You: io anon\n"
     "Mario: riga1\n"
     "  riga2\n";
 
@@ -12804,6 +13000,10 @@ static void tg_mtproto_chat_print_input_prompt(FILE *stream,
     if (stream == 0) {
         return;
     }
+    /* "[chat] >": where the line goes, not who types it. The account's own
+       name used to stand here, and one written in emoji or in another
+       alphabet read ":/ ?" (the 68000 tester's screen, 2026-10). */
+    (void)own_label;
     tg_console_ui_role(stream, TG_UI_ROLE_PROMPT);
     if (peer_label != 0 && peer_label[0] != '\0') {
         /* Truncate the bracketed chat name the same way the message lines do,
@@ -12813,12 +13013,7 @@ static void tg_mtproto_chat_print_input_prompt(FILE *stream,
                                          TG_MTPROTO_GROUP_LABEL_MAX);
         fprintf(stream, "] ");
     }
-    if (own_label != 0 && own_label[0] != '\0') {
-        tg_mtproto_print_cache_text(stream, own_label);
-    } else {
-        fprintf(stream, "me");
-    }
-    fprintf(stream, ":");
+    fprintf(stream, ">");
     tg_console_ui_reset(stream);
     fputc(' ', stream);
     fflush(stream);
@@ -13035,21 +13230,41 @@ static void tg_mtproto_cache_text_to_display(const char *text,
     fclose(tmp);
 }
 
-static void tg_mtproto_chat_tui_status(const char *peer_label)
+static char tg_chat_status_shown[64];
+
+static void tg_mtproto_chat_tui_status_draw(void)
 {
-    char shown[64];
-    char status[96];
+    char more[32];
+    char status[128];
 
     if (!tg_console_tui_active() || tg_chat_tui_stream == 0) {
         return;
     }
-    if (peer_label != 0 && peer_label[0] != '\0') {
-        tg_mtproto_cache_text_to_display(peer_label, shown, sizeof(shown));
-        sprintf(status, " " TG_APP_TITLE " - %.60s ", shown);
+    more[0] = '\0';
+    if (tg_chat_unlisted_news > 0UL) {
+        sprintf(more, "(+%lu elsewhere) ",
+                tg_chat_unlisted_news > 999UL ? 999UL : tg_chat_unlisted_news);
+    }
+    if (tg_chat_status_shown[0] != '\0') {
+        sprintf(status, " " TG_APP_TITLE " - %.60s %.31s",
+                tg_chat_status_shown, more);
     } else {
-        sprintf(status, " " TG_APP_TITLE " ");
+        sprintf(status, " " TG_APP_TITLE " %.31s", more);
     }
     tg_console_tui_status(tg_chat_tui_stream, status);
+}
+
+static void tg_mtproto_chat_tui_status(const char *peer_label)
+{
+    if (!tg_console_tui_active() || tg_chat_tui_stream == 0) {
+        return;
+    }
+    tg_chat_status_shown[0] = '\0';
+    if (peer_label != 0 && peer_label[0] != '\0') {
+        tg_mtproto_cache_text_to_display(peer_label, tg_chat_status_shown,
+                                         sizeof(tg_chat_status_shown));
+    }
+    tg_mtproto_chat_tui_status_draw();
 }
 
 /* Finds the public chat-list index (and label) of a cached peer id. */
@@ -13116,6 +13331,8 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     unsigned long current_index;
     unsigned long index;
     unsigned long i;
+    unsigned long unlisted;
+    int printed;
     const char *digits;
     const tg_chat_notify_entry *entry;
 
@@ -13139,6 +13356,8 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
             current_index = 0UL;
         }
     }
+    unlisted = 0UL;
+    printed = 0;
     for (i = 0UL; i < tg_chat_nq->count; ++i) {
         entry = &tg_chat_nq->queue[i];
         index = 0UL;
@@ -13165,6 +13384,15 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
                                                    &sender_index, label,
                                                    sizeof(label));
         }
+        if (index == 0UL && label[0] == '\0' && entry->is_chat) {
+            /* A group or channel that is not in the list, from someone not
+               in it either: no name to show, no number to jump to. One
+               "group message:" line each filled the 68000 tester's screen
+               (2026-10); they are counted instead. */
+            ++unlisted;
+            continue;
+        }
+        printed = 1;
         tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
         if (index != 0UL) {
             fprintf(stream, "[%lu] ", index);
@@ -13189,8 +13417,21 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
         fprintf(stream, "(+%lu more)", tg_chat_nq->dropped);
         tg_console_ui_reset(stream);
         tg_console_ui_end_line(stream);
+        printed = 1;
     }
-    if (tg_chat_bell_enabled) {
+    if (unlisted > 0UL) {
+        tg_chat_unlisted_news += unlisted;
+        if (tg_console_tui_active() && tg_chat_tui_stream != 0) {
+            tg_mtproto_chat_tui_status_draw(); /* the top line counts them */
+        } else {
+            /* No status line on a plain console: one line for the lot. */
+            tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
+            fprintf(stream, "(+%lu elsewhere)", unlisted);
+            tg_console_ui_reset(stream);
+            tg_console_ui_end_line(stream);
+        }
+    }
+    if (printed && tg_chat_bell_enabled) {
         /* Intuition DisplayBeep, not a BEL byte: console handlers improvise
            on BEL (AmiKit's replacement console clears the window, one AROS
            icon console draws a stray glyph). The flash never touches the
@@ -13202,37 +13443,61 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     fflush(stream);
 }
 
+/* What a first-time user needs, in three lines: the whole command list used
+   to fill an A600's screen at every start (the 68000 tester, 2026-10). */
+static void tg_mtproto_chat_print_quick_help(FILE *stream)
+{
+    static const char *const quick_lines[] = {
+        "",
+        "Type a message and press Enter to send it.",
+        "F1-F10 or a chat number: change chat. 0: Saved Messages. Tab: back.",
+        "/list: your chats.  /help: all commands.  /quit: exit.",
+        0
+    };
+    unsigned long i;
+
+    if (stream == 0) {
+        return;
+    }
+    tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
+    for (i = 0UL; quick_lines[i] != 0; ++i) {
+        fputs(quick_lines[i], stream);
+        tg_console_ui_end_line(stream);
+    }
+    tg_console_ui_reset(stream);
+    tg_console_ui_end_line(stream);
+}
+
 static void tg_mtproto_chat_print_help(FILE *stream)
 {
     static const char *help_lines[] = {
         "",
-        "Commands:",
-        "  text          send a message",
-        "  Enter         read new messages now",
-        "  number        switch to chat number",
-        "  F1..F10       switch to chat 1..10 (shift: 11..20)",
-        "  Tab           back to the previous chat",
-        "  Shift+Up/Down page through older messages (and back to live)",
-        "  /swap         back to the previous chat",
-        "  /peers        show cached chats",
-        "  /search text  find cached chats by name or username",
-        "  /add name     search Telegram and add a chat",
-        "  /remove n     remove cached chat n",
-        "  /history      show recent messages without new-message filtering",
-        "  /forward [id] forward latest (or given id) to Saved Messages",
-        "  /forwardto n [id] forward latest (or given id) to chat n",
-        "  /getfile      download the newest file in this chat to downloads/",
-        "  /sendfile p   send a file (large files supported; build limit applies)",
-        "  /photo p      send a JPEG as a photo (over 10 MiB becomes a file)",
-        "  /saved        open Saved Messages (your cloud transfer drawer)",
-        "  /watch sec    set auto-read interval",
-        "  /watch off    disable auto-read",
-        "  /resize       redraw the layout after a window resize",
-        "  /diff         toggle background catch-up (or /diff on|off)",
-        "  /color        toggle colours (or /color on|off)",
-        "  /bell         toggle the notification flash/bell",
-        "  /help         show this help",
-        "  /quit         exit",
+        "Every day:",
+        "  text + Enter    send a message",
+        "  Enter           read new messages now",
+        "  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)",
+        "  0               Saved Messages, your cloud drawer",
+        "  Tab             back to the previous chat",
+        "  Shift+Up/Down   older messages, and back",
+        "  /list           your chats",
+        "  /quit           exit",
+        "",
+        "More:",
+        "  /search text    find a chat in the list by name or username",
+        "  /add name       search Telegram and add a chat to the list",
+        "  /remove n       remove chat n from the list",
+        "  /history        show the recent messages again",
+        "  /forward [id]   forward the latest (or that id) to Saved Messages",
+        "  /forwardto n [id]  forward the latest (or that id) to chat n",
+        "  /getfile        download the newest file here to downloads/",
+        "  /sendfile path  send a file",
+        "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
+        "  /watch sec      read new messages every sec seconds (off: never)",
+        "  /resize         redraw after the window changed size",
+        "  /diff           background catch-up, on or off",
+        "  /color          colours, on or off",
+        "  /bell           flash on new messages, on or off",
+        "  /swap /saved /peers  the same as Tab, 0 and /list",
         0
     };
     unsigned long i;
@@ -13484,8 +13749,8 @@ int tg_mtproto_auth_chat_file(const char *host,
 #else
     chat_raw = 0;
 #endif
-    /* Let tg_mtproto_chat_prompt_line (Peer index / Search / /add prompts) echo
-       and line-edit in the same mode as the main loop. */
+    /* Let tg_mtproto_chat_prompt_line (Chat number / Search / /add prompts)
+       echo and line-edit in the same mode as the main loop. */
     tg_chat_input_raw = chat_raw;
     /* Colour AUTO mode keys off the same signal: a real interactive console. */
     tg_console_ui_set_interactive(chat_raw);
@@ -13629,7 +13894,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-        if (tg_mtproto_chat_prompt_line("\nPeer index: ", peer_index,
+        if (tg_mtproto_chat_prompt_line("\nChat number: ", peer_index,
                                         sizeof(peer_index), 1, stream,
                                         label) != 0) {
             tg_mtproto_close_auth_context(&chat_context);
@@ -13680,14 +13945,10 @@ int tg_mtproto_auth_chat_file(const char *host,
     consecutive_failures = 0UL;
     chat_quiet = tg_mtproto_open_quiet_stream(stream);
     {
-            FILE *tui_cap = tg_console_tui_capture_begin(stream);
-            tg_mtproto_chat_print_help(tui_cap);
-            tg_console_tui_capture_end(tui_cap, stream);
-        }
-    {
-        char watch_note[64];
-        sprintf(watch_note, "Auto-read every %lu second(s).", watch_seconds);
-        tg_mtproto_chat_print_system_line(stream, watch_note);
+        FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+        tg_mtproto_chat_print_quick_help(tui_cap);
+        tg_console_tui_capture_end(tui_cap, stream);
     }
     if (peer_index[0] == '\0') {
         tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -14001,7 +14262,12 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_chat_tui_status(peer_label);
             continue;
         }
-        if (strcmp(line, "/peers") == 0) {
+        if (strcmp(line, "/peers") == 0 || strcmp(line, "/list") == 0 ||
+            strcmp(line, "/chats") == 0) {
+            /* The list is in front of the user now: the count of news from
+               chats outside it starts again. */
+            tg_chat_unlisted_news = 0UL;
+            tg_mtproto_chat_tui_status_draw();
             tg_mtproto_chat_load_own_label(host, port, api_id, auth_file,
                                            dc_id_text, &chat_context,
                                            peer_cache_file,
@@ -14023,7 +14289,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         if (strcmp(line, "/history") == 0) {
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /peers or /add name.");
+                    stream, "Choose a chat first with /list or /add name.");
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
                 continue;
@@ -14048,7 +14314,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                the open chat into downloads/ (same machinery as the GUI). */
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /peers or /add name.");
+                    stream, "Choose a chat first with /list or /add name.");
             } else {
                 tg_mtproto_file_ctx fc;
                 char saved_path[160];
@@ -14165,7 +14431,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 }
                 if (peer_index[0] == '\0') {
                     tg_mtproto_chat_print_system_line(
-                        stream, "Choose a chat first with /peers or /add name.");
+                        stream, "Choose a chat first with /list or /add name.");
                 } else if (*fpath == '\0') {
                     tg_mtproto_chat_print_system_line(
                         stream, send_as_photo
@@ -14410,7 +14676,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-            if (tg_mtproto_chat_prompt_line("Peer index: ",
+            if (tg_mtproto_chat_prompt_line("Chat number: ",
                                             requested_peer_text,
                                             sizeof(requested_peer_text), 1,
                                             stream, label) != 0) {
@@ -14585,7 +14851,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-                if (tg_mtproto_chat_prompt_line("Peer index: ",
+                if (tg_mtproto_chat_prompt_line("Chat number: ",
                                                 requested_peer_text,
                                                 sizeof(requested_peer_text),
                                                 1, stream, label) != 0) {
@@ -14824,7 +15090,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         }
         if (peer_index[0] == '\0') {
             tg_mtproto_chat_print_system_line(
-                stream, "Choose a chat first with /peers or /add name.");
+                stream, "Choose a chat first with /list or /add name.");
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -16722,6 +16988,9 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_mtproto_display_text_self_test() != 0) {
+        return 2;
+    }
+    if (tg_mtproto_notify_lines_self_test() != 0) {
         return 2;
     }
 
