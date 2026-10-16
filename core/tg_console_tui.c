@@ -511,18 +511,27 @@ void tg_console_tui_status(FILE *stream, const char *status_text)
  * star on the chats with news. A tab keeps its width whatever is marked:
  * the brackets and the star take cells that are always there, so a key
  * never moves under the user's eye.
+ *
+ * A narrow window, such as the 37 columns of a console on a 320-pixel
+ * screen, fits only two tabs with names of eight letters. There the tabs
+ * go compact, "1 Tele" instead of "F1 Telegram" and spaces instead of the
+ * bars between them: the number is the key and the chat number alike, and
+ * the open chat keeps its whole name in the status bar.
  */
-#define TG_TUI_TAB_NAME_MIN 8U /* fewer tabs rather than names cut shorter */
+#define TG_TUI_TAB_NAME_MIN 8U  /* fewer tabs rather than names cut shorter */
 #define TG_TUI_TAB_NAME_MAX 16U
+#define TG_TUI_TAB_SHORT_MIN 4U /* the compact tabs' shortest names */
+#define TG_TUI_TABS_COMPACT_BELOW 4U /* fewer full tabs than this: compact */
 
 static char tg_tui_tab_names[TG_CONSOLE_TUI_TABS][TG_CONSOLE_TUI_TAB_NAME];
 static unsigned int tg_tui_tab_count = 0U;
 static unsigned int tg_tui_tab_current = 0U;
 static unsigned int tg_tui_tab_news = 0U;
 
-/* Cells of tab `key` (1-based) with its name cut at name_max: "F1 name"
-   plus the bracket, star and bracket cells. */
-static unsigned int tg_tui_tab_width(unsigned int key, unsigned int name_max)
+/* Cells of tab `key` (1-based) with its name cut at name_max: "F1 name",
+   or "1 name" when compact, plus the bracket, star and bracket cells. */
+static unsigned int tg_tui_tab_width(unsigned int key, unsigned int name_max,
+                                     int compact)
 {
     unsigned int length;
 
@@ -530,20 +539,43 @@ static unsigned int tg_tui_tab_width(unsigned int key, unsigned int name_max)
     if (length > name_max) {
         length = name_max;
     }
-    return (key >= 10U ? 3U : 2U) + 1U + length + 3U;
+    return (compact ? 0U : 1U) + (key >= 10U ? 2U : 1U) + 1U + length + 3U;
 }
 
 static unsigned int tg_tui_tabs_width(unsigned int count,
-                                      unsigned int name_max)
+                                      unsigned int name_max, int compact)
 {
     unsigned int key;
     unsigned int total;
 
-    total = count > 0U ? count - 1U : 0U; /* one '|' between two tabs */
+    /* One '|' between two tabs; compact tabs are told apart by the spaces
+       of their own cells. */
+    total = (count > 0U && !compact) ? count - 1U : 0U;
     for (key = 1U; key <= count; ++key) {
-        total += tg_tui_tab_width(key, name_max);
+        total += tg_tui_tab_width(key, name_max, compact);
     }
     return total;
+}
+
+/* The most tabs that fit in `width` with names of name_min letters or more,
+   and the longest names those tabs leave room for. */
+static unsigned int tg_tui_tabs_fit(unsigned int width, int compact,
+                                    unsigned int name_min,
+                                    unsigned int *name_max)
+{
+    unsigned int count;
+    unsigned int n;
+
+    for (count = tg_tui_tab_count; count > 0U; --count) {
+        for (n = TG_TUI_TAB_NAME_MAX; n >= name_min; --n) {
+            if (tg_tui_tabs_width(count, n, compact) <= width) {
+                *name_max = n;
+                return count;
+            }
+        }
+    }
+    *name_max = 0U;
+    return 0U;
 }
 
 static void tg_tui_tabs_put(char *out, unsigned long out_size,
@@ -557,7 +589,8 @@ static void tg_tui_tabs_put(char *out, unsigned long out_size,
 
 /* Lays the tabs out for `width` columns: the most keys that fit with names
    of TG_TUI_TAB_NAME_MIN letters or more, then the longest names that still
-   fit. The keys left out still work, the row just has no room for them. */
+   fit; compact tabs when that leaves too few and they fit more. The keys
+   left out still work, the row just has no room for them. */
 static void tg_tui_tabs_format(char *out, unsigned long out_size,
                                unsigned int width)
 {
@@ -566,30 +599,32 @@ static void tg_tui_tabs_format(char *out, unsigned long out_size,
     unsigned int count;
     unsigned int name_max;
     unsigned int key;
+    int compact;
 
     if (out == 0 || out_size == 0UL) {
         return;
     }
     out[0] = '\0';
     length = 0UL;
-    count = tg_tui_tab_count;
-    name_max = 0U;
-    while (count > 0U) {
-        for (name_max = TG_TUI_TAB_NAME_MAX;
-             name_max >= TG_TUI_TAB_NAME_MIN; --name_max) {
-            if (tg_tui_tabs_width(count, name_max) <= width) {
-                break;
-            }
+    compact = 0;
+    count = tg_tui_tabs_fit(width, 0, TG_TUI_TAB_NAME_MIN, &name_max);
+    if (count < TG_TUI_TABS_COMPACT_BELOW) {
+        unsigned int short_max;
+        unsigned int short_count;
+
+        short_count = tg_tui_tabs_fit(width, 1, TG_TUI_TAB_SHORT_MIN,
+                                      &short_max);
+        if (short_count > count) {
+            count = short_count;
+            name_max = short_max;
+            compact = 1;
         }
-        if (name_max >= TG_TUI_TAB_NAME_MIN) {
-            break;
-        }
-        --count;
     }
-    if (count == 0U && tg_tui_tab_count > 0U && width > 6U) {
-        /* Not even F1 with a short name: F1 alone, cut to the window. */
+    if (count == 0U && tg_tui_tab_count > 0U && width > 5U) {
+        /* Not even one compact tab: the first alone, cut to the window. */
         count = 1U;
-        name_max = width - 6U;
+        name_max = width - 5U;
+        compact = 1;
     }
     for (key = 1U; key <= count; ++key) {
         const char *name = tg_tui_tab_names[key - 1U];
@@ -598,7 +633,7 @@ static void tg_tui_tabs_format(char *out, unsigned long out_size,
         unsigned int i;
         unsigned int n;
 
-        if (key > 1U) {
+        if (key > 1U && !compact) {
             tg_tui_tabs_put(out, out_size, &length,
                             tg_console_ui_role_string(TG_UI_ROLE_SYSTEM));
             tg_tui_tabs_put(out, out_size, &length, "|");
@@ -608,7 +643,11 @@ static void tg_tui_tabs_format(char *out, unsigned long out_size,
                             open ? TG_UI_ROLE_NOTIFY
                                  : (news ? TG_UI_ROLE_PEER
                                          : TG_UI_ROLE_RESET)));
-        sprintf(cell, "%cF%u ", open ? '[' : ' ', key);
+        if (compact) {
+            sprintf(cell, "%c%u ", open ? '[' : ' ', key);
+        } else {
+            sprintf(cell, "%cF%u ", open ? '[' : ' ', key);
+        }
         i = (unsigned int)strlen(cell);
         for (n = 0U; name[n] != '\0' && n < name_max; ++n) {
             cell[i++] = name[n];
@@ -2471,7 +2510,8 @@ static int tg_tui_separator_self_test(void)
 }
 
 /* The function-key tabs, colours off: what fits in an A600's 80 columns,
-   the marks that must not move a tab, and the narrowest window. */
+   the compact tabs of a 320-pixel screen, the marks that must not move a
+   tab, and the narrowest window. */
 static int tg_tui_tabs_self_test(void)
 {
     static const char *const names[] = {
@@ -2498,13 +2538,19 @@ static int tg_tui_tabs_self_test(void)
              " F1 Ciccio  | F2 Marco  | F3 Lara  | F4 Gruppo  |"
              " F5 Amiga ITA  | F6 Paolo Rossi  | F7 Retro  | F8 Saved  |"
              " F9 Nine  | F10 Tenth  ") &&
-         tg_tui_expect_tabs("narrow", 10U, " F1 Cicc  ");
+         tg_tui_expect_tabs("40 columns", 39U,
+                            " 1 Cicci   2 Marco   3 Lara   4 Grupp  ") &&
+         tg_tui_expect_tabs("320 pixels", 36U,
+                            " 1 Cicc   2 Marc   3 Lara   4 Grup  ") &&
+         tg_tui_expect_tabs("narrow", 10U, " 1 Cicci  ");
     tg_tui_tab_current = 2U;
     tg_tui_tab_news = 1U << 2;
     ok = ok && tg_tui_expect_tabs(
                    "marks", 79U,
                    " F1 Ciccio  |[F2 Marco ]| F3 Lara* | F4 Gruppo  |"
-                   " F5 Amiga IT  | F6 Paolo Ro  ");
+                   " F5 Amiga IT  | F6 Paolo Ro  ") &&
+         tg_tui_expect_tabs("compact marks", 36U,
+                            " 1 Cicc  [2 Marc ] 3 Lara*  4 Grup  ");
     tg_console_tui_tabs_clear();
     tg_console_tui_tabs_add(" Two\nlines  ");
     ok = ok && tg_tui_expect_tabs("cleaned", 79U, " F1  Two lines  ");

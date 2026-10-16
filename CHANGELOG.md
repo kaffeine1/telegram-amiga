@@ -42,9 +42,12 @@ the text client for the plain 68000.
   changed chat; now they show which is which, and they also answer the
   first "Chat number" question. /move 5 1 makes chat 5 number 1, the one F1
   opens, so the chats you use most sit under the first keys; the window
-  keeps the same order. The Help key shows the command list, and the line
-  above the text reminds how to send a file. A window under 12 rows keeps
-  that line for the messages.
+  keeps the same order. On a narrow window, such as a console on a
+  320-pixel screen, the tabs go compact, "1 Tele  2 Amig  3 Amic", four
+  where two fitted, with the open chat's whole name in the top line. The
+  Help key shows the command list, and the line above the text reminds how
+  to send a file. A window under 12 rows keeps that line for the
+  messages.
 
 ### Fixed
 - Ctrl-C with the window open, typed in the Shell that started the client
