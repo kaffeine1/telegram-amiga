@@ -347,11 +347,13 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
 - Limits of this profile: 12 chats in the list, 8 messages per page, message
   text up to 2 KB, downloads in 16 KB chunks. Everything else works as on any
   other Amiga: send and receive, files, replies, edits, read receipts.
-- Using it: type a message and press Enter to send it. A chat number (or
-  F1..F10) opens that chat, 0 opens Saved Messages, Tab goes back to the
-  chat before, /list shows your chats again and /help the other commands.
-  Messages from chats that are not in your list are counted in the top
-  line, \"(+3 elsewhere)\", instead of scrolling past.
+- Using it: type a message and press Enter to send it. The line under the
+  top one shows your first chats with their keys, F1 to F10: press one to
+  open that chat (a star marks new messages there), or type a chat number;
+  0 opens Saved Messages, Tab goes back to the chat before. /move 5 1 puts
+  chat 5 under F1. /list shows your chats again and /help (or the Help key)
+  the other commands. Messages from chats that are not in your list are
+  counted in the top line, \"(+3 elsewhere)\", instead of scrolling past.
 - Long messages wrap by words; the composer grows to three rows. Quit with
   /quit, Ctrl+C or the close gadget, then RETURN dismisses the window."
         req_it="- Un Amiga con 68000 liscio (A500 / A600 / A1000 / A2000 / CDTV) con
@@ -380,11 +382,14 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
   fino a 2 KB per messaggio, download a blocchi da 16 KB. Il resto funziona
   come su qualsiasi Amiga: invio e ricezione, file, risposte, modifiche,
   conferme di lettura.
-- Come si usa: scrivi un messaggio e premi Invio per mandarlo. Il numero
-  di una chat (o F1..F10) apre quella chat, 0 apre i Messaggi salvati, Tab
-  torna alla chat di prima, /list rimostra le tue chat e /help gli altri
-  comandi. I messaggi delle chat che non sono nella lista si contano nella
-  riga in alto, \"(+3 elsewhere)\", invece di scorrere nel dialogo.
+- Come si usa: scrivi un messaggio e premi Invio per mandarlo. La riga
+  sotto quella in alto mostra le prime chat con i loro tasti, da F1 a F10:
+  premine uno per aprire quella chat (un asterisco segna i messaggi nuovi),
+  oppure scrivi il numero di una chat; 0 apre i Messaggi salvati, Tab torna
+  alla chat di prima. /move 5 1 mette la chat 5 sotto F1. /list rimostra le
+  tue chat e /help (o il tasto Help) gli altri comandi. I messaggi delle
+  chat che non sono nella lista si contano nella riga in alto,
+  \"(+3 elsewhere)\", invece di scorrere nel dialogo.
 - I messaggi lunghi vanno a capo per parole e il composer cresce fino a tre
   righe. Per uscire: /quit, Ctrl+C o il gadget di chiusura, poi RETURN
   congeda la finestra."
@@ -415,8 +420,10 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
   Without it the prefs program keeps asking to close the windows; use
   Settings > Use own screen, or quit before changing the prefs.
 - The text client (TelegramAmiga-TUI): type a message and press Enter to
-  send it; a chat number or F1..F10 opens a chat, 0 Saved Messages, Tab
-  the chat before, /list your chats and /help the other commands."
+  send it; the tabs under the top line show the chats F1..F10 open
+  (/move 5 1 puts chat 5 under F1), a chat number opens one too, 0 Saved
+  Messages, Tab the chat before, /list your chats and /help the other
+  commands."
         req_it="- AmigaOS 3.x (3.1 / 3.1.4 / 3.2) con uno stack TCP/IP (Roadshow, AmiTCP,
   Miami/MiamiDx) che fornisca bsdsocket.library, e una connessione internet.
 - Una CPU 68020 o superiore (questa build usa la moltiplicazione 32x32 del
@@ -440,9 +447,10 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
   chiedere di chiudere le finestre: usa Settings > Use own screen, oppure
   esci prima di cambiare le preferenze.
 - Il client testuale (TelegramAmiga-TUI): scrivi un messaggio e premi Invio
-  per mandarlo; il numero di una chat o F1..F10 apre una chat, 0 i Messaggi
-  salvati, Tab la chat di prima, /list le tue chat e /help gli altri
-  comandi."
+  per mandarlo; le schede sotto la riga in alto mostrano le chat che aprono
+  F1..F10 (/move 5 1 mette la chat 5 sotto F1), anche il numero di una chat
+  ne apre una, 0 i Messaggi salvati, Tab la chat di prima, /list le tue chat
+  e /help gli altri comandi."
         ;;
     "MorphOS")
         upload_limit="250 MiB"

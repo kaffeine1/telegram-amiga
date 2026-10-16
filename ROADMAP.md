@@ -189,8 +189,10 @@ Features are therefore grouped by the work they share.
   x86_64 VMs and waiting for the machines; a simpler text client, as the
   plain-68000 user asked (three lines of help at start, a prompt naming the
   chat, "You" for your own lines, news from chats outside the list counted
-  in the top line instead of scrolling past), with Cyrillic and Greek
-  spelled in Latin letters in both clients.
+  in the top line instead of scrolling past, and the chats on F1..F10 as
+  tabs under the top line, the bar that user sketched, with /move to
+  choose them),
+  with Cyrillic and Greek spelled in Latin letters in both clients.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -964,7 +966,10 @@ Mute and a sound of its own; and groups and channels start silent until
 the user lets them ring. One sound per chat and burst, then a quiet spell
 before that chat can ring again, and none for the chat open in front of
 the user, for messages Telegram marks as silent, or for the user's own
-messages sent from another device.
+messages sent from another device. The text client rings the same sample,
+as its plain-68000 user asked. The official clients' own sound is
+Telegram's and does not ship here; a user who wants it can convert it to
+8SVX and choose that file.
 
 Still kept out: raising the screen or the window ourselves. The pop-up
 brings the window forward only when it is clicked.

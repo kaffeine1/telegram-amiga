@@ -29,10 +29,14 @@ static unsigned int tg_tui_rows = 0U;
 static unsigned int tg_tui_columns = 0U;
 static unsigned int tg_tui_composer_rows = 1U;
 static int tg_tui_composer_cache_valid = 0;
+static unsigned int tg_tui_region_top = 2U;
+static int tg_tui_tabs_wanted_flag = 0;
 
-/* Status is row 1. The composer grows upward from the last row and keeps one
-   separator row between itself and the transcript. */
-#define TG_TUI_REGION_TOP 2U
+/* Status is row 1, the function-key tabs row 2 when they are shown. The
+   composer grows upward from the last row and keeps one separator row
+   between itself and the transcript. */
+#define TG_TUI_REGION_TOP tg_tui_region_top
+#define TG_TUI_TABS_MIN_ROWS 12U
 #define TG_TUI_MIN_ROWS 8U
 #define TG_TUI_MIN_COLUMNS 20U
 #define TG_TUI_COMPOSER_MAX_ROWS 3U
@@ -501,6 +505,212 @@ void tg_console_tui_status(FILE *stream, const char *status_text)
     fflush(stream);
 }
 
+/*
+ * Function-key tabs. The row shows as many of F1..F10 as fit, the open chat
+ * in brackets (and in the status bar's inverse when colours are on) and a
+ * star on the chats with news. A tab keeps its width whatever is marked:
+ * the brackets and the star take cells that are always there, so a key
+ * never moves under the user's eye.
+ */
+#define TG_TUI_TAB_NAME_MIN 8U /* fewer tabs rather than names cut shorter */
+#define TG_TUI_TAB_NAME_MAX 16U
+
+static char tg_tui_tab_names[TG_CONSOLE_TUI_TABS][TG_CONSOLE_TUI_TAB_NAME];
+static unsigned int tg_tui_tab_count = 0U;
+static unsigned int tg_tui_tab_current = 0U;
+static unsigned int tg_tui_tab_news = 0U;
+
+/* Cells of tab `key` (1-based) with its name cut at name_max: "F1 name"
+   plus the bracket, star and bracket cells. */
+static unsigned int tg_tui_tab_width(unsigned int key, unsigned int name_max)
+{
+    unsigned int length;
+
+    length = (unsigned int)strlen(tg_tui_tab_names[key - 1U]);
+    if (length > name_max) {
+        length = name_max;
+    }
+    return (key >= 10U ? 3U : 2U) + 1U + length + 3U;
+}
+
+static unsigned int tg_tui_tabs_width(unsigned int count,
+                                      unsigned int name_max)
+{
+    unsigned int key;
+    unsigned int total;
+
+    total = count > 0U ? count - 1U : 0U; /* one '|' between two tabs */
+    for (key = 1U; key <= count; ++key) {
+        total += tg_tui_tab_width(key, name_max);
+    }
+    return total;
+}
+
+static void tg_tui_tabs_put(char *out, unsigned long out_size,
+                            unsigned long *length, const char *text)
+{
+    while (*text != '\0' && *length + 1UL < out_size) {
+        out[(*length)++] = *text++;
+    }
+    out[*length] = '\0';
+}
+
+/* Lays the tabs out for `width` columns: the most keys that fit with names
+   of TG_TUI_TAB_NAME_MIN letters or more, then the longest names that still
+   fit. The keys left out still work, the row just has no room for them. */
+static void tg_tui_tabs_format(char *out, unsigned long out_size,
+                               unsigned int width)
+{
+    char cell[TG_CONSOLE_TUI_TAB_NAME + 8U];
+    unsigned long length;
+    unsigned int count;
+    unsigned int name_max;
+    unsigned int key;
+
+    if (out == 0 || out_size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    length = 0UL;
+    count = tg_tui_tab_count;
+    name_max = 0U;
+    while (count > 0U) {
+        for (name_max = TG_TUI_TAB_NAME_MAX;
+             name_max >= TG_TUI_TAB_NAME_MIN; --name_max) {
+            if (tg_tui_tabs_width(count, name_max) <= width) {
+                break;
+            }
+        }
+        if (name_max >= TG_TUI_TAB_NAME_MIN) {
+            break;
+        }
+        --count;
+    }
+    if (count == 0U && tg_tui_tab_count > 0U && width > 6U) {
+        /* Not even F1 with a short name: F1 alone, cut to the window. */
+        count = 1U;
+        name_max = width - 6U;
+    }
+    for (key = 1U; key <= count; ++key) {
+        const char *name = tg_tui_tab_names[key - 1U];
+        int open = key == tg_tui_tab_current;
+        int news = (tg_tui_tab_news & (1U << (key - 1U))) != 0U;
+        unsigned int i;
+        unsigned int n;
+
+        if (key > 1U) {
+            tg_tui_tabs_put(out, out_size, &length,
+                            tg_console_ui_role_string(TG_UI_ROLE_SYSTEM));
+            tg_tui_tabs_put(out, out_size, &length, "|");
+        }
+        tg_tui_tabs_put(out, out_size, &length,
+                        tg_console_ui_role_string(
+                            open ? TG_UI_ROLE_NOTIFY
+                                 : (news ? TG_UI_ROLE_PEER
+                                         : TG_UI_ROLE_RESET)));
+        sprintf(cell, "%cF%u ", open ? '[' : ' ', key);
+        i = (unsigned int)strlen(cell);
+        for (n = 0U; name[n] != '\0' && n < name_max; ++n) {
+            cell[i++] = name[n];
+        }
+        cell[i++] = news ? '*' : ' ';
+        cell[i++] = open ? ']' : ' ';
+        cell[i] = '\0';
+        tg_tui_tabs_put(out, out_size, &length, cell);
+    }
+    tg_tui_tabs_put(out, out_size, &length,
+                    tg_console_ui_role_string(TG_UI_ROLE_RESET));
+}
+
+static void tg_tui_paint_tabs(FILE *stream)
+{
+    /* Ten tabs, their colour changes and a reset (static: the chat loop
+       that ends up here already has a large frame). */
+    static char row[(TG_CONSOLE_TUI_TABS * (TG_CONSOLE_TUI_TAB_NAME + 48U)) +
+                    32U];
+
+    if (tg_tui_region_top < 3U) {
+        return;
+    }
+    tg_tui_tabs_format(row, sizeof(row),
+                       tg_tui_columns > 1U ? tg_tui_columns - 1U : 0U);
+    tg_tui_goto(stream, 2U, 1U);
+    tg_console_ui_reset(stream);
+    tg_tui_clipped_line(stream, row);
+    tg_console_ui_reset(stream);
+}
+
+void tg_console_tui_tabs_wanted(int wanted)
+{
+    tg_tui_tabs_wanted_flag = wanted ? 1 : 0;
+}
+
+void tg_console_tui_tabs_clear(void)
+{
+    tg_tui_tab_count = 0U;
+    tg_tui_tab_current = 0U;
+    tg_tui_tab_news = 0U;
+}
+
+void tg_console_tui_tabs_add(const char *name)
+{
+    char *slot;
+    unsigned long i;
+
+    if (tg_tui_tab_count >= TG_CONSOLE_TUI_TABS) {
+        return;
+    }
+    slot = tg_tui_tab_names[tg_tui_tab_count++];
+    i = 0UL;
+    while (name != 0 && name[i] != '\0' &&
+           i + 1UL < TG_CONSOLE_TUI_TAB_NAME) {
+        /* A name is one row: control bytes would move the cursor. */
+        slot[i] = (unsigned char)name[i] < 0x20U ? ' ' : name[i];
+        ++i;
+    }
+    while (i > 0UL && slot[i - 1UL] == ' ') {
+        --i;
+    }
+    slot[i] = '\0';
+}
+
+void tg_console_tui_tabs_show(FILE *stream, unsigned int current,
+                              unsigned int news)
+{
+    tg_tui_tab_current = current <= TG_CONSOLE_TUI_TABS ? current : 0U;
+    tg_tui_tab_news = news;
+    if (stream == 0 || !tg_tui_active || tg_tui_region_top < 3U) {
+        return;
+    }
+    tg_tui_composer_cache_valid = 0;
+    tg_tui_paint_tabs(stream);
+    fflush(stream);
+}
+
+/* Row 2 goes to the tabs when the chat wants them and the window has room;
+   decided again at every enter and resize. */
+static void tg_tui_pick_region_top(void)
+{
+    tg_tui_region_top =
+        (tg_tui_tabs_wanted_flag && tg_tui_rows >= TG_TUI_TABS_MIN_ROWS)
+            ? 3U
+            : 2U;
+}
+
+static char tg_tui_hint[48];
+
+void tg_console_tui_set_hint(const char *hint)
+{
+    unsigned long i;
+
+    i = 0UL;
+    while (hint != 0 && hint[i] != '\0' && i + 1UL < sizeof(tg_tui_hint)) {
+        tg_tui_hint[i] = hint[i];
+        ++i;
+    }
+    tg_tui_hint[i] = '\0';
+}
+
 void tg_console_tui_set_enabled(int enabled)
 {
     tg_tui_enabled = enabled ? 1 : 0;
@@ -822,14 +1032,46 @@ static void tg_tui_copy_virtual_region_row(unsigned int region,
 
 static void tg_tui_paint_separator(FILE *stream)
 {
+    static char line[256];
+    unsigned int width;
+    unsigned int hint;
+    unsigned int lead;
+    unsigned int n;
+    unsigned int i;
+
     tg_tui_goto(stream, tg_tui_separator_row(), 1U);
     tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
-    tg_tui_clipped_line(stream,
-                        tg_tui_view_offset > 0UL
-                            ? "---- older messages -- Shift+Down: back to "
-                              "live ----------------------------------"
-                            : "----------------------------------------------"
-                              "----------------------------------");
+    if (tg_tui_view_offset > 0UL) {
+        tg_tui_clipped_line(stream,
+                            "---- older messages -- Shift+Down: back to "
+                            "live ----------------------------------");
+        tg_console_ui_reset(stream);
+        return;
+    }
+    width = tg_tui_columns > 1U ? tg_tui_columns - 1U : 0U;
+    if (width > sizeof(line) - 1U) {
+        width = (unsigned int)sizeof(line) - 1U;
+    }
+    /* The hint sits near the right end, " hint " and two dashes after it,
+       and only where it leaves a real line before it. Written in one pass:
+       AROS's gcc 6 took computed indexes for out-of-bounds ones. */
+    hint = (unsigned int)strlen(tg_tui_hint);
+    lead = (hint > 0U && hint + 24U <= width) ? width - hint - 4U : width;
+    n = 0U;
+    while (n < lead) {
+        line[n++] = '-';
+    }
+    if (lead < width) {
+        line[n++] = ' ';
+        for (i = 0U; i < hint; ++i) {
+            line[n++] = tg_tui_hint[i];
+        }
+        line[n++] = ' ';
+        line[n++] = '-';
+        line[n++] = '-';
+    }
+    line[n] = '\0';
+    tg_tui_clipped_line(stream, line);
     tg_console_ui_reset(stream);
 }
 
@@ -1059,6 +1301,7 @@ static void tg_tui_paint_chrome(FILE *stream, const char *status_text)
     tg_console_ui_reset(stream);
     fputs(TG_UI_CSI "H" TG_UI_CSI "J", stream);
     tg_console_tui_status(stream, status_text);
+    tg_tui_paint_tabs(stream);
     /* What was on screen, back on screen: the repaint should cost the user
        nothing but a blink. */
     tg_tui_redraw_region(stream);
@@ -1091,6 +1334,7 @@ int tg_console_tui_enter(FILE *stream, const char *status_text)
     }
     tg_tui_rows = rows;
     tg_tui_columns = columns;
+    tg_tui_pick_region_top();
     tg_tui_composer_rows = 1U;
     tg_tui_composer_cache_valid = 0;
     tg_tui_active = 1;
@@ -1152,6 +1396,7 @@ int tg_console_tui_resize(FILE *stream, const char *status_text)
     }
     tg_tui_rows = rows;
     tg_tui_columns = columns;
+    tg_tui_pick_region_top();
     tg_tui_paint_chrome(stream, status_text);
     return 1;
 }
@@ -2146,6 +2391,129 @@ static int tg_tui_webpage_self_test(void)
     return ok;
 }
 
+static int tg_tui_expect_tabs(const char *label, unsigned int width,
+                              const char *expected)
+{
+    static char got[(TG_CONSOLE_TUI_TABS * (TG_CONSOLE_TUI_TAB_NAME + 48U)) +
+                    32U];
+
+    tg_tui_tabs_format(got, sizeof(got), width);
+    if (strcmp(got, expected) != 0) {
+        printf("tui layout self-test: tabs %s: got \"%s\"\n", label, got);
+        return 0;
+    }
+    return 1;
+}
+
+/* Paints the separator of a `columns`-wide window into a file and checks
+   that `expected` is what the row holds after its cursor move. */
+static int tg_tui_expect_separator(unsigned int columns, const char *expected)
+{
+    static char got[300];
+    unsigned int saved_columns;
+    unsigned int saved_rows;
+    unsigned int saved_composer;
+    unsigned long saved_offset;
+    unsigned long n;
+    const char *row;
+    FILE *tmp;
+    int ok;
+
+    tmp = tmpfile();
+    if (tmp == 0) {
+        return 1; /* nowhere to paint: nothing to check on this system */
+    }
+    saved_columns = tg_tui_columns;
+    saved_rows = tg_tui_rows;
+    saved_composer = tg_tui_composer_rows;
+    saved_offset = tg_tui_view_offset;
+    tg_tui_columns = columns;
+    tg_tui_rows = 24U;
+    tg_tui_composer_rows = 1U;
+    tg_tui_view_offset = 0UL;
+    tg_tui_paint_separator(tmp);
+    tg_tui_columns = saved_columns;
+    tg_tui_rows = saved_rows;
+    tg_tui_composer_rows = saved_composer;
+    tg_tui_view_offset = saved_offset;
+    rewind(tmp);
+    n = (unsigned long)fread(got, 1U, sizeof(got) - 1U, tmp);
+    got[n] = '\0';
+    fclose(tmp);
+    /* Past the cursor move (CSI 23;1H); then the row and its erase. */
+    row = strchr(got, 'H');
+    ok = row != 0 && strncmp(row + 1, expected, strlen(expected)) == 0 &&
+         row[1 + strlen(expected)] != '-';
+    if (!ok) {
+        printf("tui layout self-test: separator at %u columns: got \"%s\"\n",
+               columns, row != 0 ? row + 1 : got);
+    }
+    return ok;
+}
+
+/* The reminder at the end of the separator: two dashes after it on an
+   80-column window, a plain line on a window too narrow for it. */
+static int tg_tui_separator_self_test(void)
+{
+    char saved_hint[sizeof(tg_tui_hint)];
+    int ok;
+
+    memcpy(saved_hint, tg_tui_hint, sizeof(saved_hint));
+    tg_console_tui_set_hint("/sendfile path: send a file");
+    ok = tg_tui_expect_separator(
+             80U,
+             "------------------------------------------------"
+             " /sendfile path: send a file --") &&
+         tg_tui_expect_separator(40U,
+                                 "---------------------------------------");
+    memcpy(tg_tui_hint, saved_hint, sizeof(saved_hint));
+    return ok;
+}
+
+/* The function-key tabs, colours off: what fits in an A600's 80 columns,
+   the marks that must not move a tab, and the narrowest window. */
+static int tg_tui_tabs_self_test(void)
+{
+    static const char *const names[] = {
+        "Ciccio", "Marco", "Lara", "Gruppo", "Amiga ITA",
+        "Paolo Rossi", "Retro", "Saved", "Nine", "Tenth"
+    };
+    int saved_mode;
+    int ok;
+    unsigned int i;
+
+    saved_mode = tg_console_ui_color_mode();
+    tg_console_ui_set_color_mode(TG_UI_COLOR_OFF);
+    tg_console_tui_tabs_clear();
+    for (i = 0U; i < 10U; ++i) {
+        tg_console_tui_tabs_add(names[i]);
+    }
+    tg_console_tui_tabs_add("an eleventh is ignored");
+    ok = tg_tui_expect_tabs(
+             "80 columns", 79U,
+             " F1 Ciccio  | F2 Marco  | F3 Lara  | F4 Gruppo  |"
+             " F5 Amiga IT  | F6 Paolo Ro  ") &&
+         tg_tui_expect_tabs(
+             "wide", 160U,
+             " F1 Ciccio  | F2 Marco  | F3 Lara  | F4 Gruppo  |"
+             " F5 Amiga ITA  | F6 Paolo Rossi  | F7 Retro  | F8 Saved  |"
+             " F9 Nine  | F10 Tenth  ") &&
+         tg_tui_expect_tabs("narrow", 10U, " F1 Cicc  ");
+    tg_tui_tab_current = 2U;
+    tg_tui_tab_news = 1U << 2;
+    ok = ok && tg_tui_expect_tabs(
+                   "marks", 79U,
+                   " F1 Ciccio  |[F2 Marco ]| F3 Lara* | F4 Gruppo  |"
+                   " F5 Amiga IT  | F6 Paolo Ro  ");
+    tg_console_tui_tabs_clear();
+    tg_console_tui_tabs_add(" Two\nlines  ");
+    ok = ok && tg_tui_expect_tabs("cleaned", 79U, " F1  Two lines  ");
+    tg_console_tui_tabs_clear();
+    ok = ok && tg_tui_separator_self_test();
+    tg_console_ui_set_color_mode(saved_mode);
+    return ok;
+}
+
 int tg_console_tui_layout_self_test(void)
 {
     static const char words[] =
@@ -2263,7 +2631,10 @@ int tg_console_tui_layout_self_test(void)
     if (!tg_tui_webpage_self_test()) {
         return 2;
     }
-    puts("tui layout self-test: ok (wrap + incremental composer + long lines + webpages)");
+    if (!tg_tui_tabs_self_test()) {
+        return 2;
+    }
+    puts("tui layout self-test: ok (wrap + incremental composer + long lines + webpages + tabs)");
     return 0;
 }
 

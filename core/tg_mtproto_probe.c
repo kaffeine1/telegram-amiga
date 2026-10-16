@@ -488,6 +488,15 @@ static int tg_chat_bell_enabled = 1;
 /* News from chats that are not in the list, counted in the status bar
    since the last /list instead of printed one line each. */
 static unsigned long tg_chat_unlisted_news = 0UL;
+/* The function-key tabs of the full-screen chat: bit n-1 marks news on the
+   chat F n opens, cleared when that chat is opened. The names are read
+   again from the chat list after it changes (stale), never per message. */
+static unsigned int tg_chat_tab_news = 0U;
+static int tg_chat_tabs_stale = 1;
+static const char *tg_chat_tabs_file = 0;
+/* Set while a "Chat number:" question waits: a function key answers it
+   with its chat, as typing the number and Enter would. */
+static int tg_chat_prompt_fkeys = 0;
 /* Gap-handling cursor (updates.getState / getDifference) and the /diff toggle
    now live in the chat engine (tg_chat_engine), a stack-local of
    tg_mtproto_auth_chat_file -- the first slice of the engine extraction. */
@@ -10837,7 +10846,7 @@ static void tg_chat_history_add(const char *text)
    (both the TUI-transcript and the linear-raw printers use it). */
 #define TG_CHAT_SLASH_HINT_TEXT \
     "Commands: /list /search /add /history /getfile /sendfile /photo\n" \
-    "          /forward /forwardto /remove /watch /color /bell /help /quit\n"
+    "          /forward /forwardto /move /remove /watch /color /bell /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -11089,7 +11098,68 @@ static int tg_mtproto_chat_read_line_edit(char *line,
                 fflush(stream);
                 return 1;
             }
+            if (!use_history && tg_chat_prompt_fkeys && direction == '~' &&
+                fkey <= 19UL && line_size >= 4UL) {
+                /* A "Chat number:" question: the key's number is the
+                   answer, echoed like a typed one. */
+                char echo_line[128];
+                unsigned long echo_length;
+                const char *ep;
+
+                if (!tg_console_tui_active()) {
+                    for (i = 0UL; i < *line_length; ++i) {
+                        fputs("\b \b", stream);
+                    }
+                }
+                sprintf(line, "%lu", fkey + 1UL);
+                *line_length = 0UL;
+                tg_chat_caret = 0UL;
+                if (tg_console_tui_active() && tg_chat_tui_stream != 0) {
+                    echo_length = 0UL;
+                    for (ep = tg_console_tui_prompt(); ep != 0 && *ep != '\0';
+                         ++ep) {
+                        echo_length = tg_console_tui_line_push(
+                            tg_chat_tui_stream, echo_line, sizeof(echo_line),
+                            echo_length, *ep);
+                    }
+                    for (ep = line; *ep != '\0'; ++ep) {
+                        echo_length = tg_console_tui_line_push(
+                            tg_chat_tui_stream, echo_line, sizeof(echo_line),
+                            echo_length, *ep);
+                    }
+                    echo_line[echo_length] = '\0';
+                    tg_console_tui_line(tg_chat_tui_stream, echo_line);
+                    tg_console_tui_input(tg_chat_tui_stream,
+                                         tg_console_tui_prompt(), 0, 0UL);
+                } else {
+                    fputs(line, stream);
+                    fputc('\n', stream);
+                }
+                fflush(stream);
+                return 1;
+            }
             /* Not a function key: fall through to the CSI consumption. */
+        }
+        if (direction == '?') {
+            /* The Amiga's Help key is CSI ?~: the command list, as /help,
+               when nothing is typed yet (a draft is never thrown away for
+               it). Anything else after '?' is consumed below. */
+            if (tg_platform_stdin_read_char(0UL, &ch) <= 0) {
+                return 0;
+            }
+            direction = (int)(unsigned char)ch;
+            if (direction == '~') {
+                if (use_history && *line_length == 0UL && line_size >= 8UL) {
+                    strcpy(line, "/help");
+                    tg_chat_caret = 0UL;
+                    if (!tg_console_tui_active()) {
+                        fputc('\n', stream);
+                    }
+                    fflush(stream);
+                    return 1;
+                }
+                return 0;
+            }
         }
         if (direction != 'A' && direction != 'B') {
             /* Not Up/Down. Consume the rest of an unrecognised CSI sequence
@@ -13254,7 +13324,148 @@ static void tg_mtproto_chat_tui_status_draw(void)
     tg_console_tui_status(tg_chat_tui_stream, status);
 }
 
-static void tg_mtproto_chat_tui_status(const char *peer_label)
+/* The chat-list number an index text names ("7" -> 7); 0 for "self", an
+   @username or anything that is not a plain number. */
+static unsigned long tg_mtproto_chat_index_number(const char *text)
+{
+    unsigned long n;
+
+    if (text == 0 || *text == '\0') {
+        return 0UL;
+    }
+    n = 0UL;
+    while (*text >= '0' && *text <= '9') {
+        n = (n * 10UL) + (unsigned long)(*text - '0');
+        if (n > 999999UL) {
+            return 0UL;
+        }
+        ++text;
+    }
+    return *text == '\0' ? n : 0UL;
+}
+
+/* Reads the names of the chats F1..F10 open from the chat list. Only after
+   the list changed: ten names through the display conversion cost a 68000
+   a moment, which a chat switch should not pay. */
+static void tg_mtproto_chat_tabs_load(void)
+{
+    static tg_chat_list_row rows[TG_CONSOLE_TUI_TABS + 2U];
+    static char name[TG_CHAT_LIST_NAME_MAX + 2U];
+    char shown[64];
+    unsigned long key;
+    unsigned long last;
+    int count;
+    int i;
+
+    tg_chat_tabs_stale = 0;
+    tg_console_tui_tabs_clear();
+    if (tg_chat_tabs_file == 0) {
+        return;
+    }
+    count = tg_mtproto_chat_list_parse(tg_chat_tabs_file, 0UL, rows,
+                                       (int)(TG_CONSOLE_TUI_TABS + 2U), 0);
+    last = 0UL;
+    for (i = 0; i < count; ++i) {
+        if (rows[i].index <= TG_CONSOLE_TUI_TABS && rows[i].index > last) {
+            last = rows[i].index;
+        }
+    }
+    for (key = 1UL; key <= last; ++key) {
+        shown[0] = '\0';
+        for (i = 0; i < count; ++i) {
+            if (rows[i].index != key) {
+                continue;
+            }
+            sprintf(name, "%s%s", rows[i].name_is_username ? "@" : "",
+                    rows[i].name);
+            tg_mtproto_cache_text_to_display(name, shown, sizeof(shown));
+            break;
+        }
+        tg_console_tui_tabs_add(shown);
+    }
+}
+
+/* Where the chat at place x of the list sits after the one at `from` went to
+   `to`; to 0 means it left the list, and x == from then has no place (0). */
+static unsigned long tg_mtproto_chat_place_after_move(unsigned long x,
+                                                      unsigned long from,
+                                                      unsigned long to)
+{
+    if (from == 0UL || x == 0UL) {
+        return x;
+    }
+    if (x == from) {
+        return to;
+    }
+    if (to == 0UL) {
+        return x > from ? x - 1UL : x;
+    }
+    if (from < to && x > from && x <= to) {
+        return x - 1UL;
+    }
+    if (to < from && x >= to && x < from) {
+        return x + 1UL;
+    }
+    return x;
+}
+
+/* The list changed by one move or removal: the stars follow their chats
+   and the names are read again at the next repaint. */
+static void tg_mtproto_chat_tabs_moved(unsigned long from, unsigned long to)
+{
+    unsigned int news;
+    unsigned long key;
+    unsigned long now;
+
+    tg_chat_tabs_stale = 1;
+    news = 0U;
+    for (key = 1UL; key <= TG_CONSOLE_TUI_TABS; ++key) {
+        if ((tg_chat_tab_news & (1U << (unsigned int)(key - 1UL))) == 0U) {
+            continue;
+        }
+        now = tg_mtproto_chat_place_after_move(key, from, to);
+        if (now >= 1UL && now <= TG_CONSOLE_TUI_TABS) {
+            news |= 1U << (unsigned int)(now - 1UL);
+        }
+    }
+    tg_chat_tab_news = news;
+}
+
+/* Rewrites a chat-number text (the open chat, the one Tab goes back to)
+   after a move, so it keeps pointing at the same chat. */
+static void tg_mtproto_chat_index_after_move(char *index_text,
+                                             unsigned long from,
+                                             unsigned long to)
+{
+    unsigned long x;
+
+    x = tg_mtproto_chat_index_number(index_text);
+    if (x != 0UL) {
+        sprintf(index_text, "%lu",
+                tg_mtproto_chat_place_after_move(x, from, to));
+    }
+}
+
+/* Repaints the tabs: the open chat (its news cleared) and the marks. */
+static void tg_mtproto_chat_tabs_draw(unsigned long current)
+{
+    if (!tg_console_tui_active() || tg_chat_tui_stream == 0) {
+        return;
+    }
+    if (tg_chat_tabs_stale) {
+        tg_mtproto_chat_tabs_load();
+    }
+    if (current >= 1UL && current <= TG_CONSOLE_TUI_TABS) {
+        tg_chat_tab_news &= ~(1U << (unsigned int)(current - 1UL));
+    } else {
+        current = 0UL;
+    }
+    tg_console_tui_tabs_show(tg_chat_tui_stream, (unsigned int)current,
+                             tg_chat_tab_news);
+}
+
+static void tg_mtproto_chat_tui_status(const char *peer_index,
+                                       const char *peer_label)
 {
     if (!tg_console_tui_active() || tg_chat_tui_stream == 0) {
         return;
@@ -13265,6 +13476,25 @@ static void tg_mtproto_chat_tui_status(const char *peer_label)
                                          sizeof(tg_chat_status_shown));
     }
     tg_mtproto_chat_tui_status_draw();
+    tg_mtproto_chat_tabs_draw(tg_mtproto_chat_index_number(peer_index));
+}
+
+/* A "Chat number:" question: the tabs on screen show which key is which
+   chat, and a function key answers with its chat. */
+static int tg_mtproto_chat_prompt_chat_number(const char *prompt,
+                                              char *out,
+                                              unsigned long out_size,
+                                              FILE *stream,
+                                              const char *label,
+                                              const char *current_index)
+{
+    int rc;
+
+    tg_mtproto_chat_tabs_draw(tg_mtproto_chat_index_number(current_index));
+    tg_chat_prompt_fkeys = 1;
+    rc = tg_mtproto_chat_prompt_line(prompt, out, out_size, 1, stream, label);
+    tg_chat_prompt_fkeys = 0;
+    return rc;
 }
 
 /* Finds the public chat-list index (and label) of a cached peer id. */
@@ -13333,6 +13563,7 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     unsigned long i;
     unsigned long unlisted;
     int printed;
+    int tabs_marked;
     const char *digits;
     const tg_chat_notify_entry *entry;
 
@@ -13358,6 +13589,7 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     }
     unlisted = 0UL;
     printed = 0;
+    tabs_marked = 0;
     for (i = 0UL; i < tg_chat_nq->count; ++i) {
         entry = &tg_chat_nq->queue[i];
         index = 0UL;
@@ -13393,6 +13625,11 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
             continue;
         }
         printed = 1;
+        if (index >= 1UL && index <= TG_CONSOLE_TUI_TABS) {
+            /* The star on its function-key tab, until it is opened. */
+            tg_chat_tab_news |= 1U << (unsigned int)(index - 1UL);
+            tabs_marked = 1;
+        }
         tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
         if (index != 0UL) {
             fprintf(stream, "[%lu] ", index);
@@ -13430,6 +13667,9 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
             tg_console_ui_reset(stream);
             tg_console_ui_end_line(stream);
         }
+    }
+    if (tabs_marked) {
+        tg_mtproto_chat_tabs_draw(current_index);
     }
     if (printed && tg_chat_bell_enabled) {
         /* Intuition DisplayBeep, not a BEL byte: console handlers improvise
@@ -13480,11 +13720,13 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  Tab             back to the previous chat",
         "  Shift+Up/Down   older messages, and back",
         "  /list           your chats",
+        "  Help key        this list",
         "  /quit           exit",
         "",
         "More:",
         "  /search text    find a chat in the list by name or username",
         "  /add name       search Telegram and add a chat to the list",
+        "  /move 5 1       chat 5 becomes number 1, the one F1 opens",
         "  /remove n       remove chat n from the list",
         "  /history        show the recent messages again",
         "  /forward [id]   forward the latest (or that id) to Saved Messages",
@@ -13758,8 +14000,15 @@ int tg_mtproto_auth_chat_file(const char *host,
     tg_gui_log("diag: console interactive set, entering tui");
 #endif
     /* Full-screen layout when the console cooperates (needs raw mode for the
-       window-size report); falls back to the linear flow otherwise. */
+       window-size report); falls back to the linear flow otherwise. Row 2
+       names the chats F1..F10 open, and the separator above the composer
+       says how to send a file: the bar a 68000 tester drew (2026-10). */
     tg_chat_tui_stream = stream;
+    tg_chat_tabs_file = peer_cache_file;
+    tg_chat_tabs_stale = 1;
+    tg_chat_tab_news = 0U;
+    tg_console_tui_tabs_wanted(1);
+    tg_console_tui_set_hint("/sendfile path: send a file");
     if (!chat_raw || !tg_console_tui_enter(stream, " Telegram Amiga ")) {
         /* No full-screen layout: when the mini-termcap marks the console
            CSI-deaf (the probe sequence went to the screen as glyphs),
@@ -13894,9 +14143,9 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-        if (tg_mtproto_chat_prompt_line("\nChat number: ", peer_index,
-                                        sizeof(peer_index), 1, stream,
-                                        label) != 0) {
+        if (tg_mtproto_chat_prompt_chat_number("\nChat number: ", peer_index,
+                                               sizeof(peer_index), stream,
+                                               label, peer_index) != 0) {
             tg_mtproto_close_auth_context(&chat_context);
             tg_net_set_connect_timeout_seconds(saved_timeout);
             tg_console_tui_leave(stream);
@@ -13917,7 +14166,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                              sizeof(peer_label)) != 0) {
             peer_label[0] = '\0';
         }
-        tg_mtproto_chat_tui_status(peer_label);
+        tg_mtproto_chat_tui_status(peer_index, peer_label);
     } else {
         peer_index[0] = '\0';
         peer_label[0] = '\0';
@@ -13972,7 +14221,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         }
         if (tg_console_tui_resize_pending()) {
             if (tg_console_tui_resize(stream, " Telegram Amiga ")) {
-                tg_mtproto_chat_tui_status(peer_label);
+                tg_mtproto_chat_tui_status(peer_index, peer_label);
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label,
                                             line, line_length,
                                             tg_chat_input_raw);
@@ -14259,7 +14508,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 fprintf(tui_cap, "\n");
                 tg_console_tui_capture_end(tui_cap, stream);
             }
-            tg_mtproto_chat_tui_status(peer_label);
+            tg_mtproto_chat_tui_status(peer_index, peer_label);
             continue;
         }
         if (strcmp(line, "/peers") == 0 || strcmp(line, "/list") == 0 ||
@@ -14519,7 +14768,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 fprintf(tui_cap, "Current chat: Saved Messages\n");
                 tg_console_tui_capture_end(tui_cap, stream);
             }
-            tg_mtproto_chat_tui_status(peer_label);
+            tg_mtproto_chat_tui_status(peer_index, peer_label);
             continue;
         }
         if (strcmp(line, "/diff") == 0 || strcmp(line, "/diff on") == 0 ||
@@ -14578,7 +14827,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                nothing changed. */
             if (tg_console_tui_active()) {
                 if (tg_console_tui_resize(stream, " Telegram Amiga ")) {
-                    tg_mtproto_chat_tui_status(peer_label);
+                    tg_mtproto_chat_tui_status(peer_index, peer_label);
                 } else {
                     tg_mtproto_chat_print_system_line(
                         stream, "Window size unchanged.");
@@ -14621,6 +14870,85 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
             continue;
         }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/move", &cmd_arg)) {
+            /* "/move 5 1": chat 5 becomes number 1, the one F1 opens. The
+               only way to choose the tabs without the window, which the
+               plain-68000 package does not have. */
+            unsigned long move_from;
+            unsigned long move_to;
+            const char *p;
+
+            move_from = 0UL;
+            move_to = 0UL;
+            p = cmd_arg;
+            while (*p >= '0' && *p <= '9' && move_from < 100000UL) {
+                move_from = (move_from * 10UL) + (unsigned long)(*p - '0');
+                ++p;
+            }
+            while (*p == ' ' || *p == '\t') {
+                ++p;
+            }
+            while (*p >= '0' && *p <= '9' && move_to < 100000UL) {
+                move_to = (move_to * 10UL) + (unsigned long)(*p - '0');
+                ++p;
+            }
+            while (*p == ' ' || *p == '\t') {
+                ++p;
+            }
+            if (*p != '\0' || move_from == 0UL || move_to == 0UL) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Usage: /move 5 1 makes chat 5 number 1, on F1.");
+                tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                            0UL, tg_chat_input_raw);
+                continue;
+            }
+            quiet = tg_mtproto_open_quiet_stream(stream);
+            rc = tg_mtproto_peer_cache_reorder_public_index(
+                peer_cache_file, move_from, move_to, quiet);
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            if (rc != 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "No such chat number: /list shows them.");
+                tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                            0UL, tg_chat_input_raw);
+                continue;
+            }
+            /* The open chat and the one Tab goes back to keep their chats
+               under their new numbers. */
+            tg_mtproto_chat_index_after_move(peer_index, move_from, move_to);
+            tg_mtproto_chat_index_after_move(prev_peer_index, move_from,
+                                             move_to);
+            tg_mtproto_chat_tabs_moved(move_from, move_to);
+            sprintf(requested_peer_index, "%lu", move_to);
+            if (tg_mtproto_load_peer_cache_label(
+                    peer_cache_file, requested_peer_index,
+                    requested_peer_label,
+                    sizeof(requested_peer_label)) != 0) {
+                requested_peer_label[0] = '\0';
+            }
+            {
+                FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                fputs("Moved ", tui_cap);
+                if (requested_peer_label[0] != '\0') {
+                    tg_mtproto_print_cache_text(tui_cap,
+                                                requested_peer_label);
+                } else {
+                    fputs("the chat", tui_cap);
+                }
+                fprintf(tui_cap, " to number %lu", move_to);
+                if (move_to <= TG_CONSOLE_TUI_TABS) {
+                    fprintf(tui_cap, ", on F%lu", move_to);
+                }
+                fputs(".\n", tui_cap);
+                tg_console_tui_capture_end(tui_cap, stream);
+            }
+            tg_mtproto_chat_tui_status(peer_index, peer_label);
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
         remove_arg = 0;
         if (tg_mtproto_chat_named_command_arg(line, "/remove", &remove_arg) ||
             tg_mtproto_chat_named_command_arg(line, "remove", &remove_arg) ||
@@ -14648,6 +14976,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
                 continue;
             }
+            tg_mtproto_chat_tabs_moved(
+                tg_mtproto_chat_index_number(remove_arg), 0UL);
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
                 fprintf(tui_cap, "Removed ");
@@ -14676,10 +15006,11 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-            if (tg_mtproto_chat_prompt_line("Chat number: ",
-                                            requested_peer_text,
-                                            sizeof(requested_peer_text), 1,
-                                            stream, label) != 0) {
+            if (tg_mtproto_chat_prompt_chat_number("Chat number: ",
+                                                   requested_peer_text,
+                                                   sizeof(requested_peer_text),
+                                                   stream, label,
+                                                   peer_index) != 0) {
                 tg_mtproto_close_quiet_stream(chat_quiet, stream);
                 tg_mtproto_close_auth_context(&chat_context);
                 tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -14713,7 +15044,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     fprintf(tui_cap, "\n");
                     tg_console_tui_capture_end(tui_cap, stream);
                 }
-                tg_mtproto_chat_tui_status(peer_label);
+                tg_mtproto_chat_tui_status(peer_index, peer_label);
                 continue;
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -14782,6 +15113,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
                 continue;
             }
+            tg_chat_tabs_stale = 1; /* a short list may have got a new tab */
             if (requested_peer_index[0] == '\0' &&
                 tg_mtproto_peer_cache_find_username_public_index(
                     peer_cache_file, username_arg, requested_peer_index,
@@ -14811,7 +15143,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     fprintf(tui_cap, "\n");
                     tg_console_tui_capture_end(tui_cap, stream);
                 }
-                tg_mtproto_chat_tui_status(peer_label);
+                tg_mtproto_chat_tui_status(peer_index, peer_label);
                 continue;
             } else {
                 {
@@ -14851,10 +15183,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-                if (tg_mtproto_chat_prompt_line("Chat number: ",
-                                                requested_peer_text,
-                                                sizeof(requested_peer_text),
-                                                1, stream, label) != 0) {
+                if (tg_mtproto_chat_prompt_chat_number(
+                        "Chat number: ", requested_peer_text,
+                        sizeof(requested_peer_text), stream, label,
+                        peer_index) != 0) {
                     tg_mtproto_close_quiet_stream(chat_quiet, stream);
                     tg_mtproto_close_auth_context(&chat_context);
                     tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -14918,7 +15250,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 fprintf(tui_cap, "\n");
                 tg_console_tui_capture_end(tui_cap, stream);
             }
-            tg_mtproto_chat_tui_status(peer_label);
+            tg_mtproto_chat_tui_status(peer_index, peer_label);
             continue;
         }
         if (strcmp(line, "/read") == 0) {

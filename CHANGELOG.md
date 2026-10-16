@@ -34,6 +34,17 @@ the text client for the plain 68000.
   well. Settings > New messages: Off, Count in title (the default), Count
   and pop-up, Pop-up with the text, and Beep. Off leaves the iconified
   client asleep, as before.
+- The text client shows its chats as tabs on the line under the top one,
+  the bar the plain-68000 user sketched after the IRC clients of old:
+  "F1 Mario | F2 AmigaIta | F3 ...", as many as the window is wide, each
+  one always in its place, the open chat in brackets and highlighted, a
+  star on a chat with new messages until you open it. F1 to F10 already
+  changed chat; now they show which is which, and they also answer the
+  first "Chat number" question. /move 5 1 makes chat 5 number 1, the one F1
+  opens, so the chats you use most sit under the first keys; the window
+  keeps the same order. The Help key shows the command list, and the line
+  above the text reminds how to send a file. A window under 12 rows keeps
+  that line for the messages.
 
 ### Fixed
 - Ctrl-C with the window open, typed in the Shell that started the client

@@ -45,6 +45,26 @@ int tg_console_tui_active(void);
 /* Rewrites the top status bar (clipped to the window width). */
 void tg_console_tui_status(FILE *stream, const char *status_text);
 
+/* Function-key tabs on row 2, under the status bar: the chats F1..F10 open,
+   the BitchX-style bar a 68000 tester drew (2026-10). The chat names them,
+   already in the display charset, and says which one is open and which have
+   news; the TUI fits as many as the width allows, each one always at the
+   same place. Wanted before enter(); a window under 12 rows keeps that row
+   for the transcript and shows no tabs. */
+#define TG_CONSOLE_TUI_TABS 10U
+#define TG_CONSOLE_TUI_TAB_NAME 24U
+void tg_console_tui_tabs_wanted(int wanted);
+void tg_console_tui_tabs_clear(void);
+void tg_console_tui_tabs_add(const char *name);
+/* current: the open chat's key (1..10), 0 for none of them; news: bit n-1
+   set when the chat on Fn has messages not read yet. Repaints the row. */
+void tg_console_tui_tabs_show(FILE *stream, unsigned int current,
+                              unsigned int news);
+
+/* A short reminder at the right end of the separator above the composer,
+   e.g. how to send a file. Empty for none; narrow windows show none. */
+void tg_console_tui_set_hint(const char *hint);
+
 /* Appends one logical line (no newline) to the transcript region. It wraps by
    words at paint time, so resize reflows the backlog without losing text.
    Bytes are written as-is and colour role sequences consume no columns. */
