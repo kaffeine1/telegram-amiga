@@ -9841,13 +9841,25 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
 /* Our own new-message pop-up, the same on every lane: nothing to install,
    nothing linked (Ringhio, MagicBeacon and Herald each live on one system
    only, and AROS has none). A small borderless window in the top right
-   corner of a screen, opened inactive so whoever types elsewhere keeps
-   typing, and drawn first under the layer lock: the Send photo discipline,
-   since a window drawn while it becomes active once froze MorphOS. It goes
-   by itself after a few seconds; a click opens the chat. One at a time: the
+   corner of a screen, drawn like an incoming bubble of the chat: flat, in
+   the bubble's dark grey with its rounded corners, the chat's name in its
+   avatar tint as sender names are in groups, the text almost white. It
+   opens inactive so whoever types elsewhere keeps typing, and its first
+   drawing is under the layer lock: the Send photo discipline, since a
+   window drawn while it becomes active once froze MorphOS. It goes by
+   itself after a few seconds; a click opens the chat. One at a time: the
    next news takes its place. */
 #define TG_GUI_POPUP_SECONDS 6UL
-#define TG_GUI_POPUP_PAD 6
+#define TG_GUI_POPUP_PAD_X 8
+#define TG_GUI_POPUP_PAD_Y 5
+#define TG_GUI_POPUP_RADIUS 3 /* the bubbles' corner step (3,1,1) */
+
+/* Its colours, slots of pens[]. */
+#define TG_GUI_POPUP_BUBBLE 0
+#define TG_GUI_POPUP_TEXT 1
+#define TG_GUI_POPUP_NAME 2
+#define TG_GUI_POPUP_DIM 3
+#define TG_GUI_POPUP_PENS 4
 
 typedef struct tg_gui_popup {
     struct Window *window;
@@ -9855,12 +9867,16 @@ typedef struct tg_gui_popup {
     unsigned long peer_lo;
     time_t shown;           /* when its latest news came */
     int compat;             /* AfA: glyphs through BltTemplate, not Text() */
-    UWORD pen_back;
-    UWORD pen_text;
-    UWORD pen_shine;
-    UWORD pen_shadow;
-    UWORD pen_fill;
-    UWORD pen_filltext;
+    struct ColorMap *cmap;  /* its screen's, which holds the pens below */
+    LONG pens[TG_GUI_POPUP_PENS];
+    int obtained[TG_GUI_POPUP_PENS]; /* ours to give back */
+    int exact;              /* a deep screen: exact colours */
+    LONG name_fallback;     /* the system pen for the name, if no tint */
+    int name_tint;          /* avatar tint the name pen holds: -1 the link
+                               blue, -2 none yet */
+    int want_tint;          /* the tint of the chat to show */
+    int body_dim;           /* the second line is a count, not the text */
+    struct BitMap *corners; /* what lay behind the four corners */
     char head[TG_GUI_NAME_MAX + 16];
     char body[TG_GUI_NOTIFY_TEXT_MAX];
 } tg_gui_popup;
@@ -9914,8 +9930,8 @@ static void tg_gui_popup_line(tg_gui_popup *popup, int x, int baseline,
     }
 }
 
-/* A raised box in the screen's own pens: the chat on the fill strip, the
-   count or the text below it. */
+/* A bubble of the chat: what was behind the window in its corners, then
+   the fill with the chat's corner step over it, the name, the line. */
 static void tg_gui_popup_paint(tg_gui_popup *popup)
 {
     struct Window *win = popup->window;
@@ -9924,29 +9940,33 @@ static void tg_gui_popup_paint(tg_gui_popup *popup)
     int h = (int)win->Height;
     int lh = (int)rp->TxHeight;
     int base = (int)rp->TxBaseline;
-    int strip = lh + TG_GUI_POPUP_PAD;
+    int r = TG_GUI_POPUP_RADIUS;
+    int i;
 
     SetDrMd(rp, JAM1);
-    SetAPen(rp, popup->pen_back);
-    RectFill(rp, 1, 1, w - 2, h - 2);
-    SetAPen(rp, popup->pen_fill);
-    RectFill(rp, 1, 1, w - 2, strip);
-    SetAPen(rp, popup->pen_shine);
-    Move(rp, 0, h - 1);
-    Draw(rp, 0, 0);
-    Draw(rp, w - 1, 0);
-    SetAPen(rp, popup->pen_shadow);
-    Move(rp, w - 1, 1);
-    Draw(rp, w - 1, h - 1);
-    Draw(rp, 1, h - 1);
-    SetAPen(rp, popup->pen_filltext);
-    tg_gui_popup_line(popup, TG_GUI_POPUP_PAD,
-                      1 + TG_GUI_POPUP_PAD / 2 + base,
-                      w - 2 * TG_GUI_POPUP_PAD, popup->head);
-    SetAPen(rp, popup->pen_text);
-    tg_gui_popup_line(popup, TG_GUI_POPUP_PAD,
-                      1 + strip + TG_GUI_POPUP_PAD / 2 + base,
-                      w - 2 * TG_GUI_POPUP_PAD, popup->body);
+    SetAPen(rp, (ULONG)popup->pens[TG_GUI_POPUP_BUBBLE]);
+    if (popup->corners != 0) {
+        for (i = 0; i < 4; ++i) {
+            BltBitMapRastPort(popup->corners, i * r, 0, rp,
+                              (i & 1) ? w - r : 0, (i & 2) ? h - r : 0, r, r,
+                              0xC0);
+        }
+        RectFill(rp, r, 0, w - 1 - r, 0);
+        RectFill(rp, 1, 1, w - 2, r - 1);
+        RectFill(rp, 0, r, w - 1, h - 1 - r);
+        RectFill(rp, 1, h - r, w - 2, h - 2);
+        RectFill(rp, r, h - 1, w - 1 - r, h - 1);
+    } else {
+        RectFill(rp, 0, 0, w - 1, h - 1); /* square rather than wrong */
+    }
+    SetAPen(rp, (ULONG)popup->pens[TG_GUI_POPUP_NAME]);
+    tg_gui_popup_line(popup, TG_GUI_POPUP_PAD_X, TG_GUI_POPUP_PAD_Y + base,
+                      w - 2 * TG_GUI_POPUP_PAD_X, popup->head);
+    SetAPen(rp, (ULONG)popup->pens[popup->body_dim ? TG_GUI_POPUP_DIM
+                                                   : TG_GUI_POPUP_TEXT]);
+    tg_gui_popup_line(popup, TG_GUI_POPUP_PAD_X,
+                      TG_GUI_POPUP_PAD_Y + lh + 2 + base,
+                      w - 2 * TG_GUI_POPUP_PAD_X, popup->body);
 }
 
 /* A repaint of an open pop-up, outside a refresh: under the layer lock. */
@@ -9963,12 +9983,105 @@ static void tg_gui_popup_repaint(tg_gui_popup *popup)
     }
 }
 
+/* One colour of the bubble on the pop-up's screen: the nearest the screen
+   has, the exact one on a deep screen, else the system pen given. */
+static void tg_gui_popup_pen(tg_gui_popup *popup, int slot,
+                             const tg_gui_rgb *rgb, LONG fallback)
+{
+    LONG pen = -1;
+
+    if (popup->obtained[slot] && popup->cmap != 0) {
+        ReleasePen(popup->cmap, (ULONG)popup->pens[slot]);
+    }
+    if (popup->cmap != 0) {
+        pen = tg_gui_amiga_obtain_rgb(popup->cmap, rgb, popup->exact);
+    }
+    popup->obtained[slot] = pen != -1;
+    popup->pens[slot] = pen != -1 ? pen : fallback;
+}
+
+/* The name in the chat's avatar tint, as group senders are drawn. */
+static void tg_gui_popup_name_pen(tg_gui_popup *popup)
+{
+    int tint = popup->want_tint;
+
+    if (tint == popup->name_tint) {
+        return;
+    }
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_NAME,
+                     tint >= 0 ? &tg_gui_avatar_rgb[tint]
+                               : &tg_gui_dark_pens[TG_GUI_PEN_LINK],
+                     popup->name_fallback);
+    popup->name_tint = tint;
+}
+
+static void tg_gui_popup_release_pens(tg_gui_popup *popup)
+{
+    int i;
+
+    for (i = 0; i < TG_GUI_POPUP_PENS; ++i) {
+        if (popup->obtained[i] && popup->cmap != 0) {
+            ReleasePen(popup->cmap, (ULONG)popup->pens[i]);
+        }
+        popup->obtained[i] = 0;
+    }
+    popup->name_tint = -2;
+}
+
 static void tg_gui_popup_close(tg_gui_popup *popup)
 {
-    if (popup != 0 && popup->window != 0) {
+    if (popup == 0) {
+        return;
+    }
+    if (popup->window != 0) {
+        tg_gui_popup_release_pens(popup); /* while its screen surely lives */
         CloseWindow(popup->window);
         popup->window = 0;
     }
+    if (popup->corners != 0) {
+        FreeBitMap(popup->corners);
+        popup->corners = 0;
+    }
+}
+
+/* What lies behind the four corners, read before the window covers it:
+   the window is square and the bubble is not, and these systems have no
+   shaped windows, so the corners get the screen's own pixels back. Should
+   the screen change behind the pop-up in its few seconds, a corner shows a
+   stale pixel or two. */
+static struct BitMap *tg_gui_popup_corners(struct Screen *screen, int left,
+                                           int top, int w, int h)
+{
+    struct BitMap *src = screen->RastPort.BitMap;
+    struct BitMap *bm = 0;
+    ULONG depth;
+    int r = TG_GUI_POPUP_RADIUS;
+    int i;
+
+    if (src == 0 || left < 0 || top < 0 || w < 2 * r || h < 2 * r ||
+        left + w > (int)screen->Width || top + h > (int)screen->Height) {
+        return 0;
+    }
+    depth = GetBitMapAttr(src, BMA_DEPTH);
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+    /* Without it MorphOS hands out a bitmap that is not the card's format
+       (the inline photos' lesson, 1867123). */
+    if (depth > 8UL) {
+        bm = AllocBitMap((ULONG)(4 * r), (ULONG)r, depth, BMF_MINPLANES, src);
+    }
+#endif
+    if (bm == 0) {
+        bm = AllocBitMap((ULONG)(4 * r), (ULONG)r, depth, 0UL, src);
+    }
+    if (bm == 0) {
+        return 0;
+    }
+    for (i = 0; i < 4; ++i) {
+        BltBitMap(src, (i & 1) ? left + w - r : left,
+                  (i & 2) ? top + h - r : top, bm, i * r, 0, r, r, 0xC0, 0xFF,
+                  0);
+    }
+    return bm;
 }
 
 static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
@@ -9979,6 +10092,8 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     struct RastPort *srp = &screen->RastPort;
     struct DrawInfo *dri;
     struct Window *win;
+    LONG dark = 1;  /* the system pens, should the screen give no colour */
+    LONG light = 2;
     int lh;
     int w;
     int h;
@@ -9995,7 +10110,7 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
             ? tg_gui_popup_width(popup, srp, sample,
                                  (unsigned long)(sizeof(sample) - 1U))
             : 0;
-    w += 2 * TG_GUI_POPUP_PAD + 2;
+    w += 2 * TG_GUI_POPUP_PAD_X;
     if (w < (int)screen->Width / 5) {
         w = (int)screen->Width / 5; /* room for the text on a wide screen */
     }
@@ -10005,7 +10120,7 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     if (w > (int)screen->Width - 16) {
         w = (int)screen->Width - 16;
     }
-    h = 2 + 2 * (lh + TG_GUI_POPUP_PAD);
+    h = 2 * TG_GUI_POPUP_PAD_Y + 2 * lh + 2;
     left = (int)screen->Width - w - 8;
     top = (int)screen->BarHeight + 1 + 6;
     if (left < 0) {
@@ -10014,6 +10129,7 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     if (top + h > (int)screen->Height) {
         top = 0;
     }
+    popup->corners = tg_gui_popup_corners(screen, left, top, w, h);
     i = 0;
     tags[i].ti_Tag = WA_Left;
     tags[i++].ti_Data = (ULONG)left;
@@ -10040,35 +10156,40 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     tags[i++].ti_Data = 0;
     win = OpenWindowTagList(0, tags);
     if (win == 0) {
+        tg_gui_popup_close(popup); /* the corners */
         return 1;
     }
     if (srp->Font != 0) {
         SetFont(win->RPort, srp->Font); /* the font it was measured with */
     }
-    popup->pen_back = 0;
-    popup->pen_text = 1;
-    popup->pen_shine = 2;
-    popup->pen_shadow = 1;
-    popup->pen_fill = 3;
-    popup->pen_filltext = 1;
     dri = GetScreenDrawInfo(win->WScreen);
     if (dri != 0) {
-        if ((int)dri->dri_NumPens > BACKGROUNDPEN) {
-            popup->pen_back = dri->dri_Pens[BACKGROUNDPEN];
-            popup->pen_text = dri->dri_Pens[TEXTPEN];
-            popup->pen_shine = dri->dri_Pens[SHINEPEN];
-            popup->pen_shadow = dri->dri_Pens[SHADOWPEN];
-            popup->pen_fill = dri->dri_Pens[FILLPEN];
-            popup->pen_filltext = dri->dri_Pens[FILLTEXTPEN];
+        if ((int)dri->dri_NumPens > SHADOWPEN) {
+            dark = dri->dri_Pens[SHADOWPEN];
+            light = dri->dri_Pens[SHINEPEN];
         }
         FreeScreenDrawInfo(win->WScreen, dri);
     }
     popup->window = win;
+    popup->cmap = win->WScreen->ViewPort.ColorMap;
+    popup->exact = win->WScreen->RastPort.BitMap != 0 &&
+                   GetBitMapAttr(win->WScreen->RastPort.BitMap, BMA_DEPTH) >
+                       8UL;
+    popup->name_fallback = light;
+    popup->name_tint = -2;
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_BUBBLE,
+                     &tg_gui_dark_pens[TG_GUI_PEN_SURFACE], dark);
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_TEXT,
+                     &tg_gui_dark_pens[TG_GUI_PEN_TEXT], light);
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_DIM,
+                     &tg_gui_dark_pens[TG_GUI_PEN_TEXT_DIM], light);
+    tg_gui_popup_name_pen(popup);
     tg_gui_popup_repaint(popup);
     {
         char line[96];
 
-        sprintf(line, "notify: pop-up %dx%d at %d,%d", w, h, left, top);
+        sprintf(line, "notify: pop-up %dx%d at %d,%d%s", w, h, left, top,
+                popup->corners != 0 ? "" : ", square");
         tg_gui_log(line);
     }
     return 0;
@@ -10081,6 +10202,7 @@ static void tg_gui_popup_show(tg_gui_popup *popup, const tg_gui_state *state,
                               struct Screen *screen)
 {
     struct Screen *pub = 0;
+    int i;
 
     if (popup == 0 || state == 0) {
         return;
@@ -10090,6 +10212,19 @@ static void tg_gui_popup_show(tg_gui_popup *popup, const tg_gui_state *state,
     popup->peer_hi = state->notify_last_peer_hi;
     popup->peer_lo = state->notify_last_peer_lo;
     popup->shown = time(0);
+    popup->body_dim = state->notify_mode != TG_GUI_NOTIFY_POPUP_TEXT ||
+                      state->notify_last_text[0] == '\0';
+    popup->want_tint = -1;
+    for (i = 0; i < state->chat_count; ++i) {
+        if (state->chats[i].peer_id_hi == popup->peer_hi &&
+            state->chats[i].peer_id_lo == popup->peer_lo) {
+            if (state->chats[i].avatar_color >= 0) {
+                popup->want_tint =
+                    state->chats[i].avatar_color % TG_GUI_AVATAR_COLORS;
+            }
+            break;
+        }
+    }
     if (screen == 0) {
         pub = LockPubScreen(0);
         if (pub == 0) {
@@ -10101,6 +10236,7 @@ static void tg_gui_popup_show(tg_gui_popup *popup, const tg_gui_state *state,
         tg_gui_popup_close(popup);
     }
     if (popup->window != 0) {
+        tg_gui_popup_name_pen(popup);
         tg_gui_popup_repaint(popup);
     } else if (tg_gui_popup_open(popup, screen, pub != 0) != 0) {
         tg_gui_log("notify: pop-up did not open");
