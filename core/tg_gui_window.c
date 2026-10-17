@@ -10062,14 +10062,15 @@ static void tg_gui_popup_close_diskfont(void)
     }
 }
 
-/* Accepts a font only when it is larger than the screen's and not a jump
-   to a much bigger design. */
+/* Accepts a font only between `smallest` and `largest` points: a designed
+   size asked for may come back as the nearest one the font has, which can
+   be smaller than wanted (topaz 9 from the ROM for a topaz 10). */
 static struct TextFont *tg_gui_popup_try_font(struct TextAttr *ta,
-                                              UWORD smaller, UWORD largest)
+                                              UWORD smallest, UWORD largest)
 {
     struct TextFont *font = OpenDiskFont(ta);
 
-    if (font != 0 && (font->tf_YSize <= smaller || font->tf_YSize > largest)) {
+    if (font != 0 && (font->tf_YSize < smallest || font->tf_YSize > largest)) {
         CloseFont(font);
         font = 0;
     }
@@ -10109,12 +10110,13 @@ static struct TextFont *tg_gui_popup_open_font(const struct TextFont *base)
     for (size = want; font == 0 && size <= want + 2U; ++size) {
         ta.ta_YSize = size;
         ta.ta_Flags = FPF_DESIGNED; /* drawn at that size, not scaled */
-        font = tg_gui_popup_try_font(&ta, base->tf_YSize, want + 3U);
+        font = tg_gui_popup_try_font(&ta, want, want + 3U);
     }
     if (font == 0) {
         ta.ta_YSize = want;
         ta.ta_Flags = 0;
-        font = tg_gui_popup_try_font(&ta, base->tf_YSize, want + 3U);
+        font = tg_gui_popup_try_font(&ta, (UWORD)(base->tf_YSize + 1U),
+                                     want + 3U);
     }
     if (font == 0) {
         tg_gui_popup_close_diskfont();
