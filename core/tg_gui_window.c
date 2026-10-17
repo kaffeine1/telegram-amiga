@@ -86,6 +86,7 @@
 #include <proto/wb.h>
 #include <proto/icon.h>
 #include <proto/asl.h>
+#include <proto/diskfont.h>
 
 /* asl.library is opened lazily around the file requester (Send file...) so
    startup stays untouched and a system without it just skips the feature. */
@@ -93,10 +94,13 @@ struct Library *AslBase = 0;
 /* workbench.library + icon.library open lazily around the iconified wait. */
 struct Library *WorkbenchBase = 0;
 struct Library *IconBase = 0;
+/* diskfont.library opens only while a new-message pop-up holds its font. */
+struct Library *DiskfontBase = 0;
 #if defined(__amigaos4__)
 struct WorkbenchIFace *IWorkbench = 0;
 struct IconIFace *IIcon = 0;
 struct AslIFace *IAsl = 0;
+struct DiskfontIFace *IDiskfont = 0;
 #endif
 
 /* timer.device request, papering over the OS4 SDK rename (TimeRequest with
@@ -9848,7 +9852,7 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
    window drawn while it becomes active once froze MorphOS. It goes by
    itself after a few seconds; a click opens the chat. One at a time: the
    next news takes its place. */
-#define TG_GUI_POPUP_SECONDS 6UL
+#define TG_GUI_POPUP_SECONDS 10UL /* six were too few on a G5 */
 #define TG_GUI_POPUP_PAD_X 8
 #define TG_GUI_POPUP_PAD_Y 5
 #define TG_GUI_POPUP_RADIUS 3 /* the bubbles' corner step (3,1,1) */
@@ -9885,6 +9889,7 @@ typedef struct tg_gui_popup {
     int want_tint;          /* the tint of the chat to show */
     int body_dim;           /* the second line is a count, not the text */
     struct BitMap *corners; /* what lay behind the four corners */
+    struct TextFont *font;  /* its larger font, 0 when on the screen's */
     char head[TG_GUI_NAME_MAX + 16];
     char body[TG_GUI_NOTIFY_TEXT_MAX];
 } tg_gui_popup;
@@ -10043,6 +10048,80 @@ static void tg_gui_popup_release_pens(tg_gui_popup *popup)
     popup->name_tint = -2;
 }
 
+static void tg_gui_popup_close_diskfont(void)
+{
+#if defined(__amigaos4__)
+    if (IDiskfont != 0) {
+        DropInterface((struct Interface *)IDiskfont);
+        IDiskfont = 0;
+    }
+#endif
+    if (DiskfontBase != 0) {
+        CloseLibrary(DiskfontBase);
+        DiskfontBase = 0;
+    }
+}
+
+/* Accepts a font only when it is larger than the screen's and not a jump
+   to a much bigger design. */
+static struct TextFont *tg_gui_popup_try_font(struct TextAttr *ta,
+                                              UWORD smaller, UWORD largest)
+{
+    struct TextFont *font = OpenDiskFont(ta);
+
+    if (font != 0 && (font->tf_YSize <= smaller || font->tf_YSize > largest)) {
+        CloseFont(font);
+        font = 0;
+    }
+    return font;
+}
+
+/* The pop-up's font: the screen's own, about a quarter larger, since it is
+   read at a glance (the G5 test asked for bigger letters). A size its
+   designer drew comes first, then one the system scales; the screen's font
+   as it is when neither opens. diskfont.library stays open with it. */
+static struct TextFont *tg_gui_popup_open_font(const struct TextFont *base)
+{
+    struct TextAttr ta;
+    struct TextFont *font = 0;
+    UWORD want;
+    UWORD size;
+
+    if (base == 0 || base->tf_Message.mn_Node.ln_Name == 0 ||
+        base->tf_YSize == 0) {
+        return 0;
+    }
+    DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
+    if (DiskfontBase == 0) {
+        return 0;
+    }
+#if defined(__amigaos4__)
+    IDiskfont = (struct DiskfontIFace *)GetInterface(
+        DiskfontBase, (CONST_STRPTR)"main", 1, 0);
+    if (IDiskfont == 0) {
+        tg_gui_popup_close_diskfont();
+        return 0;
+    }
+#endif
+    want = (UWORD)(base->tf_YSize + (base->tf_YSize + 3U) / 4U);
+    ta.ta_Name = (STRPTR)base->tf_Message.mn_Node.ln_Name;
+    ta.ta_Style = FS_NORMAL;
+    for (size = want; font == 0 && size <= want + 2U; ++size) {
+        ta.ta_YSize = size;
+        ta.ta_Flags = FPF_DESIGNED; /* drawn at that size, not scaled */
+        font = tg_gui_popup_try_font(&ta, base->tf_YSize, want + 3U);
+    }
+    if (font == 0) {
+        ta.ta_YSize = want;
+        ta.ta_Flags = 0;
+        font = tg_gui_popup_try_font(&ta, base->tf_YSize, want + 3U);
+    }
+    if (font == 0) {
+        tg_gui_popup_close_diskfont();
+    }
+    return font;
+}
+
 static void tg_gui_popup_close(tg_gui_popup *popup)
 {
     if (popup == 0) {
@@ -10052,6 +10131,11 @@ static void tg_gui_popup_close(tg_gui_popup *popup)
         tg_gui_popup_release_pens(popup); /* while its screen surely lives */
         CloseWindow(popup->window);
         popup->window = 0;
+    }
+    if (popup->font != 0) {
+        CloseFont(popup->font);
+        popup->font = 0;
+        tg_gui_popup_close_diskfont();
     }
     if (popup->corners != 0) {
         FreeBitMap(popup->corners);
@@ -10105,6 +10189,8 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     static const char sample[] = "Telegram Amiga, a new message!";
     struct TagItem tags[16];
     struct RastPort *srp = &screen->RastPort;
+    struct RastPort mrp; /* measures with the pop-up's own font */
+    struct TextFont *font;
     struct DrawInfo *dri;
     struct Window *win;
     LONG dark = 1;  /* the system pens, should the screen give no colour */
@@ -10117,12 +10203,18 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     int i;
 
     popup->compat = tg_gui_amiga_afa_text_compat();
-    lh = (srp->Font != 0) ? (int)srp->Font->tf_YSize : 8;
+    popup->font = tg_gui_popup_open_font(srp->Font);
+    font = popup->font != 0 ? popup->font : srp->Font;
+    InitRastPort(&mrp);
+    if (font != 0) {
+        SetFont(&mrp, font);
+    }
+    lh = (font != 0) ? (int)font->tf_YSize : 8;
     if (lh < 6) {
         lh = 8;
     }
-    w = (srp->Font != 0)
-            ? tg_gui_popup_width(popup, srp, sample,
+    w = (font != 0)
+            ? tg_gui_popup_width(popup, &mrp, sample,
                                  (unsigned long)(sizeof(sample) - 1U))
             : 0;
     w += 2 * TG_GUI_POPUP_PAD_X;
@@ -10174,8 +10266,8 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
         tg_gui_popup_close(popup); /* the corners */
         return 1;
     }
-    if (srp->Font != 0) {
-        SetFont(win->RPort, srp->Font); /* the font it was measured with */
+    if (font != 0) {
+        SetFont(win->RPort, font); /* the font it was measured with */
     }
     dri = GetScreenDrawInfo(win->WScreen);
     if (dri != 0) {
@@ -10199,9 +10291,10 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     tg_gui_popup_name_pen(popup);
     tg_gui_popup_repaint(popup);
     {
-        char line[96];
+        char line[128];
 
-        sprintf(line, "notify: pop-up %dx%d at %d,%d%s", w, h, left, top,
+        sprintf(line, "notify: pop-up %dx%d at %d,%d, font %d%s%s", w, h,
+                left, top, lh, popup->font != 0 ? "" : " (screen's)",
                 popup->corners != 0 ? "" : ", square");
         tg_gui_log(line);
     }

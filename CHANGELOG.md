@@ -22,11 +22,11 @@ the text client for the plain 68000.
   chats, "Unofficial Telegram Amiga (3 new)", and the count goes when the
   chat is opened. A pop-up of our own, the same on every system with
   nothing to install, shows the chat and the count, or the start of the
-  message if you want it, in the top right corner of the screen for a few
+  message if you want it, in the top right corner of the screen for ten
   seconds, drawn like an incoming bubble of the chat: flat dark grey with
   rounded corners, the chat's name in a light shade of its own colour,
-  the text in white. A
-  click on it opens that chat and brings the window forward.
+  the text in white, in the screen's font a quarter larger. A click on it
+  opens that chat and brings the window forward.
   An optional beep flashes the screen, or plays the sound set up for it,
   once per run of news. Iconified, the client keeps reading the network:
   the AppIcon's label counts the news, "TelegramAmiga (3)", the pop-up
