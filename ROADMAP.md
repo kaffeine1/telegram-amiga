@@ -976,7 +976,12 @@ brings the window forward only when it is clicked.
 
 Settings entries: "New messages" with Off, Count in title, Count and
 pop-up, and Pop-up with the text, and "Beep" on its own beside them;
-later "Sound on new messages" with a requester for the sound file.
+later "Sound on new messages" with a requester for the sound file. Until
+the user picks one, the mode follows the machine like the photos and
+avatars do: the pop-up with the text where it is drawn at ease, the count
+in the title on a classic Amiga below the 68040 or on a native screen.
+The file says "mode=auto" for that, so a beep switched on does not freeze
+the machine's choice.
 
 In two steps. 0.0.97 brings the title with the count, the beep, the
 AppIcon label with the update poll running while parked, and the pop-up,

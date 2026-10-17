@@ -309,6 +309,8 @@ typedef struct tg_gui_state {
        chat with news this session, cleared when that chat is opened. */
     int notify_mode;       /* TG_GUI_NOTIFY_*, from data/telegram-notify.txt */
     int notify_beep;       /* DisplayBeep on the first unseen message of a run */
+    int notify_explicit;   /* the user picked the mode (else "auto") */
+    int notify_default_resolved; /* hardware default sampled this run */
     tg_gui_notify_peer notify_peers[TG_GUI_NOTIFY_PEERS];
     int notify_peer_count;
     int notify_overflow;   /* news from more chats than the table holds */
@@ -613,10 +615,15 @@ void tg_gui_avatar_preferences_load(const char *path, int *enabled,
                                     int *explicit_choice);
 int tg_gui_avatar_preferences_save_choice(const char *path, int enabled,
                                           int explicit_choice);
-/* New-message notifications. A missing or unreadable file gives the
-   defaults: the count in the title, no beep. */
-void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep);
-int tg_gui_notify_preferences_save(const char *path, int mode, int beep);
+/* New-message notifications. "mode=auto", or a missing or unreadable
+   file, leaves the mode to the machine (mode_explicit 0: the pop-up with
+   the text on a fast one, the count in the title on a classic Amiga below
+   the 68040 or without RTG, see tg_gui_graphics_preferences_resolve); a
+   mode the user picked is kept as it is. No beep unless chosen. */
+void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep,
+                                    int *mode_explicit);
+int tg_gui_notify_preferences_save(const char *path, int mode, int beep,
+                                   int mode_explicit);
 /* Counts one new message in the chat (hi, lo); the caller already skipped
    the chat open in front of the user. */
 void tg_gui_notify_count(tg_gui_state *state, unsigned long peer_hi,

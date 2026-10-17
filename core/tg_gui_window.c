@@ -353,7 +353,8 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
 
     if (state == 0 || window == 0 ||
         (state->inline_photos_default_resolved &&
-         state->emoji_default_resolved && state->avatars_default_resolved)) {
+         state->emoji_default_resolved && state->avatars_default_resolved &&
+         state->notify_default_resolved)) {
         return;
     }
 #if defined(__amigaos3__) || defined(__amigaos4__)
@@ -391,6 +392,12 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
     }
     if (!state->avatars_explicit && !state->avatars_enabled) {
         tg_gui_log("avatars: default off (native screen or cpu < 040)");
+    }
+    if (!state->notify_explicit) {
+        tg_gui_log(state->notify_mode == TG_GUI_NOTIFY_POPUP_TEXT
+                       ? "notify: default pop-up with the text"
+                       : "notify: default count in title (native screen or "
+                         "cpu < 040)");
     }
 }
 
@@ -12372,6 +12379,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (ud == (APTR)TG_MENU_NOTIFY_BEEP) {
                                 state->notify_beep = !state->notify_beep;
                             } else {
+                                /* the user's own choice: it stays */
+                                state->notify_explicit = 1;
                                 state->notify_mode =
                                     ud == (APTR)TG_MENU_NOTIFY_OFF
                                         ? TG_GUI_NOTIFY_OFF
@@ -12385,8 +12394,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                    state->notify_beep);
                             if (tg_gui_notify_preferences_save(
                                     "data/telegram-notify.txt",
-                                    state->notify_mode,
-                                    state->notify_beep) != 0) {
+                                    state->notify_mode, state->notify_beep,
+                                    state->notify_explicit) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     "Could not save the new-message setting");
@@ -14472,7 +14481,9 @@ int tg_gui_run_window(tg_gui_state *state)
                                    &state->avatars_explicit);
     state->avatars_default_resolved = 0;
     tg_gui_notify_preferences_load("data/telegram-notify.txt",
-                                   &state->notify_mode, &state->notify_beep);
+                                   &state->notify_mode, &state->notify_beep,
+                                   &state->notify_explicit);
+    state->notify_default_resolved = 0;
     if (state->photo_cache_limit_mb != TG_GUI_PHOTO_CACHE_UNLIMITED_MB &&
         state->photo_cache_limit_mb != 10UL &&
         state->photo_cache_limit_mb != 50UL &&

@@ -323,6 +323,19 @@ void tg_gui_graphics_preferences_resolve(tg_gui_state *state, int classic_amiga,
             classic_amiga, cpu_at_least_040, has_rtg);
         state->avatars_default_resolved = 1;
     }
+    if (!state->notify_default_resolved) {
+        /* The pop-up with the text where the machine draws it at ease;
+           the count in the title on a classic Amiga below the 68040 or
+           without RTG. A mode the user picked stays. */
+        if (!state->notify_explicit) {
+            state->notify_mode =
+                tg_gui_graphics_resolve(0, 0, classic_amiga,
+                                        cpu_at_least_040, has_rtg)
+                    ? TG_GUI_NOTIFY_POPUP_TEXT
+                    : TG_GUI_NOTIFY_TITLE;
+        }
+        state->notify_default_resolved = 1;
+    }
     if (!state->emoji_enabled) {
         tg_gui_emoji_close(state);
     }
@@ -392,21 +405,25 @@ int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
     return 0;
 }
 
-/* data/telegram-notify.txt: "mode=off|title|popup|text" and "beep=on|off",
-   one per line, in any order. */
-void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep)
+/* data/telegram-notify.txt: "mode=auto|off|title|popup|text" and
+   "beep=on|off", one per line, in any order. */
+void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep,
+                                    int *mode_explicit)
 {
     FILE *file;
     char value[64];
     int loaded_mode;
     int loaded_beep;
+    int loaded_explicit;
 
-    loaded_mode = TG_GUI_NOTIFY_TITLE;
+    loaded_mode = TG_GUI_NOTIFY_TITLE; /* until the machine is known */
     loaded_beep = 0;
+    loaded_explicit = 0;
     file = (path != 0 && path[0] != '\0') ? fopen(path, "rb") : 0;
     if (file != 0) {
         while (fgets(value, sizeof(value), file) != 0) {
             if (strncmp(value, "mode=", 5UL) == 0) {
+                loaded_explicit = 1;
                 if (tg_gui_photo_pref_word(value + 5, "off")) {
                     loaded_mode = TG_GUI_NOTIFY_OFF;
                 } else if (tg_gui_photo_pref_word(value + 5, "title")) {
@@ -415,6 +432,8 @@ void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep)
                     loaded_mode = TG_GUI_NOTIFY_POPUP;
                 } else if (tg_gui_photo_pref_word(value + 5, "text")) {
                     loaded_mode = TG_GUI_NOTIFY_POPUP_TEXT;
+                } else {
+                    loaded_explicit = 0; /* "auto", or a word we lost */
                 }
             } else if (strncmp(value, "beep=", 5UL) == 0) {
                 loaded_beep = tg_gui_photo_pref_word(value + 5, "on");
@@ -428,9 +447,13 @@ void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep)
     if (beep != 0) {
         *beep = loaded_beep;
     }
+    if (mode_explicit != 0) {
+        *mode_explicit = loaded_explicit;
+    }
 }
 
-int tg_gui_notify_preferences_save(const char *path, int mode, int beep)
+int tg_gui_notify_preferences_save(const char *path, int mode, int beep,
+                                   int mode_explicit)
 {
     FILE *file;
     char tmp[288];
@@ -451,7 +474,9 @@ int tg_gui_notify_preferences_save(const char *path, int mode, int beep)
     if (file == 0) {
         return 1;
     }
-    word = mode == TG_GUI_NOTIFY_OFF ? "off" :
+    /* A beep toggled on a machine default keeps the mode "auto". */
+    word = !mode_explicit ? "auto" :
+           mode == TG_GUI_NOTIFY_OFF ? "off" :
            mode == TG_GUI_NOTIFY_POPUP ? "popup" :
            mode == TG_GUI_NOTIFY_POPUP_TEXT ? "text" : "title";
     failed = fputs("mode=", file) == EOF || fputs(word, file) == EOF ||
@@ -7588,32 +7613,72 @@ int tg_gui_self_test(void)
             return 2;
         }
         if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT,
-                                           1) != 0) {
+                                           1, 1) != 0) {
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep);
-        if (mode != TG_GUI_NOTIFY_POPUP_TEXT || beep != 1) {
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        if (mode != TG_GUI_NOTIFY_POPUP_TEXT || beep != 1 || i != 1) {
             (void)remove(path);
             puts("gui self-test: notify setting round trip failed");
             return 2;
         }
-        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0) != 0) {
+        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0, 1) !=
+            0) {
             (void)remove(path);
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep);
-        (void)remove(path);
-        if (mode != TG_GUI_NOTIFY_OFF || beep != 0) {
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        if (mode != TG_GUI_NOTIFY_OFF || beep != 0 || i != 1) {
+            (void)remove(path);
             puts("gui self-test: notify off round trip failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep);
-        if (mode != TG_GUI_NOTIFY_TITLE || beep != 0) {
+        /* A beep toggled while the mode follows the machine keeps "auto". */
+        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT, 1,
+                                           0) != 0) {
+            (void)remove(path);
+            puts("gui self-test: notify setting save failed");
+            return 2;
+        }
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        (void)remove(path);
+        if (beep != 1 || i != 0) {
+            puts("gui self-test: notify auto mode did not stay auto");
+            return 2;
+        }
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        if (mode != TG_GUI_NOTIFY_TITLE || beep != 0 || i != 0) {
             puts("gui self-test: notify defaults wrong");
             return 2;
         }
+        /* The machine picks the mode the user has not: the pop-up with the
+           text on a fast one, the count in the title on a slow classic,
+           and the user's own pick stays on either. */
+        memset(ns, 0, sizeof(*ns));
+        ns->notify_mode = TG_GUI_NOTIFY_TITLE;
+        tg_gui_graphics_preferences_resolve(ns, 0, 1, 1);
+        if (ns->notify_mode != TG_GUI_NOTIFY_POPUP_TEXT) {
+            puts("gui self-test: notify default on a fast machine wrong");
+            return 2;
+        }
+        memset(ns, 0, sizeof(*ns));
+        ns->notify_mode = TG_GUI_NOTIFY_TITLE;
+        tg_gui_graphics_preferences_resolve(ns, 1, 0, 0);
+        if (ns->notify_mode != TG_GUI_NOTIFY_TITLE) {
+            puts("gui self-test: notify default on a slow classic wrong");
+            return 2;
+        }
+        memset(ns, 0, sizeof(*ns));
+        ns->notify_mode = TG_GUI_NOTIFY_OFF;
+        ns->notify_explicit = 1;
+        tg_gui_graphics_preferences_resolve(ns, 0, 1, 1);
+        if (ns->notify_mode != TG_GUI_NOTIFY_OFF) {
+            puts("gui self-test: notify default overrode the user's pick");
+            return 2;
+        }
+        memset(ns, 0, sizeof(*ns));
 
         /* The pop-up's lines: the chat and the count, or the text. */
         {

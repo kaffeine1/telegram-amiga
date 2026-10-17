@@ -32,8 +32,11 @@ the text client for the plain 68000.
   the AppIcon's label counts the news, "TelegramAmiga (3)", the pop-up
   shows on the Workbench, and a double-click opens the window on the chat
   with them. With the window behind or iconified the open chat counts as
-  well. Settings > New messages: Off, Count in title (the default), Count
-  and pop-up, Pop-up with the text, and Beep. Off leaves the iconified
+  well. Settings > New messages: Off, Count in title, Count and pop-up,
+  Pop-up with the text, and Beep. Pop-up with the text is the default on
+  machines that draw it at ease, Count in title on a classic Amiga below
+  the 68040 or without a graphics card, as with photos and avatars; a
+  choice made in the menu is kept from then on. Off leaves the iconified
   client asleep, as before.
 - The text client shows its chats as tabs on the line under the top one,
   the bar the plain-68000 user sketched after the IRC clients of old:
