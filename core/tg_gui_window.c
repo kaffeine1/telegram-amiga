@@ -9842,9 +9842,8 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
    nothing linked (Ringhio, MagicBeacon and Herald each live on one system
    only, and AROS has none). A small borderless window in the top right
    corner of a screen, drawn like an incoming bubble of the chat: flat, in
-   the bubble's dark grey with its rounded corners, the chat's name in its
-   avatar tint as sender names are in groups, the text almost white. It
-   opens inactive so whoever types elsewhere keeps typing, and its first
+   the bubble's dark grey with its rounded corners, the chat's name in a
+   light shade of its avatar tint, the text white. It opens inactive so whoever types elsewhere keeps typing, and its first
    drawing is under the layer lock: the Send photo discipline, since a
    window drawn while it becomes active once froze MorphOS. It goes by
    itself after a few seconds; a click opens the chat. One at a time: the
@@ -9860,6 +9859,15 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
 #define TG_GUI_POPUP_NAME 2
 #define TG_GUI_POPUP_DIM 3
 #define TG_GUI_POPUP_PENS 4
+
+/* Its text one step brighter than the chat's, since it is read at a glance
+   from the corner of the eye (asked after the first look on a G5): white
+   for the message, a light grey for the count, and the name's tint mixed
+   this much toward white, the avatar tints being made for the circles
+   behind white initials, too dark for letters on the bubble. */
+#define TG_GUI_POPUP_NAME_LIGHTEN 45 /* percent */
+static const tg_gui_rgb tg_gui_popup_text_rgb = {0xff, 0xff, 0xff};
+static const tg_gui_rgb tg_gui_popup_dim_rgb = {0xc2, 0xc8, 0xd2};
 
 typedef struct tg_gui_popup {
     struct Window *window;
@@ -10000,18 +10008,25 @@ static void tg_gui_popup_pen(tg_gui_popup *popup, int slot,
     popup->pens[slot] = pen != -1 ? pen : fallback;
 }
 
-/* The name in the chat's avatar tint, as group senders are drawn. */
+/* The name in a light shade of the chat's avatar tint. */
 static void tg_gui_popup_name_pen(tg_gui_popup *popup)
 {
+    const tg_gui_rgb *base;
+    tg_gui_rgb shade;
     int tint = popup->want_tint;
 
     if (tint == popup->name_tint) {
         return;
     }
-    tg_gui_popup_pen(popup, TG_GUI_POPUP_NAME,
-                     tint >= 0 ? &tg_gui_avatar_rgb[tint]
-                               : &tg_gui_dark_pens[TG_GUI_PEN_LINK],
-                     popup->name_fallback);
+    base = tint >= 0 ? &tg_gui_avatar_rgb[tint]
+                     : &tg_gui_dark_pens[TG_GUI_PEN_LINK];
+    shade.r = (unsigned char)(base->r + ((0xff - base->r) *
+                                         TG_GUI_POPUP_NAME_LIGHTEN) / 100);
+    shade.g = (unsigned char)(base->g + ((0xff - base->g) *
+                                         TG_GUI_POPUP_NAME_LIGHTEN) / 100);
+    shade.b = (unsigned char)(base->b + ((0xff - base->b) *
+                                         TG_GUI_POPUP_NAME_LIGHTEN) / 100);
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_NAME, &shade, popup->name_fallback);
     popup->name_tint = tint;
 }
 
@@ -10179,10 +10194,8 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     popup->name_tint = -2;
     tg_gui_popup_pen(popup, TG_GUI_POPUP_BUBBLE,
                      &tg_gui_dark_pens[TG_GUI_PEN_SURFACE], dark);
-    tg_gui_popup_pen(popup, TG_GUI_POPUP_TEXT,
-                     &tg_gui_dark_pens[TG_GUI_PEN_TEXT], light);
-    tg_gui_popup_pen(popup, TG_GUI_POPUP_DIM,
-                     &tg_gui_dark_pens[TG_GUI_PEN_TEXT_DIM], light);
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_TEXT, &tg_gui_popup_text_rgb, light);
+    tg_gui_popup_pen(popup, TG_GUI_POPUP_DIM, &tg_gui_popup_dim_rgb, light);
     tg_gui_popup_name_pen(popup);
     tg_gui_popup_repaint(popup);
     {

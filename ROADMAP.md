@@ -986,8 +986,10 @@ mute, which reads the notify settings the dialogs already carry.
 How the first step came out, on `main` for 0.0.97. The pop-up sits in
 the top right corner below the screen bar, a fifth of the screen wide at
 least, and looks like an incoming bubble of the chat: flat, the bubble's
-dark grey, its corner step, the chat's name in its avatar tint and the
-count or the text below it almost white; it lasts six seconds. The window
+dark grey, its corner step, the chat's name in a light shade of its
+avatar tint, the text below it white and the count light grey, one step
+brighter than the chat since it is read at a glance; it lasts six
+seconds. The window
 is square and these systems have no shaped windows, so the corners get
 back the screen's pixels read just before the window opens. When the
 client has its own screen the pop-up goes to the Workbench and the beep
