@@ -84,9 +84,19 @@
 #include <exec/exectags.h>
 #endif
 #if defined(__amigaos3__)
-/* The NDK has no AHI header: the request as devices/ahi.h defines it, for
-   the systems that have AHI installed. */
 #include <devices/audio.h>
+#endif
+#if defined(__has_include)
+#if __has_include(<devices/ahi.h>)
+#define TG_GUI_HAVE_AHI_H 1
+#endif
+#endif
+#if defined(TG_GUI_HAVE_AHI_H)
+#include <devices/ahi.h>
+#else
+/* No AHI header in this SDK (the AmigaOS 3 NDK, the Raspberry Pi AROS):
+   the request as devices/ahi.h defines it, for the systems where AHI is
+   installed all the same. */
 #define AHINAME "ahi.device"
 #define AHI_DEFAULT_UNIT 0U
 #define AHIST_M8S 0UL
@@ -95,15 +105,17 @@ struct AHIRequest {
     struct IOStdReq ahir_Std;
     UWORD ahir_Version;
     UWORD ahir_Pad1;
+#if defined(__AROS__)
+    IPTR ahir_Private[2];
+#else
     ULONG ahir_Private[2];
+#endif
     ULONG ahir_Type;
     ULONG ahir_Frequency;
     Fixed ahir_Volume;
     Fixed ahir_Position;
     struct AHIRequest *ahir_Link;
 };
-#else
-#include <devices/ahi.h>
 #endif
 #include <libraries/asl.h>
 #include <workbench/workbench.h>
