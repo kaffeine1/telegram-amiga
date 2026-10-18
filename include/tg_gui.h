@@ -615,6 +615,20 @@ void tg_gui_avatar_preferences_load(const char *path, int *enabled,
                                     int *explicit_choice);
 int tg_gui_avatar_preferences_save_choice(const char *path, int enabled,
                                           int explicit_choice);
+/* The new-message pop-up's font size, in points, for a screen font of
+   `base` points on a screen `height` pixels tall: a quarter above the
+   screen font, more on a tall screen (about 1.9% of its height, 20 points
+   at 1080 lines), never past twice the screen font nor 40 points. */
+unsigned int tg_gui_popup_font_size(unsigned int base, unsigned int height);
+
+/* The beep: a short chime made here, no file: A5 then E6, each with a
+   quick rise and a bell-like fade, 8-bit signed mono. `out` takes
+   TG_GUI_CHIME_LENGTH bytes. */
+#define TG_GUI_CHIME_RATE 22050UL
+#define TG_GUI_CHIME_NOTE 2420UL /* 110 ms a note */
+#define TG_GUI_CHIME_LENGTH (2UL * TG_GUI_CHIME_NOTE)
+void tg_gui_chime_render(signed char *out);
+
 /* New-message notifications. "mode=auto", or a missing or unreadable
    file, leaves the mode to the machine (mode_explicit 0: the pop-up with
    the text on a fast one, the count in the title on a classic Amiga below

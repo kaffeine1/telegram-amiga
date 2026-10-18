@@ -25,10 +25,13 @@ the text client for the plain 68000.
   message if you want it, in the top right corner of the screen for ten
   seconds, drawn like an incoming bubble of the chat: flat dark grey with
   rounded corners, the chat's name in a light shade of its own colour,
-  the text in white, in the screen's font a quarter larger. A click on it
-  opens that chat and brings the window forward.
-  An optional beep flashes the screen, or plays the sound set up for it,
-  once per run of news. Iconified, the client keeps reading the network:
+  the text in white, in a font sized to the screen: a quarter above the
+  screen's font, more on a tall screen (20 points at 1080 lines). A click
+  on it opens that chat and brings the window forward.
+  An optional beep, a short chime of its own through AHI or the Amiga's
+  own sound chip, plays once per run of news; only where neither opens
+  does the screen flash instead, since a 16- or 24-bit screen shows no
+  flash and stayed silent. Iconified, the client keeps reading the network:
   the AppIcon's label counts the news, "TelegramAmiga (3)", the pop-up
   shows on the Workbench, and a double-click opens the window on the chat
   with them. With the window behind or iconified the open chat counts as

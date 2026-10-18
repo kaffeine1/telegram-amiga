@@ -993,9 +993,16 @@ the top right corner below the screen bar, a fifth of the screen wide at
 least, and looks like an incoming bubble of the chat: flat, the bubble's
 dark grey, its corner step, the chat's name in a light shade of its
 avatar tint, the text below it white and the count light grey, one step
-brighter than the chat since it is read at a glance, in the screen's
-font a quarter larger (a size the font's designer drew where there is
-one, a scaled one otherwise); it lasts ten seconds. The window
+brighter than the chat since it is read at a glance, in a font sized to
+the screen: a quarter above the screen's font, or about 1.9% of the
+screen's height when that is more (20 points at 1080 lines), never past
+twice the screen font; a size the font's designer drew where there is
+one, a scaled one otherwise. It lasts ten seconds. The beep is a short
+chime of our own, A5 then E6, made in memory and played through AHI, or
+audio.device on a classic Amiga without AHI: DisplayBeep, which only
+flashes a screen with a palette or plays a sound the system was given,
+was neither seen nor heard on the 16- and 24-bit screens of a Vampire
+and a G5, and stays only for systems with no sound device. The window
 is square and these systems have no shaped windows, so the corners get
 back the screen's pixels read just before the window opens. When the
 client has its own screen the pop-up goes to the Workbench and the beep

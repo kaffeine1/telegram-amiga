@@ -80,6 +80,31 @@
 #include <intuition/intuition.h>
 #include <devices/timer.h>
 #include <devices/clipboard.h>
+#if defined(__amigaos4__)
+#include <exec/exectags.h>
+#endif
+#if defined(__amigaos3__)
+/* The NDK has no AHI header: the request as devices/ahi.h defines it, for
+   the systems that have AHI installed. */
+#include <devices/audio.h>
+#define AHINAME "ahi.device"
+#define AHI_DEFAULT_UNIT 0U
+#define AHIST_M8S 0UL
+typedef LONG Fixed;
+struct AHIRequest {
+    struct IOStdReq ahir_Std;
+    UWORD ahir_Version;
+    UWORD ahir_Pad1;
+    ULONG ahir_Private[2];
+    ULONG ahir_Type;
+    ULONG ahir_Frequency;
+    Fixed ahir_Volume;
+    Fixed ahir_Position;
+    struct AHIRequest *ahir_Link;
+};
+#else
+#include <devices/ahi.h>
+#endif
 #include <libraries/asl.h>
 #include <workbench/workbench.h>
 #include <workbench/startup.h>
@@ -10084,11 +10109,13 @@ static struct TextFont *tg_gui_popup_try_font(struct TextAttr *ta,
     return font;
 }
 
-/* The pop-up's font: the screen's own, about a quarter larger, since it is
-   read at a glance (the G5 test asked for bigger letters). A size its
-   designer drew comes first, then one the system scales; the screen's font
-   as it is when neither opens. diskfont.library stays open with it. */
-static struct TextFont *tg_gui_popup_open_font(const struct TextFont *base)
+/* The pop-up's font: the screen's own, larger since it is read at a glance
+   (the G5 test asked for bigger letters), and larger still on a tall screen
+   (tg_gui_popup_font_size). A size its designer drew comes first, then one
+   the system scales; the screen's font as it is when neither opens.
+   diskfont.library stays open with it. */
+static struct TextFont *tg_gui_popup_open_font(const struct TextFont *base,
+                                               UWORD screen_height)
 {
     struct TextAttr ta;
     struct TextFont *font = 0;
@@ -10111,7 +10138,7 @@ static struct TextFont *tg_gui_popup_open_font(const struct TextFont *base)
         return 0;
     }
 #endif
-    want = (UWORD)(base->tf_YSize + (base->tf_YSize + 3U) / 4U);
+    want = (UWORD)tg_gui_popup_font_size(base->tf_YSize, screen_height);
     ta.ta_Name = (STRPTR)base->tf_Message.mn_Node.ln_Name;
     ta.ta_Style = FS_NORMAL;
     for (size = want; font == 0 && size <= want + 2U; ++size) {
@@ -10212,7 +10239,8 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     int i;
 
     popup->compat = tg_gui_amiga_afa_text_compat();
-    popup->font = tg_gui_popup_open_font(srp->Font);
+    popup->font = tg_gui_popup_open_font(srp->Font,
+                                         (UWORD)screen->Height);
     font = popup->font != 0 ? popup->font : srp->Font;
     InitRastPort(&mrp);
     if (font != 0) {
@@ -10429,6 +10457,156 @@ static void tg_gui_popup_expire(tg_gui_popup *popup, const tg_gui_state *state)
     }
 }
 
+/* The beep of the new-message notification, a short chime of our own. A
+   DisplayBeep flashes a screen that has a palette and plays the sound the
+   system has set up for it, if any: on the 16- and 24-bit screens of a
+   Vampire or a G5 it was neither seen nor heard. The chime goes through AHI
+   where it is installed (MorphOS, AmigaOS 4, AROS, most 3.x with a graphics
+   card), through audio.device on a classic Amiga without it; DisplayBeep
+   only when neither opens. It blocks for its fifth of a second, and comes
+   once per run of news while the user is elsewhere. */
+static struct MsgPort *tg_gui_chime_port(void)
+{
+#if defined(__amigaos4__)
+    return (struct MsgPort *)AllocSysObjectTags(ASOT_PORT, TAG_END);
+#else
+    return CreateMsgPort();
+#endif
+}
+
+static void tg_gui_chime_port_free(struct MsgPort *port)
+{
+#if defined(__amigaos4__)
+    FreeSysObject(ASOT_PORT, port);
+#else
+    DeleteMsgPort(port);
+#endif
+}
+
+static struct IORequest *tg_gui_chime_request(struct MsgPort *port,
+                                              ULONG size)
+{
+#if defined(__amigaos4__)
+    return (struct IORequest *)AllocSysObjectTags(
+        ASOT_IOREQUEST, ASOIOR_Size, size, ASOIOR_ReplyPort, port, TAG_END);
+#else
+    return CreateIORequest(port, size);
+#endif
+}
+
+static void tg_gui_chime_request_free(struct IORequest *io)
+{
+#if defined(__amigaos4__)
+    FreeSysObject(ASOT_IOREQUEST, io);
+#else
+    DeleteIORequest(io);
+#endif
+}
+
+static int tg_gui_chime_ahi(signed char *wave)
+{
+    struct MsgPort *port;
+    struct AHIRequest *ahi;
+    int played = 0;
+
+    port = tg_gui_chime_port();
+    if (port == 0) {
+        return 0;
+    }
+    ahi = (struct AHIRequest *)tg_gui_chime_request(
+        port, (ULONG)sizeof(struct AHIRequest));
+    if (ahi != 0) {
+        ahi->ahir_Version = 4;
+        if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT,
+                       (struct IORequest *)ahi, 0) == 0) {
+            ahi->ahir_Std.io_Command = CMD_WRITE;
+            ahi->ahir_Std.io_Data = (APTR)wave;
+            ahi->ahir_Std.io_Length = (ULONG)TG_GUI_CHIME_LENGTH;
+            ahi->ahir_Std.io_Offset = 0;
+            ahi->ahir_Type = AHIST_M8S;
+            ahi->ahir_Frequency = (ULONG)TG_GUI_CHIME_RATE;
+            ahi->ahir_Volume = 0xC000;   /* three quarters */
+            ahi->ahir_Position = 0x8000; /* centre */
+            ahi->ahir_Link = 0;
+            played = DoIO((struct IORequest *)ahi) == 0;
+            CloseDevice((struct IORequest *)ahi);
+        }
+        tg_gui_chime_request_free((struct IORequest *)ahi);
+    }
+    tg_gui_chime_port_free(port);
+    return played;
+}
+
+#if defined(__amigaos3__)
+/* Paula: one free channel of any side, the wave in chip RAM. */
+static int tg_gui_chime_paula(signed char *wave)
+{
+    static UBYTE channels[] = { 1, 8, 2, 4 };
+    struct MsgPort *port;
+    struct IOAudio *audio;
+    int played = 0;
+
+    port = tg_gui_chime_port();
+    if (port == 0) {
+        return 0;
+    }
+    audio = (struct IOAudio *)tg_gui_chime_request(
+        port, (ULONG)sizeof(struct IOAudio));
+    if (audio != 0) {
+        audio->ioa_Request.io_Message.mn_Node.ln_Pri = 0;
+        audio->ioa_Data = channels; /* the open allocates a channel */
+        audio->ioa_Length = (ULONG)sizeof(channels);
+        if (OpenDevice((CONST_STRPTR)AUDIONAME, 0,
+                       (struct IORequest *)audio, 0) == 0) {
+            audio->ioa_Request.io_Command = CMD_WRITE;
+            audio->ioa_Request.io_Flags = ADIOF_PERVOL;
+            audio->ioa_Data = (UBYTE *)wave;
+            audio->ioa_Length = (ULONG)TG_GUI_CHIME_LENGTH;
+            audio->ioa_Period = 161; /* 3546895 Hz / 161 = 22 kHz (PAL) */
+            audio->ioa_Volume = 48;
+            audio->ioa_Cycles = 1;
+            played = DoIO((struct IORequest *)audio) == 0;
+            CloseDevice((struct IORequest *)audio); /* frees the channel */
+        }
+        tg_gui_chime_request_free((struct IORequest *)audio);
+    }
+    tg_gui_chime_port_free(port);
+    return played;
+}
+#endif
+
+/* 1 when the chime played. */
+static int tg_gui_chime_play(void)
+{
+    signed char *wave;
+    int played = 0;
+
+    wave = (signed char *)malloc((size_t)TG_GUI_CHIME_LENGTH);
+    if (wave != 0) {
+        tg_gui_chime_render(wave);
+        played = tg_gui_chime_ahi(wave);
+        free(wave);
+    }
+    if (played) {
+        tg_gui_log("notify: chime through AHI");
+        return 1;
+    }
+#if defined(__amigaos3__)
+    wave = (signed char *)AllocMem((ULONG)TG_GUI_CHIME_LENGTH, MEMF_CHIP);
+    if (wave != 0) {
+        tg_gui_chime_render(wave);
+        played = tg_gui_chime_paula(wave);
+        FreeMem(wave, (ULONG)TG_GUI_CHIME_LENGTH);
+    }
+    if (played) {
+        tg_gui_log("notify: chime through audio.device");
+        return 1;
+    }
+#endif
+    tg_gui_log("notify: no sound device, DisplayBeep");
+    return 0;
+}
+
 /* New-message notification, window open or parked. */
 typedef struct tg_gui_notify_ui {
     unsigned long seen_seq; /* state->notify_seq already handled */
@@ -10471,10 +10649,12 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
     if (!away || state->notify_mode == TG_GUI_NOTIFY_OFF) {
         return;
     }
-    /* DisplayBeep is the Amiga's polite "look": a flash, or the sound the
-       user set up. Never a raise. */
+    /* A sound, never a raise: our chime, or DisplayBeep where no sound
+       device opens. */
     if (state->notify_beep && !ui->beeped) {
-        DisplayBeep(beep_screen);
+        if (!tg_gui_chime_play()) {
+            DisplayBeep(beep_screen);
+        }
         ui->beeped = 1;
     }
     if (state->notify_mode >= TG_GUI_NOTIFY_POPUP) {

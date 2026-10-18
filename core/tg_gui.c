@@ -405,6 +405,80 @@ int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
     return 0;
 }
 
+unsigned int tg_gui_popup_font_size(unsigned int base, unsigned int height)
+{
+    unsigned int want;
+    unsigned int by_screen;
+
+    if (base == 0U) {
+        base = 8U;
+    }
+    want = base + (base + 3U) / 4U;
+    by_screen = (unsigned int)(((unsigned long)height * 19UL) / 1000UL);
+    if (by_screen > want) {
+        want = by_screen;
+    }
+    if (want > base * 2U) {
+        want = base * 2U;
+    }
+    if (want > 40U) {
+        want = 40U;
+    }
+    return want;
+}
+
+/* One sine cycle, 256 steps of 127. */
+static const signed char tg_gui_sine[256] = {
+    0, 3, 6, 9, 12, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
+    49, 51, 54, 57, 60, 63, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88,
+    90, 92, 94, 96, 98, 100, 102, 104, 106, 107, 109, 111, 112, 113, 115, 116,
+    117, 118, 120, 121, 122, 122, 123, 124, 125, 125, 126, 126, 126, 127, 127, 127,
+    127, 127, 127, 127, 126, 126, 126, 125, 125, 124, 123, 122, 122, 121, 120, 118,
+    117, 116, 115, 113, 112, 111, 109, 107, 106, 104, 102, 100, 98, 96, 94, 92,
+    90, 88, 85, 83, 81, 78, 76, 73, 71, 68, 65, 63, 60, 57, 54, 51,
+    49, 46, 43, 40, 37, 34, 31, 28, 25, 22, 19, 16, 12, 9, 6, 3,
+    0, -3, -6, -9, -12, -16, -19, -22, -25, -28, -31, -34, -37, -40, -43, -46,
+    -49, -51, -54, -57, -60, -63, -65, -68, -71, -73, -76, -78, -81, -83, -85, -88,
+    -90, -92, -94, -96, -98, -100, -102, -104, -106, -107, -109, -111, -112, -113, -115, -116,
+    -117, -118, -120, -121, -122, -122, -123, -124, -125, -125, -126, -126, -126, -127, -127, -127,
+    -127, -127, -127, -127, -126, -126, -126, -125, -125, -124, -123, -122, -122, -121, -120, -118,
+    -117, -116, -115, -113, -112, -111, -109, -107, -106, -104, -102, -100, -98, -96, -94, -92,
+    -90, -88, -85, -83, -81, -78, -76, -73, -71, -68, -65, -63, -60, -57, -54, -51,
+    -49, -46, -43, -40, -37, -34, -31, -28, -25, -22, -19, -16, -12, -9, -6, -3
+};
+
+void tg_gui_chime_render(signed char *out)
+{
+    static const unsigned long notes[2] = { 880UL, 1319UL }; /* A5, E6 */
+    unsigned long note;
+    unsigned long i;
+    unsigned long phase;
+    unsigned long step;
+    unsigned long fade;
+    unsigned long env;
+
+    if (out == 0) {
+        return;
+    }
+    for (note = 0UL; note < 2UL; ++note) {
+        /* 32-bit phase, its top byte the table step; integer only, which
+           a 68000 without an FPU renders in a blink. */
+        phase = 0UL;
+        step = ((notes[note] << 16) / TG_GUI_CHIME_RATE) << 16;
+        for (i = 0UL; i < TG_GUI_CHIME_NOTE; ++i) {
+            fade = ((TG_GUI_CHIME_NOTE - i) << 8) / TG_GUI_CHIME_NOTE;
+            env = (fade * fade) >> 8;    /* 256 down to 0, a bell's tail */
+            if (i < 64UL) {
+                env = (env * i) / 64UL;  /* 3 ms rise: no click */
+            }
+            out[note * TG_GUI_CHIME_NOTE + i] = (signed char)(
+                ((long)tg_gui_sine[(phase >> 24) & 0xFFUL] * (long)env) /
+                320L);
+            phase = (phase + step) & 0xFFFFFFFFUL;
+        }
+    }
+}
+
 /* data/telegram-notify.txt: "mode=auto|off|title|popup|text" and
    "beep=on|off", one per line, in any order. */
 void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep,
@@ -7679,6 +7753,40 @@ int tg_gui_self_test(void)
             return 2;
         }
         memset(ns, 0, sizeof(*ns));
+        /* The pop-up's font follows the screen: a quarter above its font
+           on a low screen, the height's share on a tall one, within twice
+           the screen font. */
+        if (tg_gui_popup_font_size(8U, 256U) != 10U ||
+            tg_gui_popup_font_size(16U, 1080U) != 20U ||
+            tg_gui_popup_font_size(13U, 1080U) != 20U ||
+            tg_gui_popup_font_size(13U, 720U) != 17U ||
+            tg_gui_popup_font_size(16U, 1440U) != 27U ||
+            tg_gui_popup_font_size(8U, 1080U) != 16U) {
+            puts("gui self-test: pop-up font size does not follow the screen");
+            return 2;
+        }
+        /* The chime: silent at both ends, loud in the middle, in range. */
+        {
+            static signed char wave[TG_GUI_CHIME_LENGTH];
+            unsigned long k;
+            int peak = 0;
+
+            tg_gui_chime_render(wave);
+            for (k = 0UL; k < TG_GUI_CHIME_LENGTH; ++k) {
+                int v = wave[k] < 0 ? -wave[k] : wave[k];
+
+                if (v > peak) {
+                    peak = v;
+                }
+            }
+            if (wave[0] != 0 || wave[TG_GUI_CHIME_NOTE] != 0 ||
+                wave[TG_GUI_CHIME_LENGTH - 1UL] > 1 ||
+                wave[TG_GUI_CHIME_LENGTH - 1UL] < -1 || peak < 80 ||
+                peak > 101) {
+                printf("gui self-test: chime wave wrong (peak %d)\n", peak);
+                return 2;
+            }
+        }
 
         /* The pop-up's lines: the chat and the count, or the text. */
         {
