@@ -1338,7 +1338,7 @@ own; the file stops being part of what we distribute, and a new pair can
 be rolled out with a release. The pair itself should belong to the
 project rather than to a personal account.
 
-## Open: one crash on AROS x86_64, in idle, not reproduced
+## Open: a rare crash on AROS x86_64, not reproduced
 
 Seen once during the 0.0.92 field test, on 2026-09-02, in the AROS One
 x86_64 VM: a Software Failure requester, error 0x80000008 (privilege
@@ -1364,6 +1364,22 @@ x86_64 lane has a history of its own, and 0.0.92 fetches more images
 than 0.0.91 did, so an old defect can surface more often without being
 new. Not a release blocker on one occurrence, by decision, but it stays
 here until it is either reproduced or explained.
+
+A second time on 2026-10-18, in the same VM, with 0.0.97 code (8b40da6
+and a test patch that makes up a message every 20 seconds): error
+0x80000008 again, this time in the `input.device` task, PC inside
+`tlsf_freevec`. The client's log stops after the first new-message
+pop-up had opened, at 20 points; the beep was off, so the chime never
+ran. With input.device dead, "More..." could not be pressed. Two more
+runs of the same binary on the same VM, six pop-ups and then about
+thirty in ten minutes, each opened, closed after ten seconds and the
+client ended with Ctrl-C, did not fail, nor did the i386 VM, OS4,
+MorphOS, the Vampire, the G5 and AfA_OS. Again the allocator as victim,
+again not reproduced. AROS x86_64 runs Intuition's window closing on
+the input.device task (CloseWindow waits for it), so a pop-up closing on
+memory that something else already damaged would fail exactly there;
+CloseWindow itself closes only the font Intuition opened, not the one
+we set (read in AROS's closewindow.c).
 
 Next time, before anything else: launch with `--gui-live-debug`, press
 "More..." when the requester appears and keep the screenshot, then read
