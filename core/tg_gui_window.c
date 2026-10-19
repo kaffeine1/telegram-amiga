@@ -6444,29 +6444,6 @@ static void tg_gui_clip_close(struct IOClipReq *io, struct MsgPort *port)
 /* Writes `text` to clip unit 0 as FORM FTXT / CHRS. 1 = ok. */
 /* Pairs are a screen thing: the clipboard gets the text emoticon instead,
    which is what any other Amiga program can show. */
-static void tg_gui_clip_expand_pairs(const char *src, char *dst,
-                                     unsigned long dst_size)
-{
-    unsigned long i = 0UL;
-    unsigned long o = 0UL;
-    unsigned long len = (unsigned long)strlen(src);
-    unsigned long index;
-
-    while (i < len && o + 1UL < dst_size) {
-        if (tg_gui_emoji_pair_at(src, len, i, &index)) {
-            const char *t = tg_gui_session_emoji_text(index);
-
-            while (*t != '\0' && o + 1UL < dst_size) {
-                dst[o++] = *t++;
-            }
-            i += 2UL;
-        } else {
-            dst[o++] = src[i++];
-        }
-    }
-    dst[o] = '\0';
-}
-
 static int tg_gui_clip_write_text_raw(const char *text);
 static int tg_gui_clip_write_text(const char *text)
 {
@@ -6475,7 +6452,7 @@ static int tg_gui_clip_write_text(const char *text)
     if (text == 0) {
         return 0;
     }
-    tg_gui_clip_expand_pairs(text, expanded, sizeof(expanded));
+    tg_gui_emoji_expand_pairs(expanded, sizeof(expanded), text);
     return tg_gui_clip_write_text_raw(expanded);
 }
 
@@ -6945,7 +6922,8 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
 static int tg_gui_amiga_confirm_remove(struct Window *win, const char *name)
 {
     struct EasyStruct es;
-    char body[TG_GUI_NAME_MAX + 80];
+    char shown[3 * TG_GUI_NAME_MAX]; /* an emoticon outgrows its pair */
+    char body[sizeof(shown) + 80];
     const char *pre = "Remove this chat from the list?\n\n";
     const char *post = "\n\n(re-add it later via Search)";
     const char *p;
@@ -6956,7 +6934,8 @@ static int tg_gui_amiga_confirm_remove(struct Window *win, const char *name)
         body[n++] = *p;
     }
     if (name != 0) {
-        for (p = name; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+        tg_gui_emoji_expand_pairs(shown, sizeof(shown), name);
+        for (p = shown; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
             if (*p != '%') {
                 body[n++] = *p;
             }
@@ -9135,8 +9114,9 @@ static int tg_gui_photo_viewer_show(tg_gui_photo_viewer *viewer,
         viewer->kind = tg_gui_session_viewer_photo_kind();
     }
     tg_gui_photo_viewer_cache_kind = viewer->kind;
-    tg_gui_window_copy(viewer->title, sizeof(viewer->title),
-                       message->sender[0] != '\0' ? message->sender : "Photo");
+    tg_gui_emoji_expand_pairs(viewer->title, sizeof(viewer->title),
+                              message->sender[0] != '\0' ? message->sender
+                                                         : "Photo");
     if (tg_gui_session_request_viewer_photo(
             message->photo_id_hi, message->photo_id_lo,
             &viewer->source_w, &viewer->source_h) != 0) {

@@ -165,6 +165,12 @@ int tg_gui_emoji_encode(unsigned long index, char *out);
 /* Bytes of the text unit starting at text[i]: 2 for a pair, else 1. */
 unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
                                    unsigned long i);
+/* Only our own painter draws a pair as a glyph: any font shows its prefix
+   byte as a box. Text that leaves the painter (the pop-up, a requester, a
+   window title, the clipboard) is copied with each pair turned into its text
+   emoticon, cut before an emoticon that would not fit. */
+void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
+                               const char *src);
 /* '@' mention autocomplete popup (composer). */
 #define TG_GUI_MENTION_MAX 5
 #define TG_GUI_MENTION_LEN 40

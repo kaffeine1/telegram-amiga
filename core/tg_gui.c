@@ -724,9 +724,11 @@ void tg_gui_notify_popup_text(const tg_gui_state *state, char *head,
     if (total > 999) {
         total = 999;
     }
-    tg_gui_copy(head, head_size, state->notify_last_name[0] != '\0'
-                                     ? state->notify_last_name
-                                     : "Telegram");
+    /* The pop-up writes with plain Text(): no emoji pairs in its lines. */
+    tg_gui_emoji_expand_pairs(head, head_size,
+                              state->notify_last_name[0] != '\0'
+                                  ? state->notify_last_name
+                                  : "Telegram");
     if (state->notify_mode == TG_GUI_NOTIFY_POPUP_TEXT &&
         state->notify_last_text[0] != '\0') {
         if (count > 1) {
@@ -736,7 +738,7 @@ void tg_gui_notify_popup_text(const tg_gui_state *state, char *head,
                 strcpy(head + length, number);
             }
         }
-        tg_gui_copy(body, body_size, state->notify_last_text);
+        tg_gui_emoji_expand_pairs(body, body_size, state->notify_last_text);
         return;
     }
     if (count == 1) {
@@ -1415,6 +1417,36 @@ unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
                                    unsigned long i)
 {
     return tg_gui_emoji_pair_at(text, len, i, 0) ? 2UL : 1UL;
+}
+
+void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
+                               const char *src)
+{
+    unsigned long len;
+    unsigned long i = 0UL;
+    unsigned long o = 0UL;
+    unsigned long index;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    len = (src != 0) ? (unsigned long)strlen(src) : 0UL;
+    while (i < len && o + 1UL < size) {
+        if (tg_gui_emoji_pair_at(src, len, i, &index)) {
+            const char *t = tg_gui_session_emoji_text(index);
+            unsigned long n = (unsigned long)strlen(t);
+
+            if (o + n >= size) {
+                break; /* half an emoticon reads worse than none */
+            }
+            memcpy(dest + o, t, (size_t)n);
+            o += n;
+            i += 2UL;
+        } else {
+            dest[o++] = src[i++];
+        }
+    }
+    dest[o] = '\0';
 }
 
 int tg_gui_composer_insert_emoji(tg_gui_state *state, unsigned long index)
@@ -7823,6 +7855,49 @@ int tg_gui_self_test(void)
                 printf("gui self-test: notify text pop-up \"%s\" \"%s\"\n",
                        head, body);
                 return 2;
+            }
+            /* A name or a text with an emoji pair: the pop-up draws with
+               plain Text(), so the pair arrives as its text emoticon (the
+               Pi400 showed the prefix byte as a box after a group name). */
+            {
+                int gi = tg_gui_emoji_index_of(0x1f601UL);
+                char pair[3];
+                char want[TG_GUI_NAME_MAX + 16];
+                const char *face;
+
+                if (gi < 0 || !tg_gui_emoji_encode((unsigned long)gi, pair)) {
+                    puts("gui self-test: notify emoji not in the sheet");
+                    return 2;
+                }
+                pair[2] = '\0';
+                face = tg_gui_session_emoji_text((unsigned long)gi);
+                sprintf(ns->notify_last_name, "Amici dell'Amiga%.2s", pair);
+                sprintf(ns->notify_last_text, "ciao %.2s", pair);
+                tg_gui_notify_popup_text(ns, head, sizeof(head), body,
+                                         sizeof(body));
+                sprintf(want, "Amici dell'Amiga%.8s (2)", face);
+                if (strcmp(head, want) != 0 ||
+                    strncmp(body, "ciao ", 5) != 0 ||
+                    strcmp(body + 5, face) != 0) {
+                    printf("gui self-test: notify pop-up emoji \"%s\" "
+                           "\"%s\"\n", head, body);
+                    return 2;
+                }
+                /* No half emoticon where the room ends. */
+                sprintf(body, "ab%.2s", pair);
+                tg_gui_emoji_expand_pairs(want, 2UL + strlen(face), body);
+                if (strcmp(want, "ab") != 0) {
+                    printf("gui self-test: emoji expand cut \"%s\"\n", want);
+                    return 2;
+                }
+                tg_gui_emoji_expand_pairs(want, 3UL + strlen(face), body);
+                if (strncmp(want, "ab", 2) != 0 ||
+                    strcmp(want + 2, face) != 0) {
+                    printf("gui self-test: emoji expand fit \"%s\"\n", want);
+                    return 2;
+                }
+                strcpy(ns->notify_last_name, "Mario Rossi");
+                strcpy(ns->notify_last_text, "ciao, ci sei?");
             }
             if (tg_gui_notify_pick(ns, &hi, &lo) != 1 || lo != 0x40UL) {
                 puts("gui self-test: notify pick missed the last chat");

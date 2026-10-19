@@ -57,6 +57,13 @@ the text client for the plain 68000.
   messages.
 
 ### Fixed
+- An emoji in a name reads as its text emoticon wherever the window's own
+  painter does not draw it: in the new-message pop-up, in the "Remove chat"
+  question and in the title of the photo viewer. The window keeps an emoji
+  it can draw as two bytes of its own, and these places wrote the bytes as
+  they were, so the font showed a box and a stray sign: a group name ending
+  in a grinning face ended in a box and a "&" in the pop-up on a Raspberry
+  Pi 400. It now ends in ":D", as on the clipboard.
 - Ctrl-C with the window open, typed in the Shell that started the client
   or sent with Break from another Shell, quits as Amiga+Q does: the window
   closes and the program ends cleanly. The C library caught the break
