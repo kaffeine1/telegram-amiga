@@ -6,7 +6,7 @@ aarch64). Dates use YYYY-MM-DD. Each release ships on every platform lane
 of its time unless noted: six from 0.0.94, seven from 0.0.96, which adds
 the text client for the plain 68000.
 
-## [Unreleased]
+## [0.0.97] - 2026-10-19
 
 ### Added
 - Service messages show in the chat, centred on a pill as the official
