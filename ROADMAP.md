@@ -175,24 +175,28 @@ Features are therefore grouped by the work they share.
   PiStorm under AfA OS, in the OS4, MorphOS, AROS i386, x86_64 and ARM
   VMs, and for the 68k lanes on WinUAE. A seventh package brings the
   text client to the plain 68000, the end of a long hunt on one A600.
-- **0.0.97, notifications and the field fixes.** In progress on `main`.
-  Done: service messages in the chat; inline photos on screens of 256
-  colours or fewer copied with the blitter (a repaint with a photo on an
-  emulated stock A1200 went from about 3 s to 0.45); the login saying
-  what went wrong in plain words; chats holding a draft no longer hidden
-  from the list; about 200 KB less memory for the plain-68000 text
+- **0.0.97, notifications and the field fixes.** RELEASED 2026-10-19.
+  New messages tell you when you are elsewhere: the window title counts
+  them, our own pop-up, drawn like a chat bubble, shows the chat and the
+  start of the text on machines that draw it at ease, an optional chime
+  plays through AHI or the Amiga's own sound chip, and the AppIcon counts
+  them while the window is iconified and the network is still read (see
+  the section below). Also: service messages in the chat; inline photos on
+  screens of 256 colours or fewer copied with the blitter (a repaint with a
+  photo on an emulated stock A1200 went from about 3 s to 0.45); the login
+  saying what went wrong in plain words; chats holding a draft no longer
+  hidden from the list; about 200 KB less memory for the plain-68000 text
   client; the key exchange and two-step check about 17% faster; AROS
   connections that give up and can be interrupted; photos that no longer
-  flash on MorphOS; new-message notifications (the title with the count,
-  a beep, the AppIcon label with the network read while iconified, and
-  our own pop-up, see the section below), tried in the MorphOS and AROS
-  x86_64 VMs and waiting for the machines; a simpler text client, as the
-  plain-68000 user asked (three lines of help at start, a prompt naming the
-  chat, "You" for your own lines, news from chats outside the list counted
-  in the top line instead of scrolling past, and the chats on F1..F10 as
+  flash on MorphOS; Ctrl-C quitting cleanly with the window open; a simpler
+  text client, as the plain-68000 user asked (three lines of help at start,
+  a prompt naming the chat, "You" for your own lines, news from chats
+  outside the list counted in the top line, and the chats on F1..F10 as
   tabs under the top line, the bar that user sketched, with /move to
-  choose them),
-  with Cyrillic and Greek spelled in Latin letters in both clients.
+  choose them); Cyrillic and Greek spelled in Latin letters in both
+  clients. Validated on a Vampire, a G5 under MorphOS, a PiStorm under AfA
+  OS and a Raspberry Pi 400, in the OS4, MorphOS, AROS i386, x86_64 and ARM
+  VMs, and the text client on that user's A600 and on WinUAE.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
