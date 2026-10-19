@@ -108,8 +108,8 @@ fill_platform_text() {
     # The plain-68000 package thanks the tester who made it possible. Empty
     # elsewhere, so the other packages' texts stay exactly as they were.
     if [ "$1" = "AmigaOS 3.x (68000)" ]; then
-        thanks68k_line_en="Thanks to Paolo Arus (DaRkHoRaCe): without his tenacity in testing,
-round after round on his A600, the 68000 version would never have come
+        thanks68k_line_en="Thanks to Paolo Arus (DaRkHoRaCe), without whose tenacity in testing,
+round after round on an A600, the 68000 version would never have come
 out.
 "
         thanks68k_para_en="$thanks68k_line_en
