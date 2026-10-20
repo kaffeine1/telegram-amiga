@@ -264,7 +264,23 @@ void tg_platform_log(const char *level, const char *message)
 
 void tg_platform_debug(const char *message)
 {
+#if defined(__AROS__) && defined(TG_DIAG_POPUP)
+    /* The pop-up hunt copies every log line to the kernel's debug channel:
+       booted with debug=serial it reaches the host's serial file, in order
+       with the kernel's own exception lines, even when the machine dies
+       before the disk copy of the log is flushed. */
+    const char *p;
+
+    if (message == 0) {
+        return;
+    }
+    for (p = message; *p != '\0'; ++p) {
+        RawPutChar((UBYTE)*p);
+    }
+    RawPutChar('\n');
+#else
     (void)message; /* no dedicated kernel-debug channel used here */
+#endif
 }
 
 void tg_platform_sleep_seconds(unsigned long seconds)
