@@ -9918,6 +9918,25 @@ typedef struct tg_gui_popup {
     char body[TG_GUI_NOTIFY_TEXT_MAX];
 } tg_gui_popup;
 
+#if defined(__AROS__) && defined(TG_DIAG_POPUP)
+/* Keep the last completed resource operation in the log. Addresses are only
+   printed, never followed: damaged resources may be what we are looking for. */
+static void tg_gui_popup_diag(const tg_gui_popup *popup, const char *phase)
+{
+    char line[224];
+
+    sprintf(line, "notify: %.24s win=%p font=%p corners=%p cmap=%p", phase,
+            (void *)popup->window, (void *)popup->font,
+            (void *)popup->corners, (void *)popup->cmap);
+    tg_gui_log(line);
+}
+#define TG_GUI_POPUP_DIAG(popup, phase) tg_gui_popup_diag(popup, phase)
+#define TG_GUI_POPUP_TRACE(phase) tg_gui_log("notify: " phase)
+#else
+#define TG_GUI_POPUP_DIAG(popup, phase) ((void)0)
+#define TG_GUI_POPUP_TRACE(phase) ((void)0)
+#endif
+
 static int tg_gui_popup_width(tg_gui_popup *popup, struct RastPort *rp,
                               const char *text, unsigned long length)
 {
@@ -10081,8 +10100,10 @@ static void tg_gui_popup_close_diskfont(void)
     }
 #endif
     if (DiskfontBase != 0) {
+        TG_GUI_POPUP_TRACE("diskfont CloseLibrary begin");
         CloseLibrary(DiskfontBase);
         DiskfontBase = 0;
+        TG_GUI_POPUP_TRACE("diskfont CloseLibrary end");
     }
 }
 
@@ -10092,11 +10113,39 @@ static void tg_gui_popup_close_diskfont(void)
 static struct TextFont *tg_gui_popup_try_font(struct TextAttr *ta,
                                               UWORD smallest, UWORD largest)
 {
-    struct TextFont *font = OpenDiskFont(ta);
+    struct TextFont *font;
+
+#if defined(__AROS__) && defined(TG_DIAG_POPUP)
+    {
+        char line[160];
+
+        sprintf(line, "notify: OpenDiskFont %.63s size=%u flags=%u begin",
+                ta->ta_Name, (unsigned int)ta->ta_YSize,
+                (unsigned int)ta->ta_Flags);
+        tg_gui_log(line);
+    }
+#endif
+    font = OpenDiskFont(ta);
+#if defined(__AROS__) && defined(TG_DIAG_POPUP)
+    if (font != 0) {
+        char line[160];
+
+        sprintf(line, "notify: OpenDiskFont end font=%p size=%u flags=%u "
+                      "style=%u refs=%u ext=%p", (void *)font,
+                (unsigned int)font->tf_YSize, (unsigned int)font->tf_Flags,
+                (unsigned int)font->tf_Style,
+                (unsigned int)font->tf_Accessors, (void *)font->tf_Extension);
+        tg_gui_log(line);
+    } else {
+        TG_GUI_POPUP_TRACE("OpenDiskFont end, no font");
+    }
+#endif
 
     if (font != 0 && (font->tf_YSize < smallest || font->tf_YSize > largest)) {
+        TG_GUI_POPUP_TRACE("rejected font CloseFont begin");
         CloseFont(font);
         font = 0;
+        TG_GUI_POPUP_TRACE("rejected font CloseFont end");
     }
     return font;
 }
@@ -10156,18 +10205,25 @@ static void tg_gui_popup_close(tg_gui_popup *popup)
         return;
     }
     if (popup->window != 0) {
+        TG_GUI_POPUP_DIAG(popup, "ReleasePen begin");
         tg_gui_popup_release_pens(popup); /* while its screen surely lives */
+        TG_GUI_POPUP_DIAG(popup, "CloseWindow begin");
         CloseWindow(popup->window);
         popup->window = 0;
+        TG_GUI_POPUP_DIAG(popup, "CloseWindow end");
     }
     if (popup->font != 0) {
+        TG_GUI_POPUP_DIAG(popup, "CloseFont begin");
         CloseFont(popup->font);
         popup->font = 0;
+        TG_GUI_POPUP_DIAG(popup, "CloseFont end");
         tg_gui_popup_close_diskfont();
     }
     if (popup->corners != 0) {
+        TG_GUI_POPUP_DIAG(popup, "FreeBitMap begin");
         FreeBitMap(popup->corners);
         popup->corners = 0;
+        TG_GUI_POPUP_DIAG(popup, "FreeBitMap end");
     }
 }
 
@@ -10231,8 +10287,10 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     int i;
 
     popup->compat = tg_gui_amiga_afa_text_compat();
+    TG_GUI_POPUP_DIAG(popup, "font open begin");
     popup->font = tg_gui_popup_open_font(srp->Font,
                                          (UWORD)screen->Height);
+    TG_GUI_POPUP_DIAG(popup, "measure begin");
     font = popup->font != 0 ? popup->font : srp->Font;
     InitRastPort(&mrp);
     if (font != 0) {
@@ -10246,6 +10304,16 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
             ? tg_gui_popup_width(popup, &mrp, sample,
                                  (unsigned long)(sizeof(sample) - 1U))
             : 0;
+#if defined(__AROS__) && defined(TG_DIAG_POPUP)
+    {
+        char line[96];
+
+        /* These calls leave RP_Extra empty in the reference AROS tree.
+           Check the running graphics.library without guessing an SDK LVO. */
+        sprintf(line, "notify: measure end rp_extra=%p", (void *)mrp.RP_Extra);
+        tg_gui_log(line);
+    }
+#endif
     w += 2 * TG_GUI_POPUP_PAD_X;
     if (w < (int)screen->Width / 5) {
         w = (int)screen->Width / 5; /* room for the text on a wide screen */
@@ -10265,7 +10333,9 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     if (top + h > (int)screen->Height) {
         top = 0;
     }
+    TG_GUI_POPUP_DIAG(popup, "corners begin");
     popup->corners = tg_gui_popup_corners(screen, left, top, w, h);
+    TG_GUI_POPUP_DIAG(popup, "corners end");
     i = 0;
     tags[i].ti_Tag = WA_Left;
     tags[i++].ti_Data = (ULONG)left;
@@ -10290,7 +10360,9 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     tags[i++].ti_Data = TG_GUI_TAG(screen);
     tags[i].ti_Tag = TAG_END;
     tags[i++].ti_Data = 0;
+    TG_GUI_POPUP_DIAG(popup, "OpenWindow begin");
     win = OpenWindowTagList(0, tags);
+    TG_GUI_POPUP_TRACE("OpenWindow end");
     if (win == 0) {
         tg_gui_popup_close(popup); /* the corners */
         return 1;
@@ -10313,12 +10385,15 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
                        8UL;
     popup->name_fallback = light;
     popup->name_tint = -2;
+    TG_GUI_POPUP_DIAG(popup, "pens begin");
     tg_gui_popup_pen(popup, TG_GUI_POPUP_BUBBLE,
                      &tg_gui_dark_pens[TG_GUI_PEN_SURFACE], dark);
     tg_gui_popup_pen(popup, TG_GUI_POPUP_TEXT, &tg_gui_popup_text_rgb, light);
     tg_gui_popup_pen(popup, TG_GUI_POPUP_DIM, &tg_gui_popup_dim_rgb, light);
     tg_gui_popup_name_pen(popup);
+    TG_GUI_POPUP_DIAG(popup, "paint begin");
     tg_gui_popup_repaint(popup);
+    TG_GUI_POPUP_DIAG(popup, "paint end");
     {
         char line[128];
 
@@ -10371,8 +10446,10 @@ static void tg_gui_popup_show(tg_gui_popup *popup, const tg_gui_state *state,
         tg_gui_popup_close(popup);
     }
     if (popup->window != 0) {
+        TG_GUI_POPUP_DIAG(popup, "repaint begin");
         tg_gui_popup_name_pen(popup);
         tg_gui_popup_repaint(popup);
+        TG_GUI_POPUP_DIAG(popup, "repaint end");
     } else if (tg_gui_popup_open(popup, screen, pub != 0) != 0) {
         tg_gui_log("notify: pop-up did not open");
     }
@@ -10622,9 +10699,11 @@ static void tg_gui_window_notify_title(struct Window *window,
         strcmp((const char *)window->Title, want) == 0) {
         return; /* already showing it: no title bar redraw */
     }
+    TG_GUI_POPUP_TRACE("title begin");
     memcpy(tg_gui_notify_title_text, want, sizeof(want));
     SetWindowTitles(window, (CONST_STRPTR)tg_gui_notify_title_text,
                     (CONST_STRPTR)~0UL);
+    TG_GUI_POPUP_TRACE("title end");
 }
 
 /* What a run of news does while the user is away: one beep, then the
@@ -10641,6 +10720,7 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
     if (!away || state->notify_mode == TG_GUI_NOTIFY_OFF) {
         return;
     }
+    TG_GUI_POPUP_TRACE("news begin");
     /* A sound, never a raise: our chime, or DisplayBeep where no sound
        device opens. */
     if (state->notify_beep && !ui->beeped) {
@@ -10652,6 +10732,7 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
     if (state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
         tg_gui_popup_show(&ui->popup, state, popup_screen);
     }
+    TG_GUI_POPUP_TRACE("news end");
 }
 
 static void tg_gui_window_notify_turn(tg_gui_notify_ui *ui,
@@ -14376,6 +14457,7 @@ static struct AppIcon *tg_gui_appicon_relabel(struct AppIcon *icon,
     struct AppIcon *fresh;
     struct Message *m;
 
+    TG_GUI_POPUP_TRACE("AppIcon relabel begin");
 #if defined(__AROS__)
     /* Wanderer knows an AppIcon by its address and keeps the label it read
        first, and one removed and added again comes back at the same
@@ -14383,6 +14465,7 @@ static struct AppIcon *tg_gui_appicon_relabel(struct AppIcon *icon,
     fresh = AddAppIcon(0UL, 0UL, TG_GUI_APPICON_TEXT(shown), port, 0, dobj,
                        TAG_DONE);
     if (fresh == 0) {
+        TG_GUI_POPUP_TRACE("AppIcon relabel failed");
         return icon; /* the old label stays */
     }
     RemoveAppIcon(icon);
@@ -14396,6 +14479,7 @@ static struct AppIcon *tg_gui_appicon_relabel(struct AppIcon *icon,
         ReplyMsg(m); /* a double-click on the old one still counts */
         *clicked = 1;
     }
+    TG_GUI_POPUP_TRACE("AppIcon relabel end");
     return fresh;
 }
 

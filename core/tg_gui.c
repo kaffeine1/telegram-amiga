@@ -7919,6 +7919,60 @@ int tg_gui_self_test(void)
         }
     }
 
+    /* Notification buffers also feed native OS calls. Check every small
+       capacity with full-length inputs and a count beyond the display cap. */
+    {
+        tg_gui_state *ns = tg_gui_test_scratch_state();
+        char head[130];
+        char body[130];
+        char want[128];
+        unsigned long size;
+        int kind;
+
+        memset(ns, 0, sizeof(*ns));
+        ns->notify_mode = TG_GUI_NOTIFY_POPUP_TEXT;
+        tg_gui_notify_count(ns, 0UL, 1UL);
+        ns->notify_peers[0].count = 1000;
+        ns->notify_last_peer_lo = 1UL;
+        memset(ns->notify_last_name, 'A', sizeof(ns->notify_last_name) - 1U);
+        memset(ns->notify_last_text, 'B', sizeof(ns->notify_last_text) - 1U);
+        for (kind = 0; kind < 3; ++kind) {
+            for (size = 0UL; size <= 128UL; ++size) {
+                memset(head, 'Z', sizeof(head));
+                memset(body, 'Z', sizeof(body));
+                if (kind == 0) {
+                    tg_gui_notify_title(ns, head + 1, size);
+                } else if (kind == 1) {
+                    tg_gui_notify_icon_label(ns, head + 1, size);
+                } else {
+                    tg_gui_notify_popup_text(ns, head + 1, size,
+                                             body + 1, size);
+                }
+                if (head[0] != 'Z' || head[size + 1UL] != 'Z' ||
+                    body[0] != 'Z' || body[size + 1UL] != 'Z' ||
+                    (size > 0UL && memchr(head + 1, '\0', size) == 0) ||
+                    (kind == 2 && size > 0UL &&
+                     memchr(body + 1, '\0', size) == 0)) {
+                    printf("gui self-test: notify buffer bounds kind=%d "
+                           "size=%lu\n", kind, size);
+                    return 2;
+                }
+            }
+            if (kind == 0) {
+                sprintf(want, "%.80s (999 new)", TG_APP_TITLE);
+            } else if (kind == 1) {
+                strcpy(want, "TelegramAmiga (999)");
+            } else {
+                sprintf(want, "%.47s (999)", ns->notify_last_name);
+            }
+            if (strcmp(head + 1, want) != 0 ||
+                (kind == 2 && strcmp(body + 1, ns->notify_last_text) != 0)) {
+                puts("gui self-test: notify long text or capped count wrong");
+                return 2;
+            }
+        }
+    }
+
     /* Missing settings stay automatic; explicit emoji OFF/ON survives a new
        run. A failed save must report failure instead of claiming persistence. */
     {
