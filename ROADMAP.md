@@ -959,7 +959,7 @@ history. The same window can tell the end of a download or an upload
 that ran while the user was elsewhere.
 
 A sound for new messages, asked for since by a user, with two wishes of
-his own: a sound per chat, and no ringing on and on. It plays through the
+their own: a sound per chat, and no ringing on and on. It plays through the
 system's sound datatype, so a short sample shipped with the client works
 out of the box and any sound the system reads (IFF 8SVX everywhere, WAV
 where a datatype is installed) can take its place; the beep stays for
@@ -1385,12 +1385,24 @@ memory that something else already damaged would fail exactly there;
 CloseWindow itself closes only the font Intuition opened, not the one
 we set (read in AROS's closewindow.c).
 
+On 2026-10-20 the pop-up was checked against the AROS sources, call by
+call: its font, window, pens and corner bitmap are opened, used and
+released in an order AROS supports, and the RastPort it measures with
+allocates nothing. Since the first crash came before the pop-up existed,
+the damage more likely comes from work both share, the receive, media and
+redraw paths, with the pop-up's close as the place where it shows. An AROS
+build with `-DTG_DIAG_POPUP` logs every step of the pop-up and of the title
+and AppIcon updates.
+
 Next time, before anything else: launch with `--gui-live-debug`, press
 "More..." when the requester appears and keep the screenshot, then read
 the tail of `tg-gui-debug.log`. And the x86_64 VM should boot with
 `debug=serial` on the AROS kernel line, so the kernel's own trace lands
 in the host file the launcher already captures; without that argument
-the serial channel stays silent, which is what we found.
+the serial channel stays silent, which is what we found. And the kernel's
+`mungwall` argument, given at boot, puts guard walls around every
+allocation and reports the first one damaged, with its owner, before the
+allocator trips on it.
 
 ## Planned: two MorphOS popup glitches
 
