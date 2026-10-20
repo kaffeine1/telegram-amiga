@@ -990,7 +990,13 @@ the machine's choice.
 In two steps. 0.0.97 brings the title with the count, the beep, the
 AppIcon label with the update poll running while parked, and the pop-up,
 with their settings. 0.0.98 brings the sounds per chat and the per-chat
-mute, which reads the notify settings the dialogs already carry.
+mute, which reads the notify settings the dialogs already carry. Its first
+half is on `main` since 2026-10-20: who rings is decided per chat (Telegram's
+mute checked against the server's clock, groups and channels quiet until
+allowed, half a minute between two rings of one chat, a muted chat without
+the pop-up) and the chat row's own menu sets Mute and Enable ring. Still to
+come: the sound file through the sound datatype, its requester, a sound
+per chat and the text client's sound.
 
 How the first step came out, on `main` for 0.0.97. The pop-up sits in
 the top right corner below the screen bar, a fifth of the screen wide at

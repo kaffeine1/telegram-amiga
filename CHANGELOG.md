@@ -6,6 +6,24 @@ aarch64). Dates use YYYY-MM-DD. Each release ships on every platform lane
 of its time unless noted: six from 0.0.94, seven from 0.0.96, which adds
 the text client for the plain 68000.
 
+## [Unreleased]
+
+### Added
+- Each chat decides whether its new messages ring. A chat muted in
+  Telegram, on the phone or anywhere else, stays silent here too and shows
+  no pop-up until the time it was muted for has passed; it still counts in
+  the window title and on its row. That time is checked against Telegram's
+  clock, so a machine whose own clock nobody set still gets it right. Chats
+  Telegram keeps silent, messages sent silently and your own messages from
+  another device never ring. Direct chats ring; groups and channels stay
+  quiet until you let them; a chat that rang waits half a minute before it
+  can ring again; the chat open in front of you never rings, while the
+  others now ring even with the window in front. The right mouse button
+  over a chat in the list opens a menu of its own: Remove chat, Mute or
+  Unmute, and for groups and channels Enable or Disable ring; anywhere
+  else in the window it still opens the menu bar. The choices are kept in
+  data/telegram-chat-notify.txt.
+
 ## [0.0.97] - 2026-10-19
 
 ### Added
