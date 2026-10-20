@@ -10537,64 +10537,103 @@ static int tg_mtproto_gui_fetch_group_members(
    open file, so every quiet query left a dropping in the program drawer
    (field report 2026-08-04: a drawer flooded with tmp* files). Quiet streams
    now live in T: (the standard RAM-backed temp assign, same home as the
-   search cache), one slot per nesting level, swept at first use and when the
+   search cache), one slot per live stream, swept at first use and when the
    context closes. The host keeps the POSIX tmpfile(), which really is
    anonymous. */
 #if defined(__amigaos3__) || defined(__amigaos4__) || defined(__MORPHOS__) || \
     defined(__MORPHOS) || defined(__AROS__)
+#define TG_MTPROTO_NAMED_QUIET 1
+#endif
+
+#if defined(TG_MTPROTO_NAMED_QUIET) || !defined(TG_NO_SELFTEST)
 #define TG_MTPROTO_QUIET_TMP_SLOTS 8
-static int tg_mtproto_quiet_depth;
+static FILE *tg_mtproto_quiet_files[TG_MTPROTO_QUIET_TMP_SLOTS];
 
 static void tg_mtproto_quiet_tmp_name(char *out, int slot)
 {
+#if defined(TG_MTPROTO_NAMED_QUIET)
     sprintf(out, "T:tg-quiet-%d.tmp", slot);
+#else
+    sprintf(out, "tg-quiet-selftest-%d.tmp", slot);
+#endif
 }
 
-static void tg_mtproto_quiet_tmp_sweep(void)
+static void tg_mtproto_named_quiet_tmp_sweep(void)
 {
     char name[32];
     int i;
 
     for (i = 0; i < TG_MTPROTO_QUIET_TMP_SLOTS; ++i) {
-        tg_mtproto_quiet_tmp_name(name, i);
-        (void)remove(name);
+        if (tg_mtproto_quiet_files[i] == 0) {
+            tg_mtproto_quiet_tmp_name(name, i);
+            (void)remove(name);
+        }
     }
 }
 
-static FILE *tg_mtproto_open_quiet_stream(FILE *fallback)
+static FILE *tg_mtproto_open_named_quiet_stream(FILE *fallback)
 {
     static int swept;
     char name[32];
     FILE *quiet;
+    int slot;
 
     if (!swept) {
         swept = 1;
-        tg_mtproto_quiet_tmp_sweep();
+        tg_mtproto_named_quiet_tmp_sweep();
     }
-    if (tg_mtproto_quiet_depth >= TG_MTPROTO_QUIET_TMP_SLOTS) {
+    for (slot = 0; slot < TG_MTPROTO_QUIET_TMP_SLOTS; ++slot) {
+        if (tg_mtproto_quiet_files[slot] == 0) {
+            break;
+        }
+    }
+    if (slot == TG_MTPROTO_QUIET_TMP_SLOTS) {
         return fallback;
     }
-    tg_mtproto_quiet_tmp_name(name, tg_mtproto_quiet_depth);
+    tg_mtproto_quiet_tmp_name(name, slot);
     quiet = tg_file_fopen_replace(name, "w+b"); /* a stale slot is replaced */
     if (quiet == 0) {
         return fallback;
     }
-    ++tg_mtproto_quiet_depth;
+    tg_mtproto_quiet_files[slot] = quiet;
     return quiet;
+}
+
+static void tg_mtproto_close_named_quiet_stream(FILE *quiet, FILE *fallback)
+{
+    char name[32];
+    int slot;
+
+    if (quiet != 0 && quiet != fallback) {
+        /* A photo can be cancelled while an upload still owns a newer stream.
+           Depth would remove the upload's name and reuse its live slot. */
+        for (slot = 0; slot < TG_MTPROTO_QUIET_TMP_SLOTS; ++slot) {
+            if (tg_mtproto_quiet_files[slot] == quiet) {
+                tg_mtproto_quiet_files[slot] = 0;
+                fclose(quiet);
+                tg_mtproto_quiet_tmp_name(name, slot);
+                (void)remove(name);
+                break;
+            }
+        }
+    }
+}
+#endif
+
+#if defined(TG_MTPROTO_NAMED_QUIET)
+static FILE *tg_mtproto_open_quiet_stream(FILE *fallback)
+{
+    return tg_mtproto_open_named_quiet_stream(fallback);
 }
 
 static void tg_mtproto_close_quiet_stream(FILE *quiet, FILE *fallback)
 {
-    char name[32];
+    tg_mtproto_close_named_quiet_stream(quiet, fallback);
+}
 
-    if (quiet != 0 && quiet != fallback) {
-        fclose(quiet);
-        if (tg_mtproto_quiet_depth > 0) {
-            --tg_mtproto_quiet_depth;
-            tg_mtproto_quiet_tmp_name(name, tg_mtproto_quiet_depth);
-            (void)remove(name);
-        }
-    }
+static void tg_mtproto_quiet_tmp_sweep(void)
+{
+    tg_mtproto_named_quiet_tmp_sweep();
 }
 #else
 static FILE *tg_mtproto_open_quiet_stream(FILE *fallback)
@@ -10617,6 +10656,73 @@ static void tg_mtproto_close_quiet_stream(FILE *quiet, FILE *fallback)
 
 static void tg_mtproto_quiet_tmp_sweep(void)
 {
+}
+#endif
+
+#if !defined(TG_NO_SELFTEST) && !defined(TG_MTPROTO_NAMED_QUIET)
+static int tg_mtproto_quiet_files_self_test(void)
+{
+    FILE *files[TG_MTPROTO_QUIET_TMP_SLOTS];
+    FILE *extra;
+    char name[32];
+    char text[32];
+    unsigned long length;
+    int failed;
+    int i;
+
+    memset(files, 0, sizeof(files));
+    failed = 0;
+    for (i = 0; i < TG_MTPROTO_QUIET_TMP_SLOTS; ++i) {
+        files[i] = tg_mtproto_open_named_quiet_stream(stdout);
+        if (files[i] == stdout) {
+            failed = 1;
+            break;
+        }
+        if (fputs("still owned\n", files[i]) == EOF ||
+            fflush(files[i]) != 0) {
+            failed = 1;
+            break;
+        }
+    }
+    if (!failed) {
+        extra = tg_mtproto_open_named_quiet_stream(stdout);
+        failed = extra != stdout;
+        tg_mtproto_close_named_quiet_stream(extra, stdout);
+        /* Closing an older job must neither remove a newer job's file nor
+           let a sweep or the next open replace that file. */
+        tg_mtproto_close_named_quiet_stream(files[0], stdout);
+        files[0] = 0;
+        tg_mtproto_named_quiet_tmp_sweep();
+        files[0] = tg_mtproto_open_named_quiet_stream(stdout);
+        if (files[0] == stdout || fputs("reused\n", files[0]) == EOF ||
+            fflush(files[0]) != 0) {
+            failed = 1;
+        }
+        for (i = 1; i < TG_MTPROTO_QUIET_TMP_SLOTS; ++i) {
+            tg_mtproto_quiet_tmp_name(name, i);
+            if (tg_file_read_text(name, text, sizeof(text), &length) !=
+                    TG_FILE_OK || strcmp(text, "still owned\n") != 0) {
+                failed = 1;
+            }
+        }
+    }
+    for (i = 0; i < TG_MTPROTO_QUIET_TMP_SLOTS; ++i) {
+        tg_mtproto_close_named_quiet_stream(files[i], stdout);
+    }
+    for (i = 0; i < TG_MTPROTO_QUIET_TMP_SLOTS; ++i) {
+        tg_mtproto_quiet_tmp_name(name, i);
+        extra = fopen(name, "rb");
+        if (extra != 0) {
+            fclose(extra);
+            failed = 1;
+        }
+    }
+    tg_mtproto_named_quiet_tmp_sweep();
+    if (failed) {
+        puts("probe self-test: quiet stream lost another owner's file");
+        return 2;
+    }
+    return 0;
 }
 #endif
 
@@ -16320,6 +16426,12 @@ int tg_mtproto_probe_self_test(void)
     FILE *quiet;
     tg_mtproto_tl_writer writer;
 
+#if !defined(TG_MTPROTO_NAMED_QUIET)
+    if (tg_mtproto_quiet_files_self_test() != 0) {
+        return 2;
+    }
+#endif
+
     /* Message times: a set clock in summer time with a Locale that says
        UTC+1 keeps its two hours; a clock left on 1978, or a day off, falls
        back to the Locale zone instead of anchoring the times on it. */
@@ -16594,14 +16706,31 @@ int tg_mtproto_probe_self_test(void)
         char back[16];
         unsigned long back_len;
         FILE *rf;
+        int failed;
 
         rf = tg_file_fopen_replace(rep_path, "wb");
-        if (rf == 0 || fputs("0123456789", rf) == EOF || fclose(rf) != 0) {
+        if (rf == 0) {
+            (void)remove(rep_path);
+            return 2;
+        }
+        failed = fputs("0123456789", rf) == EOF;
+        if (fclose(rf) != 0) {
+            failed = 1;
+        }
+        if (failed) {
             (void)remove(rep_path);
             return 2;
         }
         rf = tg_file_fopen_replace(rep_path, "wb");
-        if (rf == 0 || fputs("ab", rf) == EOF || fclose(rf) != 0) {
+        if (rf == 0) {
+            (void)remove(rep_path);
+            return 2;
+        }
+        failed = fputs("ab", rf) == EOF;
+        if (fclose(rf) != 0) {
+            failed = 1;
+        }
+        if (failed) {
             (void)remove(rep_path);
             return 2;
         }

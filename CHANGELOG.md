@@ -24,6 +24,14 @@ the text client for the plain 68000.
   else in the window it still opens the menu bar. The choices are kept in
   data/telegram-chat-notify.txt.
 
+### Fixed
+- The temporary files in T: that keep the network's progress lines out of
+  sight no longer get crossed. Switching chat while a photo was still
+  loading and a file was being sent could take the sender's file away from
+  it and hand its name to the next request; that request could not open it
+  and wrote its progress lines to the Shell window instead. Each request
+  now keeps its own file until it is done.
+
 ## [0.0.97] - 2026-10-19
 
 ### Added
