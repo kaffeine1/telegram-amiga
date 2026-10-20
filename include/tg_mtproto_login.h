@@ -351,6 +351,20 @@ typedef struct tg_mtproto_dialogs_summary {
 
 #define TG_MTPROTO_DIALOG_PEER_MAX 32U
 
+/* Transient dialog settings, never part of telegram-peers.txt. */
+#define TG_MTPROTO_PEER_USER_CONSTRUCTOR 0x59511722UL
+#define TG_MTPROTO_PEER_CHAT_CONSTRUCTOR 0x36c6019aUL
+#define TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR 0xa2a5371eUL
+typedef struct tg_mtproto_peer_notify_settings {
+    unsigned long mute_until;
+    unsigned char silent;
+    unsigned char valid;
+} tg_mtproto_peer_notify_settings;
+
+void tg_mtproto_peer_notify_get(unsigned long peer_constructor,
+                                 unsigned long id_hi, unsigned long id_lo,
+                                 tg_mtproto_peer_notify_settings *out);
+
 typedef struct tg_mtproto_dialog_peer {
     unsigned long peer_constructor;
     unsigned long id_hi;

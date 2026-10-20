@@ -213,7 +213,27 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
 #define TG_GUI_NOTIFY_POPUP 2      /* and a pop-up with the chat */
 #define TG_GUI_NOTIFY_POPUP_TEXT 3 /* and the start of the text in it */
 #define TG_GUI_NOTIFY_PEERS 32
+#define TG_GUI_RING_PEERS TG_GUI_MAX_CHATS
 #define TG_GUI_NOTIFY_TEXT_MAX 96
+#define TG_GUI_NOTIFY_QUIET_SECONDS 30UL
+#define TG_GUI_NOTIFY_OVERRIDE_FILE "data/telegram-chat-notify.txt"
+#define TG_GUI_NOTIFY_DEFAULT 0
+#define TG_GUI_NOTIFY_MUTE 1
+#define TG_GUI_NOTIFY_RING 2
+
+typedef struct tg_gui_notify_override {
+    int choice;
+    /* Reserved for phase 2; round trips without interpreting the filename. */
+    char sound[256];
+} tg_gui_notify_override;
+
+typedef struct tg_gui_ring_peer {
+    unsigned long peer_constructor;
+    unsigned long peer_hi;
+    unsigned long peer_lo;
+    unsigned long last_ring;
+    int pending;
+} tg_gui_ring_peer;
 
 typedef struct tg_gui_notify_peer {
     unsigned long peer_hi;
@@ -231,6 +251,7 @@ typedef struct tg_gui_chat {
     unsigned long index;      /* 1-based peer-cache number, to open this chat */
     unsigned long peer_id_hi; /* matches a notification to this row */
     unsigned long peer_id_lo;
+    int is_group;             /* basic groups and channels start quiet */
     int flash;                /* a notification landed since last opened: blink the badge */
 } tg_gui_chat;
 
@@ -320,8 +341,10 @@ typedef struct tg_gui_state {
     tg_gui_notify_peer notify_peers[TG_GUI_NOTIFY_PEERS];
     int notify_peer_count;
     int notify_overflow;   /* news from more chats than the table holds */
-    unsigned long notify_seq; /* bumps once per counted notification */
-    unsigned long notify_last_peer_hi; /* the chat of the last one */
+    const char *notify_override_path; /* the window's path; NULL uses defaults */
+    tg_gui_ring_peer notify_rings[TG_GUI_RING_PEERS];
+    unsigned long notify_seq; /* bumps for news eligible for a pop-up */
+    unsigned long notify_last_peer_hi; /* the last unmuted notification */
     unsigned long notify_last_peer_lo;
     char notify_last_name[TG_GUI_NAME_MAX];
     char notify_last_text[TG_GUI_NOTIFY_TEXT_MAX]; /* Latin-1 */
@@ -465,6 +488,8 @@ typedef struct tg_gui_state {
        agree without re-measuring. */
     int ctx_visible;
     int ctx_msg;
+    int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
+    int ctx_notify_choice;
     int ctx_x, ctx_y;
     int ctx_hover;
     int ctx_w;
@@ -644,6 +669,29 @@ void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep,
                                     int *mode_explicit);
 int tg_gui_notify_preferences_save(const char *path, int mode, int beep,
                                    int mode_explicit);
+void tg_gui_notify_override_get(const char *path, unsigned long peer_hi,
+                                unsigned long peer_lo,
+                                tg_gui_notify_override *out);
+int tg_gui_notify_override_set(const char *path, unsigned long peer_hi,
+                               unsigned long peer_lo,
+                               const tg_gui_notify_override *value);
+/* Pure sound policy. Telegram's mute and silent always win over local ring.
+   Thirty seconds absorbs a short conversation burst without silencing a
+   later message for the whole time the window is away. mute_until uses server
+   time; last_ring and the quiet spell use local time. last_ring 0 is new. */
+int tg_gui_notify_should_ring(unsigned long peer_constructor,
+                               unsigned long mute_until, int peer_silent,
+                               int choice, int silent, int is_out,
+                               int open_in_front, unsigned long server_now,
+                               unsigned long local_now,
+                               unsigned long last_ring);
+void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
+                              unsigned long peer_hi, unsigned long peer_lo,
+                              int silent, int is_out, unsigned long now);
+/* Consumes pending chats, returning 1 for each permitted chime. The history
+   survives reading the news and closing/reopening the native window. */
+int tg_gui_notify_ring_take(tg_gui_state *state, unsigned long server_now,
+                             unsigned long local_now);
 /* Counts one new message in the chat (hi, lo); the caller already skipped
    the chat open in front of the user. */
 void tg_gui_notify_count(tg_gui_state *state, unsigned long peer_hi,
@@ -740,6 +788,9 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_FORWARD_TO 7
 #define TG_GUI_CTX_SAVE_PHOTO 8
 #define TG_GUI_CTX_SENDPHOTO 9
+#define TG_GUI_CTX_CHAT_REMOVE 10
+#define TG_GUI_CTX_CHAT_MUTE 11
+#define TG_GUI_CTX_CHAT_RING 12
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
 #define TG_GUI_CTX_ITEMS_MAX 10

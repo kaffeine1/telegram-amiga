@@ -9,6 +9,7 @@
 
 #include "tg_gui_driver.h"
 #include "tg_mtproto_probe.h"
+#include "tg_gui_session.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -671,6 +672,10 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
     }
     state = gui->state;
     n = count;
+    if (state->ctx_chat > 0) {
+        state->ctx_visible = 0; /* the row indices are about to change */
+        state->ctx_chat = 0;
+    }
     if (n > TG_GUI_MAX_CHATS) {
         n = TG_GUI_MAX_CHATS;
     }
@@ -698,6 +703,7 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         chat->index = rows[i].index;
         chat->peer_id_hi = rows[i].peer_id_hi;
         chat->peer_id_lo = rows[i].peer_id_lo;
+        chat->is_group = !rows[i].is_user;
         chat->flash = 0;
         if (rows[i].is_current) {
             state->selected_chat = state->chat_count;
@@ -711,8 +717,9 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
    per chat, so the id alone disambiguates. The currently open chat does not
    flash (you are already reading it). Unmatched peers (not in the sidebar) are
    ignored -- there is no row to badge. */
-static void tg_gui_driver_on_notification(void *ctx,
-                                          const tg_chat_notify_entry *entry)
+static void tg_gui_driver_notify_at(void *ctx,
+                                     const tg_chat_notify_entry *entry,
+                                     unsigned long server_now)
 {
     tg_gui_chat_driver *gui;
     tg_gui_state *state;
@@ -723,6 +730,9 @@ static void tg_gui_driver_on_notification(void *ctx,
         return;
     }
     state = gui->state;
+    if (entry->is_out) {
+        return;
+    }
     /* While the search picker is up, state->chats[] holds transient search
        results (peer id 0), not the real sidebar -- nothing to badge here. */
     if (state->in_search) {
@@ -740,13 +750,33 @@ static void tg_gui_driver_on_notification(void *ctx,
                open chat is not in front of you either: its news count for the
                title and the pop-up, still without a badge on the row. */
             if (i != state->selected_chat || state->notify_away) {
+                tg_mtproto_peer_notify_settings settings;
+                tg_gui_notify_override value;
+                time_t now;
+
                 if (i != state->selected_chat) {
                     chat->unread += 1;
                     chat->flash = 1;
                 }
-                /* The same message, counted for the title and the pop-up. */
+                /* Muted news still count in the title and on the row. Only
+                   mute_until or local mute hides the pop-up; Telegram's
+                   per-chat silent setting silences the chime alone. */
                 tg_gui_notify_count(state, entry->peer_id_hi,
                                     entry->peer_id_lo);
+                tg_mtproto_peer_notify_get(entry->peer_constructor,
+                    entry->peer_id_hi, entry->peer_id_lo, &settings);
+                tg_gui_notify_override_get(state->notify_override_path,
+                    entry->peer_id_hi, entry->peer_id_lo, &value);
+                if (settings.mute_until > server_now ||
+                    value.choice == TG_GUI_NOTIFY_MUTE) {
+                    return;
+                }
+                now = time(0);
+                tg_gui_notify_ring_note(state, entry->peer_constructor,
+                                         entry->peer_id_hi, entry->peer_id_lo,
+                                         entry->silent, entry->is_out,
+                                         now == (time_t)-1 ? 0UL :
+                                         (unsigned long)now);
                 state->notify_last_peer_hi = entry->peer_id_hi;
                 state->notify_last_peer_lo = entry->peer_id_lo;
                 tg_gui_driver_copy(state->notify_last_name,
@@ -760,6 +790,12 @@ static void tg_gui_driver_on_notification(void *ctx,
             return;
         }
     }
+}
+
+static void tg_gui_driver_on_notification(void *ctx,
+                                          const tg_chat_notify_entry *entry)
+{
+    tg_gui_driver_notify_at(ctx, entry, tg_gui_session_server_time());
 }
 
 void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
@@ -994,6 +1030,108 @@ static int tg_gui_driver_webpage_self_test(void)
     return 1;
 }
 
+static int tg_gui_driver_notify_mute_self_test(void)
+{
+    /* The dialog and peerDialogs constructors/field order are the same as
+       the notify fixture in tg_mtproto_login.c. Only the notify fields vary. */
+    static const unsigned long words[] = {
+        0x1cb5c415UL, 1UL, 0xd58a08c6UL, 0UL,
+        TG_MTPROTO_PEER_USER_CONSTRUCTOR, 7UL, 6UL,
+        1UL, 0UL, 0UL, 1UL, 0UL, 0UL, 0x99622c0cUL, 6UL,
+        0xbc799737UL, 0UL
+    };
+    static const struct {
+        unsigned long mute_until, server_now;
+        int silent, choice, popup, ring, away;
+    } cases[] = {
+        { 1500UL, 1000UL, 0, TG_GUI_NOTIFY_DEFAULT, 0, 0, 1 },
+        { 1500UL, 2000UL, 0, TG_GUI_NOTIFY_DEFAULT, 1, 1, 0 },
+        { 1500UL, 1500UL, 0, TG_GUI_NOTIFY_DEFAULT, 1, 1, 1 },
+        { 0UL, 1000UL, 1, TG_GUI_NOTIFY_DEFAULT, 1, 0, 1 },
+        { 0UL, 1000UL, 0, TG_GUI_NOTIFY_MUTE, 0, 0, 1 },
+        { 1500UL, 2000UL, 0, TG_GUI_NOTIFY_MUTE, 0, 0, 1 },
+        { 1500UL, 1000UL, 0, TG_GUI_NOTIFY_RING, 0, 0, 1 }
+    };
+    const char *path = "tg-gui-driver-mute-self-test.tmp";
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_chat_driver gui;
+    tg_chat_driver driver;
+    tg_chat_notify_entry note;
+    tg_gui_notify_override value;
+    tg_mtproto_dialog_peer_list list;
+    tg_mtproto_tl_writer writer;
+    unsigned char body[96];
+    unsigned long i;
+    unsigned long j;
+    unsigned long word;
+    int ok;
+
+    ok = 1;
+    (void)remove(path);
+    for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]) && ok; ++i) {
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        for (j = 0UL; j < sizeof(words) / sizeof(words[0]); ++j) {
+            word = j == 15UL ?
+                (cases[i].silent ? 0x997275b5UL : 0xbc799737UL) :
+                j == 16UL ? cases[i].mute_until : words[j];
+            if (tg_mtproto_tl_write_u32(&writer, word) != TG_MTPROTO_TL_OK) {
+                ok = 0;
+            }
+        }
+        memset(state, 0, sizeof(*state));
+        tg_gui_chat_driver_bind(&gui, state, &driver);
+        memset(&value, 0, sizeof(value));
+        value.choice = cases[i].choice;
+        ok = ok && tg_mtproto_parse_dialog_peer_list(0x3371c354UL, body,
+                       writer.length, &list) == TG_MTPROTO_TL_OK &&
+             list.count == 1UL &&
+             tg_gui_notify_override_set(path, 6UL, 7UL, &value) == 0;
+        state->notify_override_path = path;
+        state->notify_mode = TG_GUI_NOTIFY_POPUP_TEXT;
+        state->notify_beep = 1;
+        state->notify_away = cases[i].away;
+        state->chat_count = 2;
+        state->chats[1].peer_id_hi = 6UL;
+        state->chats[1].peer_id_lo = 7UL;
+        strcpy(state->chats[1].name, "Fixture chat");
+        /* A muted arrival must leave every field of an earlier pop-up alone. */
+        state->notify_seq = 7UL;
+        state->notify_last_peer_hi = 12UL;
+        state->notify_last_peer_lo = 34UL;
+        strcpy(state->notify_last_name, "Previous chat");
+        strcpy(state->notify_last_text, "Previous text");
+        memset(&note, 0, sizeof(note));
+        note.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        note.peer_id_hi = 6UL;
+        note.peer_id_lo = 7UL;
+        strcpy(note.text, "New text");
+        /* A fixed server clock makes future/expired mute cases independent
+           of the host date, including a local clock far ahead of the server. */
+        tg_gui_driver_notify_at(&gui, &note, cases[i].server_now);
+        ok = ok && tg_gui_notify_total(state) == 1 &&
+             state->chats[1].unread == 1 && state->chats[1].flash == 1 &&
+             state->notify_seq == 7UL + (unsigned long)cases[i].popup;
+        if (cases[i].popup) {
+            ok = ok && state->notify_last_peer_hi == 6UL &&
+                 state->notify_last_peer_lo == 7UL &&
+                 strcmp(state->notify_last_name, "Fixture chat") == 0 &&
+                 strcmp(state->notify_last_text, "New text") == 0;
+        } else {
+            ok = ok && state->notify_last_peer_hi == 12UL &&
+                 state->notify_last_peer_lo == 34UL &&
+                 strcmp(state->notify_last_name, "Previous chat") == 0 &&
+                 strcmp(state->notify_last_text, "Previous text") == 0;
+        }
+        ok = ok && tg_gui_notify_ring_take(state, cases[i].server_now,
+                                            100UL) == cases[i].ring;
+        if (!ok) {
+            printf("gui driver self-test: popup mute case %lu failed\n", i);
+        }
+    }
+    (void)remove(path);
+    return ok;
+}
+
 int tg_gui_driver_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -1001,6 +1139,9 @@ int tg_gui_driver_self_test(void)
     tg_chat_driver driver;
     int i;
 
+    if (!tg_gui_driver_notify_mute_self_test()) {
+        return 2;
+    }
     if (!tg_gui_driver_webpage_self_test()) {
         puts("gui driver self-test: delayed webpage replay failed");
         return 2;
@@ -1382,6 +1523,78 @@ int tg_gui_driver_self_test(void)
                 puts("gui driver self-test: open chat behind not counted");
                 return 2;
             }
+        }
+    }
+
+    /* Sound policy receives every message in a drain, including a silent
+       message after one that rings. Neither silent news nor local sound
+       choices change the existing title/badge counts. */
+    {
+        tg_gui_state *ns = tg_gui_test_scratch_state();
+        tg_gui_chat_driver ng;
+        tg_chat_driver nd;
+        tg_chat_list_row rows[2];
+        tg_chat_notify_entry note;
+
+        memset(rows, 0, sizeof(rows));
+        rows[0].peer_id_hi = 5UL;
+        rows[0].peer_id_lo = 1UL;
+        rows[0].is_user = 1;
+        rows[1].peer_id_hi = 5UL;
+        rows[1].peer_id_lo = 2UL;
+        tg_gui_chat_driver_bind(&ng, ns, &nd);
+        nd.on_chat_list_changed(nd.ctx, rows, 2);
+        if (ns->chats[0].is_group || !ns->chats[1].is_group) {
+            puts("gui driver self-test: chat sound kinds lost");
+            return 2;
+        }
+        ns->notify_beep = 1;
+        ns->notify_mode = TG_GUI_NOTIFY_TITLE;
+        ns->notify_away = 1;
+        memset(&note, 0, sizeof(note));
+        note.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        note.peer_id_hi = 5UL;
+        note.peer_id_lo = 1UL;
+        nd.on_notification(nd.ctx, &note);
+        note.silent = 1;
+        nd.on_notification(nd.ctx, &note);
+        if (tg_gui_notify_total(ns) != 2 ||
+            !tg_gui_notify_ring_take(ns, 100UL, 100UL) ||
+            tg_gui_notify_ring_take(ns, 100UL, 100UL)) {
+            puts("gui driver self-test: mixed burst lost its chime or count");
+            return 2;
+        }
+        note.silent = 0;
+        note.is_out = 1;
+        nd.on_notification(nd.ctx, &note);
+        if (tg_gui_notify_total(ns) != 2 || ns->notify_seq != 2UL ||
+            tg_gui_notify_ring_take(ns, 200UL, 200UL)) {
+            puts("gui driver self-test: own message notified");
+            return 2;
+        }
+        note.is_out = 0;
+        note.silent = 1;
+        nd.on_notification(nd.ctx, &note);
+        if (tg_gui_notify_total(ns) != 3 ||
+            tg_gui_notify_ring_take(ns, 200UL, 200UL)) {
+            puts("gui driver self-test: silent message rang or lost its count");
+            return 2;
+        }
+        note.silent = 0;
+        note.peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        note.peer_id_lo = 2UL;
+        nd.on_notification(nd.ctx, &note);
+        if (tg_gui_notify_total(ns) != 4 ||
+            tg_gui_notify_ring_take(ns, 200UL, 200UL)) {
+            puts("gui driver self-test: default channel rang or lost its count");
+            return 2;
+        }
+        ns->ctx_visible = 1;
+        ns->ctx_chat = 2;
+        nd.on_chat_list_changed(nd.ctx, rows, 2);
+        if (ns->ctx_visible || ns->ctx_chat != 0) {
+            puts("gui driver self-test: chat menu retained stale row indices");
+            return 2;
         }
     }
 

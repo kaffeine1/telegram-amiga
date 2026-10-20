@@ -383,6 +383,11 @@ void tg_gui_session_persist_unread(void);
 /* 1 while a live session is held (so the window can enable composing). */
 int tg_gui_session_is_open(void);
 
+/* Server Unix time for Telegram's mute_until. With no open session, uses
+   time(0). Local cooldowns keep their own clock so a corrected offset cannot
+   shorten a chat's quiet spell. */
+unsigned long tg_gui_session_server_time(void);
+
 /* The datacenter whose first contact the open chat's avatar is waiting for,
    or 0. That contact is a key exchange (about a minute on a 14 MHz 68030),
    so open_chat leaves it for the window: once the window has painted, it

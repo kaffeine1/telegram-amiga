@@ -3064,15 +3064,102 @@ static tg_mtproto_tl_status tg_skip_notification_sound(
     }
 }
 
-static tg_mtproto_tl_status tg_skip_peer_notify_settings(
-    tg_mtproto_tl_reader *reader)
+/* One table instead of a field in every replicated peer cache. A full table
+   keeps known peers; an untracked peer then stays quiet until next run. */
+typedef struct tg_peer_notify_slot {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long mute_until;
+    unsigned char kind;
+    unsigned char silent;
+} tg_peer_notify_slot;
+
+static tg_peer_notify_slot tg_peer_notify_slots[TG_MTPROTO_PEER_CACHE_MAX];
+static int tg_peer_notify_full;
+
+static unsigned char tg_peer_notify_kind(unsigned long constructor)
+{
+    return constructor == TG_PEER_USER_CONSTRUCTOR ? 1U :
+           constructor == TG_PEER_CHAT_CONSTRUCTOR ? 2U :
+           constructor == TG_PEER_CHANNEL_CONSTRUCTOR ? 3U : 0U;
+}
+
+void tg_mtproto_peer_notify_get(unsigned long peer_constructor,
+                                 unsigned long id_hi, unsigned long id_lo,
+                                 tg_mtproto_peer_notify_settings *out)
+{
+    unsigned long i;
+    unsigned char kind;
+
+    if (out == 0) {
+        return;
+    }
+    memset(out, 0, sizeof(*out));
+    kind = tg_peer_notify_kind(peer_constructor);
+    for (i = 0UL; kind != 0U && i < TG_MTPROTO_PEER_CACHE_MAX; ++i) {
+        if (tg_peer_notify_slots[i].kind == kind &&
+            tg_peer_notify_slots[i].id_hi == id_hi &&
+            tg_peer_notify_slots[i].id_lo == id_lo) {
+            out->mute_until = tg_peer_notify_slots[i].mute_until;
+            out->silent = tg_peer_notify_slots[i].silent;
+            out->valid = 1;
+            return;
+        }
+    }
+    out->silent = tg_peer_notify_full != 0;
+}
+
+static void tg_peer_notify_store(const tg_mtproto_dialog_peer *peer,
+                                  const tg_mtproto_peer_notify_settings *value)
+{
+    unsigned long i;
+    unsigned long free_slot;
+    unsigned char kind;
+    tg_peer_notify_slot *slot;
+
+    kind = tg_peer_notify_kind(peer->peer_constructor);
+    if (kind == 0U || !value->valid) {
+        return;
+    }
+    free_slot = TG_MTPROTO_PEER_CACHE_MAX;
+    for (i = 0UL; i < TG_MTPROTO_PEER_CACHE_MAX; ++i) {
+        slot = &tg_peer_notify_slots[i];
+        if (slot->kind == kind && slot->id_hi == peer->id_hi &&
+            slot->id_lo == peer->id_lo) {
+            break;
+        }
+        if (slot->kind == 0U && free_slot == TG_MTPROTO_PEER_CACHE_MAX) {
+            free_slot = i;
+        }
+    }
+    if (i == TG_MTPROTO_PEER_CACHE_MAX) {
+        i = free_slot;
+    }
+    if (i == TG_MTPROTO_PEER_CACHE_MAX) {
+        tg_peer_notify_full = 1;
+        return;
+    }
+    slot = &tg_peer_notify_slots[i];
+    slot->kind = kind;
+    slot->id_hi = peer->id_hi;
+    slot->id_lo = peer->id_lo;
+    slot->mute_until = value->mute_until;
+    slot->silent = value->silent;
+}
+
+/* peerNotifySettings#99622c0c, official TL schema: silent is an optional
+   Bool at flags.1, mute_until an optional int at flags.2. Keep the existing
+   sound/story walk so the following dialog starts at the right byte. */
+static tg_mtproto_tl_status tg_read_peer_notify_settings(
+    tg_mtproto_tl_reader *reader, tg_mtproto_peer_notify_settings *out)
 {
     unsigned long constructor;
     unsigned long flags;
-    unsigned long scratch;
+    unsigned long silent;
     unsigned long bit;
     tg_mtproto_tl_status status;
 
+    memset(out, 0, sizeof(*out));
     status = tg_mtproto_tl_read_u32(reader, &constructor);
     if (status != TG_MTPROTO_TL_OK) {
         return status;
@@ -3087,11 +3174,15 @@ static tg_mtproto_tl_status tg_skip_peer_notify_settings(
     if ((flags & 1UL) != 0UL && tg_skip_bool(reader) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-    if ((flags & 2UL) != 0UL && tg_skip_bool(reader) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_INVALID_DATA;
+    if ((flags & 2UL) != 0UL) {
+        if (tg_mtproto_tl_read_u32(reader, &silent) != TG_MTPROTO_TL_OK ||
+            (silent != 0xbc799737UL && silent != 0x997275b5UL)) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        out->silent = silent == 0x997275b5UL;
     }
     if ((flags & 4UL) != 0UL &&
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_tl_read_u32(reader, &out->mute_until) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     for (bit = 8UL; bit <= 32UL; bit <<= 1) {
@@ -3112,6 +3203,7 @@ static tg_mtproto_tl_status tg_skip_peer_notify_settings(
             return TG_MTPROTO_TL_INVALID_DATA;
         }
     }
+    out->valid = 1;
     return TG_MTPROTO_TL_OK;
 }
 
@@ -3240,12 +3332,13 @@ static tg_mtproto_tl_status tg_skip_folder(tg_mtproto_tl_reader *reader)
 
 static tg_mtproto_tl_status tg_read_dialog_peer(
     tg_mtproto_tl_reader *reader,
-    tg_mtproto_dialog_peer *peer)
+    tg_mtproto_dialog_peer *peer, tg_mtproto_peer_notify_settings *notify)
 {
     unsigned long constructor;
     unsigned long flags;
     unsigned long scratch;
 
+    memset(notify, 0, sizeof(*notify));
     if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
@@ -3283,7 +3376,7 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
             TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
-        tg_skip_peer_notify_settings(reader) != TG_MTPROTO_TL_OK) {
+        tg_read_peer_notify_settings(reader, notify) != TG_MTPROTO_TL_OK) {
         if (peer != 0) {
             peer->peer_constructor = 0UL;
         }
@@ -3328,11 +3421,13 @@ static int tg_dialog_resync(tg_mtproto_tl_reader *reader,
             constructor == TG_DIALOG_FOLDER_CONSTRUCTOR) {
             tg_mtproto_tl_reader trial;
             tg_mtproto_dialog_peer probe;
+            tg_mtproto_peer_notify_settings notify;
 
             memset(&probe, 0, sizeof(probe));
             trial = *reader;
             trial.offset = pos;
-            if (tg_read_dialog_peer(&trial, &probe) == TG_MTPROTO_TL_OK ||
+            if (tg_read_dialog_peer(&trial, &probe, &notify) ==
+                    TG_MTPROTO_TL_OK ||
                 probe.peer_constructor != 0UL) {
                 reader->offset = pos;
                 return 1;
@@ -3414,6 +3509,7 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_list(
     unsigned long count;
     unsigned long dialog_start;
     tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings notify;
 
     if (body == 0 || out == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
@@ -3446,7 +3542,8 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_list(
 
         memset(&peer, 0, sizeof(peer));
         dialog_start = reader.offset;
-        ok = (tg_read_dialog_peer(&reader, &peer) == TG_MTPROTO_TL_OK);
+        ok = (tg_read_dialog_peer(&reader, &peer, &notify) == TG_MTPROTO_TL_OK);
+        tg_peer_notify_store(&peer, &notify);
         if (peer.peer_constructor != 0UL) {
             if (out->count < TG_MTPROTO_DIALOG_PEER_MAX) {
                 out->peers[out->count] = peer;
@@ -5980,6 +6077,7 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_cache(
 {
     tg_mtproto_tl_reader reader;
     tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings notify;
     tg_mtproto_user_summary user;
     tg_mtproto_peer_cache_entry *entry;
     unsigned long count;
@@ -6013,7 +6111,8 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_cache(
 
         memset(&peer, 0, sizeof(peer));
         dialog_start = reader.offset;
-        ok = (tg_read_dialog_peer(&reader, &peer) == TG_MTPROTO_TL_OK);
+        ok = (tg_read_dialog_peer(&reader, &peer, &notify) == TG_MTPROTO_TL_OK);
+        tg_peer_notify_store(&peer, &notify);
         if (peer.peer_constructor != 0UL) {
             entry = tg_peer_cache_add(out, peer.peer_constructor, peer.id_hi,
                                       peer.id_lo);
@@ -7223,6 +7322,128 @@ static int tg_entity_marker_self_test(void)
     return tg_service_message_self_test();
 }
 
+static int tg_peer_notify_self_test(void)
+{
+    unsigned char body[512];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_peer_notify_settings settings;
+    tg_mtproto_dialog_peer_list list;
+    tg_mtproto_peer_cache *cache;
+    unsigned long i;
+    unsigned long length;
+    unsigned long kind;
+    int pass;
+    int ok;
+
+    ok = 1;
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+#define TG_NOTIFY_W32(v) do { if (tg_mtproto_tl_write_u32(&writer, (v)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+#define TG_NOTIFY_W64(h, l) do { if (tg_mtproto_tl_write_u64(&writer, (h), (l)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+#define TG_NOTIFY_STR(v) do { if (tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)(v), (unsigned long)strlen(v)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+    TG_NOTIFY_W32(TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR);
+    TG_NOTIFY_W32(2047UL);
+    TG_NOTIFY_W32(0x997275b5UL); /* show_previews = true */
+    TG_NOTIFY_W32(0x997275b5UL); /* silent = true */
+    TG_NOTIFY_W32(1900000000UL);
+    TG_NOTIFY_W32(TG_NOTIFICATION_SOUND_DEFAULT_CONSTRUCTOR);
+    TG_NOTIFY_W32(TG_NOTIFICATION_SOUND_NONE_CONSTRUCTOR);
+    TG_NOTIFY_W32(TG_NOTIFICATION_SOUND_LOCAL_CONSTRUCTOR);
+    TG_NOTIFY_STR("Chime"); TG_NOTIFY_STR("chime.8svx");
+    TG_NOTIFY_W32(0xbc799737UL); TG_NOTIFY_W32(0x997275b5UL);
+    TG_NOTIFY_W32(TG_NOTIFICATION_SOUND_RINGTONE_CONSTRUCTOR);
+    TG_NOTIFY_W64(1UL, 2UL);
+    TG_NOTIFY_W32(TG_NOTIFICATION_SOUND_DEFAULT_CONSTRUCTOR);
+    TG_NOTIFY_W32(TG_NOTIFICATION_SOUND_NONE_CONSTRUCTOR);
+    length = writer.length;
+    tg_mtproto_tl_reader_init(&reader, body, length);
+    if (!ok || tg_read_peer_notify_settings(&reader, &settings) !=
+            TG_MTPROTO_TL_OK || !settings.valid || !settings.silent ||
+        settings.mute_until != 1900000000UL || reader.offset != length) {
+        puts("login self-test: notify settings fields or tail misread");
+        return 2;
+    }
+    for (i = 0UL; i < length; ++i) {
+        tg_mtproto_tl_reader_init(&reader, body, i);
+        if (tg_read_peer_notify_settings(&reader, &settings) ==
+                TG_MTPROTO_TL_OK || settings.valid) {
+            puts("login self-test: truncated notify settings accepted");
+            return 2;
+        }
+    }
+    body[12] = 0U; /* invalid silent Bool */
+    tg_mtproto_tl_reader_init(&reader, body, length);
+    if (tg_read_peer_notify_settings(&reader, &settings) == TG_MTPROTO_TL_OK ||
+        settings.valid) {
+        puts("login self-test: invalid notify Bool accepted");
+        return 2;
+    }
+    cache = (tg_mtproto_peer_cache *)malloc(sizeof(*cache));
+    if (cache == 0) {
+        return 2;
+    }
+    memset(tg_peer_notify_slots, 0, sizeof(tg_peer_notify_slots));
+    tg_peer_notify_full = 0;
+    /* The same id in three namespaces must keep three separate settings.
+       Both dialog consumers store them; absent fields on refresh clear them. */
+    for (pass = 0; pass < 3 && ok; ++pass) {
+        if (pass != 2) {
+            memset(tg_peer_notify_slots, 0, sizeof(tg_peer_notify_slots));
+        }
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        TG_NOTIFY_W32(TG_VECTOR_CONSTRUCTOR); TG_NOTIFY_W32(3UL);
+        for (i = 0UL; i < 3UL; ++i) {
+            kind = i == 0UL ? TG_PEER_USER_CONSTRUCTOR :
+                   i == 1UL ? TG_PEER_CHAT_CONSTRUCTOR :
+                              TG_PEER_CHANNEL_CONSTRUCTOR;
+            TG_NOTIFY_W32(TG_DIALOG_CONSTRUCTOR); TG_NOTIFY_W32(0UL);
+            TG_NOTIFY_W32(kind); TG_NOTIFY_W64(0x11223344UL, 0x55667788UL);
+            TG_NOTIFY_W32(5UL); TG_NOTIFY_W32(0UL); TG_NOTIFY_W32(0UL);
+            TG_NOTIFY_W32(1UL); TG_NOTIFY_W32(0UL); TG_NOTIFY_W32(0UL);
+            TG_NOTIFY_W32(TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR);
+            if (i == 2UL || (i == 0UL && pass == 2)) {
+                TG_NOTIFY_W32(0UL);
+            } else {
+                TG_NOTIFY_W32(6UL);
+                TG_NOTIFY_W32(i == 0UL ? 0x997275b5UL : 0xbc799737UL);
+                TG_NOTIFY_W32(i == 0UL ? 1900000000UL : 1700000000UL);
+            }
+        }
+        for (i = 0UL; i < 3UL; ++i) {
+            TG_NOTIFY_W32(TG_VECTOR_CONSTRUCTOR); TG_NOTIFY_W32(0UL);
+        }
+        if (pass == 1) {
+            ok = ok && tg_mtproto_parse_dialog_peer_cache(
+                TG_MESSAGES_DIALOGS_CONSTRUCTOR, body, writer.length, cache) ==
+                TG_MTPROTO_TL_OK && cache->count == 3UL;
+        } else {
+            ok = ok && tg_mtproto_parse_dialog_peer_list(
+                TG_MESSAGES_DIALOGS_CONSTRUCTOR, body, writer.length, &list) ==
+                TG_MTPROTO_TL_OK && list.count == 3UL;
+        }
+        for (i = 0UL; i < 3UL && ok; ++i) {
+            kind = i == 0UL ? TG_PEER_USER_CONSTRUCTOR :
+                   i == 1UL ? TG_PEER_CHAT_CONSTRUCTOR :
+                              TG_PEER_CHANNEL_CONSTRUCTOR;
+            tg_mtproto_peer_notify_get(kind, 0x11223344UL, 0x55667788UL,
+                                        &settings);
+            ok = settings.valid && settings.silent == (i == 0UL && pass != 2) &&
+                 settings.mute_until == (i == 1UL ? 1700000000UL :
+                     i == 0UL && pass != 2 ? 1900000000UL : 0UL);
+        }
+    }
+    free(cache);
+    memset(tg_peer_notify_slots, 0, sizeof(tg_peer_notify_slots));
+    if (!ok) {
+        puts("login self-test: per-chat dialog notify settings lost");
+        return 2;
+    }
+#undef TG_NOTIFY_W32
+#undef TG_NOTIFY_W64
+#undef TG_NOTIFY_STR
+    return 0;
+}
+
 int tg_mtproto_login_self_test(void)
 {
     static const unsigned char expected_send_code[] = {
@@ -7268,7 +7489,8 @@ int tg_mtproto_login_self_test(void)
     tg_mtproto_user_summary user;
     tg_mtproto_tl_writer writer;
 
-    if (tg_entity_marker_self_test() != 0) {
+    if (tg_peer_notify_self_test() != 0 ||
+        tg_entity_marker_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)

@@ -7405,11 +7405,8 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     return result;
 }
 
-/* Confirm + remove the selected chat from the sidebar, persist it, then land on
-   a neighbouring chat (or an empty transcript if the list is now empty). Shared
-   by the menu item and the Del key. No-op outside chat mode / with no selection. */
-/* Dynamic right-button trap: while the pointer is over a real transcript
-   bubble the window claims the right button (WFLG_RMBTRAP -> MENUDOWN comes
+/* Dynamic right-button trap: over a chat row or real transcript bubble the
+   window claims the right button (WFLG_RMBTRAP -> MENUDOWN comes
    in as a normal MOUSEBUTTONS event for OUR context menu); anywhere else the
    flag is dropped so the right button opens the standard Intuition menu bar.
    Flag poking under Forbid() is the documented classic idiom and works on
@@ -7434,14 +7431,12 @@ static void tg_gui_amiga_set_rmbtrap(struct Window *win, int on)
 }
 
 /* Recompute the dynamic right-button trap from the current pointer position:
-   claim it (WFLG_RMBTRAP -> our transcript context menu) ONLY over a real
-   message bubble, release it everywhere else so the standard Intuition menu
+   claim it over a chat row or message bubble, release it elsewhere so the menu
    bar opens. Driven from BOTH the MOUSEMOVE and the ~10/s INTUITICKS handlers.
    The tick pass matters: the OS4 emulated mouse coalesces/drops moves, so a
-   move-only update could leave the trap stuck ON after the pointer had already
-   left the transcript -- a right-click on the sidebar was then delivered to us
-   (not a bubble -> nothing happens, the click is swallowed) and the menu bar
-   never appeared. The periodic re-check makes the trap self-heal within
+   move-only update could leave the trap set after the pointer had already
+   left the content, swallowing the press meant for Intuition's menu bar.
+   The periodic re-check makes the trap self-heal within
    ~100 ms regardless of how moves are delivered. No-op while our own context
    menu is up (its clicks must keep reaching us). */
 static void tg_gui_window_track_rmbtrap(tg_gui_state *state,
@@ -7470,7 +7465,9 @@ static void tg_gui_window_track_rmbtrap(tg_gui_state *state,
     }
     hit = tg_gui_hit_test(state, ctx->inner_w, ctx->inner_h, ctx->line_h,
                           hx, hy);
-    over_msg = 0;
+    over_msg = !state->in_search && !state->in_filter &&
+               !state->forward_pick_active && hit >= 0 &&
+               hit < state->chat_count;
     if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
         int mi = hit <= TG_GUI_HIT_PHOTO_BASE
             ? TG_GUI_HIT_PHOTO_BASE - hit
@@ -8179,21 +8176,23 @@ static void tg_gui_window_send_photo(tg_gui_state *state, struct Window *win,
     tg_gui_window_send_file_mode(state, win, backend, 1);
 }
 
-static void tg_gui_window_remove_selected(tg_gui_state *state,
-                                          struct Window *win,
-                                          tg_gui_backend *backend)
+/* Row menu, menubar and Del share the removal path. Removing a different row
+   must leave the open conversation and its draft in front of the user. */
+static void tg_gui_window_remove_chat(tg_gui_state *state,
+                                       struct Window *win, int sel,
+                                       tg_gui_backend *backend)
 {
-    int sel;
     unsigned long idx;
+    int was_open;
 
     if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open()) {
         return;
     }
-    sel = state->selected_chat;
     if (sel < 0 || sel >= state->chat_count) {
         return;
     }
     idx = state->chats[sel].index;
+    was_open = sel == state->selected_chat;
     if (idx == 0UL) {
         tg_gui_log("remove: idx 0, ignored");
         return;
@@ -8212,6 +8211,10 @@ static void tg_gui_window_remove_selected(tg_gui_state *state,
         /* Silent no-ops read as "stuck": say it and repaint instead. */
         tg_gui_window_copy(state->status, sizeof(state->status),
                            "Could not remove this chat");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (!was_open) {
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -10679,7 +10682,6 @@ static int tg_gui_chime_play(void)
 /* New-message notification, window open or parked. */
 typedef struct tg_gui_notify_ui {
     unsigned long seen_seq; /* state->notify_seq already handled */
-    int beeped;             /* this run of news has had its beep */
     tg_gui_popup popup;
 } tg_gui_notify_ui;
 
@@ -10706,30 +10708,33 @@ static void tg_gui_window_notify_title(struct Window *window,
     TG_GUI_POPUP_TRACE("title end");
 }
 
-/* What a run of news does while the user is away: one beep, then the
-   pop-up with every message. `beep_screen` 0 flashes every screen,
+/* Pending chats ring independently; pop-ups still require the user away.
+   `beep_screen` 0 flashes every screen,
    `popup_screen` 0 is the default public screen. */
 static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
                                int away, struct Screen *beep_screen,
                                struct Screen *popup_screen)
 {
+    time_t now;
+    unsigned long server_now;
+
     if (state->notify_seq == ui->seen_seq) {
         return;
     }
     ui->seen_seq = state->notify_seq;
-    if (!away || state->notify_mode == TG_GUI_NOTIFY_OFF) {
-        return;
-    }
     TG_GUI_POPUP_TRACE("news begin");
     /* A sound, never a raise: our chime, or DisplayBeep where no sound
        device opens. */
-    if (state->notify_beep && !ui->beeped) {
+    now = time(0);
+    server_now = tg_gui_session_server_time();
+    while (tg_gui_notify_ring_take(state, server_now,
+                                    now == (time_t)-1 ? 0UL :
+                                           (unsigned long)now)) {
         if (!tg_gui_chime_play()) {
             DisplayBeep(beep_screen);
         }
-        ui->beeped = 1;
     }
-    if (state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
+    if (away && state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
         tg_gui_popup_show(&ui->popup, state, popup_screen);
     }
     TG_GUI_POPUP_TRACE("news end");
@@ -10761,7 +10766,6 @@ static void tg_gui_window_notify_turn(tg_gui_notify_ui *ui,
             tg_gui_notify_seen(state, state->chats[sel].peer_id_hi,
                                state->chats[sel].peer_id_lo);
         }
-        ui->beeped = 0;
         tg_gui_popup_close(&ui->popup);
     }
     state->notify_away = !here;
@@ -10769,9 +10773,6 @@ static void tg_gui_window_notify_turn(tg_gui_notify_ui *ui,
        to every screen and the pop-up to the Workbench. */
     tg_gui_notify_news(ui, state, !here, own_screen ? 0 : window->WScreen,
                        own_screen ? 0 : window->WScreen);
-    if (tg_gui_notify_total(state) == 0) {
-        ui->beeped = 0; /* all seen: the next news may beep again */
-    }
     tg_gui_popup_expire(&ui->popup, state);
     tg_gui_window_notify_title(window, state);
 }
@@ -12209,7 +12210,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         scroll_dirty = 1;
                     }
                 } else if (msg_code == 0x46) { /* Del: remove selected chat (confirm) */
-                    tg_gui_window_remove_selected(state, ctx.window, &backend);
+                    tg_gui_window_remove_chat(state, ctx.window,
+                                               state->selected_chat, &backend);
                 }
             } else if (msg_class == IDCMP_MENUPICK || key_menu_action != 0) {
                 UWORD mnum;
@@ -12247,8 +12249,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_amiga_easyreq(ctx.window, TG_APP_TITLE " Help",
                                                  tg_gui_help_text);
                         } else if (ud == (APTR)TG_MENU_REMOVE) {
-                            tg_gui_window_remove_selected(state, ctx.window,
-                                                          &backend);
+                            tg_gui_window_remove_chat(state, ctx.window,
+                                                       state->selected_chat,
+                                                       &backend);
                         } else if (ud == (APTR)TG_MENU_SENDFILE) {
                             tg_gui_window_send_file(state, ctx.window,
                                                     &backend);
@@ -12908,13 +12911,30 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 hx = (int)mouse_x - ctx.origin_x;
                 hy = (int)mouse_y - ctx.origin_y;
                 if (msg_code == MENUDOWN && !state->forward_pick_active) {
-                    /* Right press with RMBTRAP held: open OUR context menu on
-                       the bubble under the pointer. (Without the trap the
+                    /* Right press with RMBTRAP held: open our context menu on
+                       the row or bubble under the pointer. (Without the trap the
                        press never reaches us -- Intuition runs the menu bar.) */
                     int hit = tg_gui_hit_test(state, ctx.inner_w, ctx.inner_h,
                                               ctx.line_h, hx, hy);
 
-                    if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
+                    if (hit >= 0 && hit < state->chat_count &&
+                        !state->in_search && !state->in_filter) {
+                        tg_gui_notify_override value;
+                        const tg_gui_chat *chat = &state->chats[hit];
+
+                        tg_gui_notify_override_get(state->notify_override_path,
+                            chat->peer_id_hi, chat->peer_id_lo, &value);
+                        state->ctx_chat = hit + 1;
+                        state->ctx_notify_choice = value.choice;
+                        state->ctx_msg = -1;
+                        state->ctx_visible = 1;
+                        state->ctx_x = hx;
+                        state->ctx_y = hy;
+                        state->ctx_hover = -1;
+                        state->ctx_w = tg_gui_context_menu_measure(state,
+                                                                   &backend);
+                        tg_gui_window_paint(state, &backend);
+                    } else if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
                         int mi = hit <= TG_GUI_HIT_PHOTO_BASE
                             ? TG_GUI_HIT_PHOTO_BASE - hit
                             : TG_GUI_HIT_MESSAGE_BASE - hit;
@@ -12927,6 +12947,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             int was_open = state->ctx_visible;
 
                             state->ctx_visible = 1;
+                            state->ctx_chat = 0;
                             state->ctx_msg = mi;
                             state->ctx_x = hx;
                             state->ctx_y = hy;
@@ -12964,13 +12985,41 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                      ctx.inner_h, ctx.line_h,
                                                      hx, hy);
                     int mi = state->ctx_msg;
+                    int ci = state->ctx_chat - 1;
                     const tg_gui_message *m =
                         (mi >= 0 && mi < state->message_count)
                             ? &state->messages[mi]
                             : 0;
 
                     state->ctx_visible = 0;
-                    if (it == TG_GUI_CTX_REPLY && m != 0 && !m->is_system &&
+                    if (ci >= 0 && ci < state->chat_count &&
+                        it == TG_GUI_CTX_CHAT_REMOVE) {
+                        tg_gui_window_remove_chat(state, ctx.window, ci,
+                                                       &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               (it == TG_GUI_CTX_CHAT_MUTE ||
+                                it == TG_GUI_CTX_CHAT_RING)) {
+                        tg_gui_notify_override value;
+                        const tg_gui_chat *chat = &state->chats[ci];
+
+                        tg_gui_notify_override_get(state->notify_override_path,
+                            chat->peer_id_hi, chat->peer_id_lo, &value);
+                        if (it == TG_GUI_CTX_CHAT_MUTE) {
+                            value.choice = value.choice == TG_GUI_NOTIFY_MUTE ?
+                                TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_MUTE;
+                        } else if (chat->is_group) {
+                            value.choice = value.choice == TG_GUI_NOTIFY_RING ?
+                                TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_RING;
+                        }
+                        (void)mkdir("data", 0777);
+                        if (tg_gui_notify_override_set(
+                                state->notify_override_path, chat->peer_id_hi,
+                                chat->peer_id_lo, &value) != 0) {
+                            tg_gui_window_copy(state->status,
+                                sizeof(state->status),
+                                "Could not save this chat's sound choice");
+                        }
+                    } else if (it == TG_GUI_CTX_REPLY && m != 0 && !m->is_system &&
                         m->id != 0UL) {
                         state->in_sel_active = 0;
                         state->reply_to_id = m->id;
@@ -14632,9 +14681,6 @@ static int tg_gui_window_iconify_wait(tg_gui_state *state)
         /* Parked, the user can be on any screen: the beep flashes them all,
            the pop-up goes to the Workbench where the AppIcon is. */
         tg_gui_notify_news(&ui, state, 1, 0, 0);
-        if (tg_gui_notify_total(state) == 0) {
-            ui.beeped = 0;
-        }
         tg_gui_popup_expire(&ui.popup, state);
         /* The label counts the news. */
         tg_gui_notify_icon_label(state, label, sizeof(label));
@@ -14725,6 +14771,7 @@ int tg_gui_run_window(tg_gui_state *state)
     if (state == 0) {
         return 2;
     }
+    state->notify_override_path = TG_GUI_NOTIFY_OVERRIDE_FILE;
     /* Ctrl-C is ours from here: the window loops quit on it with the full
        teardown. The C library's own check ended the program from inside a
        stdio call and left the window on the screen with nobody behind it. */

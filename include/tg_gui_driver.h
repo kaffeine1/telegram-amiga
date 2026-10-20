@@ -8,7 +8,8 @@
  * to a tg_gui_state -- instead of the console driver, which prints it. This is
  * what turns the demo GUI window into one that shows real conversation rows.
  *
- * Pure projection: no I/O, no network, host-testable. See tg_chat_engine.h
+ * Portable projection with local notification preferences, no network.
+ * Host-testable. See tg_chat_engine.h
  * (tg_chat_driver / tg_chat_message_row) and tg_gui.h (tg_gui_state).
  */
 

@@ -14,6 +14,7 @@
 #include "tg_version.h"
 #include "tg_file.h"
 #include "tg_emoji_sheet.h"
+#include "tg_mtproto_login.h"
 
 #define TG_GUI_EMOJI_BUTTON_W 22 /* smiley button in the composer row */
 #define TG_GUI_ATTACH_BUTTON_W 22 /* paperclip at the left of the input */
@@ -567,6 +568,257 @@ int tg_gui_notify_preferences_save(const char *path, int mode, int beep,
     if (rename(tmp, path) != 0) {
         (void)remove(tmp);
         return 1;
+    }
+    return 0;
+}
+
+/* A line is two hex id halves, mute/ring, then an optional sound filename.
+   Stream the file so a rewrite never drops choices beyond an array limit. */
+static int tg_gui_notify_override_line(const char *line, unsigned long *hi,
+                                       unsigned long *lo,
+                                       tg_gui_notify_override *value)
+{
+    char word[8];
+    int used;
+    unsigned long length;
+
+    used = 0;
+    memset(value, 0, sizeof(*value));
+    if (sscanf(line, "%8lx %8lx %7s %n", hi, lo, word, &used) != 3 ||
+        used == 0) {
+        return 0;
+    }
+    value->choice = strcmp(word, "mute") == 0 ? TG_GUI_NOTIFY_MUTE :
+                    strcmp(word, "ring") == 0 ? TG_GUI_NOTIFY_RING :
+                    TG_GUI_NOTIFY_DEFAULT;
+    if (value->choice == TG_GUI_NOTIFY_DEFAULT) {
+        return 0;
+    }
+    length = (unsigned long)strcspn(line + used, "\r\n");
+    if (length >= sizeof(value->sound)) {
+        return 0;
+    }
+    memcpy(value->sound, line + used, length);
+    value->sound[length] = '\0';
+    return 1;
+}
+
+void tg_gui_notify_override_get(const char *path, unsigned long peer_hi,
+                                unsigned long peer_lo,
+                                tg_gui_notify_override *out)
+{
+    FILE *file;
+    char line[320];
+    unsigned long hi;
+    unsigned long lo;
+    tg_gui_notify_override value;
+
+    if (out == 0) {
+        return;
+    }
+    memset(out, 0, sizeof(*out));
+    file = path != 0 && path[0] != '\0' ? fopen(path, "rb") : 0;
+    if (file == 0) {
+        return;
+    }
+    while (fgets(line, sizeof(line), file) != 0) {
+        if (tg_gui_notify_override_line(line, &hi, &lo, &value) &&
+            hi == peer_hi && lo == peer_lo) {
+            *out = value;
+        }
+    }
+    fclose(file);
+}
+
+int tg_gui_notify_override_set(const char *path, unsigned long peer_hi,
+                               unsigned long peer_lo,
+                               const tg_gui_notify_override *value)
+{
+    FILE *src;
+    FILE *dst;
+    char tmp[288];
+    char line[320];
+    unsigned long length;
+    unsigned long hi;
+    unsigned long lo;
+    tg_gui_notify_override old;
+    int failed;
+    int needs_newline;
+
+    if (path == 0 || path[0] == '\0' || value == 0 ||
+        value->choice < TG_GUI_NOTIFY_DEFAULT ||
+        value->choice > TG_GUI_NOTIFY_RING ||
+        memchr(value->sound, '\0', sizeof(value->sound)) == 0 ||
+        strpbrk(value->sound, "\r\n") != 0) {
+        return 1;
+    }
+    length = (unsigned long)strlen(path);
+    if (length + 5UL >= sizeof(tmp)) {
+        return 1;
+    }
+    memcpy(tmp, path, length);
+    memcpy(tmp + length, ".tmp", 5UL);
+    /* Some Amiga libraries leave errno unchanged on an open failure. An
+       unreadable or missing source is empty; the replacement must still save. */
+    src = fopen(path, "rb");
+    dst = tg_file_fopen_replace(tmp, "wb");
+    if (dst == 0) {
+        if (src != 0) {
+            fclose(src);
+        }
+        return 1;
+    }
+    failed = 0;
+    needs_newline = 0;
+    while (src != 0 && fgets(line, sizeof(line), src) != 0) {
+        if (tg_gui_notify_override_line(line, &hi, &lo, &old) &&
+            hi == peer_hi && lo == peer_lo) {
+            continue;
+        }
+        if (fputs(line, dst) == EOF) {
+            failed = 1;
+        }
+        length = (unsigned long)strlen(line);
+        needs_newline = length > 0UL && line[length - 1UL] != '\n';
+    }
+    if (src != 0) {
+        if (ferror(src)) {
+            failed = 1;
+        }
+        fclose(src);
+    }
+    if (value->choice != TG_GUI_NOTIFY_DEFAULT) {
+        if ((needs_newline && fputc('\n', dst) == EOF) ||
+            fprintf(dst, "%08lx %08lx %.4s", peer_hi & 0xffffffffUL,
+                    peer_lo & 0xffffffffUL,
+                    value->choice == TG_GUI_NOTIFY_MUTE ? "mute" : "ring") < 0 ||
+            (value->sound[0] != '\0' &&
+             (fputc(' ', dst) == EOF || fputs(value->sound, dst) == EOF)) ||
+            fputc('\n', dst) == EOF) {
+            failed = 1;
+        }
+    }
+    if (fclose(dst) != 0) {
+        failed = 1;
+    }
+    if (failed) {
+        (void)remove(tmp);
+        return 1;
+    }
+    (void)remove(path); /* AmigaDOS rename does not replace a file. */
+    if (rename(tmp, path) != 0) {
+        return 1; /* keep the completed temporary file for recovery */
+    }
+    return 0;
+}
+
+int tg_gui_notify_should_ring(unsigned long peer_constructor,
+                               unsigned long mute_until, int peer_silent,
+                               int choice, int silent, int is_out,
+                               int open_in_front, unsigned long server_now,
+                               unsigned long local_now,
+                               unsigned long last_ring)
+{
+    if (silent || is_out || open_in_front || peer_silent ||
+        choice == TG_GUI_NOTIFY_MUTE || mute_until > server_now ||
+        local_now == 0UL) {
+        return 0;
+    }
+    if (peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+        !((peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR ||
+           peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) &&
+          choice == TG_GUI_NOTIFY_RING)) {
+        return 0;
+    }
+    /* A clock moved backwards must not underflow into an immediate ring. */
+    if (last_ring != 0UL && (local_now < last_ring ||
+        local_now - last_ring < TG_GUI_NOTIFY_QUIET_SECONDS)) {
+        return 0;
+    }
+    return 1;
+}
+
+void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
+                              unsigned long peer_hi, unsigned long peer_lo,
+                              int silent, int is_out, unsigned long now)
+{
+    int i;
+    int free_slot;
+
+    if (state == 0 || silent || is_out || !state->notify_beep ||
+        state->notify_mode == TG_GUI_NOTIFY_OFF) {
+        return;
+    }
+    free_slot = -1;
+    for (i = 0; i < TG_GUI_RING_PEERS; ++i) {
+        tg_gui_ring_peer *slot = &state->notify_rings[i];
+
+        if (slot->peer_constructor == constructor &&
+            slot->peer_hi == peer_hi && slot->peer_lo == peer_lo) {
+            slot->pending = 1;
+            return;
+        }
+        if (free_slot < 0 && (slot->peer_constructor == 0UL ||
+            (!slot->pending && now >= slot->last_ring &&
+             now - slot->last_ring >= TG_GUI_NOTIFY_QUIET_SECONDS))) {
+            free_slot = i;
+        }
+    }
+    if (free_slot >= 0) {
+        tg_gui_ring_peer *slot = &state->notify_rings[free_slot];
+
+        memset(slot, 0, sizeof(*slot));
+        slot->peer_constructor = constructor;
+        slot->peer_hi = peer_hi;
+        slot->peer_lo = peer_lo;
+        slot->pending = 1;
+    }
+}
+
+int tg_gui_notify_ring_take(tg_gui_state *state, unsigned long server_now,
+                             unsigned long local_now)
+{
+    int i;
+
+    if (state == 0) {
+        return 0;
+    }
+    for (i = 0; i < TG_GUI_RING_PEERS; ++i) {
+        tg_gui_ring_peer *slot = &state->notify_rings[i];
+        tg_mtproto_peer_notify_settings settings;
+        tg_gui_notify_override value;
+        int sel;
+        int open_in_front;
+
+        if (!slot->pending) {
+            /* Reuse only expired history, never a recent chat's quiet spell. */
+            if (slot->last_ring != 0UL && local_now >= slot->last_ring &&
+                local_now - slot->last_ring >= TG_GUI_NOTIFY_QUIET_SECONDS) {
+                memset(slot, 0, sizeof(*slot));
+            }
+            continue;
+        }
+        slot->pending = 0;
+        sel = state->selected_chat;
+        open_in_front = !state->notify_away && !state->in_search &&
+                        sel >= 0 && sel < state->chat_count &&
+                        state->chats[sel].peer_id_hi == slot->peer_hi &&
+                        state->chats[sel].peer_id_lo == slot->peer_lo;
+        tg_mtproto_peer_notify_get(slot->peer_constructor, slot->peer_hi,
+                                    slot->peer_lo, &settings);
+        tg_gui_notify_override_get(state->notify_override_path, slot->peer_hi,
+                                    slot->peer_lo, &value);
+        if (state->notify_beep && state->notify_mode != TG_GUI_NOTIFY_OFF &&
+            tg_gui_notify_should_ring(slot->peer_constructor,
+                                       settings.mute_until, settings.silent,
+                                       value.choice, 0, 0, open_in_front,
+                                       server_now, local_now, slot->last_ring)) {
+            slot->last_ring = local_now;
+            return 1;
+        }
+        if (slot->last_ring == 0UL) {
+            memset(slot, 0, sizeof(*slot));
+        }
     }
     return 0;
 }
@@ -4578,6 +4830,11 @@ int tg_gui_selection_get(const tg_gui_state *state, char *out,
 int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
                     int x, int y)
 {
+    int sidebar_w;
+    int status_h;
+    int content_h;
+    int input_h;
+
     if (state != 0 && state->emoji_active) {
         int ecell = tg_gui_emoji_cell_at(state, width, lh, x, y);
 
@@ -4585,11 +4842,6 @@ int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
             return TG_GUI_HIT_EMOJI_BASE + ecell;
         }
     }
-    int sidebar_w;
-    int status_h;
-    int content_h;
-    int input_h;
-
     if (state == 0 || lh <= 0 || width <= 0 || height <= 0) {
         return TG_GUI_HIT_NONE;
     }
@@ -4935,6 +5187,19 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
 {
     int n = 0;
 
+    if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
+        labels[n] = "Remove chat";
+        ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
+        labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE ?
+                    "Unmute" : "Mute";
+        ids[n++] = TG_GUI_CTX_CHAT_MUTE;
+        if (state->chats[state->ctx_chat - 1].is_group) {
+            labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_RING ?
+                        "Disable ring" : "Enable ring";
+            ids[n++] = TG_GUI_CTX_CHAT_RING;
+        }
+        return n;
+    }
     labels[n] = "Reply";
     ids[n] = TG_GUI_CTX_REPLY;
     ++n;
@@ -5970,6 +6235,348 @@ static int tg_gui_wrap_test_width(tg_gui_backend *backend, const char *text,
     return w;
 }
 
+static int tg_gui_notify_policy_self_test(void)
+{
+    static const struct {
+        unsigned long kind;
+        unsigned long mute;
+        int peer_silent, choice, silent, out, open;
+        unsigned long server_now, local_now, last;
+        int ring;
+    } cases[] = {
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 0, 2, 0, 0, 0, 100UL, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0, 2, 0, 0, 0, 100UL, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 1, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 0, 1, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0, 1, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 101UL, 0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 99UL, 0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 100UL, 0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 101UL, 0, 2, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1, 0, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 1, 2, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 1, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 0, 2, 1, 0, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 1, 0, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 1, 100UL, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 129UL, 129UL, 100UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 130UL, 130UL, 100UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 131UL, 131UL, 100UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 99UL, 99UL, 100UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 0UL, 0UL, 0UL, 0 },
+        { 0UL, 0UL, 0, 2, 0, 0, 0, 100UL, 100UL, 0UL, 0 },
+        /* A wrong local clock must not expire or extend a server mute. */
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 1500UL, 0, 0, 0, 0, 0, 1000UL, 2000UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 1500UL, 0, 0, 0, 0, 0, 2000UL, 1000UL, 0UL, 1 },
+        /* An offset correction must not shorten or prolong the local wait. */
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 2000UL, 129UL, 100UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 50UL, 130UL, 100UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0, 0, 0, 0, 0, 2000UL, 99UL, 100UL, 0 }
+    };
+    unsigned long i;
+
+    for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        if (tg_gui_notify_should_ring(cases[i].kind, cases[i].mute,
+                cases[i].peer_silent, cases[i].choice, cases[i].silent,
+                cases[i].out, cases[i].open, cases[i].server_now,
+                cases[i].local_now, cases[i].last) !=
+            cases[i].ring) {
+            printf("gui self-test: ring policy case %lu failed\n", i);
+            return 2;
+        }
+    }
+    return 0;
+}
+
+static int tg_gui_notify_override_self_test(void)
+{
+    const char *path = "tg-gui-chat-notify-self-test.tmp";
+    tg_gui_notify_override value;
+    tg_gui_notify_override read;
+    FILE *file;
+    unsigned long i;
+    int failed;
+
+    (void)remove(path);
+    tg_gui_notify_override_get(path, 0UL, 1UL, &read);
+    if (read.choice != TG_GUI_NOTIFY_DEFAULT || read.sound[0] != '\0') {
+        puts("gui self-test: missing chat override is not default");
+        return 2;
+    }
+    memset(&value, 0, sizeof(value));
+    value.choice = TG_GUI_NOTIFY_MUTE;
+    strcpy(value.sound, "Sounds/quiet chime.8svx");
+    if (tg_gui_notify_override_set(path, 0x12345678UL, 0xabcdef01UL,
+                                    &value) != 0) {
+        puts("gui self-test: first chat override save failed");
+        return 2;
+    }
+    failed = 0;
+    tg_gui_notify_override_get(path, 0x12345678UL, 0xabcdef01UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_MUTE ||
+              strcmp(read.sound, value.sound) != 0;
+    value.choice = TG_GUI_NOTIFY_RING;
+    failed |= tg_gui_notify_override_set(path, 0UL, 2UL, &value) != 0;
+    value.choice = TG_GUI_NOTIFY_RING;
+    failed |= tg_gui_notify_override_set(path, 0x12345678UL, 0xabcdef01UL,
+                                          &value) != 0;
+    tg_gui_notify_override_get(path, 0x12345678UL, 0xabcdef01UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_RING ||
+              strcmp(read.sound, value.sound) != 0;
+    value.choice = TG_GUI_NOTIFY_DEFAULT;
+    failed |= tg_gui_notify_override_set(path, 0x12345678UL, 0xabcdef01UL,
+                                          &value) != 0;
+    tg_gui_notify_override_get(path, 0x12345678UL, 0xabcdef01UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_DEFAULT;
+    tg_gui_notify_override_get(path, 0UL, 2UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_RING ||
+              strcmp(read.sound, value.sound) != 0;
+    /* A long file, a final line without newline and a future filename
+       survive changing another chat. */
+    file = fopen(path, "ab");
+    if (file == 0) {
+        failed = 1;
+    } else {
+        for (i = 10UL; i < 180UL; ++i) {
+            if (fprintf(file, "00000001 %08lx mute Sounds/later.8svx\n", i) < 0) {
+                failed = 1;
+            }
+        }
+        if (fputs("00000002 00000003 ring Sounds/no newline.8svx", file) == EOF) {
+            failed = 1;
+        }
+        if (fclose(file) != 0) {
+            failed = 1;
+        }
+    }
+    value.choice = TG_GUI_NOTIFY_MUTE;
+    failed |= tg_gui_notify_override_set(path, 0UL, 2UL, &value) != 0;
+    tg_gui_notify_override_get(path, 1UL, 179UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_MUTE ||
+              strcmp(read.sound, "Sounds/later.8svx") != 0;
+    tg_gui_notify_override_get(path, 2UL, 3UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_RING ||
+              strcmp(read.sound, "Sounds/no newline.8svx") != 0;
+    failed |= tg_gui_notify_override_set(
+                  "tg-gui-chat-notify-self-test.tmp/child", 0UL, 1UL,
+                  &value) == 0;
+    tg_gui_notify_override_get(path, 0UL, 2UL, &read);
+    failed |= read.choice != TG_GUI_NOTIFY_MUTE;
+    (void)remove(path);
+    if (failed) {
+        puts("gui self-test: chat override round trip failed");
+        return 2;
+    }
+    return 0;
+}
+
+static int tg_gui_notify_queue_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    int i;
+
+    state->notify_mode = TG_GUI_NOTIFY_TITLE;
+    state->notify_beep = 1;
+    state->notify_away = 1;
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 0, 0, 100UL);
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 1, 0, 100UL);
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 0, 0, 100UL);
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 2UL, 0, 0, 100UL);
+    if (!tg_gui_notify_ring_take(state, 100UL, 100UL) ||
+        !tg_gui_notify_ring_take(state, 100UL, 100UL) ||
+        tg_gui_notify_ring_take(state, 100UL, 100UL)) {
+        puts("gui self-test: per-chat burst rings lost or repeated");
+        return 2;
+    }
+    tg_gui_notify_seen(state, 2UL, 1UL);
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 0, 0, 101UL);
+    if (tg_gui_notify_ring_take(state, 101UL, 101UL)) {
+        puts("gui self-test: reading news reset the quiet spell");
+        return 2;
+    }
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 0, 0, 130UL);
+    if (!tg_gui_notify_ring_take(state, 130UL, 130UL)) {
+        puts("gui self-test: later burst did not ring again");
+        return 2;
+    }
+    memset(state->notify_rings, 0, sizeof(state->notify_rings));
+    state->chat_count = 1;
+    state->chats[0].peer_id_hi = 2UL;
+    state->chats[0].peer_id_lo = 1UL;
+    state->notify_away = 0;
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 0, 0, 200UL);
+    if (tg_gui_notify_ring_take(state, 200UL, 200UL)) {
+        puts("gui self-test: chat brought to front still rang");
+        return 2;
+    }
+    state->notify_away = 1;
+    for (i = 0; i < 4; ++i) {
+        state->notify_beep = i != 0;
+        state->notify_mode = i == 1 ? TG_GUI_NOTIFY_OFF : TG_GUI_NOTIFY_TITLE;
+        tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                 2UL, 1UL, i == 2, i == 3, 200UL);
+        if (tg_gui_notify_ring_take(state, 200UL, 200UL)) {
+            puts("gui self-test: disabled, silent or own message rang");
+            return 2;
+        }
+    }
+    /* Turning Beep off after collecting a message consumes it silently. */
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             2UL, 1UL, 0, 0, 200UL);
+    state->notify_beep = 0;
+    if (tg_gui_notify_ring_take(state, 200UL, 200UL)) {
+        puts("gui self-test: pending chime ignored Beep off");
+        return 2;
+    }
+    state->notify_beep = 1;
+    if (tg_gui_notify_ring_take(state, 200UL, 200UL)) {
+        puts("gui self-test: Beep on replayed discarded news");
+        return 2;
+    }
+    /* Capacity pressure cannot steal a recent chat's quiet spell. */
+    for (i = 0; i < TG_GUI_RING_PEERS; ++i) {
+        tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                 3UL, (unsigned long)i, 0, 0, 300UL);
+    }
+    for (i = 0; i < TG_GUI_RING_PEERS; ++i) {
+        if (!tg_gui_notify_ring_take(state, 300UL, 300UL)) {
+            puts("gui self-test: ring table lost a pending chat");
+            return 2;
+        }
+    }
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             4UL, 1UL, 0, 0, 301UL);
+    if (tg_gui_notify_ring_take(state, 301UL, 301UL)) {
+        puts("gui self-test: full ring table replaced recent history");
+        return 2;
+    }
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                             4UL, 1UL, 0, 0, 330UL);
+    if (!tg_gui_notify_ring_take(state, 330UL, 330UL)) {
+        puts("gui self-test: expired ring table was not reusable");
+        return 2;
+    }
+    return 0;
+}
+
+static int tg_gui_notify_menu_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    const char *labels[TG_GUI_CTX_ITEMS_MAX];
+    int ids[TG_GUI_CTX_ITEMS_MAX];
+
+    state->chat_count = 1;
+    state->ctx_chat = 1;
+    if (tg_gui_context_items(state, labels, ids) != 2 ||
+        ids[0] != TG_GUI_CTX_CHAT_REMOVE || ids[1] != TG_GUI_CTX_CHAT_MUTE ||
+        strcmp(labels[1], "Mute") != 0) {
+        puts("gui self-test: direct chat sound menu wrong");
+        return 2;
+    }
+    state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
+    if (tg_gui_context_items(state, labels, ids) != 2 ||
+        strcmp(labels[1], "Unmute") != 0) {
+        puts("gui self-test: muted chat menu cannot unmute");
+        return 2;
+    }
+    state->chats[0].is_group = 1;
+    if (tg_gui_context_items(state, labels, ids) != 3 ||
+        ids[2] != TG_GUI_CTX_CHAT_RING || strcmp(labels[2], "Enable ring") != 0) {
+        puts("gui self-test: group menu cannot enable ringing");
+        return 2;
+    }
+    state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
+    if (tg_gui_context_items(state, labels, ids) != 3 ||
+        strcmp(labels[1], "Mute") != 0 || strcmp(labels[2], "Disable ring") != 0) {
+        puts("gui self-test: ringing group menu cannot go quiet");
+        return 2;
+    }
+    return 0;
+}
+
+static int tg_gui_notify_settings_self_test(void)
+{
+    /* messages.peerDialogs and dialog ids from tg_mtproto_login.c. A channel
+       with local ring must still obey Telegram's silent and mute_until. */
+    static const unsigned long words[] = {
+        0x1cb5c415UL, 1UL, 0xd58a08c6UL, 0UL,
+        TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 9UL, 9UL,
+        1UL, 0UL, 0UL, 1UL, 0UL, 0UL, 0x99622c0cUL, 6UL,
+        0x997275b5UL, 500UL
+    };
+    const char *path = "tg-gui-ring-settings-self-test.tmp";
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_notify_override value;
+    tg_mtproto_dialog_peer_list list;
+    tg_mtproto_tl_writer writer;
+    unsigned char body[96];
+    unsigned long i;
+    int pass;
+    int ok;
+
+    memset(&value, 0, sizeof(value));
+    value.choice = TG_GUI_NOTIFY_RING;
+    (void)remove(path);
+    ok = tg_gui_notify_override_set(path, 9UL, 9UL, &value) == 0;
+    state->notify_override_path = path;
+    state->notify_beep = 1;
+    state->notify_mode = TG_GUI_NOTIFY_TITLE;
+    state->notify_away = 1;
+    for (pass = 0; pass < 2 && ok; ++pass) {
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        for (i = 0UL; i < sizeof(words) / sizeof(words[0]); ++i) {
+            if (tg_mtproto_tl_write_u32(&writer,
+                    pass == 1 && i == 15UL ? 0xbc799737UL : words[i]) !=
+                TG_MTPROTO_TL_OK) {
+                ok = 0;
+            }
+        }
+        ok = ok && tg_mtproto_parse_dialog_peer_list(0x3371c354UL, body,
+                       writer.length, &list) == TG_MTPROTO_TL_OK &&
+             list.count == 1UL;
+        tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                 9UL, 9UL, 0, 0, 1000UL);
+        ok = ok && !tg_gui_notify_ring_take(state, 400UL, 1000UL);
+        tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                 9UL, 9UL, 0, 0, 1001UL);
+        ok = ok && tg_gui_notify_ring_take(state, 501UL, 1001UL) == (pass == 1);
+    }
+    /* The server offset jumps and then returns. Thirty local seconds, not
+       those corrected timestamps, decide when this chat can ring again. */
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                             9UL, 9UL, 0, 0, 1002UL);
+    ok = ok && !tg_gui_notify_ring_take(state, 100000UL, 1002UL);
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                             9UL, 9UL, 0, 0, 1031UL);
+    ok = ok && tg_gui_notify_ring_take(state, 550UL, 1031UL);
+    value.choice = TG_GUI_NOTIFY_MUTE;
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                             9UL, 9UL, 0, 0, 1100UL);
+    ok = ok && tg_gui_notify_override_set(path, 9UL, 9UL, &value) == 0 &&
+         !tg_gui_notify_ring_take(state, 600UL, 1100UL);
+    value.choice = TG_GUI_NOTIFY_DEFAULT;
+    ok = ok && tg_gui_notify_override_set(path, 9UL, 9UL, &value) == 0;
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                             9UL, 9UL, 0, 0, 1200UL);
+    ok = ok && !tg_gui_notify_ring_take(state, 700UL, 1200UL);
+    (void)remove(path);
+    if (!ok) {
+        puts("gui self-test: dialog or local sound settings bypassed");
+        return 2;
+    }
+    return 0;
+}
+
 int tg_gui_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -5977,6 +6584,13 @@ int tg_gui_self_test(void)
     tg_gui_record record;
     int ok;
 
+    if (tg_gui_notify_policy_self_test() != 0 ||
+        tg_gui_notify_override_self_test() != 0 ||
+        tg_gui_notify_queue_self_test() != 0 ||
+        tg_gui_notify_menu_self_test() != 0 ||
+        tg_gui_notify_settings_self_test() != 0) {
+        return 2;
+    }
     tg_gui_demo_state(&state);
     if (state.chat_count <= 0 || state.message_count <= 0) {
         puts("gui self-test: demo state empty");

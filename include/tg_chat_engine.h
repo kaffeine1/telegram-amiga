@@ -29,7 +29,10 @@
 #define TG_CHAT_NOTIFY_RECENT 64U
 
 typedef struct tg_chat_notify_entry {
-    int is_chat; /* 1 = basic group (peer ids are the chat), 0 = DM user */
+    int is_chat; /* 1 = group/channel (peer ids are the chat), 0 = DM user */
+    unsigned long peer_constructor; /* distinguishes groups from channels */
+    unsigned char silent;
+    unsigned char is_out;
     unsigned long peer_id_hi;
     unsigned long peer_id_lo;
     /* The sender, for groups whose chat is not in the peer cache yet: a

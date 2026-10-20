@@ -229,9 +229,6 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
    others), which comfortably holds an 8 KB / 64 KB chunk plus the wrap+envelope.
    This is the send-direction twin of the download PACKET_MAX/body fix. */
 #define TG_MTPROTO_QUERY_SEND_MAX TG_MTPROTO_ENCRYPTED_BODY_MAX
-#define TG_MTPROTO_PEER_USER_CONSTRUCTOR 0x59511722UL
-#define TG_MTPROTO_PEER_CHAT_CONSTRUCTOR 0x36c6019aUL
-#define TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR 0xa2a5371eUL
 /* Transient "is typing" updates (layer 214; verified hashes). These never ride
    getDifference, only the live push stream -- so the indicator is best-effort
    and surfaces only where pushes flow (not the suppressed MorphOS path). */
@@ -588,6 +585,11 @@ static void tg_chat_notify_collect_one(const unsigned char *body,
         return;
     }
     entry->is_chat = is_chat;
+    entry->peer_constructor = is_chat ? TG_MTPROTO_PEER_CHAT_CONSTRUCTOR :
+                                        TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    /* silent:flags.13?true in the official updateShort* schemas. */
+    entry->silent = (flags & (1UL << 13)) != 0UL;
+    entry->is_out = (flags & 2UL) != 0UL;
     entry->peer_id_hi = chat_hi;
     entry->peer_id_lo = chat_lo;
     entry->from_id_hi = sender_hi;
@@ -3419,17 +3421,22 @@ static void tg_chat_notify_push_message(const tg_mtproto_message_text *message,
         return;
     }
     if (dest != 0 && dest->peer_constructor != 0UL) {
+        entry->peer_constructor = dest->peer_constructor;
         entry->is_chat =
             dest->peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR;
         entry->peer_id_hi = dest->id_hi;
         entry->peer_id_lo = dest->id_lo;
     } else {
+        entry->peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
         entry->is_chat = 0;
         entry->peer_id_hi = message->from_id_hi;
         entry->peer_id_lo = message->from_id_lo;
     }
     entry->from_id_hi = message->from_id_hi;
     entry->from_id_lo = message->from_id_lo;
+    /* message carries the same silent:flags.13?true bit. */
+    entry->silent = (message->flags & (1UL << 13)) != 0UL;
+    entry->is_out = message->is_out != 0;
     copy_length = (unsigned long)strlen(message->text);
     if (copy_length >= TG_CHAT_NOTIFY_TEXT) {
         copy_length = TG_CHAT_NOTIFY_TEXT - 1UL;
@@ -8614,6 +8621,11 @@ static int tg_mtproto_load_peer_cache_peer(const char *path,
                                            FILE *stream,
                                            const char *label)
 {
+    FILE *file;
+    char line[512];
+    unsigned long wanted_index;
+    unsigned long constructor;
+
     /* Saved Messages: the self chat has no cache row -- synthesize the
        sentinel peer; tg_write_input_peer turns it into inputPeerSelf. */
     if (peer_index_text != 0 && strcmp(peer_index_text, "self") == 0) {
@@ -8625,11 +8637,6 @@ static int tg_mtproto_load_peer_cache_peer(const char *path,
         *has_access_hash = 0;
         return 0;
     }
-    FILE *file;
-    char line[512];
-    unsigned long wanted_index;
-    unsigned long constructor;
-
     if (path == 0 || peer_constructor == 0 || peer_id_hi == 0 ||
         peer_id_lo == 0 || access_hash_hi == 0 || access_hash_lo == 0 ||
         has_access_hash == 0 ||
@@ -9083,13 +9090,6 @@ static int tg_mtproto_load_peer_cache_label(const char *path,
                                             char *label_buffer,
                                             unsigned long label_buffer_size)
 {
-    if (peer_index_text != 0 && strcmp(peer_index_text, "self") == 0) {
-        if (label_buffer_size > 0UL) {
-            strncpy(label_buffer, "Saved Messages", label_buffer_size - 1UL);
-            label_buffer[label_buffer_size - 1UL] = '\0';
-        }
-        return 0;
-    }
     FILE *file;
     char line[512];
     tg_mtproto_peer_line pl;
@@ -9097,6 +9097,13 @@ static int tg_mtproto_load_peer_cache_label(const char *path,
     char *title;
     char *username;
 
+    if (peer_index_text != 0 && strcmp(peer_index_text, "self") == 0) {
+        if (label_buffer_size > 0UL) {
+            strncpy(label_buffer, "Saved Messages", label_buffer_size - 1UL);
+            label_buffer[label_buffer_size - 1UL] = '\0';
+        }
+        return 0;
+    }
     if (label_buffer == 0 || label_buffer_size == 0UL) {
         return 2;
     }
@@ -16154,6 +16161,7 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 
 #if !defined(TG_NO_SELFTEST)
 static int tg_gui_hidden_projection_self_test(void);
+static int tg_gui_session_server_time_self_test(void);
 
 #if !defined(TG_NO_SELFTEST)
 static int tg_mtproto_executable_sniff_self_test(void); /* defined by the download engine */
@@ -16166,6 +16174,106 @@ static int tg_mtproto_download_window_self_test(void);
 static int tg_mtproto_upload_window_self_test(void);
 static int tg_mtproto_first_contact_self_test(void);
 static int tg_mtproto_display_text_self_test(void);
+
+static int tg_chat_notify_flags_self_test(void)
+{
+    static const unsigned long short_kinds[] = {
+        TG_MTPROTO_UPDATE_SHORT_MESSAGE_CONSTRUCTOR,
+        TG_MTPROTO_UPDATE_SHORT_CHAT_MESSAGE_CONSTRUCTOR,
+        TG_MTPROTO_UPDATE_SHORT_MESSAGE_L214_CONSTRUCTOR,
+        TG_MTPROTO_UPDATE_SHORT_CHAT_MESSAGE_L214_CONSTRUCTOR
+    };
+    unsigned char body[160];
+    tg_mtproto_tl_writer writer;
+    tg_chat_notify queue;
+    unsigned long i;
+    unsigned long kind;
+    unsigned long flags;
+    int mode;
+    int ok;
+
+    ok = 1;
+    tg_chat_nq = &queue;
+#define TG_RING_W32(v) do { if (tg_mtproto_tl_write_u32(&writer, (v)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+#define TG_RING_W64(h, l) do { if (tg_mtproto_tl_write_u64(&writer, (h), (l)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+#define TG_RING_TEXT() do { if (tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)"news", 4UL) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+    for (i = 0UL; i < 4UL && ok; ++i) {
+        for (mode = 0; mode < 4 && ok; ++mode) {
+            flags = (mode & 1) != 0 ? (1UL << 13) : 0UL;
+            if ((mode & 2) != 0) {
+                flags |= 2UL;
+            }
+            tg_chat_notify_reset(&queue, 1);
+            tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+            TG_RING_W32(short_kinds[i]); TG_RING_W32(flags);
+            TG_RING_W32(700UL); TG_RING_W64(1UL, 7UL);
+            if ((i & 1UL) != 0UL) {
+                TG_RING_W64(2UL, 8UL);
+            }
+            TG_RING_TEXT();
+            TG_RING_W32(1UL); TG_RING_W32(1UL); TG_RING_W32(1700000000UL);
+            tg_chat_notify_collect(body, writer.length);
+            if ((mode & 2) != 0) {
+                ok = ok && queue.count == 0UL;
+            } else {
+                kind = (i & 1UL) != 0UL ? TG_MTPROTO_PEER_CHAT_CONSTRUCTOR :
+                                                   TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+                ok = ok && queue.count == 1UL &&
+                     queue.queue[0].silent == (mode & 1) &&
+                     !queue.queue[0].is_out &&
+                     queue.queue[0].peer_constructor == kind &&
+                     queue.queue[0].peer_id_hi == ((i & 1UL) != 0UL ? 2UL : 1UL);
+            }
+        }
+    }
+    if (!ok) {
+        tg_chat_nq = 0;
+        puts("probe self-test: short notification flags lost");
+        return 2;
+    }
+    /* Full messages, as received in updateShort{updateNew*Message}. The
+       same collector is used for getDifference's message vector. */
+    for (i = 0UL; i < 3UL && ok; ++i) {
+        kind = i == 0UL ? TG_MTPROTO_PEER_USER_CONSTRUCTOR :
+               i == 1UL ? TG_MTPROTO_PEER_CHAT_CONSTRUCTOR :
+                          TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        for (mode = 0; mode < 4 && ok; ++mode) {
+            flags = (mode & 1) != 0 ? (1UL << 13) : 0UL;
+            if ((mode & 2) != 0) {
+                flags |= 2UL;
+            }
+            tg_chat_notify_reset(&queue, 1);
+            tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+            TG_RING_W32(TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR);
+            TG_RING_W32(i == 2UL ? TG_MTPROTO_UPDATE_NEW_CHANNEL_MESSAGE_CONSTRUCTOR :
+                                   TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR);
+            TG_RING_W32(TG_MTPROTO_MESSAGE_CONSTRUCTOR);
+            TG_RING_W32(flags); TG_RING_W32(0UL); TG_RING_W32(701UL);
+            TG_RING_W32(kind); TG_RING_W64(3UL, 9UL);
+            TG_RING_W32(1700000000UL); TG_RING_TEXT();
+            TG_RING_W32(1UL); TG_RING_W32(1UL); TG_RING_W32(1700000000UL);
+            tg_chat_notify_collect(body, writer.length);
+            if ((mode & 2) != 0) {
+                ok = ok && queue.count == 0UL;
+            } else {
+                ok = ok && queue.count == 1UL &&
+                     queue.queue[0].silent == (mode & 1) &&
+                     !queue.queue[0].is_out &&
+                     queue.queue[0].peer_constructor == kind &&
+                     queue.queue[0].peer_id_hi == 3UL;
+            }
+        }
+    }
+    tg_chat_nq = 0;
+#undef TG_RING_W32
+#undef TG_RING_W64
+#undef TG_RING_TEXT
+    if (!ok) {
+        puts("probe self-test: full notification flags lost");
+        return 2;
+    }
+    return 0;
+}
 
 int tg_mtproto_probe_self_test(void)
 {
@@ -16507,6 +16615,10 @@ int tg_mtproto_probe_self_test(void)
         (void)remove(rep_path);
     }
 
+    if (tg_chat_notify_flags_self_test() != 0 ||
+        tg_gui_session_server_time_self_test() != 0) {
+        return 2;
+    }
     /* 0.0.95: a pushed message's preview is cut to its buffer on a character
        boundary. "ab" and U+00E9 from there on: the 95 bytes the preview has
        end inside an e, so it keeps 94. */
@@ -23060,6 +23172,59 @@ int tg_gui_session_is_open(void)
 {
     return tg_gui_session_state.open;
 }
+
+unsigned long tg_gui_session_server_time(void)
+{
+    return tg_mtproto_context_time(tg_gui_session_state.open ?
+                                    &tg_gui_session_state.context : 0);
+}
+
+#if !defined(TG_NO_SELFTEST)
+static int tg_gui_session_server_time_self_test(void)
+{
+    static const struct {
+        int open;
+        long delta;
+    } cases[] = {
+        { 0, 7200L }, { 1, 0L }, { 1, 7200L }, { 1, -7200L }
+    };
+    unsigned long i;
+    unsigned long before;
+    unsigned long after;
+    unsigned long got;
+    int saved_open;
+    long saved_delta;
+    int ok;
+
+    saved_open = tg_gui_session_state.open;
+    saved_delta = tg_gui_session_state.context.server_time_delta_seconds;
+    ok = 1;
+    for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        tg_gui_session_state.open = cases[i].open;
+        tg_gui_session_state.context.server_time_delta_seconds = cases[i].delta;
+        before = (unsigned long)time(0);
+        got = tg_gui_session_server_time();
+        after = (unsigned long)time(0);
+        if (cases[i].open && cases[i].delta > 0L) {
+            before += 7200UL;
+            after += 7200UL;
+        } else if (cases[i].open && cases[i].delta < 0L) {
+            before = before > 7200UL ? before - 7200UL : 0UL;
+            after = after > 7200UL ? after - 7200UL : 0UL;
+        }
+        if (got < before || got > after) {
+            ok = 0;
+        }
+    }
+    tg_gui_session_state.open = saved_open;
+    tg_gui_session_state.context.server_time_delta_seconds = saved_delta;
+    if (!ok) {
+        puts("probe self-test: session server clock or fallback wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 unsigned long tg_gui_session_deferred_contact(void)
 {
