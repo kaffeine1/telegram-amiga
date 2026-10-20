@@ -1348,6 +1348,57 @@ own; the file stops being part of what we distribute, and a new pair can
 be rolled out with a release. The pair itself should belong to the
 project rather than to a personal account.
 
+## Planned: the day of older messages
+
+A message shows only its time, `HH:MM` in the bubble and `[HH:MM]` in
+the text client, so one written on an earlier day does not say which day
+that was. A tester pointed it out on 2026-10-20: for today the time is
+enough, for earlier days the day is needed too. The plan follows
+Telegram's own apps: where the day changes in the transcript, a small
+centred line gives the date ("Yesterday", or the day and the month, with
+the year when it is not the current one), and the bubbles keep their
+HH:MM. The text client prints the same line between its transcript
+lines. Which day is today has to come from the same clock the message
+times use, Telegram's time in the Locale's zone when the Amiga's own
+clock was never set, or a machine left on 1978 would call every message
+old. The words stay English until the translations after the beta.
+
+## Planned: an underscore stays an underscore
+
+Bold, italic, code and strike reach the screen as markers inside the
+message text: the engine wraps each such span in `*`, `_`, `` ` `` or `~`
+(`tg_msg_entity_marker` in `tg_mtproto_login.c`), and the GUI's painter
+takes each of those characters as a style switch and does not draw it
+(`tg_gui_draw_markup` in `tg_gui.c`). A character the user really typed
+is read the same way. A tester sent an underscore on 2026-10-20 and it
+vanished, turning the text after it italic; `2*3` or `~/docs` would do
+the same in bold and strike. Only links are exempt today. The fix gives
+the markers bytes that text never carries, control codes below 32, the
+way the emoji already travel as pairs of their own: the painter switches
+style on those and draws every printable character, and the text client,
+which shows the markers as they are, turns them back into the same
+visible characters. Whatever takes message text out of the painter (the
+clipboard, the pop-up, the window title) strips them, as it already
+expands the emoji pairs, and the self-tests carry a message with a
+literal `*`, `_`, `` ` `` and `~` in it.
+
+## Planned: typed emoticons become emoji
+
+A tester asked on 2026-10-20 for the usual text emoticons to turn into
+their emoji as they are typed, `:)` into the smiling face, as many chat
+programs do. The client already knows the pairs the other way round: it
+writes an emoji it cannot draw as its emoticon
+(`tg_mtproto_display_emoticon` in `tg_mtproto_probe.c`), and the
+composer already holds the picker's emoji as two-byte pairs that it
+draws and sends as the real emoji. The plan: a short fixed list (`:)`,
+`:-)`, `:D`, `;)`, `:P`, `:(`, `:'(`, `:O`, `<3` and their close
+variants), each mapped to an emoji the picker already draws; an emoticon
+is replaced when it stands on its own, at the start of the text or after
+a space, once a space, Return or Send follows it; Backspace straight
+after a replacement brings the typed characters back; and a setting
+turns the whole thing off. Nothing changes inside a link, and the text
+client keeps sending what is typed.
+
 ## Open: a rare crash on AROS x86_64, not reproduced
 
 Seen once during the 0.0.92 field test, on 2026-09-02, in the AROS One
