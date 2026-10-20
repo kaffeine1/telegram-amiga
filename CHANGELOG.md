@@ -25,6 +25,10 @@ the text client for the plain 68000.
   data/telegram-chat-notify.txt.
 
 ### Fixed
+- A name, a message or a preview too long for the room kept for it no
+  longer ends in a box: an emoji that does not fit whole is left out
+  instead of being cut in half. A rare control character inside a message
+  can no longer turn the letter after it into an emoji.
 - The temporary files in T: that keep the network's progress lines out of
   sight no longer get crossed. Switching chat while a photo was still
   loading and a file was being sent could take the sender's file away from

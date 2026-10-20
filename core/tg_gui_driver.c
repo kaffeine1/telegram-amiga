@@ -95,8 +95,10 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
             dest[o++] = '\n'; /* keep real line breaks (lists, paragraphs) */
         } else if (cp == 0x0DUL) {
             continue; /* drop CR: a CRLF becomes a single '\n' */
-        } else if (cp < 0x20UL) {
-            dest[o++] = ' '; /* other control bytes -> space */
+        } else if (cp < 0x20UL || (cp >= 0x80UL && cp < 0xA0UL)) {
+            /* other control bytes -> space; a C1 one passed through would
+               read as the first byte of an emoji pair */
+            dest[o++] = ' ';
         } else if (cp < 0x100UL) {
             dest[o++] = (char)cp;
         } else {
@@ -113,10 +115,13 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
                 int gi = tg_gui_emoji_index_of(cp);
 
                 if (gi >= 0 && tg_gui_emoji_encode((unsigned long)gi, tmp)) {
-                    n = 2UL;
-                    for (k = 0UL; k < n && o + 1UL < size; ++k) {
-                        dest[o++] = tmp[k];
+                    /* Both bytes or neither: the first byte alone at the
+                       end of a cut line draws as a box. */
+                    if (o + 2UL >= size) {
+                        break;
                     }
+                    dest[o++] = tmp[0];
+                    dest[o++] = tmp[1];
                     continue;
                 }
             }
@@ -1214,6 +1219,23 @@ int tg_gui_driver_self_test(void)
         tg_gui_driver_copy_latin1(out, sizeof(out), "a \xef\xb8\x8f" "b");
         if (strcmp(out, "a b") != 0) {
             printf("gui driver self-test: modifier ate a space (\"%s\")\n", out);
+            return 2;
+        }
+        /* An emoji pair that does not fit whole is left out, not cut in
+           half, and a C1 control never stands in for the pair's first byte. */
+        {
+            char small[4];
+
+            tg_gui_driver_copy_latin1(small, sizeof(small),
+                                      "ab\xf0\x9f\x98\x80");
+            if (strcmp(small, "ab") != 0) {
+                puts("gui driver self-test: emoji pair cut in half");
+                return 2;
+            }
+        }
+        tg_gui_driver_copy_latin1(out, sizeof(out), "x\xc2\x80" "Ay");
+        if (strcmp(out, "x Ay") != 0) {
+            printf("gui driver self-test: C1 control left \"%s\"\n", out);
             return 2;
         }
     }
