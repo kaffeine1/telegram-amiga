@@ -1007,10 +1007,11 @@ aminet_meta() {
     # The ARM64 lane is an Aminet upload too since 0.0.95 (first one sent on
     # 2026-10-08). Aminet's architecture list has no ARM token (m68k-amigaos,
     # ppc-amigaos, ppc-morphos, i386-aros, i386-amithlon, ppc-warpup,
-    # ppc-powerup, generic, other): "other" is the honest one, as Free
-    # Pascal's ARM AROS build uses; i386-aros would send an x86 user an ARM
-    # binary. The file name and Requires: say what it is.
-    aros-aarch64) archtag="aarch64-aros"; archval="other"
+    # ppc-powerup, generic, other). Up to 0.0.97 it said "other", which shows
+    # no AROS icon on the archive's page; from 0.0.98 it says i386-aros like
+    # the x86_64 lane and our BebboSSH port's aarch64 upload, so it is listed
+    # with the other AROS builds. The file name and Requires: say it is ARM.
+    aros-aarch64) archtag="aarch64-aros"; archval="i386-aros"
                  lhaname="TelegramAmiga-ARM64"
                  requires="AROS aarch64 (ABIv1, Raspberry Pi 4/400/5) with AROSTCP" ;;
     # The plain-68000 text client, on Aminet from 0.0.96 under its own name:
