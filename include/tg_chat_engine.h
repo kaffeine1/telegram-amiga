@@ -24,6 +24,7 @@
    the renderer (console today, GUI later). */
 #define TG_CHAT_NOTIFY_MAX 8U
 #define TG_CHAT_NOTIFY_TEXT 96U
+#define TG_CHAT_NOTIFY_NAME 48U
 /* Dedupe ring: must absorb the overlap between live pushes and the
    reconciliation sweep on a busy hour, not just push repeats. */
 #define TG_CHAT_NOTIFY_RECENT 64U
@@ -39,6 +40,7 @@ typedef struct tg_chat_notify_entry {
        stale cache then still shows WHO wrote instead of a generic line. */
     unsigned long from_id_hi;
     unsigned long from_id_lo;
+    char sender_name[TG_CHAT_NOTIFY_NAME]; /* UTF-8, empty unless a named user in a group */
     char text[TG_CHAT_NOTIFY_TEXT];
 } tg_chat_notify_entry;
 

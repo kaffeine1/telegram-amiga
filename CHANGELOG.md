@@ -23,6 +23,11 @@ the text client for the plain 68000.
   Unmute, and for groups and channels Enable or Disable ring; anywhere
   else in the window it still opens the menu bar. The choices are kept in
   data/telegram-chat-notify.txt.
+- In a group, the new-message pop-up says who wrote: "Name: text". The
+  name comes with the update or from the names the client already knows;
+  when it is unknown, and for channel posts and anonymous admins, the line
+  shows the text alone as before. A long name is cut so the text keeps
+  most of the line.
 
 ### Fixed
 - A name, a message or a preview too long for the room kept for it no

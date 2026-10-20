@@ -62,6 +62,8 @@ tg_chat_notify_entry *tg_chat_notify_claim(tg_chat_notify *notify)
         return 0;
     }
     entry = &notify->queue[notify->count];
+    /* A reused slot must not keep the preceding message's sender. */
+    entry->sender_name[0] = '\0';
     ++notify->count;
     return entry;
 }
@@ -84,6 +86,7 @@ int tg_chat_engine_self_test(void)
     unsigned int i;
 
     /* Poison, then init must produce a clean session. */
+    memset(&engine, 0xa5, sizeof(engine));
     engine.diff_enabled = 0;
     engine.updates_state.pts = 12345UL;
     engine.updates_state.qts = 6789UL;
@@ -129,6 +132,11 @@ int tg_chat_engine_self_test(void)
             puts("chat engine self-test: claim failed before full");
             return 2;
         }
+        if (entry->sender_name[0] != '\0') {
+            puts("chat engine self-test: claimed slot kept its sender");
+            return 2;
+        }
+        strcpy(entry->sender_name, "Previous sender");
         entry->is_chat = 0;
     }
     if (tg_chat_notify_claim(&engine.notify) != 0) {
@@ -137,6 +145,12 @@ int tg_chat_engine_self_test(void)
     }
     if (engine.notify.count != TG_CHAT_NOTIFY_MAX || engine.notify.dropped != 1UL) {
         puts("chat engine self-test: overflow counters wrong");
+        return 2;
+    }
+    tg_chat_notify_reset(&engine.notify, 1);
+    entry = tg_chat_notify_claim(&engine.notify);
+    if (entry == 0 || entry->sender_name[0] != '\0') {
+        puts("chat engine self-test: reset then claim kept its sender");
         return 2;
     }
 

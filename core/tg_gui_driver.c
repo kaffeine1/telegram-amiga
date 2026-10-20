@@ -717,6 +717,41 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
     }
 }
 
+/* Keep at least 62 of the 95 display bytes for the message, after ": ". The
+   cap is in Latin-1 bytes, with two-byte emoji kept whole. */
+#define TG_GUI_NOTIFY_SENDER_MAX 31UL
+
+static void tg_gui_driver_notify_text(tg_gui_state *state,
+                                       const tg_chat_notify_entry *entry)
+{
+    char name[TG_GUI_NAME_MAX];
+    unsigned long length;
+    unsigned long keep;
+    unsigned long prefix;
+
+    prefix = 0UL;
+    if (entry->is_chat && entry->sender_name[0] != '\0') {
+        tg_gui_driver_copy_latin1(name, sizeof(name), entry->sender_name);
+        length = (unsigned long)strlen(name);
+        keep = length;
+        if (keep > TG_GUI_NOTIFY_SENDER_MAX) {
+            keep = TG_GUI_NOTIFY_SENDER_MAX;
+            if (tg_gui_emoji_pair_at(name, length, keep - 1UL, 0)) {
+                --keep;
+            }
+        }
+        if (keep > 0UL) {
+            memcpy(state->notify_last_text, name, keep);
+            state->notify_last_text[keep] = ':';
+            state->notify_last_text[keep + 1UL] = ' ';
+            prefix = keep + 2UL;
+        }
+    }
+    tg_gui_driver_copy_latin1(state->notify_last_text + prefix,
+                              sizeof(state->notify_last_text) - prefix,
+                              entry->text);
+}
+
 /* A cross-chat notification: find the sidebar row whose peer id matches and
    bump its unread badge + flag it to blink. Peer ids in one cache are unique
    per chat, so the id alone disambiguates. The currently open chat does not
@@ -787,9 +822,7 @@ static void tg_gui_driver_notify_at(void *ctx,
                 tg_gui_driver_copy(state->notify_last_name,
                                    sizeof(state->notify_last_name),
                                    chat->name);
-                tg_gui_driver_copy_latin1(state->notify_last_text,
-                                          sizeof(state->notify_last_text),
-                                          entry->text);
+                tg_gui_driver_notify_text(state, entry);
                 state->notify_seq += 1UL;
             }
             return;
@@ -1137,6 +1170,99 @@ static int tg_gui_driver_notify_mute_self_test(void)
     return ok;
 }
 
+static int tg_gui_driver_notify_sender_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_chat_driver gui;
+    tg_chat_driver driver;
+    tg_chat_notify_entry note;
+    char pair[2];
+    unsigned long i;
+
+    memset(state, 0, sizeof(*state));
+    tg_gui_chat_driver_bind(&gui, state, &driver);
+    state->selected_chat = -1;
+    state->chat_count = 1;
+    state->chats[0].peer_id_lo = 0xabc123UL;
+    state->chats[0].is_group = 1;
+    strcpy(state->chats[0].name, "Group");
+    memset(&note, 0, sizeof(note));
+    note.peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    note.peer_id_lo = state->chats[0].peer_id_lo;
+    note.is_chat = 1;
+    strcpy(note.sender_name, "Name");
+    strcpy(note.text, "text");
+    driver.on_notification(driver.ctx, &note);
+    if (strcmp(state->notify_last_text, "Name: text") != 0 ||
+        strcmp(state->notify_last_name, "Group") != 0) {
+        puts("gui driver self-test: group notification sender missing");
+        return 0;
+    }
+    note.sender_name[0] = '\0';
+    driver.on_notification(driver.ctx, &note);
+    if (strcmp(state->notify_last_text, "text") != 0) {
+        puts("gui driver self-test: unnamed notification gained a prefix");
+        return 0;
+    }
+    strcpy(note.sender_name, "Name");
+    note.is_chat = 0;
+    note.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    driver.on_notification(driver.ctx, &note);
+    if (strcmp(state->notify_last_text, "text") != 0) {
+        puts("gui driver self-test: direct notification gained a prefix");
+        return 0;
+    }
+    note.is_chat = 1;
+    note.peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    strcpy(note.sender_name, "Andr\xc3\xa9");
+    memset(note.text, 'x', sizeof(note.text) - 1U);
+    note.text[sizeof(note.text) - 1U] = '\0';
+    driver.on_notification(driver.ctx, &note);
+    if (strlen(state->notify_last_text) != TG_GUI_NOTIFY_TEXT_MAX - 1UL ||
+        strncmp(state->notify_last_text, "Andr\xe9: ", 7U) != 0) {
+        puts("gui driver self-test: long notification lost its sender or bound");
+        return 0;
+    }
+    for (i = 7UL; i < TG_GUI_NOTIFY_TEXT_MAX - 1UL; ++i) {
+        if (state->notify_last_text[i] != 'x') {
+            puts("gui driver self-test: long notification text changed");
+            return 0;
+        }
+    }
+    memset(note.sender_name, 'A', sizeof(note.sender_name) - 1U);
+    note.sender_name[sizeof(note.sender_name) - 1U] = '\0';
+    strcpy(note.text, "text");
+    driver.on_notification(driver.ctx, &note);
+    if (strlen(state->notify_last_text) != 37UL ||
+        strcmp(state->notify_last_text + 31, ": text") != 0) {
+        puts("gui driver self-test: long sender left no notification text");
+        return 0;
+    }
+    /* U+1F600 becomes a two-byte GUI pair: one exactly fits the name cap,
+       the next case would cross it and must be omitted whole. */
+    if (!tg_gui_emoji_encode((unsigned long)tg_gui_emoji_index_of(0x1f600UL),
+                              pair)) {
+        puts("gui driver self-test: notification emoji fixture unavailable");
+        return 0;
+    }
+    memset(note.sender_name, 'A', 29U);
+    strcpy(note.sender_name + 29, "\xf0\x9f\x98\x80 end");
+    driver.on_notification(driver.ctx, &note);
+    if (memcmp(state->notify_last_text + 29, pair, 2U) != 0 ||
+        strcmp(state->notify_last_text + 31, ": text") != 0) {
+        puts("gui driver self-test: notification sender emoji pair lost");
+        return 0;
+    }
+    memset(note.sender_name, 'A', 30U);
+    strcpy(note.sender_name + 30, "\xf0\x9f\x98\x80 end");
+    driver.on_notification(driver.ctx, &note);
+    if (strcmp(state->notify_last_text + 30, ": text") != 0) {
+        puts("gui driver self-test: notification sender emoji pair split");
+        return 0;
+    }
+    return 1;
+}
+
 int tg_gui_driver_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -1145,6 +1271,9 @@ int tg_gui_driver_self_test(void)
     int i;
 
     if (!tg_gui_driver_notify_mute_self_test()) {
+        return 2;
+    }
+    if (!tg_gui_driver_notify_sender_self_test()) {
         return 2;
     }
     if (!tg_gui_driver_webpage_self_test()) {

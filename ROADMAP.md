@@ -1027,8 +1027,10 @@ new label by being added again: removed first everywhere, so it keeps
 its place, but on AROS the new one goes in before the old one goes,
 because Wanderer knows an AppIcon by its address and the one added back
 at once got the same address and kept the old label. Not done in this
-step: the sender's name inside a group (the update gives only its id),
-and the end of a transfer in the pop-up.
+step: the end of a transfer in the pop-up. The sender's name inside a
+group followed on `main` for 0.0.98: the short update gives only its id,
+so the name comes from the users that travel with a full update, or from
+the names the client already holds.
 
 ## Planned: select several messages, then delete or forward them
 

@@ -113,6 +113,8 @@
 #define TG_ACCOUNT_PASSWORD_CONSTRUCTOR 0x957b50fbUL
 #define TG_PASSWORD_KDF_ALGO_SRP_CONSTRUCTOR 0x3a912d4aUL
 #define TG_USER_CONSTRUCTOR 0x020b1422UL
+/* https://core.telegram.org/schema: userEmpty#d3bc4b7a id:long = User. */
+#define TG_USER_EMPTY_CONSTRUCTOR 0xd3bc4b7aUL
 #define TG_CHAT_EMPTY_CONSTRUCTOR 0x29562865UL
 #define TG_CHAT_CONSTRUCTOR 0x41cbf256UL
 #define TG_CHAT_FORBIDDEN_CONSTRUCTOR 0x6592a1a7UL
@@ -3953,6 +3955,109 @@ static unsigned long tg_peer_cache_scan_users(const unsigned char *body,
         }
     }
     return updated;
+}
+
+void tg_mtproto_copy_utf8_name(char *dest, unsigned long size, const char *src)
+{
+    unsigned long n;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    n = src != 0 ? (unsigned long)strlen(src) : 0UL;
+    if (n >= size) {
+        n = size - 1UL;
+        while (n > 0UL && ((unsigned char)src[n] & 0xc0U) == 0x80U) {
+            --n;
+        }
+    }
+    if (n > 0UL) {
+        memcpy(dest, src, n);
+    }
+    dest[n] = '\0';
+    tg_trim_utf8_tail(dest);
+}
+
+int tg_mtproto_find_user_name(const unsigned char *body,
+                              unsigned long body_length,
+                              unsigned long id_hi, unsigned long id_lo,
+                              char *name, unsigned long name_size)
+{
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_user_summary user;
+    char title[193];
+    unsigned long offset;
+    unsigned long users_start;
+    unsigned long users_left;
+    unsigned long constructor;
+    unsigned long count;
+
+    if (name == 0 || name_size == 0UL) {
+        return 0;
+    }
+    name[0] = '\0';
+    if (body == 0 || body_length < 20UL || (id_hi == 0UL && id_lo == 0UL)) {
+        return 0;
+    }
+    /* Message/Update readers cannot always skip optional tails. Locate the
+       users vector by its first User, then use the same aligned User scan as
+       tg_peer_cache_scan_users, bounded by the vector's count. users follows
+       messages/updates in both envelopes, so prefer the last such vector over
+       lookalike bytes in message text. Empty users vectors have no names. */
+    users_start = 0UL;
+    users_left = 0UL;
+    for (offset = 0UL; offset <= body_length - 12UL; offset += 4UL) {
+        if (tg_read_u32_le(body + offset) != TG_VECTOR_CONSTRUCTOR) {
+            continue;
+        }
+        count = tg_read_u32_le(body + offset + 4UL);
+        constructor = tg_read_u32_le(body + offset + 8UL);
+        /* Even userEmpty needs 12 bytes. Clamp before trusting a wire count. */
+        if (count > 0UL && count <= (body_length - offset - 8UL) / 12UL &&
+            (constructor == TG_USER_CONSTRUCTOR ||
+             constructor == TG_USER_EMPTY_CONSTRUCTOR)) {
+            users_start = offset + 8UL;
+            users_left = count;
+        }
+    }
+    for (offset = users_start; users_left > 0UL &&
+         offset <= body_length - 12UL; offset += 4UL) {
+        constructor = tg_read_u32_le(body + offset);
+        if (constructor == TG_USER_EMPTY_CONSTRUCTOR) {
+            --users_left;
+            offset += 8UL;
+            continue;
+        }
+        if (constructor != TG_USER_CONSTRUCTOR) {
+            continue;
+        }
+        if (body_length - offset < 20UL) {
+            break;
+        }
+        --users_left;
+        /* user#020b1422 flags:# flags2:# id:long is defined above. Only the
+           requested sender needs its strings read; no cache is filled. */
+        if (tg_read_u32_le(body + offset + 12UL) != id_lo ||
+            tg_read_u32_le(body + offset + 16UL) != id_hi) {
+            offset += 16UL;
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&reader, body + offset,
+                                  body_length - offset);
+        if (tg_read_user_leading_from_reader(&reader, &user) !=
+                TG_MTPROTO_TL_OK) {
+            continue;
+        }
+        /* The two 96-byte fields fit whole here; the final copy alone applies
+           the notification's smaller limit, before the GUI transcodes it. */
+        sprintf(title, "%.95s%.1s%.95s", user.first_name,
+                user.first_name[0] != '\0' && user.last_name[0] != '\0' ?
+                    " " : "", user.last_name);
+        tg_mtproto_copy_utf8_name(name, name_size,
+                                   title[0] != '\0' ? title : user.username);
+        return name[0] != '\0';
+    }
+    return 0;
 }
 
 static int tg_peer_cache_apply_chat(tg_mtproto_peer_cache *cache,

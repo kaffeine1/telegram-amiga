@@ -942,6 +942,14 @@ void tg_mtproto_parse_message_peers(const unsigned char *body,
                                     unsigned long body_length,
                                     tg_mtproto_peer_cache *out);
 
+/* A single sender from the users carried by an updates/difference container.
+   No cache is filled. Names are UTF-8 and always cut on a character boundary. */
+int tg_mtproto_find_user_name(const unsigned char *body,
+                              unsigned long body_length,
+                              unsigned long id_hi, unsigned long id_lo,
+                              char *name, unsigned long name_size);
+void tg_mtproto_copy_utf8_name(char *dest, unsigned long size, const char *src);
+
 tg_mtproto_tl_status tg_mtproto_parse_updates_summary(
     unsigned long constructor,
     const unsigned char *body,
