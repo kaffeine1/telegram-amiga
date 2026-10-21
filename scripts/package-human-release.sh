@@ -137,7 +137,11 @@ dopo giro sul suo A600, la versione 68000 non sarebbe mai uscita.
   setups. Both share the same login and the same saved session."
         tui_entry_it="- TelegramAmiga-TUI -- un client testuale a schermo intero per macchine leggere o
   senza mouse. Condividono lo stesso login e la stessa sessione salvata."
-        first_start_en="1. Unpack the drawer and double-click TelegramAmiga (or TelegramAmiga-TUI).
+        first_start_en="You need a Telegram account. This client signs in to an existing account
+but cannot create one yet: if you have none, create it first with the
+official Telegram app on a phone, then come back here.
+
+1. Unpack the drawer and double-click TelegramAmiga (or TelegramAmiga-TUI).
 2. If there is no saved login, a login panel appears. Enter your phone number
    in full international form (for example +39 333 1234567), then the code
    Telegram sends you. That code usually does NOT arrive by SMS: if you are
@@ -150,7 +154,11 @@ dopo giro sul suo A600, la versione 68000 non sarebbe mai uscita.
    (if you do NOT have one, just press Enter to continue).
 3. The client logs in and writes telegram-auth.bin in this drawer. After that
    it reuses the saved login -- you are not asked for the phone/code again."
-        first_start_it="1. Scompatta il drawer e fai doppio click su TelegramAmiga (o TelegramAmiga-TUI).
+        first_start_it="Ti serve un account Telegram. Questo client accede a un account esistente
+ma non sa ancora crearne uno: se non ce l'hai, crealo prima con l'app
+ufficiale di Telegram su un telefono, poi torna qui.
+
+1. Scompatta il drawer e fai doppio click su TelegramAmiga (o TelegramAmiga-TUI).
 2. Se non c'e' un login salvato, compare il pannello di accesso. Inserisci il
    numero di telefono in formato internazionale completo (es. +39 333 1234567),
    poi il codice che Telegram ti invia. Quel codice di solito NON arriva via
@@ -205,7 +213,11 @@ TelegramAmiga (or TelegramAmiga-TUI). First run signs you in (phone -> code -> 2
   Shell: una Shell ne assegna 4096 byte di default, e il programma te lo
   dice invece di crashare. Se la Shell si rifiuta di eseguirlo, dai una
   volta \"Protect TelegramAmiga +e\"."
-            first_start_en="1. On a FASTER Amiga (68020 or better) or in an emulator (WinUAE,
+            first_start_en="You need a Telegram account. This client signs in to an existing account
+but cannot create one yet: if you have none, create it first with the
+official Telegram app on a phone, then come back here.
+
+1. On a FASTER Amiga (68020 or better) or in an emulator (WinUAE,
    FS-UAE, vAmiga), install the standard AmigaOS 3.x package and log in
    there: phone number, the code Telegram sends you, and the cloud
    password (2FA) if your account has one.
@@ -226,7 +238,11 @@ Why not log in here? The first login runs a Diffie-Hellman key exchange:
 it is the heaviest thing this program does, and a plain 68000 cannot
 finish it comfortably. The program says so and lets you try anyway, but
 the route above is the supported one."
-            first_start_it="1. Su un Amiga PIU' POTENTE (68020 o superiore) o in un emulatore
+            first_start_it="Ti serve un account Telegram. Questo client accede a un account esistente
+ma non sa ancora crearne uno: se non ce l'hai, crealo prima con l'app
+ufficiale di Telegram su un telefono, poi torna qui.
+
+1. Su un Amiga PIU' POTENTE (68020 o superiore) o in un emulatore
    (WinUAE, FS-UAE, vAmiga), installa il pacchetto AmigaOS 3.x standard e
    accedi li': numero di telefono, codice che Telegram ti invia e password
    cloud (2FA) se il tuo account ne ha una.
@@ -282,7 +298,11 @@ then double-click TelegramAmiga-TUI."
         data/phone-code-hash.txt data/telegram-peers.txt
   (tutto su una riga sola). Se la Shell si rifiuta di eseguirlo, dai una
   volta \"Protect TelegramAmiga +e\". Login e sessione salvata sono gli stessi."
-        first_start_en="1. Unpack the drawer and double-click TelegramAmiga.
+        first_start_en="You need a Telegram account. This client signs in to an existing account
+but cannot create one yet: if you have none, create it first with the
+official Telegram app on a phone, then come back here.
+
+1. Unpack the drawer and double-click TelegramAmiga.
 2. If there is no saved login, a login panel appears. Enter your phone number
    in full international form (for example +39 333 1234567), then the code
    Telegram sends you. That code usually does NOT arrive by SMS: if you are
@@ -295,7 +315,11 @@ then double-click TelegramAmiga-TUI."
    (if you do NOT have one, just press Enter to continue).
 3. The client logs in and writes telegram-auth.bin in this drawer. After that
    it reuses the saved login -- you are not asked for the phone/code again."
-        first_start_it="1. Scompatta il drawer e fai doppio click su TelegramAmiga.
+        first_start_it="Ti serve un account Telegram. Questo client accede a un account esistente
+ma non sa ancora crearne uno: se non ce l'hai, crealo prima con l'app
+ufficiale di Telegram su un telefono, poi torna qui.
+
+1. Scompatta il drawer e fai doppio click su TelegramAmiga.
 2. Se non c'e' un login salvato, compare il pannello di accesso. Inserisci il
    numero di telefono in formato internazionale completo (es. +39 333 1234567),
    poi il codice che Telegram ti invia. Quel codice di solito NON arriva via

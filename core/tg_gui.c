@@ -5104,9 +5104,15 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     /* What to do about a failure, just under the field (whose box ends at
        mid + lh + 12); the key hints then move one line down. */
     footer = mid + (3 * lh);
-    if (state->status_hint[0] != '\0') {
+    if (state->status_hint[0] != '\0' ||
+        state->mode == TG_GUI_MODE_LOGIN_PHONE) {
+        /* With nothing to correct, the number screen says that an account
+           must exist already; a failure's own hint takes the line. */
         tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width,
-                             mid + (2 * lh) + 12, state->status_hint);
+                             mid + (2 * lh) + 12,
+                             state->status_hint[0] != '\0'
+                                 ? state->status_hint
+                                 : TG_APP_ACCOUNT_NOTE);
         footer = mid + (3 * lh) + 16; /* one line under the hint */
     }
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, footer,
@@ -9180,9 +9186,10 @@ int tg_gui_self_test(void)
         int mid = 200;
         int plain_y;
 
-        draft->mode = TG_GUI_MODE_LOGIN_PHONE;
+        draft->mode = TG_GUI_MODE_LOGIN_CODE;
+        draft->status_hint[0] = '\0';
         tg_gui_copy(draft->status, sizeof(draft->status),
-                    "That number is not valid");
+                    "Wrong code - try again");
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 2 * mid;
@@ -9191,20 +9198,49 @@ int tg_gui_self_test(void)
         lh = b.line_height(&b);
         tg_gui_paint(draft, &b);
         plain_y = rec.watch_y[0];
+        /* The number screen with nothing to correct says an account must
+           exist, on the hint's line, and the keys step down for it. */
+        draft->mode = TG_GUI_MODE_LOGIN_PHONE;
+        tg_gui_copy(draft->status, sizeof(draft->status),
+                    "Enter your phone number (+...)");
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 2 * mid;
+        rec.watch_text[0] = keys;
+        rec.watch_text[2] = TG_APP_ACCOUNT_NOTE;
+        tg_gui_paint(draft, &b);
+        if (plain_y != mid + (3 * lh) || rec.watch_hits[2] != 1 ||
+            rec.watch_y[2] - (lh - 2) < mid + lh + 12 ||
+            rec.watch_y[0] < rec.watch_y[2] + lh) {
+            printf("gui self-test: account note at %d (%d hits), keys at %d "
+                   "(plain %d)\n", rec.watch_y[2], rec.watch_hits[2],
+                   rec.watch_y[0], plain_y);
+            return 2;
+        }
+        /* A failure's hint takes that line instead. */
+        tg_gui_copy(draft->status, sizeof(draft->status),
+                    "That number is not valid");
         tg_gui_copy(draft->status_hint, sizeof(draft->status_hint), hint);
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 2 * mid;
         rec.watch_text[0] = keys;
         rec.watch_text[1] = hint;
+        rec.watch_text[2] = TG_APP_ACCOUNT_NOTE;
         tg_gui_paint(draft, &b);
-        if (plain_y != mid + (3 * lh) || rec.watch_hits[1] != 1 ||
+        if (rec.watch_hits[1] != 1 || rec.watch_hits[2] != 0 ||
             rec.watch_y[1] - (lh - 2) < mid + lh + 12 ||
             rec.watch_y[0] < rec.watch_y[1] + lh) {
             printf("gui self-test: login hint at %d, keys at %d (plain %d)\n",
                    rec.watch_y[1], rec.watch_y[0], plain_y);
             return 2;
         }
+        /* Whole in the smallest window, in an 8-pixel font like Topaz. */
+        if ((int)strlen(TG_APP_ACCOUNT_NOTE) * 8 > 480 - 4) {
+            puts("gui self-test: the account note does not fit 480 pixels");
+            return 2;
+        }
+        draft->status_hint[0] = '\0';
     }
 
     printf("gui self-test: ok (%d chats, %d msgs, %d fills, %d avatars, "

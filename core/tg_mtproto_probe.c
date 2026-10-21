@@ -5608,6 +5608,10 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
     {
         int phone_attempt;
 
+        /* The same note as the GUI's number screen: this client signs in
+           to an account, it cannot create one yet. */
+        fprintf(stream, "You need a Telegram account to sign in here.\n%s.\n",
+                TG_APP_ACCOUNT_NOTE);
         rc = 2;
         for (phone_attempt = 0; phone_attempt < 3; ++phone_attempt) {
             current_host = host;

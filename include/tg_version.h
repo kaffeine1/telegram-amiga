@@ -36,5 +36,9 @@
 /* What the same terms (2.2) ask every client to tell its users, shown under
    the title where the program introduces itself. */
 #define TG_APP_INTRO_NOTE "A Telegram API client, part of the Telegram ecosystem"
+/* The client signs in to an existing account and cannot create one yet: a
+   first-time user without an account waited for a code that could never be
+   used (field report, 2026-10-21). The number screen says it up front. */
+#define TG_APP_ACCOUNT_NOTE "No account yet? Create one in the official Telegram app"
 
 #endif

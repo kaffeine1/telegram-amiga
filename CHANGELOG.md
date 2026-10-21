@@ -28,6 +28,11 @@ the text client for the plain 68000.
   when it is unknown, and for channel posts and anonymous admins, the line
   shows the text alone as before. A long name is cut so the text keeps
   most of the line.
+- The login says that a Telegram account must exist already: the number
+  screen, the text client before it asks for the number, the manuals'
+  first start and the README. The client signs in to an account but
+  cannot create one yet, and a first-time user without one waited for a
+  code that could never have been used.
 
 ### Fixed
 - A name, a message or a preview too long for the room kept for it no

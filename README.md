@@ -94,6 +94,8 @@ build. AROS aarch64 (ABIv1) runs on the native AROS image for the Raspberry Pi
    flashing console window, or **TelegramAmiga-TUI** for the console client.
 3. First run signs you in: phone number → login code → optional 2FA password. A
    `telegram-auth.bin` session is saved; later runs go straight to your chats.
+   It signs in to an existing Telegram account and cannot create one yet: if
+   you have none, create it first in the official Telegram app on a phone.
 
 > **2FA on a slow 68k:** checking a Two-Step Verification password takes a
 > PBKDF2 key derivation (100000 rounds of SHA-512): under a minute on a Vampire,
