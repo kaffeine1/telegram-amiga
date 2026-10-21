@@ -197,6 +197,17 @@ Features are therefore grouped by the work they share.
   clients. Validated on a Vampire, a G5 under MorphOS, a PiStorm under AfA
   OS and a Raspberry Pi 400, in the OS4, MorphOS, AROS i386, x86_64 and ARM
   VMs, and the text client on that user's A600 and on WinUAE.
+- **0.0.98, sounds per chat and a tester's three requests.** In progress
+  on `main`. Who rings is decided per chat, with Telegram's own mute
+  respected (done), and a sound file of one's choice to come; a group's
+  pop-up names who wrote (done). From the requests of a tester:
+  messages from earlier days get their date, a typed underscore,
+  asterisk, backquote or tilde stays a character instead of switching the
+  style, and typed emoticons become their emoji (the three sections
+  below). Also in: the temporary files in T: no longer crossed, an emoji
+  never cut in half at the end of a line, the ARM64 package listed under
+  AROS on Aminet, and the hunt for the rare AROS x86_64 crash, now traced
+  to a file close (its section below).
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -1350,7 +1361,7 @@ own; the file stops being part of what we distribute, and a new pair can
 be rolled out with a release. The pair itself should belong to the
 project rather than to a personal account.
 
-## Planned: the day of older messages
+## Planned: the day of older messages (0.0.98)
 
 A message shows only its time, `HH:MM` in the bubble and `[HH:MM]` in
 the text client, so one written on an earlier day does not say which day
@@ -1365,7 +1376,7 @@ times use, Telegram's time in the Locale's zone when the Amiga's own
 clock was never set, or a machine left on 1978 would call every message
 old. The words stay English until the translations after the beta.
 
-## Planned: an underscore stays an underscore
+## Planned: an underscore stays an underscore (0.0.98)
 
 Bold, italic, code and strike reach the screen as markers inside the
 message text: the engine wraps each such span in `*`, `_`, `` ` `` or `~`
@@ -1384,7 +1395,7 @@ clipboard, the pop-up, the window title) strips them, as it already
 expands the emoji pairs, and the self-tests carry a message with a
 literal `*`, `_`, `` ` `` and `~` in it.
 
-## Planned: typed emoticons become emoji
+## Planned: typed emoticons become emoji (0.0.98)
 
 A tester asked on 2026-10-20 for the usual text emoticons to turn into
 their emoji as they are typed, `:)` into the smiling face, as many chat
@@ -1401,7 +1412,7 @@ after a replacement brings the typed characters back; and a setting
 turns the whole thing off. Nothing changes inside a link, and the text
 client keeps sending what is typed.
 
-## Open: a rare crash on AROS x86_64, not reproduced
+## Open: a rare crash on AROS x86_64, reproduced and traced
 
 Seen once during the 0.0.92 field test, on 2026-09-02, in the AROS One
 x86_64 VM: a Software Failure requester, error 0x80000008 (privilege
@@ -1453,15 +1464,43 @@ redraw paths, with the pop-up's close as the place where it shows. An AROS
 build with `-DTG_DIAG_POPUP` logs every step of the pop-up and of the title
 and AppIcon updates.
 
-Next time, before anything else: launch with `--gui-live-debug`, press
-"More..." when the requester appears and keep the screenshot, then read
-the tail of `tg-gui-debug.log`. And the x86_64 VM should boot with
-`debug=serial` on the AROS kernel line, so the kernel's own trace lands
-in the host file the launcher already captures; without that argument
-the serial channel stays silent, which is what we found. And the kernel's
-`mungwall` argument, given at boot, puts guard walls around every
-allocation and reports the first one damaged, with its owner, before the
-allocator trips on it.
+Reproduced on 2026-10-20 in the same VM, booted with `mungwall
+debug=serial` (guard walls around every allocation, the kernel's trace on
+the serial line), with the test patch that makes up a message every 20
+seconds: after 23 minutes, after two hours and after almost three. The
+third run had the debug log on disk switched off, so writing it is not
+the cause. With input.device dead "More..." cannot be pressed, but the
+VM's memory can be saved through QEMU's monitor, and the crashed task
+keeps the alert's registers; its stack, read against the symbols of the
+client and of the kernel and crt.library files on AROS One's install
+ISO, gives the whole path. The background poll closes the temporary
+stream that keeps a history request's progress lines out of sight
+(`tg_mtproto_close_quiet_stream`); `fclose` goes into AROS One's
+crt.library, whose `close()` frees the file's control block, and that
+block had already been freed: its guard header was already overwritten,
+and taking it off mungwall's list of allocations failed on the pattern
+mungwall leaves in freed memory. The client crashed first, and
+input.device died right after on the same instruction, because that list
+was left broken. Without mungwall the same double free damages the
+allocator's own lists, which is the `tlsf_malloc` and `tlsf_freevec`
+crashes above; a double close of a file on disk frees one of the SFS
+filesystem's locks twice, which is what the second run reported.
+
+It also explains why only this lane: AROS One x86_64's crt.library builds
+stdio on POSIX descriptors, numbered together with the network's sockets
+through fd.library, while AROS i386 uses the older arosc and the other
+systems their own C libraries. On our side, every temporary stream is
+closed once and with the fallback it was opened with, nothing duplicates
+a descriptor or runs our code in another task, sockets close with
+`CloseSocket`, and the stack never came near its end.
+
+The prime suspect was fixed the same day (ed74206): the temporary
+streams took their file name from the nesting depth, so a stream closing
+out of order could delete another stream's open file and hand its name
+to the next request. Next, two runs side by side, in two copies of the
+VM on throwaway overlays of its disk, with every open, close and delete
+of a file traced on the serial line: the old binary, to catch the first
+close of that block, and the current code, which should not crash.
 
 ## Planned: two MorphOS popup glitches
 
