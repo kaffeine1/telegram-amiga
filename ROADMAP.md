@@ -1412,6 +1412,23 @@ after a replacement brings the typed characters back; and a setting
 turns the whole thing off. Nothing changes inside a link, and the text
 client keeps sending what is typed.
 
+## Planned: reactions
+
+A user asked on 2026-10-21 whether posts can be marked with an emoji:
+the reactions every Telegram app shows under a message. Two halves.
+Seeing them: each message already carries its reactions, and the client
+reads past them today, since it has to in order to reach the fields
+after them. Reading the counts instead, and drawing a small row under
+the bubble, each reaction as an emoji from our sheet with its number, or
+as its emoticon where the picture does not fit, is the first step,
+together with the update Telegram sends when the reactions on a message
+change. Adding one: a right-button menu on a message, like the chat
+list's, with a React entry offering the reactions we can draw, sent
+with `messages.sendReaction`; choosing our own reaction again takes it
+back, and when a group does not allow that reaction the client says so.
+Custom emoji and paid reactions show as a plain mark, and the text
+client prints the counts after the line.
+
 ## Open: a rare crash on AROS x86_64, reproduced and traced
 
 Seen once during the 0.0.92 field test, on 2026-09-02, in the AROS One
