@@ -13002,6 +13002,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                         tg_gui_notify_override_get(state->notify_override_path,
                             chat->peer_id_hi, chat->peer_id_lo, &value);
+                        state->ctx_react = 0;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
                         state->ctx_msg = -1;
@@ -13025,6 +13026,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             int was_open = state->ctx_visible;
 
                             state->ctx_visible = 1;
+                            state->ctx_react = 0;
                             state->ctx_chat = 0;
                             state->ctx_msg = mi;
                             state->ctx_x = hx;
@@ -13097,6 +13099,18 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 sizeof(state->status),
                                 "Could not save this chat's sound choice");
                         }
+                    } else if (it == TG_GUI_CTX_REACT && m != 0 &&
+                               !m->is_system && m->id != 0UL) {
+                        state->ctx_react = 1;
+                        state->ctx_visible = 1;
+                        state->ctx_hover = -1;
+                        state->ctx_w = tg_gui_context_menu_measure(state, &backend);
+                    } else if (it >= TG_GUI_CTX_REACTION_FIRST &&
+                               it < TG_GUI_CTX_REACTION_FIRST + TG_REACTION_DEFAULTS &&
+                               m != 0 && !m->is_system && m->id != 0UL) {
+                        state->ctx_react = 0;
+                        (void)tg_gui_session_react(m->id,
+                            it - TG_GUI_CTX_REACTION_FIRST, stdout);
                     } else if (it == TG_GUI_CTX_REPLY && m != 0 && !m->is_system &&
                         m->id != 0UL) {
                         state->in_sel_active = 0;

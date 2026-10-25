@@ -61,6 +61,7 @@
 #define tg_gui_driver_has_unseen_own(gui) (0)
 #define tg_gui_driver_update_text(gui, message_id, text) (0)
 #define tg_gui_driver_update_text_utf8(gui, message_id, text) (0)
+#define tg_gui_driver_update_reactions(gui, id, reactions) ((void)(gui), (void)(id), (void)(reactions), 0)
 #define tg_gui_driver_set_pending_webpage(gui, msg, hi, lo) ((void)0)
 #define tg_gui_driver_apply_webpage(gui, page, ready) ((void)0, (void)(page), (void)(ready), 0)
 #define tg_gui_driver_remove_by_id(gui, message_id) (0)
@@ -173,6 +174,8 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_UPDATES_CONSTRUCTOR 0x74ae4240UL
 #define TG_MTPROTO_UPDATES_COMBINED_CONSTRUCTOR 0x725b04c3UL
 #define TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR 0x78d4dec1UL
+/* core.telegram.org/constructor/updateMessageReactions */
+#define TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR 0x1e297bfaUL
 #define TG_MTPROTO_UPDATE_SHORT_MESSAGE_CONSTRUCTOR 0x914fbf11UL
 #define TG_MTPROTO_UPDATE_SHORT_CHAT_MESSAGE_CONSTRUCTOR 0x16812688UL
 /* Layer-214 variants of the same updates (identical leading field layout:
@@ -471,6 +474,17 @@ typedef struct tg_chat_webpage_entry {
 static tg_chat_webpage_entry tg_chat_webpages[TG_CHAT_WEBPAGE_QUEUE_MAX];
 static unsigned long tg_chat_webpage_count = 0UL;
 static tg_mtproto_web_page tg_chat_sent_webpage;
+/* Only displayed summaries are queued. Coalesce repeated updates by peer/id
+   during an RPC; an older chat's queue never changes the open transcript. */
+#define TG_CHAT_REACTIONS_QUEUE_MAX 4
+typedef struct tg_chat_reactions_entry {
+    tg_mtproto_dialog_peer peer;
+    unsigned long message_id;
+    tg_reactions reactions;
+} tg_chat_reactions_entry;
+static tg_chat_reactions_entry tg_chat_reactions[TG_CHAT_REACTIONS_QUEUE_MAX];
+static unsigned int tg_chat_reactions_count = 0;
+
 /* The real console stream while the chat runs, for TUI components that must
    bypass capture streams (input-row redraws from the editor and the
    sub-prompts). 0 outside the chat. */
@@ -3656,6 +3670,63 @@ static int tg_chat_edit_peer_matches_open(const tg_chat_edit_entry *entry,
            entry->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
 }
 
+static void tg_chat_reactions_parse_update(tg_mtproto_tl_reader *reader)
+{
+    tg_chat_reactions_entry parsed;
+    unsigned int i;
+
+    memset(&parsed, 0, sizeof(parsed));
+    if (tg_mtproto_read_update_message_reactions(reader, &parsed.peer,
+            &parsed.message_id, &parsed.reactions) != TG_MTPROTO_TL_OK ||
+        parsed.peer.peer_constructor == 0UL || parsed.message_id == 0UL ||
+        parsed.message_id > 2147483647UL) return;
+    for (i = 0; i < tg_chat_reactions_count; ++i) {
+        if (tg_chat_reactions[i].peer.peer_constructor == parsed.peer.peer_constructor &&
+            tg_chat_reactions[i].peer.id_hi == parsed.peer.id_hi &&
+            tg_chat_reactions[i].peer.id_lo == parsed.peer.id_lo &&
+            tg_chat_reactions[i].message_id == parsed.message_id) {
+            tg_chat_reactions[i] = parsed;
+            return;
+        }
+    }
+    if (tg_chat_reactions_count == TG_CHAT_REACTIONS_QUEUE_MAX) {
+        memmove(tg_chat_reactions, tg_chat_reactions + 1,
+                (TG_CHAT_REACTIONS_QUEUE_MAX - 1U) * sizeof(*tg_chat_reactions));
+        --tg_chat_reactions_count;
+    }
+    tg_chat_reactions[tg_chat_reactions_count++] = parsed;
+}
+
+static int tg_chat_reactions_peer_matches(const tg_mtproto_dialog_peer *peer,
+                                           unsigned long constructor,
+                                           unsigned long hi, unsigned long lo)
+{
+    if (peer->peer_constructor == constructor &&
+        peer->id_hi == hi && peer->id_lo == lo) return 1;
+    /* User message ids are account-wide. The id lookup is the final guard
+       for inputPeerSelf, which has no local numeric peer id. */
+    return constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR &&
+           peer->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+}
+
+static int tg_chat_reactions_apply(tg_gui_chat_driver *gui,
+                                    unsigned long constructor,
+                                    unsigned long hi, unsigned long lo)
+{
+    unsigned int i;
+    int dirty = 0;
+
+    for (i = 0; i < tg_chat_reactions_count; ++i) {
+        tg_chat_reactions_entry *entry = &tg_chat_reactions[i];
+
+        if (tg_chat_reactions_peer_matches(&entry->peer, constructor, hi, lo) &&
+            tg_gui_driver_update_reactions(gui, entry->message_id,
+                                            &entry->reactions)) dirty = 1;
+    }
+    tg_chat_reactions_count = 0;
+    return dirty;
+}
+
 static void tg_chat_webpage_parse_update(tg_mtproto_tl_reader *reader,
                                           unsigned long constructor)
 {
@@ -3719,6 +3790,10 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_edit_parse_update(&reader);
+        } else if (constructor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_reactions_parse_update(&reader);
         } else if (constructor == TG_MTPROTO_UPDATE_WEBPAGE_CONSTRUCTOR ||
                    constructor == TG_MTPROTO_UPDATE_CHANNEL_WEBPAGE_CONSTRUCTOR) {
             tg_mtproto_tl_reader_init(&reader, body, body_length);
@@ -3784,6 +3859,10 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
                                         const unsigned char *container,
                                         unsigned long container_length)
 {
+    if (update_ctor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
+        tg_chat_reactions_parse_update(reader);
+        return;
+    }
     if (update_ctor == TG_MTPROTO_UPDATE_WEBPAGE_CONSTRUCTOR ||
         update_ctor == TG_MTPROTO_UPDATE_CHANNEL_WEBPAGE_CONSTRUCTOR) {
         tg_chat_webpage_parse_update(reader, update_ctor);
@@ -3885,7 +3964,8 @@ static void tg_chat_notify_collect_updates(const unsigned char *body,
             TG_MTPROTO_TL_OK) {
             return;
         }
-        if (item_constructor != TG_MTPROTO_UPDATE_WEBPAGE_CONSTRUCTOR &&
+        if (item_constructor != TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR &&
+            item_constructor != TG_MTPROTO_UPDATE_WEBPAGE_CONSTRUCTOR &&
             item_constructor != TG_MTPROTO_UPDATE_CHANNEL_WEBPAGE_CONSTRUCTOR &&
             item_constructor != TG_MTPROTO_UPDATE_USER_TYPING_CONSTRUCTOR &&
             item_constructor !=
@@ -3968,6 +4048,14 @@ static void tg_chat_notify_collect(const unsigned char *body,
         tg_chat_update_collect_short(body, body_length);
         return;
     }
+    if (constructor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
+        tg_mtproto_tl_reader reader;
+
+        tg_mtproto_tl_reader_init(&reader, body, body_length);
+        reader.offset = 4UL;
+        tg_chat_reactions_parse_update(&reader);
+        return;
+    }
     if (constructor != TG_MTPROTO_MSG_CONTAINER_CONSTRUCTOR) {
         tg_chat_notify_collect_one(body, body_length);
         return;
@@ -4000,6 +4088,12 @@ static void tg_chat_notify_collect(const unsigned char *body,
                                       &unpacked_length)) {
                 tg_chat_notify_collect(unpacked, unpacked_length);
             }
+        } else if (part_length >= 4UL &&
+                   (tg_mtproto_read_u32_le(body + offset) == TG_MTPROTO_UPDATES_CONSTRUCTOR ||
+                    tg_mtproto_read_u32_le(body + offset) == TG_MTPROTO_UPDATES_COMBINED_CONSTRUCTOR ||
+                    tg_mtproto_read_u32_le(body + offset) == TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR ||
+                    tg_mtproto_read_u32_le(body + offset) == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR)) {
+            tg_chat_notify_collect(body + offset, part_length);
         } else {
             tg_chat_notify_collect_one(body + offset, part_length);
         }
@@ -8217,6 +8311,8 @@ static int tg_chat_notify_collect_difference(const tg_mtproto_rpc_result *result
         tg_mtproto_tl_read_u32(&reader, &count) != TG_MTPROTO_TL_OK) {
         return 1;
     }
+    tg_chat_edit_scan_updates(result->result_body,
+                              result->result_body_length, 0UL);
     for (i = 0UL; i < count && reader.offset < reader.length; ++i) {
         message_start = reader.offset;
         if (tg_mtproto_read_update_message_text(&reader, &message, &dest) !=
@@ -10345,6 +10441,66 @@ static int tg_mtproto_auth_forward_peer_on_context(
     return 0;
 }
 
+static const char *tg_mtproto_reaction_failure_text(const char *raw)
+{
+    if (strcmp(raw, "REACTION_INVALID") == 0 ||
+        strcmp(raw, "REACTION_EMPTY") == 0)
+        return "This chat does not allow that reaction.";
+    if (strcmp(raw, "REACTIONS_TOO_MANY") == 0)
+        return "This message has too many different reactions.";
+    if (strcmp(raw, "CHAT_WRITE_FORBIDDEN") == 0 ||
+        strcmp(raw, "USER_BANNED_IN_CHANNEL") == 0)
+        return "You cannot react in this chat.";
+    if (strcmp(raw, "MESSAGE_ID_INVALID") == 0 ||
+        strcmp(raw, "MSG_ID_INVALID") == 0)
+        return "This message is no longer available.";
+    if (strcmp(raw, "PREMIUM_ACCOUNT_REQUIRED") == 0)
+        return "That reaction requires Telegram Premium.";
+    if (strncmp(raw, "FLOOD_WAIT_", 11U) == 0)
+        return "Please wait before reacting again.";
+    return "Could not change the reaction. Please try again.";
+}
+
+static int tg_mtproto_auth_react_peer_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, unsigned long message_id, int reaction_index,
+    FILE *stream)
+{
+    unsigned char query[128];
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    int has_hash;
+    int rc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    static const char label[] = "mtproto messages.sendReaction";
+
+    tg_mtproto_query_fail[0] = '\0';
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) return 2;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_send_reaction(&writer, constructor,
+            hi, lo, hash_hi, hash_lo, has_hash, message_id, reaction_index) !=
+        TG_MTPROTO_TL_OK) return 2;
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label, 600U);
+    if (rc != 0) return rc;
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) return 2;
+    /* Reuse the push collector for the authoritative counts in the RPC reply.
+       Never increment a count locally before the server accepts the reaction. */
+    tg_chat_notify_collect(result.result_body - 4U,
+                             result.result_body_length + 4U);
+    return 0;
+}
+
 /* messages.editMessage on the open context: replace an OWN message's text. */
 static int tg_mtproto_auth_edit_peer_on_context(
     const char *host, const char *port, const char *api_id,
@@ -11034,7 +11190,7 @@ static void tg_chat_history_add(const char *text)
    (both the TUI-transcript and the linear-raw printers use it). */
 #define TG_CHAT_SLASH_HINT_TEXT \
     "Commands: /list /search /add /history /getfile /sendfile /photo\n" \
-    "          /forward /forwardto /move /remove /watch /color /bell /help /quit\n"
+    "          /forward /forwardto /react /move /remove /watch /color /bell /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -11685,6 +11841,26 @@ static int tg_mtproto_chat_is_number_line(const char *line)
    the console driver's realisation of a tg_chat_message_row; the GUI driver
    projects the same row into a tg_gui_message instead. Pinned byte-for-byte by
    the --chat-render-self-test golden. */
+static void tg_mtproto_print_reactions(FILE *stream, const tg_reactions *reactions)
+{
+    int i;
+    char symbol[8];
+
+    if (reactions == 0) return;
+    for (i = 0; i < reactions->count && i < TG_REACTION_MAX; ++i) {
+        const tg_reaction *reaction = &reactions->items[i];
+        unsigned long n;
+
+        n = tg_mtproto_display_codepoint_to_latin1(
+                tg_reaction_codepoint(reaction), symbol, sizeof(symbol));
+        if (n == 0UL || symbol[0] == '\0') { symbol[0] = '*'; n = 1UL; }
+        fputs(" [", stream);
+        (void)fwrite(symbol, 1U, (size_t)n, stream);
+        fprintf(stream, " %lu%.1s]", tg_reaction_count(reaction),
+                reaction->chosen ? "+" : "");
+    }
+}
+
 static void tg_mtproto_chat_render_message(FILE *stream,
                                            const tg_chat_message_row *row,
                                            unsigned long *day_shown)
@@ -11719,6 +11895,7 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         tg_console_ui_reset(stream);
         fputc(' ', stream);
         tg_mtproto_print_message_text(stream, row->text);
+        tg_mtproto_print_reactions(stream, row->reactions);
         tg_console_ui_end_line(stream);
         return;
     }
@@ -11758,6 +11935,7 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         fputs("] ", stream);
     }
     tg_mtproto_print_message_text(stream, row->text);
+    tg_mtproto_print_reactions(stream, row->reactions);
     tg_console_ui_end_line(stream);
 }
 
@@ -12002,6 +12180,36 @@ int tg_mtproto_chat_render_self_test(void)
         fclose(qcap);
         if (strcmp(qbuf, "[22:13] [Sviluppo] * You added Marco\n") != 0) {
             printf("chat render self-test: service row MISMATCH: %s\n", qbuf);
+            return 2;
+        }
+    }
+    {
+        tg_chat_message_row row;
+        tg_reactions reactions;
+        unsigned long day = 0UL;
+        char text[128];
+        FILE *capture;
+        size_t used;
+
+        memset(&row, 0, sizeof(row));
+        memset(&reactions, 0, sizeof(reactions));
+        row.text = "hi";
+        row.sender = "Ada";
+        row.reactions = &reactions;
+        reactions.count = 4;
+        tg_reaction_set(&reactions.items[0], 0x1f44dUL, 3UL, 1);
+        tg_reaction_set(&reactions.items[1], 0x2764UL, 5UL, 0);
+        tg_reaction_set(&reactions.items[2], 0UL, 7UL, 0);
+        tg_reaction_set(&reactions.items[3], 0UL, 9UL, 0);
+        capture = tmpfile();
+        if (capture == 0) return 2;
+        tg_mtproto_chat_render_message(capture, &row, &day);
+        rewind(capture);
+        used = fread(text, 1U, sizeof(text) - 1U, capture);
+        text[used] = '\0';
+        fclose(capture);
+        if (strcmp(text, "Ada: hi [(y) 3+] [<3 5] [* 7] [* 9]\n") != 0) {
+            puts("chat render self-test: reaction counts/emoticons failed");
             return 2;
         }
     }
@@ -13195,6 +13403,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                     }
                 }
                 row.text = texts.messages[i].text;
+                row.reactions = &texts.messages[i].reactions;
                 if (texts.messages[i].service_action != 0UL) {
                     /* "Anna added Marco": written here, where the page's
                        users give the names. In a 1:1 chat the peer is who
@@ -13985,6 +14194,8 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  /history        show the recent messages again",
         "  /forward [id]   forward the latest (or that id) to Saved Messages",
         "  /forwardto n [id]  forward the latest (or that id) to chat n",
+        "  /react id name  react: up heart fire laugh surprise sad",
+        "                  party pray clap ok; none removes your reactions",
         "  /getfile        download the newest file here to downloads/",
         "  /sendfile path  send a file",
         "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
@@ -14118,6 +14329,67 @@ static void tg_mtproto_chat_load_own_label(const char *host,
     }
 }
 
+/* Match the other numbered-message commands, without retaining another
+   message list in the text client. "none" explicitly sends an empty vector. */
+static int tg_mtproto_chat_reaction_arg(const char *arg, unsigned long *id,
+                                        int *index)
+{
+    static const char *const names[TG_REACTION_DEFAULTS + 1] = {
+        "up", "heart", "fire", "laugh", "surprise", "sad", "party", "pray",
+        "clap", "ok", "none"
+    };
+    char *end;
+    char name[16];
+    char extra[2];
+    int i;
+
+    if (arg == 0) return 0;
+    while (*arg == ' ' || *arg == '\t') ++arg;
+    if (*arg < '0' || *arg > '9') return 0;
+    *id = strtoul(arg, &end, 10);
+    if (*id == 0UL || *id > 2147483647UL ||
+        (*end != ' ' && *end != '\t') ||
+        sscanf(end, "%15s %1s", name, extra) != 1) return 0;
+    for (i = 0; i <= TG_REACTION_DEFAULTS; ++i) {
+        if (strcmp(name, names[i]) == 0) {
+            *index = i == TG_REACTION_DEFAULTS ? -1 : i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int tg_mtproto_tui_apply_reactions(FILE *stream, const char *cache,
+                                           const char *peer_index)
+{
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    unsigned int i;
+    int has_hash;
+    int dirty = 0;
+    FILE *capture;
+
+    if (tg_chat_reactions_count == 0) return 0;
+    capture = tg_console_tui_capture_begin(stream);
+    if (tg_mtproto_load_peer_cache_peer(cache, peer_index, &constructor,
+            &hi, &lo, &hash_hi, &hash_lo, &has_hash, capture, "reactions") == 0) {
+        for (i = 0; i < tg_chat_reactions_count; ++i) {
+            tg_chat_reactions_entry *entry = &tg_chat_reactions[i];
+
+            if (!tg_chat_reactions_peer_matches(&entry->peer, constructor, hi, lo))
+                continue;
+            fprintf(capture, "Reactions on message %lu:", entry->message_id);
+            if (entry->reactions.count == 0) fputs(" none", capture);
+            tg_mtproto_print_reactions(capture, &entry->reactions);
+            tg_console_ui_end_line(capture);
+            dirty = 1;
+        }
+    }
+    tg_chat_reactions_count = 0;
+    tg_console_tui_capture_end(capture, stream);
+    return dirty;
+}
+
 static int tg_mtproto_tui_apply_webpages(FILE *stream)
 {
     unsigned long i;
@@ -14222,6 +14494,7 @@ int tg_mtproto_auth_chat_file(const char *host,
 #endif
     tg_chat_nq = &chat_engine.notify;
     tg_chat_webpage_count = 0UL;
+    tg_chat_reactions_count = 0;
     chat_quiet = 0;
     api_id[0] = '\0';
     saved_timeout = tg_net_connect_timeout_seconds();
@@ -14469,7 +14742,8 @@ int tg_mtproto_auth_chat_file(const char *host,
             line_length = 0UL;
             tg_chat_caret = 0UL;
         }
-        if (tg_mtproto_tui_apply_webpages(stream)) {
+        if (tg_mtproto_tui_apply_reactions(stream, peer_cache_file, peer_index) |
+            tg_mtproto_tui_apply_webpages(stream)) {
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label,
                                         line, line_length, tg_chat_input_raw);
         }
@@ -15598,6 +15872,34 @@ int tg_mtproto_auth_chat_file(const char *host,
                         tg_mtproto_query_fail[0] != '\0'
                             ? tg_mtproto_query_fail : "no reply");
                 tg_mtproto_chat_print_system_line(stream, forward_note);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/react", &cmd_arg)) {
+            unsigned long reaction_id;
+            int reaction_index;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(stream,
+                    "Choose a chat before reacting to a message.");
+            } else if (!tg_mtproto_chat_reaction_arg(cmd_arg, &reaction_id,
+                                                      &reaction_index)) {
+                tg_mtproto_chat_print_system_line(stream,
+                    "Use /react <message-id> <name>, or /react <message-id> none.");
+            } else {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_auth_react_peer_on_context(host, port, api_id,
+                    auth_file, dc_id_text, &chat_context, peer_cache_file,
+                    peer_index, reaction_id, reaction_index, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                tg_mtproto_chat_print_system_line(stream, rc == 0 ?
+                    (reaction_index < 0 ? "Reaction removed." : "Reaction sent.") :
+                    tg_mtproto_reaction_failure_text(tg_mtproto_query_fail));
+                if (rc == TG_MTPROTO_QUERY_SOFT_FAIL)
+                    tg_mtproto_close_auth_context(&chat_context);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
@@ -16844,6 +17146,393 @@ static int tg_chat_notify_flags_self_test(void)
     return 0;
 }
 
+/* Independent wire words, not produced by the reaction request builder.
+   Optional list constructors/flags are from the official constructor pages;
+   message, Peer, Vector and history ids are the existing login.c definitions. */
+static unsigned long tg_mtproto_reactions_fixture(unsigned char *body,
+                                                  unsigned long size)
+{
+    static const unsigned long words[] = {
+        0x0a339f0bUL, 18UL, 0x1cb5c415UL, 6UL,
+        0xa3d1cb80UL, 1UL, 0UL, 0x1b2286b8UL, 0x919ff004UL, 0x8dUL, 3UL,
+        0xa3d1cb80UL, 0UL, 0x1b2286b8UL, 0xa49de203UL, 5UL,
+        0xa3d1cb80UL, 0UL, 0x8935fc73UL, 0x11223344UL, 0xaabbccddUL, 7UL,
+        0xa3d1cb80UL, 0UL, 0x523da4ebUL, 9UL,
+        0xa3d1cb80UL, 0UL, 0x1b2286b8UL, 0x949ff004UL, 0xa5UL, 11UL,
+        0xa3d1cb80UL, 0UL, 0x79f5d419UL, 2UL,
+        0x1cb5c415UL, 1UL, 0x8c79b63cUL, 7UL,
+        0x59511722UL, 17UL, 0UL, 123UL, 0x1b2286b8UL, 0xa49de203UL,
+        0x1cb5c415UL, 2UL, 0x4ba3a95aUL, 8UL,
+        0x59511722UL, 18UL, 0UL, 4UL, 0x4ba3a95aUL, 4UL, 5UL
+    };
+    tg_mtproto_tl_writer writer;
+    unsigned long i;
+
+    tg_mtproto_tl_writer_init(&writer, body, size);
+    for (i = 0UL; i < sizeof(words) / sizeof(words[0]); ++i) {
+        if (tg_mtproto_tl_write_u32(&writer, words[i]) != TG_MTPROTO_TL_OK)
+            return 0UL;
+    }
+    return writer.length;
+}
+
+static int tg_mtproto_reactions_parse_self_test(void)
+{
+    unsigned char body[256];
+    unsigned char history[768];
+    unsigned char overflow[260];
+    unsigned long size;
+    unsigned long cut;
+    unsigned long start;
+    tg_reactions reactions;
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_tl_writer writer;
+    static tg_mtproto_message_text_list list;
+    static tg_mtproto_message_text message;
+    tg_mtproto_dialog_peer peer;
+    int ok;
+
+    size = tg_mtproto_reactions_fixture(body, sizeof(body));
+    tg_mtproto_tl_reader_init(&reader, body, size);
+    ok = size != 0UL && tg_mtproto_read_message_reactions(&reader, &reactions) ==
+         TG_MTPROTO_TL_OK && reader.offset == size && reactions.count == 4 &&
+         reactions.items[0].chosen && !reactions.items[1].chosen &&
+         tg_reaction_codepoint(&reactions.items[0]) == 0x1f44dUL &&
+         tg_reaction_count(&reactions.items[0]) == 3UL &&
+         tg_reaction_codepoint(&reactions.items[1]) == 0x2764UL &&
+         tg_reaction_count(&reactions.items[1]) == 5UL &&
+         tg_reaction_codepoint(&reactions.items[2]) == 0UL &&
+         tg_reaction_count(&reactions.items[2]) == 7UL &&
+         tg_reaction_codepoint(&reactions.items[3]) == 0UL &&
+         tg_reaction_count(&reactions.items[3]) == 9UL;
+    /* A truncated optional tail must not publish a half-read summary. */
+    for (cut = 0UL; cut < size && ok; ++cut) {
+        memset(&reactions, 0xa5, sizeof(reactions));
+        tg_mtproto_tl_reader_init(&reader, body, cut);
+        ok = tg_mtproto_read_message_reactions(&reader, &reactions) !=
+             TG_MTPROTO_TL_OK && reactions.count == 0xa5U;
+    }
+    /* A chosen fifth reaction displaces an unchosen fourth one. */
+    tg_mtproto_tl_writer_init(&writer, overflow, sizeof(overflow));
+    (void)tg_mtproto_tl_write_raw(&writer, body, 112UL);
+    overflow[108] = 1U; /* fifth ReactionCount flags.0 */
+    (void)tg_mtproto_tl_write_u32(&writer, 2UL); /* chosen_order */
+    (void)tg_mtproto_tl_write_raw(&writer, body + 112UL, size - 112UL);
+    tg_mtproto_tl_reader_init(&reader, overflow, writer.length);
+    ok = ok && tg_mtproto_read_message_reactions(&reader, &reactions) ==
+         TG_MTPROTO_TL_OK && reader.offset == writer.length &&
+         reactions.count == 4 && reactions.items[3].chosen &&
+         tg_reaction_codepoint(&reactions.items[3]) == 0x1f525UL &&
+         tg_reaction_count(&reactions.items[3]) == 11UL;
+    memcpy(overflow, body, (size_t)size);
+    overflow[43] = 0x80U; /* a negative network count is not a huge positive */
+    tg_mtproto_tl_reader_init(&reader, overflow, size);
+    ok = ok && tg_mtproto_read_message_reactions(&reader, &reactions) !=
+         TG_MTPROTO_TL_OK;
+    /* Both message paths must reach reactions and the next message, rather
+       than merely resyncing after an unconsumed recent/top vector. */
+    tg_mtproto_tl_writer_init(&writer, history, sizeof(history));
+    (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 2UL);
+    start = writer.length;
+    (void)tg_mtproto_tl_write_u32(&writer, 0x9815cec8UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 1UL << 20);
+    (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 42UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0x59511722UL);
+    (void)tg_mtproto_tl_write_u64(&writer, 0UL, 17UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 123UL);
+    (void)tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)"hi", 2UL);
+    (void)tg_mtproto_tl_write_raw(&writer, body, size);
+    tg_mtproto_tl_reader_init(&reader, history, writer.length);
+    reader.offset = start;
+    ok = ok && tg_mtproto_read_update_message_text(&reader, &message, &peer) ==
+         TG_MTPROTO_TL_OK && reader.offset == writer.length &&
+         message.reactions.count == 4 && message.reactions.items[0].chosen;
+    (void)tg_mtproto_tl_write_u32(&writer, 0x9815cec8UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 41UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0x59511722UL);
+    (void)tg_mtproto_tl_write_u64(&writer, 0UL, 17UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 122UL);
+    (void)tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)"next", 4UL);
+    ok = ok && tg_mtproto_parse_message_text_list(0x8c718e87UL, history,
+         writer.length, &list) == TG_MTPROTO_TL_OK && list.count == 2UL &&
+         list.resync_attempts == 0UL && list.messages[0].reactions.count == 4 &&
+         list.messages[1].id == 41UL && list.messages[1].reactions.count == 0;
+    if (!ok) puts("probe self-test: reactions fixture/history parse failed");
+    return ok ? 0 : 2;
+}
+
+static int tg_mtproto_reactions_request_self_test(void)
+{
+    static const unsigned char add[] = {
+        0xd4,0x78,0x0d,0xd3, 1,0,0,0, 0xc9,0x7e,0xa0,0x7d,
+        42,0,0,0, 0x15,0xc4,0xb5,0x1c, 1,0,0,0,
+        0xb8,0x86,0x22,0x1b, 4,0xf0,0x9f,0x91, 0x8d,0,0,0
+    };
+    static const unsigned char remove[] = {
+        0xd4,0x78,0x0d,0xd3, 1,0,0,0, 0xc9,0x7e,0xa0,0x7d,
+        42,0,0,0, 0x15,0xc4,0xb5,0x1c, 0,0,0,0
+    };
+    unsigned char body[128];
+    tg_mtproto_tl_writer writer;
+    int ok;
+
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    ok = tg_mtproto_build_messages_send_reaction(&writer,
+        TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0, 42UL, 0) ==
+        TG_MTPROTO_TL_OK && writer.length == sizeof(add) &&
+        memcmp(body, add, sizeof(add)) == 0;
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    ok = ok && tg_mtproto_build_messages_send_reaction(&writer,
+        TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0, 42UL, -1) ==
+        TG_MTPROTO_TL_OK && writer.length == sizeof(remove) &&
+        memcmp(body, remove, sizeof(remove)) == 0;
+    tg_mtproto_tl_writer_init(&writer, body, 12UL);
+    ok = ok && tg_mtproto_build_messages_send_reaction(&writer,
+        TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0, 42UL, 0) !=
+        TG_MTPROTO_TL_OK;
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    ok = ok && tg_mtproto_build_messages_send_reaction(&writer,
+        TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0, 0UL, 0) !=
+        TG_MTPROTO_TL_OK;
+    if (!ok) puts("probe self-test: sendReaction add/remove bytes failed");
+    return ok ? 0 : 2;
+}
+
+static int tg_mtproto_reactions_update_self_test(void)
+{
+#if !defined(TG_NO_GUI)
+    unsigned char fixture[256];
+    unsigned char item[384];
+    unsigned char body[512];
+    unsigned char envelope[576];
+    unsigned long size;
+    unsigned long item_size;
+    unsigned long envelope_size;
+    tg_mtproto_tl_writer writer;
+    tg_chat_notify notify;
+    tg_chat_notify *saved = tg_chat_nq;
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_chat_driver gui;
+    tg_chat_driver driver;
+    int mode;
+    int ok = 1;
+
+    memset(&notify, 0, sizeof(notify));
+    notify.armed = 1;
+    tg_chat_nq = &notify;
+    tg_chat_reactions_count = 0;
+    tg_gui_chat_driver_bind(&gui, state, &driver);
+    state->message_count = 1;
+    state->messages[0].id = 42UL;
+    strcpy(state->messages[0].text, "unchanged");
+    size = tg_mtproto_reactions_fixture(fixture, sizeof(fixture));
+    tg_mtproto_tl_writer_init(&writer, item, sizeof(item));
+    (void)tg_mtproto_tl_write_u32(&writer, 0x1e297bfaUL);
+    (void)tg_mtproto_tl_write_u32(&writer, 1UL); /* optional top_msg_id */
+    (void)tg_mtproto_tl_write_u32(&writer, 0xa2a5371eUL);
+    (void)tg_mtproto_tl_write_u64(&writer, 9UL, 17UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 42UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 40UL);
+    (void)tg_mtproto_tl_write_raw(&writer, fixture, size);
+    item_size = writer.length;
+    for (mode = 0; mode < 5 && ok; ++mode) {
+        memset(&state->messages[0].reactions, 0,
+               sizeof(state->messages[0].reactions));
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        if (mode == 1) {
+            (void)tg_mtproto_tl_write_u32(&writer, 0x78d4dec1UL);
+        } else if (mode >= 2) {
+            (void)tg_mtproto_tl_write_u32(&writer,
+                mode == 3 ? 0x725b04c3UL : 0x74ae4240UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 2UL);
+            /* A read receipt before the reaction exercises the scan. */
+            (void)tg_mtproto_tl_write_u32(&writer,
+                TG_MTPROTO_UPDATE_READ_HISTORY_OUTBOX_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u32(&writer, TG_MTPROTO_PEER_USER_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u64(&writer, 0UL, 11UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+        }
+        (void)tg_mtproto_tl_write_raw(&writer, item, item_size);
+        if (mode == 1) (void)tg_mtproto_tl_write_u32(&writer, 123UL);
+        if (mode >= 2) {
+            (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 123UL);
+            if (mode == 3) (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+        }
+        envelope_size = writer.length;
+        if (mode == 4) {
+            tg_mtproto_tl_writer_init(&writer, envelope, sizeof(envelope));
+            (void)tg_mtproto_tl_write_u32(&writer, 0x73f1f8dcUL);
+            (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+            (void)tg_mtproto_tl_write_u64(&writer, 0UL, 1UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+            (void)tg_mtproto_tl_write_u32(&writer, envelope_size);
+            (void)tg_mtproto_tl_write_raw(&writer, body, envelope_size);
+            tg_chat_notify_collect(envelope, writer.length);
+        } else tg_chat_notify_collect(body, envelope_size);
+        ok = tg_chat_reactions_count == 1 &&
+             !tg_chat_reactions_apply(&gui, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR,
+                                       9UL, 17UL) &&
+             state->messages[0].reactions.count == 0;
+        tg_chat_notify_collect(body, envelope_size);
+        tg_chat_notify_collect(body, envelope_size); /* coalesce */
+        ok = ok && tg_chat_reactions_count == 1 &&
+             tg_chat_reactions_apply(&gui, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                      9UL, 17UL) &&
+             state->messages[0].reactions.count == 4 &&
+             state->messages[0].reactions.items[0].chosen &&
+             tg_reaction_count(&state->messages[0].reactions.items[3]) == 9UL &&
+             strcmp(state->messages[0].text, "unchanged") == 0 &&
+             tg_chat_reactions_count == 0;
+    }
+    {
+        tg_mtproto_rpc_result result;
+
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 0UL); /* new_messages */
+        (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 0UL); /* new_encrypted_messages */
+        (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 1UL); /* other_updates */
+        (void)tg_mtproto_tl_write_raw(&writer, item, item_size);
+        memset(&result, 0, sizeof(result));
+        result.result_body = body;
+        result.result_body_length = writer.length;
+        ok = ok && tg_chat_notify_collect_difference(&result) == 0 &&
+             tg_chat_reactions_count == 1;
+        tg_chat_reactions_count = 0;
+    }
+    /* A complete empty update removes the entire row. */
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    (void)tg_mtproto_tl_write_raw(&writer, item, item_size - size);
+    (void)tg_mtproto_tl_write_u32(&writer, 0x0a339f0bUL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+    (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+    tg_chat_notify_collect(body, writer.length);
+    ok = ok && tg_chat_reactions_apply(&gui,
+        TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 9UL, 17UL) &&
+        state->messages[0].reactions.count == 0;
+    {
+        FILE *capture = tmpfile();
+        char text[160];
+        size_t used;
+
+        if (capture == 0) ok = 0;
+        else {
+            tg_chat_reactions_count = 1;
+            memset(&tg_chat_reactions[0], 0, sizeof(tg_chat_reactions[0]));
+            tg_chat_reactions[0].peer.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+            tg_chat_reactions[0].message_id = 42UL;
+            tg_chat_reactions[0].reactions.count = 1;
+            tg_reaction_set(&tg_chat_reactions[0].reactions.items[0],
+                             0x1f44dUL, 3UL, 1);
+            ok = ok && tg_mtproto_tui_apply_reactions(capture, "unused", "self");
+            rewind(capture);
+            used = fread(text, 1U, sizeof(text) - 1U, capture);
+            text[used] = '\0';
+            fclose(capture);
+            ok = ok && strcmp(text, "Reactions on message 42: [(y) 3+]\n") == 0;
+        }
+    }
+    tg_chat_nq = saved;
+    tg_chat_reactions_count = 0;
+    if (!ok) { puts("probe self-test: live reaction update path failed"); return 2; }
+#endif
+    return 0;
+}
+
+static int tg_mtproto_reactions_command_self_test(void)
+{
+    static const char *const good[] = { "42 up", "42 heart", "42 fire",
+        "42 laugh", "42 surprise", "42 sad", "42 party", "42 pray",
+        "42 clap", "42 ok", "42 none" };
+    static const char *const bad[] = { "", "42", "0 up", "-1 up", "42up",
+        "2147483648 up", "999999999999999999999 up", "42 up extra", "42 unknown" };
+    unsigned long id;
+    unsigned long i;
+    int index;
+
+    for (i = 0UL; i < sizeof(good) / sizeof(good[0]); ++i) {
+        if (!tg_mtproto_chat_reaction_arg(good[i], &id, &index) || id != 42UL ||
+            index != (i == TG_REACTION_DEFAULTS ? -1 : (int)i)) {
+            puts("probe self-test: reaction command add/remove failed");
+            return 2;
+        }
+    }
+    for (i = 0UL; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        if (tg_mtproto_chat_reaction_arg(bad[i], &id, &index)) {
+            puts("probe self-test: reaction command accepted bad arguments");
+            return 2;
+        }
+    }
+    return 0;
+}
+
+static int tg_mtproto_reactions_error_self_test(void)
+{
+    static const char *const errors[] = {
+        "REACTION_INVALID", "REACTION_EMPTY", "REACTIONS_TOO_MANY",
+        "CHAT_WRITE_FORBIDDEN", "USER_BANNED_IN_CHANNEL", "MESSAGE_ID_INVALID",
+        "MSG_ID_INVALID", "PREMIUM_ACCOUNT_REQUIRED", "FLOOD_WAIT_30", ""
+    };
+    static const char *const expected[] = {
+        "This chat does not allow that reaction.",
+        "This chat does not allow that reaction.",
+        "This message has too many different reactions.",
+        "You cannot react in this chat.", "You cannot react in this chat.",
+        "This message is no longer available.", "This message is no longer available.",
+        "That reaction requires Telegram Premium.",
+        "Please wait before reacting again.",
+        "Could not change the reaction. Please try again."
+    };
+    unsigned long i;
+    unsigned char body[64];
+    char saved[sizeof(tg_mtproto_query_fail)];
+    FILE *capture;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    int ok;
+
+    for (i = 0UL; i < sizeof(errors) / sizeof(errors[0]); ++i) {
+        if (strcmp(tg_mtproto_reaction_failure_text(errors[i]), expected[i]) != 0) {
+            puts("probe self-test: reaction error mapping failed");
+            return 2;
+        }
+    }
+    memcpy(saved, tg_mtproto_query_fail, sizeof(saved));
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    (void)tg_mtproto_tl_write_u32(&writer, TG_MTPROTO_RPC_ERROR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&writer, 400UL);
+    (void)tg_mtproto_tl_write_bytes(&writer,
+        (const unsigned char *)"REACTION_INVALID", 16UL);
+    memset(&result, 0, sizeof(result));
+    result.result_constructor = TG_MTPROTO_RPC_ERROR_CONSTRUCTOR;
+    result.result_body = body + 4;
+    result.result_body_length = writer.length - 4UL;
+    capture = tmpfile();
+    if (capture == 0) return 2;
+    ok = tg_mtproto_print_rpc_error("reactions", &result, capture) &&
+         strcmp(tg_mtproto_reaction_failure_text(tg_mtproto_query_fail),
+                expected[0]) == 0;
+    fclose(capture);
+    memcpy(tg_mtproto_query_fail, saved, sizeof(saved));
+    if (!ok) puts("probe self-test: reaction RPC error mapping failed");
+    return ok ? 0 : 2;
+}
+
 int tg_mtproto_probe_self_test(void)
 {
     static const unsigned char nonce[16] = {
@@ -16888,6 +17577,12 @@ int tg_mtproto_probe_self_test(void)
     int has_access_hash;
     FILE *quiet;
     tg_mtproto_tl_writer writer;
+
+    if (tg_mtproto_reactions_parse_self_test() != 0 ||
+        tg_mtproto_reactions_request_self_test() != 0 ||
+        tg_mtproto_reactions_command_self_test() != 0 ||
+        tg_mtproto_reactions_error_self_test() != 0 ||
+        tg_mtproto_reactions_update_self_test() != 0) return 2;
 
 #if !defined(TG_MTPROTO_NAMED_QUIET)
     if (tg_mtproto_quiet_files_self_test() != 0) {
@@ -18765,6 +19460,7 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         return 0;
     }
     tg_gui_log("open_chat: start");
+    tg_chat_reactions_count = 0;
     tg_chat_webpage_count = 0UL;
     /* Do not finish an old chat's thumbnails after the user switched. Fresh
        history below repopulates the bounded queue with the visible chat. */
@@ -19943,6 +20639,53 @@ unsigned long tg_gui_session_current_peer_index(void)
         return 0UL;
     }
     return index;
+}
+
+int tg_gui_session_react(unsigned long message_id, int reaction_index,
+                          FILE *stream)
+{
+    tg_gui_state *state = tg_gui_session_state.gui_driver.state;
+    FILE *quiet;
+    unsigned long prev_timeout;
+    int i;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || state == 0 ||
+        message_id == 0UL || reaction_index < 0 ||
+        reaction_index >= TG_REACTION_DEFAULTS ||
+        tg_gui_session_state.current_peer_index[0] == '\0') return 2;
+    for (i = 0; i < state->message_count; ++i) {
+        if (state->messages[i].id != message_id) continue;
+        reaction_index = tg_reaction_choice(&state->messages[i].reactions,
+                                             reaction_index);
+        break;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_auth_react_peer_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, message_id, reaction_index,
+        quiet);
+    if (rc == 0) {
+        (void)tg_chat_reactions_apply(&tg_gui_session_state.gui_driver,
+            tg_gui_session_state.open_peer_constructor,
+            tg_gui_session_state.open_peer_id_hi,
+            tg_gui_session_state.open_peer_id_lo);
+        sprintf(state->status, "%.47s", reaction_index < 0 ?
+            "Reaction removed" : "Reaction sent");
+    } else {
+        sprintf(state->status, "%.47s",
+            tg_mtproto_reaction_failure_text(tg_mtproto_query_fail));
+        if (rc == TG_MTPROTO_QUERY_SOFT_FAIL)
+            tg_mtproto_close_auth_context(&tg_gui_session_state.context);
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    return rc;
 }
 
 int tg_gui_session_edit(const char *text, unsigned long message_id, FILE *stream)
@@ -24276,6 +25019,10 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     if (tg_gui_session_apply_webpage_updates()) {
         dirty = 1;
     }
+    if (tg_chat_reactions_apply(&tg_gui_session_state.gui_driver,
+            tg_gui_session_state.open_peer_constructor,
+            tg_gui_session_state.open_peer_id_hi,
+            tg_gui_session_state.open_peer_id_lo)) dirty = 1;
     if (tg_gui_session_apply_read_update()) {
         dirty = 1;
     }

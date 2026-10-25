@@ -46,6 +46,13 @@ the text client for the plain 68000.
   message is sent, and Backspace straight after brings the typed
   characters back. "Settings > Emoticons become emoji" turns it off; the
   choice is kept in data/telegram-emoticons.txt.
+- Reactions: the reactions on a message show under its bubble, an emoji
+  of the sheet with its count (custom and paid ones as a plain mark),
+  yours highlighted, and they follow Telegram's updates while the chat is
+  open. "React..." in a message's right-button menu adds one of ten
+  common reactions, and choosing yours again takes it back; a reaction a
+  group does not allow gets a plain-words status line. The text client
+  prints the counts after the line and adds /react <id> <name>.
 
 ### Fixed
 - An underscore, an asterisk, a backquote or a tilde in a message is

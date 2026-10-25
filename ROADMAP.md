@@ -1429,7 +1429,7 @@ Done on `main` on 2026-10-25, with the switch in the Settings menu next to
 "Enable emoji" (and greyed out with emoji off), kept in
 `data/telegram-emoticons.txt`.
 
-## Planned: reactions (0.0.98)
+## Done for 0.0.98: reactions
 
 A user asked on 2026-10-21 whether posts can be marked with an emoji:
 the reactions every Telegram app shows under a message. Two halves.
@@ -1445,6 +1445,13 @@ with `messages.sendReaction`; choosing our own reaction again takes it
 back, and when a group does not allow that reaction the client says so.
 Custom emoji and paid reactions show as a plain mark, and the text
 client prints the counts after the line.
+
+Done on `main` on 2026-10-25: up to four reactions kept per message, in
+34 bytes (about 1 KB more for the plain-68000 build), the update
+Telegram sends when they change, `messages.sendReaction` to add or take
+back one, and `/react <id> <name>` in the text client. Still open: a
+periodic refresh of the reactions on the messages in view, which
+Telegram's documentation suggests for chats with no updates flowing.
 
 ## Open: a rare crash on AROS x86_64, reproduced and traced
 

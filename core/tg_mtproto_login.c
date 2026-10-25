@@ -1434,6 +1434,39 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
     return status;
 }
 
+/* core.telegram.org/method/messages.sendReaction: flags.0 includes the
+   vector even on removal. An absent vector would ask for the default. */
+tg_mtproto_tl_status tg_mtproto_build_messages_send_reaction(
+    tg_mtproto_tl_writer *writer, unsigned long peer_constructor,
+    unsigned long peer_id_hi, unsigned long peer_id_lo,
+    unsigned long hash_hi, unsigned long hash_lo, int has_hash,
+    unsigned long message_id, int reaction_index)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL || message_id > 2147483647UL ||
+        reaction_index < -1 || reaction_index >= TG_REACTION_DEFAULTS)
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    status = tg_mtproto_tl_write_u32(writer, 0xd30d78d4UL);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+            peer_id_lo, hash_hi, hash_lo, has_hash);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_mtproto_tl_write_u32(writer, reaction_index >= 0 ? 1UL : 0UL);
+    if (status == TG_MTPROTO_TL_OK && reaction_index >= 0) {
+        status = tg_mtproto_tl_write_u32(writer, 0x1b2286b8UL);
+        if (status == TG_MTPROTO_TL_OK)
+            status = tg_write_string(writer, tg_reaction_utf8(reaction_index));
+    }
+    return status;
+}
+
 /* messages.deleteMessages#e58e95d2 -- delete ONE message. revoke = delete for
    everyone (flags.0); 0 = delete only for me. id is a Vector<int> of one. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages(
@@ -4914,57 +4947,32 @@ static tg_mtproto_tl_status tg_skip_message_fwd_header(
     return TG_MTPROTO_TL_OK;
 }
 
-static tg_mtproto_tl_status tg_skip_reaction(tg_mtproto_tl_reader *reader)
+/* Reaction constructors already used by the old skip walker. The optional
+   lists follow core.telegram.org/constructor/messagePeerReaction and
+   /constructor/messageReactor; none of those peers need to be retained. */
+static tg_mtproto_tl_status tg_read_reaction(tg_mtproto_tl_reader *reader,
+                                            unsigned long *cp)
 {
     unsigned long constructor;
-    unsigned long scratch_hi;
-    unsigned long scratch_lo;
+    char text[32];
 
-    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
+    *cp = 0UL;
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK)
         return TG_MTPROTO_TL_INVALID_DATA;
-    }
     switch (constructor) {
     case 0x79f5d419UL: /* reactionEmpty */
     case 0x523da4ebUL: /* reactionPaid */
         return TG_MTPROTO_TL_OK;
     case 0x1b2286b8UL: /* reactionEmoji */
-        return tg_skip_string(reader);
+        if (tg_read_string_copy(reader, text, sizeof(text)) != TG_MTPROTO_TL_OK)
+            return TG_MTPROTO_TL_INVALID_DATA;
+        *cp = tg_reaction_parse_emoji(text);
+        return TG_MTPROTO_TL_OK;
     case 0x8935fc73UL: /* reactionCustomEmoji */
-        return tg_mtproto_tl_read_u64(reader, &scratch_hi, &scratch_lo);
+        return tg_skip_u32s(reader, 2UL);
     default:
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-}
-
-static tg_mtproto_tl_status tg_skip_reaction_count_vector(
-    tg_mtproto_tl_reader *reader)
-{
-    unsigned long count;
-    unsigned long constructor;
-    unsigned long flags;
-    unsigned long scratch;
-    unsigned long i;
-
-    if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_INVALID_DATA;
-    }
-    for (i = 0UL; i < count; ++i) {
-        if (tg_mtproto_tl_read_u32(reader, &constructor) !=
-                TG_MTPROTO_TL_OK ||
-            constructor != TG_REACTION_COUNT_CONSTRUCTOR ||
-            tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        if ((flags & 1UL) != 0UL &&
-            tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-        if (tg_skip_reaction(reader) != TG_MTPROTO_TL_OK ||
-            tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
-        }
-    }
-    return TG_MTPROTO_TL_OK;
 }
 
 static tg_mtproto_tl_status tg_skip_message_replies(
@@ -5011,21 +5019,107 @@ static tg_mtproto_tl_status tg_skip_message_replies(
     return TG_MTPROTO_TL_OK;
 }
 
-static tg_mtproto_tl_status tg_skip_message_reactions(
-    tg_mtproto_tl_reader *reader)
+tg_mtproto_tl_status tg_mtproto_read_message_reactions(
+    tg_mtproto_tl_reader *reader, tg_reactions *out)
 {
     unsigned long constructor;
     unsigned long flags;
+    unsigned long item_flags;
+    unsigned long count;
+    unsigned long total;
+    unsigned long cp;
+    unsigned long scratch;
+    unsigned long i;
+    int slot;
+    int j;
+    tg_reactions parsed;
+    tg_mtproto_dialog_peer peer;
 
+    memset(&parsed, 0, sizeof(parsed));
     if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
         constructor != TG_MESSAGE_REACTIONS_CONSTRUCTOR ||
         tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-        tg_skip_reaction_count_vector(reader) != TG_MTPROTO_TL_OK) {
+        tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK)
         return TG_MTPROTO_TL_INVALID_DATA;
+    parsed.min = (unsigned char)(flags & 1UL);
+    for (i = 0UL; i < count; ++i) {
+        if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+            constructor != TG_REACTION_COUNT_CONSTRUCTOR ||
+            tg_mtproto_tl_read_u32(reader, &item_flags) != TG_MTPROTO_TL_OK ||
+            ((item_flags & 1UL) != 0UL &&
+             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) ||
+            tg_read_reaction(reader, &cp) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &total) != TG_MTPROTO_TL_OK ||
+            total > 2147483647UL)
+            return TG_MTPROTO_TL_INVALID_DATA;
+        if (total == 0UL) continue;
+        slot = parsed.count;
+        if (slot >= TG_REACTION_MAX) {
+            slot = -1;
+            /* Prefer our reactions to an unchosen fourth entry, so a full
+               row can still offer the remove toggle. chosen_order may be 0. */
+            if ((item_flags & 1UL) != 0UL) {
+                for (j = TG_REACTION_MAX - 1; j >= 0; --j) {
+                    if (!parsed.items[j].chosen) { slot = j; break; }
+                }
+            }
+        } else {
+            ++parsed.count;
+        }
+        if (slot >= 0)
+            tg_reaction_set(&parsed.items[slot], cp, total,
+                             (item_flags & 1UL) != 0UL);
     }
-    if ((flags & 2UL) != 0UL || (flags & (1UL << 4)) != 0UL) {
+    if ((flags & 2UL) != 0UL) { /* recent_reactions: flags.1 */
+        if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK)
+            return TG_MTPROTO_TL_INVALID_DATA;
+        for (i = 0UL; i < count; ++i) {
+            if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+                constructor != 0x8c79b63cUL ||
+                tg_skip_u32s(reader, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK ||
+                tg_skip_u32s(reader, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_read_reaction(reader, &cp) != TG_MTPROTO_TL_OK)
+                return TG_MTPROTO_TL_INVALID_DATA;
+        }
+    }
+    if ((flags & 16UL) != 0UL) { /* top_reactors: flags.4 */
+        if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK)
+            return TG_MTPROTO_TL_INVALID_DATA;
+        for (i = 0UL; i < count; ++i) {
+            if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+                constructor != 0x4ba3a95aUL ||
+                tg_mtproto_tl_read_u32(reader, &item_flags) != TG_MTPROTO_TL_OK ||
+                ((item_flags & 8UL) != 0UL &&
+                 tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) ||
+                tg_skip_u32s(reader, 1UL) != TG_MTPROTO_TL_OK)
+                return TG_MTPROTO_TL_INVALID_DATA;
+        }
+    }
+    if (out != 0) *out = parsed;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* core.telegram.org/constructor/updateMessageReactions: flags.0 carries a
+   topic id, flags.1 a saved peer. The latter is a different conversation. */
+tg_mtproto_tl_status tg_mtproto_read_update_message_reactions(
+    tg_mtproto_tl_reader *reader, tg_mtproto_dialog_peer *peer,
+    unsigned long *message_id, tg_reactions *out)
+{
+    unsigned long flags;
+    unsigned long scratch;
+    tg_mtproto_dialog_peer saved;
+
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_read_peer_ref(reader, peer) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, message_id) != TG_MTPROTO_TL_OK ||
+        ((flags & 1UL) != 0UL &&
+         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) ||
+        ((flags & 2UL) != 0UL &&
+         tg_read_peer_ref(reader, &saved) != TG_MTPROTO_TL_OK) ||
+        tg_mtproto_read_message_reactions(reader, out) != TG_MTPROTO_TL_OK)
         return TG_MTPROTO_TL_INVALID_DATA;
-    }
+    if ((flags & 2UL) != 0UL) peer->peer_constructor = 0UL;
     return TG_MTPROTO_TL_OK;
 }
 
@@ -5329,7 +5423,7 @@ static tg_mtproto_tl_status tg_read_service_message(
         return TG_MTPROTO_TL_OK;
     }
     if ((flags & (1UL << 20)) != 0UL &&
-        tg_skip_message_reactions(reader) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_read_message_reactions(reader, &out->reactions) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_OK;
     }
     if ((flags & (1UL << 25)) != 0UL &&
@@ -5457,7 +5551,7 @@ static tg_mtproto_tl_status tg_skip_common_message(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & (1UL << 20)) != 0UL &&
-        tg_skip_message_reactions(reader) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_read_message_reactions(reader, 0) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & (1UL << 22)) != 0UL &&
@@ -6095,7 +6189,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         return TG_MTPROTO_TL_OK;
     }
     if ((flags & (1UL << 20)) != 0UL &&
-        tg_skip_message_reactions(reader) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_read_message_reactions(reader, &out->reactions) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_OK;
     }
     if ((flags & (1UL << 22)) != 0UL &&

@@ -80,6 +80,10 @@ int tg_gui_driver_update_text_utf8(tg_gui_chat_driver *gui,
                                    unsigned long message_id,
                                    const char *text);
 
+int tg_gui_driver_update_reactions(tg_gui_chat_driver *gui,
+                                    unsigned long message_id,
+                                    const tg_reactions *reactions);
+
 /* Attach send/history metadata, then complete every pending message with the
    matching 64-bit webpage id. Text uses the edit path; photos remain lazy. */
 void tg_gui_driver_set_pending_webpage(tg_gui_chat_driver *gui,

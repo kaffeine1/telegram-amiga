@@ -219,6 +219,9 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
             tg_gui_message *m = &state->messages[di];
 
             if (m->id == row->id) {
+                if (row->reactions != 0)
+                    (void)tg_gui_driver_update_reactions(gui, row->id,
+                                                         row->reactions);
                 if (row->pending_webpage_hi != 0UL || row->pending_webpage_lo != 0UL) {
                     tg_gui_driver_copy_latin1(row_latin1, sizeof(row_latin1), row->text);
                     have_l1 = 1;
@@ -245,6 +248,7 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                 }
                 if (strcmp(m->text, row_latin1) == 0) {
                     m->id = row->id; /* the echo finally learns its server id */
+                    if (row->reactions != 0) m->reactions = *row->reactions;
                     m->pending_webpage_hi = row->pending_webpage_hi;
                     m->pending_webpage_lo = row->pending_webpage_lo;
                     if (m->id <= state->open_read_outbox_max) {
@@ -361,6 +365,7 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                              message->reply_text);
     }
     message->id = row->id;
+    if (row->reactions != 0) message->reactions = *row->reactions;
     message->from_id_hi = row->from_id_hi;
     message->from_id_lo = row->from_id_lo;
     if (message->is_own) {
@@ -373,6 +378,45 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
 
     tg_gui_driver_set_time(message, row);
     /* message_count was advanced by the prepend/append prologue above. */
+}
+
+int tg_gui_driver_update_reactions(tg_gui_chat_driver *gui,
+                                    unsigned long message_id,
+                                    const tg_reactions *reactions)
+{
+    tg_reactions next;
+    tg_gui_message *message;
+    int i;
+    int j;
+    int k;
+
+    if (gui == 0 || gui->state == 0 || reactions == 0 || message_id == 0UL)
+        return 0;
+    next = *reactions;
+    if (next.count > TG_REACTION_MAX) next.count = TG_REACTION_MAX;
+    for (i = 0; i < gui->state->message_count; ++i) {
+        message = &gui->state->messages[i];
+        if (message->id != message_id) continue;
+        /* A min update omits chosen_order. Preserve known ownership for the
+           displayed ordinary emoji instead of making our highlight blink. */
+        if (next.min) {
+            for (j = 0; j < next.count; ++j) {
+                unsigned long cp = tg_reaction_codepoint(&next.items[j]);
+
+                for (k = 0; cp != 0UL && k < message->reactions.count &&
+                            k < TG_REACTION_MAX; ++k) {
+                    if (cp == tg_reaction_codepoint(&message->reactions.items[k]))
+                        next.items[j].chosen = message->reactions.items[k].chosen;
+                }
+            }
+        }
+        if (memcmp(&message->reactions, &next, sizeof(next)) == 0) return 0;
+        message->reactions = next;
+        message->layout_key = 0UL;
+        ++gui->state->msg_gen;
+        return 1;
+    }
+    return 0;
 }
 
 void tg_gui_driver_append_own(tg_gui_chat_driver *gui, const char *text,
@@ -1277,6 +1321,45 @@ static int tg_gui_driver_notify_sender_self_test(void)
     return 1;
 }
 
+static int tg_gui_driver_reactions_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_chat_driver gui;
+    tg_chat_driver driver;
+    tg_chat_message_row row;
+    tg_reactions reactions;
+    unsigned long generation;
+    int ok;
+
+    memset(&row, 0, sizeof(row));
+    memset(&reactions, 0, sizeof(reactions));
+    reactions.count = 1;
+    tg_reaction_set(&reactions.items[0], 0x1f44dUL, 3UL, 1);
+    row.id = 42UL;
+    row.text = "hello";
+    row.reactions = &reactions;
+    tg_gui_chat_driver_bind(&gui, state, &driver);
+    driver.on_message(driver.ctx, &row);
+    ok = state->message_count == 1 && state->messages[0].reactions.count == 1 &&
+         state->messages[0].reactions.items[0].chosen;
+    state->messages[0].layout_key = 123UL;
+    generation = state->msg_gen;
+    reactions.min = 1;
+    tg_reaction_set(&reactions.items[0], 0x1f44dUL, 9UL, 0);
+    driver.on_message(driver.ctx, &row); /* a history re-fetch updates the row */
+    ok = ok && state->message_count == 1 && state->msg_gen > generation &&
+         state->messages[0].layout_key == 0UL &&
+         state->messages[0].reactions.items[0].chosen &&
+         tg_reaction_count(&state->messages[0].reactions.items[0]) == 9UL &&
+         !tg_gui_driver_update_reactions(&gui, 99UL, &reactions) &&
+         !tg_gui_driver_update_reactions(&gui, 42UL, &reactions);
+    memset(&reactions, 0, sizeof(reactions));
+    ok = ok && tg_gui_driver_update_reactions(&gui, 42UL, &reactions) &&
+         state->messages[0].reactions.count == 0;
+    if (!ok) puts("gui driver self-test: reaction projection/update failed");
+    return ok;
+}
+
 int tg_gui_driver_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -1284,6 +1367,7 @@ int tg_gui_driver_self_test(void)
     tg_chat_driver driver;
     int i;
 
+    if (!tg_gui_driver_reactions_self_test()) return 2;
     if (!tg_gui_driver_notify_mute_self_test()) {
         return 2;
     }

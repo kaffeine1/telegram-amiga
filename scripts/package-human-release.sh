@@ -710,6 +710,11 @@ Using the GUI
   composer an emoji shows as a small picture and is edited as one character.
 - Right-click a message and choose "Forward to Saved Messages" for a one-click
   cloud copy, or "Forward to..." to select another chat with the normal search.
+- Reactions show under a message as small chips, an emoji with its count,
+  yours highlighted. Right-click a message and choose "React..." to add one
+  of ten common reactions; choosing yours again takes it back. When a group
+  does not allow that reaction, the status line says so. In the text client
+  the counts follow the line, and /react <id> <name> adds one.
 - In groups, type @ in the composer to autocomplete a member: a small list
   pops up above the input line -- Up/Down select, Enter or Tab inserts
   @username, Esc closes, typing narrows the matches.
@@ -921,6 +926,12 @@ Usare la GUI
 - Click destro su un messaggio: "Forward to Saved Messages" lo copia con un
   click nel proprio cloud; "Forward to..." permette di scegliere un'altra chat
   usando la ricerca normale.
+- Le reazioni compaiono sotto un messaggio come piccole etichette, emoji e
+  numero, la tua evidenziata. Click destro su un messaggio, "React...", per
+  aggiungerne una fra dieci comuni; scegliendo di nuovo la tua la togli. Se
+  il gruppo non permette quella reazione, lo dice la riga di stato. Nel
+  client testuale i conteggi seguono la riga e /react <id> <nome> ne
+  aggiunge una.
 - Nei gruppi, digita @ nel composer per completare un membro: compare una
   listina sopra la riga di input -- Su/Giu' selezionano, Invio o Tab inserisce
   @username, Esc chiude, digitando filtri i risultati.

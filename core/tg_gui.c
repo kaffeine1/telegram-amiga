@@ -16,6 +16,7 @@
 #include "tg_emoji_sheet.h"
 #include "tg_text_style.h"
 #include "tg_mtproto_login.h"
+#include "tg_mtproto_probe.h"
 
 #include <time.h>
 
@@ -2929,6 +2930,7 @@ typedef struct tg_gui_bubble_geom {
     int status_gap; /* between the last line and the time row */
     int status_h;   /* the time row: native letters, not the emoji cell */
     int bottom_pad; /* inside the fill, below the time row */
+    int reaction_h;
     int line_count;
     unsigned long starts[TG_GUI_WRAP_MAX_LINES];
     unsigned long lengths[TG_GUI_WRAP_MAX_LINES];
@@ -3101,6 +3103,62 @@ static const char *tg_gui_photo_placeholder(const tg_gui_message *message)
     return "[Photo]";
 }
 
+/* One layout for measuring and painting the reaction chips. A narrow window
+   wraps whole chips, so the transcript's kept heights and hit rows agree. */
+static int tg_gui_reactions_layout(tg_gui_backend *backend,
+                                    const tg_reactions *reactions, int width,
+                                    int lh, int x, int y, int top, int bottom,
+                                    int draw, int *widest)
+{
+    int i;
+    int dx = 0;
+    int dy = 0;
+    int ih = lh + 4;
+    int w;
+    int gi;
+    int n;
+    char symbol[8];
+    char label[32];
+
+    *widest = 0;
+    if (reactions->count == 0 || width <= 0) return 0;
+    for (i = 0; i < reactions->count && i < TG_REACTION_MAX; ++i) {
+        const tg_reaction *reaction = &reactions->items[i];
+        unsigned long cp = tg_reaction_codepoint(reaction);
+
+        memset(symbol, 0, sizeof(symbol));
+        gi = tg_gui_emoji_index_of(cp);
+        if (gi < 0 || !tg_gui_emoji_encode((unsigned long)gi, symbol)) {
+            n = (int)tg_mtproto_display_codepoint_to_latin1(cp, symbol,
+                                                           sizeof(symbol));
+            if (n == 0 || symbol[0] == '\0') strcpy(symbol, "*");
+        }
+        sprintf(label, "%.7s %lu%.1s", symbol, tg_reaction_count(reaction),
+                reaction->chosen ? "+" : "");
+        w = backend->text_width(backend, label, (unsigned long)strlen(label)) + 8;
+        if (w > width) {
+            /* The picture and long emoticons yield to the count first. */
+            sprintf(label, "* %lu%.1s", tg_reaction_count(reaction),
+                    reaction->chosen ? "+" : "");
+            w = backend->text_width(backend, label,
+                                     (unsigned long)strlen(label)) + 8;
+            if (w > width) w = width;
+        }
+        if (dx > 0 && dx + w > width) { dx = 0; dy += ih + 2; }
+        if (dx + w > *widest) *widest = dx + w;
+        if (draw && y + dy >= top && y + dy + ih <= bottom) {
+            backend->round_bg = TG_GUI_PEN_WINDOW;
+            tg_gui_fill_pill(backend, reaction->chosen ? TG_GUI_PEN_ACCENT :
+                TG_GUI_PEN_SURFACE, tg_gui_make_rect(x + dx, y + dy, w, ih));
+            tg_gui_draw_clipped(backend, reaction->chosen ?
+                TG_GUI_PEN_ACCENT_TEXT : TG_GUI_PEN_TEXT, x + dx + 4,
+                tg_gui_centred_baseline(backend, y + dy, ih), label, w - 8);
+        }
+        dx += w + 4;
+    }
+    return dy + ih + 2;
+}
+
 static void tg_gui_bubble_geometry(tg_gui_backend *backend,
                                    const tg_gui_message *message, int area_x,
                                    int area_w, int lh, int inline_photos,
@@ -3115,6 +3173,7 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
     int has_mark;
     int read_mark_w;
     int status_w;
+    int reaction_w;
 
     geo->pad = 8;
     max_bubble_w = (area_w * 78) / 100;
@@ -3179,10 +3238,15 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
             widest = reply_w; /* the quoted reference line must fit too */
         }
     }
+    (void)tg_gui_reactions_layout(backend, &message->reactions,
+        max_bubble_w - 2 * geo->pad, lh, 0, 0, 0, 0, 0, &reaction_w);
+    if (reaction_w > widest) widest = reaction_w;
     geo->bubble_w = widest + (2 * geo->pad);
     if (geo->bubble_w > max_bubble_w) {
         geo->bubble_w = max_bubble_w;
     }
+    geo->reaction_h = tg_gui_reactions_layout(backend, &message->reactions,
+        geo->bubble_w - 2 * geo->pad, lh, 0, 0, 0, 0, 0, &reaction_w);
     geo->bubble_x = message->is_own ? (area_x + area_w - geo->bubble_w)
                                     : area_x;
     /* lh + lh/2: gap below the sender-name baseline wider than the font
@@ -3505,7 +3569,14 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             }
         }
     }
-    return bubble_h + 6;
+    {
+        int reaction_w;
+        int reaction_h = tg_gui_reactions_layout(backend, &message->reactions,
+            bubble_w - 2 * pad, lh, bubble_x + pad, y + bubble_h + 2,
+            top, bottom, 1, &reaction_w);
+
+        return bubble_h + reaction_h + 6;
+    }
 }
 
 /* The vertical space a message occupies (matching what tg_gui_paint_bubble
@@ -3532,7 +3603,7 @@ static int tg_gui_message_height(tg_gui_backend *backend,
     return geo.header_h + geo.top_pad + geo.reply_h + geo.photo_h +
            geo.photo_gap + (geo.line_count * lh) +
            (has_status ? geo.status_gap + geo.status_h : 0) + geo.bottom_pad +
-           6;
+           geo.reaction_h + 6;
 }
 
 /* Each message keeps the height worked out for it, with a key of everything
@@ -3603,6 +3674,13 @@ static int tg_gui_message_height_kept(const tg_gui_state *state,
                                                  ? 64 : 0)));
     key = tg_gui_layout_mix(key, message->photo_width);
     key = tg_gui_layout_mix(key, message->photo_height);
+    {
+        const unsigned char *bytes = (const unsigned char *)&message->reactions;
+        unsigned long i;
+
+        for (i = 0UL; i < sizeof(message->reactions); ++i)
+            key = tg_gui_layout_mix(key, bytes[i]);
+    }
     for (t = message->text; *t != '\0'; ++t) {
         key = ((key ^ (unsigned char)*t) * 16777619UL) & 0xffffffffUL;
     }
@@ -4912,6 +4990,11 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
               (tg_gui_message_day_break(state, msg_index) ? lh + 6 : 0) +
               geo.header_h + geo.top_pad + geo.reply_h + geo.photo_h +
               geo.photo_gap);
+    if (geo.reaction_h > 0 && ty >= geo.line_count * lh +
+        ((message->time[0] != '\0' || tg_gui_check_count(message) > 0) ?
+            geo.status_gap + geo.status_h : 0) + geo.bottom_pad + 2) {
+        return -1; /* a reaction chip must not open the body's last URL */
+    }
     if (ty < 0) {
         return 0; /* header band or above: clamp to the start */
     }
@@ -5441,6 +5524,17 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         }
         return n;
     }
+    if (state->ctx_react && state->ctx_msg >= 0 &&
+        state->ctx_msg < state->message_count &&
+        state->messages[state->ctx_msg].id != 0UL &&
+        !state->messages[state->ctx_msg].is_system) {
+        while (n < TG_REACTION_DEFAULTS) {
+            labels[n] = tg_reaction_name(n);
+            ids[n] = TG_GUI_CTX_REACTION_FIRST + n;
+            ++n;
+        }
+        return n;
+    }
     labels[n] = "Reply";
     ids[n] = TG_GUI_CTX_REPLY;
     ++n;
@@ -5475,6 +5569,8 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
         }
         if (!m->is_system) {
+            labels[n] = "React...";
+            ids[n++] = TG_GUI_CTX_REACT;
             labels[n] = "Forward to Saved";
             ids[n] = TG_GUI_CTX_FORWARD_SAVED;
             ++n;
@@ -7006,6 +7102,110 @@ static int tg_gui_notify_settings_self_test(void)
     return 0;
 }
 
+static int tg_gui_reactions_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_message *message = &state->messages[0];
+    tg_gui_backend backend;
+    tg_gui_record record;
+    const char *labels[TG_GUI_CTX_ITEMS_MAX];
+    int ids[TG_GUI_CTX_ITEMS_MAX];
+    int base;
+    int wide;
+    int narrow;
+    int painted;
+    int w;
+    int i;
+    int bx, by, bw, bh, ih;
+    unsigned long key;
+    unsigned long metrics;
+    char label[16];
+    int ok;
+
+    memset(&backend, 0, sizeof(backend));
+    memset(&record, 0, sizeof(record));
+    record.width = 480;
+    record.height = 320;
+    record.line_h = 18;
+    backend.context = &record;
+    backend.width = tg_gui_rec_width;
+    backend.height = tg_gui_rec_height;
+    backend.line_height = tg_gui_rec_line_height;
+    backend.text_width = tg_gui_rec_text_width;
+    backend.draw_text = tg_gui_rec_text;
+    backend.fill_rect = tg_gui_rec_fill;
+    backend.avatar_fill = tg_gui_rec_avatar;
+    backend.set_style = 0;
+    state->message_count = 2;
+    strcpy(message->text, "hello");
+    message->id = 42UL;
+    message->is_own = 1;
+    strcpy(state->messages[1].text, "next");
+    state->messages[1].id = 43UL;
+    state->messages[1].is_own = 1;
+    base = tg_gui_message_height(&backend, message, 300, 18, 0, 0);
+    message->reactions.count = 4;
+    for (i = 0; i < 4; ++i)
+        tg_reaction_set(&message->reactions.items[i], i == 0 ? 0x1f44dUL : 0UL,
+                         (unsigned long)i + 3UL, i == 0);
+    wide = tg_gui_message_height(&backend, message, 300, 18, 0, 0);
+    narrow = tg_gui_message_height(&backend, message, 100, 18, 0, 0);
+    ok = wide == base + 24 && narrow > wide;
+    memset(label, 0, sizeof(label));
+    ok = ok && tg_gui_emoji_encode((unsigned long)tg_gui_emoji_index_of(0x1f44dUL),
+                                    label);
+    strcat(label, " 3+");
+    record.watch_text[0] = label;
+    record.watch_text[1] = "* 4";
+    painted = tg_gui_paint_bubble(&backend, message, 0, 300, 20, 18,
+                                  0, 300, -1L, -1L, 0, 0, 0);
+    ok = ok && painted == wide && record.watch_hits[0] == 1 &&
+         record.watch_hits[1] == 1 && record.watch_y[0] > 20 + base - 6;
+    /* Very narrow chips use a plain mark; clipping may omit a whole row but
+       cannot draw part of it over the composer or above the viewport. */
+    record.watch_hits[0] = 0;
+    record.watch_text[0] = "* 3+";
+    (void)tg_gui_reactions_layout(&backend, &message->reactions, 32, 18,
+                                   0, 10, 10, 32, 1, &w);
+    ok = ok && record.watch_hits[0] == 1 && w <= 32;
+    record.watch_hits[0] = 0;
+    (void)tg_gui_reactions_layout(&backend, &message->reactions, 32, 18,
+                                   0, 10, 11, 31, 1, &w);
+    ok = ok && record.watch_hits[0] == 0;
+    metrics = tg_gui_layout_metrics(&backend, 100, 18, 0);
+    (void)tg_gui_message_height_kept(state, &backend, 0, 100, 18, 0, metrics);
+    key = message->layout_key;
+    message->reactions.count = 0;
+    ok = ok && tg_gui_message_height_kept(state, &backend, 0, 100, 18, 0,
+                                          metrics) < narrow &&
+         message->layout_key != key;
+    message->reactions.count = 4;
+    strcpy(message->text, "https://example.org");
+    tg_gui_paint(state, &backend);
+    ok = ok && state->msg_cached == 2 &&
+         tg_gui_hit_test(state, 480, 320, 18, state->tr_area_x + 10,
+             state->msg_top[1] - 8) == TG_GUI_HIT_MESSAGE_BASE &&
+         tg_gui_transcript_char_at(state, &backend, 18, 0,
+             state->tr_area_x + 10, state->msg_top[1] - 8) == -1;
+    /* Every offered reaction must exist in the sheet. Check the chooser's
+       actual item geometry and ids, including the final OK entry. */
+    state->ctx_visible = 1;
+    state->ctx_msg = 0;
+    state->ctx_react = 1;
+    state->ctx_w = tg_gui_context_menu_measure(state, &backend);
+    ok = ok && tg_gui_context_items(state, labels, ids) == TG_REACTION_DEFAULTS;
+    tg_gui_context_box(state, TG_REACTION_DEFAULTS, 480, 320, 18,
+                        &bx, &by, &bw, &bh, &ih);
+    for (i = 0; i < TG_REACTION_DEFAULTS && ok; ++i) {
+        ok = tg_gui_emoji_index_of(tg_reaction_default(i)) >= 0 &&
+             tg_gui_context_menu_hit(state, 480, 320, 18,
+                 bx + 8, by + 2 + i * ih + ih / 2) ==
+                 TG_GUI_CTX_REACTION_FIRST + i;
+    }
+    if (!ok) puts("gui self-test: reaction row/layout/menu failed");
+    return ok ? 0 : 2;
+}
+
 int tg_gui_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -7015,6 +7215,7 @@ int tg_gui_self_test(void)
 
     if (tg_gui_markup_self_test() != 0 ||
         tg_gui_plain_text_self_test() != 0 ||
+        tg_gui_reactions_self_test() != 0 ||
         tg_gui_notify_policy_self_test() != 0 ||
         tg_gui_notify_override_self_test() != 0 ||
         tg_gui_notify_queue_self_test() != 0 ||

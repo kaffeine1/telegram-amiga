@@ -11,6 +11,8 @@
 #ifndef TG_GUI_H
 #define TG_GUI_H
 
+#include "tg_reaction.h"
+
 /* Themes are skins over the same pen roles below; the renderer is theme-blind. */
 #define TG_GUI_THEME_DARK 0  /* default modern theme */
 #define TG_GUI_THEME_LIGHT 1 /* follow Workbench pens */
@@ -301,6 +303,7 @@ typedef struct tg_gui_message {
        key of everything that height depends on (0 = none yet). */
     unsigned long layout_key;
     int layout_h;
+    tg_reactions reactions;
 } tg_gui_message;
 
 typedef struct tg_gui_state {
@@ -501,6 +504,7 @@ typedef struct tg_gui_state {
     int ctx_msg;
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
+    int ctx_react; /* the React chooser replaces the message menu */
     int ctx_x, ctx_y;
     int ctx_hover;
     int ctx_w;
@@ -809,9 +813,11 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_REMOVE 10
 #define TG_GUI_CTX_CHAT_MUTE 11
 #define TG_GUI_CTX_CHAT_RING 12
+#define TG_GUI_CTX_REACT 13
+#define TG_GUI_CTX_REACTION_FIRST 14
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
-#define TG_GUI_CTX_ITEMS_MAX 10
+#define TG_GUI_CTX_ITEMS_MAX 11
 
 /* Attachment chooser: known image extensions get the Photo/File dialog;
    validation of the actual bytes still belongs to the upload gate. */

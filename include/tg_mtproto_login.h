@@ -8,6 +8,7 @@
 
 #include "tg_mtproto_crypto.h"
 #include "tg_mtproto_tl.h"
+#include "tg_reaction.h"
 
 #define TG_MTPROTO_PASSWORD_BYTES_MAX 256U
 
@@ -501,7 +502,19 @@ typedef struct tg_mtproto_message_text {
     unsigned long service_value;    /* seconds, timer period, score, boosts */
     unsigned long service_flags;    /* the action's own flags */
     unsigned long service_reason;   /* a call's PhoneCallDiscardReason */
+    tg_reactions reactions;
 } tg_mtproto_message_text;
+
+tg_mtproto_tl_status tg_mtproto_read_message_reactions(
+    tg_mtproto_tl_reader *reader, tg_reactions *out);
+tg_mtproto_tl_status tg_mtproto_read_update_message_reactions(
+    tg_mtproto_tl_reader *reader, tg_mtproto_dialog_peer *peer,
+    unsigned long *message_id, tg_reactions *out);
+tg_mtproto_tl_status tg_mtproto_build_messages_send_reaction(
+    tg_mtproto_tl_writer *writer, unsigned long peer_constructor,
+    unsigned long peer_id_hi, unsigned long peer_id_lo,
+    unsigned long hash_hi, unsigned long hash_lo, int has_hash,
+    unsigned long message_id, int reaction_index);
 
 typedef struct tg_mtproto_message_text_list {
     unsigned long count;

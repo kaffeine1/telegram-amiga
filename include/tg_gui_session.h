@@ -310,6 +310,10 @@ const char *tg_gui_session_last_action_error(void);
 
 /* Edits an own message (messages.editMessage) to `text`, and on success updates
    the on-screen bubble in place. Returns 0 ok, non-zero on failure / no chat. */
+/* Choose one of the fixed reactions; choosing an owned one removes it. */
+int tg_gui_session_react(unsigned long message_id, int reaction_index,
+                          FILE *stream);
+
 int tg_gui_session_edit(const char *text, unsigned long message_id,
                         FILE *stream);
 
