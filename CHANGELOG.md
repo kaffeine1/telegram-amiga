@@ -55,6 +55,12 @@ the text client for the plain 68000.
   prints the counts after the line and adds /react <id> <name>.
 
 ### Fixed
+- AROS: the client no longer asks for /dev/urandom on every encrypted
+  message. AROS has none, so the answer always came from the client's own
+  generator, but the failing open ran through a path of AROS One's C
+  library that, in a VM watched for memory damage, was caught freeing a
+  block already damaged: the most likely cause of the rare x86_64 crash.
+  MorphOS asks once and remembers the answer.
 - An underscore, an asterisk, a backquote or a tilde in a message is
   drawn as the character it is. They used to double as the switches for
   italic, bold, code and strike, so a typed "_" vanished and turned the

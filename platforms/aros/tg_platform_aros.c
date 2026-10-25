@@ -652,9 +652,11 @@ static void tg_aros_drbg_generate(unsigned char *out, unsigned long n)
 
 int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
 {
+#if !defined(__AROS__)
     int fd;
     unsigned long offset;
     long got;
+#endif
 
     if (bytes == 0) {
         return 0;
@@ -662,6 +664,12 @@ int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
     if (byte_count == 0) {
         return 1;
     }
+#if !defined(__AROS__)
+    /* Not on AROS: it has no /dev/urandom, and asking for it on every
+       encrypted message ran AROS One's crt open() through a failing path
+       thousands of times an hour; in a VM with mungwall that path was
+       caught freeing a block already damaged (FreeDeviceProc under
+       IsFileSystem), the long-sought x86_64 crash. */
     fd = open("/dev/urandom", O_RDONLY);
     if (fd < 0) {
         fd = open("/dev/random", O_RDONLY);
@@ -680,6 +688,7 @@ int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
             return 1;
         }
     }
+#endif
 #if TG_ENABLE_TLS
     if (RAND_bytes(bytes, (int)byte_count) == 1) {
         return 1;

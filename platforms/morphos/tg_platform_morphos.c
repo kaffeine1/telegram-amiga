@@ -592,6 +592,9 @@ static int tg_morphos_random_fallback(unsigned char *bytes,
 
 int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
 {
+    /* Absent once, absent for good: two failing opens on every encrypted
+       message only cost DOS work (and tripped AROS One's C library). */
+    static int no_device;
     int fd;
     unsigned long offset;
     long got;
@@ -602,9 +605,15 @@ int tg_platform_random_bytes(unsigned char *bytes, unsigned long byte_count)
     if (byte_count == 0) {
         return 1;
     }
-    fd = open("/dev/urandom", O_RDONLY);
-    if (fd < 0) {
-        fd = open("/dev/random", O_RDONLY);
+    fd = -1;
+    if (!no_device) {
+        fd = open("/dev/urandom", O_RDONLY);
+        if (fd < 0) {
+            fd = open("/dev/random", O_RDONLY);
+        }
+        if (fd < 0) {
+            no_device = 1;
+        }
     }
     if (fd >= 0) {
         offset = 0;
