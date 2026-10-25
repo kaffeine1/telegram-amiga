@@ -176,6 +176,14 @@ void tg_gui_strip_markers(char *dest, unsigned long size, const char *src);
    window title, the clipboard) is copied with each pair turned into its text
    emoticon, cut before an emoticon that would not fit. Internal entity
    markers are stripped too. */
+/* One pixel of an avatar drawn in RGB: rgb is its grid x grid source,
+   (x, y) a pixel of the w x h place, px the background in and the result
+   out (bilinear source, soft disc edge). */
+void tg_gui_rgb_avatar_pixel(const unsigned char *rgb, int grid, int w, int h,
+                             int x, int y, unsigned char *px);
+/* The same for an emoji glyph of the sheet, index 0 as transparency. */
+void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
+                            int y, unsigned char *px);
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src);
 /* '@' mention autocomplete popup (composer). */

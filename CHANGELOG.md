@@ -69,6 +69,15 @@ the text client for the plain 68000.
   prints the counts after the line and adds /react <id> <name>.
 
 ### Fixed
+- Avatars and emoji look as they should on screens of more than 256
+  colours. They were drawn with the screen's palette pens, at most 256 and
+  shared with every other program, so their colours came out as whatever
+  near ones were left and the emoji's shading went flat. Where the
+  graphics card's library writes the window's frame, as on MorphOS and
+  AROS, they are now drawn in their own colours, smoothly scaled, with a
+  soft edge on the round avatars and the emoji's edges blended into what
+  is behind them. Paletted screens, slower 68k machines and frames the
+  library does not take keep the pens.
 - AROS: the client no longer asks for /dev/urandom on every encrypted
   message. AROS has none, so the answer always came from the client's own
   generator, and the failing open cost a trip through DOS each time.

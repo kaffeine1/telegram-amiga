@@ -1431,6 +1431,142 @@ void tg_gui_strip_markers(char *dest, unsigned long size, const char *src)
     dest[o] = '\0';
 }
 
+/* The truecolour avatar and emoji pixels (the Amiga backend composes them
+   on the frame through cybergraphics; here so the host tests them). */
+/* Source position of output pixel i of n over a grid of g, in 1/256 of a
+   source pixel, pixel centres aligned (an unscaled copy lands exactly). */
+static void tg_gui_rgb_source(int i, int n, int g, int *at, int *frac)
+{
+    long f = (((long)(2 * i + 1) * (long)g * 128L) / (long)n) - 128L;
+
+    if (f < 0L) {
+        f = 0L;
+    }
+    if (f > (long)(g - 1) * 256L) {
+        f = (long)(g - 1) * 256L;
+    }
+    *at = (int)(f >> 8);
+    *frac = (int)(f & 255L);
+}
+
+static unsigned long tg_gui_isqrt(unsigned long v)
+{
+    unsigned long r = 0UL;
+    unsigned long bit = 1UL << 30;
+
+    while (bit > v) {
+        bit >>= 2;
+    }
+    while (bit != 0UL) {
+        if (v >= r + bit) {
+            v -= r + bit;
+            r = (r >> 1) + bit;
+        } else {
+            r >>= 1;
+        }
+        bit >>= 2;
+    }
+    return r;
+}
+
+void tg_gui_rgb_avatar_pixel(const unsigned char *rgb, int g, int w, int h,
+                             int x, int y, unsigned char *px)
+{
+    long dx = (long)(2 * x + 1 - w);
+    long dy = (long)(2 * y + 1 - h);
+    long radius = (long)(w < h ? w : h); /* in half pixels */
+    long dist16;
+    long cover;
+    int sx;
+    int sy;
+    int fx;
+    int fy;
+    int k;
+
+    /* Coverage of the disc, in 1/256: a pixel straddling the edge takes
+       the share of it inside, so the circle has no steps. */
+    dist16 = (long)tg_gui_isqrt((unsigned long)(dx * dx + dy * dy) * 256UL);
+    cover = (radius * 16L - dist16) * 8L + 128L;
+    if (cover <= 0L) {
+        return;
+    }
+    if (cover > 256L) {
+        cover = 256L;
+    }
+    tg_gui_rgb_source(x, w, g, &sx, &fx);
+    tg_gui_rgb_source(y, h, g, &sy, &fy);
+    for (k = 0; k < 3; ++k) {
+        int sx1 = sx + 1 < g ? sx + 1 : sx;
+        int sy1 = sy + 1 < g ? sy + 1 : sy;
+        long a = rgb[(sy * g + sx) * 3 + k];
+        long b = rgb[(sy * g + sx1) * 3 + k];
+        long c = rgb[(sy1 * g + sx) * 3 + k];
+        long d = rgb[(sy1 * g + sx1) * 3 + k];
+        long top = a * (256L - fx) + b * fx;
+        long bottom = c * (256L - fx) + d * fx;
+        long v = (top * (256L - fy) + bottom * fy) >> 16;
+
+        px[k] = (unsigned char)((v * cover + (long)px[k] * (256L - cover)) >> 8);
+    }
+}
+
+void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
+                            int y, unsigned char *px)
+{
+    unsigned char v[4];
+    long weight[4];
+    long alpha = 0L;
+    long sum[3] = { 0L, 0L, 0L };
+    int sx;
+    int sy;
+    int fx;
+    int fy;
+    int sx1;
+    int sy1;
+    int i;
+    int k;
+
+    tg_gui_rgb_source(x, w, TG_EMOJI_GLYPH_SIZE, &sx, &fx);
+    tg_gui_rgb_source(y, h, TG_EMOJI_GLYPH_SIZE, &sy, &fy);
+    sx1 = sx + 1 < TG_EMOJI_GLYPH_SIZE ? sx + 1 : sx;
+    sy1 = sy + 1 < TG_EMOJI_GLYPH_SIZE ? sy + 1 : sy;
+    v[0] = glyph[sy * TG_EMOJI_GLYPH_SIZE + sx];
+    v[1] = glyph[sy * TG_EMOJI_GLYPH_SIZE + sx1];
+    v[2] = glyph[sy1 * TG_EMOJI_GLYPH_SIZE + sx];
+    v[3] = glyph[sy1 * TG_EMOJI_GLYPH_SIZE + sx1];
+    weight[0] = ((256L - fx) * (256L - fy)) >> 8;
+    weight[1] = ((long)fx * (256L - fy)) >> 8;
+    weight[2] = ((256L - fx) * (long)fy) >> 8;
+    weight[3] = ((long)fx * (long)fy) >> 8;
+    /* Index 0 is the sheet's transparency: it weighs as alpha, so the
+       glyph's edge blends into whatever is behind it. */
+    for (i = 0; i < 4; ++i) {
+        if (v[i] != 0U) {
+            const unsigned char *c = tg_emoji_sheet_palette[v[i] - 1U];
+
+            alpha += weight[i];
+            for (k = 0; k < 3; ++k) {
+                sum[k] += weight[i] * (long)c[k];
+            }
+        }
+    }
+    if (alpha <= 0L) {
+        return;
+    }
+    if (alpha > 256L) {
+        alpha = 256L;
+    }
+    for (k = 0; k < 3; ++k) {
+        long colour = sum[k] / alpha;
+
+        if (colour > 255L) {
+            colour = 255L;
+        }
+        px[k] = (unsigned char)((colour * alpha +
+                                 (long)px[k] * (256L - alpha)) >> 8);
+    }
+}
+
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src)
 {
@@ -7151,6 +7287,71 @@ static int tg_gui_reactions_self_test(void)
     return ok ? 0 : 2;
 }
 
+/* The truecolour pixels: exact colours where nothing is scaled, the
+   background kept outside the disc and the glyph, a blend on the edges. */
+static int tg_gui_rgb_pixels_self_test(void)
+{
+    static unsigned char grid[4 * 4 * 3];
+    static unsigned char glyph[TG_EMOJI_GLYPH_SIZE * TG_EMOJI_GLYPH_SIZE];
+    unsigned char px[3];
+    const unsigned char *c;
+    int i;
+    int ok = 1;
+
+    for (i = 0; i < 16; ++i) {
+        grid[i * 3] = (unsigned char)(i * 16);
+        grid[i * 3 + 1] = (unsigned char)(255 - i * 16);
+        grid[i * 3 + 2] = 77U;
+    }
+    /* Unscaled: inside the disc each pixel is its own source pixel. */
+    px[0] = px[1] = px[2] = 9U;
+    tg_gui_rgb_avatar_pixel(grid, 4, 4, 4, 1, 2, px);
+    ok = ok && px[0] == grid[(2 * 4 + 1) * 3] &&
+         px[1] == grid[(2 * 4 + 1) * 3 + 1] && px[2] == 77U;
+    /* Outside the disc the background stays; on its edge it is a mix. */
+    px[0] = px[1] = px[2] = 9U;
+    tg_gui_rgb_avatar_pixel(grid, 4, 32, 32, 0, 0, px);
+    ok = ok && px[0] == 9U && px[1] == 9U && px[2] == 9U;
+    px[0] = px[1] = px[2] = 0U;
+    tg_gui_rgb_avatar_pixel(grid, 4, 32, 32, 4, 4, px); /* a quarter in */
+    ok = ok && px[2] > 0U && px[2] < 77U;
+    /* Upscaled, pixel 15 of 32 samples the grid at 1 + 112/256 on both
+       axes: 80, 96, 144 and 160 mix to 115 exactly. */
+    px[0] = px[1] = px[2] = 0U;
+    tg_gui_rgb_avatar_pixel(grid, 4, 32, 32, 15, 15, px);
+    ok = ok && px[0] == 115U;
+    if (!ok) {
+        puts("gui self-test: truecolour avatar pixels failed");
+        return 2;
+    }
+    memset(glyph, 0, sizeof(glyph));
+    glyph[4 * TG_EMOJI_GLYPH_SIZE + 3] = 5U;
+    c = tg_emoji_sheet_palette[4];
+    px[0] = px[1] = px[2] = 9U;
+    tg_gui_rgb_emoji_pixel(glyph, TG_EMOJI_GLYPH_SIZE, TG_EMOJI_GLYPH_SIZE,
+                           3, 4, px);
+    ok = px[0] == c[0] && px[1] == c[1] && px[2] == c[2];
+    px[0] = px[1] = px[2] = 9U;
+    tg_gui_rgb_emoji_pixel(glyph, TG_EMOJI_GLYPH_SIZE, TG_EMOJI_GLYPH_SIZE,
+                           6, 4, px);
+    ok = ok && px[0] == 9U && px[1] == 9U && px[2] == 9U;
+    /* Twice the size, pixel (8, 9) samples (3 + 192/256, 4 + 64/256): the
+       coloured pixel weighs 48 of 256 there, so it is 48/256 of its colour
+       over 208/256 of the background. */
+    px[0] = px[1] = px[2] = 200U;
+    tg_gui_rgb_emoji_pixel(glyph, 2 * TG_EMOJI_GLYPH_SIZE,
+                           2 * TG_EMOJI_GLYPH_SIZE, 8, 9, px);
+    for (i = 0; i < 3; ++i) {
+        ok = ok && px[i] == (unsigned char)(((long)c[i] * 48L +
+                                              200L * 208L) >> 8);
+    }
+    if (!ok) {
+        puts("gui self-test: truecolour emoji pixels failed");
+        return 2;
+    }
+    return 0;
+}
+
 int tg_gui_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -7158,7 +7359,8 @@ int tg_gui_self_test(void)
     tg_gui_record record;
     int ok;
 
-    if (tg_gui_markup_self_test() != 0 ||
+    if (tg_gui_rgb_pixels_self_test() != 0 ||
+        tg_gui_markup_self_test() != 0 ||
         tg_gui_plain_text_self_test() != 0 ||
         tg_gui_reactions_self_test() != 0 ||
         tg_gui_notify_policy_self_test() != 0 ||

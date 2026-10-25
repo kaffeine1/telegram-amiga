@@ -759,6 +759,16 @@ static int tg_gui_amiga_emoji_cell(const tg_gui_amiga_ctx *ctx)
     return tg_gui_emoji_inline_size(ctx->state, h);
 }
 
+/* The truecolour painters for emoji and avatars (defined with the photo
+   replay, whose cybergraphics check they share): 1 when they drew. */
+static int tg_gui_emoji_draw_rgb(tg_gui_amiga_ctx *ctx,
+                                 const unsigned char *glyph, int x, int y_top,
+                                 int size);
+struct tg_gui_av_slot;
+static int tg_gui_av_draw_rgb(tg_gui_amiga_ctx *ctx,
+                              const struct tg_gui_av_slot *slot,
+                              tg_gui_rect rect);
+
 /* Pens for the sheet palette, resolved once per session. Entry 0 is never
    drawn (transparent). A truecolour screen sends every colour through the
    avatar matching; a paletted one (AGA, ECS) gets them planned by
@@ -806,8 +816,11 @@ static int tg_gui_amiga_glyph_image(tg_gui_backend *backend,
         index >= tg_emoji_sheet_count || size <= 0 || ctx->rport == 0) {
         return 0;
     }
-    tg_gui_amiga_emoji_pens();
     px = tg_emoji_sheet_pixels[index];
+    if (tg_gui_emoji_draw_rgb(ctx, px, x, y_top, size)) {
+        return 1;
+    }
+    tg_gui_amiga_emoji_pens();
     SetDrMd(ctx->rport, JAM1);
     for (y = 0; y < size; ++y) {
         int sy = (y * TG_EMOJI_GLYPH_SIZE) / size;
@@ -1230,6 +1243,9 @@ typedef struct tg_gui_av_slot {
     int state; /* 0 free, 1 pens ready, -1 nothing/undecodable (initials),
                   2 waiting for its decode (initials meanwhile) */
     int grid;  /* side of the pen grid it was built at (tg_gui_av_grid) */
+    int pens_ok; /* pen[] holds the grid (on truecolour only on demand) */
+    int rgb_ok;  /* rgb holds the grid, for the truecolour path */
+    unsigned char *rgb; /* allocated once per slot on a truecolour screen */
     unsigned char pen[TG_GUI_AV_SZ * TG_GUI_AV_SZ];
 } tg_gui_av_slot;
 static tg_gui_av_slot tg_gui_av_slots[TG_GUI_AV_SLOTS];
@@ -2133,16 +2149,34 @@ static void tg_gui_av_build(tg_gui_av_slot *slot)
         slot->state = -1; /* nothing/undecodable: initials, no re-probe */
         return;
     }
-    for (px = 0UL; px < (unsigned long)grid * (unsigned long)grid; ++px) {
-        LONG p = tg_gui_av_pen_for(rgb + px * 3UL);
-
-        if (p == -1) { /* pen system exhausted: give up cleanly */
-            slot->state = -1;
-            return;
-        }
-        slot->pen[px] = (unsigned char)p;
-    }
     slot->grid = grid;
+    slot->pens_ok = 0;
+    slot->rgb_ok = 0;
+    /* A truecolour screen draws the colours themselves (tg_gui_av_draw_rgb):
+       keep them, and leave the pens for when that path is not there. */
+    if (tg_gui_av_rich) {
+        if (slot->rgb == 0) {
+            slot->rgb = (unsigned char *)malloc(
+                (size_t)(TG_GUI_AV_SZ * TG_GUI_AV_SZ * 3));
+        }
+        if (slot->rgb != 0) {
+            memcpy(slot->rgb, rgb,
+                   (size_t)grid * (size_t)grid * 3U);
+            slot->rgb_ok = 1;
+        }
+    }
+    if (!slot->rgb_ok) {
+        for (px = 0UL; px < (unsigned long)grid * (unsigned long)grid; ++px) {
+            LONG p = tg_gui_av_pen_for(rgb + px * 3UL);
+
+            if (p == -1) { /* pen system exhausted: give up cleanly */
+                slot->state = -1;
+                return;
+            }
+            slot->pen[px] = (unsigned char)p;
+        }
+        slot->pens_ok = 1;
+    }
     slot->state = 1;
     if (timing_lines < 32 && tg_gui_log_is_enabled()) {
         char line[128];
@@ -2216,6 +2250,28 @@ static int tg_gui_amiga_avatar_image(tg_gui_backend *backend,
     }
     if (slot->state != 1) {
         return 0;
+    }
+    if (slot->rgb_ok && tg_gui_av_draw_rgb(ctx, slot, rect)) {
+        return 1;
+    }
+    if (!slot->pens_ok) {
+        /* A truecolour build whose frame cybergraphics would not take:
+           the pens after all, once. */
+        unsigned long px;
+        unsigned long n = (unsigned long)slot->grid * (unsigned long)slot->grid;
+
+        if (!slot->rgb_ok) {
+            return 0;
+        }
+        for (px = 0UL; px < n; ++px) {
+            LONG p = tg_gui_av_pen_for(slot->rgb + px * 3UL);
+
+            if (p == -1) {
+                return 0;
+            }
+            slot->pen[px] = (unsigned char)p;
+        }
+        slot->pens_ok = 1;
     }
     /* Replay the pen grid scaled to rect (nearest), row by row with
        run-length RectFills into the current (buffered) RastPort, each row
@@ -4130,6 +4186,7 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
 {
     unsigned char expected[6] = { 255U, 0U, 0U, 0U, 255U, 0U };
     unsigned char actual[6];
+    unsigned char saved[6];
     int is_window;
     int *checked;
     int *usable;
@@ -4167,7 +4224,13 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
         test_y = ctx->inner_h - 1;
     }
     memset(actual, 0, sizeof(actual));
-    if (tg_gui_cgx_write_pixel_array(
+    /* The two test pixels go back as they were: an avatar or an emoji,
+       unlike a photo, does not cover all of the place it is checked at. */
+    if (tg_gui_cgx_read_pixel_array(
+            saved, 0, 0, 6, target,
+            (UWORD)(origin_x + test_x), (UWORD)(origin_y + test_y),
+            2, 1, RECTFMT_RGB) == 0UL ||
+        tg_gui_cgx_write_pixel_array(
             expected, 0, 0, 6, target,
             (UWORD)(origin_x + test_x), (UWORD)(origin_y + test_y),
             2, 1, RECTFMT_RGB) == 0UL ||
@@ -4177,6 +4240,10 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
             2, 1, RECTFMT_RGB) == 0UL ||
         actual[0] < 200U || actual[1] > 55U || actual[2] > 55U ||
         actual[3] > 55U || actual[4] < 200U || actual[5] > 55U) {
+        (void)tg_gui_cgx_write_pixel_array(
+            saved, 0, 0, 6, target,
+            (UWORD)(origin_x + test_x), (UWORD)(origin_y + test_y),
+            2, 1, RECTFMT_RGB);
         if (is_window) {
             ctx->photo_direct_report = -1;
         } else {
@@ -4184,6 +4251,10 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
         }
         return 0;
     }
+    (void)tg_gui_cgx_write_pixel_array(
+        saved, 0, 0, 6, target,
+        (UWORD)(origin_x + test_x), (UWORD)(origin_y + test_y),
+        2, 1, RECTFMT_RGB);
     *usable = 1;
     if (is_window) {
         if (ctx->photo_direct_report == 0) {
@@ -4195,6 +4266,148 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
     return 1;
 }
 #endif
+
+/* Avatars and emoji on a truecolour screen (0.0.98). Through pens they came
+   out in whatever colours the screen's 256 pens had left near the wanted
+   ones: avatars share a pool of 160, the emoji's 228 shades went through it
+   too, and the window's exact colours and every other program take theirs
+   first. Where the frame is one cybergraphics writes (the photos' check),
+   they are composed in RGB on the background read from the frame: the
+   avatar scaled bilinearly from its 32x32 grid with a soft disc edge, the
+   emoji scaled bilinearly with its transparent pixels as alpha. Pens stay
+   for paletted screens, slow 68k machines and frames cybergraphics will
+   not take. */
+#define TG_GUI_RGB_BLOCK_W 256
+#define TG_GUI_RGB_BLOCK_ROWS 16
+
+typedef void (*tg_gui_rgb_shade_fn)(const void *data, int w, int h, int x,
+                                    int y, unsigned char *px);
+
+/* Reads the frame under rect in blocks of rows, lets shade() change each
+   pixel (it gets the background and leaves the result) and writes the
+   block back. Clipped to the window's inner area. 1 when drawn. */
+static int tg_gui_amiga_rgb_compose(tg_gui_amiga_ctx *ctx, tg_gui_rect rect,
+                                    tg_gui_rgb_shade_fn shade,
+                                    const void *data)
+{
+#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
+    static unsigned char block[TG_GUI_RGB_BLOCK_W * TG_GUI_RGB_BLOCK_ROWS * 3];
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+    int w;
+    int y;
+
+    if (ctx == 0 || ctx->rport == 0 || !ctx->photo_truecolor ||
+        ctx->photo_cgx_failed || tg_gui_av_paint_budget_ms == 0UL ||
+        rect.w <= 0 || rect.h <= 0 || CyberGfxBase == 0) {
+        return 0;
+    }
+    x0 = rect.x < 0 ? 0 : rect.x;
+    y0 = rect.y < 0 ? 0 : rect.y;
+    x1 = rect.x + rect.w;
+    y1 = rect.y + rect.h;
+    if (x1 > ctx->inner_w) {
+        x1 = ctx->inner_w;
+    }
+    if (y1 > ctx->inner_h) {
+        y1 = ctx->inner_h;
+    }
+    if (x1 <= x0 || y1 <= y0) {
+        return 1; /* nothing of it in the window */
+    }
+    w = x1 - x0;
+    if (w > TG_GUI_RGB_BLOCK_W ||
+        !tg_gui_photo_cgx_self_check(ctx, ctx->rport, ctx->origin_x,
+                                     ctx->origin_y, x0, y0)) {
+        return 0;
+    }
+    for (y = y0; y < y1; y += TG_GUI_RGB_BLOCK_ROWS) {
+        int rows = y1 - y;
+        int r;
+
+        if (rows > TG_GUI_RGB_BLOCK_ROWS) {
+            rows = TG_GUI_RGB_BLOCK_ROWS;
+        }
+        if (tg_gui_cgx_read_pixel_array(
+                block, 0, 0, (UWORD)(w * 3), ctx->rport,
+                (UWORD)(ctx->origin_x + x0), (UWORD)(ctx->origin_y + y),
+                (UWORD)w, (UWORD)rows, RECTFMT_RGB) == 0UL) {
+            return 0;
+        }
+        for (r = 0; r < rows; ++r) {
+            int c;
+
+            for (c = 0; c < w; ++c) {
+                shade(data, rect.w, rect.h, x0 + c - rect.x,
+                      y + r - rect.y,
+                      block + ((unsigned long)r * (unsigned long)w +
+                               (unsigned long)c) * 3UL);
+            }
+        }
+        if (tg_gui_cgx_write_pixel_array(
+                block, 0, 0, (UWORD)(w * 3), ctx->rport,
+                (UWORD)(ctx->origin_x + x0), (UWORD)(ctx->origin_y + y),
+                (UWORD)w, (UWORD)rows, RECTFMT_RGB) == 0UL) {
+            return 0;
+        }
+    }
+    return 1;
+#else
+    (void)ctx;
+    (void)rect;
+    (void)shade;
+    (void)data;
+    return 0;
+#endif
+}
+
+typedef struct tg_gui_av_rgb_src {
+    const unsigned char *rgb;
+    int grid;
+} tg_gui_av_rgb_src;
+
+static void tg_gui_av_shade(const void *data, int w, int h, int x, int y,
+                            unsigned char *px)
+{
+    const tg_gui_av_rgb_src *src = (const tg_gui_av_rgb_src *)data;
+
+    tg_gui_rgb_avatar_pixel(src->rgb, src->grid, w, h, x, y, px);
+}
+
+static int tg_gui_av_draw_rgb(tg_gui_amiga_ctx *ctx,
+                              const struct tg_gui_av_slot *slot,
+                              tg_gui_rect rect)
+{
+    tg_gui_av_rgb_src src;
+
+    if (slot == 0 || !slot->rgb_ok || slot->rgb == 0 || slot->grid <= 0) {
+        return 0;
+    }
+    src.rgb = slot->rgb;
+    src.grid = slot->grid;
+    return tg_gui_amiga_rgb_compose(ctx, rect, tg_gui_av_shade, &src);
+}
+
+static void tg_gui_emoji_shade(const void *data, int w, int h, int x, int y,
+                               unsigned char *px)
+{
+    tg_gui_rgb_emoji_pixel((const unsigned char *)data, w, h, x, y, px);
+}
+
+static int tg_gui_emoji_draw_rgb(tg_gui_amiga_ctx *ctx,
+                                 const unsigned char *glyph, int x, int y_top,
+                                 int size)
+{
+    tg_gui_rect rect;
+
+    rect.x = x;
+    rect.y = y_top;
+    rect.w = size;
+    rect.h = size;
+    return tg_gui_amiga_rgb_compose(ctx, rect, tg_gui_emoji_shade, glyph);
+}
 
 /* How many scaled rows are staged before handing them to cybergraphics in one
    call. One row per call cost 220-820 ms per slice on a 68k with P96/AfA (the
