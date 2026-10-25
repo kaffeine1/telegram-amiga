@@ -41,6 +41,11 @@ the text client for the plain 68000.
   already marked a change of day, now also opens an older page with its
   date. Today comes from the same clock as the message times, so a
   machine whose clock was never set still gets it right.
+- Typed emoticons become emoji: :) :D ;) :P :( :'( :O :* <3 and xD,
+  standing alone, turn into their emoji when a space follows or the
+  message is sent, and Backspace straight after brings the typed
+  characters back. "Settings > Emoticons become emoji" turns it off; the
+  choice is kept in data/telegram-emoticons.txt.
 
 ### Fixed
 - An underscore, an asterisk, a backquote or a tilde in a message is

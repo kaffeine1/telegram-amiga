@@ -675,6 +675,10 @@ Using the GUI
   enabled, emoji are at least 16 pixels, including with Topaz 8 on OS3. The
   font stays unchanged and the rows make room; Off restores compact text rows.
   Avatar sizes stay unchanged when switching emoji on or off.
+- "Settings > Emoticons become emoji" (on by default, with emoji enabled):
+  a typed :) :D ;) :P :( :'( :O :* <3 or xD, standing alone, becomes its
+  emoji when a space follows it or the message is sent. Backspace straight
+  after brings the typed characters back.
 - Videos show a frame and a pasted link shows its preview, with the picture
   when the page has one. Both go through the same photo pipeline, so the same
   "Show inline photos" setting governs them. Stickers show the emoji they
@@ -880,6 +884,10 @@ Usare la GUI
   anche con Topaz 8 su OS3: il font resta uguale e le righe fanno spazio.
   Off ripristina le righe compatte con emoticon testuali.
   La dimensione degli avatar resta uguale attivando o disattivando le emoji.
+- "Settings > Emoticons become emoji" (acceso di default, con le emoji
+  attive): un :) :D ;) :P :( :'( :O :* <3 o xD scritto da solo diventa la
+  sua emoji quando lo segue uno spazio o il messaggio parte. Backspace
+  subito dopo rimette i caratteri scritti.
 - I video mostrano un fotogramma e un link incollato mostra la sua anteprima,
   con l'immagine se la pagina ne ha una. Passano dalla stessa pipeline delle
   foto, quindi li governa la stessa impostazione "Show inline photos". Gli

@@ -588,6 +588,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_NOTIFY_POPUP 29
 #define TG_MENU_NOTIFY_TEXT 30
 #define TG_MENU_NOTIFY_BEEP 31
+#define TG_MENU_EMOTICONS 32
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -6642,6 +6643,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_FULLPHOTOS },
     { NM_ITEM,  (STRPTR)"Enable emoji", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_ENABLEEMOJI },
+    { NM_ITEM,  (STRPTR)"Emoticons become emoji", 0, CHECKIT | MENUTOGGLE, 0,
+      (APTR)TG_MENU_EMOTICONS },
     { NM_ITEM,  (STRPTR)"Show avatars", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_AVATARS },
     { NM_ITEM,  (STRPTR)"Photo dithering", 0, 0, 0, 0 },
@@ -6688,6 +6691,28 @@ static struct MenuItem *tg_gui_menu_find_userdata(struct Menu *menu, APTR data)
         }
     }
     return 0;
+}
+
+/* The emoticon switch shows its own state, usable only with emoji on. */
+static void tg_gui_menu_set_emoticons(struct Menu *menu, int replace,
+                                      int emoji_enabled)
+{
+    struct MenuItem *item;
+
+    item = tg_gui_menu_find_userdata(menu, (APTR)TG_MENU_EMOTICONS);
+    if (item == 0) {
+        return;
+    }
+    if (replace) {
+        item->Flags |= CHECKED;
+    } else {
+        item->Flags &= (UWORD)~CHECKED;
+    }
+    if (emoji_enabled) {
+        item->Flags |= ITEMENABLED;
+    } else {
+        item->Flags &= (UWORD)~ITEMENABLED;
+    }
 }
 
 static void tg_gui_menu_set_emoji(struct Menu *menu, int enabled)
@@ -11177,6 +11202,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 tg_gui_menu_set_notify(menu, state->notify_mode,
                                        state->notify_beep);
                 tg_gui_menu_set_emoji(menu, state->emoji_enabled);
+                tg_gui_menu_set_emoticons(menu, state->emoticon_replace,
+                                          state->emoji_enabled);
                 tg_gui_menu_set_photo_cache_limit(
                     menu, state->photo_cache_limit_mb);
                 SetMenuStrip(ctx.window, menu);
@@ -11792,9 +11819,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             } else if (msg_class == IDCMP_VANILLAKEY && state->composing) {
                 int old_input_h;
                 int old_mention_active;
+                int emoticon_undo;
 
                 old_input_h = tg_gui_input_layout_height(state, &backend);
                 old_mention_active = state->mention_active;
+                /* An emoticon that just became an emoji can come back with
+                   the very next key only, if that key is Backspace. */
+                emoticon_undo = state->emoticon_undo_at;
+                state->emoticon_undo_at = -1;
                 /* Composing: keys edit the input line; RETURN sends, ESC
                    cancels, BACKSPACE deletes. While the '@' mention popup is
                    up, RETURN/TAB insert the highlighted username instead (the
@@ -11820,6 +11852,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->mention_count = 0;
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 13 || msg_code == 10) {
+                    /* An emoticon ending the message goes as its emoji. */
+                    (void)tg_gui_composer_emoticon(
+                        state, (unsigned long)strlen(state->input));
+                    state->emoticon_undo_at = -1;
                     if (state->input[0] != '\0') {
                         if (state->edit_to_id != 0UL) {
                             state->in_sel_active = 0;
@@ -11870,7 +11906,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     unsigned long n;
                     unsigned long c;
 
-                    if (tg_gui_window_input_delete_sel(state)) {
+                    state->emoticon_undo_at = emoticon_undo;
+                    if (tg_gui_composer_emoticon_undo(state)) {
+                        /* the emoji just made goes back to what was typed */
+                        tg_gui_window_mention_refresh(state);
+                        tg_gui_window_paint_composer_edit(
+                            state, &backend, old_input_h, old_mention_active);
+                    } else if (tg_gui_window_input_delete_sel(state)) {
                         /* a selection consumes the keypress whole */
                         tg_gui_window_mention_refresh(state);
                         tg_gui_window_paint_composer_edit(
@@ -11942,6 +11984,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 n - c + 1UL);
                         state->input[c] = (char)msg_code;
                         state->input_caret = (int)(c + 1UL);
+                        if (msg_code == ' ') {
+                            /* a space closes the word before it */
+                            (void)tg_gui_composer_emoticon(state, c);
+                        }
                         tg_gui_window_mention_refresh(state);
                         tg_gui_window_paint_composer_edit(
                             state, &backend, old_input_h, old_mention_active);
@@ -12532,6 +12578,26 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else if (ud == (APTR)TG_MENU_DLDIR) {
                             tg_gui_window_pick_download_dir(state, ctx.window,
                                                             &backend);
+                        } else if (ud == (APTR)TG_MENU_EMOTICONS) {
+                            state->emoticon_replace = !state->emoticon_replace;
+                            state->emoticon_undo_at = -1;
+                            if (menu != 0) {
+                                ClearMenuStrip(ctx.window);
+                                tg_gui_menu_set_emoticons(
+                                    menu, state->emoticon_replace,
+                                    state->emoji_enabled);
+                                SetMenuStrip(ctx.window, menu);
+                            }
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                tg_gui_emoji_preferences_save_choice(
+                                    TG_GUI_EMOTICON_FILE,
+                                    state->emoticon_replace, 1) != 0
+                                    ? "Could not save emoticon setting"
+                                    : state->emoticon_replace
+                                          ? "Emoticons become emoji"
+                                          : "Emoticons stay text");
+                            tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_ENABLEEMOJI) {
                             tg_gui_set_emoji_enabled(state, !state->emoji_enabled);
                             ctx.line_h = tg_gui_font_line_height(
@@ -12541,6 +12607,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (menu != 0) {
                                 ClearMenuStrip(ctx.window);
                                 tg_gui_menu_set_emoji(menu, state->emoji_enabled);
+                                tg_gui_menu_set_emoticons(
+                                    menu, state->emoticon_replace,
+                                    state->emoji_enabled);
                                 SetMenuStrip(ctx.window, menu);
                             }
                             if (tg_gui_emoji_preferences_save_choice(
@@ -14787,6 +14856,15 @@ int tg_gui_run_window(tg_gui_state *state)
     tg_platform_break_own();
     tg_gui_emoji_preferences_load("data/telegram-emoji.txt",
                                   &state->emoji_enabled, &state->emoji_explicit);
+    {
+        int emoticons_explicit = 0;
+
+        state->emoticon_replace = 1;
+        tg_gui_emoji_preferences_load(TG_GUI_EMOTICON_FILE,
+                                      &state->emoticon_replace,
+                                      &emoticons_explicit);
+        state->emoticon_undo_at = -1;
+    }
     state->emoji_default_resolved = 0;
     tg_gui_avatar_preferences_load("data/telegram-avatars.txt",
                                    &state->avatars_enabled,

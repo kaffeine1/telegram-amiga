@@ -1442,6 +1442,8 @@ void tg_gui_demo_state(tg_gui_state *state)
     state->theme = TG_GUI_THEME_DARK;
     state->inline_photos = 1;
     state->emoji_enabled = 1;
+    state->emoticon_replace = 1;
+    state->emoticon_undo_at = -1;
     state->avatars_enabled = 1;
     state->photo_dither = TG_GUI_PHOTO_DITHER_FULL;
     state->photo_cache_limit_mb = TG_GUI_PHOTO_CACHE_DEFAULT_MB;
@@ -1751,6 +1753,116 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
         }
     }
     dest[o] = '\0';
+}
+
+/* Typed emoticons and the emoji they become. Each emoji is one the sheet
+   draws, checked again at use, so a smaller sheet only loses entries. */
+static const struct {
+    const char *text;
+    unsigned long codepoint;
+} tg_gui_emoticons[] = {
+    { ":)", 0x1f642UL }, { ":-)", 0x1f642UL },
+    { ":D", 0x1f603UL }, { ":-D", 0x1f603UL },
+    { ";)", 0x1f609UL }, { ";-)", 0x1f609UL },
+    { ":P", 0x1f61bUL }, { ":-P", 0x1f61bUL },
+    { ":p", 0x1f61bUL }, { ":-p", 0x1f61bUL },
+    { ":(", 0x1f641UL }, { ":-(", 0x1f641UL },
+    { ":'(", 0x1f622UL },
+    { ":O", 0x1f62eUL }, { ":-O", 0x1f62eUL },
+    { ":o", 0x1f62eUL }, { ":-o", 0x1f62eUL },
+    { ":*", 0x1f618UL }, { ":-*", 0x1f618UL },
+    { "<3", 0x2764UL },
+    { "xD", 0x1f606UL }, { "XD", 0x1f606UL }
+};
+
+int tg_gui_composer_emoticon(tg_gui_state *state, unsigned long end)
+{
+    unsigned long n;
+    unsigned long start;
+    unsigned long len;
+    unsigned long k;
+    unsigned long c;
+    int index;
+    char pair[2];
+
+    if (state == 0 || !state->emoji_enabled || !state->emoticon_replace) {
+        return 0;
+    }
+    n = (unsigned long)strlen(state->input);
+    if (end > n) {
+        return 0;
+    }
+    /* The word must stand alone: from the start of the text or a blank. A
+       link or a longer word never matches the whole table entry. */
+    start = end;
+    while (start > 0UL && state->input[start - 1UL] != ' ' &&
+           state->input[start - 1UL] != '\n' &&
+           state->input[start - 1UL] != '\t') {
+        --start;
+    }
+    len = end - start;
+    if (len < 2UL || len >= sizeof(state->emoticon_undo)) {
+        return 0;
+    }
+    for (k = 0UL; k < sizeof(tg_gui_emoticons) / sizeof(tg_gui_emoticons[0]);
+         ++k) {
+        if (strlen(tg_gui_emoticons[k].text) == len &&
+            memcmp(state->input + start, tg_gui_emoticons[k].text,
+                   (size_t)len) == 0) {
+            break;
+        }
+    }
+    if (k == sizeof(tg_gui_emoticons) / sizeof(tg_gui_emoticons[0])) {
+        return 0;
+    }
+    index = tg_gui_emoji_index_of(tg_gui_emoticons[k].codepoint);
+    if (index < 0 || !tg_gui_emoji_encode((unsigned long)index, pair)) {
+        return 0;
+    }
+    memcpy(state->emoticon_undo, state->input + start, (size_t)len);
+    state->emoticon_undo[len] = '\0';
+    /* Two bytes take the place of two or three: the text never grows. */
+    memmove(state->input + start + 2UL, state->input + end, n - end + 1UL);
+    state->input[start] = pair[0];
+    state->input[start + 1UL] = pair[1];
+    c = (unsigned long)state->input_caret;
+    if (c >= end) {
+        c -= len - 2UL;
+    } else if (c > start) {
+        c = start + 2UL;
+    }
+    state->input_caret = (int)c;
+    state->emoticon_undo_at = (int)start;
+    return 1;
+}
+
+int tg_gui_composer_emoticon_undo(tg_gui_state *state)
+{
+    unsigned long at;
+    unsigned long n;
+    unsigned long len;
+    unsigned long c;
+
+    if (state == 0 || state->emoticon_undo_at < 0) {
+        return 0;
+    }
+    at = (unsigned long)state->emoticon_undo_at;
+    state->emoticon_undo_at = -1;
+    n = (unsigned long)strlen(state->input);
+    len = (unsigned long)strlen(state->emoticon_undo);
+    if (len < 2UL || at + 2UL > n ||
+        !tg_gui_emoji_pair_at(state->input, n, at, 0) ||
+        n - 2UL + len >= sizeof(state->input)) {
+        return 0;
+    }
+    memmove(state->input + at + len, state->input + at + 2UL,
+            n - (at + 2UL) + 1UL);
+    memcpy(state->input + at, state->emoticon_undo, (size_t)len);
+    c = (unsigned long)state->input_caret;
+    if (c >= at + 2UL) {
+        state->input_caret = (int)(c + len - 2UL);
+    }
+    return 1;
 }
 
 int tg_gui_composer_insert_emoji(tg_gui_state *state, unsigned long index)
@@ -7751,6 +7863,69 @@ int tg_gui_self_test(void)
             }
             state.input[0] = '\0';
             state.input_caret = 0;
+        }
+
+        /* 0.0.98: a typed emoticon standing alone becomes its emoji when a
+           space follows (or the message is sent), Backspace straight after
+           brings the characters back once, and words, links and the switch
+           being off leave the text alone. */
+        {
+            unsigned long idx = 0UL;
+            int failed = 0;
+            int smile = tg_gui_emoji_index_of(0x1f642UL);
+            int heart = tg_gui_emoji_index_of(0x2764UL);
+
+            state.emoticon_replace = 1;
+            state.emoticon_undo_at = -1;
+            strcpy(state.input, ":) ");
+            state.input_caret = 3;
+            if (!tg_gui_composer_emoticon(&state, 2UL) ||
+                strlen(state.input) != 3UL || state.input[2] != ' ' ||
+                state.input_caret != 3 ||
+                !tg_gui_emoji_pair_at(state.input, 3UL, 0UL, &idx) ||
+                (int)idx != smile) {
+                failed = 1;
+            }
+            if (!tg_gui_composer_emoticon_undo(&state) ||
+                strcmp(state.input, ":) ") != 0 || state.input_caret != 3 ||
+                tg_gui_composer_emoticon_undo(&state)) {
+                failed = 1;
+            }
+            strcpy(state.input, "ok :-) yes"); /* caret at the end */
+            state.input_caret = 10;
+            if (!tg_gui_composer_emoticon(&state, 6UL) ||
+                state.input_caret != 9 || strlen(state.input) != 9UL ||
+                strcmp(state.input + 5, " yes") != 0) {
+                failed = 1;
+            }
+            strcpy(state.input, "<3");
+            state.input_caret = 2;
+            if (!tg_gui_composer_emoticon(&state, 2UL) ||
+                !tg_gui_emoji_pair_at(state.input, 2UL, 0UL, &idx) ||
+                (int)idx != heart) {
+                failed = 1;
+            }
+            strcpy(state.input, "a:) http://x.com/:) :/");
+            state.input_caret = 0;
+            if (tg_gui_composer_emoticon(&state, 3UL) ||
+                tg_gui_composer_emoticon(&state, 19UL) ||
+                tg_gui_composer_emoticon(&state, 22UL)) {
+                failed = 1;
+            }
+            strcpy(state.input, ":)");
+            state.emoticon_replace = 0;
+            failed |= tg_gui_composer_emoticon(&state, 2UL);
+            state.emoticon_replace = 1;
+            state.emoji_enabled = 0;
+            failed |= tg_gui_composer_emoticon(&state, 2UL);
+            state.emoji_enabled = 1;
+            if (failed || strcmp(state.input, ":)") != 0) {
+                puts("gui self-test: emoticon replacement");
+                return 2;
+            }
+            state.input[0] = '\0';
+            state.input_caret = 0;
+            state.emoticon_undo_at = -1;
         }
 
         /* 0.0.93: the emoji picker paints inside the window with one glyph per

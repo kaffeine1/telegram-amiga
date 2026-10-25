@@ -1408,7 +1408,7 @@ Done on `main` on 2026-10-25 with the bytes 0x1C to 0x1F
 (`include/tg_text_style.h`); a byte of that range arriving in a message
 becomes a space before the markers go in, so text cannot fake a style.
 
-## Planned: typed emoticons become emoji (0.0.98)
+## Done for 0.0.98: typed emoticons become emoji
 
 A tester asked on 2026-10-20 for the usual text emoticons to turn into
 their emoji as they are typed, `:)` into the smiling face, as many chat
@@ -1424,6 +1424,10 @@ a space, once a space, Return or Send follows it; Backspace straight
 after a replacement brings the typed characters back; and a setting
 turns the whole thing off. Nothing changes inside a link, and the text
 client keeps sending what is typed.
+
+Done on `main` on 2026-10-25, with the switch in the Settings menu next to
+"Enable emoji" (and greyed out with emoji off), kept in
+`data/telegram-emoticons.txt`.
 
 ## Planned: reactions (0.0.98)
 

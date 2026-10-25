@@ -222,6 +222,7 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
 #define TG_GUI_NOTIFY_TEXT_MAX 96
 #define TG_GUI_NOTIFY_QUIET_SECONDS 30UL
 #define TG_GUI_NOTIFY_OVERRIDE_FILE "data/telegram-chat-notify.txt"
+#define TG_GUI_EMOTICON_FILE "data/telegram-emoticons.txt"
 #define TG_GUI_NOTIFY_DEFAULT 0
 #define TG_GUI_NOTIFY_MUTE 1
 #define TG_GUI_NOTIFY_RING 2
@@ -325,6 +326,9 @@ typedef struct tg_gui_state {
     int inline_photos_explicit; /* user saved an on/off choice */
     int inline_photos_default_resolved; /* hardware default sampled this run */
     int emoji_enabled;    /* picker and graphical emoji; off keeps text emoticons */
+    int emoticon_replace; /* a typed :) becomes its emoji (on by default) */
+    int emoticon_undo_at; /* where the last one went in, for Backspace; -1 */
+    char emoticon_undo[8]; /* the characters typed for it */
     int emoji_explicit;   /* user saved an on/off choice */
     int emoji_default_resolved;
     int avatars_enabled;  /* profile pictures in the chat list; off keeps
@@ -728,6 +732,13 @@ int tg_gui_notify_pick(const tg_gui_state *state, unsigned long *peer_hi,
 /* Menu toggles: a choice equal to the sampled machine default is "auto". */
 void tg_gui_set_inline_photos(tg_gui_state *state, int enabled);
 void tg_gui_set_emoji_enabled(tg_gui_state *state, int enabled);
+/* A typed emoticon (":)", "<3" ...) standing alone and ending at `end`
+   becomes its emoji pair; the typed characters are kept for Backspace.
+   Returns 1 when it replaced one. */
+int tg_gui_composer_emoticon(tg_gui_state *state, unsigned long end);
+/* Backspace straight after a replacement: the typed characters come back.
+   Returns 1 when it undid one; it never undoes twice. */
+int tg_gui_composer_emoticon_undo(tg_gui_state *state);
 void tg_gui_set_avatars_enabled(tg_gui_state *state, int enabled);
 /* Zero means emoji disabled; otherwise a square of at least 16px. Line
    height and ascent reserve that cell while keeping the actual font intact. */
