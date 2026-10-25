@@ -76,8 +76,9 @@ the text client for the plain 68000.
   VirtualBox): the system can crash after minutes or hours of network
   use. AROS's e1000 driver frees memory from its interrupt, which breaks
   the allocator when a program is allocating at that moment; small test
-  programs without any Telegram code crash the same way. Another network
-  card model avoids it.
+  programs without any Telegram code crash the same way. Fixed on AROS's
+  side after an earlier report; until the installed AROS carries the fix,
+  another network card model avoids it.
 - An underscore, an asterisk, a backquote or a tilde in a message is
   drawn as the character it is. They used to double as the switches for
   italic, bold, code and strike, so a typed "_" vanished and turned the

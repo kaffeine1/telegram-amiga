@@ -1558,11 +1558,11 @@ crashes. The client meets it sooner than the test programs because it
 allocates and frees all the time (every DOS call does) while the network
 is busy.
 
-So nothing to fix on our side. The x86_64 lane is not affected on
-hardware or virtual machines with another network card; QEMU and
-VirtualBox both offer e1000 by default, and a user who sees the crash can
-pick another model their AROS has a driver for. The test programs and
-logs are kept for a report to AROS's developers.
+So nothing to fix on our side. The same fault had already turned up in
+September while porting BebboSSH to AROS x86_64; it was reported to
+AROS's developers then and fixed on their side. Until a user's AROS
+carries that fix, another network card model avoids it (QEMU and
+VirtualBox both offer e1000 by default).
 
 ## Planned: two MorphOS popup glitches
 
