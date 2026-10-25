@@ -197,17 +197,21 @@ Features are therefore grouped by the work they share.
   clients. Validated on a Vampire, a G5 under MorphOS, a PiStorm under AfA
   OS and a Raspberry Pi 400, in the OS4, MorphOS, AROS i386, x86_64 and ARM
   VMs, and the text client on that user's A600 and on WinUAE.
-- **0.0.98, sounds per chat and a tester's three requests.** In progress
+- **0.0.98, sounds per chat, reactions and a tester's three requests.** In progress
   on `main`. Who rings is decided per chat, with Telegram's own mute
   respected (done), and a sound file of one's choice to come; a group's
   pop-up names who wrote (done). From the requests of a tester:
   messages from earlier days get their date, a typed underscore,
   asterisk, backquote or tilde stays a character instead of switching the
   style, and typed emoticons become their emoji (the three sections
+  below), and reactions under a message, seen and added (their section
   below). Also in: the temporary files in T: no longer crossed, an emoji
   never cut in half at the end of a line, the ARM64 package listed under
   AROS on Aminet, and the hunt for the rare AROS x86_64 crash, now traced
   to a file close (its section below).
+- **0.0.99, the last fixes.** Kept free on purpose for whatever the field
+  reports of 0.0.98 bring, so that the 0.1 beta, the first release under
+  the name Amigram, starts its quiet cycle from a clean slate.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -1412,7 +1416,7 @@ after a replacement brings the typed characters back; and a setting
 turns the whole thing off. Nothing changes inside a link, and the text
 client keeps sending what is typed.
 
-## Planned: reactions
+## Planned: reactions (0.0.98)
 
 A user asked on 2026-10-21 whether posts can be marked with an emoji:
 the reactions every Telegram app shows under a message. Two halves.
