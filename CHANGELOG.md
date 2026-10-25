@@ -77,8 +77,9 @@ the text client for the plain 68000.
   use. AROS's e1000 driver frees memory from its interrupt, which breaks
   the allocator when a program is allocating at that moment; small test
   programs without any Telegram code crash the same way. Fixed on AROS's
-  side after an earlier report; until the installed AROS carries the fix,
-  another network card model avoids it.
+  side after an earlier report, most likely in the AROS nightly builds
+  first and not yet in AROS One; until the installed AROS carries the
+  fix, another network card model avoids it.
 - An underscore, an asterisk, a backquote or a tilde in a message is
   drawn as the character it is. They used to double as the switches for
   italic, bold, code and strike, so a typed "_" vanished and turned the

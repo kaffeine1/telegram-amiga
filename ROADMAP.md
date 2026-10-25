@@ -1560,7 +1560,8 @@ is busy.
 
 So nothing to fix on our side. The same fault had already turned up in
 September while porting BebboSSH to AROS x86_64; it was reported to
-AROS's developers then and fixed on their side. Until a user's AROS
+AROS's developers then and fixed on their side, most likely in the
+nightly builds first and not yet in AROS One. Until a user's AROS
 carries that fix, another network card model avoids it (QEMU and
 VirtualBox both offer e1000 by default).
 
