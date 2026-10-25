@@ -68,10 +68,16 @@ the text client for the plain 68000.
 ### Fixed
 - AROS: the client no longer asks for /dev/urandom on every encrypted
   message. AROS has none, so the answer always came from the client's own
-  generator, but the failing open ran through a path of AROS One's C
-  library that, in a VM watched for memory damage, was caught freeing a
-  block already damaged: the most likely cause of the rare x86_64 crash.
+  generator, and the failing open cost a trip through DOS each time.
   MorphOS asks once and remembers the answer.
+
+### Known issues
+- AROS x86_64 with an e1000 network card (the default in QEMU and
+  VirtualBox): the system can crash after minutes or hours of network
+  use. AROS's e1000 driver frees memory from its interrupt, which breaks
+  the allocator when a program is allocating at that moment; small test
+  programs without any Telegram code crash the same way. Another network
+  card model avoids it.
 - An underscore, an asterisk, a backquote or a tilde in a message is
   drawn as the character it is. They used to double as the switches for
   italic, bold, code and strike, so a typed "_" vanished and turned the

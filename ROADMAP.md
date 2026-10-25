@@ -207,8 +207,9 @@ Features are therefore grouped by the work they share.
   below), and reactions under a message, seen and added (their section
   below). Also in: the temporary files in T: no longer crossed, an emoji
   never cut in half at the end of a line, the ARM64 package listed under
-  AROS on Aminet, and the hunt for the rare AROS x86_64 crash, now traced
-  to a file close (its section below).
+  AROS on Aminet, and the hunt for the rare AROS x86_64 crash, now
+  explained: AROS's e1000 network driver frees memory from its interrupt
+  (its section below).
 - **0.0.99, the last fixes.** Kept free on purpose for whatever the field
   reports of 0.0.98 bring, so that the 0.1 beta, the first release under
   the name Amigram, starts its quiet cycle from a clean slate.
@@ -1457,7 +1458,7 @@ back one, and `/react <id> <name>` in the text client. Still open: a
 periodic refresh of the reactions on the messages in view, which
 Telegram's documentation suggests for chats with no updates flowing.
 
-## Open: a rare crash on AROS x86_64, reproduced and traced
+## Explained: the rare crash on AROS x86_64 is the e1000 network driver
 
 Seen once during the 0.0.92 field test, on 2026-09-02, in the AROS One
 x86_64 VM: a Software Failure requester, error 0x80000008 (privilege
@@ -1531,21 +1532,37 @@ allocator's own lists, which is the `tlsf_malloc` and `tlsf_freevec`
 crashes above; a double close of a file on disk frees one of the SFS
 filesystem's locks twice, which is what the second run reported.
 
-It also explains why only this lane: AROS One x86_64's crt.library builds
-stdio on POSIX descriptors, numbered together with the network's sockets
-through fd.library, while AROS i386 uses the older arosc and the other
-systems their own C libraries. On our side, every temporary stream is
-closed once and with the fallback it was opened with, nothing duplicates
-a descriptor or runs our code in another task, sockets close with
-`CloseSocket`, and the stack never came near its end.
+That reading was wrong, and so was the next one. Two fixes went in on
+the way, each sound on its own: the temporary streams no longer take
+their name from the nesting depth (ed74206), and AROS no longer tries to
+open /dev/urandom on every encrypted message (36095fd). Neither cured
+the crash: on 2026-10-25 the client still crashed after 15 minutes, and
+after 2 with the pop-up switched off, always with a DOS allocation as
+the victim.
 
-The prime suspect was fixed the same day (ed74206): the temporary
-streams took their file name from the nesting depth, so a stream closing
-out of order could delete another stream's open file and hand its name
-to the next request. Next, two runs side by side, in two copies of the
-VM on throwaway overlays of its disk, with every open, close and delete
-of a file traced on the serial line: the old binary, to catch the first
-close of that block, and the current code, which should not crash.
+The answer came from small test programs with none of the client's code,
+built with the client's recipe and run in the same VM with mungwall:
+creating, writing and deleting files in T: (2 million rounds) and the
+client's own remove-then-create (3 million) ran clean; a program that
+fetches 64 KB over a new TCP connection per request and writes a file in
+T: after each crashed after about 1160 requests, and one that keeps a
+single connection open and only reads crashed after about 180,000
+rounds, inside the kernel's software interrupt dispatch. The second run
+of the first program gave the whole path: in interrupt 43, the e1000
+network card's, `e1000func_IntHandler` calls `e1000func_clean_tx_irq`,
+which hands a sent packet's 1518-byte buffer back with `FreeMem`, while
+the interrupted task was itself inside the allocator closing a file.
+Memory may not be freed from an interrupt on AmigaOS or AROS; when the
+two meet, the allocator's lists are broken and whoever comes next
+crashes. The client meets it sooner than the test programs because it
+allocates and frees all the time (every DOS call does) while the network
+is busy.
+
+So nothing to fix on our side. The x86_64 lane is not affected on
+hardware or virtual machines with another network card; QEMU and
+VirtualBox both offer e1000 by default, and a user who sees the crash can
+pick another model their AROS has a driver for. The test programs and
+logs are kept for a report to AROS's developers.
 
 ## Planned: two MorphOS popup glitches
 
