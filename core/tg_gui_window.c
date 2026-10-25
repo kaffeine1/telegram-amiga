@@ -83,40 +83,6 @@
 #if defined(__amigaos4__)
 #include <exec/exectags.h>
 #endif
-#if defined(__amigaos3__)
-#include <devices/audio.h>
-#endif
-#if defined(__has_include)
-#if __has_include(<devices/ahi.h>)
-#define TG_GUI_HAVE_AHI_H 1
-#endif
-#endif
-#if defined(TG_GUI_HAVE_AHI_H)
-#include <devices/ahi.h>
-#else
-/* No AHI header in this SDK (the AmigaOS 3 NDK, the Raspberry Pi AROS):
-   the request as devices/ahi.h defines it, for the systems where AHI is
-   installed all the same. */
-#define AHINAME "ahi.device"
-#define AHI_DEFAULT_UNIT 0U
-#define AHIST_M8S 0UL
-typedef LONG Fixed;
-struct AHIRequest {
-    struct IOStdReq ahir_Std;
-    UWORD ahir_Version;
-    UWORD ahir_Pad1;
-#if defined(__AROS__)
-    IPTR ahir_Private[2];
-#else
-    ULONG ahir_Private[2];
-#endif
-    ULONG ahir_Type;
-    ULONG ahir_Frequency;
-    Fixed ahir_Volume;
-    Fixed ahir_Position;
-    struct AHIRequest *ahir_Link;
-};
-#endif
 #include <libraries/asl.h>
 #include <workbench/workbench.h>
 #include <workbench/startup.h>
@@ -589,6 +555,8 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_NOTIFY_TEXT 30
 #define TG_MENU_NOTIFY_BEEP 31
 #define TG_MENU_EMOTICONS 32
+#define TG_MENU_NOTIFY_SOUND 33
+#define TG_MENU_NOTIFY_CHIME 34
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -6624,7 +6592,7 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_OWNSCREEN },
     { NM_ITEM,  (STRPTR)"Download drawer...", 0, 0, 0,
       (APTR)TG_MENU_DLDIR },
-    { NM_ITEM,  (STRPTR)"New messages", 0, 0, 0, 0 },
+    { NM_ITEM,  (STRPTR)"Notifications", 0, 0, 0, 0 },
     { NM_SUB,   (STRPTR)"Off", 0,
       CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_OFF },
     { NM_SUB,   (STRPTR)"Count in title", 0,
@@ -6636,6 +6604,10 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_SUB,   NM_BARLABEL, 0, 0, 0, 0 },
     { NM_SUB,   (STRPTR)"Beep", 0,
       CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_BEEP },
+    { NM_SUB,   (STRPTR)"Sound file...", 0, 0, 0,
+      (APTR)TG_MENU_NOTIFY_SOUND },
+    { NM_SUB,   (STRPTR)"Built-in chime", 0, 0, 0,
+      (APTR)TG_MENU_NOTIFY_CHIME },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Show inline photos", 0, CHECKIT | MENUTOGGLE, 0,
       (APTR)TG_MENU_INLINEPHOTOS },
@@ -7618,6 +7590,65 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
     }
     tg_gui_window_copy(state->status, sizeof(state->status), line);
     tg_gui_window_paint(state, backend);
+}
+
+/* Reuse ASL's native path joining, and reject a long name rather than save
+   a truncated path that could name a different file. Cancel keeps the choice. */
+static int tg_gui_window_pick_sound(tg_gui_state *state, struct Window *win,
+                                     char *path, unsigned long size)
+{
+    struct FileRequester *req;
+    char chosen[TG_NOTIFY_SOUND_MAX];
+    unsigned long n;
+    int selected = 0;
+
+    AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38L);
+    if (AslBase == 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "asl.library V38 not found");
+        return 0;
+    }
+#if defined(__amigaos4__)
+    IAsl = (struct AslIFace *)GetInterface(AslBase, "main", 1L, 0);
+    if (IAsl == 0) {
+        CloseLibrary(AslBase);
+        AslBase = 0;
+        return 0;
+    }
+#endif
+    req = (struct FileRequester *)AllocAslRequestTags(
+        ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win), ASLFR_TitleText,
+        TG_GUI_TAG("Notification sound"), TAG_DONE);
+    if (req != 0 && AslRequestTags(req, TAG_DONE) && req->fr_File != 0 &&
+        req->fr_File[0] != '\0') {
+        n = req->fr_Drawer != 0 ?
+            (unsigned long)strlen((const char *)req->fr_Drawer) : 0UL;
+        if (n < sizeof(chosen)) {
+            if (n != 0UL) {
+                memcpy(chosen, req->fr_Drawer, n);
+            }
+            chosen[n] = '\0';
+            if (AddPart((STRPTR)chosen, req->fr_File, sizeof(chosen)) &&
+                strlen(chosen) < size && strpbrk(chosen, "\r\n") == 0) {
+                memcpy(path, chosen, strlen(chosen) + 1U);
+                selected = 1;
+            }
+        }
+        if (!selected) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Sound filename too long or invalid");
+        }
+    }
+    if (req != 0) {
+        FreeAslRequest(req);
+    }
+#if defined(__amigaos4__)
+    DropInterface((struct Interface *)IAsl);
+    IAsl = 0;
+#endif
+    CloseLibrary(AslBase);
+    AslBase = 0;
+    return selected;
 }
 
 /* "Download drawer...": ASL drawer requester -> where downloads land from
@@ -10562,156 +10593,6 @@ static void tg_gui_popup_expire(tg_gui_popup *popup, const tg_gui_state *state)
     }
 }
 
-/* The beep of the new-message notification, a short chime of our own. A
-   DisplayBeep flashes a screen that has a palette and plays the sound the
-   system has set up for it, if any: on the 16- and 24-bit screens of a
-   Vampire or a G5 it was neither seen nor heard. The chime goes through AHI
-   where it is installed (MorphOS, AmigaOS 4, AROS, most 3.x with a graphics
-   card), through audio.device on a classic Amiga without it; DisplayBeep
-   only when neither opens. It blocks for its fifth of a second, and comes
-   once per run of news while the user is elsewhere. */
-static struct MsgPort *tg_gui_chime_port(void)
-{
-#if defined(__amigaos4__)
-    return (struct MsgPort *)AllocSysObjectTags(ASOT_PORT, TAG_END);
-#else
-    return CreateMsgPort();
-#endif
-}
-
-static void tg_gui_chime_port_free(struct MsgPort *port)
-{
-#if defined(__amigaos4__)
-    FreeSysObject(ASOT_PORT, port);
-#else
-    DeleteMsgPort(port);
-#endif
-}
-
-static struct IORequest *tg_gui_chime_request(struct MsgPort *port,
-                                              ULONG size)
-{
-#if defined(__amigaos4__)
-    return (struct IORequest *)AllocSysObjectTags(
-        ASOT_IOREQUEST, ASOIOR_Size, size, ASOIOR_ReplyPort, port, TAG_END);
-#else
-    return CreateIORequest(port, size);
-#endif
-}
-
-static void tg_gui_chime_request_free(struct IORequest *io)
-{
-#if defined(__amigaos4__)
-    FreeSysObject(ASOT_IOREQUEST, io);
-#else
-    DeleteIORequest(io);
-#endif
-}
-
-static int tg_gui_chime_ahi(signed char *wave)
-{
-    struct MsgPort *port;
-    struct AHIRequest *ahi;
-    int played = 0;
-
-    port = tg_gui_chime_port();
-    if (port == 0) {
-        return 0;
-    }
-    ahi = (struct AHIRequest *)tg_gui_chime_request(
-        port, (ULONG)sizeof(struct AHIRequest));
-    if (ahi != 0) {
-        ahi->ahir_Version = 4;
-        if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT,
-                       (struct IORequest *)ahi, 0) == 0) {
-            ahi->ahir_Std.io_Command = CMD_WRITE;
-            ahi->ahir_Std.io_Data = (APTR)wave;
-            ahi->ahir_Std.io_Length = (ULONG)TG_GUI_CHIME_LENGTH;
-            ahi->ahir_Std.io_Offset = 0;
-            ahi->ahir_Type = AHIST_M8S;
-            ahi->ahir_Frequency = (ULONG)TG_GUI_CHIME_RATE;
-            ahi->ahir_Volume = 0xC000;   /* three quarters */
-            ahi->ahir_Position = 0x8000; /* centre */
-            ahi->ahir_Link = 0;
-            played = DoIO((struct IORequest *)ahi) == 0;
-            CloseDevice((struct IORequest *)ahi);
-        }
-        tg_gui_chime_request_free((struct IORequest *)ahi);
-    }
-    tg_gui_chime_port_free(port);
-    return played;
-}
-
-#if defined(__amigaos3__)
-/* Paula: one free channel of any side, the wave in chip RAM. */
-static int tg_gui_chime_paula(signed char *wave)
-{
-    static UBYTE channels[] = { 1, 8, 2, 4 };
-    struct MsgPort *port;
-    struct IOAudio *audio;
-    int played = 0;
-
-    port = tg_gui_chime_port();
-    if (port == 0) {
-        return 0;
-    }
-    audio = (struct IOAudio *)tg_gui_chime_request(
-        port, (ULONG)sizeof(struct IOAudio));
-    if (audio != 0) {
-        audio->ioa_Request.io_Message.mn_Node.ln_Pri = 0;
-        audio->ioa_Data = channels; /* the open allocates a channel */
-        audio->ioa_Length = (ULONG)sizeof(channels);
-        if (OpenDevice((CONST_STRPTR)AUDIONAME, 0,
-                       (struct IORequest *)audio, 0) == 0) {
-            audio->ioa_Request.io_Command = CMD_WRITE;
-            audio->ioa_Request.io_Flags = ADIOF_PERVOL;
-            audio->ioa_Data = (UBYTE *)wave;
-            audio->ioa_Length = (ULONG)TG_GUI_CHIME_LENGTH;
-            audio->ioa_Period = 161; /* 3546895 Hz / 161 = 22 kHz (PAL) */
-            audio->ioa_Volume = 48;
-            audio->ioa_Cycles = 1;
-            played = DoIO((struct IORequest *)audio) == 0;
-            CloseDevice((struct IORequest *)audio); /* frees the channel */
-        }
-        tg_gui_chime_request_free((struct IORequest *)audio);
-    }
-    tg_gui_chime_port_free(port);
-    return played;
-}
-#endif
-
-/* 1 when the chime played. */
-static int tg_gui_chime_play(void)
-{
-    signed char *wave;
-    int played = 0;
-
-    wave = (signed char *)malloc((size_t)TG_GUI_CHIME_LENGTH);
-    if (wave != 0) {
-        tg_gui_chime_render(wave);
-        played = tg_gui_chime_ahi(wave);
-        free(wave);
-    }
-    if (played) {
-        tg_gui_log("notify: chime through AHI");
-        return 1;
-    }
-#if defined(__amigaos3__)
-    wave = (signed char *)AllocMem((ULONG)TG_GUI_CHIME_LENGTH, MEMF_CHIP);
-    if (wave != 0) {
-        tg_gui_chime_render(wave);
-        played = tg_gui_chime_paula(wave);
-        FreeMem(wave, (ULONG)TG_GUI_CHIME_LENGTH);
-    }
-    if (played) {
-        tg_gui_log("notify: chime through audio.device");
-        return 1;
-    }
-#endif
-    tg_gui_log("notify: no sound device, DisplayBeep");
-    return 0;
-}
-
 /* New-message notification, window open or parked. */
 typedef struct tg_gui_notify_ui {
     unsigned long seen_seq; /* state->notify_seq already handled */
@@ -10742,30 +10623,28 @@ static void tg_gui_window_notify_title(struct Window *window,
 }
 
 /* Pending chats ring independently; pop-ups still require the user away.
-   `beep_screen` 0 flashes every screen,
    `popup_screen` 0 is the default public screen. */
 static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
-                               int away, struct Screen *beep_screen,
+                               int away,
                                struct Screen *popup_screen)
 {
     time_t now;
     unsigned long server_now;
+    char sound[TG_NOTIFY_SOUND_MAX];
 
+    tg_notify_sound_poll();
     if (state->notify_seq == ui->seen_seq) {
         return;
     }
     ui->seen_seq = state->notify_seq;
     TG_GUI_POPUP_TRACE("news begin");
-    /* A sound, never a raise: our chime, or DisplayBeep where no sound
-       device opens. */
+    /* tg_notify_sound_play owns loading, playback and the fallback chime. */
     now = time(0);
     server_now = tg_gui_session_server_time();
-    while (tg_gui_notify_ring_take(state, server_now,
-                                    now == (time_t)-1 ? 0UL :
-                                           (unsigned long)now)) {
-        if (!tg_gui_chime_play()) {
-            DisplayBeep(beep_screen);
-        }
+    while (tg_gui_notify_ring_take_sound(state, server_now,
+                now == (time_t)-1 ? 0UL : (unsigned long)now,
+                sound, sizeof(sound))) {
+        tg_notify_sound_play(sound);
     }
     if (away && state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
         tg_gui_popup_show(&ui->popup, state, popup_screen);
@@ -10804,7 +10683,7 @@ static void tg_gui_window_notify_turn(tg_gui_notify_ui *ui,
     state->notify_away = !here;
     /* On its own screen the window is not where the user is: the beep goes
        to every screen and the pop-up to the Workbench. */
-    tg_gui_notify_news(ui, state, !here, own_screen ? 0 : window->WScreen,
+    tg_gui_notify_news(ui, state, !here,
                        own_screen ? 0 : window->WScreen);
     tg_gui_popup_expire(&ui->popup, state);
     tg_gui_window_notify_title(window, state);
@@ -12698,6 +12577,31 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         : "Inline photos disabled");
                             }
                             tg_gui_window_paint(state, &backend);
+                        } else if (ud == (APTR)TG_MENU_NOTIFY_SOUND ||
+                                   ud == (APTR)TG_MENU_NOTIFY_CHIME) {
+                            int changed;
+
+                            changed = ud == (APTR)TG_MENU_NOTIFY_CHIME;
+                            if (changed) {
+                                state->notify_sound[0] = '\0';
+                            } else {
+                                changed = tg_gui_window_pick_sound(state,
+                                    ctx.window, state->notify_sound,
+                                    sizeof(state->notify_sound));
+                            }
+                            if (changed) {
+                                (void)mkdir("data", 0777);
+                                tg_gui_window_copy(state->status,
+                                    sizeof(state->status),
+                                    tg_gui_notify_preferences_save(
+                                        TG_NOTIFY_FILE, state->notify_mode,
+                                        state->notify_beep,
+                                        state->notify_explicit,
+                                        state->notify_sound) == 0 ?
+                                    "Notification sound saved" :
+                                    "Could not save the notification sound");
+                            }
+                            tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_NOTIFY_OFF ||
                                    ud == (APTR)TG_MENU_NOTIFY_TITLE ||
                                    ud == (APTR)TG_MENU_NOTIFY_POPUP ||
@@ -12727,9 +12631,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_menu_set_notify(menu, state->notify_mode,
                                                    state->notify_beep);
                             if (tg_gui_notify_preferences_save(
-                                    "data/telegram-notify.txt",
+                                    TG_NOTIFY_FILE,
                                     state->notify_mode, state->notify_beep,
-                                    state->notify_explicit) != 0) {
+                                    state->notify_explicit,
+                                    state->notify_sound) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     "Could not save the new-message setting");
@@ -13078,21 +12983,29 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                        &backend);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                (it == TG_GUI_CTX_CHAT_MUTE ||
-                                it == TG_GUI_CTX_CHAT_RING)) {
+                                it == TG_GUI_CTX_CHAT_RING ||
+                                it == TG_GUI_CTX_CHAT_SOUND ||
+                                it == TG_GUI_CTX_CHAT_DEFAULT_SOUND)) {
                         tg_gui_notify_override value;
                         const tg_gui_chat *chat = &state->chats[ci];
+                        int changed = 1;
 
                         tg_gui_notify_override_get(state->notify_override_path,
                             chat->peer_id_hi, chat->peer_id_lo, &value);
                         if (it == TG_GUI_CTX_CHAT_MUTE) {
                             value.choice = value.choice == TG_GUI_NOTIFY_MUTE ?
                                 TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_MUTE;
-                        } else if (chat->is_group) {
+                        } else if (it == TG_GUI_CTX_CHAT_RING && chat->is_group) {
                             value.choice = value.choice == TG_GUI_NOTIFY_RING ?
                                 TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_RING;
+                        } else if (it == TG_GUI_CTX_CHAT_SOUND) {
+                            changed = tg_gui_window_pick_sound(state,
+                                ctx.window, value.sound, sizeof(value.sound));
+                        } else if (it == TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+                            value.sound[0] = '\0';
                         }
                         (void)mkdir("data", 0777);
-                        if (tg_gui_notify_override_set(
+                        if (changed && tg_gui_notify_override_set(
                                 state->notify_override_path, chat->peer_id_hi,
                                 chat->peer_id_lo, &value) != 0) {
                             tg_gui_window_copy(state->status,
@@ -14772,7 +14685,7 @@ static int tg_gui_window_iconify_wait(tg_gui_state *state)
         }
         /* Parked, the user can be on any screen: the beep flashes them all,
            the pop-up goes to the Workbench where the AppIcon is. */
-        tg_gui_notify_news(&ui, state, 1, 0, 0);
+        tg_gui_notify_news(&ui, state, 1, 0);
         tg_gui_popup_expire(&ui.popup, state);
         /* The label counts the news. */
         tg_gui_notify_icon_label(state, label, sizeof(label));
@@ -14884,9 +14797,10 @@ int tg_gui_run_window(tg_gui_state *state)
                                    &state->avatars_enabled,
                                    &state->avatars_explicit);
     state->avatars_default_resolved = 0;
-    tg_gui_notify_preferences_load("data/telegram-notify.txt",
+    tg_gui_notify_preferences_load(TG_NOTIFY_FILE,
                                    &state->notify_mode, &state->notify_beep,
-                                   &state->notify_explicit);
+                                   &state->notify_explicit, state->notify_sound,
+                                   sizeof(state->notify_sound));
     state->notify_default_resolved = 0;
     if (state->photo_cache_limit_mb != TG_GUI_PHOTO_CACHE_UNLIMITED_MB &&
         state->photo_cache_limit_mb != 10UL &&

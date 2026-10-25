@@ -432,316 +432,6 @@ unsigned int tg_gui_popup_font_size(unsigned int base, unsigned int height)
     return want;
 }
 
-/* One sine cycle, 256 steps of 127. */
-static const signed char tg_gui_sine[256] = {
-    0, 3, 6, 9, 12, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
-    49, 51, 54, 57, 60, 63, 65, 68, 71, 73, 76, 78, 81, 83, 85, 88,
-    90, 92, 94, 96, 98, 100, 102, 104, 106, 107, 109, 111, 112, 113, 115, 116,
-    117, 118, 120, 121, 122, 122, 123, 124, 125, 125, 126, 126, 126, 127, 127, 127,
-    127, 127, 127, 127, 126, 126, 126, 125, 125, 124, 123, 122, 122, 121, 120, 118,
-    117, 116, 115, 113, 112, 111, 109, 107, 106, 104, 102, 100, 98, 96, 94, 92,
-    90, 88, 85, 83, 81, 78, 76, 73, 71, 68, 65, 63, 60, 57, 54, 51,
-    49, 46, 43, 40, 37, 34, 31, 28, 25, 22, 19, 16, 12, 9, 6, 3,
-    0, -3, -6, -9, -12, -16, -19, -22, -25, -28, -31, -34, -37, -40, -43, -46,
-    -49, -51, -54, -57, -60, -63, -65, -68, -71, -73, -76, -78, -81, -83, -85, -88,
-    -90, -92, -94, -96, -98, -100, -102, -104, -106, -107, -109, -111, -112, -113, -115, -116,
-    -117, -118, -120, -121, -122, -122, -123, -124, -125, -125, -126, -126, -126, -127, -127, -127,
-    -127, -127, -127, -127, -126, -126, -126, -125, -125, -124, -123, -122, -122, -121, -120, -118,
-    -117, -116, -115, -113, -112, -111, -109, -107, -106, -104, -102, -100, -98, -96, -94, -92,
-    -90, -88, -85, -83, -81, -78, -76, -73, -71, -68, -65, -63, -60, -57, -54, -51,
-    -49, -46, -43, -40, -37, -34, -31, -28, -25, -22, -19, -16, -12, -9, -6, -3
-};
-
-void tg_gui_chime_render(signed char *out)
-{
-    static const unsigned long notes[2] = { 880UL, 1319UL }; /* A5, E6 */
-    unsigned long note;
-    unsigned long i;
-    unsigned long phase;
-    unsigned long step;
-    unsigned long fade;
-    unsigned long env;
-
-    if (out == 0) {
-        return;
-    }
-    for (note = 0UL; note < 2UL; ++note) {
-        /* 32-bit phase, its top byte the table step; integer only, which
-           a 68000 without an FPU renders in a blink. */
-        phase = 0UL;
-        step = ((notes[note] << 16) / TG_GUI_CHIME_RATE) << 16;
-        for (i = 0UL; i < TG_GUI_CHIME_NOTE; ++i) {
-            fade = ((TG_GUI_CHIME_NOTE - i) << 8) / TG_GUI_CHIME_NOTE;
-            env = (fade * fade) >> 8;    /* 256 down to 0, a bell's tail */
-            if (i < 64UL) {
-                env = (env * i) / 64UL;  /* 3 ms rise: no click */
-            }
-            out[note * TG_GUI_CHIME_NOTE + i] = (signed char)(
-                ((long)tg_gui_sine[(phase >> 24) & 0xFFUL] * (long)env) /
-                320L);
-            phase = (phase + step) & 0xFFFFFFFFUL;
-        }
-    }
-}
-
-/* data/telegram-notify.txt: "mode=auto|off|title|popup|text" and
-   "beep=on|off", one per line, in any order. */
-void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep,
-                                    int *mode_explicit)
-{
-    FILE *file;
-    char value[64];
-    int loaded_mode;
-    int loaded_beep;
-    int loaded_explicit;
-
-    loaded_mode = TG_GUI_NOTIFY_TITLE; /* until the machine is known */
-    loaded_beep = 0;
-    loaded_explicit = 0;
-    file = (path != 0 && path[0] != '\0') ? fopen(path, "rb") : 0;
-    if (file != 0) {
-        while (fgets(value, sizeof(value), file) != 0) {
-            if (strncmp(value, "mode=", 5UL) == 0) {
-                loaded_explicit = 1;
-                if (tg_gui_photo_pref_word(value + 5, "off")) {
-                    loaded_mode = TG_GUI_NOTIFY_OFF;
-                } else if (tg_gui_photo_pref_word(value + 5, "title")) {
-                    loaded_mode = TG_GUI_NOTIFY_TITLE;
-                } else if (tg_gui_photo_pref_word(value + 5, "popup")) {
-                    loaded_mode = TG_GUI_NOTIFY_POPUP;
-                } else if (tg_gui_photo_pref_word(value + 5, "text")) {
-                    loaded_mode = TG_GUI_NOTIFY_POPUP_TEXT;
-                } else {
-                    loaded_explicit = 0; /* "auto", or a word we lost */
-                }
-            } else if (strncmp(value, "beep=", 5UL) == 0) {
-                loaded_beep = tg_gui_photo_pref_word(value + 5, "on");
-            }
-        }
-        fclose(file);
-    }
-    if (mode != 0) {
-        *mode = loaded_mode;
-    }
-    if (beep != 0) {
-        *beep = loaded_beep;
-    }
-    if (mode_explicit != 0) {
-        *mode_explicit = loaded_explicit;
-    }
-}
-
-int tg_gui_notify_preferences_save(const char *path, int mode, int beep,
-                                   int mode_explicit)
-{
-    FILE *file;
-    char tmp[288];
-    unsigned long length;
-    const char *word;
-    int failed;
-
-    if (path == 0 || path[0] == '\0') {
-        return 1;
-    }
-    length = (unsigned long)strlen(path);
-    if (length + 5UL >= sizeof(tmp)) {
-        return 1;
-    }
-    memcpy(tmp, path, length);
-    memcpy(tmp + length, ".tmp", 5UL);
-    file = tg_file_fopen_replace(tmp, "wb");
-    if (file == 0) {
-        return 1;
-    }
-    /* A beep toggled on a machine default keeps the mode "auto". */
-    word = !mode_explicit ? "auto" :
-           mode == TG_GUI_NOTIFY_OFF ? "off" :
-           mode == TG_GUI_NOTIFY_POPUP ? "popup" :
-           mode == TG_GUI_NOTIFY_POPUP_TEXT ? "text" : "title";
-    failed = fputs("mode=", file) == EOF || fputs(word, file) == EOF ||
-             fputc('\n', file) == EOF ||
-             fputs(beep ? "beep=on\n" : "beep=off\n", file) == EOF;
-    if (fclose(file) != 0) {
-        failed = 1;
-    }
-    if (failed) {
-        (void)remove(tmp);
-        return 1;
-    }
-    (void)remove(path);
-    if (rename(tmp, path) != 0) {
-        (void)remove(tmp);
-        return 1;
-    }
-    return 0;
-}
-
-/* A line is two hex id halves, mute/ring, then an optional sound filename.
-   Stream the file so a rewrite never drops choices beyond an array limit. */
-static int tg_gui_notify_override_line(const char *line, unsigned long *hi,
-                                       unsigned long *lo,
-                                       tg_gui_notify_override *value)
-{
-    char word[8];
-    int used;
-    unsigned long length;
-
-    used = 0;
-    memset(value, 0, sizeof(*value));
-    if (sscanf(line, "%8lx %8lx %7s %n", hi, lo, word, &used) != 3 ||
-        used == 0) {
-        return 0;
-    }
-    value->choice = strcmp(word, "mute") == 0 ? TG_GUI_NOTIFY_MUTE :
-                    strcmp(word, "ring") == 0 ? TG_GUI_NOTIFY_RING :
-                    TG_GUI_NOTIFY_DEFAULT;
-    if (value->choice == TG_GUI_NOTIFY_DEFAULT) {
-        return 0;
-    }
-    length = (unsigned long)strcspn(line + used, "\r\n");
-    if (length >= sizeof(value->sound)) {
-        return 0;
-    }
-    memcpy(value->sound, line + used, length);
-    value->sound[length] = '\0';
-    return 1;
-}
-
-void tg_gui_notify_override_get(const char *path, unsigned long peer_hi,
-                                unsigned long peer_lo,
-                                tg_gui_notify_override *out)
-{
-    FILE *file;
-    char line[320];
-    unsigned long hi;
-    unsigned long lo;
-    tg_gui_notify_override value;
-
-    if (out == 0) {
-        return;
-    }
-    memset(out, 0, sizeof(*out));
-    file = path != 0 && path[0] != '\0' ? fopen(path, "rb") : 0;
-    if (file == 0) {
-        return;
-    }
-    while (fgets(line, sizeof(line), file) != 0) {
-        if (tg_gui_notify_override_line(line, &hi, &lo, &value) &&
-            hi == peer_hi && lo == peer_lo) {
-            *out = value;
-        }
-    }
-    fclose(file);
-}
-
-int tg_gui_notify_override_set(const char *path, unsigned long peer_hi,
-                               unsigned long peer_lo,
-                               const tg_gui_notify_override *value)
-{
-    FILE *src;
-    FILE *dst;
-    char tmp[288];
-    char line[320];
-    unsigned long length;
-    unsigned long hi;
-    unsigned long lo;
-    tg_gui_notify_override old;
-    int failed;
-    int needs_newline;
-
-    if (path == 0 || path[0] == '\0' || value == 0 ||
-        value->choice < TG_GUI_NOTIFY_DEFAULT ||
-        value->choice > TG_GUI_NOTIFY_RING ||
-        memchr(value->sound, '\0', sizeof(value->sound)) == 0 ||
-        strpbrk(value->sound, "\r\n") != 0) {
-        return 1;
-    }
-    length = (unsigned long)strlen(path);
-    if (length + 5UL >= sizeof(tmp)) {
-        return 1;
-    }
-    memcpy(tmp, path, length);
-    memcpy(tmp + length, ".tmp", 5UL);
-    /* Some Amiga libraries leave errno unchanged on an open failure. An
-       unreadable or missing source is empty; the replacement must still save. */
-    src = fopen(path, "rb");
-    dst = tg_file_fopen_replace(tmp, "wb");
-    if (dst == 0) {
-        if (src != 0) {
-            fclose(src);
-        }
-        return 1;
-    }
-    failed = 0;
-    needs_newline = 0;
-    while (src != 0 && fgets(line, sizeof(line), src) != 0) {
-        if (tg_gui_notify_override_line(line, &hi, &lo, &old) &&
-            hi == peer_hi && lo == peer_lo) {
-            continue;
-        }
-        if (fputs(line, dst) == EOF) {
-            failed = 1;
-        }
-        length = (unsigned long)strlen(line);
-        needs_newline = length > 0UL && line[length - 1UL] != '\n';
-    }
-    if (src != 0) {
-        if (ferror(src)) {
-            failed = 1;
-        }
-        fclose(src);
-    }
-    if (value->choice != TG_GUI_NOTIFY_DEFAULT) {
-        if ((needs_newline && fputc('\n', dst) == EOF) ||
-            fprintf(dst, "%08lx %08lx %.4s", peer_hi & 0xffffffffUL,
-                    peer_lo & 0xffffffffUL,
-                    value->choice == TG_GUI_NOTIFY_MUTE ? "mute" : "ring") < 0 ||
-            (value->sound[0] != '\0' &&
-             (fputc(' ', dst) == EOF || fputs(value->sound, dst) == EOF)) ||
-            fputc('\n', dst) == EOF) {
-            failed = 1;
-        }
-    }
-    if (fclose(dst) != 0) {
-        failed = 1;
-    }
-    if (failed) {
-        (void)remove(tmp);
-        return 1;
-    }
-    (void)remove(path); /* AmigaDOS rename does not replace a file. */
-    if (rename(tmp, path) != 0) {
-        return 1; /* keep the completed temporary file for recovery */
-    }
-    return 0;
-}
-
-int tg_gui_notify_should_ring(unsigned long peer_constructor,
-                               unsigned long mute_until, int peer_silent,
-                               int choice, int silent, int is_out,
-                               int open_in_front, unsigned long server_now,
-                               unsigned long local_now,
-                               unsigned long last_ring)
-{
-    if (silent || is_out || open_in_front || peer_silent ||
-        choice == TG_GUI_NOTIFY_MUTE || mute_until > server_now ||
-        local_now == 0UL) {
-        return 0;
-    }
-    if (peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
-        !((peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR ||
-           peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) &&
-          choice == TG_GUI_NOTIFY_RING)) {
-        return 0;
-    }
-    /* A clock moved backwards must not underflow into an immediate ring. */
-    if (last_ring != 0UL && (local_now < last_ring ||
-        local_now - last_ring < TG_GUI_NOTIFY_QUIET_SECONDS)) {
-        return 0;
-    }
-    return 1;
-}
-
 void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
                               unsigned long peer_hi, unsigned long peer_lo,
                               int silent, int is_out, unsigned long now)
@@ -782,8 +472,18 @@ void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
 int tg_gui_notify_ring_take(tg_gui_state *state, unsigned long server_now,
                              unsigned long local_now)
 {
+    return tg_gui_notify_ring_take_sound(state, server_now, local_now, 0, 0UL);
+}
+
+int tg_gui_notify_ring_take_sound(tg_gui_state *state, unsigned long server_now,
+                                   unsigned long local_now, char *sound,
+                                   unsigned long sound_size)
+{
     int i;
 
+    if (sound != 0 && sound_size != 0UL) {
+        sound[0] = '\0';
+    }
     if (state == 0) {
         return 0;
     }
@@ -817,6 +517,13 @@ int tg_gui_notify_ring_take(tg_gui_state *state, unsigned long server_now,
                                        settings.mute_until, settings.silent,
                                        value.choice, 0, 0, open_in_front,
                                        server_now, local_now, slot->last_ring)) {
+            const char *path = tg_notify_sound_choice(1, value.sound,
+                                                       state->notify_sound);
+            unsigned long n = (unsigned long)strlen(path);
+
+            if (sound != 0 && n < sound_size) {
+                memcpy(sound, path, n + 1UL);
+            }
             slot->last_ring = local_now;
             return 1;
         }
@@ -5522,6 +5229,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                         "Disable ring" : "Enable ring";
             ids[n++] = TG_GUI_CTX_CHAT_RING;
         }
+        labels[n] = "Sound...";
+        ids[n++] = TG_GUI_CTX_CHAT_SOUND;
+        labels[n] = "Default sound";
+        ids[n++] = TG_GUI_CTX_CHAT_DEFAULT_SOUND;
         return n;
     }
     if (state->ctx_react && state->ctx_msg >= 0 &&
@@ -7002,28 +6713,262 @@ static int tg_gui_notify_menu_self_test(void)
 
     state->chat_count = 1;
     state->ctx_chat = 1;
-    if (tg_gui_context_items(state, labels, ids) != 2 ||
+    if (tg_gui_context_items(state, labels, ids) != 4 ||
         ids[0] != TG_GUI_CTX_CHAT_REMOVE || ids[1] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[1], "Mute") != 0) {
+        strcmp(labels[1], "Mute") != 0 || ids[2] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[2], "Sound...") != 0 ||
+        ids[3] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        strcmp(labels[3], "Default sound") != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
-    if (tg_gui_context_items(state, labels, ids) != 2 ||
+    if (tg_gui_context_items(state, labels, ids) != 4 ||
         strcmp(labels[1], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 3 ||
-        ids[2] != TG_GUI_CTX_CHAT_RING || strcmp(labels[2], "Enable ring") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        ids[2] != TG_GUI_CTX_CHAT_RING || strcmp(labels[2], "Enable ring") != 0 ||
+        ids[3] != TG_GUI_CTX_CHAT_SOUND ||
+        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 3 ||
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
         strcmp(labels[1], "Mute") != 0 || strcmp(labels[2], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
+        return 2;
+    }
+    return 0;
+}
+
+static int tg_gui_notify_sound_preferences_self_test(void)
+{
+    const char *path = "tg-gui-sound-preferences-self-test.tmp";
+    const char *name = "Work:Notification Sounds/Small bell.8svx";
+    char sound[TG_NOTIFY_SOUND_MAX];
+    char longest[TG_NOTIFY_SOUND_MAX + 1];
+    FILE *file;
+    int mode;
+    int beep;
+    int explicit_mode;
+    int i;
+    int ok;
+
+    (void)remove(path);
+    strcpy(sound, "stale");
+    tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
+                                sound, sizeof(sound));
+    ok = sound[0] == '\0' && mode == TG_NOTIFY_TITLE && !beep && !explicit_mode;
+    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_POPUP_TEXT, 1, 0,
+                                           name) == 0;
+    tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
+                                sound, sizeof(sound));
+    ok = ok && strcmp(sound, name) == 0 && beep == 1 && explicit_mode == 0;
+    /* A phase 1 file, including CRLF and an unknown setting. */
+    file = tg_file_fopen_replace(path, "wb");
+    if (file == 0) {
+        ok = 0;
+    } else {
+        fputs("mode=PoPuP\r\nbeep=ON\r\nfuture=ignored\r\n", file);
+        ok = fclose(file) == 0 && ok;
+    }
+    tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
+                                sound, sizeof(sound));
+    ok = ok && sound[0] == '\0' && mode == TG_NOTIFY_POPUP && beep && explicit_mode;
+    for (i = 0; i < TG_NOTIFY_SOUND_MAX - 1; ++i) {
+        longest[i] = i % 11 == 7 ? ' ' : 'a';
+    }
+    longest[TG_NOTIFY_SOUND_MAX - 1] = '\0';
+    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_TITLE, 1, 1,
+                                           longest) == 0;
+    /* An unknown physical line cannot be reinterpreted in small chunks. */
+    file = fopen(path, "ab");
+    if (file == 0) {
+        ok = 0;
+    } else {
+        for (i = 0; i < 319; ++i) {
+            fputc('x', file);
+        }
+        fputs("mode=off\n", file);
+        ok = fclose(file) == 0 && ok;
+    }
+    tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
+                                sound, sizeof(sound));
+    ok = ok && strcmp(sound, longest) == 0 && mode == TG_NOTIFY_TITLE &&
+         beep && explicit_mode;
+    longest[TG_NOTIFY_SOUND_MAX - 1] = 'x';
+    longest[TG_NOTIFY_SOUND_MAX] = '\0';
+    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_OFF, 0, 1,
+                                           longest) != 0 &&
+         tg_notify_preferences_save(path, TG_NOTIFY_OFF, 0, 1,
+                                     "RAM:bell\nbeep=off") != 0;
+    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_TITLE, 1, 1, "") == 0;
+    strcpy(sound, "stale");
+    tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
+                                sound, sizeof(sound));
+    ok = ok && sound[0] == '\0' && mode == TG_NOTIFY_TITLE && beep;
+    (void)remove(path);
+    if (!ok) {
+        puts("gui self-test: sound preferences round trip/default/legacy failed");
+        return 2;
+    }
+    return 0;
+}
+
+/* The phase 1 reader's grammar, retained here to check forward compatibility
+   against the original limits rather than the new parser's own expectations. */
+static int tg_gui_notify_phase1_choice(const char *path, unsigned long peer_lo)
+{
+    FILE *file;
+    char line[320];
+    char word[8];
+    unsigned long hi;
+    unsigned long lo;
+    int used;
+    int choice = TG_NOTIFY_DEFAULT;
+
+    file = fopen(path, "rb");
+    if (file != 0) {
+        while (fgets(line, sizeof(line), file) != 0) {
+            used = 0;
+            if (sscanf(line, "%8lx %8lx %7s %n", &hi, &lo, word, &used) == 3 &&
+                used != 0 && hi == 0UL && lo == peer_lo &&
+                strcspn(line + used, "\r\n") < 256UL &&
+                (strcmp(word, "mute") == 0 || strcmp(word, "ring") == 0)) {
+                choice = strcmp(word, "mute") == 0 ? TG_NOTIFY_MUTE : TG_NOTIFY_RING;
+            }
+        }
+        fclose(file);
+    }
+    return choice;
+}
+
+static int tg_gui_notify_sound_override_self_test(void)
+{
+    const char *path = "tg-gui-sound-overrides-self-test.tmp";
+    tg_notify_override value;
+    tg_notify_override read;
+    FILE *file;
+    int choice;
+    int i;
+    int ok;
+
+    file = tg_file_fopen_replace(path, "wb");
+    if (file == 0) {
+        return 2;
+    }
+    fputs("00000000 00000001 mute\n00000000 00000002 ring\n", file);
+    ok = fclose(file) == 0;
+    tg_notify_override_get(path, 0UL, 1UL, &read);
+    ok = ok && read.choice == TG_NOTIFY_MUTE && read.sound[0] == '\0';
+    tg_notify_override_get(path, 0UL, 2UL, &read);
+    ok = ok && read.choice == TG_NOTIFY_RING && read.sound[0] == '\0';
+    memset(&value, 0, sizeof(value));
+    strcpy(value.sound, "Sounds/two soft notes.8svx");
+    for (choice = TG_NOTIFY_DEFAULT; choice <= TG_NOTIFY_RING; ++choice) {
+        value.choice = choice;
+        ok = ok && tg_notify_override_set(path, 0UL, 3UL, &value) == 0;
+        tg_notify_override_get(path, 0UL, 3UL, &read);
+        ok = ok && read.choice == choice && strcmp(read.sound, value.sound) == 0 &&
+             tg_gui_notify_phase1_choice(path, 3UL) == choice;
+    }
+    for (i = 0; i < TG_NOTIFY_SOUND_MAX - 1; ++i) {
+        value.sound[i] = i % 9 == 4 ? ' ' : 'b';
+    }
+    value.sound[TG_NOTIFY_SOUND_MAX - 1] = '\0';
+    for (choice = TG_NOTIFY_DEFAULT; choice <= TG_NOTIFY_RING; ++choice) {
+        value.choice = choice;
+        ok = ok && tg_notify_override_set(path, 0UL, 3UL, &value) == 0;
+        tg_notify_override_get(path, 0UL, 3UL, &read);
+        ok = ok && read.choice == choice && strcmp(read.sound, value.sound) == 0 &&
+             tg_gui_notify_phase1_choice(path, 3UL) == choice;
+    }
+    value.sound[0] = '\0';
+    value.choice = TG_NOTIFY_MUTE;
+    ok = ok && tg_notify_override_set(path, 0UL, 3UL, &value) == 0;
+    tg_notify_override_get(path, 0UL, 3UL, &read);
+    ok = ok && read.choice == TG_NOTIFY_MUTE && read.sound[0] == '\0';
+    value.choice = TG_NOTIFY_DEFAULT;
+    ok = ok && tg_notify_override_set(path, 0UL, 3UL, &value) == 0;
+    tg_notify_override_get(path, 0UL, 3UL, &read);
+    ok = ok && read.choice == TG_NOTIFY_DEFAULT && read.sound[0] == '\0';
+    tg_notify_override_get(path, 0UL, 2UL, &read);
+    ok = ok && read.choice == TG_NOTIFY_RING && read.sound[0] == '\0';
+    strcpy(value.sound, "RAM:bad\nname");
+    ok = ok && tg_notify_override_set(path, 0UL, 3UL, &value) != 0;
+    memset(value.sound, 'x', sizeof(value.sound));
+    ok = ok && tg_notify_override_set(path, 0UL, 3UL, &value) != 0;
+    (void)remove(path);
+    if (!ok) {
+        puts("gui self-test: sound overrides/phase 1 compatibility failed");
+        return 2;
+    }
+    return 0;
+}
+
+static int tg_gui_notify_sound_choice_self_test(void)
+{
+    static const struct {
+        int ring;
+        const char *chat;
+        const char *global;
+        const char *want;
+    } cases[] = {
+        { 1, "chat sound", "global sound", "chat sound" },
+        { 1, "", "global sound", "global sound" },
+        { 1, 0, "global sound", "global sound" },
+        { 1, "", "", "" }, { 1, 0, 0, "" },
+        { 0, "chat sound", "global sound", 0 }, { 0, "", "", 0 }
+    };
+    const char *path = "tg-gui-sound-choice-self-test.tmp";
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_notify_override value;
+    char sound[TG_NOTIFY_SOUND_MAX];
+    const char *got;
+    unsigned long i;
+    int ok = 1;
+
+    for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        got = tg_notify_sound_choice(cases[i].ring, cases[i].chat, cases[i].global);
+        if ((got == 0) != (cases[i].want == 0) ||
+            (got != 0 && strcmp(got, cases[i].want) != 0)) {
+            puts("gui self-test: sound choice precedence/silence failed");
+            return 2;
+        }
+    }
+    (void)remove(path);
+    memset(&value, 0, sizeof(value));
+    strcpy(value.sound, "chat sound");
+    ok = tg_notify_override_set(path, 0UL, 42UL, &value) == 0;
+    state->notify_mode = TG_NOTIFY_TITLE;
+    state->notify_beep = 1;
+    state->notify_away = 1;
+    state->notify_override_path = path;
+    strcpy(state->notify_sound, "global sound");
+    for (i = 0UL; i < 3UL; ++i) {
+        if (i == 2UL) {
+            state->notify_sound[0] = '\0';
+        }
+        tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                  0UL, 42UL + i, 0, 0, 100UL);
+        ok = ok && tg_gui_notify_ring_take_sound(state, 100UL, 100UL,
+                                                   sound, sizeof(sound)) &&
+             strcmp(sound, i == 0UL ? "chat sound" :
+                           i == 1UL ? "global sound" : "") == 0;
+    }
+    value.choice = TG_NOTIFY_MUTE;
+    ok = ok && tg_notify_override_set(path, 0UL, 42UL, &value) == 0;
+    tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                              0UL, 42UL, 0, 0, 200UL);
+    ok = ok && !tg_gui_notify_ring_take_sound(state, 200UL, 200UL,
+                                               sound, sizeof(sound));
+    (void)remove(path);
+    if (!ok) {
+        puts("gui self-test: queued chat/global/chime/mute sound failed");
         return 2;
     }
     return 0;
@@ -7220,6 +7165,9 @@ int tg_gui_self_test(void)
         tg_gui_notify_override_self_test() != 0 ||
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||
+        tg_gui_notify_sound_preferences_self_test() != 0 ||
+        tg_gui_notify_sound_override_self_test() != 0 ||
+        tg_gui_notify_sound_choice_self_test() != 0 ||
         tg_gui_notify_settings_self_test() != 0) {
         return 2;
     }
@@ -9100,23 +9048,23 @@ int tg_gui_self_test(void)
             return 2;
         }
         if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT,
-                                           1, 1) != 0) {
+                                           1, 1, "") != 0) {
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
         if (mode != TG_GUI_NOTIFY_POPUP_TEXT || beep != 1 || i != 1) {
             (void)remove(path);
             puts("gui self-test: notify setting round trip failed");
             return 2;
         }
-        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0, 1) !=
+        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0, 1, "") !=
             0) {
             (void)remove(path);
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
         if (mode != TG_GUI_NOTIFY_OFF || beep != 0 || i != 1) {
             (void)remove(path);
             puts("gui self-test: notify off round trip failed");
@@ -9124,18 +9072,18 @@ int tg_gui_self_test(void)
         }
         /* A beep toggled while the mode follows the machine keeps "auto". */
         if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT, 1,
-                                           0) != 0) {
+                                           0, "") != 0) {
             (void)remove(path);
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
         (void)remove(path);
         if (beep != 1 || i != 0) {
             puts("gui self-test: notify auto mode did not stay auto");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
         if (mode != TG_GUI_NOTIFY_TITLE || beep != 0 || i != 0) {
             puts("gui self-test: notify defaults wrong");
             return 2;

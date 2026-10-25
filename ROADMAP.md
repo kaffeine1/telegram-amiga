@@ -199,8 +199,8 @@ Features are therefore grouped by the work they share.
   VMs, and the text client on that user's A600 and on WinUAE.
 - **0.0.98, sounds per chat, reactions and a tester's three requests.** In progress
   on `main`. Who rings is decided per chat, with Telegram's own mute
-  respected (done), and a sound file of one's choice to come; a group's
-  pop-up names who wrote (done). From the requests of a tester:
+  respected, a sound file of one's choice for all chats or one chat
+  (done), and a group's pop-up names who wrote (done). From the requests of a tester:
   messages from earlier days get their date, a typed underscore,
   asterisk, backquote or tilde stays a character instead of switching the
   style, and typed emoticons become their emoji (the three sections
@@ -993,9 +993,10 @@ Telegram's and does not ship here; a user who wants it can convert it to
 Still kept out: raising the screen or the window ourselves. The pop-up
 brings the window forward only when it is clicked.
 
-Settings entries: "New messages" with Off, Count in title, Count and
-pop-up, and Pop-up with the text, and "Beep" on its own beside them;
-later "Sound on new messages" with a requester for the sound file. Until
+Settings entries: "Notifications" (called "New messages" until 0.0.97)
+with Off, Count in title, Count and pop-up, and Pop-up with the text,
+"Beep" on its own beside them, then "Sound file..." with a requester for
+the sound file and "Built-in chime" to go back to the client's own. Until
 the user picks one, the mode follows the machine like the photos and
 avatars do: the pop-up with the text where it is drawn at ease, the count
 in the title on a classic Amiga below the 68040 or on a native screen.
@@ -1009,9 +1010,12 @@ mute, which reads the notify settings the dialogs already carry. Its first
 half is on `main` since 2026-10-20: who rings is decided per chat (Telegram's
 mute checked against the server's clock, groups and channels quiet until
 allowed, half a minute between two rings of one chat, a muted chat without
-the pop-up) and the chat row's own menu sets Mute and Enable ring. Still to
-come: the sound file through the sound datatype, its requester, a sound
-per chat and the text client's sound.
+the pop-up) and the chat row's own menu sets Mute and Enable ring. The second half
+followed on 2026-10-25: the sound file through the sound datatype (up to
+1 MB, at most three seconds, loaded and played by the client's own task
+without a helper process), its requester, a sound per chat from the chat
+row's menu, the built-in chime when no file is chosen or none opens, and
+the same sounds in the text client while /bell is on.
 
 How the first step came out, on `main` for 0.0.97. The pop-up sits in
 the top right corner below the screen bar, a fifth of the screen wide at

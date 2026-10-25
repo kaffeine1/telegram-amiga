@@ -495,8 +495,14 @@ static void tg_mtproto_chat_show_prompt(FILE *stream,
                                         const char *pending,
                                         unsigned long pending_length,
                                         int raw);
-/* Console bell (BEL -> screen flash on Amiga consoles) on notifications. */
+/* /bell changes the shared beep preference for this text session. */
 static int tg_chat_bell_enabled = 1;
+/* Kind, two 32-bit id halves and a 32-bit local ring time, in bytes so the
+   68000-like host profile grows by 156 bytes, not an LP64 struct array. */
+static unsigned char tg_chat_ring_history[TG_GUI_MAX_CHATS][13];
+#if !defined(TG_LOWMEM)
+static char tg_chat_notify_sound[TG_NOTIFY_SOUND_MAX];
+#endif
 /* News from chats that are not in the list, counted in the status bar
    since the last /list instead of printed one line each. */
 static unsigned long tg_chat_unlisted_news = 0UL;
@@ -7067,7 +7073,8 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
 #if !defined(TG_NO_SELFTEST)
 static void tg_mtproto_chat_print_notify_lines(FILE *stream,
                                                const char *peer_cache_file,
-                                               const char *current_index_text);
+                                               const char *current_index_text,
+                                               const tg_mtproto_auth_context *context);
 
 /* 0.0.97: news from a chat in the list keeps its line, and so does a private
    message from someone new; a group outside the list, from someone not in it
@@ -7128,7 +7135,7 @@ static int tg_mtproto_notify_lines_self_test(void)
     tg_console_ui_set_theme(TG_UI_THEME_PLAIN);
     file = tmpfile();
     if (file != 0) {
-        tg_mtproto_chat_print_notify_lines(file, path, "");
+        tg_mtproto_chat_print_notify_lines(file, path, "", 0);
         rewind(file);
         n = fread(got, 1, sizeof(got) - 1U, file);
         got[n] = '\0';
@@ -11231,6 +11238,9 @@ static int tg_mtproto_chat_read_line_edit(char *line,
     if (tg_platform_break_pending()) {
         return -1;
     }
+    /* Reap playback even when no further notification arrives. In particular
+       a missing sound device must still reach DisplayBeep at the prompt. */
+    tg_notify_sound_poll();
     rc = tg_platform_stdin_read_char(timeout_seconds, &ch);
     if (rc <= 0) {
         /* Read timeout: check for a file dropped on the console window and
@@ -14013,23 +14023,229 @@ static int tg_mtproto_peer_cache_find_by_id(const char *path,
     return 2;
 }
 
+/* Ring history is independent of reading or switching chats. A full table
+   keeps recent quiet spells, like the GUI, until a slot expires. */
+static int tg_mtproto_chat_ring_at(const tg_chat_notify_entry *entry,
+                                   int open_in_front,
+                                   unsigned long server_now,
+                                   unsigned long local_now,
+                                   const char *override_path,
+                                   const char *global_sound, char *sound,
+                                   unsigned long sound_size)
+{
+    tg_notify_override value;
+    tg_mtproto_peer_notify_settings settings;
+    unsigned char key[9];
+    unsigned long last;
+    unsigned long t;
+    const char *path;
+    unsigned long n;
+    int slot;
+    int i;
+
+    if (sound != 0 && sound_size != 0UL) {
+        sound[0] = '\0';
+    }
+    if (!tg_chat_bell_enabled || entry == 0) {
+        return 0;
+    }
+    key[0] = entry->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR ? 1 :
+             entry->peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR ? 2 :
+             entry->peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ? 3 : 0;
+    for (i = 0; i < 4; ++i) {
+        key[i + 1] = (unsigned char)(entry->peer_id_hi >> (i * 8));
+        key[i + 5] = (unsigned char)(entry->peer_id_lo >> (i * 8));
+    }
+    slot = -1;
+    last = 0UL;
+    for (i = 0; i < TG_GUI_MAX_CHATS; ++i) {
+        t = tg_mtproto_read_u32_le(tg_chat_ring_history[i] + 9);
+        if (memcmp(tg_chat_ring_history[i], key, sizeof(key)) == 0) {
+            slot = i;
+            last = t;
+            break;
+        }
+        if (slot < 0 && (tg_chat_ring_history[i][0] == 0 ||
+            (local_now >= t && local_now - t >= TG_NOTIFY_QUIET_SECONDS))) {
+            slot = i;
+        }
+    }
+    tg_notify_override_get(override_path, entry->peer_id_hi,
+                            entry->peer_id_lo, &value);
+    tg_mtproto_peer_notify_get(entry->peer_constructor, entry->peer_id_hi,
+                               entry->peer_id_lo, &settings);
+    if (slot < 0 || !tg_notify_should_ring(entry->peer_constructor,
+            settings.mute_until, settings.silent, value.choice, entry->silent,
+            entry->is_out, open_in_front, server_now, local_now, last)) {
+        return 0;
+    }
+    memcpy(tg_chat_ring_history[slot], key, sizeof(key));
+    for (i = 0; i < 4; ++i) {
+        tg_chat_ring_history[slot][i + 9] =
+            (unsigned char)(local_now >> (i * 8));
+    }
+    path = tg_notify_sound_choice(1, value.sound, global_sound);
+    n = (unsigned long)strlen(path);
+    if (sound != 0 && n < sound_size) {
+        memcpy(sound, path, n + 1UL);
+    }
+    return 1;
+}
+
+#if !defined(TG_NO_SELFTEST)
+static int tg_mtproto_notify_ring_self_test(void)
+{
+    static const struct {
+        unsigned long kind;
+        int choice;
+        int silent;
+        int out;
+        int open;
+        int beep;
+        unsigned long now;
+        unsigned long prior;
+        int ring;
+    } cases[] = {
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0, 0, 0, 0, 1, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0, 0, 0, 0, 1, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0, 0, 0, 0, 1, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 2, 0, 0, 0, 1, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 2, 0, 0, 0, 1, 100UL, 0UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 1, 0, 0, 0, 1, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 2, 1, 0, 0, 1, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 2, 0, 1, 0, 1, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 2, 0, 0, 1, 1, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 2, 0, 0, 0, 0, 100UL, 0UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0, 0, 0, 0, 1, 100UL, 100UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0, 0, 0, 0, 1, 129UL, 100UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0, 0, 0, 0, 1, 130UL, 100UL, 1 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0, 0, 0, 0, 1, 99UL, 100UL, 0 },
+        { TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0, 0, 0, 0, 1, 0UL, 0UL, 0 }
+    };
+    /* The peerDialogs fixture already used in the GUI's phase 1 test:
+       constructors and flag fields come from tg_mtproto_login.c. */
+    static const unsigned long words[] = {
+        0x1cb5c415UL, 1UL, 0xd58a08c6UL, 0UL,
+        TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 9UL, 9UL,
+        1UL, 0UL, 0UL, 1UL, 0UL, 0UL, 0x99622c0cUL, 6UL,
+        0x997275b5UL, 500UL
+    };
+    static tg_mtproto_dialog_peer_list list;
+    const char *path = "tg-console-ring-self-test.tmp";
+    unsigned char saved[TG_GUI_MAX_CHATS][13];
+    unsigned char body[96];
+    tg_mtproto_tl_writer writer;
+    tg_chat_notify_entry entry;
+    tg_notify_override value;
+    char sound[TG_NOTIFY_SOUND_MAX];
+    unsigned long i;
+    unsigned long j;
+    int saved_bell;
+    int ok = 1;
+
+    memcpy(saved, tg_chat_ring_history, sizeof(saved));
+    saved_bell = tg_chat_bell_enabled;
+    memset(&entry, 0, sizeof(entry));
+    memset(&value, 0, sizeof(value));
+    entry.peer_id_hi = 0x1234UL;
+    entry.peer_id_lo = 42UL;
+    strcpy(value.sound, "RAM:Chat sounds/Soft.8svx");
+    (void)remove(path);
+    for (i = 0UL; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
+        entry.peer_constructor = cases[i].kind;
+        entry.silent = 0;
+        entry.is_out = 0;
+        value.choice = cases[i].choice;
+        tg_chat_bell_enabled = 1;
+        ok = ok && tg_notify_override_set(path, entry.peer_id_hi,
+                                           entry.peer_id_lo, &value) == 0;
+        if (cases[i].prior != 0UL) {
+            ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 1000UL,
+                cases[i].prior, path, "global", sound, sizeof(sound));
+        }
+        entry.silent = (unsigned char)cases[i].silent;
+        entry.is_out = (unsigned char)cases[i].out;
+        tg_chat_bell_enabled = cases[i].beep;
+        if (tg_mtproto_chat_ring_at(&entry, cases[i].open, 1000UL,
+                cases[i].now, path, "global", sound, sizeof(sound)) !=
+            cases[i].ring || (cases[i].ring && strcmp(sound, value.sound) != 0)) {
+            printf("probe self-test: console ring decision case %lu failed\n", i);
+            ok = 0;
+            break;
+        }
+    }
+    /* Two distinct id halves must not share a quiet spell. */
+    memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
+    entry.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    entry.silent = 0;
+    entry.is_out = 0;
+    tg_chat_bell_enabled = 1;
+    ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 1000UL, 100UL,
+                                       path, "global", sound, sizeof(sound));
+    ++entry.peer_id_hi;
+    ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 1000UL, 100UL,
+                                       path, "global", sound, sizeof(sound)) &&
+         strcmp(sound, "global") == 0;
+    ++entry.peer_id_lo;
+    ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 1000UL, 100UL,
+                                       path, "", sound, sizeof(sound)) &&
+         sound[0] == '\0';
+    entry.peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    entry.peer_id_hi = 9UL;
+    entry.peer_id_lo = 9UL;
+    value.choice = TG_NOTIFY_RING;
+    ok = ok && tg_notify_override_set(path, 9UL, 9UL, &value) == 0;
+    for (i = 0UL; i < 2UL; ++i) {
+        memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        for (j = 0UL; j < sizeof(words) / sizeof(words[0]); ++j) {
+            ok = tg_mtproto_tl_write_u32(&writer,
+                i == 1UL && j == 15UL ? 0xbc799737UL : words[j]) ==
+                TG_MTPROTO_TL_OK && ok;
+        }
+        ok = ok && tg_mtproto_parse_dialog_peer_list(0x3371c354UL, body,
+                    writer.length, &list) == TG_MTPROTO_TL_OK &&
+             list.count == 1UL;
+        /* Server mute uses server time, quiet spells use local time. */
+        ok = ok && !tg_mtproto_chat_ring_at(&entry, 0, 400UL, 1000UL,
+                                           path, "global", sound, sizeof(sound));
+        ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 501UL, 1001UL,
+                    path, "global", sound, sizeof(sound)) == (i == 1UL);
+    }
+    (void)remove(path);
+    memcpy(tg_chat_ring_history, saved, sizeof(saved));
+    tg_chat_bell_enabled = saved_bell;
+    if (!ok) {
+        puts("probe self-test: console sound policy/choice failed");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
 /* Drains the cross-chat notification queue: one inverse-video line per
    message from a chat other than the open one, prefixed with the chat-list
    number so an F-key or a bare number jumps straight there. */
 static void tg_mtproto_chat_print_notify_lines(FILE *stream,
                                                const char *peer_cache_file,
-                                               const char *current_index_text)
+                                               const char *current_index_text,
+                                               const tg_mtproto_auth_context *context)
 {
     char label[128];
     unsigned long current_index;
     unsigned long index;
     unsigned long i;
     unsigned long unlisted;
-    int printed;
+    unsigned long server_now;
+    unsigned long local_now;
+    time_t now;
+    char sound[TG_NOTIFY_SOUND_MAX];
     int tabs_marked;
     const char *digits;
     const tg_chat_notify_entry *entry;
 
+    tg_notify_sound_poll();
     if (tg_chat_nq == 0) {
         return;
     }
@@ -14051,8 +14267,10 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
         }
     }
     unlisted = 0UL;
-    printed = 0;
     tabs_marked = 0;
+    now = time(0);
+    local_now = now == (time_t)-1 ? 0UL : (unsigned long)now;
+    server_now = tg_mtproto_context_time(context);
     for (i = 0UL; i < tg_chat_nq->count; ++i) {
         entry = &tg_chat_nq->queue[i];
         index = 0UL;
@@ -14064,6 +14282,16 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
         if (current_index != 0UL && index == current_index) {
             /* The open chat: the normal auto-read already shows it. */
             continue;
+        }
+        if (tg_mtproto_chat_ring_at(entry, 0, server_now, local_now,
+                TG_NOTIFY_OVERRIDE_FILE,
+#if defined(TG_LOWMEM)
+                "",
+#else
+                tg_chat_notify_sound,
+#endif
+                sound, sizeof(sound))) {
+            tg_notify_sound_play(sound);
         }
         if (label[0] == '\0' &&
             (entry->from_id_hi != 0UL || entry->from_id_lo != 0UL) &&
@@ -14087,7 +14315,6 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
             ++unlisted;
             continue;
         }
-        printed = 1;
         if (index >= 1UL && index <= TG_CONSOLE_TUI_TABS) {
             /* The star on its function-key tab, until it is opened. */
             tg_chat_tab_news |= 1U << (unsigned int)(index - 1UL);
@@ -14117,7 +14344,6 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
         fprintf(stream, "(+%lu more)", tg_chat_nq->dropped);
         tg_console_ui_reset(stream);
         tg_console_ui_end_line(stream);
-        printed = 1;
     }
     if (unlisted > 0UL) {
         tg_chat_unlisted_news += unlisted;
@@ -14133,13 +14359,6 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     }
     if (tabs_marked) {
         tg_mtproto_chat_tabs_draw(current_index);
-    }
-    if (printed && tg_chat_bell_enabled) {
-        /* Intuition DisplayBeep, not a BEL byte: console handlers improvise
-           on BEL (AmiKit's replacement console clears the window, one AROS
-           icon console draws a stray glyph). The flash never touches the
-           console stream. */
-        tg_platform_display_beep();
     }
     tg_chat_nq->count = 0UL;
     tg_chat_nq->dropped = 0UL;
@@ -14489,6 +14708,14 @@ int tg_mtproto_auth_chat_file(const char *host,
        anything can collect (the recv path arms only after the reset below).
        init zeroes the updates cursor + notify queue and enables /diff. */
     tg_chat_engine_init(&chat_engine);
+    memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
+    tg_notify_preferences_load(TG_NOTIFY_FILE, 0, &tg_chat_bell_enabled, 0,
+#if defined(TG_LOWMEM)
+                                0, 0UL);
+#else
+                                tg_chat_notify_sound,
+                                sizeof(tg_chat_notify_sound));
+#endif
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: chat engine init done");
 #endif
@@ -14897,7 +15124,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
                 tg_mtproto_chat_print_notify_lines(tui_cap, peer_cache_file,
-                                                   peer_index);
+                                                   peer_index, &chat_context);
                 tg_console_tui_capture_end(tui_cap, stream);
             }
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label,
@@ -14943,7 +15170,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             {
             FILE *tui_cap = tg_console_tui_capture_begin(stream);
             tg_mtproto_chat_print_notify_lines(tui_cap, peer_cache_file,
-                                               peer_index);
+                                               peer_index, &chat_context);
             tg_console_tui_capture_end(tui_cap, stream);
         }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -15341,7 +15568,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
                 tg_mtproto_chat_print_notify_lines(tui_cap, peer_cache_file,
-                                                   peer_index);
+                                                   peer_index, &chat_context);
                 tg_console_tui_capture_end(tui_cap, stream);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -17903,6 +18130,7 @@ int tg_mtproto_probe_self_test(void)
     }
 
     if (tg_mtproto_marker_input_self_test() != 0 ||
+        tg_mtproto_notify_ring_self_test() != 0 ||
         tg_chat_notify_flags_self_test() != 0 ||
         tg_chat_notify_sender_self_test() != 0 ||
         tg_gui_session_server_time_self_test() != 0) {

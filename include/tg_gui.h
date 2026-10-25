@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: MIT
  *
  * Telegram Amiga native GUI (Phase 5b). Portable model + renderer over a thin
- * per-platform backend (Intuition/RastPort). The console/TUI line is separate
- * and untouched; both sit on the same MTProto core. See
+ * per-platform backend (Intuition/RastPort). The console/TUI is a separate
+ * front-end; both share the MTProto core and notification helpers. See
  * docs/GUI_ARCHITECTURE.md.
  */
 
@@ -12,6 +12,7 @@
 #define TG_GUI_H
 
 #include "tg_reaction.h"
+#include "tg_notify.h"
 
 /* Themes are skins over the same pen roles below; the renderer is theme-blind. */
 #define TG_GUI_THEME_DARK 0  /* default modern theme */
@@ -215,33 +216,22 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
 
 /* New-message notifications: what tells the user about a message in a chat
    other than the open one. Each mode includes the ones before it. */
-#define TG_GUI_NOTIFY_OFF 0
-#define TG_GUI_NOTIFY_TITLE 1      /* count in the window title / AppIcon */
-#define TG_GUI_NOTIFY_POPUP 2      /* and a pop-up with the chat */
-#define TG_GUI_NOTIFY_POPUP_TEXT 3 /* and the start of the text in it */
+#define TG_GUI_NOTIFY_OFF TG_NOTIFY_OFF
+#define TG_GUI_NOTIFY_TITLE TG_NOTIFY_TITLE
+#define TG_GUI_NOTIFY_POPUP TG_NOTIFY_POPUP
+#define TG_GUI_NOTIFY_POPUP_TEXT TG_NOTIFY_POPUP_TEXT
 #define TG_GUI_NOTIFY_PEERS 32
 #define TG_GUI_RING_PEERS TG_GUI_MAX_CHATS
 #define TG_GUI_NOTIFY_TEXT_MAX 96
-#define TG_GUI_NOTIFY_QUIET_SECONDS 30UL
-#define TG_GUI_NOTIFY_OVERRIDE_FILE "data/telegram-chat-notify.txt"
+#define TG_GUI_NOTIFY_QUIET_SECONDS TG_NOTIFY_QUIET_SECONDS
+#define TG_GUI_NOTIFY_OVERRIDE_FILE TG_NOTIFY_OVERRIDE_FILE
 #define TG_GUI_EMOTICON_FILE "data/telegram-emoticons.txt"
-#define TG_GUI_NOTIFY_DEFAULT 0
-#define TG_GUI_NOTIFY_MUTE 1
-#define TG_GUI_NOTIFY_RING 2
+#define TG_GUI_NOTIFY_DEFAULT TG_NOTIFY_DEFAULT
+#define TG_GUI_NOTIFY_MUTE TG_NOTIFY_MUTE
+#define TG_GUI_NOTIFY_RING TG_NOTIFY_RING
 
-typedef struct tg_gui_notify_override {
-    int choice;
-    /* Reserved for phase 2; round trips without interpreting the filename. */
-    char sound[256];
-} tg_gui_notify_override;
-
-typedef struct tg_gui_ring_peer {
-    unsigned long peer_constructor;
-    unsigned long peer_hi;
-    unsigned long peer_lo;
-    unsigned long last_ring;
-    int pending;
-} tg_gui_ring_peer;
+typedef tg_notify_override tg_gui_notify_override;
+typedef tg_notify_ring_peer tg_gui_ring_peer;
 
 typedef struct tg_gui_notify_peer {
     unsigned long peer_hi;
@@ -348,7 +338,8 @@ typedef struct tg_gui_state {
        sidebar rows, which a search or a list reload rewrites: one slot per
        chat with news this session, cleared when that chat is opened. */
     int notify_mode;       /* TG_GUI_NOTIFY_*, from data/telegram-notify.txt */
-    int notify_beep;       /* DisplayBeep on the first unseen message of a run */
+    int notify_beep;       /* sound on eligible news */
+    char notify_sound[TG_NOTIFY_SOUND_MAX];
     int notify_explicit;   /* the user picked the mode (else "auto") */
     int notify_default_resolved; /* hardware default sampled this run */
     tg_gui_notify_peer notify_peers[TG_GUI_NOTIFY_PEERS];
@@ -670,36 +661,16 @@ unsigned int tg_gui_popup_font_size(unsigned int base, unsigned int height);
 /* The beep: a short chime made here, no file: A5 then E6, each with a
    quick rise and a bell-like fade, 8-bit signed mono. `out` takes
    TG_GUI_CHIME_LENGTH bytes. */
-#define TG_GUI_CHIME_RATE 22050UL
-#define TG_GUI_CHIME_NOTE 2420UL /* 110 ms a note */
-#define TG_GUI_CHIME_LENGTH (2UL * TG_GUI_CHIME_NOTE)
-void tg_gui_chime_render(signed char *out);
-
-/* New-message notifications. "mode=auto", or a missing or unreadable
-   file, leaves the mode to the machine (mode_explicit 0: the pop-up with
-   the text on a fast one, the count in the title on a classic Amiga below
-   the 68040 or without RTG, see tg_gui_graphics_preferences_resolve); a
-   mode the user picked is kept as it is. No beep unless chosen. */
-void tg_gui_notify_preferences_load(const char *path, int *mode, int *beep,
-                                    int *mode_explicit);
-int tg_gui_notify_preferences_save(const char *path, int mode, int beep,
-                                   int mode_explicit);
-void tg_gui_notify_override_get(const char *path, unsigned long peer_hi,
-                                unsigned long peer_lo,
-                                tg_gui_notify_override *out);
-int tg_gui_notify_override_set(const char *path, unsigned long peer_hi,
-                               unsigned long peer_lo,
-                               const tg_gui_notify_override *value);
-/* Pure sound policy. Telegram's mute and silent always win over local ring.
-   Thirty seconds absorbs a short conversation burst without silencing a
-   later message for the whole time the window is away. mute_until uses server
-   time; last_ring and the quiet spell use local time. last_ring 0 is new. */
-int tg_gui_notify_should_ring(unsigned long peer_constructor,
-                               unsigned long mute_until, int peer_silent,
-                               int choice, int silent, int is_out,
-                               int open_in_front, unsigned long server_now,
-                               unsigned long local_now,
-                               unsigned long last_ring);
+/* Phase 1 GUI names remain aliases of the shared notification helpers. */
+#define TG_GUI_CHIME_RATE TG_NOTIFY_CHIME_RATE
+#define TG_GUI_CHIME_NOTE TG_NOTIFY_CHIME_NOTE
+#define TG_GUI_CHIME_LENGTH TG_NOTIFY_CHIME_LENGTH
+#define tg_gui_chime_render tg_notify_chime_render
+#define tg_gui_notify_preferences_load tg_notify_preferences_load
+#define tg_gui_notify_preferences_save tg_notify_preferences_save
+#define tg_gui_notify_override_get tg_notify_override_get
+#define tg_gui_notify_override_set tg_notify_override_set
+#define tg_gui_notify_should_ring tg_notify_should_ring
 void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
                               unsigned long peer_hi, unsigned long peer_lo,
                               int silent, int is_out, unsigned long now);
@@ -707,6 +678,9 @@ void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
    survives reading the news and closing/reopening the native window. */
 int tg_gui_notify_ring_take(tg_gui_state *state, unsigned long server_now,
                              unsigned long local_now);
+int tg_gui_notify_ring_take_sound(tg_gui_state *state, unsigned long server_now,
+                                   unsigned long local_now, char *sound,
+                                   unsigned long sound_size);
 /* Counts one new message in the chat (hi, lo); the caller already skipped
    the chat open in front of the user. */
 void tg_gui_notify_count(tg_gui_state *state, unsigned long peer_hi,
@@ -815,6 +789,8 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_RING 12
 #define TG_GUI_CTX_REACT 13
 #define TG_GUI_CTX_REACTION_FIRST 14
+#define TG_GUI_CTX_CHAT_SOUND 32
+#define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
 #define TG_GUI_CTX_ITEMS_MAX 11

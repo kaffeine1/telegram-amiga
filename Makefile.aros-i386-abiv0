@@ -11,7 +11,7 @@ AROS_CC ?= $(TOOLCHAIN)/i386-aros-gcc
 TARGET ?= build/aros-i386-abiv0/TelegramAmiga
 BUILD_DIR := $(dir $(TARGET))
 
-SRC := src/main.c core/tg_app.c core/tg_bot.c core/tg_config.c core/tg_console.c core/tg_console_ui.c core/tg_console_tui.c core/tg_gui.c core/tg_gui_window.c core/tg_chat_engine.c core/tg_gui_driver.c core/tg_client_state.c core/tg_offset_state.c core/tg_text_client.c core/tg_file.c core/tg_http.c core/tg_https.c core/tg_json.c core/tg_telegram.c core/tg_log.c core/tg_mtproto.c core/tg_mtproto_auth.c core/tg_mtproto_bigint.c core/tg_mtproto_dc.c core/tg_mtproto_envelope.c core/tg_mtproto_encrypted.c core/tg_mtproto_login.c core/tg_mtproto_message_id.c core/tg_mtproto_probe.c core/tg_mtproto_rsa.c core/tg_mtproto_crypto.c core/tg_mtproto_session.c core/tg_mtproto_srp.c core/tg_mtproto_tl.c core/tg_mtproto_transport.c core/tg_net.c core/tg_tls.c platforms/aros/tg_platform_aros.c
+SRC := src/main.c core/tg_app.c core/tg_bot.c core/tg_config.c core/tg_console.c core/tg_console_ui.c core/tg_console_tui.c core/tg_gui.c core/tg_gui_window.c core/tg_notify.c core/tg_notify_sound.c core/tg_chat_engine.c core/tg_gui_driver.c core/tg_client_state.c core/tg_offset_state.c core/tg_text_client.c core/tg_file.c core/tg_http.c core/tg_https.c core/tg_json.c core/tg_telegram.c core/tg_log.c core/tg_mtproto.c core/tg_mtproto_auth.c core/tg_mtproto_bigint.c core/tg_mtproto_dc.c core/tg_mtproto_envelope.c core/tg_mtproto_encrypted.c core/tg_mtproto_login.c core/tg_mtproto_message_id.c core/tg_mtproto_probe.c core/tg_mtproto_rsa.c core/tg_mtproto_crypto.c core/tg_mtproto_session.c core/tg_mtproto_srp.c core/tg_mtproto_tl.c core/tg_mtproto_transport.c core/tg_net.c core/tg_tls.c platforms/aros/tg_platform_aros.c
 
 CFLAGS ?= -Wall -Wextra -O2
 

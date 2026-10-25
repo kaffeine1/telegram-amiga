@@ -715,6 +715,12 @@ Using the GUI
   of ten common reactions; choosing yours again takes it back. When a group
   does not allow that reaction, the status line says so. In the text client
   the counts follow the line, and /react <id> <name> adds one.
+- New messages: "Settings > Notifications" chooses the count in the title,
+  the pop-up, or nothing. With Beep on, a chat that rings plays a sound:
+  the built-in chime, or a file picked with "Sound file..." (IFF 8SVX, or
+  WAV where a datatype reads it, up to 1 MB). Right-click a chat in the
+  list for Mute, Enable ring (groups and channels start quiet) and a
+  "Sound..." of its own.
 - In groups, type @ in the composer to autocomplete a member: a small list
   pops up above the input line -- Up/Down select, Enter or Tab inserts
   @username, Esc closes, typing narrows the matches.
@@ -932,6 +938,12 @@ Usare la GUI
   il gruppo non permette quella reazione, lo dice la riga di stato. Nel
   client testuale i conteggi seguono la riga e /react <id> <nome> ne
   aggiunge una.
+- Nuovi messaggi: "Settings > Notifications" sceglie il conteggio nel
+  titolo, il pop-up o niente. Con Beep attivo, una chat che suona fa
+  sentire un suono: il campanello interno, o un file scelto con "Sound
+  file..." (IFF 8SVX, o WAV dove un datatype lo legge, fino a 1 MB). Click
+  destro su una chat nell'elenco per Mute, Enable ring (gruppi e canali
+  partono muti) e un "Sound..." tutto suo.
 - Nei gruppi, digita @ nel composer per completare un membro: compare una
   listina sopra la riga di input -- Su/Giu' selezionano, Invio o Tab inserisce
   @username, Esc chiude, digitando filtri i risultati.

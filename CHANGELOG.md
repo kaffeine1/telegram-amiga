@@ -23,6 +23,17 @@ the text client for the plain 68000.
   Unmute, and for groups and channels Enable or Disable ring; anywhere
   else in the window it still opens the menu bar. The choices are kept in
   data/telegram-chat-notify.txt.
+- A sound of your choice for new messages. "Settings > Notifications >
+  Sound file..." picks any sound the system's sound datatype reads (IFF
+  8SVX everywhere, WAV and others where a datatype is installed), up to
+  1 MB; "Built-in chime" goes back to the client's own short chime. A chat
+  can have a sound of its own: "Sound..." in the chat row's right-button
+  menu, and "Default sound" to drop it. A sound plays when Beep is on and
+  the chat rings, for at most three seconds, while the client goes on
+  working; without a sound device the screen flashes as before. The text
+  client rings the same sounds while /bell is on. The menu once called
+  "New messages" is now "Notifications". The choices are kept in
+  data/telegram-notify.txt and data/telegram-chat-notify.txt.
 - In a group, the new-message pop-up says who wrote: "Name: text". The
   name comes with the update or from the names the client already knows;
   when it is unknown, and for channel posts and anonymous admins, the line

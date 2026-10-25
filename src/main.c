@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "tg_app.h"
+#include "tg_notify.h"
 #include "tg_gui_session.h" /* tg_gui_log: diagnostic trace */
 #include "tg_version.h"
 
@@ -144,6 +145,7 @@ static int tg_main_finish(int result)
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: platform shutdown");
 #endif
+    tg_notify_sound_shutdown();
     tg_platform_shutdown();
 #ifdef TG_DIAG_TRACE
     /* Last probe we control: whatever happens after this line happens in
