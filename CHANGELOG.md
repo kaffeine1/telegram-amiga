@@ -34,6 +34,14 @@ the text client for the plain 68000.
   cannot create one yet, and a first-time user without one waited for a
   code that could never have been used.
 
+- Messages from earlier days show their day: the transcript opens each
+  day with a line carrying its date ("Today", "Yesterday", or the day and
+  the month, with the year when it is not the current one), and a run of
+  messages from one sender breaks at a new day. The text client, which
+  already marked a change of day, now also opens an older page with its
+  date. Today comes from the same clock as the message times, so a
+  machine whose clock was never set still gets it right.
+
 ### Fixed
 - A name, a message or a preview too long for the room kept for it no
   longer ends in a box: an emoji that does not fit whole is left out

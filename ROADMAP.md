@@ -1365,7 +1365,7 @@ own; the file stops being part of what we distribute, and a new pair can
 be rolled out with a release. The pair itself should belong to the
 project rather than to a personal account.
 
-## Planned: the day of older messages (0.0.98)
+## Done for 0.0.98: the day of older messages
 
 A message shows only its time, `HH:MM` in the bubble and `[HH:MM]` in
 the text client, so one written on an earlier day does not say which day
@@ -1379,6 +1379,11 @@ lines. Which day is today has to come from the same clock the message
 times use, Telegram's time in the Locale's zone when the Amiga's own
 clock was never set, or a machine left on 1978 would call every message
 old. The words stay English until the translations after the beta.
+
+Done on `main` on 2026-10-25. The line belongs to the row below it, so the
+heights, the scrolling and the clicks stay in step; the text client
+already had its `--- 15 Nov ---` line between two days and now also opens
+a page of older messages with one.
 
 ## Planned: an underscore stays an underscore (0.0.98)
 

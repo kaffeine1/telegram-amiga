@@ -16,6 +16,8 @@
 #include "tg_emoji_sheet.h"
 #include "tg_mtproto_login.h"
 
+#include <time.h>
+
 #define TG_GUI_EMOJI_BUTTON_W 22 /* smiley button in the composer row */
 #define TG_GUI_ATTACH_BUTTON_W 22 /* paperclip at the left of the input */
 #define TG_GUI_INPUT_TEXT_PAD 6 /* equal air above and below the glyph block */
@@ -2860,6 +2862,79 @@ static int tg_gui_marked_width(tg_gui_backend *backend, const char *text,
    between them: the sender name then shows only on the first of the run, the
    way the desktop client groups a busy conversation. Pure derivation from
    the two neighbours, so every geometry consumer computes the same answer. */
+/* Whether a line with the date goes above this message: it has a date and
+   the nearest dated message above it, if any, is from another day. Rows with
+   no time yet (the echo of a message just sent) neither start nor break a
+   day. Pure, like the grouping below, so every geometry consumer agrees. */
+static int tg_gui_message_day_break(const tg_gui_state *state, int index)
+{
+    unsigned long day;
+    int j;
+
+    if (state == 0 || index < 0 || index >= state->message_count) {
+        return 0;
+    }
+    day = state->messages[index].day;
+    if (day == 0UL) {
+        return 0;
+    }
+    for (j = index - 1; j >= 0; --j) {
+        if (state->messages[j].day != 0UL) {
+            return state->messages[j].day != day;
+        }
+    }
+    return 1;
+}
+
+/* "Today", "Yesterday", or the day and the month, with the year when it is
+   not the current one (or when today is unknown). */
+static void tg_gui_day_label(const tg_gui_state *state, unsigned long day,
+                             char *out, unsigned long size)
+{
+    static const char *const months[12] = {
+        "January", "February", "March", "April", "May", "June", "July",
+        "August", "September", "October", "November", "December"
+    };
+    time_t when;
+    struct tm *parts;
+    int year;
+
+    if (out == 0 || size < 24UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (day == 0UL) {
+        return;
+    }
+    if (state->today != 0UL && day == state->today) {
+        strcpy(out, "Today");
+        return;
+    }
+    if (state->today != 0UL && day + 1UL == state->today) {
+        strcpy(out, "Yesterday");
+        return;
+    }
+    year = -1;
+    if (state->today != 0UL) {
+        when = (time_t)((state->today - 1UL) * TG_GUI_DAY_SECONDS);
+        parts = gmtime(&when);
+        if (parts != 0) {
+            year = parts->tm_year;
+        }
+    }
+    when = (time_t)((day - 1UL) * TG_GUI_DAY_SECONDS);
+    parts = gmtime(&when);
+    if (parts == 0 || parts->tm_mon < 0 || parts->tm_mon > 11) {
+        return;
+    }
+    if (parts->tm_year == year) {
+        sprintf(out, "%d %.9s", parts->tm_mday % 100, months[parts->tm_mon]);
+    } else {
+        sprintf(out, "%d %.9s %d", parts->tm_mday % 100, months[parts->tm_mon],
+                (parts->tm_year + 1900) % 10000);
+    }
+}
+
 static int tg_gui_message_grouped(const tg_gui_state *state, int index)
 {
     const tg_gui_message *m;
@@ -2870,7 +2945,8 @@ static int tg_gui_message_grouped(const tg_gui_state *state, int index)
     }
     m = &state->messages[index];
     prev = &state->messages[index - 1];
-    if (m->is_own || m->is_system || prev->is_own || prev->is_system) {
+    if (m->is_own || m->is_system || prev->is_own || prev->is_system ||
+        tg_gui_message_day_break(state, index)) {
         return 0;
     }
     if (m->sender[0] == '\0' || strcmp(m->sender, prev->sender) != 0) {
@@ -3379,9 +3455,11 @@ static int tg_gui_message_height_kept(const tg_gui_state *state,
     tg_gui_message *message = (tg_gui_message *)&state->messages[index];
     unsigned long key;
     const char *t;
+    /* The line with the date above it is part of the row it opens. */
+    int day_h = tg_gui_message_day_break(state, index) ? lh + 6 : 0;
 
     if (message->is_system) {
-        return lh + 6;
+        return day_h + lh + 6;
     }
     key = tg_gui_layout_mix(metrics,
                             (unsigned long)((message->is_own ? 1 : 0) |
@@ -3405,7 +3483,7 @@ static int tg_gui_message_height_kept(const tg_gui_state *state,
             backend, message, area_w, lh, state->inline_photos, grouped);
         message->layout_key = key;
     }
-    return message->layout_h;
+    return day_h + message->layout_h;
 }
 
 /* Draws just the bottom composer row: the input box, the typed text (or the
@@ -4320,7 +4398,7 @@ static void tg_gui_paint_header(const tg_gui_state *state,
    any system line (lh + 6) and is drawn only while the whole pill is in
    view; it used to start a quarter in, plain, and was never filled. */
 static void tg_gui_paint_system_line(tg_gui_backend *backend,
-                                     const tg_gui_message *message,
+                                     const char *text,
                                      int area_x, int area_w, int y, int lh,
                                      int transcript_top, int transcript_bottom)
 {
@@ -4338,11 +4416,11 @@ static void tg_gui_paint_system_line(tg_gui_backend *backend,
         pill_y + pill_h > transcript_bottom) {
         return;
     }
-    length = (unsigned long)strlen(message->text);
+    length = (unsigned long)strlen(text);
     if (length >= sizeof(line)) {
         length = sizeof(line) - 1UL;
     }
-    memcpy(line, message->text, (size_t)length);
+    memcpy(line, text, (size_t)length);
     line[length] = '\0';
     if (length > 0UL && backend->text_width(backend, line, length) > max_w) {
         int dots_w = backend->text_width(backend, "...", 3UL);
@@ -4537,6 +4615,21 @@ static void tg_gui_paint_main(const tg_gui_state *state,
         h = tg_gui_message_height_kept(state, backend, i, area_w, lh,
                                        tg_gui_message_grouped(state, i),
                                        layout_metrics);
+        /* A new day opens with its date, on the pill of a service line; the
+           row below it starts one line lower. */
+        if (tg_gui_message_day_break(state, i)) {
+            char day_text[32];
+
+            if (y + lh + 6 > transcript_top && y < transcript_bottom) {
+                tg_gui_day_label(state, message->day, day_text,
+                                 sizeof(day_text));
+                tg_gui_paint_system_line(backend, day_text, area_x, area_w, y,
+                                         lh, transcript_top,
+                                         transcript_bottom);
+            }
+            y += lh + 6;
+            h -= lh + 6;
+        }
         /* Draw only messages intersecting the viewport; each part is clipped to
            [transcript_top, transcript_bottom] inside the bubble. */
         if (y + h > transcript_top && y < transcript_bottom) {
@@ -4558,7 +4651,8 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                 }
             }
             if (message->is_system) {
-                tg_gui_paint_system_line(backend, message, area_x, area_w, y,
+                tg_gui_paint_system_line(backend, message->text, area_x,
+                                         area_w, y,
                                          lh, transcript_top,
                                          transcript_bottom);
             } else {
@@ -4683,8 +4777,10 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
     tg_gui_bubble_geometry(backend, message, state->tr_area_x,
                            state->tr_area_w, lh, state->inline_photos,
                            tg_gui_message_grouped(state, msg_index), &geo);
-    ty = y - (state->msg_top[msg_index] + geo.header_h + geo.top_pad +
-              geo.reply_h + geo.photo_h + geo.photo_gap);
+    ty = y - (state->msg_top[msg_index] +
+              (tg_gui_message_day_break(state, msg_index) ? lh + 6 : 0) +
+              geo.header_h + geo.top_pad + geo.reply_h + geo.photo_h +
+              geo.photo_gap);
     if (ty < 0) {
         return 0; /* header band or above: clamp to the start */
     }
@@ -7151,6 +7247,78 @@ int tg_gui_self_test(void)
         }
         state.messages[0] = saved0;
         state.messages[1] = saved1;
+    }
+
+    /* Day lines: a line with the date opens each day (Today, Yesterday,
+       the date, the year when it is another), a new day breaks a sender's
+       run, a row with no time neither opens nor breaks one, and the painter
+       draws each line once. Day numbers are days since 1970 plus one:
+       20752 is 25 October 2026. */
+    {
+        tg_gui_message saved0 = state.messages[0];
+        tg_gui_message saved1 = state.messages[1];
+        unsigned long saved_today = state.today;
+        char label[32];
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int k;
+        int failed = 0;
+
+        for (k = 0; k < 2; ++k) {
+            tg_gui_copy(state.messages[k].sender,
+                        sizeof(state.messages[k].sender), "Mario");
+            state.messages[k].is_own = 0;
+            state.messages[k].is_system = 0;
+        }
+        state.today = 20752UL;
+        state.messages[0].day = 20751UL;
+        state.messages[1].day = 20752UL;
+        if (!tg_gui_message_day_break(&state, 0) ||
+            !tg_gui_message_day_break(&state, 1) ||
+            tg_gui_message_grouped(&state, 1)) {
+            failed = 1;
+        }
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 480;
+        rec.height = 900; /* every row in view: the transcript sits low */
+        rec.watch_text[0] = "Yesterday";
+        rec.watch_text[1] = "Today";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        if (rec.watch_hits[0] != 1 || rec.watch_hits[1] != 1 ||
+            rec.watch_y[1] <= rec.watch_y[0]) {
+            printf("gui self-test: day lines drawn %d/%d at %d/%d\n",
+                   rec.watch_hits[0], rec.watch_hits[1], rec.watch_y[0],
+                   rec.watch_y[1]);
+            failed = 1;
+        }
+        state.messages[1].day = 20751UL;
+        if (tg_gui_message_day_break(&state, 1) ||
+            !tg_gui_message_grouped(&state, 1)) {
+            failed = 1;
+        }
+        state.messages[1].day = 0UL; /* the echo of a message just sent */
+        if (tg_gui_message_day_break(&state, 1)) {
+            failed = 1;
+        }
+        tg_gui_day_label(&state, 20752UL, label, sizeof(label));
+        failed |= strcmp(label, "Today") != 0;
+        tg_gui_day_label(&state, 20751UL, label, sizeof(label));
+        failed |= strcmp(label, "Yesterday") != 0;
+        tg_gui_day_label(&state, 20518UL, label, sizeof(label));
+        failed |= strcmp(label, "5 March") != 0;
+        tg_gui_day_label(&state, 20454UL, label, sizeof(label));
+        failed |= strcmp(label, "31 December 2025") != 0;
+        state.today = 0UL; /* not known yet: the full date */
+        tg_gui_day_label(&state, 20752UL, label, sizeof(label));
+        failed |= strcmp(label, "25 October 2026") != 0;
+        state.messages[0] = saved0;
+        state.messages[1] = saved1;
+        state.today = saved_today;
+        if (failed) {
+            puts("gui self-test: day lines wrong");
+            return 2;
+        }
     }
 
     /* Save-as naming/path joining is platform-neutral. Existing destinations

@@ -9794,9 +9794,17 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
 {
     time_t now = time(0);
     unsigned long eff = watch_seconds;
+    unsigned long today;
 
     if (now == (time_t)-1) {
         return;
+    }
+    /* The transcript's day lines call today by the clock of the message
+       times; past midnight they repaint with the new day. */
+    today = tg_gui_session_display_now() / TG_GUI_DAY_SECONDS + 1UL;
+    if (state->today != today) {
+        ((tg_gui_state *)state)->today = today;
+        tg_gui_window_session_changed(session_dirty, header_dirty);
     }
     if ((state->composing || tg_gui_session_transfer_busy()) &&
         now >= *last_receive_drain &&
@@ -11365,6 +11373,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         tg_gui_timer_arm(timer_req, 0);
         timer_pending = 1;
     }
+    state->today = tg_gui_session_display_now() / TG_GUI_DAY_SECONDS + 1UL;
     wbn_mask = tg_gui_wbn_begin();
     wbn_close = 0;
     /* News that came before the window opened are in the title already;

@@ -13068,6 +13068,14 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
            wall-clock-vs-time() skew rebases the delta on the Workbench clock. */
         display_delta = tg_mtproto_display_delta(
             context->server_time_delta_seconds, tg_mtproto_local_clock_skew());
+        /* The text client's first line of a chat starts from today in the
+           same frame, so a page of older messages opens with its date. */
+        if (tg_chat_day_shown == 0UL) {
+            tg_chat_day_shown =
+                tg_mtproto_chat_local_epoch(tg_mtproto_context_time(context),
+                                            display_delta) /
+                86400UL;
+        }
         while (i > 0UL) {
             --i;
             if (texts.messages[i].id > max_seen_message_id) {
@@ -23731,6 +23739,18 @@ unsigned long tg_gui_session_server_time(void)
 {
     return tg_mtproto_context_time(tg_gui_session_state.open ?
                                     &tg_gui_session_state.context : 0);
+}
+
+unsigned long tg_gui_session_display_now(void)
+{
+    if (!tg_gui_session_state.open) {
+        return tg_platform_local_epoch();
+    }
+    return tg_mtproto_chat_local_epoch(
+        tg_mtproto_context_time(&tg_gui_session_state.context),
+        tg_mtproto_display_delta(
+            tg_gui_session_state.context.server_time_delta_seconds,
+            tg_mtproto_local_clock_skew()));
 }
 
 #if !defined(TG_NO_SELFTEST)

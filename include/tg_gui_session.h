@@ -388,6 +388,11 @@ int tg_gui_session_is_open(void);
    shorten a chat's quiet spell. */
 unsigned long tg_gui_session_server_time(void);
 
+/* Now, in the frame message times are shown in: the wall clock, or the
+   server's time in the Locale zone when the wall clock was never set. The
+   transcript's day lines call today and yesterday by it. */
+unsigned long tg_gui_session_display_now(void);
+
 /* The datacenter whose first contact the open chat's avatar is waiting for,
    or 0. That contact is a key exchange (about a minute on a 14 MHz 68030),
    so open_chat leaves it for the window: once the window has painted, it

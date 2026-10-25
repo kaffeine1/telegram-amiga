@@ -191,6 +191,7 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
 #endif
 #define TG_GUI_HISTORY_MAX 16
 #define TG_GUI_TIME_MAX 8
+#define TG_GUI_DAY_SECONDS 86400UL /* tg_gui_message.day counts these */
 #define TG_GUI_INITIALS_MAX 4
 #define TG_GUI_REPLY_MAX 96
 #define TG_GUI_SEARCH_MAX 64
@@ -272,6 +273,7 @@ typedef struct tg_gui_message {
     char sender[TG_GUI_NAME_MAX];
     char text[TG_GUI_MSG_TEXT_MAX];
     char time[TG_GUI_TIME_MAX];
+    unsigned long day;   /* day of the shown time, + 1; 0 = no date */
     int sender_color;
     int is_own;
     int is_system;
@@ -435,6 +437,7 @@ typedef struct tg_gui_state {
     char reply_snippet[TG_GUI_REPLY_MAX];
     int msg_top[TG_GUI_MAX_MESSAGES];
     int msg_cached;
+    unsigned long today;   /* the same day count for now, 0 = unknown */
     /* Clickable photo rectangle cached by the last paint. A rectangle is kept
        even when inline photos are disabled, where it covers the [Photo] label
        and opens the on-demand viewer without starting background work. */

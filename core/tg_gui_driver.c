@@ -174,6 +174,7 @@ static void tg_gui_driver_set_time(tg_gui_message *message,
     parts = gmtime(&when);
     if (parts != 0) {
         sprintf(message->time, "%02d:%02d", parts->tm_hour, parts->tm_min);
+        message->day = row->local_epoch / TG_GUI_DAY_SECONDS + 1UL;
     }
 }
 
