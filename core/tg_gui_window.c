@@ -4274,7 +4274,7 @@ static int tg_gui_photo_cgx_self_check(tg_gui_amiga_ctx *ctx,
    first. Where the frame is one cybergraphics writes (the photos' check),
    they are composed in RGB on the background read from the frame: the
    avatar scaled bilinearly from its 32x32 grid with a soft disc edge, the
-   emoji scaled bilinearly with its transparent pixels as alpha. Pens stay
+   emoji sampled nearest like its pen painter, in its exact colours. Pens stay
    for paletted screens, slow 68k machines and frames cybergraphics will
    not take. */
 #define TG_GUI_RGB_BLOCK_W 256

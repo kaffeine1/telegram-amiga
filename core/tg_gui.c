@@ -1513,58 +1513,25 @@ void tg_gui_rgb_avatar_pixel(const unsigned char *rgb, int g, int w, int h,
 void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
                             int y, unsigned char *px)
 {
-    unsigned char v[4];
-    long weight[4];
-    long alpha = 0L;
-    long sum[3] = { 0L, 0L, 0L };
-    int sx;
-    int sy;
-    int fx;
-    int fy;
-    int sx1;
-    int sy1;
-    int i;
-    int k;
+    /* Nearest, as the pen painter samples: the sheet is 16-pixel pixel art,
+       and a bilinear scale to the usual 18-22 pixel cell blurred it (seen
+       in the MorphOS VM). Index 0 is the sheet's transparency. */
+    int sx = (x * TG_EMOJI_GLYPH_SIZE) / w;
+    int sy = (y * TG_EMOJI_GLYPH_SIZE) / h;
+    unsigned char v;
+    const unsigned char *c;
 
-    tg_gui_rgb_source(x, w, TG_EMOJI_GLYPH_SIZE, &sx, &fx);
-    tg_gui_rgb_source(y, h, TG_EMOJI_GLYPH_SIZE, &sy, &fy);
-    sx1 = sx + 1 < TG_EMOJI_GLYPH_SIZE ? sx + 1 : sx;
-    sy1 = sy + 1 < TG_EMOJI_GLYPH_SIZE ? sy + 1 : sy;
-    v[0] = glyph[sy * TG_EMOJI_GLYPH_SIZE + sx];
-    v[1] = glyph[sy * TG_EMOJI_GLYPH_SIZE + sx1];
-    v[2] = glyph[sy1 * TG_EMOJI_GLYPH_SIZE + sx];
-    v[3] = glyph[sy1 * TG_EMOJI_GLYPH_SIZE + sx1];
-    weight[0] = ((256L - fx) * (256L - fy)) >> 8;
-    weight[1] = ((long)fx * (256L - fy)) >> 8;
-    weight[2] = ((256L - fx) * (long)fy) >> 8;
-    weight[3] = ((long)fx * (long)fy) >> 8;
-    /* Index 0 is the sheet's transparency: it weighs as alpha, so the
-       glyph's edge blends into whatever is behind it. */
-    for (i = 0; i < 4; ++i) {
-        if (v[i] != 0U) {
-            const unsigned char *c = tg_emoji_sheet_palette[v[i] - 1U];
-
-            alpha += weight[i];
-            for (k = 0; k < 3; ++k) {
-                sum[k] += weight[i] * (long)c[k];
-            }
-        }
-    }
-    if (alpha <= 0L) {
+    if (x < 0 || y < 0 || x >= w || y >= h) {
         return;
     }
-    if (alpha > 256L) {
-        alpha = 256L;
+    v = glyph[sy * TG_EMOJI_GLYPH_SIZE + sx];
+    if (v == 0U) {
+        return;
     }
-    for (k = 0; k < 3; ++k) {
-        long colour = sum[k] / alpha;
-
-        if (colour > 255L) {
-            colour = 255L;
-        }
-        px[k] = (unsigned char)((colour * alpha +
-                                 (long)px[k] * (256L - alpha)) >> 8);
-    }
+    c = tg_emoji_sheet_palette[v - 1U];
+    px[0] = c[0];
+    px[1] = c[1];
+    px[2] = c[2];
 }
 
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
@@ -7335,16 +7302,16 @@ static int tg_gui_rgb_pixels_self_test(void)
     tg_gui_rgb_emoji_pixel(glyph, TG_EMOJI_GLYPH_SIZE, TG_EMOJI_GLYPH_SIZE,
                            6, 4, px);
     ok = ok && px[0] == 9U && px[1] == 9U && px[2] == 9U;
-    /* Twice the size, pixel (8, 9) samples (3 + 192/256, 4 + 64/256): the
-       coloured pixel weighs 48 of 256 there, so it is 48/256 of its colour
-       over 208/256 of the background. */
+    /* Twice the size, nearest: pixels 6-7 of row 8 are source pixel 3,
+       pixel 8 is source pixel 4, transparent. */
+    px[0] = px[1] = px[2] = 200U;
+    tg_gui_rgb_emoji_pixel(glyph, 2 * TG_EMOJI_GLYPH_SIZE,
+                           2 * TG_EMOJI_GLYPH_SIZE, 7, 9, px);
+    ok = ok && px[0] == c[0] && px[1] == c[1] && px[2] == c[2];
     px[0] = px[1] = px[2] = 200U;
     tg_gui_rgb_emoji_pixel(glyph, 2 * TG_EMOJI_GLYPH_SIZE,
                            2 * TG_EMOJI_GLYPH_SIZE, 8, 9, px);
-    for (i = 0; i < 3; ++i) {
-        ok = ok && px[i] == (unsigned char)(((long)c[i] * 48L +
-                                              200L * 208L) >> 8);
-    }
+    ok = ok && px[0] == 200U && px[1] == 200U && px[2] == 200U;
     if (!ok) {
         puts("gui self-test: truecolour emoji pixels failed");
         return 2;

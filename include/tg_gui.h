@@ -181,7 +181,7 @@ void tg_gui_strip_markers(char *dest, unsigned long size, const char *src);
    out (bilinear source, soft disc edge). */
 void tg_gui_rgb_avatar_pixel(const unsigned char *rgb, int grid, int w, int h,
                              int x, int y, unsigned char *px);
-/* The same for an emoji glyph of the sheet, index 0 as transparency. */
+/* The same for an emoji glyph of the sheet: nearest, index 0 transparent. */
 void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
                             int y, unsigned char *px);
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
