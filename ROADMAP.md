@@ -1454,9 +1454,12 @@ client prints the counts after the line.
 Done on `main` on 2026-10-25: up to four reactions kept per message, in
 34 bytes (about 1 KB more for the plain-68000 build), the update
 Telegram sends when they change, `messages.sendReaction` to add or take
-back one, and `/react <id> <name>` in the text client. Still open: a
-periodic refresh of the reactions on the messages in view, which
-Telegram's documentation suggests for chats with no updates flowing.
+back one, and `/react <id> <name>` in the text client. The periodic
+refresh followed the same day: every 20 seconds the GUI asks
+`messages.getMessagesReactions` for up to 16 messages in view (8 on the
+plain 68000 build) that are not the user's own and already carry
+reactions, as Telegram's reactions page asks of apps (every 15 to 30
+seconds); the answer goes through the same update path as a push.
 
 ## Explained: the rare crash on AROS x86_64 is the e1000 network driver
 

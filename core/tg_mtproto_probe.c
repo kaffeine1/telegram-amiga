@@ -62,6 +62,7 @@
 #define tg_gui_driver_update_text(gui, message_id, text) (0)
 #define tg_gui_driver_update_text_utf8(gui, message_id, text) (0)
 #define tg_gui_driver_update_reactions(gui, id, reactions) ((void)(gui), (void)(id), (void)(reactions), 0)
+#define tg_gui_driver_reaction_poll_ids(gui, ids, max) ((void)(gui), (void)(ids), (void)(max), 0U)
 #define tg_gui_driver_set_pending_webpage(gui, msg, hi, lo) ((void)0)
 #define tg_gui_driver_apply_webpage(gui, page, ready) ((void)0, (void)(page), (void)(ready), 0)
 #define tg_gui_driver_remove_by_id(gui, message_id) (0)
@@ -476,7 +477,13 @@ static unsigned long tg_chat_webpage_count = 0UL;
 static tg_mtproto_web_page tg_chat_sent_webpage;
 /* Only displayed summaries are queued. Coalesce repeated updates by peer/id
    during an RPC; an older chat's queue never changes the open transcript. */
-#define TG_CHAT_REACTIONS_QUEUE_MAX 4
+/* Room for one periodic poll's answer (tg_gui_session_poll_reactions asks
+   for at most this many messages at once). */
+#if defined(TG_LOWMEM)
+#define TG_CHAT_REACTIONS_QUEUE_MAX 8U
+#else
+#define TG_CHAT_REACTIONS_QUEUE_MAX 16U
+#endif
 typedef struct tg_chat_reactions_entry {
     tg_mtproto_dialog_peer peer;
     unsigned long message_id;
@@ -10508,6 +10515,47 @@ static int tg_mtproto_auth_react_peer_on_context(
     return 0;
 }
 
+/* messages.getMessagesReactions on the open context: the answer is an
+   updates container with one updateMessageReactions per message, which the
+   push collector queues like any other; the next tick applies it. */
+static int tg_mtproto_auth_poll_reactions_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, const unsigned long *message_ids,
+    unsigned int count, FILE *stream)
+{
+    unsigned char query[64 + 4 * TG_CHAT_REACTIONS_QUEUE_MAX];
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    int has_hash;
+    int rc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    static const char label[] = "mtproto messages.getMessagesReactions";
+
+    if (count == 0U || count > TG_CHAT_REACTIONS_QUEUE_MAX) return 2;
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) return 2;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_messages_reactions(&writer, constructor,
+            hi, lo, hash_hi, hash_lo, has_hash, message_ids, count) !=
+        TG_MTPROTO_TL_OK) return 2;
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label, 600U);
+    if (rc != 0) return rc;
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) return 2;
+    tg_chat_notify_collect(result.result_body - 4U,
+                             result.result_body_length + 4U);
+    return 0;
+}
+
 /* messages.editMessage on the open context: replace an OWN message's text. */
 static int tg_mtproto_auth_edit_peer_on_context(
     const char *host, const char *port, const char *api_id,
@@ -17526,6 +17574,32 @@ static int tg_mtproto_reactions_request_self_test(void)
         TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0, 0UL, 0) !=
         TG_MTPROTO_TL_OK;
     if (!ok) puts("probe self-test: sendReaction add/remove bytes failed");
+    {
+        static const unsigned char poll[] = {
+            0xe6,0x90,0xba,0x8b, 0xc9,0x7e,0xa0,0x7d,
+            0x15,0xc4,0xb5,0x1c, 2,0,0,0, 42,0,0,0, 0x39,0x30,0,0
+        };
+        static const unsigned long ids[] = { 42UL, 12345UL };
+        static const unsigned long bad[] = { 42UL, 0UL };
+        int polled;
+
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        polled = tg_mtproto_build_messages_get_messages_reactions(&writer,
+            TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0, ids, 2U)
+            == TG_MTPROTO_TL_OK && writer.length == sizeof(poll) &&
+            memcmp(body, poll, sizeof(poll)) == 0;
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        polled = polled && tg_mtproto_build_messages_get_messages_reactions(
+            &writer, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+            bad, 2U) != TG_MTPROTO_TL_OK;
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        polled = polled && tg_mtproto_build_messages_get_messages_reactions(
+            &writer, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+            ids, 0U) != TG_MTPROTO_TL_OK;
+        if (!polled)
+            puts("probe self-test: getMessagesReactions bytes failed");
+        ok = ok && polled;
+    }
     return ok ? 0 : 2;
 }
 
@@ -17640,6 +17714,47 @@ static int tg_mtproto_reactions_update_self_test(void)
         ok = ok && tg_chat_notify_collect_difference(&result) == 0 &&
              tg_chat_reactions_count == 1;
         tg_chat_reactions_count = 0;
+    }
+    {
+        /* The periodic poll answers one updates container for as many
+           messages as the queue holds: every one of them must land. */
+        static unsigned char many[TG_CHAT_REACTIONS_QUEUE_MAX * 288U + 64U];
+        unsigned int i;
+        int all = 1;
+
+        tg_mtproto_tl_writer_init(&writer, many, sizeof(many));
+        (void)tg_mtproto_tl_write_u32(&writer, 0x74ae4240UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+        (void)tg_mtproto_tl_write_u32(&writer, TG_CHAT_REACTIONS_QUEUE_MAX);
+        for (i = 0U; i < TG_CHAT_REACTIONS_QUEUE_MAX; ++i) {
+            (void)tg_mtproto_tl_write_u32(&writer, 0x1e297bfaUL);
+            (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 0xa2a5371eUL);
+            (void)tg_mtproto_tl_write_u64(&writer, 9UL, 17UL);
+            (void)tg_mtproto_tl_write_u32(&writer, 100UL + i);
+            (void)tg_mtproto_tl_write_raw(&writer, fixture, size);
+            state->messages[i].id = 100UL + i;
+            memset(&state->messages[i].reactions, 0,
+                   sizeof(state->messages[i].reactions));
+        }
+        (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 123UL);
+        (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+        state->message_count = (int)TG_CHAT_REACTIONS_QUEUE_MAX;
+        tg_chat_reactions_count = 0;
+        tg_chat_notify_collect(many, writer.length);
+        all = tg_chat_reactions_count == TG_CHAT_REACTIONS_QUEUE_MAX &&
+              tg_chat_reactions_apply(&gui,
+                  TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 9UL, 17UL);
+        for (i = 0U; all && i < TG_CHAT_REACTIONS_QUEUE_MAX; ++i)
+            all = state->messages[i].reactions.count == 4;
+        if (!all) puts("probe self-test: reactions poll batch failed");
+        ok = ok && all;
+        state->message_count = 1;
+        state->messages[0].id = 42UL;
     }
     /* A complete empty update removes the entire row. */
     tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
@@ -25339,6 +25454,10 @@ int tg_gui_session_receive_pending(FILE *stream)
     return dirty;
 }
 
+/* When the open chat's reactions were last polled (0 = not yet). */
+#define TG_GUI_SESSION_REACTIONS_SECONDS 20UL
+static time_t tg_gui_session_reactions_polled = (time_t)0;
+
 /* Ticks in a row that tried the network and lost the connection. */
 static unsigned long tg_gui_session_link_failed = 0UL;
 
@@ -25434,6 +25553,37 @@ int tg_gui_session_tick(FILE *stream)
                         dirty = 1;
                         tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
                     }
+                }
+            }
+        }
+        /* Telegram's reactions page asks apps to short-poll the reactions
+           of the messages in view every 15 to 30 seconds; pushes alone do
+           not carry other people's reactions in most chats. */
+        {
+            time_t now = time(0);
+
+            if (now != (time_t)-1 &&
+                (tg_gui_session_reactions_polled == (time_t)0 ||
+                 now < tg_gui_session_reactions_polled ||
+                 (unsigned long)(now - tg_gui_session_reactions_polled) >=
+                     TG_GUI_SESSION_REACTIONS_SECONDS)) {
+                unsigned long ids[TG_CHAT_REACTIONS_QUEUE_MAX];
+                unsigned int n;
+
+                tg_gui_session_reactions_polled = now;
+                n = tg_gui_driver_reaction_poll_ids(
+                    &tg_gui_session_state.gui_driver, ids,
+                    TG_CHAT_REACTIONS_QUEUE_MAX);
+                if (n > 0U) {
+                    (void)tg_mtproto_auth_poll_reactions_on_context(
+                        tg_gui_session_state.host, tg_gui_session_state.port,
+                        tg_gui_session_state.api_id,
+                        tg_gui_session_state.auth_file,
+                        tg_gui_session_state.dc_id_text,
+                        &tg_gui_session_state.context,
+                        tg_gui_session_state.peer_cache_file,
+                        tg_gui_session_state.current_peer_index, ids, n,
+                        quiet);
                 }
             }
         }

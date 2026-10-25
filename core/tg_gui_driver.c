@@ -497,6 +497,39 @@ int tg_gui_driver_set_read_outbox_max(tg_gui_chat_driver *gui,
     return changed;
 }
 
+unsigned int tg_gui_driver_reaction_poll_ids(const tg_gui_chat_driver *gui,
+                                             unsigned long *ids,
+                                             unsigned int max)
+{
+    const tg_gui_state *state;
+    unsigned long below; /* pixels of rows under the view's bottom edge */
+    unsigned int n = 0U;
+    int i;
+
+    if (gui == 0 || gui->state == 0 || ids == 0) return 0U;
+    state = gui->state;
+    below = state->transcript_scroll > 0
+                ? (unsigned long)state->transcript_scroll : 0UL;
+    for (i = state->message_count - 1; i >= 0 && n < max; --i) {
+        const tg_gui_message *message = &state->messages[i];
+        unsigned long h = message->layout_h > 0
+                              ? (unsigned long)message->layout_h : 0UL;
+
+        if (below > 0UL && h > 0UL) {
+            if (h <= below) {
+                below -= h;
+                continue;
+            }
+            below = 0UL; /* this row reaches into the view */
+        }
+        if (message->id == 0UL || message->is_own ||
+            message->reactions.count == 0)
+            continue;
+        ids[n++] = message->id;
+    }
+    return n;
+}
+
 void tg_gui_driver_reset_read_outbox(tg_gui_chat_driver *gui)
 {
     if (gui != 0 && gui->state != 0) {
@@ -1357,6 +1390,34 @@ static int tg_gui_driver_reactions_self_test(void)
     ok = ok && tg_gui_driver_update_reactions(&gui, 42UL, &reactions) &&
          state->messages[0].reactions.count == 0;
     if (!ok) puts("gui driver self-test: reaction projection/update failed");
+    {
+        /* The poll's choice: own rows, rows without reactions and rows
+           scrolled out below the view stay out; newest first, capped. */
+        unsigned long ids[4];
+        unsigned int n;
+        int i;
+
+        state->message_count = 6;
+        for (i = 0; i < 6; ++i) {
+            memset(&state->messages[i], 0, sizeof(state->messages[i]));
+            state->messages[i].id = 10UL + (unsigned long)i;
+            state->messages[i].layout_h = 40;
+            state->messages[i].reactions.count = 1;
+        }
+        state->messages[3].is_own = 1;
+        state->messages[2].reactions.count = 0;
+        state->transcript_scroll = 0;
+        n = tg_gui_driver_reaction_poll_ids(&gui, ids, 4U);
+        ok = ok && n == 4U && ids[0] == 15UL && ids[1] == 14UL &&
+             ids[2] == 11UL && ids[3] == 10UL;
+        n = tg_gui_driver_reaction_poll_ids(&gui, ids, 2U);
+        ok = ok && n == 2U && ids[0] == 15UL && ids[1] == 14UL;
+        state->transcript_scroll = 80; /* the two newest are below the view */
+        n = tg_gui_driver_reaction_poll_ids(&gui, ids, 4U);
+        ok = ok && n == 2U && ids[0] == 11UL && ids[1] == 10UL;
+        state->transcript_scroll = 0;
+        if (!ok) puts("gui driver self-test: reaction poll choice failed");
+    }
     return ok;
 }
 

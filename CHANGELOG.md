@@ -60,7 +60,10 @@ the text client for the plain 68000.
 - Reactions: the reactions on a message show under its bubble, an emoji
   of the sheet with its count (custom and paid ones as a plain mark),
   yours highlighted, and they follow Telegram's updates while the chat is
-  open. "React..." in a message's right-button menu adds one of ten
+  open. Every 20 seconds the open chat also asks Telegram for the
+  current reactions of the messages in view that are not yours and
+  already have some, as Telegram asks apps to do, since most chats send
+  no update when someone else reacts. "React..." in a message's right-button menu adds one of ten
   common reactions, and choosing yours again takes it back; a reaction a
   group does not allow gets a plain-words status line. The text client
   prints the counts after the line and adds /react <id> <name>.

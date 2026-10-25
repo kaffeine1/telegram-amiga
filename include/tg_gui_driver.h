@@ -84,6 +84,14 @@ int tg_gui_driver_update_reactions(tg_gui_chat_driver *gui,
                                     unsigned long message_id,
                                     const tg_reactions *reactions);
 
+/* The messages whose reactions the periodic poll asks for, as Telegram's
+   reactions page wants: shown, not the user's own, already carrying
+   reactions. Newest first from the bottom of the view (rows scrolled out
+   below it are skipped), at most `max`. Returns how many went into ids. */
+unsigned int tg_gui_driver_reaction_poll_ids(const tg_gui_chat_driver *gui,
+                                             unsigned long *ids,
+                                             unsigned int max);
+
 /* Attach send/history metadata, then complete every pending message with the
    matching 64-bit webpage id. Text uses the edit path; photos remain lazy. */
 void tg_gui_driver_set_pending_webpage(tg_gui_chat_driver *gui,

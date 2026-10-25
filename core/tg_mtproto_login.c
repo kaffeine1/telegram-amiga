@@ -1467,6 +1467,37 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_reaction(
     return status;
 }
 
+/* core.telegram.org/method/messages.getMessagesReactions:
+   messages.getMessagesReactions#8bba90e6 peer:InputPeer id:Vector<int>
+   = Updates. The answer carries an updateMessageReactions per message. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_messages_reactions(
+    tg_mtproto_tl_writer *writer, unsigned long peer_constructor,
+    unsigned long peer_id_hi, unsigned long peer_id_lo,
+    unsigned long hash_hi, unsigned long hash_lo, int has_hash,
+    const unsigned long *message_ids, unsigned int count)
+{
+    tg_mtproto_tl_status status;
+    unsigned int i;
+
+    if (writer == 0 || message_ids == 0 || count == 0U)
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    for (i = 0U; i < count; ++i) {
+        if (message_ids[i] == 0UL || message_ids[i] > 2147483647UL)
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x8bba90e6UL);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+            peer_id_lo, hash_hi, hash_lo, has_hash);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK)
+        status = tg_mtproto_tl_write_u32(writer, (unsigned long)count);
+    for (i = 0U; status == TG_MTPROTO_TL_OK && i < count; ++i)
+        status = tg_mtproto_tl_write_u32(writer, message_ids[i]);
+    return status;
+}
+
 /* messages.deleteMessages#e58e95d2 -- delete ONE message. revoke = delete for
    everyone (flags.0); 0 = delete only for me. id is a Vector<int> of one. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages(

@@ -515,6 +515,11 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_reaction(
     unsigned long peer_id_hi, unsigned long peer_id_lo,
     unsigned long hash_hi, unsigned long hash_lo, int has_hash,
     unsigned long message_id, int reaction_index);
+tg_mtproto_tl_status tg_mtproto_build_messages_get_messages_reactions(
+    tg_mtproto_tl_writer *writer, unsigned long peer_constructor,
+    unsigned long peer_id_hi, unsigned long peer_id_lo,
+    unsigned long hash_hi, unsigned long hash_lo, int has_hash,
+    const unsigned long *message_ids, unsigned int count);
 
 typedef struct tg_mtproto_message_text_list {
     unsigned long count;
