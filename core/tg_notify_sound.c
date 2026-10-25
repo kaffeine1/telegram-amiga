@@ -248,6 +248,7 @@ static int tg_notify_sound_file_small(const char *path)
    three seconds have passed. No second process: DOS packets and the C
    library stay with the one task that already owns them. */
 static Object *tg_notify_sound_object = 0;
+static const char *tg_notify_sound_reason = "";
 static BYTE tg_notify_sound_bit = -1;
 static struct DateStamp tg_notify_sound_started;
 
@@ -294,8 +295,10 @@ static int tg_notify_sound_start(const char *path)
     self->pr_WindowPtr = (APTR)-1; /* no insert-volume requesters */
     if (!tg_notify_sound_file_small(path)) {
         self->pr_WindowPtr = window;
+        tg_notify_sound_reason = "missing, a drawer or over 1 MB";
         return 0;
     }
+    tg_notify_sound_reason = "datatypes.library V39 did not open";
     DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39L);
 #if defined(__amigaos4__)
     if (DataTypesBase != 0) {
@@ -323,8 +326,10 @@ static int tg_notify_sound_start(const char *path)
         tags[4].ti_Data = 1UL;
         tags[5].ti_Tag = TAG_DONE;
         tags[5].ti_Data = 0UL;
+        tg_notify_sound_reason = "no sound datatype reads it";
         tg_notify_sound_object = NewDTObjectA((APTR)path, tags);
         if (tg_notify_sound_object != 0) {
+            tg_notify_sound_reason = "the datatype would not play it";
             trigger.MethodID = DTM_TRIGGER;
             trigger.dtt_GInfo = 0;
             trigger.dtt_Function = STM_PLAY;
@@ -368,18 +373,26 @@ void tg_notify_sound_poll(void)
     }
 }
 
-void tg_notify_sound_play(const char *path)
+int tg_notify_sound_play(const char *path)
 {
     if (path == 0) {
-        return;
+        return TG_NOTIFY_HEARD_NOTHING;
     }
     tg_notify_sound_stop(); /* a new message cuts the last sound short */
+    tg_notify_sound_reason = "";
     if (path[0] != '\0' && tg_notify_sound_start(path)) {
-        return;
+        return TG_NOTIFY_HEARD_FILE;
     }
-    if (!tg_notify_chime_play()) {
-        tg_platform_display_beep();
+    if (tg_notify_chime_play()) {
+        return TG_NOTIFY_HEARD_CHIME;
     }
+    tg_platform_display_beep();
+    return TG_NOTIFY_HEARD_BEEP;
+}
+
+const char *tg_notify_sound_why(void)
+{
+    return tg_notify_sound_reason;
 }
 
 void tg_notify_sound_shutdown(void)
@@ -390,11 +403,18 @@ void tg_notify_sound_shutdown(void)
 #else
 
 /* The 68000 text build has no datatype state or sample buffer. */
-void tg_notify_sound_play(const char *path)
+int tg_notify_sound_play(const char *path)
 {
-    if (path != 0) {
-        tg_platform_display_beep();
+    if (path == 0) {
+        return TG_NOTIFY_HEARD_NOTHING;
     }
+    tg_platform_display_beep();
+    return TG_NOTIFY_HEARD_BEEP;
+}
+
+const char *tg_notify_sound_why(void)
+{
+    return "";
 }
 
 void tg_notify_sound_poll(void)

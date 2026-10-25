@@ -62,8 +62,15 @@ void tg_notify_chime_render(signed char *out);
    and plays on its own through the sound.datatype; tg_notify_sound_poll,
    called from the event loops, lets it go at its end or after three
    seconds. LOWMEM uses only DisplayBeep. A failed file or unavailable
-   datatype falls back to the chime. Shutdown stops any sound still held. */
-void tg_notify_sound_play(const char *path);
+   datatype falls back to the chime. Shutdown stops any sound still held.
+   Play returns what was heard, and tg_notify_sound_why says why a file
+   was not, for the debug log. */
+#define TG_NOTIFY_HEARD_NOTHING 0
+#define TG_NOTIFY_HEARD_FILE 1
+#define TG_NOTIFY_HEARD_CHIME 2
+#define TG_NOTIFY_HEARD_BEEP 3
+int tg_notify_sound_play(const char *path);
+const char *tg_notify_sound_why(void);
 void tg_notify_sound_poll(void);
 void tg_notify_sound_shutdown(void);
 

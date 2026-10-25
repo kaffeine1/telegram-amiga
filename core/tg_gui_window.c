@@ -10622,6 +10622,30 @@ static void tg_gui_window_notify_title(struct Window *window,
     TG_GUI_POPUP_TRACE("title end");
 }
 
+/* Plays a notification sound and says in the debug log what was heard. */
+static void tg_gui_notify_sound(const char *path)
+{
+    char line[TG_NOTIFY_SOUND_MAX + 128]; /* 367 at most */
+    int heard = tg_notify_sound_play(path);
+
+    if (heard == TG_NOTIFY_HEARD_NOTHING) {
+        return;
+    }
+    if (heard == TG_NOTIFY_HEARD_FILE) {
+        sprintf(line, "notify: sound file %.255s", path);
+    } else if (path[0] != '\0') {
+        sprintf(line, "notify: sound file %.255s not played (%.48s), %s",
+                path, tg_notify_sound_why(),
+                heard == TG_NOTIFY_HEARD_CHIME ? "chime through AHI or Paula"
+                                               : "no sound device, DisplayBeep");
+    } else {
+        sprintf(line, "notify: %s", heard == TG_NOTIFY_HEARD_CHIME
+                                       ? "chime through AHI or Paula"
+                                       : "no sound device, DisplayBeep");
+    }
+    tg_gui_log(line);
+}
+
 /* Pending chats ring independently; pop-ups still require the user away.
    `popup_screen` 0 is the default public screen. */
 static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
@@ -10644,7 +10668,7 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
     while (tg_gui_notify_ring_take_sound(state, server_now,
                 now == (time_t)-1 ? 0UL : (unsigned long)now,
                 sound, sizeof(sound))) {
-        tg_notify_sound_play(sound);
+        tg_gui_notify_sound(sound);
     }
     if (away && state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
         tg_gui_popup_show(&ui->popup, state, popup_screen);
@@ -12600,6 +12624,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         state->notify_sound) == 0 ?
                                     "Notification sound saved" :
                                     "Could not save the notification sound");
+                                tg_gui_notify_sound(state->notify_sound);
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_NOTIFY_OFF ||
@@ -12651,6 +12676,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             }
                             tg_gui_window_notify_title(ctx.window, state);
                             tg_gui_window_paint_status(state, &backend);
+                            if (ud == (APTR)TG_MENU_NOTIFY_BEEP &&
+                                state->notify_beep) {
+                                tg_gui_notify_sound(state->notify_sound);
+                            }
                         } else if (ud == (APTR)TG_MENU_DITHER_FULL ||
                                    ud == (APTR)TG_MENU_DITHER_LIGHT ||
                                    ud == (APTR)TG_MENU_DITHER_OFF) {
@@ -13011,6 +13040,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_copy(state->status,
                                 sizeof(state->status),
                                 "Could not save this chat's sound choice");
+                        }
+                        if (changed && it == TG_GUI_CTX_CHAT_SOUND) {
+                            tg_gui_notify_sound(value.sound);
                         }
                     } else if (it == TG_GUI_CTX_REACT && m != 0 &&
                                !m->is_system && m->id != 0UL) {

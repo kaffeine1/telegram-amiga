@@ -14339,7 +14339,7 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
                 tg_chat_notify_sound,
 #endif
                 sound, sizeof(sound))) {
-            tg_notify_sound_play(sound);
+            (void)tg_notify_sound_play(sound);
         }
         if (label[0] == '\0' &&
             (entry->from_id_hi != 0UL || entry->from_id_lo != 0UL) &&
