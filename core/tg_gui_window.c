@@ -6442,8 +6442,8 @@ static void tg_gui_clip_close(struct IOClipReq *io, struct MsgPort *port)
 }
 
 /* Writes `text` to clip unit 0 as FORM FTXT / CHRS. 1 = ok. */
-/* Pairs are a screen thing: the clipboard gets the text emoticon instead,
-   which is what any other Amiga program can show. */
+/* The clipboard gets plain text: emoji become emoticons and internal style
+   markers are removed, which is what any other Amiga program can show. */
 static int tg_gui_clip_write_text_raw(const char *text);
 static int tg_gui_clip_write_text(const char *text)
 {
@@ -13035,7 +13035,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->reply_sender,
                                            sizeof(state->reply_sender),
                                            m->sender);
-                        tg_gui_window_copy(state->reply_snippet,
+                        tg_gui_strip_markers(state->reply_snippet,
                                            sizeof(state->reply_snippet),
                                            m->text);
                         state->edit_to_id = 0UL;
@@ -13057,7 +13057,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->reply_to_id = 0UL;
                         state->reply_sender[0] = '\0';
                         state->reply_snippet[0] = '\0';
-                        tg_gui_window_copy(state->input, sizeof(state->input),
+                        tg_gui_strip_markers(state->input, sizeof(state->input),
                                            m->text);
                         state->search_active = 0;
                         state->composing = 1;
@@ -13237,7 +13237,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                             state->reply_sender,
                                             sizeof(state->reply_sender),
                                             m->sender);
-                                        tg_gui_window_copy(
+                                        tg_gui_strip_markers(
                                             state->reply_snippet,
                                             sizeof(state->reply_snippet),
                                             m->text);

@@ -40,6 +40,7 @@
 #include "tg_console_tui.h"
 #include "tg_avatar.h"
 #include "tg_file.h"
+#include "tg_text_style.h"
 #include "tg_gui.h"
 #include "tg_gui_driver.h"
 #include "tg_gui_session.h"
@@ -542,6 +543,7 @@ static void tg_chat_notify_collect_one(const unsigned char *body,
     unsigned long text_length;
     unsigned long copy_length;
     int is_chat;
+    unsigned long i;
 
     if (body == 0 || body_length < 4UL) {
         return;
@@ -623,6 +625,12 @@ static void tg_chat_notify_collect_one(const unsigned char *body,
     }
     memcpy(entry->text, text, copy_length);
     entry->text[copy_length] = '\0';
+    /* Short pushes bypass the common Message reader and have no styles. */
+    for (i = 0UL; i < copy_length; ++i) {
+        if (TG_TEXT_IS_MARKER(entry->text[i])) {
+            entry->text[i] = ' ';
+        }
+    }
 }
 
 static void tg_chat_notify_collect(const unsigned char *body,
@@ -6258,6 +6266,8 @@ static void tg_mtproto_write_cache_text(FILE *stream, const char *text)
     for (i = 0UL; text[i] != '\0'; ++i) {
         if (text[i] == '\r' || text[i] == '\n' || text[i] == '\t') {
             fputc(' ', stream);
+        } else if (TG_TEXT_IS_MARKER(text[i])) {
+            fputc(TG_TEXT_MARKER_ASCII(text[i]), stream);
         } else {
             fputc((unsigned char)text[i], stream);
         }
@@ -6903,6 +6913,9 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
     i = 0UL;
     while (text[i] != '\0') {
         cp = tg_mtproto_utf8_read_codepoint(text, &i);
+        if (TG_TEXT_IS_MARKER(cp)) {
+            cp = (unsigned long)TG_TEXT_MARKER_ASCII(cp);
+        }
         if (cp == '\r') {
             continue;
         }
@@ -7205,6 +7218,9 @@ static void tg_mtproto_print_message_text(FILE *stream, const char *text)
     while (text[i] != '\0') {
         cp = (unsigned long)(unsigned char)text[i];
         ++i;
+        if (TG_TEXT_IS_MARKER(cp)) {
+            cp = (unsigned long)TG_TEXT_MARKER_ASCII(cp);
+        }
         if (cp == '\r') {
             continue;
         }
@@ -11806,6 +11822,62 @@ static void tg_chat_render_emit(tg_chat_driver *driver, unsigned long date,
     driver->on_message(driver->ctx, &row);
 }
 
+static int tg_mtproto_styled_render_self_test(void)
+{
+    static const char text[] =
+        "\034bold\034 \035italic\035 \036code\036 \037strike\037; * _ ` ~";
+    static const char visible[] = "*bold* _italic_ `code` ~strike~; * _ ` ~";
+    tg_chat_message_row row;
+    char got[128];
+    char want[128];
+    unsigned long day;
+    size_t n;
+    FILE *cap;
+    int mode;
+    int saved_charset;
+
+    saved_charset = tg_console_ui_charset();
+    for (mode = 0; mode < 4; ++mode) {
+        cap = tmpfile();
+        if (cap == 0) {
+            tg_console_ui_set_charset(saved_charset);
+            puts("chat render self-test: no styled-text capture");
+            return 2;
+        }
+        tg_console_ui_set_charset(mode == 0 ? TG_UI_CHARSET_LATIN1 :
+                                              TG_UI_CHARSET_UTF8);
+        if (mode < 2) {
+            memset(&row, 0, sizeof(row));
+            row.text = text;
+            row.peer_label = "Mario";
+            day = 0UL;
+            tg_mtproto_chat_render_message(cap, &row, &day);
+            sprintf(want, "Mario: %.80s\n", visible);
+        } else {
+            if (mode == 2) {
+                /* Exercise the target-only Latin-1 path on the host too. */
+                tg_mtproto_print_latin1_text(cap, text, 1);
+            } else {
+                /* Notification previews use the cache-text printer. */
+                tg_mtproto_print_cache_text(cap, text);
+            }
+            strcpy(want, visible);
+        }
+        rewind(cap);
+        n = fread(got, 1, sizeof(got) - 1U, cap);
+        got[n] = '\0';
+        fclose(cap);
+        if (strcmp(got, want) != 0) {
+            tg_console_ui_set_charset(saved_charset);
+            printf("chat render self-test: styled output changed (mode %d)\n",
+                   mode);
+            return 2;
+        }
+    }
+    tg_console_ui_set_charset(saved_charset);
+    return 0;
+}
+
 int tg_mtproto_chat_render_self_test(void)
 {
     unsigned long day_shown;
@@ -11933,7 +12005,8 @@ int tg_mtproto_chat_render_self_test(void)
             return 2;
         }
     }
-    if (tg_console_tui_layout_self_test() != 0) {
+    if (tg_mtproto_styled_render_self_test() != 0 ||
+        tg_console_tui_layout_self_test() != 0) {
         return 2;
     }
     puts("chat render self-test: ok (transcript renderer golden)");
@@ -16603,6 +16676,74 @@ static int tg_chat_notify_sender_self_test(void)
     return 0;
 }
 
+static int tg_mtproto_marker_input_self_test(void)
+{
+    static const char text[] = "\034a\035b\036c\037d * _ ` ~";
+    static const char want[] = " a b c d * _ ` ~";
+    static const unsigned long short_kinds[] = {
+        TG_MTPROTO_UPDATE_SHORT_MESSAGE_CONSTRUCTOR,
+        TG_MTPROTO_UPDATE_SHORT_CHAT_MESSAGE_CONSTRUCTOR,
+        TG_MTPROTO_UPDATE_SHORT_MESSAGE_L214_CONSTRUCTOR,
+        TG_MTPROTO_UPDATE_SHORT_CHAT_MESSAGE_L214_CONSTRUCTOR
+    };
+    static tg_mtproto_message_text message;
+    unsigned char body[128];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_reader reader;
+    tg_chat_notify queue;
+    tg_chat_notify *saved_queue = tg_chat_nq;
+    int mode;
+    int ok;
+
+    for (mode = 0; mode < 6; ++mode) {
+        ok = 1;
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+#define TG_MARK_W32(v) do { if (tg_mtproto_tl_write_u32(&writer, (v)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+#define TG_MARK_W64(v) do { if (tg_mtproto_tl_write_u64(&writer, 0UL, (v)) != TG_MTPROTO_TL_OK) ok = 0; } while (0)
+        if (mode < 2) {
+            TG_MARK_W32(TG_MTPROTO_MESSAGE_CONSTRUCTOR);
+            /* No entities; reply markup takes the reader's early return. */
+            TG_MARK_W32(mode == 0 ? 0UL : 64UL);
+            TG_MARK_W32(0UL); TG_MARK_W32(700UL);
+            TG_MARK_W32(TG_MTPROTO_PEER_USER_CONSTRUCTOR);
+            TG_MARK_W64(7UL); TG_MARK_W32(1700000000UL);
+        } else {
+            TG_MARK_W32(short_kinds[mode - 2]);
+            TG_MARK_W32(0UL); TG_MARK_W32(700UL); TG_MARK_W64(7UL);
+            if ((mode & 1) != 0) {
+                TG_MARK_W64(8UL);
+            }
+        }
+        if (tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)text,
+                                       (unsigned long)strlen(text)) !=
+                TG_MTPROTO_TL_OK) {
+            ok = 0;
+        }
+        if (mode < 2) {
+            tg_mtproto_tl_reader_init(&reader, body, writer.length);
+            ok = ok && tg_mtproto_read_update_message_text(&reader, &message,
+                                                             0) ==
+                           TG_MTPROTO_TL_OK && strcmp(message.text, want) == 0;
+        } else {
+            TG_MARK_W32(1UL); TG_MARK_W32(1UL); TG_MARK_W32(1700000000UL);
+            tg_chat_notify_reset(&queue, 1);
+            tg_chat_nq = &queue;
+            tg_chat_notify_collect_one(body, writer.length);
+            ok = ok && queue.count == 1UL &&
+                 strcmp(queue.queue[0].text, want) == 0;
+        }
+        tg_chat_nq = saved_queue;
+        if (!ok) {
+            printf("probe self-test: typed marker survived input (mode %d)\n",
+                   mode);
+            return 2;
+        }
+    }
+#undef TG_MARK_W32
+#undef TG_MARK_W64
+    return 0;
+}
+
 static int tg_chat_notify_flags_self_test(void)
 {
     static const unsigned long short_kinds[] = {
@@ -17066,7 +17207,8 @@ int tg_mtproto_probe_self_test(void)
         (void)remove(rep_path);
     }
 
-    if (tg_chat_notify_flags_self_test() != 0 ||
+    if (tg_mtproto_marker_input_self_test() != 0 ||
+        tg_chat_notify_flags_self_test() != 0 ||
         tg_chat_notify_sender_self_test() != 0 ||
         tg_gui_session_server_time_self_test() != 0) {
         return 2;

@@ -56,8 +56,8 @@ typedef struct tg_gui_rect {
     int h;
 } tg_gui_rect;
 
-/* Inline text styling, a bitmask the renderer derives from message markup
-   (the *bold* / _italic_ / `code` / ~strike~ markers baked in at parse time)
+/* Inline text styling, a bitmask the renderer derives from the internal
+   entity markers in tg_text_style.h, inserted at parse time,
    and applies through the backend's set_style hook before drawing each run. */
 #define TG_GUI_STYLE_BOLD   1
 #define TG_GUI_STYLE_ITALIC 2
@@ -165,10 +165,14 @@ int tg_gui_emoji_encode(unsigned long index, char *out);
 /* Bytes of the text unit starting at text[i]: 2 for a pair, else 1. */
 unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
                                    unsigned long i);
+/* Plain GUI text and the composer keep emoji pairs but drop style markers.
+   dest may equal src. */
+void tg_gui_strip_markers(char *dest, unsigned long size, const char *src);
 /* Only our own painter draws a pair as a glyph: any font shows its prefix
    byte as a box. Text that leaves the painter (the pop-up, a requester, a
    window title, the clipboard) is copied with each pair turned into its text
-   emoticon, cut before an emoticon that would not fit. */
+   emoticon, cut before an emoticon that would not fit. Internal entity
+   markers are stripped too. */
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src);
 /* '@' mention autocomplete popup (composer). */

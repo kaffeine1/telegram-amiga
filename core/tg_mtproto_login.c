@@ -9,6 +9,7 @@
 #include "tg_mtproto_login.h"
 #include "tg_avatar.h"
 #include "tg_file.h"
+#include "tg_text_style.h"
 
 #define TG_MTPROTO_CURRENT_LAYER 214UL
 #define TG_INVOKE_WITH_LAYER_CONSTRUCTOR 0xda9b0d0dUL
@@ -4480,12 +4481,10 @@ static tg_mtproto_tl_status tg_read_peer_cache_chat(
 }
 
 /*
- * Message text entities (bold/italic/code/strike) are surfaced as inline ASCII
- * markers baked into the text so every front-end -- console and the native GUI
- * on all five targets -- shows formatting with no per-layer plumbing. Telegram
+ * Message text entities (bold/italic/code/strike) use internal control-byte
+ * markers, so printable punctuation stays text in both front-ends. Telegram
  * entity offsets/lengths are UTF-16 code units over the UTF-8 body, so the
- * marker pass maps them to byte positions. Real GUI font styling (SetSoftStyle)
- * can later read structured entities; this is the smallest visible step.
+ * marker pass maps them to byte positions.
  */
 #define TG_MSG_ENT_NONE   0UL
 #define TG_MSG_ENT_BOLD   1UL
@@ -4502,19 +4501,32 @@ typedef struct tg_msg_entity {
 
 /* The 1-char marker for a styled entity, or 0 for entities we leave as plain
    text (mentions, links, hashtags ... already readable as their own text). */
-static const char *tg_msg_entity_marker(unsigned long type)
+static char tg_msg_entity_marker(unsigned long type)
 {
     switch (type) {
     case TG_MSG_ENT_BOLD:
-        return "*";
+        return TG_TEXT_MARKER_BOLD;
     case TG_MSG_ENT_ITALIC:
-        return "_";
+        return TG_TEXT_MARKER_ITALIC;
     case TG_MSG_ENT_CODE:
-        return "`";
+        return TG_TEXT_MARKER_CODE;
     case TG_MSG_ENT_STRIKE:
-        return "~";
+        return TG_TEXT_MARKER_STRIKE;
     default:
         return 0;
+    }
+}
+
+/* Keep byte and UTF-16 offsets intact while making entity markers impossible
+   to inject as message text. This also runs on bodies with no entities. */
+static void tg_msg_sanitize_markers(char *text)
+{
+    unsigned long i;
+
+    for (i = 0UL; text[i] != '\0'; ++i) {
+        if (TG_TEXT_IS_MARKER(text[i])) {
+            text[i] = ' ';
+        }
     }
 }
 
@@ -4613,27 +4625,28 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
     unsigned long u16 = 0UL; /* UTF-16 position in the body */
     int e;
 
+    tg_msg_sanitize_markers(text);
     for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
         opened[e] = 0;
     }
     for (;;) {
         /* Closes before opens at the same position so adjacent spans abut. */
         for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
-            const char *m;
+            char m;
             if (opened[e] && ents[e].off + ents[e].len == u16 &&
                 (m = tg_msg_entity_marker(ents[e].type)) != 0) {
-                while (*m != '\0' && bi + 1UL < sizeof(buf)) {
-                    buf[bi++] = *m++;
+                if (bi + 1UL < sizeof(buf)) {
+                    buf[bi++] = m;
                 }
                 opened[e] = 0;
             }
         }
         for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
-            const char *m;
+            char m;
             if (!opened[e] && ents[e].off == u16 && ents[e].len > 0UL &&
                 (m = tg_msg_entity_marker(ents[e].type)) != 0) {
-                while (*m != '\0' && bi + 1UL < sizeof(buf)) {
-                    buf[bi++] = *m++;
+                if (bi + 1UL < sizeof(buf)) {
+                    buf[bi++] = m;
                 }
                 opened[e] = 1;
             }
@@ -4660,10 +4673,10 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
     }
     /* Close any span the body ended inside of. */
     for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
-        const char *m;
+        char m;
         if (opened[e] && (m = tg_msg_entity_marker(ents[e].type)) != 0) {
-            while (*m != '\0' && bi + 1UL < sizeof(buf)) {
-                buf[bi++] = *m++;
+            if (bi + 1UL < sizeof(buf)) {
+                buf[bi++] = m;
             }
         }
     }
@@ -5778,6 +5791,7 @@ tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
         }
         tg_label_append(out->text, sizeof(out->text), &n, desc);
     }
+    tg_msg_sanitize_markers(out->text);
     return TG_MTPROTO_TL_OK;
 }
 
@@ -5952,6 +5966,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                                 &text_cut) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    tg_msg_sanitize_markers(out->text);
     if (text_cut) {
         kept_units = tg_mark_cut_text(out->text, sizeof(out->text));
     }
@@ -6033,6 +6048,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                 }
             }
         }
+        tg_msg_sanitize_markers(out->text);
         return TG_MTPROTO_TL_OK;
     }
 
@@ -7039,7 +7055,7 @@ int tg_mtproto_is_auth_authorization_constructor(unsigned long constructor)
 static int tg_entity_marker_case(const char *in, const tg_msg_entity *ents,
                                  int count, const char *expect)
 {
-    char buf[TG_MTPROTO_MESSAGE_TEXT_MAX];
+    static char buf[TG_MTPROTO_MESSAGE_TEXT_MAX];
     unsigned long i;
 
     for (i = 0UL; i + 1UL < sizeof(buf) && in[i] != '\0'; ++i) {
@@ -7133,8 +7149,9 @@ static int tg_message_cut_self_test(void)
     }
     t = list.messages[0].text;
     n = (unsigned long)strlen(t);
-    if (n < 8UL || n + 64UL < TG_MTPROTO_MESSAGE_TEXT_MAX || t[0] != '*' ||
-        strcmp(t + n - 7UL, "* [...]") != 0) {
+    if (n < 8UL || n + 64UL < TG_MTPROTO_MESSAGE_TEXT_MAX ||
+        t[0] != TG_TEXT_MARKER_BOLD ||
+        strcmp(t + n - 7UL, "\034 [...]") != 0) {
         puts("login self-test: a cut message does not end with \"* [...]\"");
         return 2;
     }
@@ -7161,7 +7178,7 @@ static int tg_message_cut_self_test(void)
     e[1].len = 1UL;
     tg_apply_entity_markers(styled, sizeof(styled), e, 2);
     n = (unsigned long)strlen(styled);
-    if (strncmp(styled, "*\xC3\xA9**\xC3\xA9*", 8U) != 0 ||
+    if (strncmp(styled, "\034\xC3\xA9\034\034\xC3\xA9\034", 8U) != 0 ||
         n != TG_MTPROTO_MESSAGE_TEXT_MAX - 2UL ||
         (unsigned char)styled[n - 1UL] != 0xA9U) {
         puts("login self-test: the styled text keeps half a character");
@@ -7387,6 +7404,24 @@ static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
 
+    memset(e, 0, sizeof(e));
+    /* Typed punctuation stays literal; reserved bytes keep their positions
+       as spaces, even inside a real entity span. */
+    if (!tg_entity_marker_case("* _ ` ~\n\t", e, 0, "* _ ` ~\n\t") ||
+        !tg_entity_marker_case("\034a\035b\036c\037d", e, 0,
+                               " a b c d")) {
+        puts("login self-test: typed text became a style marker");
+        return 2;
+    }
+    e[0].type = TG_MSG_ENT_STRIKE;
+    e[0].off = 1UL;
+    e[0].len = 3UL;
+    if (!tg_entity_marker_case("\034a\035b\036c\037d", e, 1,
+                               " \037a b\037 c d")) {
+        puts("login self-test: typed marker changed an entity offset");
+        return 2;
+    }
+
     /* Two non-overlapping spans, plain ASCII. */
     e[0].type = TG_MSG_ENT_BOLD;
     e[0].off = 0UL;
@@ -7394,14 +7429,14 @@ static int tg_entity_marker_self_test(void)
     e[1].type = TG_MSG_ENT_ITALIC;
     e[1].off = 6UL;
     e[1].len = 5UL;
-    if (!tg_entity_marker_case("group reply", e, 2, "*group* _reply_")) {
+    if (!tg_entity_marker_case("group reply", e, 2, "\034group\034 \035reply\035")) {
         return 2;
     }
     /* Inline code marker. */
     e[0].type = TG_MSG_ENT_CODE;
     e[0].off = 0UL;
     e[0].len = 4UL;
-    if (!tg_entity_marker_case("code here", e, 1, "`code` here")) {
+    if (!tg_entity_marker_case("code here", e, 1, "\036code\036 here")) {
         return 2;
     }
     /* UTF-16 offset 1 sits AFTER a 2-byte UTF-8 char (U+00E9 'e-acute'); the
@@ -7409,7 +7444,7 @@ static int tg_entity_marker_self_test(void)
     e[0].type = TG_MSG_ENT_BOLD;
     e[0].off = 1UL;
     e[0].len = 1UL;
-    if (!tg_entity_marker_case("\xC3\xA9" "b", e, 1, "\xC3\xA9" "*b*")) {
+    if (!tg_entity_marker_case("\xC3\xA9" "b", e, 1, "\xC3\xA9" "\034b\034")) {
         return 2;
     }
     /* An astral emoji (U+1F600) is 2 UTF-16 units; the span on the next char
@@ -7418,7 +7453,7 @@ static int tg_entity_marker_self_test(void)
     e[0].off = 2UL;
     e[0].len = 1UL;
     if (!tg_entity_marker_case("\xF0\x9F\x98\x80" "X", e, 1,
-                               "\xF0\x9F\x98\x80" "*X*")) {
+                               "\xF0\x9F\x98\x80" "\034X\034")) {
         return 2;
     }
     if (tg_message_cut_self_test() != 0) {
@@ -9832,7 +9867,7 @@ int tg_mtproto_login_self_test(void)
         text_list.messages[3].date != 2224UL ||
         text_list.messages[3].is_out ||
         /* messageEntityBold over "group" (offset 0, len 5) -> inline markers. */
-        strcmp(text_list.messages[3].text, "*group* reply") != 0 ||
+        strcmp(text_list.messages[3].text, "\034group\034 reply") != 0 ||
         /* reply header: reply_to_msg_id (flags.4) + quote_text (flags.6). */
         !text_list.messages[3].has_reply ||
         text_list.messages[3].reply_to_msg_id != 1002UL ||

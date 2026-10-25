@@ -14,6 +14,7 @@
 #include "tg_version.h"
 #include "tg_file.h"
 #include "tg_emoji_sheet.h"
+#include "tg_text_style.h"
 #include "tg_mtproto_login.h"
 
 #include <time.h>
@@ -1488,6 +1489,26 @@ void tg_gui_demo_state(tg_gui_state *state)
     tg_gui_copy(state->status, sizeof(state->status), "Connected - DC4");
 }
 
+/* Style markers have no advance, everywhere, including inside URLs. Keep
+   wrapping, bubble width, selection and pointer mapping on this same rule. */
+static int tg_gui_marked_width(tg_gui_backend *backend, const char *text,
+                               unsigned long from, unsigned long to)
+{
+    unsigned long i;
+    unsigned long run = from;
+    int w = 0;
+
+    for (i = from; i <= to; ++i) {
+        if (i == to || TG_TEXT_IS_MARKER(text[i])) {
+            if (i > run) {
+                w += backend->text_width(backend, text + run, i - run);
+            }
+            run = i + 1UL;
+        }
+    }
+    return w;
+}
+
 /* How many leading characters of s (len of them) fit in max_width; the first
    always counts, so a glyph wider than the line still advances. Widths only
    grow as characters are added, so a doubling probe and a binary search find
@@ -1511,7 +1532,7 @@ static unsigned long tg_gui_wrap_fit(tg_gui_backend *backend, const char *s,
         if (probe >= len) {
             probe = len;
         }
-        if (backend->text_width(backend, s, probe) > max_width) {
+        if (tg_gui_marked_width(backend, s, 0UL, probe) > max_width) {
             hi = probe - 1UL;
             break;
         }
@@ -1523,7 +1544,7 @@ static unsigned long tg_gui_wrap_fit(tg_gui_backend *backend, const char *s,
     while (lo < hi) {
         unsigned long mid = lo + (hi - lo + 1UL) / 2UL;
 
-        if (backend->text_width(backend, s, mid) > max_width) {
+        if (tg_gui_marked_width(backend, s, 0UL, mid) > max_width) {
             hi = mid - 1UL;
         } else {
             lo = mid;
@@ -1673,6 +1694,33 @@ unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
     return tg_gui_emoji_pair_at(text, len, i, 0) ? 2UL : 1UL;
 }
 
+void tg_gui_strip_markers(char *dest, unsigned long size, const char *src)
+{
+    unsigned long len;
+    unsigned long i = 0UL;
+    unsigned long o = 0UL;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    len = src != 0 ? (unsigned long)strlen(src) : 0UL;
+    while (i < len && o + 1UL < size) {
+        if (TG_TEXT_IS_MARKER(src[i])) {
+            ++i;
+        } else {
+            unsigned long n = tg_gui_text_unit_len(src, len, i);
+
+            if (o + n >= size) {
+                break; /* keep a cut emoji pair whole, including in-place */
+            }
+            memmove(dest + o, src + i, (size_t)n);
+            o += n;
+            i += n;
+        }
+    }
+    dest[o] = '\0';
+}
+
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src)
 {
@@ -1686,7 +1734,9 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
     }
     len = (src != 0) ? (unsigned long)strlen(src) : 0UL;
     while (i < len && o + 1UL < size) {
-        if (tg_gui_emoji_pair_at(src, len, i, &index)) {
+        if (TG_TEXT_IS_MARKER(src[i])) {
+            ++i;
+        } else if (tg_gui_emoji_pair_at(src, len, i, &index)) {
             const char *t = tg_gui_session_emoji_text(index);
             unsigned long n = (unsigned long)strlen(t);
 
@@ -1894,13 +1944,24 @@ static void tg_gui_draw_caret(tg_gui_backend *backend, int pen, int x,
 static void tg_gui_draw_clipped(tg_gui_backend *backend, int pen, int x,
                                 int baseline, const char *text, int max_w)
 {
+    static char plain[TG_GUI_MSG_TEXT_MAX];
     unsigned long n;
+    unsigned long i;
     int dots_w;
     int budget;
     unsigned long fit;
 
     if (text == 0 || max_w <= 0) {
         return;
+    }
+    /* Reply strips, previews and search labels use plain drawing. Keep
+       emoji pairs for the backend, but never hand it a style control. */
+    for (i = 0UL; text[i] != '\0'; ++i) {
+        if (TG_TEXT_IS_MARKER(text[i])) {
+            tg_gui_strip_markers(plain, sizeof(plain), text);
+            text = plain;
+            break;
+        }
     }
     n = (unsigned long)strlen(text);
     if (n == 0UL) {
@@ -2499,12 +2560,6 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
     }
 }
 
-/* Draws one wrapped line of message text, interpreting the inline markup
-   markers (* _ ` ~) as styling: each marker toggles a TG_GUI_STYLE_* bit, is
-   not drawn itself, and the run between markers is drawn in the current style
-   via the backend's set_style hook. *style carries across wrapped lines so a
-   span that breaks over two lines stays styled. Backends without set_style get
-   clean text (markers skipped), just unstyled. */
 /* Length of the web link starting at text[i], or 0 when there is none.
    Word-anchored (the caller only asks at word starts) and stops at the
    first blank; trailing punctuation is left out so a link at the end of a
@@ -2524,7 +2579,8 @@ static unsigned long tg_gui_link_span(const char *text, unsigned long i,
                text[end] != '\n') {
             ++end;
         }
-        while (end > i && (text[end - 1UL] == '.' || text[end - 1UL] == ',' ||
+        while (end > i && (TG_TEXT_IS_MARKER(text[end - 1UL]) ||
+                           text[end - 1UL] == '.' || text[end - 1UL] == ',' ||
                            text[end - 1UL] == ';' || text[end - 1UL] == ':' ||
                            text[end - 1UL] == '!' || text[end - 1UL] == '?' ||
                            text[end - 1UL] == ')' || text[end - 1UL] == ']' ||
@@ -2537,7 +2593,7 @@ static unsigned long tg_gui_link_span(const char *text, unsigned long i,
 }
 
 /* A wrapped line or selection can start inside a URL. Keep the complete
-   word's context, so its literal markup characters still occupy pixels. */
+   word's context so its link colour continues on the next line. */
 static unsigned long tg_gui_link_remaining(const char *text, unsigned long at,
                                             unsigned long length)
 {
@@ -2548,12 +2604,15 @@ static unsigned long tg_gui_link_remaining(const char *text, unsigned long at,
            text[start - 1UL] != '\t' && text[start - 1UL] != '\n') {
         --start;
     }
+    while (start < length && TG_TEXT_IS_MARKER(text[start])) {
+        ++start;
+    }
     end = start + tg_gui_link_span(text, start, length);
     return end > at ? end - at : 0UL;
 }
 
 /* Draws one wrapped line of message text, interpreting the inline markup
-   markers (* _ ` ~) as styling: each marker toggles a TG_GUI_STYLE_* bit, is
+   control markers as styling: each marker toggles a TG_GUI_STYLE_* bit, is
    not drawn itself, and the run between markers is drawn in the current style
    via the backend's set_style hook. *style carries across wrapped lines so a
    span that breaks over two lines stays styled. Web links are drawn in
@@ -2576,21 +2635,17 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
         int boundary = 0;
 
         if (i < to) {
-            /* Markup markers are text INSIDE a link: an underscore in
-               en.wikipedia.org/wiki/Amiga_500 is part of the address, not an
-               italic switch. Reading it as markup dropped the byte from the
-               drawn URL and left the rest of the message italic. */
-            switch (link_left > 0UL ? '\0' : text[i]) {
-            case '*':
+            switch (text[i]) {
+            case TG_TEXT_MARKER_BOLD:
                 toggle = TG_GUI_STYLE_BOLD;
                 break;
-            case '_':
+            case TG_TEXT_MARKER_ITALIC:
                 toggle = TG_GUI_STYLE_ITALIC;
                 break;
-            case '`':
+            case TG_TEXT_MARKER_CODE:
                 toggle = TG_GUI_STYLE_CODE;
                 break;
-            case '~':
+            case TG_TEXT_MARKER_STRIKE:
                 toggle = TG_GUI_STYLE_STRIKE;
                 break;
             default:
@@ -2598,7 +2653,7 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
             }
             if (link_left == 0UL &&
                 (i == 0UL || text[i - 1UL] == ' ' || text[i - 1UL] == '\t' ||
-                 text[i - 1UL] == '\n')) {
+                 text[i - 1UL] == '\n' || TG_TEXT_IS_MARKER(text[i - 1UL]))) {
                 unsigned long span = tg_gui_link_span(text, i, text_length);
 
                 if (span > 0UL) {
@@ -2821,42 +2876,6 @@ static void tg_gui_photo_geometry(const tg_gui_message *message,
     *out_h = h;
 }
 
-/* Width of text[from..to) as rendered: style markers occupy no pixels,
-   except inside URLs where they are literal text. The painter and pointer
-   mapping both retain URL context across wrapping and selection boundaries.
-   Amiga font widths are additive (no kerning), so runs sum to the advance. */
-static int tg_gui_marked_width(tg_gui_backend *backend, const char *text,
-                               unsigned long from, unsigned long to)
-{
-    unsigned long i;
-    unsigned long run;
-    unsigned long length = (unsigned long)strlen(text);
-    unsigned long link_end = from + tg_gui_link_remaining(text, from, length);
-    int w = 0;
-
-    run = from;
-    for (i = from; i <= to; ++i) {
-        int marker = 0;
-
-        if (i < to) {
-            if (i >= link_end && (i == 0UL || text[i - 1UL] == ' ' ||
-                                 text[i - 1UL] == '\t' || text[i - 1UL] == '\n')) {
-                link_end = i + tg_gui_link_span(text, i, length);
-            }
-            marker = i >= link_end &&
-                     (text[i] == '*' || text[i] == '_' || text[i] == '`' ||
-                      text[i] == '~');
-        }
-        if (marker || i == to) {
-            if (i > run) {
-                w += backend->text_width(backend, text + run, i - run);
-            }
-            run = i + 1UL;
-        }
-    }
-    return w;
-}
-
 /* A message joins the run above it when both are incoming, from the same
    sender, with nothing else (an own message, a day separator, a system line)
    between them: the sender name then shows only on the first of the run, the
@@ -3019,8 +3038,8 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
     for (k = 0; k < geo->line_count; ++k) {
         int w;
 
-        w = backend->text_width(backend, message->text + geo->starts[k],
-                                geo->lengths[k]);
+        w = tg_gui_marked_width(backend, message->text, geo->starts[k],
+                                geo->starts[k] + geo->lengths[k]);
         if (w > widest) {
             widest = w;
         }
@@ -3041,8 +3060,8 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
         int reply_w;
 
         reply_w = backend->text_width(backend, "> ", 2UL) +
-                  backend->text_width(
-                      backend, message->reply_text,
+                  tg_gui_marked_width(
+                      backend, message->reply_text, 0UL,
                       (unsigned long)strlen(message->reply_text));
         if (reply_w > widest) {
             widest = reply_w; /* the quoted reference line must fit too */
@@ -4816,6 +4835,7 @@ int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
     long b;
     unsigned long n;
     unsigned long need;
+    unsigned long i;
     const char *w;
     long wl;
     int www;
@@ -4842,15 +4862,13 @@ int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
         ++b;
     }
     /* Strip style markers and wrapping punctuation from both ends. */
-    while (a <= b && (m->text[a] == '*' || m->text[a] == '_' ||
-                      m->text[a] == '`' || m->text[a] == '~' ||
+    while (a <= b && (TG_TEXT_IS_MARKER(m->text[a]) ||
                       m->text[a] == '(' || m->text[a] == '<' ||
                       m->text[a] == '[' || m->text[a] == '"' ||
                       m->text[a] == '\'')) {
         ++a;
     }
-    while (b >= a && (m->text[b] == '*' || m->text[b] == '_' ||
-                      m->text[b] == '`' || m->text[b] == '~' ||
+    while (b >= a && (TG_TEXT_IS_MARKER(m->text[b]) ||
                       m->text[b] == ')' || m->text[b] == '>' ||
                       m->text[b] == ']' || m->text[b] == '"' ||
                       m->text[b] == '\'' || m->text[b] == '.' ||
@@ -4876,7 +4894,12 @@ int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
     } else {
         return 0;
     }
-    need = (unsigned long)wl + (www ? 7UL : 0UL);
+    need = www ? 7UL : 0UL;
+    for (i = 0UL; i < (unsigned long)wl; ++i) {
+        if (!TG_TEXT_IS_MARKER(w[i])) {
+            ++need;
+        }
+    }
     if (need + 1UL > out_size) {
         return 0; /* longer than the caller can take: not clickable */
     }
@@ -4885,8 +4908,12 @@ int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
         strcpy(out, "http://");
         n = 7UL;
     }
-    memcpy(out + n, w, (unsigned long)wl);
-    out[n + (unsigned long)wl] = '\0';
+    for (i = 0UL; i < (unsigned long)wl; ++i) {
+        if (!TG_TEXT_IS_MARKER(w[i])) {
+            out[n++] = w[i];
+        }
+    }
+    out[n] = '\0';
     return 1;
 }
 
@@ -6242,8 +6269,8 @@ static int tg_gui_wrap_linear(tg_gui_backend *backend, const char *text,
                 break;
             }
             if (j > line_start &&
-                backend->text_width(backend, text + line_start,
-                                    j - line_start + 1UL) > max_width) {
+                tg_gui_marked_width(backend, text, line_start,
+                                     j + 1UL) > max_width) {
                 break;
             }
             if (text[j] == ' ') {
@@ -6335,6 +6362,194 @@ static int tg_gui_wrap_test_width(tg_gui_backend *backend, const char *text,
         }
     }
     return w;
+}
+
+typedef struct tg_gui_markup_record {
+    char text[128];
+    int styles[128];
+    unsigned long length;
+    int style;
+} tg_gui_markup_record;
+
+static void tg_gui_markup_test_style(tg_gui_backend *backend, int style)
+{
+    tg_gui_markup_record *record = (tg_gui_markup_record *)backend->context;
+
+    record->style = style;
+}
+
+static void tg_gui_markup_test_draw(tg_gui_backend *backend, int pen, int x,
+                                    int baseline, const char *text,
+                                    unsigned long length)
+{
+    tg_gui_markup_record *record = (tg_gui_markup_record *)backend->context;
+    unsigned long i;
+
+    (void)pen;
+    (void)x;
+    (void)baseline;
+    for (i = 0UL; i < length && record->length + 1UL < sizeof(record->text);
+         ++i) {
+        record->styles[record->length] = record->style;
+        record->text[record->length++] = text[i];
+    }
+    record->text[record->length] = '\0';
+}
+
+static int tg_gui_markup_self_test(void)
+{
+    static const char styled[] =
+        "\034bold\034 \035italic\035 \036code\036 \037strike\037";
+    static const char literal[] = "* _ ` ~ 2*3 ~/docs";
+    tg_gui_backend backend;
+    tg_gui_markup_record record;
+    unsigned long i;
+    int style;
+    int plain;
+
+    memset(&backend, 0, sizeof(backend));
+    backend.context = &record;
+    backend.text_width = tg_gui_rec_text_width;
+    backend.draw_text = tg_gui_markup_test_draw;
+    for (plain = 0; plain <= 1; ++plain) {
+        memset(&record, 0, sizeof(record));
+        backend.set_style = plain ? 0 : tg_gui_markup_test_style;
+        style = 0;
+        tg_gui_draw_markup(&backend, 0, 0, 0, 0, styled, 0UL,
+                            (unsigned long)strlen(styled), &style);
+        if (strcmp(record.text, "bold italic code strike") != 0 || style != 0) {
+            puts("gui self-test: entity markers did not draw clean styled text");
+            return 2;
+        }
+        for (i = 0UL; i < record.length; ++i) {
+            int want = 0;
+
+            if (!plain) {
+                want = i < 4UL ? TG_GUI_STYLE_BOLD :
+                       i >= 5UL && i < 11UL ? TG_GUI_STYLE_ITALIC :
+                       i >= 12UL && i < 16UL ? TG_GUI_STYLE_CODE :
+                       i >= 17UL ? TG_GUI_STYLE_STRIKE : 0;
+            }
+            if (record.styles[i] != want) {
+                puts("gui self-test: entity text lost its painter style");
+                return 2;
+            }
+        }
+    }
+    memset(&record, 0, sizeof(record));
+    backend.set_style = tg_gui_markup_test_style;
+    style = 0;
+    tg_gui_draw_markup(&backend, 0, 0, 0, 0, literal, 0UL,
+                        (unsigned long)strlen(literal), &style);
+    if (strcmp(record.text, literal) != 0 || style != 0) {
+        puts("gui self-test: literal punctuation was read as styling");
+        return 2;
+    }
+    for (i = 0UL; i < record.length; ++i) {
+        if (record.styles[i] != 0) {
+            puts("gui self-test: literal punctuation switched painter style");
+            return 2;
+        }
+    }
+    {
+        const char *wrapped = "\034ab_cd\034";
+        unsigned long starts[4];
+        unsigned long lengths[4];
+        int lines;
+        int k;
+
+        memset(&record, 0, sizeof(record));
+        style = 0;
+        lines = tg_gui_wrap(&backend, wrapped, 18, starts, lengths, 4);
+        for (k = 0; k < lines; ++k) {
+            tg_gui_draw_markup(&backend, 0, 0, 0, 0, wrapped, starts[k],
+                                lengths[k], &style);
+        }
+        if (lines != 2 || strcmp(record.text, "ab_cd") != 0 || style != 0 ||
+            tg_gui_marked_width(&backend, wrapped, 0UL, 7UL) != 30 ||
+            tg_gui_marked_width(&backend, literal, 0UL,
+                                 (unsigned long)strlen(literal)) !=
+                (int)strlen(literal) * 6) {
+            puts("gui self-test: marker width or wrapped style changed");
+            return 2;
+        }
+        for (i = 0UL; i < record.length; ++i) {
+            if (record.styles[i] != TG_GUI_STYLE_BOLD) {
+                puts("gui self-test: wrapped entity lost its painter style");
+                return 2;
+            }
+        }
+    }
+    {
+        tg_gui_state *state = tg_gui_test_scratch_state();
+        char got[64];
+
+        strcpy(state->messages[0].text,
+               "\034https://example.org/a*_`~\034");
+        if (!tg_gui_url_at(&state->messages[0], 10L, got, sizeof(got)) ||
+            strcmp(got, "https://example.org/a*_`~") != 0) {
+            puts("gui self-test: URL export changed literal punctuation");
+            return 2;
+        }
+    }
+    return 0;
+}
+
+static int tg_gui_plain_text_self_test(void)
+{
+    static const char source[] =
+        "\034*\034 \035_\035 \036`\036 \037~\037 \x80!";
+    static const char plain[] = "* _ ` ~ \x80!";
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_backend backend;
+    tg_gui_markup_record record;
+    char got[64];
+    char want[64];
+    char head[32];
+
+    /* The composer and plain GUI rows keep the emoji pair. */
+    tg_gui_strip_markers(got, sizeof(got), source);
+    if (strcmp(got, plain) != 0) {
+        puts("gui self-test: plain GUI copy retained a marker");
+        return 2;
+    }
+    strcpy(got, source);
+    tg_gui_strip_markers(got, sizeof(got), got);
+    if (strcmp(got, plain) != 0) {
+        puts("gui self-test: in-place plain GUI copy retained a marker");
+        return 2;
+    }
+    tg_gui_strip_markers(got, 2UL, "\034\x80!");
+    if (got[0] != '\0') {
+        puts("gui self-test: plain GUI copy cut an emoji pair");
+        return 2;
+    }
+    memset(&backend, 0, sizeof(backend));
+    memset(&record, 0, sizeof(record));
+    backend.context = &record;
+    backend.text_width = tg_gui_rec_text_width;
+    backend.draw_text = tg_gui_markup_test_draw;
+    tg_gui_draw_clipped(&backend, 0, 0, 0, source, 1000);
+    if (strcmp(record.text, plain) != 0) {
+        puts("gui self-test: plain GUI painter received a marker");
+        return 2;
+    }
+    /* The exact helper used by clipboard, requester and title exports. */
+    sprintf(want, "* _ ` ~ %.16s", tg_gui_session_emoji_text(0UL));
+    tg_gui_emoji_expand_pairs(got, sizeof(got), source);
+    if (strcmp(got, want) != 0) {
+        puts("gui self-test: clipboard export retained a marker");
+        return 2;
+    }
+    state->notify_mode = TG_GUI_NOTIFY_POPUP_TEXT;
+    strcpy(state->notify_last_name, "\034Chat\034");
+    strcpy(state->notify_last_text, source);
+    tg_gui_notify_popup_text(state, head, sizeof(head), got, sizeof(got));
+    if (strcmp(head, "Chat") != 0 || strcmp(got, want) != 0) {
+        puts("gui self-test: pop-up export retained a marker");
+        return 2;
+    }
+    return 0;
 }
 
 static int tg_gui_notify_policy_self_test(void)
@@ -6686,7 +6901,9 @@ int tg_gui_self_test(void)
     tg_gui_record record;
     int ok;
 
-    if (tg_gui_notify_policy_self_test() != 0 ||
+    if (tg_gui_markup_self_test() != 0 ||
+        tg_gui_plain_text_self_test() != 0 ||
+        tg_gui_notify_policy_self_test() != 0 ||
         tg_gui_notify_override_self_test() != 0 ||
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||

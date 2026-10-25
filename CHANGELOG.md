@@ -43,6 +43,11 @@ the text client for the plain 68000.
   machine whose clock was never set still gets it right.
 
 ### Fixed
+- An underscore, an asterisk, a backquote or a tilde in a message is
+  drawn as the character it is. They used to double as the switches for
+  italic, bold, code and strike, so a typed "_" vanished and turned the
+  rest of the bubble italic; Telegram's own formatting now travels on
+  bytes no text carries. The text client looks the same as before.
 - A name, a message or a preview too long for the room kept for it no
   longer ends in a box: an emoji that does not fit whole is left out
   instead of being cut in half. A rare control character inside a message

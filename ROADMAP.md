@@ -1385,7 +1385,7 @@ heights, the scrolling and the clicks stay in step; the text client
 already had its `--- 15 Nov ---` line between two days and now also opens
 a page of older messages with one.
 
-## Planned: an underscore stays an underscore (0.0.98)
+## Done for 0.0.98: an underscore stays an underscore
 
 Bold, italic, code and strike reach the screen as markers inside the
 message text: the engine wraps each such span in `*`, `_`, `` ` `` or `~`
@@ -1403,6 +1403,10 @@ visible characters. Whatever takes message text out of the painter (the
 clipboard, the pop-up, the window title) strips them, as it already
 expands the emoji pairs, and the self-tests carry a message with a
 literal `*`, `_`, `` ` `` and `~` in it.
+
+Done on `main` on 2026-10-25 with the bytes 0x1C to 0x1F
+(`include/tg_text_style.h`); a byte of that range arriving in a message
+becomes a space before the markers go in, so text cannot fake a style.
 
 ## Planned: typed emoticons become emoji (0.0.98)
 

@@ -10,6 +10,7 @@
 #include "tg_gui_driver.h"
 #include "tg_mtproto_probe.h"
 #include "tg_gui_session.h"
+#include "tg_text_style.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -35,7 +36,8 @@ static void tg_gui_driver_copy(char *dest, unsigned long size, const char *src)
 /* Engine rows carry raw UTF-8 (the console transcodes at print time). The GUI
    draws with the Amiga font (Latin-1), so copy text with a UTF-8 -> Latin-1
    transcode: codepoints < 256 map 1:1 (Italian accents render correctly),
-   control bytes flatten to a space, and anything higher (emoji, dashes, ...)
+   entity markers pass unchanged, other control bytes flatten to a space,
+   and anything higher (emoji, dashes, ...)
    routes through tg_mtproto_display_codepoint_to_latin1, which renders the
    common emoji as their ASCII emoticons (":)" etc.) and omits anything with no
    readable rendition rather than drawing a '?'. Invalid UTF-8 bytes are
@@ -95,7 +97,10 @@ static void tg_gui_driver_copy_latin1(char *dest, unsigned long size,
             dest[o++] = '\n'; /* keep real line breaks (lists, paragraphs) */
         } else if (cp == 0x0DUL) {
             continue; /* drop CR: a CRLF becomes a single '\n' */
-        } else if (cp < 0x20UL || (cp >= 0x80UL && cp < 0xA0UL)) {
+        } else if (c < 0x80U && TG_TEXT_IS_MARKER(cp)) {
+            /* Only a raw marker passes, never an overlong UTF-8 encoding. */
+            dest[o++] = (char)cp;
+        } else if (cp < 0x20UL || (cp >= 0x7FUL && cp < 0xA0UL)) {
             /* other control bytes -> space; a C1 one passed through would
                read as the first byte of an emoji pair */
             dest[o++] = ' ';
@@ -341,11 +346,19 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
         who = "";
     }
     tg_gui_driver_copy_latin1(message->sender, sizeof(message->sender), who);
+    tg_gui_strip_markers(message->sender, sizeof(message->sender),
+                         message->sender);
     message->sender_color = tg_gui_driver_color_for(who);
     tg_gui_driver_copy_latin1(message->text, sizeof(message->text), row->text);
+    if (row->is_service) {
+        tg_gui_strip_markers(message->text, sizeof(message->text),
+                             message->text);
+    }
     if (row->reply_quote != 0 && row->reply_quote[0] != '\0') {
         tg_gui_driver_copy_latin1(message->reply_text,
                                   sizeof(message->reply_text), row->reply_quote);
+        tg_gui_strip_markers(message->reply_text, sizeof(message->reply_text),
+                             message->reply_text);
     }
     message->id = row->id;
     message->from_id_hi = row->from_id_hi;
@@ -1284,6 +1297,53 @@ int tg_gui_driver_self_test(void)
 
     memset(&state, 0, sizeof(state));
     tg_gui_chat_driver_bind(&gui, &state, &driver);
+
+    /* Only the four reserved C0 bytes survive the UTF-8 display copy.
+       Newline and CR keep their existing line-break policy. */
+    {
+        char input[3];
+        char out[64];
+        tg_chat_message_row row;
+
+        input[1] = 'x';
+        input[2] = '\0';
+        for (i = 1; i < 32; ++i) {
+            input[0] = (char)i;
+            tg_gui_driver_copy_latin1(out, sizeof(out), input);
+            if ((i == '\r' && strcmp(out, "x") != 0) ||
+                (i != '\r' &&
+                 (out[0] != ((i == '\n' || TG_TEXT_IS_MARKER(i))
+                                 ? (char)i : ' ') ||
+                  out[1] != 'x' || out[2] != '\0'))) {
+                puts("gui driver self-test: control-byte display copy changed");
+                return 2;
+            }
+        }
+        tg_gui_driver_copy_latin1(out, sizeof(out),
+                                  "\xc0\x9c\xc0\x9d\xc0\x9e\xc0\x9f");
+        if (strcmp(out, "    ") != 0) {
+            puts("gui driver self-test: overlong UTF-8 forged style markers");
+            return 2;
+        }
+        tg_gui_driver_copy_latin1(out, sizeof(out), "\177\xc2\x9f");
+        if (strcmp(out, "  ") != 0) {
+            puts("gui driver self-test: DEL or C1 control survived display copy");
+            return 2;
+        }
+        memset(&row, 0, sizeof(row));
+        row.text = "\034*\034 \035_\035 \036`\036 \037~\037";
+        row.sender = "\034Name\034";
+        row.reply_quote = row.text;
+        driver.on_message(driver.ctx, &row);
+        if (state.message_count != 1 ||
+            strcmp(state.messages[0].text, row.text) != 0 ||
+            strcmp(state.messages[0].sender, "Name") != 0 ||
+            strcmp(state.messages[0].reply_text, "* _ ` ~") != 0) {
+            puts("gui driver self-test: body or plain reply markers changed");
+            return 2;
+        }
+        memset(&state, 0, sizeof(state));
+    }
 
     /* 0.0.92: a symbol with no Latin-1 shape takes its leading space with it,
        so it leaves a sentence rather than a hole. Modifiers do not: they hang
