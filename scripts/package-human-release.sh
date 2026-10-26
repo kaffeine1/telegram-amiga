@@ -711,9 +711,10 @@ Using the GUI
 - Right-click a message and choose "Forward to Saved Messages" for a one-click
   cloud copy, or "Forward to..." to select another chat with the normal search.
 - Reactions show under a message as small chips, an emoji with its count,
-  yours highlighted. Right-click a message and choose "React...": a grid of
-  ten common reactions opens, yours on the accent colour; a click adds one,
-  and choosing yours again takes it back. When a group
+  yours highlighted. Right-click a message and choose "React...": a grid
+  opens with the reactions the chat allows (ten common ones where all are),
+  yours on the accent colour; a click adds one, and choosing yours again
+  takes it back. When a group
   does not allow that reaction, the status line says so. In the text client
   the counts follow the line, and /react <id> <name> adds one.
 - New messages: "Settings > Notifications" chooses the count in the title,
@@ -936,8 +937,9 @@ Usare la GUI
   usando la ricerca normale.
 - Le reazioni compaiono sotto un messaggio come piccole etichette, emoji e
   numero, la tua evidenziata. Click destro su un messaggio, "React...": si
-  apre una griglia di dieci reazioni comuni, la tua sul colore d'accento;
-  un click ne aggiunge una, scegliendo di nuovo la tua la togli. Se
+  apre una griglia con le reazioni che la chat permette (dieci comuni dove
+  le permette tutte), la tua sul colore d'accento; un click ne aggiunge
+  una, scegliendo di nuovo la tua la togli. Se
   il gruppo non permette quella reazione, lo dice la riga di stato. Nel
   client testuale i conteggi seguono la riga e /react <id> <nome> ne
   aggiunge una.

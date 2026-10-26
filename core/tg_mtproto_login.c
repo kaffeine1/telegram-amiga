@@ -1435,17 +1435,19 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
 }
 
 /* core.telegram.org/method/messages.sendReaction: flags.0 includes the
-   vector even on removal. An absent vector would ask for the default. */
+   vector even on removal. An absent vector would ask for the default.
+   reaction_cp 0 takes the user's reaction back. */
 tg_mtproto_tl_status tg_mtproto_build_messages_send_reaction(
     tg_mtproto_tl_writer *writer, unsigned long peer_constructor,
     unsigned long peer_id_hi, unsigned long peer_id_lo,
     unsigned long hash_hi, unsigned long hash_lo, int has_hash,
-    unsigned long message_id, int reaction_index)
+    unsigned long message_id, unsigned long reaction_cp)
 {
     tg_mtproto_tl_status status;
+    char utf8[8];
 
     if (writer == 0 || message_id == 0UL || message_id > 2147483647UL ||
-        reaction_index < -1 || reaction_index >= TG_REACTION_DEFAULTS)
+        (reaction_cp != 0UL && !tg_reaction_encode(reaction_cp, utf8)))
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     status = tg_mtproto_tl_write_u32(writer, 0xd30d78d4UL);
     if (status == TG_MTPROTO_TL_OK)
@@ -1458,13 +1460,121 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_reaction(
     if (status == TG_MTPROTO_TL_OK)
         status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK)
-        status = tg_mtproto_tl_write_u32(writer, reaction_index >= 0 ? 1UL : 0UL);
-    if (status == TG_MTPROTO_TL_OK && reaction_index >= 0) {
+        status = tg_mtproto_tl_write_u32(writer, reaction_cp != 0UL ? 1UL : 0UL);
+    if (status == TG_MTPROTO_TL_OK && reaction_cp != 0UL) {
         status = tg_mtproto_tl_write_u32(writer, 0x1b2286b8UL);
         if (status == TG_MTPROTO_TL_OK)
-            status = tg_write_string(writer, tg_reaction_utf8(reaction_index));
+            status = tg_write_string(writer, utf8);
     }
     return status;
+}
+
+/* channels.getFullChannel#8736a09 channel:InputChannel = messages.ChatFull
+   and messages.getFullChat#aeb00b34 chat_id:long = messages.ChatFull
+   (core.telegram.org/method/...): asked only for the chat's
+   available_reactions. */
+tg_mtproto_tl_status tg_mtproto_build_get_full_chat(
+    tg_mtproto_tl_writer *writer, unsigned long peer_constructor,
+    unsigned long id_hi, unsigned long id_lo,
+    unsigned long hash_hi, unsigned long hash_lo)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    if (peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        status = tg_mtproto_tl_write_u32(writer, 0x08736a09UL);
+        if (status == TG_MTPROTO_TL_OK)
+            status = tg_mtproto_tl_write_u32(writer, TG_INPUT_CHANNEL_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK)
+            status = tg_mtproto_tl_write_u64(writer, id_hi, id_lo);
+        if (status == TG_MTPROTO_TL_OK)
+            status = tg_mtproto_tl_write_u64(writer, hash_hi, hash_lo);
+        return status;
+    }
+    if (peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR) {
+        status = tg_mtproto_tl_write_u32(writer, 0xaeb00b34UL);
+        if (status == TG_MTPROTO_TL_OK)
+            status = tg_mtproto_tl_write_u64(writer, id_hi, id_lo);
+        return status;
+    }
+    return TG_MTPROTO_TL_INVALID_ARGUMENT;
+}
+
+/* The full chat's available_reactions, found by its constructor rather than
+   by parsing channelFull, whose many optional members (photo, invite, bot
+   info, stories...) come first:
+     chatReactionsNone#eafc32bc, chatReactionsAll#52928bca flags:#,
+     chatReactionsSome#661d4037 reactions:Vector<Reaction>
+   (core.telegram.org/type/ChatReactions). A "some" list counts only when
+   every item reads as a Reaction. Returns 1 when one was found. */
+static tg_mtproto_tl_status tg_read_vector_count(tg_mtproto_tl_reader *reader,
+                                                 unsigned long *count);
+static tg_mtproto_tl_status tg_read_reaction(tg_mtproto_tl_reader *reader,
+                                            unsigned long *cp);
+
+static unsigned long tg_le32(const unsigned char *p)
+{
+    return (unsigned long)p[0] | ((unsigned long)p[1] << 8) |
+           ((unsigned long)p[2] << 16) | ((unsigned long)p[3] << 24);
+}
+
+int tg_mtproto_scan_chat_reactions(const unsigned char *body,
+                                   unsigned long length,
+                                   tg_reactions_allowed *out)
+{
+    unsigned long offset;
+
+    if (body == 0 || out == 0) return 0;
+    memset(out, 0, sizeof(*out));
+    for (offset = 0UL; offset + 4UL <= length; offset += 4UL) {
+        unsigned long constructor = tg_le32(body + offset);
+        tg_mtproto_tl_reader reader;
+
+        if (constructor == 0xeafc32bcUL) {
+            out->mode = TG_REACTIONS_ALLOW_NONE;
+            return 1;
+        }
+        if (constructor == 0x52928bcaUL && offset + 8UL <= length &&
+            tg_le32(body + offset + 4UL) <= 1UL) {
+            out->mode = TG_REACTIONS_ALLOW_ALL;
+            return 1;
+        }
+        if (constructor == 0x661d4037UL) {
+            unsigned long count;
+            unsigned long i;
+            int ok = 1;
+
+            tg_mtproto_tl_reader_init(&reader, body, length);
+            reader.offset = offset + 4UL;
+            out->count = 0;
+            if (tg_read_vector_count(&reader, &count) != TG_MTPROTO_TL_OK ||
+                count > 4096UL) {
+                continue;
+            }
+            for (i = 0UL; i < count && ok; ++i) {
+                unsigned long cp;
+                int k;
+                int seen = 0;
+
+                if (tg_read_reaction(&reader, &cp) != TG_MTPROTO_TL_OK) {
+                    ok = 0;
+                    break;
+                }
+                for (k = 0; k < out->count; ++k) {
+                    if (out->cps[k] == cp) seen = 1;
+                }
+                if (cp != 0UL && !seen && out->count < TG_REACTION_ALLOWED_MAX) {
+                    out->cps[out->count++] = cp;
+                }
+            }
+            if (ok) {
+                out->mode = TG_REACTIONS_ALLOW_SOME;
+                return 1;
+            }
+            out->count = 0;
+        }
+    }
+    return 0;
 }
 
 /* core.telegram.org/method/messages.getMessagesReactions:

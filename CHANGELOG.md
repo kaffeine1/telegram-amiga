@@ -73,7 +73,10 @@ the text client for the plain 68000.
   five to a row like the strip of the official desktop client, with yours
   on the accent colour. The ten are among the reactions Telegram accepts
   everywhere: tears of joy and an open mouth, which it refuses, became
-  rolling on the floor laughing and a shocked face. A reaction added in a
+  rolling on the floor laughing and a shocked face. A group or a channel
+  that allows only some reactions gets those in the grid, in its own
+  order (asked from Telegram the first time React... opens there); one
+  that allows none says so in the status line. A reaction added in a
   private chat shows too:
   Telegram reports it there by editing the message, not with the reaction
   update groups get.

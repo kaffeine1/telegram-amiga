@@ -29,5 +29,23 @@ unsigned long tg_reaction_default(int index);
 const char *tg_reaction_name(int index);
 const char *tg_reaction_utf8(int index);
 int tg_reaction_choice(const tg_reactions *reactions, int index);
+/* The codepoint to send for `cp` on a message: 0 (take it back) when it is
+   already the user's own reaction there. */
+unsigned long tg_reaction_choice_cp(const tg_reactions *reactions,
+                                    unsigned long cp);
+/* UTF-8 of a reaction codepoint into out (at least 5 bytes), as Telegram
+   lists them: bare, no variation selector. 0 when cp is not encodable. */
+int tg_reaction_encode(unsigned long cp, char *out);
+
+/* The reactions a chat allows (its full chat's available_reactions). */
+#define TG_REACTIONS_ALLOW_ALL 0
+#define TG_REACTIONS_ALLOW_NONE 1
+#define TG_REACTIONS_ALLOW_SOME 2
+#define TG_REACTION_ALLOWED_MAX 24
+typedef struct tg_reactions_allowed {
+    int mode;
+    int count;
+    unsigned long cps[TG_REACTION_ALLOWED_MAX];
+} tg_reactions_allowed;
 
 #endif

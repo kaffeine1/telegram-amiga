@@ -13321,16 +13321,36 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         }
                     } else if (it == TG_GUI_CTX_REACT && m != 0 &&
                                !m->is_system && m->id != 0UL) {
-                        state->ctx_react = 1;
-                        state->ctx_visible = 1;
-                        state->ctx_hover = -1;
-                        state->ctx_w = tg_gui_context_menu_measure(state, &backend);
+                        /* A group or a channel may allow only some
+                           reactions: offer those (asked once per chat). */
+                        tg_reactions_allowed allowed;
+                        int choices;
+
+                        (void)tg_gui_session_allowed_reactions(&allowed,
+                                                               stdout);
+                        choices = tg_gui_react_set_choices(state, &allowed);
+                        if (choices == TG_GUI_REACT_CHOICES_OK) {
+                            state->ctx_react = 1;
+                            state->ctx_visible = 1;
+                            state->ctx_hover = -1;
+                            state->ctx_w = tg_gui_context_menu_measure(
+                                state, &backend);
+                        } else {
+                            tg_gui_window_copy(state->status,
+                                sizeof(state->status),
+                                choices == TG_GUI_REACT_CHOICES_NONE
+                                    ? "This chat does not allow reactions."
+                                    : "This chat allows only reactions this "
+                                      "client cannot draw.");
+                        }
                     } else if (it >= TG_GUI_CTX_REACTION_FIRST &&
-                               it < TG_GUI_CTX_REACTION_FIRST + TG_REACTION_DEFAULTS &&
+                               tg_gui_react_choice_at(state,
+                                   it - TG_GUI_CTX_REACTION_FIRST) != 0UL &&
                                m != 0 && !m->is_system && m->id != 0UL) {
                         state->ctx_react = 0;
                         (void)tg_gui_session_react(m->id,
-                            it - TG_GUI_CTX_REACTION_FIRST, stdout);
+                            tg_gui_react_choice_at(state,
+                                it - TG_GUI_CTX_REACTION_FIRST), stdout);
                     } else if (it == TG_GUI_CTX_REPLY && m != 0 && !m->is_system &&
                         m->id != 0UL) {
                         state->in_sel_active = 0;

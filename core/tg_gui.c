@@ -5316,6 +5316,52 @@ int tg_gui_open_chat_is_self(const tg_gui_state *state)
                TG_GUI_SAVED_PEER_INDEX;
 }
 
+/* The chooser's entries: the chat's own list when one was set, else the
+   ten defaults. */
+static int tg_gui_react_choice_count(const tg_gui_state *state)
+{
+    return state->react_choice_count > 0 ? state->react_choice_count
+                                         : TG_REACTION_DEFAULTS;
+}
+
+static unsigned long tg_gui_react_choice(const tg_gui_state *state, int i)
+{
+    return state->react_choice_count > 0 ? state->react_choices[i]
+                                         : tg_reaction_default(i);
+}
+
+int tg_gui_react_set_choices(tg_gui_state *state,
+                             const tg_reactions_allowed *allowed)
+{
+    int i;
+
+    state->react_choice_count = 0;
+    if (allowed == 0 || allowed->mode == TG_REACTIONS_ALLOW_ALL) {
+        return TG_GUI_REACT_CHOICES_OK;
+    }
+    if (allowed->mode == TG_REACTIONS_ALLOW_NONE || allowed->count <= 0) {
+        return TG_GUI_REACT_CHOICES_NONE;
+    }
+    /* The chat's list in its own order, as far as the sheet can draw it. */
+    for (i = 0; i < allowed->count && i < TG_REACTION_ALLOWED_MAX &&
+                state->react_choice_count < TG_REACTION_DEFAULTS; ++i) {
+        if (tg_gui_emoji_index_of(allowed->cps[i]) >= 0) {
+            state->react_choices[state->react_choice_count++] =
+                allowed->cps[i];
+        }
+    }
+    return state->react_choice_count > 0 ? TG_GUI_REACT_CHOICES_OK
+                                         : TG_GUI_REACT_CHOICES_UNDRAWN;
+}
+
+unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i)
+{
+    if (state == 0 || i < 0 || i >= tg_gui_react_choice_count(state)) {
+        return 0UL;
+    }
+    return tg_gui_react_choice(state, i);
+}
+
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids)
 {
@@ -5342,8 +5388,11 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         state->ctx_msg < state->message_count &&
         state->messages[state->ctx_msg].id != 0UL &&
         !state->messages[state->ctx_msg].is_system) {
-        while (n < TG_REACTION_DEFAULTS) {
-            labels[n] = tg_reaction_name(n);
+        int count = tg_gui_react_choice_count(state);
+
+        while (n < count) {
+            labels[n] = state->react_choice_count > 0 ? ""
+                                                       : tg_reaction_name(n);
             ids[n] = TG_GUI_CTX_REACTION_FIRST + n;
             ++n;
         }
@@ -5639,7 +5688,7 @@ static void tg_gui_paint_react_grid(const tg_gui_state *state,
     for (i = 0; i < n; ++i) {
         int cx = bx + 2 + (i % TG_GUI_REACT_COLS) * cell;
         int cy = by + 2 + (i / TG_GUI_REACT_COLS) * cell;
-        unsigned long cp = tg_reaction_default(i);
+        unsigned long cp = tg_gui_react_choice(state, i);
         int idx = tg_gui_emoji_index_of(cp);
         int mine = 0;
         int k;
@@ -7380,6 +7429,43 @@ static int tg_gui_reactions_self_test(void)
              tg_gui_context_menu_index(state, 480, 320, 18, cx, cy) == i;
     }
     if (!ok) puts("gui self-test: reaction row/layout/menu failed");
+    {
+        /* A chat's own list: drawable emoji in its order, up to ten; none
+           allowed, or none drawable, opens nothing; all = the defaults. */
+        tg_reactions_allowed allowed;
+
+        memset(&allowed, 0, sizeof(allowed));
+        allowed.mode = TG_REACTIONS_ALLOW_SOME;
+        allowed.count = 3;
+        allowed.cps[0] = 0x1f525UL;
+        allowed.cps[1] = 0x1fae8UL; /* not in the sheet */
+        allowed.cps[2] = 0x2764UL;
+        ok = ok && tg_gui_react_set_choices(state, &allowed) ==
+                       TG_GUI_REACT_CHOICES_OK &&
+             state->react_choice_count == 2 &&
+             tg_gui_react_choice_at(state, 1) == 0x2764UL &&
+             tg_gui_react_choice_at(state, 2) == 0UL &&
+             tg_gui_context_items(state, labels, ids) == 2;
+        state->ctx_w = tg_gui_context_menu_measure(state, &backend);
+        tg_gui_context_box(state, 2, 480, 320, 18, &bx, &by, &bw, &bh, &ih);
+        ok = ok && tg_gui_context_menu_hit(state, 480, 320, 18,
+                       bx + 2 + ih + ih / 2, by + 2 + ih / 2) ==
+                       TG_GUI_CTX_REACTION_FIRST + 1 &&
+             bh == ih + 4;
+        allowed.count = 1;
+        allowed.cps[0] = 0x1fae8UL;
+        ok = ok && tg_gui_react_set_choices(state, &allowed) ==
+                       TG_GUI_REACT_CHOICES_UNDRAWN;
+        allowed.mode = TG_REACTIONS_ALLOW_NONE;
+        ok = ok && tg_gui_react_set_choices(state, &allowed) ==
+                       TG_GUI_REACT_CHOICES_NONE;
+        allowed.mode = TG_REACTIONS_ALLOW_ALL;
+        ok = ok && tg_gui_react_set_choices(state, &allowed) ==
+                       TG_GUI_REACT_CHOICES_OK &&
+             tg_gui_react_choice_at(state, 9) == tg_reaction_default(9);
+        state->react_choice_count = 0;
+        if (!ok) puts("gui self-test: allowed reaction choices failed");
+    }
     return ok ? 0 : 2;
 }
 

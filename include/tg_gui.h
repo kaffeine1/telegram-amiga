@@ -506,6 +506,10 @@ typedef struct tg_gui_state {
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
     int ctx_react; /* the React chooser replaces the message menu */
+    /* What the chooser offers: the open chat's allowed reactions that the
+       emoji sheet draws, or the defaults when react_choice_count is 0. */
+    unsigned long react_choices[TG_REACTION_DEFAULTS];
+    int react_choice_count;
     int ctx_x, ctx_y;
     int ctx_hover;
     int ctx_w;
@@ -577,6 +581,16 @@ void tg_gui_emoji_recent_save(const tg_gui_state *state);
 extern int tg_gui_emoji_geom_y; /* panel top as last painted (tests, hit checks) */
 /* Sheet index of a codepoint, or -1 when the sheet has no glyph for it. */
 int tg_gui_emoji_index_of(unsigned long codepoint);
+/* Fills the React chooser from the chat's allowed reactions: OK (the list,
+   or the defaults when all are allowed), NONE (the chat allows none) or
+   UNDRAWN (it allows only emoji the sheet cannot draw). */
+#define TG_GUI_REACT_CHOICES_OK 0
+#define TG_GUI_REACT_CHOICES_NONE 1
+#define TG_GUI_REACT_CHOICES_UNDRAWN 2
+int tg_gui_react_set_choices(tg_gui_state *state,
+                             const tg_reactions_allowed *allowed);
+/* The codepoint of chooser entry i, 0 past the end. */
+unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i);
 /* Repaints ONLY the active caret region (composer input row in chat mode, login
    input box otherwise). Lets the ~2 Hz caret blink avoid a full-window repaint,
    which was visible as a constant refresh on slow OS3 planar displays. */

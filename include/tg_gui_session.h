@@ -310,9 +310,15 @@ const char *tg_gui_session_last_action_error(void);
 
 /* Edits an own message (messages.editMessage) to `text`, and on success updates
    the on-screen bubble in place. Returns 0 ok, non-zero on failure / no chat. */
-/* Choose one of the fixed reactions; choosing an owned one removes it. */
-int tg_gui_session_react(unsigned long message_id, int reaction_index,
+/* Reacts with codepoint `reaction_cp`; choosing the user's own reaction
+   again takes it back. */
+int tg_gui_session_react(unsigned long message_id, unsigned long reaction_cp,
                           FILE *stream);
+
+/* The reactions the open chat allows: all in private chats, the group's or
+   channel's own list asked once per chat and session. Returns 0 when known
+   (or all), non-zero when the question failed (then all, not kept). */
+int tg_gui_session_allowed_reactions(tg_reactions_allowed *out, FILE *stream);
 
 int tg_gui_session_edit(const char *text, unsigned long message_id,
                         FILE *stream);

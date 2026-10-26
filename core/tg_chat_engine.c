@@ -74,6 +74,46 @@ unsigned long tg_reaction_parse_emoji(const char *text)
     return cp;
 }
 
+int tg_reaction_encode(unsigned long cp, char *out)
+{
+    if (out == 0) return 0;
+    if (cp >= 0x80UL && cp < 0x800UL) {
+        out[0] = (char)(0xc0UL | (cp >> 6));
+        out[1] = (char)(0x80UL | (cp & 0x3fUL));
+        out[2] = '\0';
+    } else if (cp >= 0x800UL && cp < 0x10000UL &&
+               (cp < 0xd800UL || cp > 0xdfffUL)) {
+        out[0] = (char)(0xe0UL | (cp >> 12));
+        out[1] = (char)(0x80UL | ((cp >> 6) & 0x3fUL));
+        out[2] = (char)(0x80UL | (cp & 0x3fUL));
+        out[3] = '\0';
+    } else if (cp >= 0x10000UL && cp <= 0x10ffffUL) {
+        out[0] = (char)(0xf0UL | (cp >> 18));
+        out[1] = (char)(0x80UL | ((cp >> 12) & 0x3fUL));
+        out[2] = (char)(0x80UL | ((cp >> 6) & 0x3fUL));
+        out[3] = (char)(0x80UL | (cp & 0x3fUL));
+        out[4] = '\0';
+    } else {
+        out[0] = '\0';
+        return 0;
+    }
+    return 1;
+}
+
+unsigned long tg_reaction_choice_cp(const tg_reactions *reactions,
+                                    unsigned long cp)
+{
+    int i;
+
+    if (reactions == 0) return cp;
+    for (i = 0; i < reactions->count && i < TG_REACTION_MAX; ++i) {
+        if (reactions->items[i].chosen &&
+            tg_reaction_codepoint(&reactions->items[i]) == cp)
+            return 0UL;
+    }
+    return cp;
+}
+
 unsigned long tg_reaction_default(int index)
 {
     static const unsigned long cps[TG_REACTION_DEFAULTS] = {
@@ -206,6 +246,23 @@ int tg_chat_engine_self_test(void)
         tg_reaction_parse_emoji("\xe0\x80\x80") != 0UL) {
         puts("chat engine self-test: reaction emoji/toggle failed");
         return 2;
+    }
+    {
+        char utf8[8];
+
+        reactions.items[0].chosen = 1;
+        if (!tg_reaction_encode(0x2764UL, utf8) ||
+            strcmp(utf8, "\xe2\x9d\xa4") != 0 ||
+            !tg_reaction_encode(0x1f923UL, utf8) ||
+            strcmp(utf8, "\xf0\x9f\xa4\xa3") != 0 ||
+            tg_reaction_encode(0xd800UL, utf8) ||
+            tg_reaction_choice_cp(&reactions,
+                tg_reaction_codepoint(&reactions.items[0])) != 0UL ||
+            tg_reaction_choice_cp(&reactions, 0x1f525UL) != 0x1f525UL) {
+            puts("chat engine self-test: reaction encode/choice failed");
+            return 2;
+        }
+        reactions.items[0].chosen = 0;
     }
     for (i = 0; i < TG_REACTION_DEFAULTS; ++i) {
         /* The single-codepoint standard reactions, as the Bot API lists
