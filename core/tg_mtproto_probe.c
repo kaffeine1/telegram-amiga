@@ -3758,21 +3758,6 @@ static int tg_chat_reactions_apply(tg_gui_chat_driver *gui,
     for (i = 0; i < tg_chat_reactions_count; ++i) {
         tg_chat_reactions_entry *entry = &tg_chat_reactions[i];
 
-        if (tg_gui_log_is_enabled()) {
-            char line[160];
-
-            sprintf(line, "react: queued msg %lu peer 0x%08lx %08lx%08lx, "
-                          "open 0x%08lx %08lx%08lx, %u reactions",
-                    entry->message_id & 0x7fffffffUL,
-                    entry->peer.peer_constructor & 0xffffffffUL,
-                    entry->peer.id_hi & 0xffffffffUL,
-                    entry->peer.id_lo & 0xffffffffUL,
-                    constructor & 0xffffffffUL, hi & 0xffffffffUL,
-                    lo & 0xffffffffUL,
-                    (unsigned int)entry->reactions.count);
-            tg_gui_log(line);
-        }
-
         if (tg_chat_reactions_peer_matches(&entry->peer, constructor, hi, lo) &&
             tg_gui_driver_update_reactions(gui, entry->message_id,
                                             &entry->reactions)) dirty = 1;
@@ -21107,6 +21092,28 @@ int tg_gui_session_react(unsigned long message_id, int reaction_index,
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, message_id, reaction_index,
         quiet);
+    if (rc == 0 && tg_gui_log_is_enabled()) {
+        unsigned int q;
+
+        for (q = 0; q < tg_chat_reactions_count; ++q) {
+            const tg_chat_reactions_entry *entry = &tg_chat_reactions[q];
+            unsigned long constructor = tg_gui_session_state.open_peer_constructor;
+            unsigned long hi = tg_gui_session_state.open_peer_id_hi;
+            unsigned long lo = tg_gui_session_state.open_peer_id_lo;
+            char line[160];
+
+            sprintf(line, "react: queued msg %lu peer 0x%08lx %08lx%08lx, "
+                          "open 0x%08lx %08lx%08lx, %u reactions",
+                    entry->message_id & 0x7fffffffUL,
+                    entry->peer.peer_constructor & 0xffffffffUL,
+                    entry->peer.id_hi & 0xffffffffUL,
+                    entry->peer.id_lo & 0xffffffffUL,
+                    constructor & 0xffffffffUL, hi & 0xffffffffUL,
+                    lo & 0xffffffffUL,
+                    (unsigned int)entry->reactions.count);
+            tg_gui_log(line);
+        }
+    }
     if (rc == 0) {
         int applied = tg_chat_reactions_apply(&tg_gui_session_state.gui_driver,
             tg_gui_session_state.open_peer_constructor,
