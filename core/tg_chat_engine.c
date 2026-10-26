@@ -77,7 +77,7 @@ unsigned long tg_reaction_parse_emoji(const char *text)
 unsigned long tg_reaction_default(int index)
 {
     static const unsigned long cps[TG_REACTION_DEFAULTS] = {
-        0x1f44dUL, 0x2764UL, 0x1f525UL, 0x1f602UL, 0x1f62eUL,
+        0x1f44dUL, 0x2764UL, 0x1f525UL, 0x1f923UL, 0x1f631UL,
         0x1f622UL, 0x1f389UL, 0x1f64fUL, 0x1f44fUL, 0x1f44cUL
     };
     return index >= 0 && index < TG_REACTION_DEFAULTS ? cps[index] : 0UL;
@@ -86,7 +86,7 @@ unsigned long tg_reaction_default(int index)
 const char *tg_reaction_name(int index)
 {
     static const char *const names[TG_REACTION_DEFAULTS] = {
-        "Thumbs up", "Heart", "Fire", "Laughing", "Surprised",
+        "Thumbs up", "Heart", "Fire", "Laughing", "Shocked",
         "Sad", "Party", "Pray", "Clap", "OK"
     };
     return index >= 0 && index < TG_REACTION_DEFAULTS ? names[index] : "";
@@ -96,7 +96,7 @@ const char *tg_reaction_utf8(int index)
 {
     static const char *const emoji[TG_REACTION_DEFAULTS] = {
         "\xf0\x9f\x91\x8d", "\xe2\x9d\xa4", "\xf0\x9f\x94\xa5",
-        "\xf0\x9f\x98\x82", "\xf0\x9f\x98\xae", "\xf0\x9f\x98\xa2",
+        "\xf0\x9f\xa4\xa3", "\xf0\x9f\x98\xb1", "\xf0\x9f\x98\xa2",
         "\xf0\x9f\x8e\x89", "\xf0\x9f\x99\x8f", "\xf0\x9f\x91\x8f",
         "\xf0\x9f\x91\x8c"
     };
@@ -208,7 +208,34 @@ int tg_chat_engine_self_test(void)
         return 2;
     }
     for (i = 0; i < TG_REACTION_DEFAULTS; ++i) {
-        if (tg_reaction_parse_emoji(tg_reaction_utf8((int)i)) !=
+        /* The single-codepoint standard reactions, as the Bot API lists
+           them under ReactionTypeEmoji (core.telegram.org/bots/api,
+           2026-10-26). Anything else is REACTION_INVALID in every chat:
+           tears of joy and an open mouth were, before this list. */
+        static const unsigned long standard[] = {
+            0x2764UL, 0x1f44dUL, 0x1f44eUL, 0x1f525UL, 0x1f970UL, 0x1f44fUL,
+            0x1f601UL, 0x1f914UL, 0x1f92fUL, 0x1f631UL, 0x1f92cUL, 0x1f622UL,
+            0x1f389UL, 0x1f929UL, 0x1f92eUL, 0x1f4a9UL, 0x1f64fUL, 0x1f44cUL,
+            0x1f54aUL, 0x1f921UL, 0x1f971UL, 0x1f974UL, 0x1f60dUL, 0x1f433UL,
+            0x1f31aUL, 0x1f32dUL, 0x1f4afUL, 0x1f923UL, 0x26a1UL, 0x1f34cUL,
+            0x1f3c6UL, 0x1f494UL, 0x1f928UL, 0x1f610UL, 0x1f353UL, 0x1f37eUL,
+            0x1f48bUL, 0x1f595UL, 0x1f608UL, 0x1f634UL, 0x1f62dUL, 0x1f913UL,
+            0x1f47bUL, 0x1f440UL, 0x1f383UL, 0x1f648UL, 0x1f607UL, 0x1f628UL,
+            0x1f91dUL, 0x270dUL, 0x1f917UL, 0x1fae1UL, 0x1f385UL, 0x1f384UL,
+            0x2603UL, 0x1f485UL, 0x1f92aUL, 0x1f5ffUL, 0x1f192UL, 0x1f498UL,
+            0x1f649UL, 0x1f984UL, 0x1f618UL, 0x1f48aUL, 0x1f64aUL, 0x1f60eUL,
+            0x1f47eUL, 0x1f937UL, 0x1f621UL
+        };
+        unsigned long k;
+        int listed = 0;
+
+        for (k = 0UL; k < sizeof(standard) / sizeof(standard[0]); ++k) {
+            if (standard[k] == tg_reaction_default((int)i)) {
+                listed = 1;
+            }
+        }
+        if (!listed ||
+            tg_reaction_parse_emoji(tg_reaction_utf8((int)i)) !=
             tg_reaction_default((int)i) || tg_reaction_name((int)i)[0] == '\0') {
             puts("chat engine self-test: reaction defaults failed");
             return 2;

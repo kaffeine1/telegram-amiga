@@ -71,7 +71,10 @@ the text client for the plain 68000.
   prints the counts after the line and adds /react <id> <name>. "React...",
   first in a message's menu, opens a grid of the ten reactions' own emoji,
   five to a row like the strip of the official desktop client, with yours
-  on the accent colour. A reaction added in a private chat shows too:
+  on the accent colour. The ten are among the reactions Telegram accepts
+  everywhere: tears of joy and an open mouth, which it refuses, became
+  rolling on the floor laughing and a shocked face. A reaction added in a
+  private chat shows too:
   Telegram reports it there by editing the message, not with the reaction
   update groups get.
 
