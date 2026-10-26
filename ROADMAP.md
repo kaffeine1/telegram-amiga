@@ -224,7 +224,19 @@ Features are therefore grouped by the work they share.
   update tool that compares versions. From the beta the public number and
   the cookie are the same two integers: 0.1, then 0.2, and one day 1.0. The
   alphas keep their three-part numbers; mapping 0.0.93 onto 0.93 would make
-  the beta look like a downgrade to the system.
+  the beta look like a downgrade to the system. What the beta carries:
+  - the rename to Amigram, in the steps of its section below (the last
+    TelegramAmiga release says so, the new archives replace the old ones
+    through their Replaces fields, a "coming from TelegramAmiga" section
+    in the readme and the manuals);
+  - AmiUpdate on AmigaOS 4, whose entry starts as Amigram at 0.1 (its
+    section below): what the system needs is checked in the OS4 VM, the
+    account is opened by the maintainer, and the entry's fields are
+    written out once it exists;
+  - the api credentials inside the binary, with `data/telegram-api.txt`
+    left as the override (their section below);
+  - the adversarial review of the whole client, and a sanitizer round on
+    the code that ships.
 - **After the beta: skins and translations.** Colours, fonts and more
   still to be defined, and the client in other languages through the
   system's locale.library. Both touch every colour or every word on
@@ -1357,6 +1369,32 @@ create the account and this client to use it, and the feature is for
 the people for whom that is not an option: a phone that receives SMS
 and no smartphone. It fits the 0.0.9x line after the 0.0.95 speed
 release.
+
+## Planned for 0.1: AmiUpdate on AmigaOS 4
+
+A user asked for the client among the updates AmiUpdate offers, the
+update tool of AmigaOS 4 (the other systems have no equivalent). Its
+server keeps only a version and an address per program; the archive
+stays where it is, on OS4Depot, and AmiUpdate unpacks our lha as it is.
+
+What the system needs was checked in the OS4 VM on 2026-09-12. The
+`Version` command shows our three numbers, but a comparison reads two:
+asked whether 0.0.92 is at least 0.1, the system says no. That is why
+the beta drops a dot, and why the entry starts at 0.1: from there every
+alpha is older, and the first update AmiUpdate offers is the beta. The
+installed program is found without help, in `APPDIR:`, which AmigaOS 4
+keeps of the programs it ran, so the entry needs no path and nothing has
+to be written to `ENV:AppPaths`.
+
+Because the entry starts with the beta, it starts under the new name,
+Amigram. Steps: the maintainer opens the account on the AmiUpdate site;
+the entry's fields are then written out (how the form takes a version
+is still to be seen, its database lists three-part ones too); the
+address is the stable OS4Depot link of the renamed archive. An
+`AutoInstall` script, which would update the binary, icons, manuals and
+licences and leave the session and the data drawer alone, comes later,
+after a release or two with the plain entry, and is tried in the OS4 VM
+on a drawer with a real session, RollBack included.
 
 ## Planned: the api credentials the packages carry
 
