@@ -488,6 +488,7 @@ typedef struct tg_chat_reactions_entry {
     tg_mtproto_dialog_peer peer;
     unsigned long message_id;
     tg_reactions reactions;
+    unsigned char from_edit; /* read off an edited message, not an update */
 } tg_chat_reactions_entry;
 static tg_chat_reactions_entry tg_chat_reactions[TG_CHAT_REACTIONS_QUEUE_MAX];
 static unsigned int tg_chat_reactions_count = 0;
@@ -3630,14 +3631,18 @@ static void tg_chat_edit_parse_update(tg_mtproto_tl_reader *reader)
        messages.sendReaction included) by editing the message, which carries
        its whole reactions field: that is the message's reactions now, none
        when it has no field. Groups and channels send updateMessageReactions
-       instead (seen in a tester's log, 2026-10-26). */
-    {
+       too, and an edit there was read short of its reactions (a media the
+       reader stops at) and wiped the reaction just added (tester's log,
+       2026-10-26): the edit counts only when the reader got that far, and
+       never over an updateMessageReactions for the same message. */
+    if (message.reactions_known) {
         tg_chat_reactions_entry reacted;
 
         memset(&reacted, 0, sizeof(reacted));
         reacted.peer = dest;
         reacted.message_id = message.id;
         reacted.reactions = message.reactions;
+        reacted.from_edit = 1;
         tg_chat_reactions_queue(&reacted);
     }
     if (tg_chat_edit_target == 0) {
@@ -3714,7 +3719,11 @@ static void tg_chat_reactions_queue(const tg_chat_reactions_entry *parsed)
             tg_chat_reactions[i].peer.id_hi == parsed->peer.id_hi &&
             tg_chat_reactions[i].peer.id_lo == parsed->peer.id_lo &&
             tg_chat_reactions[i].message_id == parsed->message_id) {
-            tg_chat_reactions[i] = *parsed;
+            /* updateMessageReactions is about the reactions alone: an
+               edited message in the same reply never overrides it. */
+            if (!parsed->from_edit || tg_chat_reactions[i].from_edit) {
+                tg_chat_reactions[i] = *parsed;
+            }
             return;
         }
     }
@@ -17900,6 +17909,55 @@ static int tg_mtproto_reactions_update_self_test(void)
              state->messages[0].reactions.count == 4 &&
              state->messages[0].reactions.items[0].chosen;
         if (!ok) puts("probe self-test: reactions from an edited message failed");
+        {
+            /* A group's reply: updateMessageReactions and an edit without
+               a reactions field for the same message, in either order.
+               The reaction update wins; an edit alone (no field) clears. */
+            int order;
+
+            for (order = 0; order < 3 && ok; ++order) {
+                tg_mtproto_tl_writer_init(&writer, edit, sizeof(edit));
+                (void)tg_mtproto_tl_write_u32(&writer, 0x74ae4240UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+                (void)tg_mtproto_tl_write_u32(&writer, order == 2 ? 1UL : 2UL);
+                if (order == 1) {
+                    (void)tg_mtproto_tl_write_raw(&writer, item, item_size);
+                }
+                (void)tg_mtproto_tl_write_u32(&writer,
+                    TG_MTPROTO_UPDATE_EDIT_CHANNEL_MESSAGE_CONSTRUCTOR);
+                (void)tg_mtproto_tl_write_u32(&writer, 0x9815cec8UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 0UL); /* no reactions */
+                (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 42UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 0xa2a5371eUL);
+                (void)tg_mtproto_tl_write_u64(&writer, 9UL, 17UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 123UL);
+                (void)tg_mtproto_tl_write_bytes(&writer,
+                    (const unsigned char *)"hi", 2UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 9UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+                if (order == 0) {
+                    (void)tg_mtproto_tl_write_raw(&writer, item, item_size);
+                }
+                (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 0x1cb5c415UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 0UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 123UL);
+                (void)tg_mtproto_tl_write_u32(&writer, 1UL);
+                memset(&state->messages[0].reactions, 0,
+                       sizeof(state->messages[0].reactions));
+                state->messages[0].reactions.count = order == 2 ? 2 : 0;
+                tg_chat_reactions_count = 0;
+                tg_chat_notify_collect(edit, writer.length);
+                (void)tg_chat_reactions_apply(&gui,
+                    TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 9UL, 17UL);
+                ok = state->messages[0].reactions.count ==
+                     (order == 2 ? 0 : 4);
+            }
+            if (!ok) puts("probe self-test: edit against reaction update failed");
+            state->messages[0].reactions.count = 4; /* as the tests below expect */
+        }
         tg_chat_edit_target = saved_edit;
     }
     /* A complete empty update removes the entire row. */

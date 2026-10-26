@@ -503,6 +503,10 @@ typedef struct tg_mtproto_message_text {
     unsigned long service_flags;    /* the action's own flags */
     unsigned long service_reason;   /* a call's PhoneCallDiscardReason */
     tg_reactions reactions;
+    /* 1 when the reader got as far as the reactions field: reactions is
+       then the message's own (none when it had no field). A reader that
+       stops earlier (a media or an entity it cannot walk) leaves 0. */
+    unsigned char reactions_known;
 } tg_mtproto_message_text;
 
 tg_mtproto_tl_status tg_mtproto_read_message_reactions(

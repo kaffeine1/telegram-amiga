@@ -5567,6 +5567,7 @@ static tg_mtproto_tl_status tg_read_service_message(
         tg_mtproto_read_message_reactions(reader, &out->reactions) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_OK;
     }
+    out->reactions_known = 1;
     if ((flags & (1UL << 25)) != 0UL &&
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_OK;
@@ -6333,6 +6334,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         tg_mtproto_read_message_reactions(reader, &out->reactions) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_OK;
     }
+    out->reactions_known = 1;
     if ((flags & (1UL << 22)) != 0UL &&
         tg_skip_restriction_reason_vector(reader) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_OK;
