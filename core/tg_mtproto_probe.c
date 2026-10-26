@@ -3732,6 +3732,21 @@ static int tg_chat_reactions_apply(tg_gui_chat_driver *gui,
     for (i = 0; i < tg_chat_reactions_count; ++i) {
         tg_chat_reactions_entry *entry = &tg_chat_reactions[i];
 
+        if (tg_gui_log_is_enabled()) {
+            char line[160];
+
+            sprintf(line, "react: queued msg %lu peer 0x%08lx %08lx%08lx, "
+                          "open 0x%08lx %08lx%08lx, %u reactions",
+                    entry->message_id & 0x7fffffffUL,
+                    entry->peer.peer_constructor & 0xffffffffUL,
+                    entry->peer.id_hi & 0xffffffffUL,
+                    entry->peer.id_lo & 0xffffffffUL,
+                    constructor & 0xffffffffUL, hi & 0xffffffffUL,
+                    lo & 0xffffffffUL,
+                    (unsigned int)entry->reactions.count);
+            tg_gui_log(line);
+        }
+
         if (tg_chat_reactions_peer_matches(&entry->peer, constructor, hi, lo) &&
             tg_gui_driver_update_reactions(gui, entry->message_id,
                                             &entry->reactions)) dirty = 1;
@@ -10512,6 +10527,16 @@ static int tg_mtproto_auth_react_peer_on_context(
        Never increment a count locally before the server accepts the reaction. */
     tg_chat_notify_collect(result.result_body - 4U,
                              result.result_body_length + 4U);
+    {
+        char line[96];
+
+        sprintf(line, "react: reply 0x%08lx, %lu bytes, %u queued",
+                tg_mtproto_read_u32_le(result.result_body - 4U),
+                result.result_body_length > 99999999UL
+                    ? 99999999UL : result.result_body_length,
+                tg_chat_reactions_count);
+        tg_gui_log(line);
+    }
     return 0;
 }
 
@@ -21014,13 +21039,22 @@ int tg_gui_session_react(unsigned long message_id, int reaction_index,
         tg_gui_session_state.current_peer_index, message_id, reaction_index,
         quiet);
     if (rc == 0) {
-        (void)tg_chat_reactions_apply(&tg_gui_session_state.gui_driver,
+        int applied = tg_chat_reactions_apply(&tg_gui_session_state.gui_driver,
             tg_gui_session_state.open_peer_constructor,
             tg_gui_session_state.open_peer_id_hi,
             tg_gui_session_state.open_peer_id_lo);
+        char line[64];
+
+        sprintf(line, "react: msg %lu applied %d",
+                message_id & 0x7fffffffUL, applied);
+        tg_gui_log(line);
         sprintf(state->status, "%.47s", reaction_index < 0 ?
             "Reaction removed" : "Reaction sent");
     } else {
+        char line[96];
+
+        sprintf(line, "react: failed rc %d (%.48s)", rc, tg_mtproto_query_fail);
+        tg_gui_log(line);
         sprintf(state->status, "%.47s",
             tg_mtproto_reaction_failure_text(tg_mtproto_query_fail));
         if (rc == TG_MTPROTO_QUERY_SOFT_FAIL)
