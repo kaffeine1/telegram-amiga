@@ -4390,23 +4390,85 @@ static int tg_gui_av_draw_rgb(tg_gui_amiga_ctx *ctx,
     return tg_gui_amiga_rgb_compose(ctx, rect, tg_gui_av_shade, &src);
 }
 
-static void tg_gui_emoji_shade(const void *data, int w, int h, int x, int y,
-                               unsigned char *px)
-{
-    tg_gui_rgb_emoji_pixel((const unsigned char *)data, w, h, x, y, px);
-}
-
+/* An emoji, sampled nearest, is either a colour or transparent at each
+   pixel, so it needs no background: each row's runs of colour are written
+   as they are, and nothing is read back from the frame. Reading the frame
+   is what costs on a machine whose video memory is far from the CPU (a
+   Sam460), and the input row with its emoji is drawn again at every key. */
 static int tg_gui_emoji_draw_rgb(tg_gui_amiga_ctx *ctx,
                                  const unsigned char *glyph, int x, int y_top,
                                  int size)
 {
-    tg_gui_rect rect;
+#if defined(TG_GUI_HAVE_CYBERGRAPHICS)
+    unsigned char row[TG_GUI_RGB_BLOCK_W * 3];
+    int x0;
+    int x1;
+    int y;
 
-    rect.x = x;
-    rect.y = y_top;
-    rect.w = size;
-    rect.h = size;
-    return tg_gui_amiga_rgb_compose(ctx, rect, tg_gui_emoji_shade, glyph);
+    if (ctx == 0 || ctx->rport == 0 || !ctx->photo_truecolor ||
+        ctx->photo_cgx_failed || tg_gui_av_paint_budget_ms == 0UL ||
+        size <= 0 || size > TG_GUI_RGB_BLOCK_W || CyberGfxBase == 0) {
+        return 0;
+    }
+    x0 = x < 0 ? 0 : x;
+    x1 = x + size > ctx->inner_w ? ctx->inner_w : x + size;
+    if (x1 <= x0 || y_top >= ctx->inner_h || y_top + size <= 0) {
+        return 1; /* nothing of it in the window */
+    }
+    if (!tg_gui_photo_cgx_self_check(ctx, ctx->rport, ctx->origin_x,
+                                     ctx->origin_y, x0,
+                                     y_top < 0 ? 0 : y_top)) {
+        return 0;
+    }
+    for (y = 0; y < size; ++y) {
+        int sy = (y * TG_EMOJI_GLYPH_SIZE) / size;
+        int c = x0;
+
+        if (y_top + y < 0 || y_top + y >= ctx->inner_h) {
+            continue;
+        }
+        while (c < x1) {
+            int start;
+
+            while (c < x1 &&
+                   glyph[sy * TG_EMOJI_GLYPH_SIZE +
+                         ((c - x) * TG_EMOJI_GLYPH_SIZE) / size] == 0U) {
+                ++c;
+            }
+            start = c;
+            while (c < x1) {
+                unsigned char v = glyph[sy * TG_EMOJI_GLYPH_SIZE +
+                                        ((c - x) * TG_EMOJI_GLYPH_SIZE) / size];
+                const unsigned char *rgb;
+
+                if (v == 0U) {
+                    break;
+                }
+                rgb = tg_emoji_sheet_palette[v - 1U];
+                row[(c - start) * 3] = rgb[0];
+                row[(c - start) * 3 + 1] = rgb[1];
+                row[(c - start) * 3 + 2] = rgb[2];
+                ++c;
+            }
+            if (c > start &&
+                tg_gui_cgx_write_pixel_array(
+                    row, 0, 0, (UWORD)((c - start) * 3), ctx->rport,
+                    (UWORD)(ctx->origin_x + start),
+                    (UWORD)(ctx->origin_y + y_top + y),
+                    (UWORD)(c - start), 1, RECTFMT_RGB) == 0UL) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+#else
+    (void)ctx;
+    (void)glyph;
+    (void)x;
+    (void)y_top;
+    (void)size;
+    return 0;
+#endif
 }
 
 /* How many scaled rows are staged before handing them to cybergraphics in one
