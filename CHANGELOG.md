@@ -68,9 +68,12 @@ the text client for the plain 68000.
   no update when someone else reacts. "React..." in a message's right-button menu adds one of ten
   common reactions, and choosing yours again takes it back; a reaction a
   group does not allow gets a plain-words status line. The text client
-  prints the counts after the line and adds /react <id> <name>. "React..."
-  opens a grid of the ten reactions' own emoji, five to a row like the
-  strip of the official desktop client, with yours on the accent colour.
+  prints the counts after the line and adds /react <id> <name>. "React...",
+  first in a message's menu, opens a grid of the ten reactions' own emoji,
+  five to a row like the strip of the official desktop client, with yours
+  on the accent colour. A reaction added in a private chat shows too:
+  Telegram reports it there by editing the message, not with the reaction
+  update groups get.
 
 ### Fixed
 - Avatars and emoji look as they should on screens of more than 256

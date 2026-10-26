@@ -5349,6 +5349,13 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         }
         return n;
     }
+    /* React... leads, as the official clients put the reactions first. */
+    if (state->ctx_msg >= 0 && state->ctx_msg < state->message_count &&
+        state->messages[state->ctx_msg].id != 0UL &&
+        !state->messages[state->ctx_msg].is_system) {
+        labels[n] = "React...";
+        ids[n++] = TG_GUI_CTX_REACT;
+    }
     labels[n] = "Reply";
     ids[n] = TG_GUI_CTX_REPLY;
     ++n;
@@ -5383,8 +5390,6 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
         }
         if (!m->is_system) {
-            labels[n] = "React...";
-            ids[n++] = TG_GUI_CTX_REACT;
             labels[n] = "Forward to Saved";
             ids[n] = TG_GUI_CTX_FORWARD_SAVED;
             ++n;
@@ -5646,9 +5651,9 @@ static void tg_gui_paint_react_grid(const tg_gui_state *state,
             }
         }
         if (i == state->ctx_hover || mine) {
-            backend->round_bg = TG_GUI_PEN_MENU_BACK;
+            backend->round_bg = TG_GUI_PEN_SURFACE;
             tg_gui_fill_pill(backend, i == state->ctx_hover
-                                          ? TG_GUI_PEN_MENU_FILL
+                                          ? TG_GUI_PEN_SELECT
                                           : TG_GUI_PEN_ACCENT,
                              tg_gui_make_rect(cx + 1, cy + 1, cell - 2,
                                               cell - 2));
@@ -5662,9 +5667,7 @@ static void tg_gui_paint_react_grid(const tg_gui_state *state,
             unsigned long tl = (unsigned long)strlen(t);
             int tw = backend->text_width(backend, t, tl);
 
-            backend->draw_text(backend, i == state->ctx_hover
-                                            ? TG_GUI_PEN_MENU_FILLTEXT
-                                            : TG_GUI_PEN_MENU_TEXT,
+            backend->draw_text(backend, TG_GUI_PEN_TEXT,
                                cx + (cell - tw) / 2,
                                tg_gui_centred_baseline(backend, cy, cell), t,
                                tl);
@@ -5701,12 +5704,17 @@ static void tg_gui_paint_context_menu(const tg_gui_state *state,
        and the hover highlight all come from the screen's own pens. */
     tg_gui_popup_frame(backend, TG_GUI_PEN_MENU_FRAME,
                         tg_gui_make_rect(bx - 1, by - 1, bw + 2, bh + 2));
-    backend->fill_rect(backend, TG_GUI_PEN_MENU_BACK,
-                       tg_gui_make_rect(bx, by, bw, bh));
     if (tg_gui_context_is_react_grid(state)) {
+        /* On the chat's own dark surface, not the system menu's grey: the
+           sheet's soft edges were blended over black when it was made, so
+           on a light grey every emoji wore a dark rim (G5, 2026-10-26). */
+        backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                           tg_gui_make_rect(bx, by, bw, bh));
         tg_gui_paint_react_grid(state, backend, n, bx, by, ih, lh);
         return;
     }
+    backend->fill_rect(backend, TG_GUI_PEN_MENU_BACK,
+                       tg_gui_make_rect(bx, by, bw, bh));
     for (i = 0; i < n; ++i) {
         int text_pen = TG_GUI_PEN_MENU_TEXT;
 
@@ -7351,6 +7359,9 @@ static int tg_gui_reactions_self_test(void)
        actual item geometry and ids, including the final OK entry. */
     state->ctx_visible = 1;
     state->ctx_msg = 0;
+    state->ctx_react = 0;
+    ok = ok && tg_gui_context_items(state, labels, ids) > 1 &&
+         ids[0] == TG_GUI_CTX_REACT; /* the reactions lead the menu */
     state->ctx_react = 1;
     state->ctx_w = tg_gui_context_menu_measure(state, &backend);
     ok = ok && tg_gui_context_items(state, labels, ids) == TG_REACTION_DEFAULTS;
