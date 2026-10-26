@@ -5535,6 +5535,24 @@ int tg_gui_photo_save_allowed(int destination_exists,
    the paint and the backend-free hit-test share one width (issue #11: the
    fixed width truncated "Send file..." / "Download drawer..." on wider
    fonts). */
+/* The React... chooser is a grid of the reactions' own emoji, five to a
+   row, like the strip of the official desktop client, instead of a list of
+   their names. Square cells of a line and a bit. */
+#define TG_GUI_REACT_COLS 5
+
+static int tg_gui_context_is_react_grid(const tg_gui_state *state)
+{
+    return state->ctx_react && state->ctx_msg >= 0 &&
+           state->ctx_msg < state->message_count &&
+           state->messages[state->ctx_msg].id != 0UL &&
+           !state->messages[state->ctx_msg].is_system;
+}
+
+static int tg_gui_react_cell(int lh)
+{
+    return lh + 8;
+}
+
 int tg_gui_context_menu_measure(const tg_gui_state *state,
                                 tg_gui_backend *backend)
 {
@@ -5546,6 +5564,10 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 
     if (state == 0 || backend == 0 || backend->text_width == 0) {
         return w;
+    }
+    if (tg_gui_context_is_react_grid(state) && backend->line_height != 0) {
+        return TG_GUI_REACT_COLS *
+                   tg_gui_react_cell(backend->line_height(backend)) + 4;
     }
     n = tg_gui_context_items(state, labels, ids);
     for (i = 0; i < n; ++i) {
@@ -5561,7 +5583,8 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 
 /* Shared geometry for the popup: box rect + per-item height for `count` items,
    clamped so the box stays fully inside the window. Backend-free: the width
-   was measured (and stored) when the menu opened; 0 = the fixed minimum. */
+   was measured (and stored) when the menu opened; 0 = the fixed minimum.
+   The reaction grid's item height is its square cell. */
 static void tg_gui_context_box(const tg_gui_state *state, int count, int width,
                                int height, int lh, int *bx, int *by, int *bw,
                                int *bh, int *item_h)
@@ -5571,6 +5594,12 @@ static void tg_gui_context_box(const tg_gui_state *state, int count, int width,
     int h = (count * ih) + 4;
     int x = state->ctx_x;
     int y = state->ctx_y;
+
+    if (tg_gui_context_is_react_grid(state)) {
+        ih = tg_gui_react_cell(lh);
+        w = TG_GUI_REACT_COLS * ih + 4;
+        h = ((count + TG_GUI_REACT_COLS - 1) / TG_GUI_REACT_COLS) * ih + 4;
+    }
 
     if (x + w > width) {
         x = width - w;
@@ -5589,6 +5618,59 @@ static void tg_gui_context_box(const tg_gui_state *state, int count, int width,
     *bw = w;
     *bh = h;
     *item_h = ih;
+}
+
+/* The reaction grid: each reaction's emoji in its cell, the cell under the
+   pointer in the menu's highlight, the user's own reaction on the accent
+   (choosing it again takes it back). Where a glyph cannot be drawn (emoji
+   switched off) its emoticon stands in. */
+static void tg_gui_paint_react_grid(const tg_gui_state *state,
+                                    tg_gui_backend *backend, int n, int bx,
+                                    int by, int cell, int lh)
+{
+    const tg_reactions *have = &state->messages[state->ctx_msg].reactions;
+    int i;
+
+    for (i = 0; i < n; ++i) {
+        int cx = bx + 2 + (i % TG_GUI_REACT_COLS) * cell;
+        int cy = by + 2 + (i / TG_GUI_REACT_COLS) * cell;
+        unsigned long cp = tg_reaction_default(i);
+        int idx = tg_gui_emoji_index_of(cp);
+        int mine = 0;
+        int k;
+
+        for (k = 0; k < have->count && k < TG_REACTION_MAX; ++k) {
+            if (have->items[k].chosen &&
+                tg_reaction_codepoint(&have->items[k]) == cp) {
+                mine = 1;
+            }
+        }
+        if (i == state->ctx_hover || mine) {
+            backend->round_bg = TG_GUI_PEN_MENU_BACK;
+            tg_gui_fill_pill(backend, i == state->ctx_hover
+                                          ? TG_GUI_PEN_MENU_FILL
+                                          : TG_GUI_PEN_ACCENT,
+                             tg_gui_make_rect(cx + 1, cy + 1, cell - 2,
+                                              cell - 2));
+        }
+        if (idx < 0 || backend->glyph_image == 0 ||
+            !backend->glyph_image(backend, (unsigned long)idx, cx + 4,
+                                  cy + 4, cell - 8)) {
+            const char *t = idx >= 0
+                                ? tg_gui_session_emoji_text((unsigned long)idx)
+                                : "*";
+            unsigned long tl = (unsigned long)strlen(t);
+            int tw = backend->text_width(backend, t, tl);
+
+            backend->draw_text(backend, i == state->ctx_hover
+                                            ? TG_GUI_PEN_MENU_FILLTEXT
+                                            : TG_GUI_PEN_MENU_TEXT,
+                               cx + (cell - tw) / 2,
+                               tg_gui_centred_baseline(backend, cy, cell), t,
+                               tl);
+        }
+    }
+    (void)lh;
 }
 
 /* Draws the context menu on top of everything when open: an accent frame, a
@@ -5621,6 +5703,10 @@ static void tg_gui_paint_context_menu(const tg_gui_state *state,
                         tg_gui_make_rect(bx - 1, by - 1, bw + 2, bh + 2));
     backend->fill_rect(backend, TG_GUI_PEN_MENU_BACK,
                        tg_gui_make_rect(bx, by, bw, bh));
+    if (tg_gui_context_is_react_grid(state)) {
+        tg_gui_paint_react_grid(state, backend, n, bx, by, ih, lh);
+        return;
+    }
     for (i = 0; i < n; ++i) {
         int text_pen = TG_GUI_PEN_MENU_TEXT;
 
@@ -5671,6 +5757,24 @@ int tg_gui_paint_context_menu_area(const tg_gui_state *state,
     return 1;
 }
 
+/* The grid cell under (x, y), counted row by row. */
+static int tg_gui_react_grid_at(int bx, int by, int cell, int x, int y)
+{
+    int col = (x - (bx + 2)) / cell;
+    int row = (y - (by + 2)) / cell;
+
+    if (col < 0) {
+        col = 0;
+    }
+    if (col >= TG_GUI_REACT_COLS) {
+        col = TG_GUI_REACT_COLS - 1;
+    }
+    if (row < 0) {
+        row = 0;
+    }
+    return row * TG_GUI_REACT_COLS + col;
+}
+
 int tg_gui_context_menu_hit(const tg_gui_state *state, int width, int height,
                             int lh, int x, int y)
 {
@@ -5686,6 +5790,10 @@ int tg_gui_context_menu_hit(const tg_gui_state *state, int width, int height,
     tg_gui_context_box(state, n, width, height, lh, &bx, &by, &bw, &bh, &ih);
     if (x < bx || x >= bx + bw || y < by || y >= by + bh) {
         return -1; /* outside the box -> dismiss */
+    }
+    if (tg_gui_context_is_react_grid(state)) {
+        i = tg_gui_react_grid_at(bx, by, ih, x, y);
+        return i < n ? ids[i] : -1;
     }
     i = (y - (by + 2)) / ih;
     if (i < 0) {
@@ -5712,6 +5820,10 @@ int tg_gui_context_menu_index(const tg_gui_state *state, int width, int height,
     tg_gui_context_box(state, n, width, height, lh, &bx, &by, &bw, &bh, &ih);
     if (x < bx || x >= bx + bw || y < by || y >= by + bh) {
         return -1; /* outside the box -> no item highlighted */
+    }
+    if (tg_gui_context_is_react_grid(state)) {
+        i = tg_gui_react_grid_at(bx, by, ih, x, y);
+        return i < n ? i : -1;
     }
     i = (y - (by + 2)) / ih;
     if (i < 0) {
@@ -7244,11 +7356,17 @@ static int tg_gui_reactions_self_test(void)
     ok = ok && tg_gui_context_items(state, labels, ids) == TG_REACTION_DEFAULTS;
     tg_gui_context_box(state, TG_REACTION_DEFAULTS, 480, 320, 18,
                         &bx, &by, &bw, &bh, &ih);
+    /* A grid of five emoji to a row: square cells of a line and eight. */
+    ok = ok && state->ctx_w == 5 * (18 + 8) + 4 && ih == 18 + 8 &&
+         bw == state->ctx_w && bh == 2 * ih + 4;
     for (i = 0; i < TG_REACTION_DEFAULTS && ok; ++i) {
+        int cx = bx + 2 + (i % 5) * ih + ih / 2;
+        int cy = by + 2 + (i / 5) * ih + ih / 2;
+
         ok = tg_gui_emoji_index_of(tg_reaction_default(i)) >= 0 &&
-             tg_gui_context_menu_hit(state, 480, 320, 18,
-                 bx + 8, by + 2 + i * ih + ih / 2) ==
-                 TG_GUI_CTX_REACTION_FIRST + i;
+             tg_gui_context_menu_hit(state, 480, 320, 18, cx, cy) ==
+                 TG_GUI_CTX_REACTION_FIRST + i &&
+             tg_gui_context_menu_index(state, 480, 320, 18, cx, cy) == i;
     }
     if (!ok) puts("gui self-test: reaction row/layout/menu failed");
     return ok ? 0 : 2;

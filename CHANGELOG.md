@@ -31,7 +31,9 @@ the text client for the plain 68000.
   menu, and "Default sound" to drop it. A sound plays when Beep is on and
   the chat rings, for at most three seconds, while the client goes on
   working; without a sound device the screen flashes as before. The text
-  client rings the same sounds while /bell is on. The menu once called
+  client rings the same sounds while /bell is on. Six short sounds of our
+  own come in the sounds/ drawer of the packages, in IFF 8SVX so that every
+  system plays them, and choosing a sound plays it at once. The menu once called
   "New messages" is now "Notifications". The choices are kept in
   data/telegram-notify.txt and data/telegram-chat-notify.txt.
 - In a group, the new-message pop-up says who wrote: "Name: text". The
@@ -66,7 +68,9 @@ the text client for the plain 68000.
   no update when someone else reacts. "React..." in a message's right-button menu adds one of ten
   common reactions, and choosing yours again takes it back; a reaction a
   group does not allow gets a plain-words status line. The text client
-  prints the counts after the line and adds /react <id> <name>.
+  prints the counts after the line and adds /react <id> <name>. "React..."
+  opens a grid of the ten reactions' own emoji, five to a row like the
+  strip of the official desktop client, with yours on the accent colour.
 
 ### Fixed
 - Avatars and emoji look as they should on screens of more than 256
