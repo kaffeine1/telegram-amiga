@@ -1405,8 +1405,10 @@ terms tell developers not to do with them, and everybody shares one set
 of limits. The default pair belongs in the binary instead, with
 `data/telegram-api.txt` kept as the override for anyone who wants their
 own; the file stops being part of what we distribute, and a new pair can
-be rolled out with a release. The pair itself should belong to the
-project rather than to a personal account.
+be rolled out with a release. The pair already belongs to an account of
+the project's own, not to a personal one, so it stays; it goes into the
+binary from a local file kept out of the repository, so that the public
+source does not publish it either.
 
 ## Done for 0.0.98: the day of older messages
 
