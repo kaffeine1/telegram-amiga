@@ -36,6 +36,7 @@
 #include <exec/system.h>
 #endif
 #if defined(__AROS__)
+#include <datatypes/soundclassext.h>
 #define TG_NOTIFY_TAG(p) ((IPTR)(p))
 #else
 #define TG_NOTIFY_TAG(p) ((ULONG)(p))
@@ -61,6 +62,9 @@ struct DataTypesIFace *IDataTypes = 0;
 #define AHINAME "ahi.device"
 #define AHI_DEFAULT_UNIT 0U
 #define AHIST_M8S 0UL
+#define AHIST_M16S 1UL
+#define AHIST_S8S 2UL
+#define AHIST_S16S 3UL
 typedef LONG Fixed;
 struct AHIRequest {
     struct IOStdReq ahir_Std;
@@ -252,10 +256,91 @@ static const char *tg_notify_sound_reason = "";
 static BYTE tg_notify_sound_bit = -1;
 static struct DateStamp tg_notify_sound_started;
 
+#if defined(__AROS__)
+/* AROS's sound.datatype plays through a mode of its own choosing
+   (AHI_BestAudioID), which on a Raspberry Pi is I2S rather than the HDMI
+   picked in Prefs/AHI, so there even MultiView is silent. On AROS the
+   datatype only reads the file and ahi.device, the unit Prefs/AHI set up,
+   plays its sample, as it plays the chime. */
+static struct MsgPort *tg_notify_sound_port = 0;
+static struct AHIRequest *tg_notify_sound_ahi = 0;
+
+static void tg_notify_sound_ahi_stop(void)
+{
+    if (tg_notify_sound_ahi != 0) {
+        if (!CheckIO((struct IORequest *)tg_notify_sound_ahi)) {
+            AbortIO((struct IORequest *)tg_notify_sound_ahi);
+        }
+        WaitIO((struct IORequest *)tg_notify_sound_ahi);
+        CloseDevice((struct IORequest *)tg_notify_sound_ahi);
+        tg_notify_chime_request_free(
+            (struct IORequest *)tg_notify_sound_ahi);
+        tg_notify_sound_ahi = 0;
+    }
+    if (tg_notify_sound_port != 0) {
+        tg_notify_chime_port_free(tg_notify_sound_port);
+        tg_notify_sound_port = 0;
+    }
+}
+
+/* 1 when the object's sample went to ahi.device. */
+static int tg_notify_sound_ahi_start(Object *object)
+{
+    static const ULONG types[4] = { AHIST_M8S, AHIST_S8S, AHIST_M16S,
+                                    AHIST_S16S };
+    APTR sample = 0;
+    IPTR length = 0;
+    IPTR rate = 0;
+    IPTR type = SDTST_M8S;
+    struct AHIRequest *ahi;
+
+    (void)GetDTAttrs(object, SDTA_Sample, (IPTR)&sample,
+                     SDTA_SampleLength, (IPTR)&length,
+                     SDTA_SamplesPerSec, (IPTR)&rate,
+                     SDTA_SampleType, (IPTR)&type, TAG_DONE);
+    if (sample == 0 || length == 0 || rate == 0 || type > SDTST_S16S ||
+        length > (IPTR)TG_NOTIFY_SOUND_FILE_MAX * 2U) {
+        return 0;
+    }
+    tg_notify_sound_port = tg_notify_chime_port();
+    if (tg_notify_sound_port == 0) {
+        return 0;
+    }
+    ahi = (struct AHIRequest *)tg_notify_chime_request(
+        tg_notify_sound_port, (ULONG)sizeof(struct AHIRequest));
+    if (ahi == 0) {
+        tg_notify_sound_ahi_stop();
+        return 0;
+    }
+    ahi->ahir_Version = 4;
+    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT,
+                   (struct IORequest *)ahi, 0) != 0) {
+        tg_notify_chime_request_free((struct IORequest *)ahi);
+        tg_notify_sound_ahi_stop();
+        return 0;
+    }
+    ahi->ahir_Std.io_Command = CMD_WRITE;
+    ahi->ahir_Std.io_Data = sample;
+    ahi->ahir_Std.io_Length = (ULONG)(length * SDTM_BYTESPERPOINT(type));
+    ahi->ahir_Std.io_Offset = 0;
+    ahi->ahir_Type = types[type];
+    ahi->ahir_Frequency = (ULONG)rate;
+    ahi->ahir_Volume = 0xC000;   /* as loud as the chime */
+    ahi->ahir_Position = 0x8000; /* centre */
+    ahi->ahir_Link = 0;
+    SendIO((struct IORequest *)ahi);
+    tg_notify_sound_ahi = ahi;
+    return 1;
+}
+#endif
+
 static void tg_notify_sound_stop(void)
 {
     struct dtTrigger trigger;
 
+#if defined(__AROS__)
+    tg_notify_sound_ahi_stop(); /* before the object that owns the sample */
+#endif
     if (tg_notify_sound_object != 0) {
         trigger.MethodID = DTM_TRIGGER;
         trigger.dtt_GInfo = 0;
@@ -287,7 +372,9 @@ static int tg_notify_sound_start(const char *path)
     struct Process *self;
     APTR window;
     struct TagItem tags[6];
+#if !defined(__AROS__)
     struct dtTrigger trigger;
+#endif
     int played = 0;
 
     self = (struct Process *)FindTask(0);
@@ -320,8 +407,10 @@ static int tg_notify_sound_start(const char *path)
         tags[1].ti_Data = GID_SOUND;
         tags[2].ti_Tag = SDTA_SignalTask;
         tags[2].ti_Data = TG_NOTIFY_TAG(self);
+        /* A mask, despite the name: sound.datatype V40 shipped it that way
+           and every system kept it (SDTA_SignalBitMask in newer headers). */
         tags[3].ti_Tag = SDTA_SignalBit;
-        tags[3].ti_Data = (ULONG)tg_notify_sound_bit;
+        tags[3].ti_Data = 1UL << (unsigned int)tg_notify_sound_bit;
         tags[4].ti_Tag = SDTA_Cycles;
         tags[4].ti_Data = 1UL;
         tags[5].ti_Tag = TAG_DONE;
@@ -329,6 +418,10 @@ static int tg_notify_sound_start(const char *path)
         tg_notify_sound_reason = "no sound datatype reads it";
         tg_notify_sound_object = NewDTObjectA((APTR)path, tags);
         if (tg_notify_sound_object != 0) {
+#if defined(__AROS__)
+            tg_notify_sound_reason = "ahi.device would not play it";
+            played = tg_notify_sound_ahi_start(tg_notify_sound_object);
+#else
             tg_notify_sound_reason = "the datatype would not play it";
             trigger.MethodID = DTM_TRIGGER;
             trigger.dtt_GInfo = 0;
@@ -336,6 +429,7 @@ static int tg_notify_sound_start(const char *path)
             trigger.dtt_Data = 0;
             played = DoDTMethodA(tg_notify_sound_object, 0, 0,
                                  (Msg)&trigger) != 0UL;
+#endif
         }
     }
     self->pr_WindowPtr = window;
@@ -356,6 +450,13 @@ void tg_notify_sound_poll(void)
     if (tg_notify_sound_object == 0) {
         return;
     }
+#if defined(__AROS__)
+    if (tg_notify_sound_ahi != 0 &&
+        CheckIO((struct IORequest *)tg_notify_sound_ahi)) {
+        tg_notify_sound_stop();
+        return;
+    }
+#endif
     mask = 1UL << (unsigned int)tg_notify_sound_bit;
     if ((SetSignal(0UL, 0UL) & mask) != 0UL) {
         (void)SetSignal(0UL, mask);

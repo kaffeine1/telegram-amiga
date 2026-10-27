@@ -33,7 +33,10 @@ the text client for the plain 68000.
   working; without a sound device the screen flashes as before. The text
   client rings the same sounds while /bell is on. Six short sounds of our
   own come in the sounds/ drawer of the packages, in IFF 8SVX so that every
-  system plays them, and choosing a sound plays it at once. The menu once called
+  system plays them, and choosing a sound plays it at once. On AROS the
+  sound goes out through the unit set in Prefs/AHI, as the chime does: the
+  system's sound datatype picks an audio mode of its own, which on a
+  Raspberry Pi is not HDMI. The menu once called
   "New messages" is now "Notifications". The choices are kept in
   data/telegram-notify.txt and data/telegram-chat-notify.txt.
 - In a group, the new-message pop-up says who wrote: "Name: text". The
