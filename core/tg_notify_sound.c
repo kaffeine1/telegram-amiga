@@ -27,6 +27,7 @@
 #include <proto/datatypes.h>
 #if defined(__amigaos3__)
 #include <devices/audio.h>
+#include <clib/alib_protos.h>
 #endif
 #if defined(__amigaos4__)
 #include <exec/exectags.h>
@@ -182,7 +183,11 @@ static int tg_notify_chime_paula(signed char *wave)
             audio->ioa_Period = 161; /* 3546895 Hz / 161 = 22 kHz (PAL) */
             audio->ioa_Volume = 48;
             audio->ioa_Cycles = 1;
-            played = DoIO((struct IORequest *)audio) == 0;
+            /* BeginIO, not DoIO: exec's DoIO sets io_Flags to IOF_QUICK,
+               and without ADIOF_PERVOL the channel keeps a period and a
+               volume of nought, silent though the request succeeds. */
+            BeginIO((struct IORequest *)audio);
+            played = WaitIO((struct IORequest *)audio) == 0;
             CloseDevice((struct IORequest *)audio); /* frees the channel */
         }
         tg_notify_chime_request_free((struct IORequest *)audio);

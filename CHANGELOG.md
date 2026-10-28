@@ -36,7 +36,8 @@ the text client for the plain 68000.
   system plays them, and choosing a sound plays it at once. On AROS the
   sound goes out through the unit set in Prefs/AHI, as the chime does: the
   system's sound datatype picks an audio mode of its own, which on a
-  Raspberry Pi is not HDMI. The menu once called
+  Raspberry Pi is not HDMI. On an Amiga without AHI the built-in chime
+  goes to Paula with its volume and pitch; it was silent there. The menu once called
   "New messages" is now "Notifications". The choices are kept in
   data/telegram-notify.txt and data/telegram-chat-notify.txt.
 - In a group, the new-message pop-up says who wrote: "Name: text". The
