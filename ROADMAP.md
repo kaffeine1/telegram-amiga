@@ -197,8 +197,8 @@ Features are therefore grouped by the work they share.
   clients. Validated on a Vampire, a G5 under MorphOS, a PiStorm under AfA
   OS and a Raspberry Pi 400, in the OS4, MorphOS, AROS i386, x86_64 and ARM
   VMs, and the text client on that user's A600 and on WinUAE.
-- **0.0.98, sounds per chat, reactions and a tester's three requests.** In progress
-  on `main`. Who rings is decided per chat, with Telegram's own mute
+- **0.0.98, sounds per chat, reactions and a tester's three requests.** RELEASED
+  2026-10-28. Who rings is decided per chat, with Telegram's own mute
   respected, a sound file of one's choice for all chats or one chat
   (done), and a group's pop-up names who wrote (done). From the requests of a tester:
   messages from earlier days get their date, a typed underscore,
@@ -209,7 +209,9 @@ Features are therefore grouped by the work they share.
   never cut in half at the end of a line, the ARM64 package listed under
   AROS on Aminet, and the hunt for the rare AROS x86_64 crash, now
   explained: AROS's e1000 network driver frees memory from its interrupt
-  (its section below).
+  (its section below). Validated on a stock A1200, a Vampire, a PiStorm
+  under AfA OS, a G5 under MorphOS and a Raspberry Pi 400, and in the OS4,
+  AROS i386 and x86_64 VMs.
 - **0.0.99, the last fixes.** Kept free on purpose for whatever the field
   reports of 0.0.98 bring, so that the 0.1 beta, the first release under
   the name Amigram, starts its quiet cycle from a clean slate.

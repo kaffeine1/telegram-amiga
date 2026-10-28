@@ -8,6 +8,8 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+## [0.0.98] - 2026-10-28
+
 ### Added
 - Each chat decides whether its new messages ring. A chat muted in
   Telegram, on the phone or anywhere else, stays silent here too and shows
