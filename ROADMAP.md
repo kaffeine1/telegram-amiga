@@ -214,7 +214,9 @@ Features are therefore grouped by the work they share.
   AROS i386 and x86_64 VMs.
 - **0.0.99, the last fixes.** Kept free on purpose for whatever the field
   reports of 0.0.98 bring, so that the 0.1 beta, the first release under
-  the name Amigram, starts its quiet cycle from a clean slate.
+  the name Amigram, starts its quiet cycle from a clean slate. The first
+  such request is in: hiding a group message one does not care about
+  (its section below).
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -1065,6 +1067,27 @@ step: the end of a transfer in the pop-up. The sender's name inside a
 group followed on `main` for 0.0.98: the short update gives only its id,
 so the name comes from the users that travel with a full update, or from
 the names the client already holds.
+
+## Planned for 0.0.99: hide a message in a group
+
+A user asked to get rid of posts that do not interest them in group
+chats. Today Delete is offered only on one's own messages, and it deletes
+for everyone. For anyone else's message in a group the protocol has a
+hard limit that the official clients share: in a basic group,
+messages.deleteMessages without revoke deletes a message for oneself
+only, but a supergroup (almost every group today) has no such thing,
+and channels.deleteMessages deletes for everyone, which only the author
+or an admin may do.
+
+So the popup gets "Hide message", in every group. The message leaves the
+transcript and stays hidden when the chat reloads: a short list of chat
+and message ids in `data/telegram-hidden-msgs.txt`, capped, private like
+`data/telegram-hidden.txt`. In a basic group the client also asks the
+server to delete it for oneself, so it disappears on one's other devices
+too. A "Show hidden messages" entry in the chat's menu brings them back.
+The text client follows with a /hide command. Deleting other people's
+messages as a supergroup admin is a separate step for later: it needs
+the admin rights, which the client does not ask for today.
 
 ## Planned: select several messages, then delete or forward them
 
