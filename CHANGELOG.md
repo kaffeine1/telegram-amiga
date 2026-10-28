@@ -82,7 +82,8 @@ the text client for the plain 68000.
   that allows none says so in the status line. A reaction added in a
   private chat shows too:
   Telegram reports it there by editing the message, not with the reaction
-  update groups get.
+  update groups get, and when that edit is of a message with a photo or
+  formatted text the client asks Telegram for the message's reactions.
 
 ### Fixed
 - Avatars and emoji look as they should on screens of more than 256

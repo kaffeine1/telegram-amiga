@@ -10510,6 +10510,13 @@ static const char *tg_mtproto_reaction_failure_text(const char *raw)
     return "Could not change the reaction. Please try again.";
 }
 
+static int tg_mtproto_auth_poll_reactions_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, const unsigned long *message_ids,
+    unsigned int count, FILE *stream);
+
 static int tg_mtproto_auth_react_peer_on_context(
     const char *host, const char *port, const char *api_id,
     const char *auth_file, const char *dc_id_text,
@@ -10549,13 +10556,29 @@ static int tg_mtproto_auth_react_peer_on_context(
                              result.result_body_length + 4U);
     {
         char line[96];
+        unsigned int i;
 
+        for (i = 0U; i < tg_chat_reactions_count; ++i) {
+            if (tg_chat_reactions[i].message_id == message_id) break;
+        }
         sprintf(line, "react: reply 0x%08lx, %lu bytes, %u queued",
                 tg_mtproto_read_u32_le(result.result_body - 4U),
                 result.result_body_length > 99999999UL
                     ? 99999999UL : result.result_body_length,
                 tg_chat_reactions_count);
         tg_gui_log(line);
+        /* In a private chat the reply reports the reaction only through an
+           edit of the whole message, and the reader stops at a media or an
+           entity short of the reactions field (tester's log, 2026-10-28):
+           then ask for that message's reactions, as the periodic poll does. */
+        if (i == tg_chat_reactions_count &&
+            tg_mtproto_auth_poll_reactions_on_context(host, port, api_id,
+                auth_file, dc_id_text, context, peer_cache_file,
+                peer_index_text, &message_id, 1U, stream) == 0) {
+            sprintf(line, "react: polled msg %lu, %u queued",
+                    message_id & 0x7fffffffUL, tg_chat_reactions_count);
+            tg_gui_log(line);
+        }
     }
     return 0;
 }
