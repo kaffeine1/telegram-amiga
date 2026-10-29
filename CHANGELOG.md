@@ -18,6 +18,14 @@ the text client for the plain 68000.
   Delete, Download and Copy could miss in the same way. The menu now
   finds its message again by id, and closes when that message is no
   longer loaded.
+- Reactions on a photo, a file or a message with a link preview stay
+  shown. The history reader stops at such a message's media, short of its
+  reactions, and passed that unread field on as "no reactions": each
+  refresh of the chat wiped the reactions just added, and reopening the
+  chat showed none, though Telegram and the other clients had them. The
+  history now leaves such a message's reactions as they are, and the
+  periodic reactions poll asks Telegram for them once, the user's own
+  messages included.
 
 ## [0.0.98] - 2026-10-28
 

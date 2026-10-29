@@ -102,6 +102,9 @@ typedef struct tg_chat_message_row {
     unsigned long webpage_channel_lo;
     int is_service;            /* a service line ("X joined"): text says it all */
     const tg_reactions *reactions;
+    /* The reader stopped short of the reactions field (a media, a keyboard):
+       reactions is 0 and the message's reactions are still to be asked. */
+    int reactions_unknown;
 } tg_chat_message_row;
 
 /* One resolved chat-list row. The engine parses the peer cache into these

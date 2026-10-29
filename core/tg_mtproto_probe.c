@@ -63,6 +63,7 @@
 #define tg_gui_driver_update_text_utf8(gui, message_id, text) (0)
 #define tg_gui_driver_update_reactions(gui, id, reactions) ((void)(gui), (void)(id), (void)(reactions), 0)
 #define tg_gui_driver_reaction_poll_ids(gui, ids, max) ((void)(gui), (void)(ids), (void)(max), 0U)
+#define tg_gui_driver_reactions_asked(gui, ids, n) ((void)0)
 #define tg_gui_driver_set_pending_webpage(gui, msg, hi, lo) ((void)0)
 #define tg_gui_driver_apply_webpage(gui, page, ready) ((void)0, (void)(page), (void)(ready), 0)
 #define tg_gui_driver_remove_by_id(gui, message_id) (0)
@@ -13529,7 +13530,15 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                     }
                 }
                 row.text = texts.messages[i].text;
-                row.reactions = &texts.messages[i].reactions;
+                /* A message read short of its reactions field (a photo, a
+                   link preview, a file) has none to tell: passing its empty
+                   set wiped the reactions already shown on every refresh and
+                   on reopening the chat. The poll asks for them instead. */
+                if (texts.messages[i].reactions_known) {
+                    row.reactions = &texts.messages[i].reactions;
+                } else {
+                    row.reactions_unknown = 1;
+                }
                 if (texts.messages[i].service_action != 0UL) {
                     /* "Anna added Marco": written here, where the page's
                        users give the names. In a 1:1 chat the peer is who
@@ -25924,8 +25933,8 @@ int tg_gui_session_tick(FILE *stream)
                 n = tg_gui_driver_reaction_poll_ids(
                     &tg_gui_session_state.gui_driver, ids,
                     TG_CHAT_REACTIONS_QUEUE_MAX);
-                if (n > 0U) {
-                    (void)tg_mtproto_auth_poll_reactions_on_context(
+                if (n > 0U &&
+                    tg_mtproto_auth_poll_reactions_on_context(
                         tg_gui_session_state.host, tg_gui_session_state.port,
                         tg_gui_session_state.api_id,
                         tg_gui_session_state.auth_file,
@@ -25933,7 +25942,9 @@ int tg_gui_session_tick(FILE *stream)
                         &tg_gui_session_state.context,
                         tg_gui_session_state.peer_cache_file,
                         tg_gui_session_state.current_peer_index, ids, n,
-                        quiet);
+                        quiet) == 0) {
+                    tg_gui_driver_reactions_asked(
+                        &tg_gui_session_state.gui_driver, ids, n);
                 }
             }
         }

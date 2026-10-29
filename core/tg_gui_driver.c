@@ -366,6 +366,8 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     }
     message->id = row->id;
     if (row->reactions != 0) message->reactions = *row->reactions;
+    message->reactions_unknown = row->reactions == 0 && row->reactions_unknown
+                                     ? 1U : 0U;
     message->from_id_hi = row->from_id_hi;
     message->from_id_lo = row->from_id_lo;
     if (message->is_own) {
@@ -397,6 +399,7 @@ int tg_gui_driver_update_reactions(tg_gui_chat_driver *gui,
     for (i = 0; i < gui->state->message_count; ++i) {
         message = &gui->state->messages[i];
         if (message->id != message_id) continue;
+        message->reactions_unknown = 0U;
         /* A min update omits chosen_order. Preserve known ownership for the
            displayed ordinary emoji instead of making our highlight blink. */
         if (next.min) {
@@ -522,12 +525,30 @@ unsigned int tg_gui_driver_reaction_poll_ids(const tg_gui_chat_driver *gui,
             }
             below = 0UL; /* this row reaches into the view */
         }
-        if (message->id == 0UL || message->is_own ||
-            message->reactions.count == 0)
+        if (message->id == 0UL ||
+            (!message->reactions_unknown &&
+             (message->is_own || message->reactions.count == 0)))
             continue;
         ids[n++] = message->id;
     }
     return n;
+}
+
+void tg_gui_driver_reactions_asked(tg_gui_chat_driver *gui,
+                                   const unsigned long *ids, unsigned int n)
+{
+    unsigned int k;
+    int i;
+
+    if (gui == 0 || gui->state == 0 || ids == 0) return;
+    for (k = 0U; k < n; ++k) {
+        for (i = 0; i < gui->state->message_count; ++i) {
+            if (gui->state->messages[i].id == ids[k]) {
+                gui->state->messages[i].reactions_unknown = 0U;
+                break;
+            }
+        }
+    }
 }
 
 void tg_gui_driver_reset_read_outbox(tg_gui_chat_driver *gui)
@@ -1386,6 +1407,16 @@ static int tg_gui_driver_reactions_self_test(void)
          tg_reaction_count(&state->messages[0].reactions.items[0]) == 9UL &&
          !tg_gui_driver_update_reactions(&gui, 99UL, &reactions) &&
          !tg_gui_driver_update_reactions(&gui, 42UL, &reactions);
+    /* A re-fetch read short of the reactions field (a photo) knows none:
+       it must leave the shown reactions alone, not wipe them. */
+    row.reactions = 0;
+    row.reactions_unknown = 1;
+    driver.on_message(driver.ctx, &row);
+    ok = ok && state->message_count == 1 &&
+         state->messages[0].reactions.count == 1 &&
+         tg_reaction_count(&state->messages[0].reactions.items[0]) == 9UL;
+    row.reactions = &reactions;
+    row.reactions_unknown = 0;
     memset(&reactions, 0, sizeof(reactions));
     ok = ok && tg_gui_driver_update_reactions(&gui, 42UL, &reactions) &&
          state->messages[0].reactions.count == 0;
@@ -1416,6 +1447,15 @@ static int tg_gui_driver_reactions_self_test(void)
         n = tg_gui_driver_reaction_poll_ids(&gui, ids, 4U);
         ok = ok && n == 2U && ids[0] == 11UL && ids[1] == 10UL;
         state->transcript_scroll = 0;
+        /* Reactions history could not read are asked once, own or not. */
+        state->messages[2].reactions_unknown = 1U;
+        state->messages[3].reactions_unknown = 1U;
+        n = tg_gui_driver_reaction_poll_ids(&gui, ids, 4U);
+        ok = ok && n == 4U && ids[0] == 15UL && ids[1] == 14UL &&
+             ids[2] == 13UL && ids[3] == 12UL;
+        tg_gui_driver_reactions_asked(&gui, ids, n);
+        n = tg_gui_driver_reaction_poll_ids(&gui, ids, 4U);
+        ok = ok && n == 4U && ids[2] == 11UL && ids[3] == 10UL;
         if (!ok) puts("gui driver self-test: reaction poll choice failed");
     }
     return ok;

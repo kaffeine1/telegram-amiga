@@ -87,10 +87,17 @@ int tg_gui_driver_update_reactions(tg_gui_chat_driver *gui,
 /* The messages whose reactions the periodic poll asks for, as Telegram's
    reactions page wants: shown, not the user's own, already carrying
    reactions. Newest first from the bottom of the view (rows scrolled out
-   below it are skipped), at most `max`. Returns how many went into ids. */
+   below it are skipped), at most `max`. Returns how many went into ids.
+   A message whose reactions history could not read is asked for too,
+   own or not, until one answer came for it. */
 unsigned int tg_gui_driver_reaction_poll_ids(const tg_gui_chat_driver *gui,
                                              unsigned long *ids,
                                              unsigned int max);
+
+/* The poll answered for these ids: their reactions are known now, even
+   when Telegram had none to report. */
+void tg_gui_driver_reactions_asked(tg_gui_chat_driver *gui,
+                                   const unsigned long *ids, unsigned int n);
 
 /* Attach send/history metadata, then complete every pending message with the
    matching 64-bit webpage id. Text uses the edit path; photos remain lazy. */

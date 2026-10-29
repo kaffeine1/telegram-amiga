@@ -304,6 +304,9 @@ typedef struct tg_gui_message {
     unsigned long layout_key;
     int layout_h;
     tg_reactions reactions;
+    /* History could not read this message's reactions (the reader stops at
+       a media): the reactions poll asks for them once. */
+    unsigned char reactions_unknown;
 } tg_gui_message;
 
 typedef struct tg_gui_state {
