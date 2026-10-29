@@ -8,6 +8,17 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Fixed
+- A message's right-button menu acts on the message it was opened on. It
+  remembered the message by its row, and in a chat with a full transcript
+  every new message moves each row up by one, so a message arriving while
+  the menu or the reaction grid was open turned the choice to the message
+  below: a reaction landed there, and when that message already carried
+  the same reaction of yours, it was taken away instead. Reply, Edit,
+  Delete, Download and Copy could miss in the same way. The menu now
+  finds its message again by id, and closes when that message is no
+  longer loaded.
+
 ## [0.0.98] - 2026-10-28
 
 ### Added

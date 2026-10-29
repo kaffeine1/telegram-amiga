@@ -503,6 +503,10 @@ typedef struct tg_gui_state {
        agree without re-measuring. */
     int ctx_visible;
     int ctx_msg;
+    /* The id of the message ctx_msg named when the menu opened: new
+       messages shift the transcript under an open menu, so the index is
+       found again by this id before the menu acts (tg_gui_context_follow). */
+    unsigned long ctx_msg_id;
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
     int ctx_react; /* the React chooser replaces the message menu */
@@ -844,6 +848,11 @@ void tg_gui_note_open_chat(tg_gui_state *state);
 /* Maps a click at renderer-space (x, y) to a context-menu item id
    (TG_GUI_CTX_REPLY/EDIT/DELETE) when the popup is open, or -1 when the click is
    outside it (the caller then dismisses the menu). */
+/* Points ctx_msg at the message the open menu was opened on again, after
+   new or deleted messages moved it; closes the menu when that message is no
+   longer loaded. Returns 1 while the menu still has its message. */
+int tg_gui_context_follow(tg_gui_state *state);
+
 int tg_gui_context_menu_hit(const tg_gui_state *state, int width, int height,
                             int lh, int x, int y);
 /* Maps a pointer at renderer-space (x, y) to the 0-based context-menu item INDEX

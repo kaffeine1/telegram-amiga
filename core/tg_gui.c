@@ -5316,6 +5316,32 @@ int tg_gui_open_chat_is_self(const tg_gui_state *state)
                TG_GUI_SAVED_PEER_INDEX;
 }
 
+int tg_gui_context_follow(tg_gui_state *state)
+{
+    int i;
+
+    if (state == 0 || !state->ctx_visible || state->ctx_chat > 0 ||
+        state->ctx_msg_id == 0UL) {
+        return state != 0 && state->ctx_visible;
+    }
+    if (state->ctx_msg >= 0 && state->ctx_msg < state->message_count &&
+        state->messages[state->ctx_msg].id == state->ctx_msg_id) {
+        return 1;
+    }
+    for (i = 0; i < state->message_count; ++i) {
+        if (state->messages[i].id == state->ctx_msg_id &&
+            !state->messages[i].is_system) {
+            state->ctx_msg = i;
+            return 1;
+        }
+    }
+    state->ctx_visible = 0;
+    state->ctx_react = 0;
+    state->ctx_msg = -1;
+    state->ctx_msg_id = 0UL;
+    return 0;
+}
+
 /* The chooser's entries: the chat's own list when one was set, else the
    ten defaults. */
 static int tg_gui_react_choice_count(const tg_gui_state *state)
@@ -7465,6 +7491,31 @@ static int tg_gui_reactions_self_test(void)
              tg_gui_react_choice_at(state, 9) == tg_reaction_default(9);
         state->react_choice_count = 0;
         if (!ok) puts("gui self-test: allowed reaction choices failed");
+    }
+    {
+        /* A full transcript drops its oldest row for each new message, so
+           an open menu must follow its message, not its row, and close
+           when the message is gone. */
+        for (i = 0; i < 3; ++i) {
+            state->messages[i].id = 10UL + (unsigned long)i;
+            state->messages[i].is_system = 0;
+        }
+        state->message_count = 3;
+        state->ctx_visible = 1;
+        state->ctx_chat = 0;
+        state->ctx_react = 1;
+        state->ctx_msg = 1;
+        state->ctx_msg_id = 11UL;
+        ok = ok && tg_gui_context_follow(state) == 1 && state->ctx_msg == 1;
+        state->messages[0] = state->messages[1];
+        state->messages[1] = state->messages[2];
+        state->messages[2].id = 13UL;
+        ok = ok && tg_gui_context_follow(state) == 1 && state->ctx_msg == 0 &&
+             state->ctx_react == 1;
+        state->messages[0].id = 14UL;
+        ok = ok && tg_gui_context_follow(state) == 0 &&
+             !state->ctx_visible && !state->ctx_react && state->ctx_msg == -1;
+        if (!ok) puts("gui self-test: context menu follow failed");
     }
     return ok ? 0 : 2;
 }

@@ -10143,6 +10143,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
             TG_GUI_COMPOSE_RECEIVE_SECONDS) {
         *last_receive_drain = now;
         if (tg_gui_session_receive_pending(stdout)) {
+            (void)tg_gui_context_follow((tg_gui_state *)state);
             tg_gui_window_session_changed(session_dirty, header_dirty);
         }
     }
@@ -10163,6 +10164,8 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
              TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
         *last_session_poll = now;
         if (tg_gui_session_tick(stdout)) {
+            /* New messages shift the transcript under an open menu. */
+            (void)tg_gui_context_follow((tg_gui_state *)state);
             tg_gui_window_session_changed(session_dirty, header_dirty);
         }
         tg_gui_tick_after(last_session_poll, eff);
@@ -13215,6 +13218,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
                         state->ctx_msg = -1;
+                        state->ctx_msg_id = 0UL;
                         state->ctx_visible = 1;
                         state->ctx_x = hx;
                         state->ctx_y = hy;
@@ -13238,6 +13242,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_react = 0;
                             state->ctx_chat = 0;
                             state->ctx_msg = mi;
+                            state->ctx_msg_id = state->messages[mi].id;
                             state->ctx_x = hx;
                             state->ctx_y = hy;
                             state->ctx_hover = -1;
@@ -13267,9 +13272,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_mention_click(state, &backend, hx, hy);
                     tg_gui_window_mention_complete(state);
                     tg_gui_window_paint(state, &backend);
+                } else if (msg_code == SELECTDOWN && state->ctx_visible &&
+                           !tg_gui_context_follow(state)) {
+                    /* The menu's message left the transcript while the menu
+                       was open: act on nothing rather than on whatever
+                       message took its place. */
+                    tg_gui_window_copy(state->status, sizeof(state->status),
+                        "That message is no longer loaded.");
+                    tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTDOWN && state->ctx_visible) {
                     /* A left click while the context menu is open: run the item
-                       under the pointer, or dismiss when the click is outside. */
+                       under the pointer, or dismiss when the click is outside.
+                       tg_gui_context_follow just pointed ctx_msg at the message
+                       the menu opened on, wherever new messages moved it. */
                     int it = tg_gui_context_menu_hit(state, ctx.inner_w,
                                                      ctx.inner_h, ctx.line_h,
                                                      hx, hy);
