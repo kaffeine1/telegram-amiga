@@ -216,7 +216,8 @@ Features are therefore grouped by the work they share.
   reports of 0.0.98 bring, so that the 0.1 beta, the first release under
   the name Amigram, starts its quiet cycle from a clean slate. The first
   such request is in: hiding a group message one does not care about
-  (its section below).
+  (its section below). Also /ring in the text client, so that it can let
+  a group or a channel ring again (its section below).
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -1088,6 +1089,20 @@ too. A "Show hidden messages" entry in the chat's menu brings them back.
 The text client follows with a /hide command. Deleting other people's
 messages as a supergroup admin is a separate step for later: it needs
 the admin rights, which the client does not ask for today.
+
+## Planned for 0.0.99: /ring in the text client
+
+Since 0.0.98 groups and channels stay quiet until one lets them ring, and
+the switch is "Enable ring" in the chat row's right-button menu, which
+only the window has. The text client follows the same rule but offers no
+way to change it, so on the 68000 build, which has only the text client,
+a group no longer flashes at all, as it did up to 0.0.97.
+
+`/ring on` and `/ring off` act on the open chat and write the same
+`data/telegram-chat-notify.txt` the window writes, so the choice holds in
+both clients; `/ring` alone says what the open chat does now, including
+when Telegram's own mute is what keeps it quiet. It goes in /help next to
+/bell, which stays the general switch.
 
 ## Planned: select several messages, then delete or forward them
 
