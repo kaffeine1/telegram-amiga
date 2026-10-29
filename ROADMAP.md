@@ -217,7 +217,8 @@ Features are therefore grouped by the work they share.
   the name Amigram, starts its quiet cycle from a clean slate. The first
   such request is in: hiding a group message one does not care about
   (its section below). Also /ring in the text client, so that it can let
-  a group or a channel ring again (its section below).
+  a group or a channel ring again, and more reactions than the ten of the
+  grid (their sections below).
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -1103,6 +1104,27 @@ a group no longer flashes at all, as it did up to 0.0.97.
 both clients; `/ring` alone says what the open chat does now, including
 when Telegram's own mute is what keeps it quiet. It goes in /help next to
 /bell, which stays the general switch.
+
+## Planned for 0.0.99: more reactions than the ten of the grid
+
+A user on OS4 asked how to pick a reaction other than the ten that
+"React..." offers: the desktop client ends its strip with an arrow that
+opens every reaction, and ours has no such way. The grid is the ten
+defaults, or a group's own list cut to ten.
+
+The limit that matters is drawing: the grid can show only what the emoji
+sheet has a glyph for. Of Telegram's free reactions (the server's own
+list comes from messages.getAvailableReactions), about thirty are on the
+sheet already and about forty are not, among them the exploding head,
+the clown, the whale, the trophy, the ghost and the unicorn.
+
+Two steps. First, the last cell of the grid becomes an arrow that opens
+every allowed reaction the sheet can draw, a few rows in the same style,
+and a group's own list is shown whole instead of cut to ten; the text
+client's /react takes the new names too. Second, the missing reactions
+join the sheet as Noto Emoji glyphs, under the same Apache 2.0 licence
+as the ones there, which grows the sheet by about a third. The 68000
+build has no window and is not touched.
 
 ## Planned: select several messages, then delete or forward them
 
