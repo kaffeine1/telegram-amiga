@@ -20028,6 +20028,10 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
 
 static void tg_gui_session_fetch_open_avatar(FILE *stream);
 
+/* When the open chat's reactions were last polled (0 = not yet). */
+#define TG_GUI_SESSION_REACTIONS_SECONDS 20UL
+static time_t tg_gui_session_reactions_polled = (time_t)0;
+
 int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
 {
     FILE *quiet;
@@ -20082,6 +20086,10 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         tg_gui_session_state.gui_driver.state->msg_gen++;
         tg_gui_session_state.gui_driver.state->newest_dropped = 0;
         tg_gui_session_state.gui_driver.state->unread_below = 0;
+        /* A new chat asks its reactions on the first tick: the history
+           cannot read those of a photo or a link, so they would otherwise
+           show only a poll period later. */
+        tg_gui_session_reactions_polled = (time_t)0;
         /* A reply target points into the OLD chat -- never carry it across. */
         tg_gui_session_state.gui_driver.state->reply_to_id = 0UL;
         tg_gui_session_state.gui_driver.state->reply_sender[0] = '\0';
@@ -25813,10 +25821,6 @@ int tg_gui_session_receive_pending(FILE *stream)
     return dirty;
 }
 
-/* When the open chat's reactions were last polled (0 = not yet). */
-#define TG_GUI_SESSION_REACTIONS_SECONDS 20UL
-static time_t tg_gui_session_reactions_polled = (time_t)0;
-
 /* Ticks in a row that tried the network and lost the connection. */
 static unsigned long tg_gui_session_link_failed = 0UL;
 
@@ -25945,6 +25949,15 @@ int tg_gui_session_tick(FILE *stream)
                         quiet) == 0) {
                     tg_gui_driver_reactions_asked(
                         &tg_gui_session_state.gui_driver, ids, n);
+                    /* Show them on this tick, not the next one. */
+                    if (tg_chat_reactions_apply(
+                            &tg_gui_session_state.gui_driver,
+                            tg_gui_session_state.open_peer_constructor,
+                            tg_gui_session_state.open_peer_id_hi,
+                            tg_gui_session_state.open_peer_id_lo)) {
+                        dirty = 1;
+                        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+                    }
                 }
             }
         }

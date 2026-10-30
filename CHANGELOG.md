@@ -25,7 +25,8 @@ the text client for the plain 68000.
   chat showed none, though Telegram and the other clients had them. The
   history now leaves such a message's reactions as they are, and the
   periodic reactions poll asks Telegram for them once, the user's own
-  messages included.
+  messages included. Opening a chat asks at once instead of waiting for
+  the poll's twenty seconds, and the answer shows on the same tick.
 
 ## [0.0.98] - 2026-10-28
 
