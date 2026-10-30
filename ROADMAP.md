@@ -217,8 +217,8 @@ Features are therefore grouped by the work they share.
   the name Amigram, starts its quiet cycle from a clean slate. The first
   such request is in: hiding a group message one does not care about
   (its section below). Also /ring in the text client, so that it can let
-  a group or a channel ring again, and more reactions than the ten of the
-  grid (their sections below).
+  a group or a channel ring again, more reactions than the ten of the
+  grid, and more contrast in the dark colours (their sections below).
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that
@@ -1125,6 +1125,33 @@ client's /react takes the new names too. Second, the missing reactions
 join the sheet as Noto Emoji glyphs, under the same Apache 2.0 licence
 as the ones there, which grows the sheet by about a third. The 68000
 build has no window and is not touched.
+
+## Planned for 0.0.99: more contrast, same colours
+
+A user asked for more contrast and for no dark blue on black. The colours
+are the desktop client's dark mode and stay so; measured with the WCAG
+ratio (4.5 for text, 3 for shapes), the main text is fine at 15 to 1,
+and a few pairs fall short:
+
+- the selected chat row, `1a2c44` on the `12141a` window, is 1.3 to 1:
+  it is the dark blue on black the user means;
+- the incoming bubbles and the side panel, `20242e`, are 1.2 to 1 from
+  the window;
+- sender names in groups take the avatar colours and reach only 3.0 to
+  3.5 on the bubble, the purple worst;
+- the read ticks, `4dc2ff` on the blue of one's own bubble, are 2.6;
+- the unread badge, `185fa5` on the window, is 2.8.
+
+The changes keep each hue. The selected row takes `2b5278`, the blue the
+desktop uses for selection (2.3 from the window, the text on it 6.7).
+Sender names take a lighter tint of their avatar colour, as the desktop
+does at night, all above 5.8 (blue `75a9d0`, purple `9e97db`, teal
+`77b6a4`, coral `d69380`, pink `d58eab`, amber `cba86d`); the avatars
+keep theirs. The read ticks go to `8fdcff` (3.5), the badge to `2f7bc8`
+(4.2), the incoming bubbles to `262b37`, a small step on purpose. All of
+it is the pen table in `tg_gui_window.c` and a name table next to the
+avatar colours; to be checked on real screens, since 16-bit RTG and AGA
+round the pens.
 
 ## Planned: topics in forum groups
 
