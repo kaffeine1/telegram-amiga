@@ -1014,7 +1014,7 @@ static int tg_gui_amiga_disc_inset(int y, int h)
    colormap and cached; on paletted screens (no exact pens, tight budget) the
    cache stays empty and every shape keeps its hard edge, which is also what
    those screens' dithered look expects. */
-#define TG_GUI_BLEND_PENS 24
+#define TG_GUI_BLEND_PENS 64
 static struct {
     ULONG rgb;
     LONG pen;
@@ -1050,7 +1050,9 @@ static LONG tg_gui_amiga_obtain_rgb(struct ColorMap *cmap, const tg_gui_rgb *c,
                           exact ? tags : 0);
 }
 
-static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
+/* The colour `quarters` fourths of the way from bg to fg (1..3). */
+static LONG tg_gui_amiga_blend_pen_q(const tg_gui_rgb *fg, const tg_gui_rgb *bg,
+                                     int quarters)
 {
     ULONG key;
     tg_gui_rgb mix;
@@ -1060,9 +1062,12 @@ static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
     if (!tg_gui_av_rich || tg_gui_av_cmap == 0 || fg == 0 || bg == 0) {
         return -1;
     }
-    mix.r = (unsigned char)(((int)fg->r + (int)bg->r) / 2);
-    mix.g = (unsigned char)(((int)fg->g + (int)bg->g) / 2);
-    mix.b = (unsigned char)(((int)fg->b + (int)bg->b) / 2);
+    mix.r = (unsigned char)((int)bg->r +
+                            (((int)fg->r - (int)bg->r) * quarters) / 4);
+    mix.g = (unsigned char)((int)bg->g +
+                            (((int)fg->g - (int)bg->g) * quarters) / 4);
+    mix.b = (unsigned char)((int)bg->b +
+                            (((int)fg->b - (int)bg->b) * quarters) / 4);
     key = ((ULONG)mix.r << 16) | ((ULONG)mix.g << 8) | (ULONG)mix.b;
     for (i = 0; i < tg_gui_blend_count; ++i) {
         if (tg_gui_blend_pens[i].rgb == key) {
@@ -1080,6 +1085,11 @@ static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
     tg_gui_blend_pens[tg_gui_blend_count].pen = p;
     ++tg_gui_blend_count;
     return p;
+}
+
+static LONG tg_gui_amiga_blend_pen(const tg_gui_rgb *fg, const tg_gui_rgb *bg)
+{
+    return tg_gui_amiga_blend_pen_q(fg, bg, 2);
 }
 
 static void tg_gui_amiga_blend_release(struct ColorMap *cmap)
@@ -1125,6 +1135,135 @@ static void tg_gui_amiga_pill_rows(tg_gui_amiga_ctx *ctx, LONG rawpen, int x,
     }
 }
 
+/* Anti-aliased round shape (0.0.99: the reaction chips' one-pixel ring
+   still looked stepped). Each pixel of a cap gets the share of it the true
+   circle covers, from 4x4 samples, rounded to quarters: a quarter, a half
+   or three quarters of the way to the shape's colour, or the colour
+   itself. The shares depend only on the height, so a few heights are kept
+   worked out. Needs three blend pens per colour pair; without them the
+   caller falls back to the ring. */
+#define TG_GUI_AA_MAX_H 48
+#define TG_GUI_AA_HALF (TG_GUI_AA_MAX_H / 2 + 1)
+#define TG_GUI_AA_SLOTS 4
+static struct {
+    int h;
+    unsigned char level[TG_GUI_AA_MAX_H][TG_GUI_AA_HALF]; /* 0..4 quarters */
+} tg_gui_aa_cache[TG_GUI_AA_SLOTS];
+static int tg_gui_aa_next;
+
+static int tg_gui_amiga_aa_slot(int h)
+{
+    int slot;
+    int half = (h + 1) / 2;
+    long c8 = 4L * (long)h; /* centre and radius in eighths of a pixel */
+    int x;
+    int y;
+
+    for (slot = 0; slot < TG_GUI_AA_SLOTS; ++slot) {
+        if (tg_gui_aa_cache[slot].h == h) {
+            return slot;
+        }
+    }
+    slot = tg_gui_aa_next;
+    tg_gui_aa_next = (tg_gui_aa_next + 1) % TG_GUI_AA_SLOTS;
+    for (y = 0; y < h; ++y) {
+        for (x = 0; x < half; ++x) {
+            int count = 0;
+            int i;
+            int j;
+
+            for (j = 0; j < 4; ++j) {
+                long dy = 8L * y + 2L * j + 1L - c8;
+
+                for (i = 0; i < 4; ++i) {
+                    long dx = 8L * x + 2L * i + 1L - c8;
+
+                    if (dx * dx + dy * dy <= c8 * c8) {
+                        ++count;
+                    }
+                }
+            }
+            tg_gui_aa_cache[slot].level[y][x] =
+                (unsigned char)((count * 4 + 8) / 16);
+        }
+    }
+    tg_gui_aa_cache[slot].h = h;
+    return slot;
+}
+
+/* Returns 0 when drawn, -1 when the shape is out of range or the blend
+   pens are not to be had (nothing drawn then). */
+static int tg_gui_amiga_aa_shape(tg_gui_amiga_ctx *ctx, LONG solid,
+                                 const tg_gui_rgb *fg, const tg_gui_rgb *bg,
+                                 int x0, int y0, int w, int h)
+{
+    LONG blends[4];
+    int half;
+    int slot;
+    int row;
+    int k;
+
+    if (h < 6 || h > TG_GUI_AA_MAX_H || w < h) {
+        return -1;
+    }
+    for (k = 1; k <= 3; ++k) {
+        blends[k] = tg_gui_amiga_blend_pen_q(fg, bg, k);
+        if (blends[k] == -1) {
+            return -1;
+        }
+    }
+    blends[0] = -1;
+    half = (h + 1) / 2;
+    slot = tg_gui_amiga_aa_slot(h);
+    /* The solid body in bands of rows that start at the same column. */
+    SetAPen(ctx->rport, solid);
+    row = 0;
+    while (row < h) {
+        int s = 0;
+        int last = row;
+
+        while (s < half && tg_gui_aa_cache[slot].level[row][s] < 4) {
+            ++s;
+        }
+        while (last + 1 < h) {
+            int t = 0;
+
+            while (t < half && tg_gui_aa_cache[slot].level[last + 1][t] < 4) {
+                ++t;
+            }
+            if (t != s) {
+                break;
+            }
+            ++last;
+        }
+        if (w - 2 * s > 0) {
+            RectFill(ctx->rport, x0 + s, y0 + row, x0 + w - 1 - s, y0 + last);
+        }
+        row = last + 1;
+    }
+    /* The edge: runs of equal share left of the body, mirrored right. */
+    for (row = 0; row < h; ++row) {
+        const unsigned char *lv = tg_gui_aa_cache[slot].level[row];
+        int x = 0;
+
+        while (x < half && lv[x] < 4) {
+            int end = x;
+
+            while (end + 1 < half && lv[end + 1] == lv[x]) {
+                ++end;
+            }
+            if (lv[x] > 0) {
+                SetAPen(ctx->rport, blends[lv[x]]);
+                RectFill(ctx->rport, x0 + x, y0 + row, x0 + end, y0 + row);
+                RectFill(ctx->rport, x0 + w - 1 - end, y0 + row,
+                         x0 + w - 1 - x, y0 + row);
+            }
+            x = end + 1;
+        }
+    }
+    return 0;
+}
+
 /* Backend pill fill: the blend ring under a one-pixel-inset solid shape when
    the screen affords exact pens, plain hard rows otherwise. round_bg (set by
    the renderer before the call) names what the ring blends toward. */
@@ -1154,6 +1293,11 @@ static void tg_gui_amiga_fill_pill(tg_gui_backend *backend, int pen,
     bg = backend->round_bg;
     if (bg < 0 || bg >= TG_GUI_PEN_COUNT) {
         bg = TG_GUI_PEN_WINDOW;
+    }
+    if (tg_gui_amiga_aa_shape(ctx, ctx->pens[pen], &tg_gui_dark_pens[pen],
+                              &tg_gui_dark_pens[bg], x0, y0, rect.w,
+                              rect.h) == 0) {
+        return;
     }
     blend = (rect.h >= 6)
                 ? tg_gui_amiga_blend_pen(&tg_gui_dark_pens[pen],
@@ -1195,6 +1339,12 @@ static void tg_gui_amiga_avatar_fill(tg_gui_backend *backend, int color_index,
        underneath. The blend ring smooths the silhouette on exact-pen
        screens; the initials still fit, the solid disc only loses one pixel
        of radius under the ring. */
+    if (tg_gui_amiga_aa_shape(ctx, ctx->avatar_pens[color_index],
+                              &tg_gui_avatar_rgb[color_index],
+                              &tg_gui_dark_pens[bg], x0, y0, rect.w,
+                              rect.h) == 0) {
+        return;
+    }
     blend = (rect.h >= 6)
                 ? tg_gui_amiga_blend_pen(&tg_gui_avatar_rgb[color_index],
                                          &tg_gui_dark_pens[bg])

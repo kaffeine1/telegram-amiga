@@ -27,6 +27,13 @@ the text client for the plain 68000.
   periodic reactions poll asks Telegram for them once, the user's own
   messages included. Opening a chat asks at once instead of waiting for
   the poll's twenty seconds, and the answer shows on the same tick.
+- Smoother round shapes on true-colour screens: the reaction chips, the
+  unread badges, the jump button and the initials discs. Their edge was a
+  one-pixel ring halfway between the shape and the background, with the
+  shape one pixel inside it, which read as a dark rim along the straight
+  sides. Each edge pixel now takes the share of it the true circle covers,
+  in quarters, and the shape keeps its full size. Paletted screens keep
+  the hard edge.
 
 ## [0.0.98] - 2026-10-28
 
