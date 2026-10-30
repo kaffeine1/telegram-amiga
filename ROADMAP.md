@@ -1126,6 +1126,37 @@ join the sheet as Noto Emoji glyphs, under the same Apache 2.0 licence
 as the ones there, which grows the sheet by about a third. The 68000
 build has no window and is not touched.
 
+## Planned: topics in forum groups
+
+A group can be turned into a forum: its messages live in topics, each
+with its own title, icon and thread ("General", "News", "Games" and so
+on), and the official clients open such a group on the list of its
+topics, each row with its last message and time, much like the chat
+list itself. This client knows topics only as service lines ("created
+the topic ..."): a forum opens as one transcript with every topic's
+messages mixed, and what one sends lands in General.
+
+The plan follows the desktop client. Opening a forum shows its topics in
+the transcript area, newest activity first, with the topic's icon colour
+standing in for its emoji, its unread count and the last message's
+sender and text. A click opens that topic's thread, the header gets a
+way back to the list, and the composer sends into the topic, so replies
+and new messages stay where they belong. The text client gets /topics
+to list them and /topic <n> to open one.
+
+On the wire: the forum flag comes with the group, the topic list from
+the forum-topics method, a topic's thread from messages.getReplies on
+the topic's first message, and a message is sent into a topic by
+naming that message as top_msg_id in its reply header. Telegram has
+moved the topic methods between namespaces in recent layers, so names
+and constructors are checked against the current schema before any
+code is written. Updates already carry the topic of each new message,
+which the unread counts per topic need.
+
+It touches the transcript, the header, the composer and the history
+paging, so it is a feature of its own and not a fix: a slot after the
+0.1 beta, unless forum groups turn out to be where most users are.
+
 ## Planned: select several messages, then delete or forward them
 
 Today every action on a message starts from the right-click popup and
