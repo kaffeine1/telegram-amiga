@@ -58,6 +58,12 @@ License: MIT. A non-commercial community project, a gift to the Amiga
 community. Development diary:
 <https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/>
 
+<!-- patreon-support:start -->
+## Support development
+
+Telegram Amiga remains free and open source. If you find it useful, you can [support my work on Patreon](https://www.patreon.com/c/kaffeine1). Contributions help me dedicate time to development, testing and documentation. No subscription is required to use the client; public code, releases and articles remain available to everyone.
+<!-- patreon-support:end -->
+
 ## Platforms & releases
 
 Each package bundles both clients (the plain-68000 one the text client alone),
