@@ -72,6 +72,9 @@ AMINET_UPLOADER=${AMINET_UPLOADER:-"michele.dipace@kaffeine.net (Michele Dipace)
 AMINET_AUTHOR=${AMINET_AUTHOR:-"Michele Dipace <michele.dipace@kaffeine.net>"}
 DIARY_URL="https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/"
 REPO_URL="https://github.com/kaffeine1/telegram-amiga"
+# Voluntary support link: OS4Depot and the AROS Archives turn their
+# donateurl: header key into a "Donate" button on the file page.
+SUPPORT_URL="https://www.patreon.com/c/kaffeine1"
 
 sha_cmd() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
 
@@ -804,7 +807,7 @@ send back what they find -- this client is what it is because of them.
 The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
 1.1) reduced to sixteen pixels; the licence text ships in the archive.
 
-Support my work on Patreon: https://www.patreon.com/c/kaffeine1
+Support my work on Patreon: $SUPPORT_URL
 Contributions are voluntary; no subscription is required to use this
 software. The link is also under "Support development..." in the window's
 Telegram menu, and at the end of /help in the text client.
@@ -1034,7 +1037,7 @@ l'icona del cassetto e mi ha permesso di distribuire le sue versioni.
 ${thanks68k_line_it}Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
 raccontano quello che trovano: questo client e' com'e' grazie a loro.
 
-Sostieni il mio lavoro su Patreon: https://www.patreon.com/c/kaffeine1
+Sostieni il mio lavoro su Patreon: $SUPPORT_URL
 Il sostegno e' volontario: non serve alcun abbonamento per usare il
 programma. Il link e' anche in "Support development..." nel menu Telegram
 della finestra, e in fondo a /help nel client testuale.
@@ -1284,7 +1287,7 @@ versions.
   $DIARY_URL
   Support my work on Patreon (voluntary; no subscription
   is required to use this software):
-  https://www.patreon.com/c/kaffeine1
+  $SUPPORT_URL
 EOF
     if [ -z "$replaces" ]; then
         awk 'NR <= 10 && /^Replaces:/ { next } { print }' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
@@ -1542,6 +1545,7 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-OS4.lha" ]; then
         printf 'submitter:Michele Dipace\n'
         printf 'email:michele.dipace@kaffeine.net\n'
         printf 'url:%s\n' "$REPO_URL"
+        printf 'donateurl:%s\n' "$SUPPORT_URL"
         printf 'category:network/chat\n'
         printf 'requirements:AmigaOS 4.x with its TCP/IP stack\n'
         # license must be one of THEIR values (help/help_submit.txt):
@@ -1571,9 +1575,10 @@ fi
 # body, minus minosversion. Naming is theirs: lowercase, platform in the file
 # name, and "-v11" marks the x86_64 ABIv11 build. Web form only, no FTP:
 # index.php?function=submit (no captcha; fields f_name f_description f_version
-# f_author f_submitter f_email f_url f_category f_userfile f_replaces
-# f_requirements f_license f_distribute f_text=body). A replace of a file we
-# did not upload ourselves waits for the original uploader's confirmation.
+# f_author f_submitter f_email f_url f_donateurl f_category f_userfile
+# f_replaces f_requirements f_license f_distribute f_text=body). A replace of
+# a file we did not upload ourselves waits for the original uploader's
+# confirmation.
 # Own subdirectory for the same reason as OS4Depot: never a lowercase twin of
 # an Aminet archive in the same directory on a case-insensitive filesystem.
 # (AROSARCHIVES_ROOT is set at the top, next to AMINET_ROOT.)
@@ -1595,6 +1600,7 @@ write_arosarchives_pair() {
         printf 'submitter:Michele Dipace\n'
         printf 'email:michele.dipace@kaffeine.net\n'
         printf 'url:%s\n' "$REPO_URL"
+        printf 'donateurl:%s\n' "$SUPPORT_URL"
         printf 'category:network/chat\n'
         if [ "${4:-}" != "new" ]; then printf 'replaces:network/chat/%s.lha\n' "$2"; fi
         printf 'requirements:%s\n' "$3"
