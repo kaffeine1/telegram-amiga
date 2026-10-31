@@ -854,6 +854,7 @@ from the plain-68000 user full of question marks. The other scripts stay
 out of reach: the text client shows one "?" per word and "(another
 alphabet)" for a text with nothing readable, while the window still leaves
 those letters out, which is the next thing to give the same treatment.
+Real Cyrillic, drawn and typed, has its own section below.
 
 The hard half followed at once, because the machinery made it cheap:
 received emoji are pairs too, emitted by the display conversion for any
@@ -883,6 +884,39 @@ is not something we can do. Where facts are needed rather than ideas,
 the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
+
+## Planned: Cyrillic, drawn and typed
+
+Asked for by several users. Since 0.0.97 Cyrillic reads as Latin letters
+("Privet"), which is a fallback, not support: a Russian or Ukrainian user
+wants to read and write in their own alphabet.
+
+The text model stays as it is. Cyrillic letters travel inside the
+Latin-1 text as pairs with a prefix of their own, the way received emoji
+already do with 0x80/0x81, so measuring, wrapping, the composer and the
+search keep working on one byte stream, and Latin accents and Cyrillic
+can sit in the same message. What goes out is UTF-8, as always.
+
+- **Drawing.** The window draws Cyrillic runs with a second font, one in
+  Amiga-1251, the codepage the Amiga systems use for Cyrillic; it is
+  chosen in Settings next to the main font, and without one the
+  transliteration stays. Still to settle: which Cyrillic fonts each
+  system actually ships, and whether the package should carry one, which
+  depends on finding a font whose licence allows it.
+- **Typing.** A Russian or Ukrainian keymap gives Amiga-1251 bytes; with
+  Cyrillic input on, the composer maps them to pairs. While it is on,
+  those bytes stop meaning the Latin-1 accented letters, so it has to be
+  a switch, ideally one that follows the keymap in use.
+- **The text client.** The console has one font, so with a Cyrillic
+  console font it writes Amiga-1251 instead of the transliteration, and
+  reads the keyboard the same way, under a switch of its own. It is a
+  table and costs next to nothing, so the 68000 build gets it too.
+
+The letters covered are those of the codepage: Russian, Ukrainian,
+Belarusian, Bulgarian, Serbian and Macedonian. Greek could follow the
+same path later with its own codepage. Each step needs a pass on real
+systems with a Cyrillic font and keymap installed, and a Russian-speaking
+tester to say whether it reads right.
 
 ## Done for 0.0.95: full-size photos in the viewer and on save
 
