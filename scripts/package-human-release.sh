@@ -804,6 +804,11 @@ send back what they find -- this client is what it is because of them.
 The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
 1.1) reduced to sixteen pixels; the licence text ships in the archive.
 
+Support my work on Patreon: https://www.patreon.com/c/kaffeine1
+Contributions are voluntary; no subscription is required to use this
+software. The link is also under "Support development..." in the window's
+Telegram menu, and at the end of /help in the text client.
+
 License: MIT -- a non-commercial community project. Diary:
 https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/
 EOF
@@ -1028,6 +1033,11 @@ l'ha ottimizzata per ogni sistema, l'ha messa su un cassetto standard per
 l'icona del cassetto e mi ha permesso di distribuire le sue versioni.
 ${thanks68k_line_it}Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
 raccontano quello che trovano: questo client e' com'e' grazie a loro.
+
+Sostieni il mio lavoro su Patreon: https://www.patreon.com/c/kaffeine1
+Il sostegno e' volontario: non serve alcun abbonamento per usare il
+programma. Il link e' anche in "Support development..." nel menu Telegram
+della finestra, e in fondo a /help nel client testuale.
 
 Licenza: MIT -- progetto di comunita' non commerciale. Diario:
 https://androidlab.it/telegram-amiga-diario-sviluppo-client-mtproto/
@@ -1272,6 +1282,9 @@ versions.
   $REPO_URL
   Development diary:
   $DIARY_URL
+  Support my work on Patreon (voluntary; no subscription
+  is required to use this software):
+  https://www.patreon.com/c/kaffeine1
 EOF
     if [ -z "$replaces" ]; then
         awk 'NR <= 10 && /^Replaces:/ { next } { print }' "$out" > "$out.tmp" && mv "$out.tmp" "$out"

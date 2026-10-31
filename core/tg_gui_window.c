@@ -557,6 +557,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_EMOTICONS 32
 #define TG_MENU_NOTIFY_SOUND 33
 #define TG_MENU_NOTIFY_CHIME 34
+#define TG_MENU_SUPPORT 35
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -6989,6 +6990,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_ABOUT },
     { NM_ITEM,  (STRPTR)"Help...",  0, 0, 0,
       (APTR)TG_MENU_HELP },
+    { NM_ITEM,  (STRPTR)"Support development...", 0, 0, 0,
+      (APTR)TG_MENU_SUPPORT },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Remove chat from list", (STRPTR)"R", 0, 0,
       (APTR)TG_MENU_REMOVE },
@@ -7234,6 +7237,14 @@ static const char tg_gui_about_text[] =
     "Source, issues and new releases:\n"
     "github.com/kaffeine1/telegram-amiga";
 
+#define TG_GUI_SUPPORT_URL "https://www.patreon.com/c/kaffeine1"
+
+static const char tg_gui_support_text[] =
+    "Support my work on Patreon.\n\n"
+    "Contributions are voluntary; no subscription\n"
+    "is required to use this software.\n\n"
+    "www.patreon.com/c/kaffeine1";
+
 static const char tg_gui_help_text[] =
     "Chat selection:\n"
     "  F1 - F10          chats 1 to 10\n"
@@ -7334,6 +7345,33 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
     es.es_TextFormat = (STRPTR)body;
     es.es_GadgetFormat = (STRPTR)"OK";
     (void)tg_gui_amiga_easyreq_args(win, &es);
+}
+
+/* The menu's "Support development...": the link opens the way a link in a
+   message does, or lands on the clipboard when no OpenURL/URLOpen is there.
+   Only on request, never at start-up. */
+static void tg_gui_window_support(tg_gui_state *state, struct Window *win)
+{
+    struct EasyStruct es;
+
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    es.es_Title = (STRPTR)"Support development";
+    es.es_TextFormat = (STRPTR)tg_gui_support_text;
+    es.es_GadgetFormat = (STRPTR)"Open link|Close";
+    if (tg_gui_amiga_easyreq_cancel_args(win, &es) != 1L) {
+        return;
+    }
+    if (tg_platform_open_url(TG_GUI_SUPPORT_URL) == 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Opening URL in the browser...");
+    } else if (tg_gui_clip_write_text(TG_GUI_SUPPORT_URL)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "URL copied (no OpenURL command)");
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not open the URL");
+    }
 }
 
 /* Two-button confirm for removing a chat. Returns 1 = Remove, 0 = Cancel. The
@@ -12631,6 +12669,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_amiga_easyreq(ctx.window,
                                                  "About Telegram Amiga",
                                                  tg_gui_about_text);
+                        } else if (ud == (APTR)TG_MENU_SUPPORT) {
+                            tg_gui_window_support(state, ctx.window);
+                            tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_HELP) {
                             tg_gui_amiga_easyreq(ctx.window, TG_APP_TITLE " Help",
                                                  tg_gui_help_text);

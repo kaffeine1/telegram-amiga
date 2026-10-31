@@ -14549,6 +14549,9 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  /color          colours, on or off",
         "  /bell           flash on new messages, on or off",
         "  /swap /saved /peers  the same as Tab, 0 and /list",
+        "",
+        "Support my work on Patreon: www.patreon.com/c/kaffeine1",
+        "Contributions are voluntary; no subscription is required.",
         0
     };
     unsigned long i;

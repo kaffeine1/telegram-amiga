@@ -8,6 +8,13 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Added
+- "Support development..." in the window's Telegram menu, after Help:
+  it says where to support my work on Patreon and opens the link, or
+  copies it when no OpenURL command is there. Voluntary, nothing changes
+  without it, and it never shows on its own. The text client has the
+  same two lines at the end of /help.
+
 ### Fixed
 - A message's right-button menu acts on the message it was opened on. It
   remembered the message by its row, and in a chat with a full transcript
