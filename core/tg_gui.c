@@ -5664,9 +5664,10 @@ int tg_gui_photo_save_allowed(int destination_exists,
 /* The React... chooser is a grid of the reactions' own emoji, five to a
    row, like the strip of the official desktop client, instead of a list of
    their names. Square cells of a line and a bit. The whole list, behind
-   the arrow, is wider: eight to a row. */
+   the arrow, is wider: ten to a row, so the 69 standard reactions take
+   seven rows and stay inside a 256 line screen. */
 #define TG_GUI_REACT_COLS 5
-#define TG_GUI_REACT_COLS_ALL 8
+#define TG_GUI_REACT_COLS_ALL 10
 
 static int tg_gui_react_cols(const tg_gui_state *state)
 {
@@ -7588,8 +7589,9 @@ static int tg_gui_reactions_self_test(void)
              ids[8] == TG_GUI_CTX_REACTION_FIRST + 8 &&
              ids[9] == TG_GUI_CTX_REACT_MORE;
         {
-            /* All allowed: the arrow opens every standard reaction the
-               sheet draws, eight to a row, in Telegram's order. */
+            /* All allowed: the arrow opens every standard reaction, ten
+               to a row, in Telegram's order. Each has a glyph on the
+               sheet and an emoticon where the glyph cannot be drawn. */
             int drawn = 0;
             int k;
 
@@ -7601,7 +7603,7 @@ static int tg_gui_reactions_self_test(void)
             state->ctx_w = tg_gui_context_menu_measure(state, &backend);
             tg_gui_context_box(state, TG_REACTION_DEFAULTS, 480, 320, 18,
                                 &bx, &by, &bw, &bh, &ih);
-            ok = ok && drawn > TG_REACTION_DEFAULTS &&
+            ok = ok && drawn == TG_REACTION_STANDARD &&
                  state->react_choice_count == drawn &&
                  tg_gui_context_menu_hit(state, 480, 320, 18,
                      bx + 2 + 4 * ih + ih / 2, by + 2 + ih + ih / 2) ==
@@ -7612,15 +7614,19 @@ static int tg_gui_reactions_self_test(void)
                                 &bx, &by, &bw, &bh, &ih);
             ok = ok && tg_gui_context_items(state, labels, ids) == drawn &&
                  tg_gui_react_choice_at(state, 0) == tg_reaction_standard(0) &&
-                 state->ctx_w == 8 * ih + 4 && bw == state->ctx_w &&
-                 bh == ((drawn + 7) / 8) * ih + 4 &&
+                 state->ctx_w == 10 * ih + 4 && bw == state->ctx_w &&
+                 bh == ((drawn + 9) / 10) * ih + 4 &&
                  tg_gui_context_menu_hit(state, 480, 320, 18,
                      bx + 2 + 2 * ih + ih / 2, by + 2 + ih + ih / 2) ==
-                     TG_GUI_CTX_REACTION_FIRST + 10 &&
+                     TG_GUI_CTX_REACTION_FIRST + 12 &&
                  tg_gui_react_choice_at(state, drawn) == 0UL;
             for (k = 0; k < drawn && ok; ++k) {
+                int gi = tg_gui_emoji_index_of(tg_reaction_standard(k));
+
                 ok = ids[k] == TG_GUI_CTX_REACTION_FIRST + k &&
-                     tg_gui_react_choice_at(state, k) != 0UL;
+                     tg_gui_react_choice_at(state, k) != 0UL &&
+                     strcmp(tg_gui_session_emoji_text((unsigned long)gi),
+                            "?") != 0;
             }
         }
         {

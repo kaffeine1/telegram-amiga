@@ -6605,6 +6605,85 @@ static const char *tg_mtproto_display_emoticon(unsigned long cp)
     case 0x1f339UL: /* rose */
     case 0x1f490UL: /* bouquet */
         return "(rose)";
+    /* The rest of the standard reactions (tg_reaction_standard), so the
+       whole reaction list has a glyph and reads back in the console. Kept
+       last: the sheet takes this order and its indexes are saved. */
+    case 0x1f92fUL: /* exploding head */
+        return "(boom)";
+    case 0x1f92cUL: /* symbols on mouth */
+        return "(swear)";
+    case 0x1f929UL: /* star-struck */
+        return "(stars)";
+    case 0x1f92eUL: /* vomiting */
+        return "(puke)";
+    case 0x1f54aUL: /* dove */
+        return "(dove)";
+    case 0x1f921UL: /* clown */
+        return "(clown)";
+    case 0x1f974UL: /* woozy */
+        return "(woozy)";
+    case 0x1f433UL: /* spouting whale */
+        return "(whale)";
+    case 0x1f31aUL: /* new moon face */
+        return "(moon)";
+    case 0x1f32dUL: /* hot dog */
+        return "(hotdog)";
+    case 0x26a1UL: /* high voltage */
+        return "(zap)";
+    case 0x1f34cUL: /* banana */
+        return "(banana)";
+    case 0x1f3c6UL: /* trophy */
+        return "(trophy)";
+    case 0x1f928UL: /* raised eyebrow */
+        return "o_O";
+    case 0x1f610UL: /* neutral */
+        return ":|";
+    case 0x1f353UL: /* strawberry */
+        return "(berry)";
+    case 0x1f37eUL: /* champagne */
+        return "(cheers)";
+    case 0x1f48bUL: /* kiss mark */
+        return ":*";
+    case 0x1f595UL: /* middle finger */
+        return "(finger)";
+    case 0x1f608UL: /* smiling devil */
+        return ">:)";
+    case 0x1f913UL: /* nerd */
+        return "(nerd)";
+    case 0x1f47bUL: /* ghost */
+        return "(ghost)";
+    case 0x1f383UL: /* jack-o-lantern */
+        return "(pumpkin)";
+    case 0x1f648UL: /* see-no-evil monkey */
+        return "(nosee)";
+    case 0x270dUL: /* writing hand */
+        return "(write)";
+    case 0x1fae1UL: /* saluting face */
+        return "o7";
+    case 0x1f385UL: /* santa */
+        return "(santa)";
+    case 0x1f384UL: /* christmas tree */
+        return "(xmas)";
+    case 0x2603UL: /* snowman */
+        return "(snowman)";
+    case 0x1f485UL: /* nail polish */
+        return "(nails)";
+    case 0x1f92aUL: /* zany */
+        return "(zany)";
+    case 0x1f5ffUL: /* moai */
+        return "(moai)";
+    case 0x1f192UL: /* squared cool */
+        return "(cool)";
+    case 0x1f649UL: /* hear-no-evil monkey */
+        return "(nohear)";
+    case 0x1f984UL: /* unicorn */
+        return "(unicorn)";
+    case 0x1f48aUL: /* pill */
+        return "(pill)";
+    case 0x1f64aUL: /* speak-no-evil monkey */
+        return "(nospeak)";
+    case 0x1f47eUL: /* alien monster */
+        return "(alien)";
     default:
         return 0;
     }

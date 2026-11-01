@@ -3,7 +3,8 @@
 
 Input: a directory holding emoji_u<hex>.png (the 128 px set of
 https://github.com/googlefonts/noto-emoji, OFL 1.1) for the codepoints in
-the curated list below. Output: 16x16 glyphs on a shared 255 colour palette,
+the curated list below. The sheet is built from release v2.051 (commit
+f3ae03f), path png/128; later commits moved the PNGs to 2D/png. Output: 16x16 glyphs on a shared 255 colour palette,
 index 0 = transparent, as C arrays, plus a preview PNG.
 
 The curated list is the emoji the client already maps to text emoticons in
@@ -63,6 +64,8 @@ def main(png_dir, preview=None):
     for k, (cp, _) in enumerate(glyphs):
         c.append('    0x%xUL,%s' % (cp, '\n' if k % 6 == 5 else ' '))
     c.append('\n};\n')
+    # The text-only build (NO_GUI) reads the codepoints and never draws.
+    c.append('#ifndef TG_NO_GUI\n')
     c.append('const unsigned char tg_emoji_sheet_palette[255][3] = {\n')
     for k in range(255):
         c.append('    {%d,%d,%d},%s' % (pal[k*3], pal[k*3+1], pal[k*3+2], '\n' if k % 6 == 5 else ' '))
@@ -74,6 +77,7 @@ def main(png_dir, preview=None):
             c.append('      ' + ','.join('%3d' % v for v in cell[y*SIZE:(y+1)*SIZE]) + ',\n')
         c.append('    },\n')
     c.append('};\n')
+    c.append('#endif\n')
     open(os.path.join(ROOT, 'core', 'tg_emoji_sheet.c'), 'w').write(''.join(c))
     h = '''/* Emoji glyph sheet: %d glyphs of %dx%d pixels on one shared palette, index 0
    transparent. Derived from Noto Emoji (OFL 1.1), see third_party/noto-emoji.

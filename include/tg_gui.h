@@ -154,7 +154,7 @@ struct tg_gui_backend {
    the composer is a two byte escape: a prefix byte from the C1 control range,
    which no keymap emits, followed by an index byte from 0x21..0x7E with '@'
    left out (it would wake the mention popup). 93 slots per prefix, two
-   prefixes, 186 addressable glyphs, against 109 in the sheet today. The
+   prefixes, 186 addressable glyphs, against 147 in the sheet today. The
    backends measure and draw a pair as one square cell of the line height
    showing the sheet glyph; the wrap never splits one; the send path expands
    it to the codepoint's UTF-8. Reception can use the same pairs later, so a

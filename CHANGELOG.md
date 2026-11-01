@@ -15,11 +15,16 @@ the text client for the plain 68000.
   without it, and it never shows on its own. The text client has the
   same two lines at the end of /help.
 - More reactions than the ten of the grid. When a chat allows more, the
-  grid's last cell is an arrow that opens every reaction it allows and
-  the client can draw, eight to a row: in a chat that allows all, the
-  free reactions in Telegram's order, and a group's own list whole
-  instead of cut to ten. The text client's /react takes every standard
-  reaction by name, and /reactions lists the names.
+  grid's last cell is an arrow that opens every reaction it allows, ten
+  to a row: in a chat that allows all, the 69 free reactions in
+  Telegram's order, and a group's own list whole instead of cut to ten.
+  The text client's /react takes every standard reaction by name, and
+  /reactions lists the names.
+- 38 more emoji on the sheet, from the same Noto Emoji set: the free
+  reactions that were missing, among them the exploding head, the clown,
+  the whale, the trophy, the ghost, the unicorn and the three monkeys.
+  They show in messages and reactions, join the end of the emoji panel,
+  and read as short words in the text client, like (unicorn) or o7.
 
 ### Changed
 - More contrast in the dark colours, same hues, after a user asked for
