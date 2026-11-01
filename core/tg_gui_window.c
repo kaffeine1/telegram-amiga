@@ -570,15 +570,15 @@ typedef struct tg_gui_rgb {
 
 static const tg_gui_rgb tg_gui_dark_pens[TG_GUI_PEN_COUNT] = {
     {0x12, 0x14, 0x1a}, /* WINDOW */
-    {0x20, 0x24, 0x2e}, /* SURFACE */
+    {0x26, 0x2b, 0x37}, /* SURFACE */
     {0xe6, 0xea, 0xf0}, /* TEXT */
     {0x93, 0x9a, 0xa6}, /* TEXT_DIM */
     {0x2a, 0x6e, 0xb4}, /* ACCENT */
     {0xf0, 0xf6, 0xff}, /* ACCENT_TEXT */
-    {0x1a, 0x2c, 0x44}, /* SELECT */
-    {0x18, 0x5f, 0xa5}, /* BADGE */
-    {0xe6, 0xf1, 0xfb}, /* BADGE_TEXT */
-    {0x4d, 0xc2, 0xff}, /* READ - read-receipt double check, pops on the blue bubble */
+    {0x2b, 0x52, 0x78}, /* SELECT - the desktop's selection blue */
+    {0x2d, 0x78, 0xc2}, /* BADGE */
+    {0xff, 0xff, 0xff}, /* BADGE_TEXT */
+    {0x8f, 0xdc, 0xff}, /* READ - read-receipt double check, pops on the blue bubble */
     /* MENU_*: fallbacks only -- the real values come from the screen's
        DrawInfo in obtain_pens below (classic WB grey/black/blue here). */
     {0xaa, 0xaa, 0xaa}, /* MENU_BACK */
@@ -596,6 +596,18 @@ static const tg_gui_rgb tg_gui_avatar_rgb[TG_GUI_AVATAR_COLORS] = {
     {0xbf, 0x52, 0x7e}, /* pink */
     {0xb0, 0x7a, 0x1f}, /* amber */
     {0x2c, 0x7c, 0xb8}  /* blue */
+};
+
+/* Sender names in groups: a lighter shade of each avatar tint, the way the
+   desktop does it at night, so the name reads on the incoming bubble (all
+   above 5:1 on SURFACE). Same order as tg_gui_avatar_rgb. */
+static const tg_gui_rgb tg_gui_name_rgb[TG_GUI_AVATAR_COLORS] = {
+    {0x77, 0xb6, 0xa4}, /* teal */
+    {0xd6, 0x93, 0x80}, /* coral */
+    {0x9e, 0x97, 0xdb}, /* purple */
+    {0xd5, 0x8e, 0xab}, /* pink */
+    {0xcb, 0xa8, 0x6d}, /* amber */
+    {0x75, 0xa9, 0xd0}  /* blue */
 };
 
 #define TG_GUI_PHOTO_DIRECT_OPS 24
@@ -625,6 +637,8 @@ typedef struct tg_gui_amiga_ctx {
     LONG pens_obtained[TG_GUI_PEN_COUNT];       /* raw ObtainBestPenA result, -1 if failed */
     LONG avatar_pens[TG_GUI_AVATAR_COLORS];
     LONG avatar_obtained[TG_GUI_AVATAR_COLORS];
+    LONG name_pens[TG_GUI_AVATAR_COLORS];
+    LONG name_obtained[TG_GUI_AVATAR_COLORS];
     int pens_held;
     /* Off-screen double-buffer (flicker-free paint). buf_ok==0 => direct render. */
     struct BitMap *buf_bm;   /* friend of window->RPort->BitMap; 0 if none */
@@ -920,6 +934,15 @@ static int tg_gui_amiga_text_width(tg_gui_backend *backend, const char *text,
 
 static LONG tg_gui_amiga_resolve_pen(tg_gui_amiga_ctx *ctx, int pen)
 {
+    if (pen >= TG_GUI_PEN_NAME_BASE) {
+        int tint;
+
+        tint = pen - TG_GUI_PEN_NAME_BASE;
+        if (tint >= TG_GUI_AVATAR_COLORS) {
+            tint = 0;
+        }
+        return ctx->name_pens[tint];
+    }
     if (pen >= TG_GUI_PEN_COUNT) {
         int avatar;
 
@@ -5681,6 +5704,12 @@ static void tg_gui_amiga_obtain_pens(tg_gui_amiga_ctx *ctx,
             tg_gui_amiga_obtain_rgb(cmap, &tg_gui_avatar_rgb[i], exact);
         ctx->avatar_pens[i] =
             (ctx->avatar_obtained[i] == -1) ? 1L : ctx->avatar_obtained[i];
+        /* A name that finds no pen of its own keeps the avatar's. */
+        ctx->name_obtained[i] =
+            tg_gui_amiga_obtain_rgb(cmap, &tg_gui_name_rgb[i], exact);
+        ctx->name_pens[i] = (ctx->name_obtained[i] == -1)
+                                ? ctx->avatar_pens[i]
+                                : ctx->name_obtained[i];
     }
     ctx->pens_held = 1;
     if (tg_gui_log_is_enabled()) {
@@ -5711,6 +5740,9 @@ static void tg_gui_amiga_release_pens(tg_gui_amiga_ctx *ctx,
     for (i = 0; i < TG_GUI_AVATAR_COLORS; ++i) {
         if (ctx->avatar_obtained[i] != -1) {
             ReleasePen(cmap, ctx->avatar_obtained[i]);
+        }
+        if (ctx->name_obtained[i] != -1) {
+            ReleasePen(cmap, ctx->name_obtained[i]);
         }
     }
     tg_gui_av_release_pool(cmap); /* the shared real-avatar pen pool */
@@ -9587,6 +9619,8 @@ static int tg_gui_photo_viewer_open_window(tg_gui_photo_viewer *viewer,
     memcpy(viewer->ctx.pens, main_ctx->pens, sizeof(viewer->ctx.pens));
     memcpy(viewer->ctx.avatar_pens, main_ctx->avatar_pens,
            sizeof(viewer->ctx.avatar_pens));
+    memcpy(viewer->ctx.name_pens, main_ctx->name_pens,
+           sizeof(viewer->ctx.name_pens));
     viewer->ctx.bitmap_text_compat = main_ctx->bitmap_text_compat;
     viewer->ctx.photo_truecolor = main_ctx->photo_truecolor;
     viewer->ctx.photo_cgx_failed = main_ctx->photo_cgx_failed;
@@ -11648,7 +11682,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         printf("gui window: open %dx%d, font %s %dpx, %lu pens; window "
                "footprint ~%lu KB\n",
                ctx.inner_w, ctx.inner_h, font_name, ctx.line_h,
-               (unsigned long)(TG_GUI_PEN_COUNT + TG_GUI_AVATAR_COLORS),
+               (unsigned long)(TG_GUI_PEN_NAME_BASE + TG_GUI_AVATAR_COLORS),
                footprint / 1024UL);
     }
     fflush(stdout);

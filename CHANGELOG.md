@@ -15,6 +15,15 @@ the text client for the plain 68000.
   without it, and it never shows on its own. The text client has the
   same two lines at the end of /help.
 
+### Changed
+- More contrast in the dark colours, same hues, after a user asked for
+  no dark blue on black. The selected chat takes the desktop's selection
+  blue, and on it the time and preview are drawn in the full text colour.
+  Sender names in groups take a lighter shade of their avatar colour, the
+  incoming bubbles and the side panel stand a little further from the
+  window, the read ticks are lighter on one's own bubble, and the unread
+  badge is a brighter blue with a white number.
+
 ### Fixed
 - A message's right-button menu acts on the message it was opened on. It
   remembered the message by its row, and in a chat with a full transcript

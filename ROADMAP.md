@@ -1176,16 +1176,20 @@ and a few pairs fall short:
 - the read ticks, `4dc2ff` on the blue of one's own bubble, are 2.6;
 - the unread badge, `185fa5` on the window, is 2.8.
 
-The changes keep each hue. The selected row takes `2b5278`, the blue the
-desktop uses for selection (2.3 from the window, the text on it 6.7).
-Sender names take a lighter tint of their avatar colour, as the desktop
-does at night, all above 5.8 (blue `75a9d0`, purple `9e97db`, teal
-`77b6a4`, coral `d69380`, pink `d58eab`, amber `cba86d`); the avatars
-keep theirs. The read ticks go to `8fdcff` (3.5), the badge to `2f7bc8`
-(4.2), the incoming bubbles to `262b37`, a small step on purpose. All of
-it is the pen table in `tg_gui_window.c` and a name table next to the
-avatar colours; to be checked on real screens, since 16-bit RTG and AGA
-round the pens.
+The changes keep each hue, and they are on main. The selected row takes
+`2b5278`, the blue the desktop uses for selection (2.3 from the window,
+the text on it 6.7); the dim grey would fall to 2.9 there, so a tinted
+row draws its time and preview in the full text colour, as the desktop
+does. Sender names take a lighter tint of their avatar colour, as the
+desktop does at night, all above 5.3 on the new bubble (blue `75a9d0`,
+purple `9e97db`, teal `77b6a4`, coral `d69380`, pink `d58eab`, amber
+`cba86d`); the avatars keep theirs. The read ticks go to `8fdcff` (3.5),
+the incoming bubbles to `262b37`, a small step on purpose. The badge
+takes `2d78c2` with a white number: the `2f7bc8` first planned would
+have dropped the number to 3.8, and this one keeps it at 4.6 with the
+badge at 4.0 from the window. All of it is the pen table in
+`tg_gui_window.c` and a name table next to the avatar colours; to be
+checked on real screens, since 16-bit RTG and AGA round the pens.
 
 ## Planned: topics in forum groups
 

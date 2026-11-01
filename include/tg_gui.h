@@ -51,6 +51,9 @@
 
 /* Distinct avatar / sender tints, resolved by the backend like the pens. */
 #define TG_GUI_AVATAR_COLORS 6
+/* Sender names in groups: a lighter shade of each avatar tint, one pen per
+   tint from this index on. */
+#define TG_GUI_PEN_NAME_BASE (TG_GUI_PEN_COUNT + TG_GUI_AVATAR_COLORS)
 
 typedef struct tg_gui_rect {
     int x;

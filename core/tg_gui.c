@@ -2277,10 +2277,14 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
         int preview_pen;
 
         chat = &state->chats[i];
-        /* The selected row is set apart by its tint and accent bar; the text
-           pens are the same as an unselected row. */
+        /* The selected row is set apart by its tint and accent bar. On the
+           tint the dim grey falls under 3:1, so a tinted row draws its
+           secondary text in the full text colour, as the desktop does. */
         name_pen = TG_GUI_PEN_TEXT;
-        preview_pen = TG_GUI_PEN_TEXT_DIM;
+        preview_pen = (i == state->selected_chat || i == state->nav_chat ||
+                       (state->drag_active && i == state->drag_src))
+                          ? TG_GUI_PEN_TEXT
+                          : TG_GUI_PEN_TEXT_DIM;
         if (i == state->selected_chat) {
             backend->fill_rect(backend, TG_GUI_PEN_SELECT,
                                tg_gui_make_rect(0, y, sidebar_w, row_h));
@@ -2403,7 +2407,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             if (has_preview) {
                 int preview_limit;
 
-                backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, sidebar_w - 34,
+                backend->draw_text(backend, preview_pen, sidebar_w - 34,
                                    name_baseline, chat->time,
                                    (unsigned long)strlen(chat->time));
                 preview_limit = (chat->unread > 0) ? (badge_x - 4)
@@ -3216,7 +3220,7 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
                 sender_pen = 0;
             }
             if (!grouped && (y + lh) <= bottom && y >= top) {
-                backend->draw_text(backend, sender_pen + TG_GUI_PEN_COUNT,
+                backend->draw_text(backend, sender_pen + TG_GUI_PEN_NAME_BASE,
                                    bubble_x + 2,
                                    tg_gui_centred_baseline(backend, y, lh),
                                    message->sender,
