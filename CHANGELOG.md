@@ -20,6 +20,12 @@ the text client for the plain 68000.
   Telegram's order, and a group's own list whole instead of cut to ten.
   The text client's /react takes every standard reaction by name, and
   /reactions lists the names.
+- /ids in the text client, after a user asked what to put where /react
+  wants a message id: the text client never showed one. Switched on,
+  each message starts with its number, like #4821, which /react,
+  /forward and /forwardto take; off by default, so the lines stay as
+  they were. And /react no longer needs the number: like /forward, it
+  takes the latest message without one, so /react heart is enough.
 - 38 more emoji on the sheet, from the same Noto Emoji set: the free
   reactions that were missing, among them the exploding head, the clown,
   the whale, the trophy, the ghost, the unicorn and the three monkeys.

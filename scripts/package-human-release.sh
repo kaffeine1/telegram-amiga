@@ -717,9 +717,12 @@ Using the GUI
   yours highlighted. Right-click a message and choose "React...": a grid
   opens with the reactions the chat allows (ten common ones where all are),
   yours on the accent colour; a click adds one, and choosing yours again
-  takes it back. When a group
+  takes it back. When there are more, the last cell is an arrow that opens
+  them all. When a group
   does not allow that reaction, the status line says so. In the text client
-  the counts follow the line, and /react <id> <name> adds one.
+  the counts follow the line, /react <name> adds one to the latest message
+  (/reactions lists the names), and /ids shows the message numbers that
+  /react <id> <name>, /forward and /forwardto take.
 - New messages: "Settings > Notifications" chooses the count in the title,
   the pop-up, or nothing. With Beep on, a chat that rings plays a sound:
   the built-in chime, or a file picked with "Sound file..." (IFF 8SVX, or
@@ -947,10 +950,13 @@ Usare la GUI
   numero, la tua evidenziata. Click destro su un messaggio, "React...": si
   apre una griglia con le reazioni che la chat permette (dieci comuni dove
   le permette tutte), la tua sul colore d'accento; un click ne aggiunge
-  una, scegliendo di nuovo la tua la togli. Se
+  una, scegliendo di nuovo la tua la togli. Quando ce ne sono di piu',
+  l'ultima casella e' una freccia che le apre tutte. Se
   il gruppo non permette quella reazione, lo dice la riga di stato. Nel
-  client testuale i conteggi seguono la riga e /react <id> <nome> ne
-  aggiunge una.
+  client testuale i conteggi seguono la riga, /react <nome> ne aggiunge
+  una all'ultimo messaggio (/reactions elenca i nomi) e /ids mostra i
+  numeri dei messaggi che /react <id> <nome>, /forward e /forwardto
+  accettano.
 - Nuovi messaggi: "Settings > Notifications" sceglie il conteggio nel
   titolo, il pop-up o niente. Con Beep attivo, una chat che suona fa
   sentire un suono: il campanello interno, o un file scelto con "Sound

@@ -506,6 +506,9 @@ static void tg_mtproto_chat_show_prompt(FILE *stream,
                                         int raw);
 /* /bell changes the shared beep preference for this text session. */
 static int tg_chat_bell_enabled = 1;
+/* /ids: each message line starts with its server id, the number /react,
+   /forward and /forwardto take. Off by default, the lines stay plain. */
+static int tg_chat_ids_shown = 0;
 /* Kind, two 32-bit id halves and a 32-bit local ring time, in bytes so the
    68000-like host profile grows by 156 bytes, not an LP64 struct array. */
 static unsigned char tg_chat_ring_history[TG_GUI_MAX_CHATS][13];
@@ -12083,6 +12086,12 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         }
         tg_mtproto_chat_print_message_time(stream, row->local_epoch);
     }
+    if (tg_chat_ids_shown && row->id != 0UL) {
+        tg_console_ui_role(stream, TG_UI_ROLE_GROUP);
+        fprintf(stream, "#%lu", row->id);
+        tg_console_ui_reset(stream);
+        fputc(' ', stream);
+    }
     if (row->is_group && row->peer_label != 0 && row->peer_label[0] != '\0') {
         tg_console_ui_role(stream, TG_UI_ROLE_GROUP);
         fputc('[', stream);
@@ -12259,6 +12268,32 @@ static int tg_mtproto_styled_render_self_test(void)
         }
     }
     tg_console_ui_set_charset(saved_charset);
+    /* /ids on: the server id leads the line, the number /react takes. */
+    cap = tmpfile();
+    if (cap == 0) {
+        puts("chat render self-test: no message-id capture");
+        return 2;
+    }
+    memset(&row, 0, sizeof(row));
+    row.text = "ciao";
+    row.peer_label = "Mario";
+    row.id = 4821UL;
+    day = 0UL;
+    tg_chat_ids_shown = 1;
+    tg_mtproto_chat_render_message(cap, &row, &day);
+    row.id = 0UL; /* not known yet: no number rather than #0 */
+    tg_mtproto_chat_render_message(cap, &row, &day);
+    tg_chat_ids_shown = 0;
+    row.id = 4821UL;
+    tg_mtproto_chat_render_message(cap, &row, &day);
+    rewind(cap);
+    n = fread(got, 1, sizeof(got) - 1U, cap);
+    got[n] = '\0';
+    fclose(cap);
+    if (strcmp(got, "#4821 Mario: ciao\nMario: ciao\nMario: ciao\n") != 0) {
+        printf("chat render self-test: message id \"%s\"\n", got);
+        return 2;
+    }
     return 0;
 }
 
@@ -14601,7 +14636,7 @@ static void tg_mtproto_chat_print_reaction_names(FILE *stream)
     int i;
     unsigned long col = 0UL;
 
-    fputs("\nReactions for /react <message-id> <name>:\n", stream);
+    fputs("\nReactions for /react [message-id] <name>:\n", stream);
     for (i = 0; i < TG_REACTION_STANDARD; ++i) {
         const char *name = tg_reaction_standard_name(i);
         unsigned long len = (unsigned long)strlen(name);
@@ -14641,9 +14676,11 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  /history        show the recent messages again",
         "  /forward [id]   forward the latest (or that id) to Saved Messages",
         "  /forwardto n [id]  forward the latest (or that id) to chat n",
-        "  /react id name  react: up heart fire laugh surprise sad",
-        "                  party pray clap ok; none removes your reactions",
+        "  /react [id] name   react to the latest (or that id): up heart",
+        "                  fire laugh surprise sad party pray clap ok;",
+        "                  none removes your reactions",
         "  /reactions      every name /react takes",
+        "  /ids            message ids before each message, on or off",
         "  /getfile        download the newest file here to downloads/",
         "  /sendfile path  send a file",
         "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
@@ -14781,9 +14818,10 @@ static void tg_mtproto_chat_load_own_label(const char *host,
 }
 
 /* Match the other numbered-message commands, without retaining another
-   message list in the text client. The name is any standard reaction's
-   (tg_reaction_standard_name); "none" explicitly sends an empty vector and
-   leaves *cp at 0. */
+   message list in the text client. The id is optional, as for /forward:
+   without one *id is 0 and the caller takes the latest message. The name
+   is any standard reaction's (tg_reaction_standard_name); "none"
+   explicitly sends an empty vector and leaves *cp at 0. */
 static int tg_mtproto_chat_reaction_arg(const char *arg, unsigned long *id,
                                         unsigned long *cp)
 {
@@ -14793,11 +14831,15 @@ static int tg_mtproto_chat_reaction_arg(const char *arg, unsigned long *id,
 
     if (arg == 0) return 0;
     while (*arg == ' ' || *arg == '\t') ++arg;
-    if (*arg < '0' || *arg > '9') return 0;
-    *id = strtoul(arg, &end, 10);
-    if (*id == 0UL || *id > 2147483647UL ||
-        (*end != ' ' && *end != '\t') ||
-        sscanf(end, "%15s %1s", name, extra) != 1) return 0;
+    if (*arg >= '0' && *arg <= '9') {
+        *id = strtoul(arg, &end, 10);
+        if (*id == 0UL || *id > 2147483647UL ||
+            (*end != ' ' && *end != '\t')) return 0;
+    } else {
+        *id = 0UL;
+        end = (char *)arg;
+    }
+    if (sscanf(end, "%15s %1s", name, extra) != 1) return 0;
     if (strcmp(name, "none") == 0) {
         *cp = 0UL;
         return 1;
@@ -15473,6 +15515,24 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             tg_mtproto_chat_print_system_line(
                 stream, tg_chat_bell_enabled ? "Bell on." : "Bell off.");
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        color_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/ids", &color_arg)) {
+            if (color_arg != 0 && strcmp(color_arg, "on") == 0) {
+                tg_chat_ids_shown = 1;
+            } else if (color_arg != 0 && strcmp(color_arg, "off") == 0) {
+                tg_chat_ids_shown = 0;
+            } else {
+                tg_chat_ids_shown = !tg_chat_ids_shown;
+            }
+            tg_mtproto_chat_print_system_line(
+                stream, tg_chat_ids_shown
+                            ? "Message ids on: /react, /forward and /forwardto "
+                              "take the number after #."
+                            : "Message ids off.");
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -16352,8 +16412,12 @@ int tg_mtproto_auth_chat_file(const char *host,
             } else if (!tg_mtproto_chat_reaction_arg(cmd_arg, &reaction_id,
                                                       &reaction_cp)) {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Use /react <message-id> <name>, or /react <message-id> none; "
-                    "/reactions lists the names.");
+                    "Use /react [message-id] <name>, or /react [message-id] none; "
+                    "/reactions lists the names, /ids shows the ids.");
+            } else if (reaction_id == 0UL &&
+                       (reaction_id = last_seen_message_id) == 0UL) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "No recent message is available to react to.");
             } else {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_react_peer_on_context(host, port, api_id,
@@ -18153,9 +18217,12 @@ static int tg_mtproto_reactions_command_self_test(void)
     static const unsigned long want[] = { 0x1f44dUL, 0x2764UL, 0x1f525UL,
         0x1f923UL, 0x1f631UL, 0x1f622UL, 0x1f389UL, 0x1f64fUL, 0x1f44fUL,
         0x1f44cUL, 0UL, 0x1f984UL, 0x1f64aUL };
+    /* Without an id: the latest message, id 0 for the caller to fill. */
+    static const char *const latest[] = { "heart", " unicorn", "none" };
+    static const unsigned long latest_want[] = { 0x2764UL, 0x1f984UL, 0UL };
     static const char *const bad[] = { "", "42", "0 up", "-1 up", "42up",
         "2147483648 up", "999999999999999999999 up", "42 up extra", "42 unknown",
-        "42 Up" };
+        "42 Up", "Up", "unknown", "heart extra", "-1" };
     unsigned long id;
     unsigned long i;
     unsigned long cp;
@@ -18166,6 +18233,14 @@ static int tg_mtproto_reactions_command_self_test(void)
             (i < (unsigned long)TG_REACTION_DEFAULTS &&
              cp != tg_reaction_default((int)i))) {
             puts("probe self-test: reaction command add/remove failed");
+            return 2;
+        }
+    }
+    for (i = 0UL; i < sizeof(latest) / sizeof(latest[0]); ++i) {
+        id = 42UL;
+        if (!tg_mtproto_chat_reaction_arg(latest[i], &id, &cp) || id != 0UL ||
+            cp != latest_want[i]) {
+            puts("probe self-test: reaction command without an id failed");
             return 2;
         }
     }
