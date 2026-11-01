@@ -509,6 +509,10 @@ static int tg_chat_bell_enabled = 1;
 /* /ids: each message line starts with its server id, the number /react,
    /forward and /forwardto take. Off by default, the lines stay plain. */
 static int tg_chat_ids_shown = 0;
+/* The newest message from someone else that the text client printed in the
+   current chat: what /react takes without an id. One's own messages and
+   service lines are not counted. */
+static unsigned long tg_chat_last_incoming_id = 0UL;
 /* Kind, two 32-bit id halves and a 32-bit local ring time, in bytes so the
    68000-like host profile grows by 156 bytes, not an LP64 struct array. */
 static unsigned char tg_chat_ring_history[TG_GUI_MAX_CHATS][13];
@@ -12162,6 +12166,15 @@ typedef struct tg_chat_console_driver {
     unsigned long *day_shown;
 } tg_chat_console_driver;
 
+/* Keeps tg_chat_last_incoming_id on the newest message from someone else. */
+static void tg_mtproto_chat_note_incoming(const tg_chat_message_row *row)
+{
+    if (row != 0 && !row->is_out && !row->is_service &&
+        row->id > tg_chat_last_incoming_id) {
+        tg_chat_last_incoming_id = row->id;
+    }
+}
+
 static void tg_chat_console_on_message(void *ctx,
                                        const tg_chat_message_row *row)
 {
@@ -12293,6 +12306,29 @@ static int tg_mtproto_styled_render_self_test(void)
     if (strcmp(got, "#4821 Mario: ciao\nMario: ciao\nMario: ciao\n") != 0) {
         printf("chat render self-test: message id \"%s\"\n", got);
         return 2;
+    }
+    /* /react without an id: the newest message from the others, never one's
+       own nor a service line, and an older one does not take it back. */
+    {
+        unsigned long saved = tg_chat_last_incoming_id;
+
+        tg_chat_last_incoming_id = 0UL;
+        memset(&row, 0, sizeof(row));
+        row.id = 100UL;
+        tg_mtproto_chat_note_incoming(&row);
+        row.id = 101UL; row.is_out = 1;
+        tg_mtproto_chat_note_incoming(&row);
+        row.id = 102UL; row.is_out = 0; row.is_service = 1;
+        tg_mtproto_chat_note_incoming(&row);
+        row.id = 99UL; row.is_service = 0;
+        tg_mtproto_chat_note_incoming(&row);
+        if (tg_chat_last_incoming_id != 100UL) {
+            printf("chat render self-test: last received %lu\n",
+                   tg_chat_last_incoming_id);
+            tg_chat_last_incoming_id = saved;
+            return 2;
+        }
+        tg_chat_last_incoming_id = saved;
     }
     return 0;
 }
@@ -13556,6 +13592,10 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
 
     max_seen_message_id = last_seen_message_id != 0 ?
         *last_seen_message_id : 0UL;
+    if (last_seen_message_id != 0 && *last_seen_message_id == 0UL &&
+        tg_chat_message_driver_override == 0) {
+        tg_chat_last_incoming_id = 0UL; /* a chat read from the start */
+    }
     printed = 0UL;
     if (texts.count == 0UL) {
         tg_shared_message_texts_busy = 0;
@@ -13755,6 +13795,9 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                            never starts background photo work. */
                         tg_gui_photo_catalog_offer(&texts.messages[i].photo);
                     }
+                }
+                if (tg_chat_message_driver_override == 0) {
+                    tg_mtproto_chat_note_incoming(&row);
                 }
                 driver.on_message(driver.ctx, &row);
             }
@@ -14676,9 +14719,9 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  /history        show the recent messages again",
         "  /forward [id]   forward the latest (or that id) to Saved Messages",
         "  /forwardto n [id]  forward the latest (or that id) to chat n",
-        "  /react [id] name   react to the latest (or that id): up heart",
-        "                  fire laugh surprise sad party pray clap ok;",
-        "                  none removes your reactions",
+        "  /react [id] name   react to the last one received (or that id):",
+        "                  up heart fire laugh surprise sad party pray",
+        "                  clap ok; none removes your reactions",
         "  /reactions      every name /react takes",
         "  /ids            message ids before each message, on or off",
         "  /getfile        download the newest file here to downloads/",
@@ -16415,9 +16458,12 @@ int tg_mtproto_auth_chat_file(const char *host,
                     "Use /react [message-id] <name>, or /react [message-id] none; "
                     "/reactions lists the names, /ids shows the ids.");
             } else if (reaction_id == 0UL &&
-                       (reaction_id = last_seen_message_id) == 0UL) {
+                       (last_seen_message_id == 0UL ||
+                        (reaction_id = tg_chat_last_incoming_id) == 0UL)) {
+                /* last_seen is 0 right after a chat switch, before its
+                   history is read: the id kept is the previous chat's. */
                 tg_mtproto_chat_print_system_line(
-                    stream, "No recent message is available to react to.");
+                    stream, "No message from the others to react to yet.");
             } else {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_react_peer_on_context(host, port, api_id,

@@ -720,8 +720,8 @@ Using the GUI
   takes it back. When there are more, the last cell is an arrow that opens
   them all. When a group
   does not allow that reaction, the status line says so. In the text client
-  the counts follow the line, /react <name> adds one to the latest message
-  (/reactions lists the names), and /ids shows the message numbers that
+  the counts follow the line, /react <name> adds one to the last message
+  received (/reactions lists the names), and /ids shows the numbers that
   /react <id> <name>, /forward and /forwardto take.
 - New messages: "Settings > Notifications" chooses the count in the title,
   the pop-up, or nothing. With Beep on, a chat that rings plays a sound:
@@ -954,9 +954,9 @@ Usare la GUI
   l'ultima casella e' una freccia che le apre tutte. Se
   il gruppo non permette quella reazione, lo dice la riga di stato. Nel
   client testuale i conteggi seguono la riga, /react <nome> ne aggiunge
-  una all'ultimo messaggio (/reactions elenca i nomi) e /ids mostra i
-  numeri dei messaggi che /react <id> <nome>, /forward e /forwardto
-  accettano.
+  una all'ultimo messaggio ricevuto (/reactions elenca i nomi) e /ids
+  mostra i numeri dei messaggi che /react <id> <nome>, /forward e
+  /forwardto accettano.
 - Nuovi messaggi: "Settings > Notifications" sceglie il conteggio nel
   titolo, il pop-up o niente. Con Beep attivo, una chat che suona fa
   sentire un suono: il campanello interno, o un file scelto con "Sound
