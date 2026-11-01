@@ -49,6 +49,9 @@
 #define TG_GUI_PEN_LINK 15          /* clickable URL in an incoming bubble */
 #define TG_GUI_PEN_COUNT 16
 
+/* The React chooser's longest list: every standard reaction. */
+#define TG_GUI_REACT_CHOICES_MAX TG_REACTION_ALLOWED_MAX
+
 /* Distinct avatar / sender tints, resolved by the backend like the pens. */
 #define TG_GUI_AVATAR_COLORS 6
 /* Sender names in groups: a lighter shade of each avatar tint, one pen per
@@ -516,10 +519,16 @@ typedef struct tg_gui_state {
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
     int ctx_react; /* the React chooser replaces the message menu */
-    /* What the chooser offers: the open chat's allowed reactions that the
-       emoji sheet draws, or the defaults when react_choice_count is 0. */
-    unsigned long react_choices[TG_REACTION_DEFAULTS];
+    /* What the chooser offers: every reaction the open chat allows that
+       the emoji sheet draws, in the chat's order (or Telegram's, when the
+       chat allows all). The first grid shows the ten defaults when
+       react_defaults is set, else the start of this list, and ends in an
+       arrow to the whole of it (react_all) when there is more. With
+       react_choice_count 0 the grid is the defaults alone. */
+    unsigned long react_choices[TG_GUI_REACT_CHOICES_MAX];
     int react_choice_count;
+    int react_defaults;
+    int react_all;
     int ctx_x, ctx_y;
     int ctx_hover;
     int ctx_w;
@@ -592,14 +601,16 @@ extern int tg_gui_emoji_geom_y; /* panel top as last painted (tests, hit checks)
 /* Sheet index of a codepoint, or -1 when the sheet has no glyph for it. */
 int tg_gui_emoji_index_of(unsigned long codepoint);
 /* Fills the React chooser from the chat's allowed reactions: OK (the list,
-   or the defaults when all are allowed), NONE (the chat allows none) or
-   UNDRAWN (it allows only emoji the sheet cannot draw). */
+   or the defaults and then every standard reaction when all are allowed),
+   NONE (the chat allows none) or UNDRAWN (it allows only emoji the sheet
+   cannot draw). The chooser opens on its first grid. */
 #define TG_GUI_REACT_CHOICES_OK 0
 #define TG_GUI_REACT_CHOICES_NONE 1
 #define TG_GUI_REACT_CHOICES_UNDRAWN 2
 int tg_gui_react_set_choices(tg_gui_state *state,
                              const tg_reactions_allowed *allowed);
-/* The codepoint of chooser entry i, 0 past the end. */
+/* The codepoint of chooser entry i, 0 past the end and for the arrow that
+   opens the whole list. */
 unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i);
 /* Repaints ONLY the active caret region (composer input row in chat mode, login
    input box otherwise). Lets the ~2 Hz caret blink avoid a full-window repaint,
@@ -822,12 +833,15 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_MUTE 11
 #define TG_GUI_CTX_CHAT_RING 12
 #define TG_GUI_CTX_REACT 13
-#define TG_GUI_CTX_REACTION_FIRST 14
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
+#define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
+/* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
+#define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
-#define TG_GUI_CTX_ITEMS_MAX 11
+#define TG_GUI_CTX_MENU_ITEMS 11 /* the longest message menu */
+#define TG_GUI_CTX_ITEMS_MAX TG_GUI_REACT_CHOICES_MAX /* the whole chooser */
 
 /* Attachment chooser: known image extensions get the Photo/File dialog;
    validation of the actual bytes still belongs to the upload gate. */

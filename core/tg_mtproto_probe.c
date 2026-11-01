@@ -14515,6 +14515,30 @@ static void tg_mtproto_chat_print_quick_help(FILE *stream)
     tg_console_ui_end_line(stream);
 }
 
+/* The names /react takes, the standard reactions in Telegram's order, a
+   few to a line so they fit a 640-pixel console. */
+static void tg_mtproto_chat_print_reaction_names(FILE *stream)
+{
+    int i;
+    unsigned long col = 0UL;
+
+    fputs("\nReactions for /react <message-id> <name>:\n", stream);
+    for (i = 0; i < TG_REACTION_STANDARD; ++i) {
+        const char *name = tg_reaction_standard_name(i);
+        unsigned long len = (unsigned long)strlen(name);
+
+        if (col > 0UL && col + 1UL + len > 60UL) {
+            tg_console_ui_end_line(stream);
+            col = 0UL;
+        }
+        fputs(col == 0UL ? "  " : " ", stream);
+        fputs(name, stream);
+        col += (col == 0UL ? 2UL : 1UL) + len;
+    }
+    tg_console_ui_end_line(stream);
+    fputs("  none removes your reactions\n", stream);
+}
+
 static void tg_mtproto_chat_print_help(FILE *stream)
 {
     static const char *help_lines[] = {
@@ -14540,6 +14564,7 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  /forwardto n [id]  forward the latest (or that id) to chat n",
         "  /react id name  react: up heart fire laugh surprise sad",
         "                  party pray clap ok; none removes your reactions",
+        "  /reactions      every name /react takes",
         "  /getfile        download the newest file here to downloads/",
         "  /sendfile path  send a file",
         "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
@@ -14677,18 +14702,15 @@ static void tg_mtproto_chat_load_own_label(const char *host,
 }
 
 /* Match the other numbered-message commands, without retaining another
-   message list in the text client. "none" explicitly sends an empty vector. */
+   message list in the text client. The name is any standard reaction's
+   (tg_reaction_standard_name); "none" explicitly sends an empty vector and
+   leaves *cp at 0. */
 static int tg_mtproto_chat_reaction_arg(const char *arg, unsigned long *id,
-                                        int *index)
+                                        unsigned long *cp)
 {
-    static const char *const names[TG_REACTION_DEFAULTS + 1] = {
-        "up", "heart", "fire", "laugh", "surprise", "sad", "party", "pray",
-        "clap", "ok", "none"
-    };
     char *end;
     char name[16];
     char extra[2];
-    int i;
 
     if (arg == 0) return 0;
     while (*arg == ' ' || *arg == '\t') ++arg;
@@ -14697,13 +14719,12 @@ static int tg_mtproto_chat_reaction_arg(const char *arg, unsigned long *id,
     if (*id == 0UL || *id > 2147483647UL ||
         (*end != ' ' && *end != '\t') ||
         sscanf(end, "%15s %1s", name, extra) != 1) return 0;
-    for (i = 0; i <= TG_REACTION_DEFAULTS; ++i) {
-        if (strcmp(name, names[i]) == 0) {
-            *index = i == TG_REACTION_DEFAULTS ? -1 : i;
-            return 1;
-        }
+    if (strcmp(name, "none") == 0) {
+        *cp = 0UL;
+        return 1;
     }
-    return 0;
+    *cp = tg_reaction_standard_find(name);
+    return *cp != 0UL;
 }
 
 static int tg_mtproto_tui_apply_reactions(FILE *stream, const char *cache,
@@ -15323,6 +15344,15 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_console_ui_leave_screen(stream);
             if (chat_raw) { tg_platform_stdin_set_raw(0); }
             return 0;
+        }
+        if (strcmp(line, "/reactions") == 0) {
+            FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+            tg_mtproto_chat_print_reaction_names(tui_cap);
+            tg_console_tui_capture_end(tui_cap, stream);
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
         }
         if (strcmp(line, "/help") == 0 || strcmp(line, "help") == 0) {
             {
@@ -16235,25 +16265,24 @@ int tg_mtproto_auth_chat_file(const char *host,
         cmd_arg = 0;
         if (tg_mtproto_chat_named_command_arg(line, "/react", &cmd_arg)) {
             unsigned long reaction_id;
-            int reaction_index;
+            unsigned long reaction_cp;
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(stream,
                     "Choose a chat before reacting to a message.");
             } else if (!tg_mtproto_chat_reaction_arg(cmd_arg, &reaction_id,
-                                                      &reaction_index)) {
+                                                      &reaction_cp)) {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Use /react <message-id> <name>, or /react <message-id> none.");
+                    "Use /react <message-id> <name>, or /react <message-id> none; "
+                    "/reactions lists the names.");
             } else {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_react_peer_on_context(host, port, api_id,
                     auth_file, dc_id_text, &chat_context, peer_cache_file,
-                    peer_index, reaction_id,
-                    reaction_index < 0 ? 0UL : tg_reaction_default(reaction_index),
-                    quiet);
+                    peer_index, reaction_id, reaction_cp, quiet);
                 tg_mtproto_close_quiet_stream(quiet, stream);
                 tg_mtproto_chat_print_system_line(stream, rc == 0 ?
-                    (reaction_index < 0 ? "Reaction removed." : "Reaction sent.") :
+                    (reaction_cp == 0UL ? "Reaction removed." : "Reaction sent.") :
                     tg_mtproto_reaction_failure_text(tg_mtproto_query_fail));
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL)
                     tg_mtproto_close_auth_context(&chat_context);
@@ -18037,24 +18066,32 @@ static int tg_mtproto_reactions_update_self_test(void)
 
 static int tg_mtproto_reactions_command_self_test(void)
 {
+    /* The ten names of before keep their reactions; the rest of the
+       standard list reads too. */
     static const char *const good[] = { "42 up", "42 heart", "42 fire",
         "42 laugh", "42 surprise", "42 sad", "42 party", "42 pray",
-        "42 clap", "42 ok", "42 none" };
+        "42 clap", "42 ok", "42 none", "42 unicorn", "42 speaknoevil" };
+    static const unsigned long want[] = { 0x1f44dUL, 0x2764UL, 0x1f525UL,
+        0x1f923UL, 0x1f631UL, 0x1f622UL, 0x1f389UL, 0x1f64fUL, 0x1f44fUL,
+        0x1f44cUL, 0UL, 0x1f984UL, 0x1f64aUL };
     static const char *const bad[] = { "", "42", "0 up", "-1 up", "42up",
-        "2147483648 up", "999999999999999999999 up", "42 up extra", "42 unknown" };
+        "2147483648 up", "999999999999999999999 up", "42 up extra", "42 unknown",
+        "42 Up" };
     unsigned long id;
     unsigned long i;
-    int index;
+    unsigned long cp;
 
     for (i = 0UL; i < sizeof(good) / sizeof(good[0]); ++i) {
-        if (!tg_mtproto_chat_reaction_arg(good[i], &id, &index) || id != 42UL ||
-            index != (i == TG_REACTION_DEFAULTS ? -1 : (int)i)) {
+        if (!tg_mtproto_chat_reaction_arg(good[i], &id, &cp) || id != 42UL ||
+            cp != want[i] ||
+            (i < (unsigned long)TG_REACTION_DEFAULTS &&
+             cp != tg_reaction_default((int)i))) {
             puts("probe self-test: reaction command add/remove failed");
             return 2;
         }
     }
     for (i = 0UL; i < sizeof(bad) / sizeof(bad[0]); ++i) {
-        if (tg_mtproto_chat_reaction_arg(bad[i], &id, &index)) {
+        if (tg_mtproto_chat_reaction_arg(bad[i], &id, &cp)) {
             puts("probe self-test: reaction command accepted bad arguments");
             return 2;
         }

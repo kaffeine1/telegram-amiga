@@ -29,6 +29,13 @@ unsigned long tg_reaction_default(int index);
 const char *tg_reaction_name(int index);
 const char *tg_reaction_utf8(int index);
 int tg_reaction_choice(const tg_reactions *reactions, int index);
+/* The standard reactions, the only plain emoji Telegram accepts: entry i's
+   codepoint and short name (0 and "" past the end), and the codepoint of a
+   name, 0 when no reaction has it. */
+#define TG_REACTION_STANDARD 69
+unsigned long tg_reaction_standard(int index);
+const char *tg_reaction_standard_name(int index);
+unsigned long tg_reaction_standard_find(const char *name);
 /* The codepoint to send for `cp` on a message: 0 (take it back) when it is
    already the user's own reaction there. */
 unsigned long tg_reaction_choice_cp(const tg_reactions *reactions,
@@ -41,7 +48,7 @@ int tg_reaction_encode(unsigned long cp, char *out);
 #define TG_REACTIONS_ALLOW_ALL 0
 #define TG_REACTIONS_ALLOW_NONE 1
 #define TG_REACTIONS_ALLOW_SOME 2
-#define TG_REACTION_ALLOWED_MAX 24
+#define TG_REACTION_ALLOWED_MAX 72
 typedef struct tg_reactions_allowed {
     int mode;
     int count;

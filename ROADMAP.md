@@ -1155,7 +1155,10 @@ the clown, the whale, the trophy, the ghost and the unicorn.
 Two steps. First, the last cell of the grid becomes an arrow that opens
 every allowed reaction the sheet can draw, a few rows in the same style,
 and a group's own list is shown whole instead of cut to ten; the text
-client's /react takes the new names too. Second, the missing reactions
+client's /react takes the new names too. That step is on main: the arrow
+replaces the tenth cell whenever there is more to choose, the whole list
+is eight to a row, and the text client reads a short name for each of
+the 69 standard reactions, which /reactions lists. Second, the missing reactions
 join the sheet as Noto Emoji glyphs, under the same Apache 2.0 licence
 as the ones there, which grows the sheet by about a third. The 68000
 build has no window and is not touched.

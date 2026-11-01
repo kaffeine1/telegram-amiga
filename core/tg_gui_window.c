@@ -13583,6 +13583,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     : "This chat allows only reactions this "
                                       "client cannot draw.");
                         }
+                    } else if (it == TG_GUI_CTX_REACT_MORE && m != 0 &&
+                               !m->is_system && m->id != 0UL) {
+                        /* The arrow: the same chooser, now with every
+                           reaction the chat allows. */
+                        state->react_all = 1;
+                        state->ctx_react = 1;
+                        state->ctx_visible = 1;
+                        state->ctx_hover = -1;
+                        state->ctx_w = tg_gui_context_menu_measure(state,
+                                                                   &backend);
                     } else if (it >= TG_GUI_CTX_REACTION_FIRST &&
                                tg_gui_react_choice_at(state,
                                    it - TG_GUI_CTX_REACTION_FIRST) != 0UL &&

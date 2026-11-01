@@ -14,6 +14,12 @@ the text client for the plain 68000.
   copies it when no OpenURL command is there. Voluntary, nothing changes
   without it, and it never shows on its own. The text client has the
   same two lines at the end of /help.
+- More reactions than the ten of the grid. When a chat allows more, the
+  grid's last cell is an arrow that opens every reaction it allows and
+  the client can draw, eight to a row: in a chat that allows all, the
+  free reactions in Telegram's order, and a group's own list whole
+  instead of cut to ten. The text client's /react takes every standard
+  reaction by name, and /reactions lists the names.
 
 ### Changed
 - More contrast in the dark colours, same hues, after a user asked for

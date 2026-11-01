@@ -143,6 +143,65 @@ const char *tg_reaction_utf8(int index)
     return index >= 0 && index < TG_REACTION_DEFAULTS ? emoji[index] : "";
 }
 
+/* The single-codepoint standard reactions, as the Bot API lists them under
+   ReactionTypeEmoji (core.telegram.org/bots/api, 2026-10-26), in its order.
+   Anything else is REACTION_INVALID in every chat: tears of joy and an open
+   mouth were, before this list. The names are what the text client's
+   /react reads; the defaults keep the names they had there. */
+static const struct {
+    unsigned long cp;
+    const char *name;
+} tg_reaction_standard_table[TG_REACTION_STANDARD] = {
+    {0x2764UL, "heart"}, {0x1f44dUL, "up"}, {0x1f44eUL, "down"},
+    {0x1f525UL, "fire"}, {0x1f970UL, "love"}, {0x1f44fUL, "clap"},
+    {0x1f601UL, "grin"}, {0x1f914UL, "think"}, {0x1f92fUL, "mindblown"},
+    {0x1f631UL, "surprise"}, {0x1f92cUL, "swear"}, {0x1f622UL, "sad"},
+    {0x1f389UL, "party"}, {0x1f929UL, "starstruck"}, {0x1f92eUL, "vomit"},
+    {0x1f4a9UL, "poo"}, {0x1f64fUL, "pray"}, {0x1f44cUL, "ok"},
+    {0x1f54aUL, "dove"}, {0x1f921UL, "clown"}, {0x1f971UL, "yawn"},
+    {0x1f974UL, "woozy"}, {0x1f60dUL, "hearteyes"}, {0x1f433UL, "whale"},
+    {0x1f31aUL, "moon"}, {0x1f32dUL, "hotdog"}, {0x1f4afUL, "hundred"},
+    {0x1f923UL, "laugh"}, {0x26a1UL, "zap"}, {0x1f34cUL, "banana"},
+    {0x1f3c6UL, "trophy"}, {0x1f494UL, "broken"}, {0x1f928UL, "eyebrow"},
+    {0x1f610UL, "neutral"}, {0x1f353UL, "strawberry"},
+    {0x1f37eUL, "champagne"}, {0x1f48bUL, "kiss"}, {0x1f595UL, "finger"},
+    {0x1f608UL, "devil"}, {0x1f634UL, "sleep"}, {0x1f62dUL, "cry"},
+    {0x1f913UL, "nerd"}, {0x1f47bUL, "ghost"}, {0x1f440UL, "eyes"},
+    {0x1f383UL, "pumpkin"}, {0x1f648UL, "seenoevil"}, {0x1f607UL, "angel"},
+    {0x1f628UL, "fear"}, {0x1f91dUL, "handshake"}, {0x270dUL, "write"},
+    {0x1f917UL, "hug"}, {0x1fae1UL, "salute"}, {0x1f385UL, "santa"},
+    {0x1f384UL, "tree"}, {0x2603UL, "snowman"}, {0x1f485UL, "nails"},
+    {0x1f92aUL, "zany"}, {0x1f5ffUL, "moai"}, {0x1f192UL, "cool"},
+    {0x1f498UL, "cupid"}, {0x1f649UL, "hearnoevil"}, {0x1f984UL, "unicorn"},
+    {0x1f618UL, "blowkiss"}, {0x1f48aUL, "pill"}, {0x1f64aUL, "speaknoevil"},
+    {0x1f60eUL, "sunglasses"}, {0x1f47eUL, "alien"}, {0x1f937UL, "shrug"},
+    {0x1f621UL, "angry"}
+};
+
+unsigned long tg_reaction_standard(int index)
+{
+    return index >= 0 && index < TG_REACTION_STANDARD
+               ? tg_reaction_standard_table[index].cp : 0UL;
+}
+
+const char *tg_reaction_standard_name(int index)
+{
+    return index >= 0 && index < TG_REACTION_STANDARD
+               ? tg_reaction_standard_table[index].name : "";
+}
+
+unsigned long tg_reaction_standard_find(const char *name)
+{
+    int i;
+
+    if (name == 0) return 0UL;
+    for (i = 0; i < TG_REACTION_STANDARD; ++i) {
+        if (strcmp(name, tg_reaction_standard_table[i].name) == 0)
+            return tg_reaction_standard_table[i].cp;
+    }
+    return 0UL;
+}
+
 int tg_reaction_choice(const tg_reactions *reactions, int index)
 {
     int i;
@@ -265,29 +324,11 @@ int tg_chat_engine_self_test(void)
         reactions.items[0].chosen = 0;
     }
     for (i = 0; i < TG_REACTION_DEFAULTS; ++i) {
-        /* The single-codepoint standard reactions, as the Bot API lists
-           them under ReactionTypeEmoji (core.telegram.org/bots/api,
-           2026-10-26). Anything else is REACTION_INVALID in every chat:
-           tears of joy and an open mouth were, before this list. */
-        static const unsigned long standard[] = {
-            0x2764UL, 0x1f44dUL, 0x1f44eUL, 0x1f525UL, 0x1f970UL, 0x1f44fUL,
-            0x1f601UL, 0x1f914UL, 0x1f92fUL, 0x1f631UL, 0x1f92cUL, 0x1f622UL,
-            0x1f389UL, 0x1f929UL, 0x1f92eUL, 0x1f4a9UL, 0x1f64fUL, 0x1f44cUL,
-            0x1f54aUL, 0x1f921UL, 0x1f971UL, 0x1f974UL, 0x1f60dUL, 0x1f433UL,
-            0x1f31aUL, 0x1f32dUL, 0x1f4afUL, 0x1f923UL, 0x26a1UL, 0x1f34cUL,
-            0x1f3c6UL, 0x1f494UL, 0x1f928UL, 0x1f610UL, 0x1f353UL, 0x1f37eUL,
-            0x1f48bUL, 0x1f595UL, 0x1f608UL, 0x1f634UL, 0x1f62dUL, 0x1f913UL,
-            0x1f47bUL, 0x1f440UL, 0x1f383UL, 0x1f648UL, 0x1f607UL, 0x1f628UL,
-            0x1f91dUL, 0x270dUL, 0x1f917UL, 0x1fae1UL, 0x1f385UL, 0x1f384UL,
-            0x2603UL, 0x1f485UL, 0x1f92aUL, 0x1f5ffUL, 0x1f192UL, 0x1f498UL,
-            0x1f649UL, 0x1f984UL, 0x1f618UL, 0x1f48aUL, 0x1f64aUL, 0x1f60eUL,
-            0x1f47eUL, 0x1f937UL, 0x1f621UL
-        };
-        unsigned long k;
         int listed = 0;
+        int k;
 
-        for (k = 0UL; k < sizeof(standard) / sizeof(standard[0]); ++k) {
-            if (standard[k] == tg_reaction_default((int)i)) {
+        for (k = 0; k < TG_REACTION_STANDARD; ++k) {
+            if (tg_reaction_standard(k) == tg_reaction_default((int)i)) {
                 listed = 1;
             }
         }
@@ -295,6 +336,35 @@ int tg_chat_engine_self_test(void)
             tg_reaction_parse_emoji(tg_reaction_utf8((int)i)) !=
             tg_reaction_default((int)i) || tg_reaction_name((int)i)[0] == '\0') {
             puts("chat engine self-test: reaction defaults failed");
+            return 2;
+        }
+    }
+    {
+        /* Every standard reaction has one short name, unique, that the
+           text client's /react can read back; "none" is taken. */
+        int k;
+        int j;
+
+        for (k = 0; k < TG_REACTION_STANDARD; ++k) {
+            const char *name = tg_reaction_standard_name(k);
+
+            if (tg_reaction_standard(k) == 0UL || name[0] == '\0' ||
+                strlen(name) > 15U || strcmp(name, "none") == 0 ||
+                tg_reaction_standard_find(name) != tg_reaction_standard(k)) {
+                puts("chat engine self-test: standard reactions failed");
+                return 2;
+            }
+            for (j = 0; j < k; ++j) {
+                if (tg_reaction_standard(j) == tg_reaction_standard(k) ||
+                    strcmp(tg_reaction_standard_name(j), name) == 0) {
+                    puts("chat engine self-test: standard reactions repeat");
+                    return 2;
+                }
+            }
+        }
+        if (tg_reaction_standard(TG_REACTION_STANDARD) != 0UL ||
+            tg_reaction_standard_find("unknown") != 0UL) {
+            puts("chat engine self-test: standard reactions bounds failed");
             return 2;
         }
     }
