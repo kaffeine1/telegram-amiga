@@ -8,6 +8,8 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+## [0.0.99] - 2026-11-02
+
 ### Added
 - "Support development..." in the window's Telegram menu, after Help:
   it says where to support my work on Patreon and opens the link, or

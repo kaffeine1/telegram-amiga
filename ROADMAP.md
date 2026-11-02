@@ -212,13 +212,15 @@ Features are therefore grouped by the work they share.
   (its section below). Validated on a stock A1200, a Vampire, a PiStorm
   under AfA OS, a G5 under MorphOS and a Raspberry Pi 400, and in the OS4,
   AROS i386 and x86_64 VMs.
-- **0.0.99, the last fixes.** Kept free on purpose for whatever the field
+- **0.0.99, the last fixes.** RELEASED 2026-11-02. Kept free on purpose for whatever the field
   reports of 0.0.98 bring, so that the 0.1 beta, the first release under
   the name Amigram, starts its quiet cycle from a clean slate. The first
   such request is in: hiding a group message one does not care about
   (its section below). Also /ring in the text client, so that it can let
   a group or a channel ring again, more reactions than the ten of the
   grid, and more contrast in the dark colours (their sections below).
+  Validated on a stock A1200, a Vampire, a G5 under MorphOS and a
+  Raspberry Pi 400, and in the OS4, AROS i386 and x86_64 VMs.
 - **Room to spare.** The numbering leaves several slots between 0.0.95
   and the beta on purpose. Field reports arrive faster than plans, and
   an intermediate release is a normal thing to need, not a sign that

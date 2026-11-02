@@ -28,20 +28,21 @@ Two front-ends share one engine:
 
 ![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.98** - everyday direct-message and group chat works on all
-the platforms below. 0.0.98 brings reactions: they show under each bubble, and
-React... in a message's right-button menu opens a grid of emoji to add or take
-back yours. Each chat decides whether it rings and with which sound: six short
-sounds of our own come in the sounds/ drawer, and any sound the system's
-datatypes read will do. A group's pop-up says who wrote, messages from earlier
-days show their day, and typed emoticons such as :) become emoji. The text
+Status: **alpha 0.0.99** - everyday direct-message and group chat works on all
+the platforms below. 0.0.99, the last alpha before the 0.1 beta, gathers what
+users asked for after 0.0.98: a group message that does not interest you can
+be hidden, an arrow in the reaction grid opens every reaction a chat allows,
+with 38 more emoji drawn, and the dark colours have more contrast. Reactions
+on photos and links now stay, and the message menu keeps to its message when
+new ones arrive. The text client gains /ring, /ids and /hide, and lists every
+command when you type /. The text
 client, on the plain 68000 too, shows its chats as tabs under F1 to F10. The
 plain-68000 package exists thanks to Paolo Arus (DaRkHoRaCe), without whose
 tenacity in testing, round after round on an A600, it would never have come
 out.
 
-It retains 0.0.97's new-message notifications (title, pop-up, chime and
-AppIcon), 0.0.96's window at home on a stock A1200 and its plain-68000 text
+It retains 0.0.98's reactions and sounds per chat, 0.0.97's new-message
+notifications (title, pop-up, chime and AppIcon), 0.0.96's window at home on a stock A1200 and its plain-68000 text
 client, 0.0.95's faster transfers and full-size photos, 0.0.94's sixth
 platform, its icons and its fixes for FAT volumes, 0.0.93's emoji panel,
 attachment chooser and working logins, 0.0.92's link previews, video frames
@@ -72,13 +73,13 @@ icons, a public `telegram-api.txt` and per-architecture IT/EN manuals, and
 
 | Platform | CPU | Release |
 |---|---|---|
-| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.98) |
-| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-alpha-0.0.98) |
-| AmigaOS 4.x | PPC | [os4-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.98) |
-| MorphOS | PPC | [morphos-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.98) |
-| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.98) |
-| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.98) |
-| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.98](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.98) |
+| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.99) |
+| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-alpha-0.0.99) |
+| AmigaOS 4.x | PPC | [os4-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.99) |
+| MorphOS | PPC | [morphos-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.99) |
+| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.99) |
+| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.99) |
+| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.99) |
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases>.
 Full history in [CHANGELOG.md](CHANGELOG.md) (also bundled in every package
