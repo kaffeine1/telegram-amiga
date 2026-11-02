@@ -11396,11 +11396,14 @@ static void tg_chat_history_add(const char *text)
     tg_chat_history_recall = -1L;
 }
 
-/* One-line command cheat-sheet shown when a lone '/' starts the input row
-   (both the TUI-transcript and the linear-raw printers use it). */
+/* Command cheat-sheet shown when a lone '/' starts the input row (both the
+   TUI-transcript and the linear-raw printers use it). Every command /help
+   lists, 64 columns at most; a self-test holds it to both. */
 #define TG_CHAT_SLASH_HINT_TEXT \
-    "Commands: /list /search /add /history /getfile /sendfile /photo\n" \
-    "          /forward /forwardto /react /move /remove /watch /color /bell /help /quit\n"
+    "Commands: /list /search /add /move /remove /swap /saved /peers\n" \
+    "          /history /forward /forwardto /react /reactions /ids\n" \
+    "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
+    "          /diff /color /bell /ring /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -15140,59 +15143,120 @@ static void tg_mtproto_chat_print_reaction_names(FILE *stream)
     fputs("  none removes your reactions\n", stream);
 }
 
+static const char *const tg_chat_help_lines[] = {
+    "",
+    "Every day:",
+    "  text + Enter    send a message",
+    "  Enter           read new messages now",
+    "  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)",
+    "  0               Saved Messages, your cloud drawer",
+    "  Tab             back to the previous chat",
+    "  Shift+Up/Down   older messages, and back",
+    "  /list           your chats",
+    "  Help key        this list",
+    "  /quit           exit",
+    "",
+    "More:",
+    "  /search text    find a chat in the list by name or username",
+    "  /add name       search Telegram and add a chat to the list",
+    "  /move 5 1       chat 5 becomes number 1, the one F1 opens",
+    "  /remove n       remove chat n from the list",
+    "  /history        show the recent messages again",
+    "  /forward [id]   forward the latest (or that id) to Saved Messages",
+    "  /forwardto n [id]  forward the latest (or that id) to chat n",
+    "  /react [id] name   react to the last one received (or that id):",
+    "                  up heart fire laugh surprise sad party pray",
+    "                  clap ok; none removes your reactions",
+    "  /reactions      every name /react takes",
+    "  /ids            message ids before each message, on or off",
+    "  /hide [id]      hide the last one received (or that id) in a group",
+    "  /unhide         bring back this chat's hidden messages",
+    "  /getfile        download the newest file here to downloads/",
+    "  /sendfile path  send a file",
+    "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
+    "  /watch sec      read new messages every sec seconds (off: never)",
+    "  /resize         redraw after the window changed size",
+    "  /diff           background catch-up, on or off",
+    "  /color          colours, on or off",
+    "  /bell           flash on new messages, on or off",
+    "  /ring           does this chat ring? /ring on or off changes it",
+    "  /swap /saved /peers  the same as Tab, 0 and /list",
+    "",
+    "Support my work on Patreon: www.patreon.com/c/kaffeine1",
+    "Contributions are voluntary; no subscription is required.",
+    0
+};
+
+#if !defined(TG_NO_SELFTEST)
+/* The '/' cheat-sheet names every command /help starts a line with, and
+   keeps to 64 columns. */
+static int tg_mtproto_chat_slash_hint_self_test(void)
+{
+    static const char hint[] = TG_CHAT_SLASH_HINT_TEXT;
+    char word[24];
+    const char *p;
+    const char *q;
+    const char *at;
+    unsigned long i;
+    unsigned long n;
+    unsigned long checked = 0UL;
+    int ok = 1;
+
+    for (p = hint; *p != '\0'; p = q + 1) {
+        q = strchr(p, '\n');
+        if (q == 0 || q - p > 64) {
+            puts("probe self-test: slash hint line over 64 columns");
+            return 2;
+        }
+    }
+    for (i = 0UL; tg_chat_help_lines[i] != 0; ++i) {
+        p = tg_chat_help_lines[i];
+        if (strncmp(p, "  /", 3) != 0) {
+            continue;
+        }
+        p += 2;
+        while (*p == '/') {
+            for (n = 0UL; p[n] != '\0' && p[n] != ' ' &&
+                 n < sizeof(word) - 2UL; ++n) {
+                word[n] = p[n];
+            }
+            word[n] = '\0';
+            /* A whole word: a space before it, a space or the line's end
+               after it. */
+            at = strstr(hint, word);
+            while (at != 0 && (at[-1] != ' ' ||
+                   (at[n] != ' ' && at[n] != '\n'))) {
+                at = strstr(at + 1, word);
+            }
+            if (at == 0) {
+                printf("probe self-test: slash hint lacks %s\n", word);
+                ok = 0;
+            }
+            ++checked;
+            p += n;
+            if (*p == ' ' && p[1] == '/') {
+                ++p;
+            }
+        }
+    }
+    if (checked < 20UL || strstr(hint, " /help ") == 0) {
+        puts("probe self-test: slash hint check read too few commands");
+        ok = 0;
+    }
+    return ok ? 0 : 2;
+}
+#endif
+
 static void tg_mtproto_chat_print_help(FILE *stream)
 {
-    static const char *help_lines[] = {
-        "",
-        "Every day:",
-        "  text + Enter    send a message",
-        "  Enter           read new messages now",
-        "  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)",
-        "  0               Saved Messages, your cloud drawer",
-        "  Tab             back to the previous chat",
-        "  Shift+Up/Down   older messages, and back",
-        "  /list           your chats",
-        "  Help key        this list",
-        "  /quit           exit",
-        "",
-        "More:",
-        "  /search text    find a chat in the list by name or username",
-        "  /add name       search Telegram and add a chat to the list",
-        "  /move 5 1       chat 5 becomes number 1, the one F1 opens",
-        "  /remove n       remove chat n from the list",
-        "  /history        show the recent messages again",
-        "  /forward [id]   forward the latest (or that id) to Saved Messages",
-        "  /forwardto n [id]  forward the latest (or that id) to chat n",
-        "  /react [id] name   react to the last one received (or that id):",
-        "                  up heart fire laugh surprise sad party pray",
-        "                  clap ok; none removes your reactions",
-        "  /reactions      every name /react takes",
-        "  /ids            message ids before each message, on or off",
-        "  /hide [id]      hide the last one received (or that id) in a group",
-        "  /unhide         bring back this chat's hidden messages",
-        "  /getfile        download the newest file here to downloads/",
-        "  /sendfile path  send a file",
-        "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
-        "  /watch sec      read new messages every sec seconds (off: never)",
-        "  /resize         redraw after the window changed size",
-        "  /diff           background catch-up, on or off",
-        "  /color          colours, on or off",
-        "  /bell           flash on new messages, on or off",
-        "  /ring           does this chat ring? /ring on or off changes it",
-        "  /swap /saved /peers  the same as Tab, 0 and /list",
-        "",
-        "Support my work on Patreon: www.patreon.com/c/kaffeine1",
-        "Contributions are voluntary; no subscription is required.",
-        0
-    };
     unsigned long i;
 
     if (stream == 0) {
         return;
     }
     tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
-    for (i = 0UL; help_lines[i] != 0; ++i) {
-        fputs(help_lines[i], stream);
+    for (i = 0UL; tg_chat_help_lines[i] != 0; ++i) {
+        fputs(tg_chat_help_lines[i], stream);
         tg_console_ui_end_line(stream);
     }
     /* Live status of the console drag-and-drop (the startup print is wiped by
@@ -19218,6 +19282,7 @@ int tg_mtproto_probe_self_test(void)
     if (tg_mtproto_marker_input_self_test() != 0 ||
         tg_mtproto_notify_ring_self_test() != 0 ||
         tg_hidden_msgs_self_test() != 0 ||
+        tg_mtproto_chat_slash_hint_self_test() != 0 ||
         tg_chat_notify_flags_self_test() != 0 ||
         tg_chat_notify_sender_self_test() != 0 ||
         tg_gui_session_server_time_self_test() != 0) {

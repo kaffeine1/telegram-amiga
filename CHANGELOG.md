@@ -52,6 +52,10 @@ the text client for the plain 68000.
   and read as short words in the text client, like (unicorn) or o7.
 
 ### Changed
+- The hint a lone / shows in the text client lists every command /help
+  does, on four lines of at most 64 columns. It had fallen behind:
+  /reactions, /ids, /hide, /ring and older ones like /swap and /diff
+  were missing, and its second line ran past 80 columns.
 - More contrast in the dark colours, same hues, after a user asked for
   no dark blue on black. The selected chat takes the desktop's selection
   blue, and on it the time and preview are drawn in the full text colour.
