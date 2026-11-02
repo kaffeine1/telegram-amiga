@@ -63,6 +63,8 @@ community. Development diary:
 ## Support development
 
 Telegram Amiga remains free and open source. If you find it useful, you can [support my work on Patreon](https://www.patreon.com/c/kaffeine1). Contributions help me dedicate time to development, testing and documentation. No subscription is required to use the client; public code, releases and articles remain available to everyone.
+
+If you prefer a one-time contribution, you can [support my work on Ko-fi](https://ko-fi.com/kaffeine1).
 <!-- patreon-support:end -->
 
 ## Platforms & releases
