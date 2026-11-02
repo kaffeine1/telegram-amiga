@@ -642,7 +642,14 @@ Using the GUI
   right-click it for a context menu) -- it is sent as a reply, with the quoted
   line shown above it. The menu highlights the item under the pointer; on your
   OWN messages it also offers Edit (change the text) and Delete (remove for
-  everyone). Sent messages show a delivery tick: one check = sent, two blue
+  everyone). In a group or a channel, someone else's message offers Hide
+  message instead: it leaves the chat and stays out on every reload, and
+  "Show hidden messages" in that chat's right-click menu in the list brings
+  them back. In a basic group (a small group Telegram never turned into a
+  supergroup) Telegram also deletes it for you alone, so it goes from your
+  other devices too and cannot come back. In the text client /hide hides
+  the last message received (or /hide <id> that one) and /unhide brings the
+  chat's back. Sent messages show a delivery tick: one check = sent, two blue
   checks = read by the other side -- it updates live.
 - Chat-list avatars show each peer's real profile picture: a blurred preview
   appears as soon as the chat list loads, and it turns crisp shortly after you
@@ -871,7 +878,15 @@ Usare la GUI
   Premi Invio per inviare. Per rispondere a un messaggio, clicca la sua bolla (o
   tasto destro per il menu contestuale) -- parte come risposta, con la citazione
   mostrata sopra. Il menu evidenzia la voce sotto il puntatore; sui TUOI messaggi
-  offre anche Edit (modifica il testo) e Delete (elimina per tutti). I messaggi
+  offre anche Edit (modifica il testo) e Delete (elimina per tutti). In un
+  gruppo o in un canale, sui messaggi degli altri offre invece Hide message:
+  il messaggio esce dalla chat e resta fuori a ogni ricarica, e "Show hidden
+  messages" nel menu del tasto destro di quella chat nell'elenco li riporta.
+  In un gruppo semplice (un gruppo piccolo che Telegram non ha mai fatto
+  diventare supergruppo) Telegram lo cancella anche per te solo, quindi
+  sparisce pure dagli altri tuoi dispositivi e non puo' tornare. Nel client
+  testuale /hide nasconde l'ultimo messaggio ricevuto (o /hide <id> quello)
+  e /unhide riporta quelli della chat. I messaggi
   inviati mostrano la spunta: una = inviato, due azzurre = letto -- in tempo reale.
 - Gli avatar della lista chat mostrano la vera foto profilo: un'anteprima
   sfocata appare subito col caricamento della lista, e diventa nitida poco dopo

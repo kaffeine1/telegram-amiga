@@ -13436,6 +13436,168 @@ static void tg_gui_photo_queue_reset(void)
     tg_gui_photo_cache_paused = 0;
 }
 
+/* --- Hidden messages -----------------------------------------------------
+   "Hide message" in a group or a channel. Telegram deletes someone else's
+   message for oneself only in a basic group, so the list is ours: one
+   "peer_hi peer_lo id" line each in data/telegram-hidden-msgs.txt, newest
+   last, the oldest dropped past TG_HIDDEN_MSGS_MAX. Read once into a small
+   table, since the history checks every row against it. */
+#define TG_HIDDEN_MSGS_MAX 256
+
+typedef struct tg_hidden_msg {
+    unsigned long peer_hi;
+    unsigned long peer_lo;
+    unsigned long id;
+} tg_hidden_msg;
+
+static tg_hidden_msg tg_hidden_msgs[TG_HIDDEN_MSGS_MAX];
+static unsigned long tg_hidden_msgs_count = 0UL;
+static int tg_hidden_msgs_loaded = 0;
+/* Variables so the self-test can point them at scratch files. */
+static const char *tg_hidden_msgs_file = "data/telegram-hidden-msgs.txt";
+static const char *tg_hidden_msgs_tmp = "data/telegram-hidden-msgs.tmp";
+
+static void tg_hidden_msgs_push(unsigned long peer_hi, unsigned long peer_lo,
+                                unsigned long id)
+{
+    if (tg_hidden_msgs_count == TG_HIDDEN_MSGS_MAX) {
+        memmove(&tg_hidden_msgs[0], &tg_hidden_msgs[1],
+                (TG_HIDDEN_MSGS_MAX - 1UL) * sizeof(tg_hidden_msgs[0]));
+        --tg_hidden_msgs_count;
+    }
+    tg_hidden_msgs[tg_hidden_msgs_count].peer_hi = peer_hi;
+    tg_hidden_msgs[tg_hidden_msgs_count].peer_lo = peer_lo;
+    tg_hidden_msgs[tg_hidden_msgs_count].id = id;
+    ++tg_hidden_msgs_count;
+}
+
+static void tg_hidden_msgs_load(void)
+{
+    FILE *f;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long id;
+
+    if (tg_hidden_msgs_loaded) {
+        return;
+    }
+    tg_hidden_msgs_loaded = 1;
+    tg_hidden_msgs_count = 0UL;
+    f = fopen(tg_hidden_msgs_file, "r");
+    if (f == 0) {
+        return;
+    }
+    while (fscanf(f, "%lx %lx %lu", &hi, &lo, &id) == 3) {
+        if (id != 0UL) {
+            tg_hidden_msgs_push(hi, lo, id);
+        }
+    }
+    fclose(f);
+}
+
+static int tg_hidden_msgs_save(void)
+{
+    FILE *f;
+    unsigned long i;
+
+    if (tg_hidden_msgs_count == 0UL) {
+        (void)remove(tg_hidden_msgs_file);
+        return 0;
+    }
+    (void)mkdir("data", 0777);
+    f = tg_file_fopen_replace(tg_hidden_msgs_tmp, "w");
+    if (f == 0) {
+        return 2;
+    }
+    for (i = 0UL; i < tg_hidden_msgs_count; ++i) {
+        fprintf(f, "%08lx %08lx %lu\n", tg_hidden_msgs[i].peer_hi,
+                tg_hidden_msgs[i].peer_lo, tg_hidden_msgs[i].id);
+    }
+    if (fclose(f) != 0) {
+        (void)remove(tg_hidden_msgs_tmp);
+        return 2;
+    }
+    (void)remove(tg_hidden_msgs_file); /* AmigaDOS rename does not replace */
+    return rename(tg_hidden_msgs_tmp, tg_hidden_msgs_file) == 0 ? 0 : 2;
+}
+
+static int tg_hidden_msgs_contains(unsigned long peer_hi,
+                                   unsigned long peer_lo, unsigned long id)
+{
+    unsigned long i;
+
+    tg_hidden_msgs_load();
+    for (i = 0UL; i < tg_hidden_msgs_count; ++i) {
+        if (tg_hidden_msgs[i].id == id && tg_hidden_msgs[i].peer_lo == peer_lo &&
+            tg_hidden_msgs[i].peer_hi == peer_hi) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int tg_hidden_msgs_add(unsigned long peer_hi, unsigned long peer_lo,
+                              unsigned long id)
+{
+    if (id == 0UL) {
+        return 2;
+    }
+    if (tg_hidden_msgs_contains(peer_hi, peer_lo, id)) {
+        return 0;
+    }
+    tg_hidden_msgs_push(peer_hi, peer_lo, id);
+    return tg_hidden_msgs_save();
+}
+
+static unsigned long tg_hidden_msgs_count_chat(unsigned long peer_hi,
+                                               unsigned long peer_lo)
+{
+    unsigned long i;
+    unsigned long n = 0UL;
+
+    tg_hidden_msgs_load();
+    for (i = 0UL; i < tg_hidden_msgs_count; ++i) {
+        if (tg_hidden_msgs[i].peer_lo == peer_lo &&
+            tg_hidden_msgs[i].peer_hi == peer_hi) {
+            ++n;
+        }
+    }
+    return n;
+}
+
+/* Brings a chat's hidden messages back; returns how many there were. */
+static unsigned long tg_hidden_msgs_forget_chat(unsigned long peer_hi,
+                                                unsigned long peer_lo)
+{
+    unsigned long i;
+    unsigned long out = 0UL;
+    unsigned long dropped;
+
+    tg_hidden_msgs_load();
+    for (i = 0UL; i < tg_hidden_msgs_count; ++i) {
+        if (tg_hidden_msgs[i].peer_lo != peer_lo ||
+            tg_hidden_msgs[i].peer_hi != peer_hi) {
+            tg_hidden_msgs[out++] = tg_hidden_msgs[i];
+        }
+    }
+    dropped = tg_hidden_msgs_count - out;
+    tg_hidden_msgs_count = out;
+    if (dropped != 0UL) {
+        (void)tg_hidden_msgs_save();
+    }
+    return dropped;
+}
+
+/* Only groups and channels hide messages: a direct chat never consults it. */
+static int tg_hidden_msgs_skip(unsigned long peer_constructor,
+                               unsigned long peer_hi, unsigned long peer_lo,
+                               unsigned long id)
+{
+    return (peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR ||
+            peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) &&
+           tg_hidden_msgs_contains(peer_hi, peer_lo, id);
+}
+
 /* Shared between getHistory(peer) and getHistory(download) -- never active
    at the same time; guarded by tg_shared_message_texts_busy. */
 static tg_mtproto_message_text_list tg_shared_message_texts;
@@ -13648,6 +13810,10 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 continue;
             }
             if (!include_outgoing && texts.messages[i].is_out) {
+                continue;
+            }
+            if (tg_hidden_msgs_skip(peer_constructor, peer_id_hi, peer_id_lo,
+                                    texts.messages[i].id)) {
                 continue;
             }
             /* In a group/channel prefix every line with the (truncated) chat
@@ -14374,6 +14540,78 @@ static int tg_mtproto_chat_ring_at(const tg_chat_notify_entry *entry,
     return 1;
 }
 
+/* /hide and /unhide in the text client, on the open chat. A line already
+   printed stays on screen; the message is left out from the next read. */
+static void tg_mtproto_chat_hide_command(
+    FILE *stream, const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index, unsigned long message_id, int unhide)
+{
+    unsigned long constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long hash_hi;
+    unsigned long hash_lo;
+    unsigned long n;
+    int has_hash;
+    int rc;
+    FILE *quiet;
+    char note[128];
+
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index,
+                                         &constructor, &id_hi, &id_lo,
+                                         &hash_hi, &hash_lo, &has_hash,
+                                         quiet, "hide");
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_mtproto_chat_print_system_line(
+            stream, "This chat is not in the chat list.");
+        return;
+    }
+    if (constructor != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+        constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        tg_mtproto_chat_print_system_line(
+            stream, "Only messages in groups and channels can be hidden.");
+        return;
+    }
+    if (unhide) {
+        n = tg_hidden_msgs_forget_chat(id_hi, id_lo);
+        if (n == 0UL) {
+            tg_mtproto_chat_print_system_line(
+                stream, "No hidden messages in this chat.");
+        } else {
+            sprintf(note, "%lu hidden message%s back; /history shows them.",
+                    n > 999UL ? 999UL : n, n == 1UL ? "" : "s");
+            tg_mtproto_chat_print_system_line(stream, note);
+        }
+        return;
+    }
+    if (tg_hidden_msgs_add(id_hi, id_lo, message_id) != 0) {
+        tg_mtproto_chat_print_system_line(
+            stream, "Could not save the hidden message.");
+        return;
+    }
+    if (constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR) {
+        /* A basic group lets one delete it for oneself, as the window does. */
+        quiet = tg_mtproto_open_quiet_stream(stream);
+        rc = tg_mtproto_auth_delete_peer_on_context(
+            host, port, api_id, auth_file, dc_id_text, context,
+            peer_cache_file, peer_index, message_id, 0, quiet);
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+            tg_mtproto_close_auth_context(context);
+        }
+    }
+    n = tg_hidden_msgs_count_chat(id_hi, id_lo);
+    sprintf(note, "#%lu hidden from now on; /unhide brings back the %lu "
+                  "hidden here.",
+            message_id > 2147483647UL ? 0UL : message_id,
+            n > 999UL ? 999UL : n);
+    tg_mtproto_chat_print_system_line(stream, note);
+}
+
 /* /ring on|off writes the window's own choice for the open chat: a group or
    a channel rings only when asked to, a direct chat unless muted. */
 static int tg_mtproto_chat_ring_choice(unsigned long peer_constructor, int on)
@@ -14473,6 +14711,63 @@ static void tg_mtproto_chat_ring_command(
 }
 
 #if !defined(TG_NO_SELFTEST)
+/* The hidden-message list: kept per chat, back from the file after a
+   restart, capped by dropping the oldest, and never consulted outside a
+   group or a channel. */
+static int tg_hidden_msgs_self_test(void)
+{
+    const char *saved_file = tg_hidden_msgs_file;
+    const char *saved_tmp = tg_hidden_msgs_tmp;
+    unsigned long i;
+    int ok = 1;
+
+    tg_hidden_msgs_file = "tg-hidden-msgs-self-test.tmp";
+    tg_hidden_msgs_tmp = "tg-hidden-msgs-self-test.new";
+    (void)remove(tg_hidden_msgs_file);
+    tg_hidden_msgs_loaded = 0;
+    ok = ok && tg_hidden_msgs_add(0x1UL, 0x2UL, 100UL) == 0;
+    ok = ok && tg_hidden_msgs_add(0x1UL, 0x2UL, 100UL) == 0;
+    ok = ok && tg_hidden_msgs_add(0x1UL, 0x3UL, 100UL) == 0;
+    ok = ok && tg_hidden_msgs_add(0x1UL, 0x2UL, 0UL) != 0;
+    ok = ok && tg_hidden_msgs_count == 2UL;
+    tg_hidden_msgs_loaded = 0; /* as after a restart */
+    ok = ok && tg_hidden_msgs_skip(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                   0x1UL, 0x2UL, 100UL);
+    ok = ok && tg_hidden_msgs_skip(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR,
+                                   0x1UL, 0x3UL, 100UL);
+    ok = ok && !tg_hidden_msgs_skip(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                    0x1UL, 0x2UL, 100UL);
+    ok = ok && !tg_hidden_msgs_skip(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                    0x1UL, 0x2UL, 101UL);
+    ok = ok && !tg_hidden_msgs_skip(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                    0x9UL, 0x2UL, 100UL);
+    ok = ok && tg_hidden_msgs_count_chat(0x1UL, 0x2UL) == 1UL;
+    ok = ok && tg_hidden_msgs_forget_chat(0x1UL, 0x2UL) == 1UL;
+    tg_hidden_msgs_loaded = 0;
+    ok = ok && tg_hidden_msgs_count_chat(0x1UL, 0x2UL) == 0UL &&
+         tg_hidden_msgs_contains(0x1UL, 0x3UL, 100UL);
+    for (i = 1UL; ok && i <= TG_HIDDEN_MSGS_MAX; ++i) {
+        ok = tg_hidden_msgs_add(0x5UL, 0x6UL, i) == 0;
+    }
+    tg_hidden_msgs_loaded = 0;
+    ok = ok && tg_hidden_msgs_count == TG_HIDDEN_MSGS_MAX &&
+         !tg_hidden_msgs_contains(0x1UL, 0x3UL, 100UL) &&
+         tg_hidden_msgs_contains(0x5UL, 0x6UL, 1UL) &&
+         tg_hidden_msgs_contains(0x5UL, 0x6UL, TG_HIDDEN_MSGS_MAX);
+    ok = ok && tg_hidden_msgs_forget_chat(0x5UL, 0x6UL) == TG_HIDDEN_MSGS_MAX;
+    (void)remove(tg_hidden_msgs_file);
+    (void)remove(tg_hidden_msgs_tmp);
+    tg_hidden_msgs_file = saved_file;
+    tg_hidden_msgs_tmp = saved_tmp;
+    tg_hidden_msgs_loaded = 0;
+    tg_hidden_msgs_count = 0UL;
+    if (!ok) {
+        puts("probe self-test: hidden messages failed");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_mtproto_notify_ring_self_test(void)
 {
     static const struct {
@@ -14873,6 +15168,8 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "                  clap ok; none removes your reactions",
         "  /reactions      every name /react takes",
         "  /ids            message ids before each message, on or off",
+        "  /hide [id]      hide the last one received (or that id) in a group",
+        "  /unhide         bring back this chat's hidden messages",
         "  /getfile        download the newest file here to downloads/",
         "  /sendfile path  send a file",
         "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
@@ -16633,6 +16930,46 @@ int tg_mtproto_auth_chat_file(const char *host,
                     tg_mtproto_reaction_failure_text(tg_mtproto_query_fail));
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL)
                     tg_mtproto_close_auth_context(&chat_context);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/hide", &cmd_arg)) {
+            unsigned long hide_id = 0UL;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(stream,
+                    "Choose a chat before hiding a message.");
+            } else if (cmd_arg[0] != '\0' &&
+                       (tg_mtproto_parse_ulong_arg(cmd_arg, &hide_id) != 0 ||
+                        hide_id == 0UL || hide_id > 2147483647UL)) {
+                tg_mtproto_chat_print_system_line(stream,
+                    "Use /hide or /hide <message-id>; /unhide brings them "
+                    "back.");
+            } else if (hide_id == 0UL &&
+                       (last_seen_message_id == 0UL ||
+                        (hide_id = tg_chat_last_incoming_id) == 0UL)) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "No message from the others to hide yet.");
+            } else {
+                tg_mtproto_chat_hide_command(stream, host, port, api_id,
+                    auth_file, dc_id_text, &chat_context, peer_cache_file,
+                    peer_index, hide_id, 0);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        if (strcmp(line, "/unhide") == 0) {
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(stream,
+                    "Choose a chat first.");
+            } else {
+                tg_mtproto_chat_hide_command(stream, host, port, api_id,
+                    auth_file, dc_id_text, &chat_context, peer_cache_file,
+                    peer_index, 0UL, 1);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
@@ -18880,6 +19217,7 @@ int tg_mtproto_probe_self_test(void)
 
     if (tg_mtproto_marker_input_self_test() != 0 ||
         tg_mtproto_notify_ring_self_test() != 0 ||
+        tg_hidden_msgs_self_test() != 0 ||
         tg_chat_notify_flags_self_test() != 0 ||
         tg_chat_notify_sender_self_test() != 0 ||
         tg_gui_session_server_time_self_test() != 0) {
@@ -21866,6 +22204,52 @@ int tg_gui_session_delete(unsigned long message_id, FILE *stream)
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
     return rc;
+}
+
+int tg_gui_session_hide(unsigned long message_id, FILE *stream)
+{
+    FILE *quiet;
+    unsigned long prev_timeout;
+    unsigned long kind = tg_gui_session_state.open_peer_constructor;
+
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        (kind != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+         kind != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) ||
+        tg_hidden_msgs_add(tg_gui_session_state.open_peer_id_hi,
+                           tg_gui_session_state.open_peer_id_lo,
+                           message_id) != 0) {
+        return 2;
+    }
+    (void)tg_gui_driver_remove_by_id(&tg_gui_session_state.gui_driver,
+                                     message_id);
+    if (kind == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR) {
+        /* revoke = 0: gone for this account only, as the official clients'
+           "Delete for me". A failure leaves it hidden here all the same. */
+        quiet = tg_mtproto_open_quiet_stream(stream);
+        prev_timeout = tg_net_connect_timeout_seconds();
+        tg_net_set_connect_timeout_seconds(10UL);
+        (void)tg_mtproto_auth_delete_peer_on_context(
+            tg_gui_session_state.host, tg_gui_session_state.port,
+            tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+            tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, message_id, 0, quiet);
+        tg_net_set_connect_timeout_seconds(prev_timeout);
+        tg_mtproto_close_quiet_stream(quiet, stream);
+    }
+    return 0;
+}
+
+unsigned long tg_gui_session_hidden_count(unsigned long peer_id_hi,
+                                          unsigned long peer_id_lo)
+{
+    return tg_hidden_msgs_count_chat(peer_id_hi, peer_id_lo);
+}
+
+unsigned long tg_gui_session_show_hidden(unsigned long peer_id_hi,
+                                         unsigned long peer_id_lo)
+{
+    return tg_hidden_msgs_forget_chat(peer_id_hi, peer_id_lo);
 }
 
 /* One-shot member fetch for the OPEN group (same lazily-triggered fetch the

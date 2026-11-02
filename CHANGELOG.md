@@ -20,6 +20,17 @@ the text client for the plain 68000.
   Telegram's order, and a group's own list whole instead of cut to ten.
   The text client's /react takes every standard reaction by name, and
   /reactions lists the names.
+- Hide message, after a user asked to get rid of posts that do not
+  interest them in groups. Telegram lets nobody delete someone else's
+  message for themselves in a supergroup, so in a group or a channel the
+  right-button menu of someone else's message offers Hide message: it
+  leaves the transcript and stays out on every reload, kept in
+  data/telegram-hidden-msgs.txt (the newest 256). "Show hidden messages"
+  in the chat's menu in the list brings them back. In a basic group the
+  client also asks Telegram to delete it for this account, so it goes
+  from one's other devices too, and that cannot be undone. The text
+  client has /hide, on the last message received or on an id, and
+  /unhide.
 - /ring in the text client, for the open chat: /ring on lets a group or
   a channel ring, /ring off makes it quiet again, the same choice as
   "Enable ring" in the window's chat menu and kept in the same file, so

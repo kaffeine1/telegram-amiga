@@ -327,6 +327,20 @@ int tg_gui_session_edit(const char *text, unsigned long message_id,
    type), and on success removes it from the transcript. Returns 0 ok. */
 int tg_gui_session_delete(unsigned long message_id, FILE *stream);
 
+/* Hides someone else's message in the open group or channel: it leaves the
+   transcript and stays out on every reload (data/telegram-hidden-msgs.txt).
+   In a basic group Telegram also deletes it for oneself, so it goes from
+   one's other devices too. Returns 0 ok, 2 when no group is open or the
+   list could not be saved. */
+int tg_gui_session_hide(unsigned long message_id, FILE *stream);
+
+/* How many messages of a chat are hidden, and bringing them back (returns
+   how many there were). The caller reopens the chat to show them. */
+unsigned long tg_gui_session_hidden_count(unsigned long peer_id_hi,
+                                          unsigned long peer_id_lo);
+unsigned long tg_gui_session_show_hidden(unsigned long peer_id_hi,
+                                         unsigned long peer_id_lo);
+
 /* '@' mention autocomplete: fills up to `max` candidate usernames (no leading
    '@', NUL-terminated, `item_size` bytes apart in `items`) for the open GROUP,
    matching `prefix` case-insensitively against username or title (empty prefix

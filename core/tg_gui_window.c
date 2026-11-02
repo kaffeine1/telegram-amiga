@@ -13442,6 +13442,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->ctx_react = 0;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
+                        state->ctx_hidden_count = chat->is_group
+                            ? tg_gui_session_hidden_count(chat->peer_id_hi,
+                                                          chat->peer_id_lo)
+                            : 0UL;
                         state->ctx_msg = -1;
                         state->ctx_msg_id = 0UL;
                         state->ctx_visible = 1;
@@ -13525,6 +13529,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         it == TG_GUI_CTX_CHAT_REMOVE) {
                         tg_gui_window_remove_chat(state, ctx.window, ci,
                                                        &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+                        (void)tg_gui_session_show_hidden(
+                            state->chats[ci].peer_id_hi,
+                            state->chats[ci].peer_id_lo);
+                        if (ci == state->selected_chat) {
+                            /* Reloaded from the server: hidden messages
+                               were only ever left out of the transcript. */
+                            tg_gui_window_open_selection(state, ci, &backend);
+                        }
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Hidden messages shown again");
                     } else if (ci >= 0 && ci < state->chat_count &&
                                (it == TG_GUI_CTX_CHAT_MUTE ||
                                 it == TG_GUI_CTX_CHAT_RING ||
@@ -13648,6 +13665,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (tg_gui_amiga_confirm_delete(ctx.window) != 0) {
                             (void)tg_gui_session_delete(del_id, stdout);
                         }
+                    } else if (it == TG_GUI_CTX_HIDE && m != 0 &&
+                               !m->is_own && !m->is_system && m->id != 0UL) {
+                        tg_gui_window_copy(state->status,
+                            sizeof(state->status),
+                            tg_gui_session_hide(m->id, stdout) == 0
+                                ? "Message hidden; the chat's menu shows it again"
+                                : "Could not hide this message");
                     } else if (it == TG_GUI_CTX_DOWNLOAD && m != 0 &&
                                m->has_document && m->id != 0UL) {
                         unsigned long dl_id = m->id;

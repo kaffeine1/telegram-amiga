@@ -518,6 +518,7 @@ typedef struct tg_gui_state {
     unsigned long ctx_msg_id;
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
+    unsigned long ctx_hidden_count; /* the chat's hidden messages */
     int ctx_react; /* the React chooser replaces the message menu */
     /* What the chooser offers: every reaction the open chat allows that
        the emoji sheet draws, in the chat's order (or Telegram's, when the
@@ -833,6 +834,8 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_MUTE 11
 #define TG_GUI_CTX_CHAT_RING 12
 #define TG_GUI_CTX_REACT 13
+#define TG_GUI_CTX_HIDE 14 /* someone else's message in a group */
+#define TG_GUI_CTX_CHAT_SHOW_HIDDEN 15
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */

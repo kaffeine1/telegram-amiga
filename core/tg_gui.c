@@ -5448,6 +5448,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         ids[n++] = TG_GUI_CTX_CHAT_SOUND;
         labels[n] = "Default sound";
         ids[n++] = TG_GUI_CTX_CHAT_DEFAULT_SOUND;
+        if (state->ctx_hidden_count != 0UL) {
+            labels[n] = "Show hidden messages";
+            ids[n++] = TG_GUI_CTX_CHAT_SHOW_HIDDEN;
+        }
         return n;
     }
     if (state->ctx_react && state->ctx_msg >= 0 &&
@@ -5493,6 +5497,14 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
             labels[n] = "Delete";
             ids[n] = TG_GUI_CTX_DELETE;
+            ++n;
+        } else if (!m->is_system && state->selected_chat >= 0 &&
+                   state->selected_chat < state->chat_count &&
+                   state->chats[state->selected_chat].is_group) {
+            /* Telegram lets nobody delete someone else's message for
+               themselves in a supergroup: the client hides it instead. */
+            labels[n] = "Hide message";
+            ids[n] = TG_GUI_CTX_HIDE;
             ++n;
         }
         if (m->has_document) { /* incoming OR own: you can save either */
@@ -7133,6 +7145,47 @@ static int tg_gui_notify_menu_self_test(void)
         strcmp(labels[1], "Mute") != 0 || strcmp(labels[2], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
+    }
+    state->ctx_hidden_count = 2UL;
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        ids[5] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+        puts("gui self-test: group menu cannot show hidden messages");
+        return 2;
+    }
+    state->ctx_hidden_count = 0UL;
+    /* "Hide message": someone else's message, and only in a group. */
+    {
+        static const struct {
+            int group;
+            int own;
+            int hide;
+        } cases[] = { { 1, 0, 1 }, { 1, 1, 0 }, { 0, 0, 0 } };
+        unsigned long c;
+        int found;
+        int n;
+        int i;
+
+        state->ctx_chat = 0;
+        state->selected_chat = 0;
+        state->message_count = 1;
+        state->ctx_msg = 0;
+        state->messages[0].id = 7UL;
+        state->messages[0].is_system = 0;
+        for (c = 0UL; c < sizeof(cases) / sizeof(cases[0]); ++c) {
+            state->chats[0].is_group = cases[c].group;
+            state->messages[0].is_own = cases[c].own;
+            n = tg_gui_context_items(state, labels, ids);
+            found = 0;
+            for (i = 0; i < n; ++i) {
+                found = found || (ids[i] == TG_GUI_CTX_HIDE &&
+                                  strcmp(labels[i], "Hide message") == 0);
+            }
+            if (found != cases[c].hide || n > TG_GUI_CTX_MENU_ITEMS) {
+                printf("gui self-test: Hide message case %lu wrong\n", c);
+                return 2;
+            }
+        }
+        state->message_count = 0;
     }
     return 0;
 }

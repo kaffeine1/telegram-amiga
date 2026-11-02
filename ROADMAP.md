@@ -1125,6 +1125,16 @@ The text client follows with a /hide command. Deleting other people's
 messages as a supergroup admin is a separate step for later: it needs
 the admin rights, which the client does not ask for today.
 
+That is on main. The popup offers Hide message on someone else's message
+in a group or a channel (one's own keep Edit and Delete), the list keeps
+the newest 256, and the history leaves them out before the transcript
+sees them, so the window and the text client agree. "Show hidden
+messages" sits in the chat row's menu when that chat has any, and
+reopens the chat if it is the one in front. The text client has /hide,
+on the last message received from the others like /react, or on an id,
+and /unhide. In a basic group "Show hidden messages" cannot bring back
+what Telegram has deleted for this account; the manuals say so.
+
 ## Planned for 0.0.99: /ring in the text client
 
 Since 0.0.98 groups and channels stay quiet until one lets them ring, and

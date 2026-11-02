@@ -23,14 +23,16 @@ telegram-peers*.txt
 /data/telegram-thumbs.bin
 # Files the running client writes next to itself when it is started from the
 # repository root: the saved preferences, the recent-emoji row, the window
-# geometry, the chosen download drawer and the hidden-chat list. None of them
-# belongs in the history, and telegram-hidden.txt holds peer ids.
+# geometry, the chosen download drawer and the hidden chats and messages. None
+# of them belongs in the history, and the two hidden lists hold peer ids.
 /data/telegram-photos.txt
 /data/telegram-emoji.txt
 /data/telegram-emoji-recent.txt
 /data/telegram-gui-win.txt
 /data/telegram-downloads.txt
 /data/telegram-hidden.txt
+/data/telegram-hidden-msgs.txt
+/data/telegram-hidden-msgs.tmp
 *.api
 *.token
 *.token.txt
