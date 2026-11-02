@@ -14374,6 +14374,104 @@ static int tg_mtproto_chat_ring_at(const tg_chat_notify_entry *entry,
     return 1;
 }
 
+/* /ring on|off writes the window's own choice for the open chat: a group or
+   a channel rings only when asked to, a direct chat unless muted. */
+static int tg_mtproto_chat_ring_choice(unsigned long peer_constructor, int on)
+{
+    if (peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+        return on ? TG_NOTIFY_DEFAULT : TG_NOTIFY_MUTE;
+    }
+    return on ? TG_NOTIFY_RING : TG_NOTIFY_DEFAULT;
+}
+
+/* What the open chat does now, by the rules of tg_notify_should_ring. */
+static const char *tg_mtproto_chat_ring_state(
+    unsigned long peer_constructor, int choice,
+    const tg_mtproto_peer_notify_settings *settings,
+    unsigned long server_now, int bell)
+{
+    if (peer_constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+        return "Saved Messages never ring.";
+    }
+    if (choice == TG_NOTIFY_MUTE ||
+        (peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+         choice != TG_NOTIFY_RING)) {
+        return "This chat stays quiet; /ring on lets it ring.";
+    }
+    if (settings != 0 &&
+        (settings->silent || settings->mute_until > server_now)) {
+        return "This chat stays quiet: it is muted in Telegram, here or "
+               "on another device.";
+    }
+    if (!bell) {
+        return "This chat rings, but /bell is off for every chat.";
+    }
+    return "This chat rings when a message arrives while another chat "
+           "is open.";
+}
+
+static void tg_mtproto_chat_ring_command(
+    FILE *stream, const char *peer_cache_file, const char *peer_index,
+    const char *arg, const tg_mtproto_auth_context *context)
+{
+    tg_mtproto_peer_notify_settings settings;
+    tg_notify_override value;
+    unsigned long constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long hash_hi;
+    unsigned long hash_lo;
+    int has_hash;
+    int rc;
+    FILE *quiet;
+
+    if (peer_index == 0 || peer_index[0] == '\0') {
+        tg_mtproto_chat_print_system_line(
+            stream, "Choose a chat before /ring.");
+        return;
+    }
+    if (arg != 0 && arg[0] != '\0' && strcmp(arg, "on") != 0 &&
+        strcmp(arg, "off") != 0) {
+        tg_mtproto_chat_print_system_line(
+            stream, "Use /ring to see what this chat does, /ring on or "
+                    "/ring off to change it.");
+        return;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index,
+                                         &constructor, &id_hi, &id_lo,
+                                         &hash_hi, &hash_lo, &has_hash,
+                                         quiet, "ring");
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_mtproto_chat_print_system_line(
+            stream, "This chat is not in the chat list.");
+        return;
+    }
+    memset(&settings, 0, sizeof(settings));
+    value.choice = TG_NOTIFY_DEFAULT;
+    if (constructor != TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+        tg_notify_override_get(TG_NOTIFY_OVERRIDE_FILE, id_hi, id_lo, &value);
+        if (arg != 0 && arg[0] != '\0') {
+            value.choice = tg_mtproto_chat_ring_choice(
+                constructor, strcmp(arg, "on") == 0);
+            (void)mkdir("data", 0777);
+            if (tg_notify_override_set(TG_NOTIFY_OVERRIDE_FILE, id_hi, id_lo,
+                                       &value) != 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Could not save this chat's ring choice.");
+                return;
+            }
+        }
+        tg_mtproto_peer_notify_get(constructor, id_hi, id_lo, &settings);
+    }
+    tg_mtproto_chat_print_system_line(
+        stream, tg_mtproto_chat_ring_state(constructor, value.choice,
+                                           &settings,
+                                           tg_mtproto_context_time(context),
+                                           tg_chat_bell_enabled));
+}
+
 #if !defined(TG_NO_SELFTEST)
 static int tg_mtproto_notify_ring_self_test(void)
 {
@@ -14494,6 +14592,57 @@ static int tg_mtproto_notify_ring_self_test(void)
                                            path, "global", sound, sizeof(sound));
         ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 501UL, 1001UL,
                     path, "global", sound, sizeof(sound)) == (i == 1UL);
+    }
+    /* /ring on and off decide the ring itself, for every kind of chat,
+       and /ring alone says so. */
+    {
+        static const unsigned long kinds[] = {
+            TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+            TG_MTPROTO_PEER_CHAT_CONSTRUCTOR,
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR
+        };
+        tg_mtproto_peer_notify_settings settings;
+        const char *said;
+        int on;
+
+        memset(&settings, 0, sizeof(settings));
+        entry.peer_id_hi = 0x77UL;
+        entry.peer_id_lo = 0x88UL;
+        entry.silent = 0;
+        entry.is_out = 0;
+        for (i = 0UL; i < 3UL; ++i) {
+            for (on = 0; on <= 1; ++on) {
+                memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
+                tg_chat_bell_enabled = 1;
+                entry.peer_constructor = kinds[i];
+                value.choice = tg_mtproto_chat_ring_choice(kinds[i], on);
+                said = tg_mtproto_chat_ring_state(kinds[i], value.choice,
+                                                  &settings, 1000UL, 1);
+                ok = ok && tg_notify_override_set(path, 0x77UL, 0x88UL,
+                                                   &value) == 0;
+                if (tg_mtproto_chat_ring_at(&entry, 0, 1000UL, 100UL, path,
+                        "global", sound, sizeof(sound)) != on ||
+                    (strncmp(said, "This chat rings", 15) == 0) != on) {
+                    printf("probe self-test: /ring %s kind %lu failed\n",
+                           on ? "on" : "off", i);
+                    ok = 0;
+                }
+            }
+        }
+        settings.mute_until = 1001UL;
+        ok = ok && strstr(tg_mtproto_chat_ring_state(
+                      TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, TG_NOTIFY_RING,
+                      &settings, 1000UL, 1), "muted in Telegram") != 0;
+        settings.mute_until = 1000UL;
+        ok = ok && strstr(tg_mtproto_chat_ring_state(
+                      TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, TG_NOTIFY_RING,
+                      &settings, 1000UL, 0), "/bell is off") != 0;
+        ok = ok && strstr(tg_mtproto_chat_ring_state(
+                      TG_MTPROTO_PEER_USER_CONSTRUCTOR, TG_NOTIFY_RING,
+                      &settings, 1000UL, 1), "chat rings") != 0;
+        ok = ok && strncmp(tg_mtproto_chat_ring_state(
+                      TG_MTPROTO_PEER_SELF_CONSTRUCTOR, TG_NOTIFY_RING,
+                      &settings, 1000UL, 1), "Saved", 5) == 0;
     }
     (void)remove(path);
     memcpy(tg_chat_ring_history, saved, sizeof(saved));
@@ -14732,6 +14881,7 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         "  /diff           background catch-up, on or off",
         "  /color          colours, on or off",
         "  /bell           flash on new messages, on or off",
+        "  /ring           does this chat ring? /ring on or off changes it",
         "  /swap /saved /peers  the same as Tab, 0 and /list",
         "",
         "Support my work on Patreon: www.patreon.com/c/kaffeine1",
@@ -15558,6 +15708,14 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             tg_mtproto_chat_print_system_line(
                 stream, tg_chat_bell_enabled ? "Bell on." : "Bell off.");
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        color_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/ring", &color_arg)) {
+            tg_mtproto_chat_ring_command(stream, peer_cache_file, peer_index,
+                                         color_arg, &chat_context);
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;

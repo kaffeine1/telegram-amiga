@@ -20,6 +20,13 @@ the text client for the plain 68000.
   Telegram's order, and a group's own list whole instead of cut to ten.
   The text client's /react takes every standard reaction by name, and
   /reactions lists the names.
+- /ring in the text client, for the open chat: /ring on lets a group or
+  a channel ring, /ring off makes it quiet again, the same choice as
+  "Enable ring" in the window's chat menu and kept in the same file, so
+  it holds in both. Since 0.0.98 groups start quiet, and the 68000
+  build, which has only the text client, had no way to wake one. In a
+  direct chat on and off unmute and mute it, and /ring alone says what
+  the chat does now, Telegram's own mute and /bell included.
 - /ids in the text client, after a user asked what to put where /react
   wants a message id: the text client never showed one. Switched on,
   each message starts with its number, like #4821, which /react,

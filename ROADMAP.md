@@ -1139,6 +1139,12 @@ both clients; `/ring` alone says what the open chat does now, including
 when Telegram's own mute is what keeps it quiet. It goes in /help next to
 /bell, which stays the general switch.
 
+That is on main. For a group or a channel /ring on is the window's
+"Enable ring" and /ring off its "Disable ring"; for a direct chat they
+are Unmute and Mute, so on and off mean the same thing everywhere.
+/ring alone also says when /bell is off, and that Saved Messages never
+ring.
+
 ## Planned for 0.0.99: more reactions than the ten of the grid
 
 A user on OS4 asked how to pick a reaction other than the ten that

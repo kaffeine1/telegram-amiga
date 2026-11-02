@@ -729,7 +729,8 @@ Using the GUI
   WAV where a datatype reads it, up to 1 MB); the sounds/ drawer has six
   to start with. Choosing one plays it at once. Right-click a chat in the
   list for Mute, Enable ring (groups and channels start quiet) and a
-  "Sound..." of its own.
+  "Sound..." of its own. In the text client /ring on and /ring off do the
+  same for the open chat, and /ring alone says whether it rings.
 - In groups, type @ in the composer to autocomplete a member: a small list
   pops up above the input line -- Up/Down select, Enter or Tab inserts
   @username, Esc closes, typing narrows the matches.
@@ -963,7 +964,9 @@ Usare la GUI
   file..." (IFF 8SVX, o WAV dove un datatype lo legge, fino a 1 MB); il
   cassetto sounds/ ne ha sei per cominciare. Quando lo scegli suona subito.
   Click destro su una chat nell'elenco per Mute, Enable ring (gruppi e
-  canali partono muti) e un "Sound..." tutto suo.
+  canali partono muti) e un "Sound..." tutto suo. Nel client testuale
+  /ring on e /ring off fanno lo stesso per la chat aperta, e /ring da solo
+  dice se suona.
 - Nei gruppi, digita @ nel composer per completare un membro: compare una
   listina sopra la riga di input -- Su/Giu' selezionano, Invio o Tab inserisce
   @username, Esc chiude, digitando filtri i risultati.
