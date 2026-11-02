@@ -22642,14 +22642,80 @@ static void tg_gui_dl_sanitize_name(const char *in, char *out,
             out[n++] = (char)c;
         }
     }
-    if (n == 0UL) { /* no usable name: a stable fallback */
-        const char *f = "download.bin";
+    out[n] = '\0';
+}
 
-        while (*f != '\0' && n + 1UL < out_size) {
-            out[n++] = *f++;
+/* The extension a mime type stands for, "bin" when we do not know it. The
+   compare ignores case: the sending client writes the mime, not the server. */
+static const char *tg_gui_dl_mime_ext(const char *mime)
+{
+    static const char *const map[] = {
+        "video/mp4", "mp4",           "video/quicktime", "mov",
+        "video/webm", "webm",         "video/x-matroska", "mkv",
+        "image/jpeg", "jpg",          "image/png", "png",
+        "image/gif", "gif",           "image/webp", "webp",
+        "audio/ogg", "ogg",           "audio/mpeg", "mp3",
+        "audio/mp4", "m4a",           "audio/x-m4a", "m4a",
+        "audio/flac", "flac",         "audio/x-wav", "wav",
+        "audio/wav", "wav",           "application/pdf", "pdf",
+        "application/zip", "zip",     "application/x-lha", "lha",
+        "application/x-tgsticker", "tgs", "text/plain", "txt"
+    };
+    unsigned long i;
+
+    if (mime == 0) {
+        return "bin";
+    }
+    for (i = 0UL; i < sizeof(map) / sizeof(map[0]); i += 2UL) {
+        const char *a = map[i];
+        const char *b = mime;
+
+        for (; *a != '\0' && *b != '\0'; ++a, ++b) {
+            unsigned char c = (unsigned char)*b;
+
+            if (c >= 'A' && c <= 'Z') {
+                c = (unsigned char)(c - 'A' + 'a');
+            }
+            if ((unsigned char)*a != c) {
+                break;
+            }
+        }
+        if (*a == '\0' && *b == '\0') {
+            return map[i + 1UL];
         }
     }
-    out[n] = '\0';
+    return "bin";
+}
+
+/* The name a download is saved under: the attachment's own name when it has
+   one, otherwise one made from what the file is. Videos shot on a phone,
+   GIFs, voice notes and most audio carry no name at all: they all used to
+   land as "download.bin", unopenable and each one overwriting the last (a
+   tester's video). Now "video_1a2b3c4d.mp4": the kind, the low half of the
+   document id (stable, so saving the same file again replaces it and saving
+   another does not) and the extension of its mime type. At most 29 chars,
+   inside the 30 an FFS name allows. */
+static void tg_gui_dl_file_name(const tg_mtproto_document_meta *doc, char *out,
+                                unsigned long out_size)
+{
+    static const char *const kinds[] = {
+        "file", "sticker", "gif", "video", "voice", "audio"
+    };
+    char made[32];
+    const char *kind;
+
+    if (out_size == 0UL) {
+        return;
+    }
+    tg_gui_dl_sanitize_name(doc->file_name, out, out_size);
+    if (out[0] != '\0') {
+        return;
+    }
+    kind = doc->kind < sizeof(kinds) / sizeof(kinds[0]) ? kinds[doc->kind]
+                                                        : "file";
+    sprintf(made, "%.7s_%08lx.%.4s", kind, doc->id_lo & 0xffffffffUL,
+            tg_gui_dl_mime_ext(doc->mime));
+    tg_gui_dl_sanitize_name(made, out, out_size);
 }
 
 /* Join the download drawer and the file name into dst WITHOUT overflowing it.
@@ -24552,7 +24618,7 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
         tg_gui_dl.need_dc = tg_gui_dl.doc.dc_id;
         tg_gui_log("download: foreign DC, using its file channel");
     }
-    tg_gui_dl_sanitize_name(tg_gui_dl.doc.file_name, safe, sizeof(safe));
+    tg_gui_dl_file_name(&tg_gui_dl.doc, safe, sizeof(safe));
     {
         const char *dir = tg_gui_session_download_dir();
 
@@ -24790,6 +24856,52 @@ static int tg_mtproto_download_window_self_test(void)
         tg_mtproto_download_room_short(1, 2130UL, 0UL, 0UL) != 0UL) {
         puts("probe self-test: window: download room check");
         return 2;
+    }
+
+    /* The saved name: the attachment's own when it has one (path bits
+       dropped), otherwise kind + id + the mime's extension, never the old
+       shared "download.bin" that each nameless file overwrote. */
+    {
+        static tg_mtproto_document_meta doc;
+        char name[TG_MTPROTO_DOC_NAME_MAX];
+        char shortname[8];
+
+        memset(&doc, 0, sizeof(doc));
+        doc.kind = TG_MTPROTO_DOC_KIND_VIDEO;
+        doc.id_hi = 0x01234567UL;
+        doc.id_lo = 0x1a2b3c4dUL;
+        strcpy(doc.mime, "video/QuickTime");
+        tg_gui_dl_file_name(&doc, name, sizeof(name));
+        ok = strcmp(name, "video_1a2b3c4d.mov") == 0;
+        doc.kind = TG_MTPROTO_DOC_KIND_VOICE;
+        strcpy(doc.mime, "audio/ogg");
+        tg_gui_dl_file_name(&doc, name, sizeof(name));
+        ok = ok && strcmp(name, "voice_1a2b3c4d.ogg") == 0;
+        doc.kind = 99U;
+        strcpy(doc.mime, "application/x-unknown");
+        tg_gui_dl_file_name(&doc, name, sizeof(name));
+        ok = ok && strcmp(name, "file_1a2b3c4d.bin") == 0;
+        doc.kind = TG_MTPROTO_DOC_KIND_STICKER;
+        strcpy(doc.mime, "image/webp");
+        tg_gui_dl_file_name(&doc, name, sizeof(name));
+        ok = ok && strcmp(name, "sticker_1a2b3c4d.webp") == 0 &&
+             strlen(name) <= 30U;
+        strcpy(doc.file_name, "DH0:dir/Game.lha");
+        tg_gui_dl_file_name(&doc, name, sizeof(name));
+        ok = ok && strcmp(name, "DH0dirGame.lha") == 0;
+        strcpy(doc.file_name, "/:");
+        doc.kind = TG_MTPROTO_DOC_KIND_GIF;
+        strcpy(doc.mime, "video/mp4");
+        tg_gui_dl_file_name(&doc, name, sizeof(name));
+        ok = ok && strcmp(name, "gif_1a2b3c4d.mp4") == 0;
+        tg_gui_dl_file_name(&doc, shortname, sizeof(shortname));
+        ok = ok && strcmp(shortname, "gif_1a2") == 0;
+        if (!ok || strcmp(tg_gui_dl_mime_ext(0), "bin") != 0 ||
+            strcmp(tg_gui_dl_mime_ext("video/mp4x"), "bin") != 0 ||
+            strcmp(tg_gui_dl_mime_ext("video/mp"), "bin") != 0) {
+            puts("probe self-test: window: download file name");
+            return 2;
+        }
     }
 
     /* msg_id: an older server id keeps ours, a newer one moves it on, and

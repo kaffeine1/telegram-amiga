@@ -8,6 +8,14 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Fixed
+- A file sent without a name of its own, as videos shot on a phone,
+  GIFs, voice notes and most audio are, was saved as "download.bin":
+  nothing could open it, and the next one overwrote it. It is now saved
+  under what it is, an id and the extension of its type, for example
+  "video_1a2b3c4d.mp4", so it opens and each one keeps its own file.
+  Saving the same file again still replaces it.
+
 ## [0.0.99] - 2026-11-02
 
 ### Added
