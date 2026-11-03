@@ -7270,12 +7270,15 @@ static const char tg_gui_about_text[] =
     "github.com/kaffeine1/telegram-amiga";
 
 #define TG_GUI_SUPPORT_URL "https://www.patreon.com/c/kaffeine1"
+#define TG_GUI_SUPPORT_KOFI_URL "https://ko-fi.com/kaffeine1"
 
 static const char tg_gui_support_text[] =
-    "Support my work on Patreon.\n\n"
+    "Support my work on Patreon, or with a\n"
+    "one-time tip on Ko-fi.\n\n"
     "Contributions are voluntary; no subscription\n"
     "is required to use this software.\n\n"
-    "www.patreon.com/c/kaffeine1";
+    "www.patreon.com/c/kaffeine1\n"
+    "ko-fi.com/kaffeine1";
 
 static const char tg_gui_help_text[] =
     "Chat selection:\n"
@@ -7379,25 +7382,32 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
-/* The menu's "Support development...": the link opens the way a link in a
-   message does, or lands on the clipboard when no OpenURL/URLOpen is there.
-   Only on request, never at start-up. */
+/* The menu's "Support development...": the chosen link (Patreon or Ko-fi)
+   opens the way a link in a message does, or lands on the clipboard when no
+   OpenURL/URLOpen is there. Only on request, never at start-up. */
 static void tg_gui_window_support(tg_gui_state *state, struct Window *win)
 {
     struct EasyStruct es;
+    const char *url;
+    LONG choice;
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     es.es_Title = (STRPTR)"Support development";
     es.es_TextFormat = (STRPTR)tg_gui_support_text;
-    es.es_GadgetFormat = (STRPTR)"Open link|Close";
-    if (tg_gui_amiga_easyreq_cancel_args(win, &es) != 1L) {
+    es.es_GadgetFormat = (STRPTR)"Patreon|Ko-fi|Close";
+    choice = tg_gui_amiga_easyreq_cancel_args(win, &es);
+    if (choice == 1L) {
+        url = TG_GUI_SUPPORT_URL;
+    } else if (choice == 2L) {
+        url = TG_GUI_SUPPORT_KOFI_URL;
+    } else {
         return;
     }
-    if (tg_platform_open_url(TG_GUI_SUPPORT_URL) == 0) {
+    if (tg_platform_open_url(url) == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            "Opening URL in the browser...");
-    } else if (tg_gui_clip_write_text(TG_GUI_SUPPORT_URL)) {
+    } else if (tg_gui_clip_write_text(url)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            "URL copied (no OpenURL command)");
     } else {

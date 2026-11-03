@@ -15183,6 +15183,7 @@ static const char *const tg_chat_help_lines[] = {
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
     "Support my work on Patreon: www.patreon.com/c/kaffeine1",
+    "or with a one-time tip on Ko-fi: ko-fi.com/kaffeine1",
     "Contributions are voluntary; no subscription is required.",
     0
 };

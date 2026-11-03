@@ -75,6 +75,8 @@ REPO_URL="https://github.com/kaffeine1/telegram-amiga"
 # Voluntary support link: OS4Depot and the AROS Archives turn their
 # donateurl: header key into a "Donate" button on the file page.
 SUPPORT_URL="https://www.patreon.com/c/kaffeine1"
+# One-time tips; in the texts beside Patreon (donateurl: takes one link only).
+KOFI_URL="https://ko-fi.com/kaffeine1"
 
 sha_cmd() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
 
@@ -819,9 +821,10 @@ The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
 1.1) reduced to sixteen pixels; the licence text ships in the archive.
 
 Support my work on Patreon: $SUPPORT_URL
+or with a one-time tip on Ko-fi: $KOFI_URL
 Contributions are voluntary; no subscription is required to use this
-software. The link is also under "Support development..." in the window's
-Telegram menu, and at the end of /help in the text client.
+software. Both links are also under "Support development..." in the
+window's Telegram menu, and at the end of /help in the text client.
 
 License: MIT -- a non-commercial community project. Diary:
 https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/
@@ -1062,9 +1065,10 @@ ${thanks68k_line_it}Grazie ai tester sparsi per il mondo che lo provano su hardw
 raccontano quello che trovano: questo client e' com'e' grazie a loro.
 
 Sostieni il mio lavoro su Patreon: $SUPPORT_URL
+oppure con un contributo una tantum su Ko-fi: $KOFI_URL
 Il sostegno e' volontario: non serve alcun abbonamento per usare il
-programma. Il link e' anche in "Support development..." nel menu Telegram
-della finestra, e in fondo a /help nel client testuale.
+programma. I due link sono anche in "Support development..." nel menu
+Telegram della finestra, e in fondo a /help nel client testuale.
 
 Licenza: MIT -- progetto di comunita' non commerciale. Diario:
 https://androidlab.it/telegram-amiga-diario-sviluppo-client-mtproto/
@@ -1309,9 +1313,11 @@ versions.
   $REPO_URL
   Development diary:
   $DIARY_URL
-  Support my work on Patreon (voluntary; no subscription
-  is required to use this software):
+  Support my work on Patreon, or with a one-time tip on
+  Ko-fi (voluntary; no subscription is required to use
+  this software):
   $SUPPORT_URL
+  $KOFI_URL
 EOF
     if [ -z "$replaces" ]; then
         awk 'NR <= 10 && /^Replaces:/ { next } { print }' "$out" > "$out.tmp" && mv "$out.tmp" "$out"

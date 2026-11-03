@@ -8,6 +8,12 @@ the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Added
+- Ko-fi beside Patreon, for a one-time tip: "Support development..." in
+  the window's Telegram menu now has a button for each, and the text
+  client's /help, the manuals and the Aminet readme name both links,
+  as the README already does.
+
 ### Fixed
 - A file sent without a name of its own, as videos shot on a phone,
   GIFs, voice notes and most audio are, was saved as "download.bin":
