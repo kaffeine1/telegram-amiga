@@ -640,9 +640,10 @@ Using the GUI
   very top to load older history (it pulls the previous page and keeps your
   place).
 - Click the input line and type to compose; long messages wrap over several
-  lines. Press Enter to send. To reply to a message, click its bubble (or
-  right-click it for a context menu) -- it is sent as a reply, with the quoted
-  line shown above it. The menu highlights the item under the pointer; on your
+  lines. Press Enter to send, Shift+Enter to start a new line. To reply to a
+  message, click its bubble (or right-click it for a context menu) -- it is
+  sent as a reply, with the quoted line
+  shown above it. The menu highlights the item under the pointer; on your
   OWN messages it also offers Edit (change the text) and Delete (remove for
   everyone). In a group or a channel, someone else's message offers Hide
   message instead: it leaves the chat and stays out on every reload, and
@@ -878,9 +879,10 @@ Usare la GUI
   per caricare la storia piu' vecchia (tira la pagina precedente mantenendo la
   posizione).
 - Clicca la riga di input e scrivi; i messaggi lunghi vanno a capo su piu' righe.
-  Premi Invio per inviare. Per rispondere a un messaggio, clicca la sua bolla (o
-  tasto destro per il menu contestuale) -- parte come risposta, con la citazione
-  mostrata sopra. Il menu evidenzia la voce sotto il puntatore; sui TUOI messaggi
+  Premi Invio per inviare, Shift+Invio per andare a capo. Per rispondere a un
+  messaggio, clicca la sua bolla (o tasto destro per il menu contestuale) --
+  parte come risposta, con la citazione mostrata
+  sopra. Il menu evidenzia la voce sotto il puntatore; sui TUOI messaggi
   offre anche Edit (modifica il testo) e Delete (elimina per tutti). In un
   gruppo o in un canale, sui messaggi degli altri offre invece Hide message:
   il messaggio esce dalla chat e resta fuori a ogni ricarica, e "Show hidden

@@ -7285,6 +7285,7 @@ static const char tg_gui_help_text[] =
     "  F1 - F10          chats 1 to 10\n"
     "  Shift + F1 - F10  chats 11 to 20\n\n"
     "ENTER        write a message to the open chat\n"
+    "Shift+ENTER  new line in the message (ENTER sends)\n"
     "Click msg    select it (A+C copies); double-click replies\n"
     "Del / A+R    remove the selected chat from the list\n"
     "A+F          send a file to the open chat\n"
@@ -12264,6 +12265,39 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->mention_active = 0;
                     state->mention_count = 0;
                     tg_gui_window_paint(state, &backend);
+                } else if ((msg_code == 13 || msg_code == 10) &&
+                           (msg_qual &
+                            (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0) {
+                    /* Shift+RETURN starts a new line instead of sending, as
+                       in the official clients (issue #18). The composer
+                       already wraps on a LF, which Paste has kept since
+                       issue #5, and Telegram carries it as a newline. */
+                    unsigned long n;
+                    unsigned long c;
+
+                    (void)tg_gui_window_input_delete_sel(state);
+                    n = (unsigned long)strlen(state->input);
+                    c = (unsigned long)state->input_caret;
+                    if (c > n) {
+                        c = n;
+                    }
+                    if (n + 1UL < (unsigned long)sizeof(state->input)) {
+                        /* the word before the break closes, as with a space
+                           (and Backspace right after still undoes it) */
+                        (void)tg_gui_composer_emoticon(state, c);
+                        n = (unsigned long)strlen(state->input);
+                        c = (unsigned long)state->input_caret;
+                        if (c > n) {
+                            c = n;
+                        }
+                        memmove(&state->input[c + 1UL], &state->input[c],
+                                n - c + 1UL);
+                        state->input[c] = '\n';
+                        state->input_caret = (int)(c + 1UL);
+                        tg_gui_window_mention_refresh(state);
+                        tg_gui_window_paint_composer_edit(
+                            state, &backend, old_input_h, old_mention_active);
+                    }
                 } else if (msg_code == 13 || msg_code == 10) {
                     /* An emoticon ending the message goes as its emoji. */
                     (void)tg_gui_composer_emoticon(

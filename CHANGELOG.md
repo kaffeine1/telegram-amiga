@@ -9,6 +9,8 @@ the text client for the plain 68000.
 ## [Unreleased]
 
 ### Added
+- Shift+Enter starts a new line in the message instead of sending it,
+  as in the official clients (issue #18). Enter still sends.
 - Ko-fi beside Patreon, for a one-time tip: "Support development..." in
   the window's Telegram menu now has a button for each, and the text
   client's /help, the manuals and the Aminet readme name both links,
