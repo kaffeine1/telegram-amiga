@@ -76,6 +76,39 @@
 #include "tg_net.h"
 #include "tg_platform.h"
 
+/* What initConnection tells Telegram about us. The login notice and the
+   active sessions list read "<app title> <app_version> on <device_model>":
+   the app title is the one registered with the api_id, the rest is ours.
+   It used to say "0.1 on Amiga" on every lane, from MorphOS to a Raspberry
+   Pi, and never moved with the version: now the system, its processor and
+   TG_VERSION, which every release bumps anyway. */
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+#define TG_MTPROTO_DEVICE_MODEL "MorphOS"
+#define TG_MTPROTO_SYSTEM_VERSION "PowerPC"
+#elif defined(__amigaos4__)
+#define TG_MTPROTO_DEVICE_MODEL "AmigaOS 4"
+#define TG_MTPROTO_SYSTEM_VERSION "PowerPC"
+#elif defined(__AROS__) && defined(__x86_64__)
+#define TG_MTPROTO_DEVICE_MODEL "AROS"
+#define TG_MTPROTO_SYSTEM_VERSION "x86_64"
+#elif defined(__AROS__) && defined(__aarch64__)
+#define TG_MTPROTO_DEVICE_MODEL "AROS"
+#define TG_MTPROTO_SYSTEM_VERSION "ARM64"
+#elif defined(__AROS__)
+#define TG_MTPROTO_DEVICE_MODEL "AROS"
+#define TG_MTPROTO_SYSTEM_VERSION "i386"
+#elif defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || \
+    defined(__mc68060__)
+#define TG_MTPROTO_DEVICE_MODEL "AmigaOS 3"
+#define TG_MTPROTO_SYSTEM_VERSION "68020+"
+#elif defined(__mc68000__)
+#define TG_MTPROTO_DEVICE_MODEL "AmigaOS 3"
+#define TG_MTPROTO_SYSTEM_VERSION "68000"
+#else /* the host build that runs the self-tests */
+#define TG_MTPROTO_DEVICE_MODEL "Amiga"
+#define TG_MTPROTO_SYSTEM_VERSION "portable"
+#endif
+
 #define TG_MTPROTO_RPC_RESULT_CONSTRUCTOR 0xf35c6d01UL
 #define TG_MTPROTO_RPC_ERROR_CONSTRUCTOR 0x2144ca19UL
 #define TG_MTPROTO_MSG_CONTAINER_CONSTRUCTOR 0x73f1f8dcUL
@@ -4190,8 +4223,10 @@ static int tg_mtproto_build_initialized_query(tg_mtproto_tl_writer *writer,
     }
 
     tg_mtproto_tl_writer_init(writer, init_hdr, sizeof(init_hdr));
-    status = tg_mtproto_build_init_connection(writer, api_id, "Amiga",
-                                              "portable", "0.1", "en",
+    status = tg_mtproto_build_init_connection(writer, api_id,
+                                              TG_MTPROTO_DEVICE_MODEL,
+                                              TG_MTPROTO_SYSTEM_VERSION,
+                                              TG_VERSION, "en",
                                               0, 0UL);
     if (status != TG_MTPROTO_TL_OK) {
         return 1;
@@ -4514,8 +4549,10 @@ int tg_mtproto_auth_send_code(const char *host,
     query_length = writer.length;
     tg_mtproto_tl_writer_init(&writer, initialized_query,
                               sizeof(initialized_query));
-    if (tg_mtproto_build_init_connection(&writer, api_id, "Amiga",
-                                         "portable", "0.1", "en", query,
+    if (tg_mtproto_build_init_connection(&writer, api_id,
+                                         TG_MTPROTO_DEVICE_MODEL,
+                                         TG_MTPROTO_SYSTEM_VERSION,
+                                         TG_VERSION, "en", query,
                                          query_length) != TG_MTPROTO_TL_OK) {
         tg_mtproto_close_auth_context(&context);
         fprintf(stream, "%s: init-connection-build-failed\n", label);
@@ -4698,8 +4735,10 @@ int tg_mtproto_auth_sign_in(const char *host,
     query_length = writer.length;
     tg_mtproto_tl_writer_init(&writer, initialized_query,
                               sizeof(initialized_query));
-    if (tg_mtproto_build_init_connection(&writer, api_id, "Amiga",
-                                         "portable", "0.1", "en", query,
+    if (tg_mtproto_build_init_connection(&writer, api_id,
+                                         TG_MTPROTO_DEVICE_MODEL,
+                                         TG_MTPROTO_SYSTEM_VERSION,
+                                         TG_VERSION, "en", query,
                                          query_length) != TG_MTPROTO_TL_OK) {
         tg_mtproto_close_auth_context(&context);
         fprintf(stream, "%s: init-connection-build-failed\n", label);
@@ -4882,8 +4921,10 @@ int tg_mtproto_auth_resend_code(const char *host,
     query_length = writer.length;
     tg_mtproto_tl_writer_init(&writer, initialized_query,
                               sizeof(initialized_query));
-    if (tg_mtproto_build_init_connection(&writer, api_id, "Amiga",
-                                         "portable", "0.1", "en", query,
+    if (tg_mtproto_build_init_connection(&writer, api_id,
+                                         TG_MTPROTO_DEVICE_MODEL,
+                                         TG_MTPROTO_SYSTEM_VERSION,
+                                         TG_VERSION, "en", query,
                                          query_length) != TG_MTPROTO_TL_OK) {
         tg_mtproto_close_auth_context(&context);
         fprintf(stream, "%s: init-connection-build-failed\n", label);
@@ -5083,8 +5124,10 @@ int tg_mtproto_auth_sign_up(const char *host,
     query_length = writer.length;
     tg_mtproto_tl_writer_init(&writer, initialized_query,
                               sizeof(initialized_query));
-    if (tg_mtproto_build_init_connection(&writer, api_id, "Amiga",
-                                         "portable", "0.1", "en", query,
+    if (tg_mtproto_build_init_connection(&writer, api_id,
+                                         TG_MTPROTO_DEVICE_MODEL,
+                                         TG_MTPROTO_SYSTEM_VERSION,
+                                         TG_VERSION, "en", query,
                                          query_length) != TG_MTPROTO_TL_OK) {
         tg_mtproto_close_auth_context(&context);
         fprintf(stream, "%s: init-connection-build-failed\n", label);

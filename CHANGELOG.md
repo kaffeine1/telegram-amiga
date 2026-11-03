@@ -16,6 +16,13 @@ the text client for the plain 68000.
   client's /help, the manuals and the Aminet readme name both links,
   as the README already does.
 
+### Changed
+- Telegram's login notice and the list of active sessions name the
+  system and the real version: "0.0.99 on MorphOS", "on AmigaOS 3",
+  "on AmigaOS 4" or "on AROS", with the processor (68020+, 68000,
+  PowerPC, i386, x86_64, ARM64) in the session details. Every lane used
+  to say "0.1 on Amiga", whatever the machine and the release.
+
 ### Fixed
 - A file sent without a name of its own, as videos shot on a phone,
   GIFs, voice notes and most audio are, was saved as "download.bin":
