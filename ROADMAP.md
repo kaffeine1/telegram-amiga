@@ -1524,6 +1524,13 @@ the data drawer), so a user who copies the new drawer over the old one
 keeps the session. It lands in the 0.0.9x line, so the 0.1 beta ships
 as Amigram.
 
+One part is not in the code: the name Telegram's login notice and the
+active sessions list show ("TelegramAmiga 0.0.99 on MorphOS") is the
+title of the app registered with the api_id on my.telegram.org. It is
+changed there to Amigram in the same release. The system and the
+version after it come from the client and follow each release on their
+own.
+
 ## Planned: create an account from the client
 
 When a phone number has no account yet, auth.signIn answers that a sign
