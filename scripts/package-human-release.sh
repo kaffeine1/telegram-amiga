@@ -72,10 +72,11 @@ AMINET_UPLOADER=${AMINET_UPLOADER:-"michele.dipace@kaffeine.net (Michele Dipace)
 AMINET_AUTHOR=${AMINET_AUTHOR:-"Michele Dipace <michele.dipace@kaffeine.net>"}
 DIARY_URL="https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/"
 REPO_URL="https://github.com/kaffeine1/telegram-amiga"
-# Voluntary support link: OS4Depot and the AROS Archives turn their
-# donateurl: header key into a "Donate" button on the file page.
+# Voluntary support links, both named in the texts.
 SUPPORT_URL="https://www.patreon.com/c/kaffeine1"
-# One-time tips; in the texts beside Patreon (donateurl: takes one link only).
+# One-time tips. OS4Depot and the AROS Archives turn their donateurl:
+# header key into a "Donate" button on the file page, which takes one
+# link only: a donation is a one-time thing, so the button goes to Ko-fi.
 KOFI_URL="https://ko-fi.com/kaffeine1"
 
 sha_cmd() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
@@ -1577,7 +1578,7 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-OS4.lha" ]; then
         printf 'submitter:Michele Dipace\n'
         printf 'email:michele.dipace@kaffeine.net\n'
         printf 'url:%s\n' "$REPO_URL"
-        printf 'donateurl:%s\n' "$SUPPORT_URL"
+        printf 'donateurl:%s\n' "$KOFI_URL"
         printf 'category:network/chat\n'
         printf 'requirements:AmigaOS 4.x with its TCP/IP stack\n'
         # license must be one of THEIR values (help/help_submit.txt):
@@ -1632,7 +1633,7 @@ write_arosarchives_pair() {
         printf 'submitter:Michele Dipace\n'
         printf 'email:michele.dipace@kaffeine.net\n'
         printf 'url:%s\n' "$REPO_URL"
-        printf 'donateurl:%s\n' "$SUPPORT_URL"
+        printf 'donateurl:%s\n' "$KOFI_URL"
         printf 'category:network/chat\n'
         if [ "${4:-}" != "new" ]; then printf 'replaces:network/chat/%s.lha\n' "$2"; fi
         printf 'requirements:%s\n' "$3"

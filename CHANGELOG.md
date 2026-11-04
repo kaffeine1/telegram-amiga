@@ -14,7 +14,8 @@ the text client for the plain 68000.
 - Ko-fi beside Patreon, for a one-time tip: "Support development..." in
   the window's Telegram menu now has a button for each, and the text
   client's /help, the manuals and the Aminet readme name both links,
-  as the README already does.
+  as the README already does. The Donate button on the OS4Depot and
+  AROS Archives pages goes to Ko-fi.
 
 ### Changed
 - Telegram's login notice and the list of active sessions name the
