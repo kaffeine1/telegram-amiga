@@ -112,11 +112,10 @@ fill_platform_text() {
     *) tui_icon=0; gui_icon=1 ;;
     esac
     # The plain-68000 package thanks the tester who made it possible. Empty
-    # elsewhere, so the other packages' texts stay exactly as they were.
+    # elsewhere.
     if [ "$1" = "AmigaOS 3.x (68000)" ]; then
-        thanks68k_line_en="Thanks to Paolo Arus (DaRkHoRaCe), without whose tenacity in testing,
-round after round on an A600, the 68000 version would never have come
-out.
+        thanks68k_line_en="Thanks to Paolo Arus (DaRkHoRaCe): without his tenacity in testing, round
+after round on an A600, the 68000 version would never have come out.
 "
         thanks68k_para_en="$thanks68k_line_en
 "
@@ -128,301 +127,222 @@ dopo giro sul suo A600, la versione 68000 non sarebbe mai uscita.
         thanks68k_para_en=""
         thanks68k_line_it=""
     fi
-    gui_entry_en="- TelegramAmiga -- the native Intuition/GadTools GUI (chat list + conversation).
-  Double-click it: it starts the GUI directly, with no flashing console window.
+    gui_entry_en="- TelegramAmiga: the window client (Intuition/GadTools). Double-click it.
 "
-    gui_entry_it="- TelegramAmiga -- la GUI nativa Intuition/GadTools (lista chat + conversazione).
-  Doppio click: avvia direttamente la GUI, senza finestra console che lampeggia.
+    gui_entry_it="- TelegramAmiga: il client a finestra (Intuition/GadTools). Doppio click.
 "
+    account_en="You need a Telegram account. The client cannot create one: make it
+first with the official app on a phone."
+    account_it="Ti serve un account Telegram. Il client non sa crearne uno: fallo
+prima con l'app ufficiale su un telefono."
+    login_steps_en="2. Enter your phone number in international form (for example
+   +39 333 1234567), then the code Telegram sends. If you are signed in
+   to Telegram elsewhere, the code arrives there, in the Telegram service
+   chat, not by SMS; the client says where it went. If nothing comes,
+   wait until the code screen offers another way and press S to have it
+   sent again, usually by SMS.
+3. If your account has a cloud password (2FA), type it. If not, press
+   Enter.
+4. The client saves the login in telegram-auth.bin, in this drawer, and
+   does not ask again."
+    login_steps_it="2. Scrivi il numero di telefono in formato internazionale (per esempio
+   +39 333 1234567), poi il codice che Telegram ti manda. Se sei
+   collegato a Telegram altrove, il codice arriva li', nella chat di
+   servizio di Telegram, non via SMS; il client ti dice dove l'ha
+   spedito. Se non arriva niente, aspetta che la schermata del codice
+   proponga un'altra via e premi S per fartelo rimandare, di solito via
+   SMS.
+3. Se il tuo account ha una password cloud (2FA), scrivila. Se no, premi
+   Invio.
+4. Il client salva l'accesso in telegram-auth.bin, in questo cassetto, e
+   non te lo chiede piu'."
+    shell_cmd="      TelegramAmiga --mtproto-start-file data/telegram-api.txt
+        telegram-auth.bin data/phone-code-hash.txt data/telegram-peers.txt"
     if [ "$tui_icon" = "1" ]; then
-        launchers_title_en="Two launchers
--------------"
-        launchers_title_it="I due launcher
---------------"
-        tui_entry_en="- TelegramAmiga-TUI -- a full-screen text/console client for low-end or mouse-less
-  setups. Both share the same login and the same saved session."
-        tui_entry_it="- TelegramAmiga-TUI -- un client testuale a schermo intero per macchine leggere o
-  senza mouse. Condividono lo stesso login e la stessa sessione salvata."
-        first_start_en="You need a Telegram account. This client signs in to an existing account
-but cannot create one yet: if you have none, create it first with the
-official Telegram app on a phone, then come back here.
+        launchers_title_en="Two icons
+---------"
+        launchers_title_it="Due icone
+---------"
+        tui_entry_en="- TelegramAmiga-TUI: the text client, full screen, for slow machines
+  or setups without a mouse. Both use the same login."
+        tui_entry_it="- TelegramAmiga-TUI: il client testuale a schermo intero, per macchine
+  lente o senza mouse. Usano lo stesso accesso."
+        first_start_en="$account_en
 
-1. Unpack the drawer and double-click TelegramAmiga (or TelegramAmiga-TUI).
-2. If there is no saved login, a login panel appears. Enter your phone number
-   in full international form (for example +39 333 1234567), then the code
-   Telegram sends you. That code usually does NOT arrive by SMS: if you are
-   signed in to Telegram anywhere else (phone, PC, web), it is delivered
-   INSIDE Telegram, as a message from the official Telegram service chat.
-   The client tells you on screen where it was sent. If nothing arrives,
-   wait until the code screen offers another way and press S: Telegram
-   then sends the code again, usually by SMS.
-   If your account has a cloud password (2FA), type it on the masked screen
-   (if you do NOT have one, just press Enter to continue).
-3. The client logs in and writes telegram-auth.bin in this drawer. After that
-   it reuses the saved login -- you are not asked for the phone/code again."
-        first_start_it="Ti serve un account Telegram. Questo client accede a un account esistente
-ma non sa ancora crearne uno: se non ce l'hai, crealo prima con l'app
-ufficiale di Telegram su un telefono, poi torna qui.
+1. Copy the drawer to a writable volume and double-click TelegramAmiga
+   (or TelegramAmiga-TUI).
+$login_steps_en"
+        first_start_it="$account_it
 
-1. Scompatta il drawer e fai doppio click su TelegramAmiga (o TelegramAmiga-TUI).
-2. Se non c'e' un login salvato, compare il pannello di accesso. Inserisci il
-   numero di telefono in formato internazionale completo (es. +39 333 1234567),
-   poi il codice che Telegram ti invia. Quel codice di solito NON arriva via
-   SMS: se sei collegato a Telegram da qualche altra parte (telefono, PC,
-   web), te lo consegna DENTRO Telegram, come messaggio della chat
-   ufficiale Telegram. Il client ti dice a schermo dove e' stato spedito.
-   Se non arriva nulla, aspetta che la schermata del codice proponga
-   un'altra via e premi S: Telegram lo rimanda, di solito via SMS.
-   Se il tuo account ha una password cloud (2FA), digitala sulla schermata
-   mascherata (se NON ce l'hai, premi Invio).
-3. Il client accede e scrive telegram-auth.bin in questo drawer. Da li' in poi
-   riusa il login salvato -- non ti richiede piu' telefono/codice."
-        readme_programs="  TelegramAmiga  - graphical (Intuition), with scrollbars + mouse.
-  TelegramAmiga-TUI  - text-mode / console."
-        readme_start="Quick start: copy this drawer to a WRITABLE volume, then double-click
-TelegramAmiga (or TelegramAmiga-TUI). First run signs you in (phone -> code -> 2FA)."
-        aminet_programs="Two programs share one engine and one saved login:
+1. Copia il cassetto su un volume scrivibile e fai doppio click su
+   TelegramAmiga (o TelegramAmiga-TUI).
+$login_steps_it"
+        readme_programs="  TelegramAmiga      the window client
+  TelegramAmiga-TUI  the text client"
+        readme_start="Copy this drawer to a writable volume and double-click TelegramAmiga
+(or TelegramAmiga-TUI). The first run signs you in: phone, code, 2FA."
+        aminet_programs="Two clients share one engine and one login:
 
-  TelegramAmiga  - the native Intuition/GadTools GUI: chat list with real
-                 profile-picture avatars, message bubbles, scrollbars,
-                 mouse wheel, context menus.
-  TelegramAmiga-TUI  - the text/console client, at home on a 68030 with a
-                 serial console or an ssh session."
+  TelegramAmiga      the window client (Intuition/GadTools): chat list
+                     with avatars, bubbles, photos, emoji, menus.
+  TelegramAmiga-TUI  the text client, for slow machines, a serial
+                     console or an ssh session."
+        aminet_tui_hint=" (or TelegramAmiga-TUI for the text client)"
         if [ "$gui_icon" = "0" ]; then
-            launchers_title_en="One launcher
-------------"
-            launchers_title_it="Un solo launcher
-----------------"
-            tui_entry_en="- TelegramAmiga-TUI -- the full-screen text/console client. This package
-  ships ONLY that icon: the Intuition GUI is too heavy for a plain 68000,
-  so the text client is the way in here.
-- From a Shell instead of the icon: TelegramAmiga-TUI is a 0-byte marker,
-  not a program, so running it gives \"file is not executable\". Run the
-  binary with the same arguments the icon uses, from inside the drawer:
+            launchers_title_en="The icon
+--------"
+            launchers_title_it="L'icona
+-------"
+            tui_entry_en="- TelegramAmiga-TUI: the text client, full screen. It is the only
+  icon here: the window client needs a 68020 or better and is not in
+  this build.
+- From a Shell: TelegramAmiga-TUI is an empty marker file, not a
+  program (running it says \"file is not executable\"). Inside the
+  drawer type:
       stack 393216
-      TelegramAmiga --mtproto-start-file data/telegram-api.txt
-        telegram-auth.bin data/phone-code-hash.txt data/telegram-peers.txt
-  (the command is one single line). The stack line is needed once per
-  Shell: a Shell hands out 4096 bytes by default, and the program says so
-  rather than crashing. Add \"Protect TelegramAmiga +e\" once if the Shell
-  refuses to run it."
-            tui_entry_it="- TelegramAmiga-TUI -- il client testuale a schermo intero. Questo
-  pacchetto porta SOLO quell'icona: la GUI Intuition e' troppo pesante per
-  un 68000 liscio, qui si usa il client testuale.
-- Da Shell invece che dall'icona: TelegramAmiga-TUI e' un marker da 0 byte,
-  non un programma, quindi lanciarlo da' \"file is not executable\". Esegui
-  il binario con gli stessi argomenti che usa l'icona, dentro il drawer:
+$shell_cmd
+  The second command is one line. The stack is needed once per Shell (a
+  Shell gives 4096 bytes, and the program says so). If the Shell refuses
+  to run it, type \"Protect TelegramAmiga +e\" once."
+            tui_entry_it="- TelegramAmiga-TUI: il client testuale a schermo intero. E' l'unica
+  icona: il client a finestra vuole un 68020 o superiore e in questa
+  build non c'e'.
+- Da Shell: TelegramAmiga-TUI e' un file segnaposto vuoto, non un
+  programma (lanciarlo da' \"file is not executable\"). Dentro il
+  cassetto scrivi:
       stack 393216
-      TelegramAmiga --mtproto-start-file data/telegram-api.txt
-        telegram-auth.bin data/phone-code-hash.txt data/telegram-peers.txt
-  (il comando e' tutto su una riga sola). La riga stack serve una volta per
-  Shell: una Shell ne assegna 4096 byte di default, e il programma te lo
-  dice invece di crashare. Se la Shell si rifiuta di eseguirlo, dai una
-  volta \"Protect TelegramAmiga +e\"."
-            first_start_en="You need a Telegram account. This client signs in to an existing account
-but cannot create one yet: if you have none, create it first with the
-official Telegram app on a phone, then come back here.
+$shell_cmd
+  Il secondo comando sta su una riga sola. Lo stack serve una volta per
+  Shell (una Shell ne da' 4096 byte, e il programma lo dice). Se la
+  Shell si rifiuta di eseguirlo, scrivi una volta
+  \"Protect TelegramAmiga +e\"."
+            first_start_en="$account_en
 
-1. On a FASTER Amiga (68020 or better) or in an emulator (WinUAE,
-   FS-UAE, vAmiga), install the standard AmigaOS 3.x package and log in
-   there: phone number, the code Telegram sends you, and the cloud
-   password (2FA) if your account has one.
-2. Copy telegram-auth.bin from that drawer into THIS drawer, next to
-   TelegramAmiga-TUI. Copy data/telegram-peers.txt too if you want your
-   chat list ready. NEVER share telegram-auth.bin with anyone.
-3. Unpack this drawer on a WRITABLE volume and double-click
-   TelegramAmiga-TUI: it reuses that login and goes straight to the chats.
-   The same account stays usable on both machines.
+The first login is too heavy for a 68000 (a Diffie-Hellman key
+exchange), so it is made elsewhere:
 
-If your account has Two-Step Verification, checking the cloud password
-derives a key with 100000 iterations of SHA-512: about 35 minutes on a
-stock A1200 (68020), much less on a faster machine. The dots show it
-working, and once the key is ready the client asks Telegram for a fresh
-challenge, so the login completes even on the slow machine.
+1. On a 68020 or better, or in an emulator (WinUAE, FS-UAE, vAmiga),
+   install the standard AmigaOS 3.x package and log in there.
+2. Copy telegram-auth.bin from that drawer into this one, next to
+   TelegramAmiga-TUI, and data/telegram-peers.txt too if you want the
+   chat list ready. Never share telegram-auth.bin.
+3. Copy this drawer to a writable volume and double-click
+   TelegramAmiga-TUI. The account stays usable on both machines.
 
-Why not log in here? The first login runs a Diffie-Hellman key exchange:
-it is the heaviest thing this program does, and a plain 68000 cannot
-finish it comfortably. The program says so and lets you try anyway, but
-the route above is the supported one."
-            first_start_it="Ti serve un account Telegram. Questo client accede a un account esistente
-ma non sa ancora crearne uno: se non ce l'hai, crealo prima con l'app
-ufficiale di Telegram su un telefono, poi torna qui.
+With a cloud password (2FA), checking it takes about 35 minutes on a
+stock A1200 and much less on faster machines. The dots show it working,
+and the login then completes.
 
-1. Su un Amiga PIU' POTENTE (68020 o superiore) o in un emulatore
-   (WinUAE, FS-UAE, vAmiga), installa il pacchetto AmigaOS 3.x standard e
-   accedi li': numero di telefono, codice che Telegram ti invia e password
-   cloud (2FA) se il tuo account ne ha una.
-2. Copia telegram-auth.bin da quel drawer dentro QUESTO drawer, accanto a
-   TelegramAmiga-TUI. Copia anche data/telegram-peers.txt se vuoi la lista
-   chat gia' pronta. NON condividere MAI telegram-auth.bin con nessuno.
-3. Scompatta questo drawer su un volume SCRIVIBILE e fai doppio click su
-   TelegramAmiga-TUI: riusa quel login e va dritto alle chat. Lo stesso
-   account resta utilizzabile su entrambe le macchine.
+The program lets you try the login on the 68000 anyway, but the route
+above is the supported one."
+            first_start_it="$account_it
 
-Se il tuo account ha la verifica in due passaggi, il controllo della
-password cloud deriva una chiave con 100000 iterazioni di SHA-512: circa
-35 minuti su un A1200 liscio (68020), molto meno su una macchina piu'
-veloce. I puntini mostrano che sta lavorando, e quando la chiave e' pronta
-il client chiede a Telegram una richiesta nuova, quindi l'accesso si
-completa anche sulla macchina lenta.
+Il primo accesso e' troppo pesante per un 68000 (uno scambio di chiavi
+Diffie-Hellman), quindi si fa altrove:
 
-Perche' non accedere qui? Il primo login esegue uno scambio di chiavi
-Diffie-Hellman: e' la cosa piu' pesante che il programma faccia, e un
-68000 liscio non riesce a portarla a termine comodamente. Il programma te
-lo dice e ti lascia comunque provare, ma la via sopra e' quella
-supportata."
-            readme_programs="  TelegramAmiga-TUI  - the text/console client (the only icon here:
-                       the GUI needs a 68020 or better)."
-            readme_start="Quick start: copy this drawer to a WRITABLE volume. FIRST log in on a
-faster Amiga or an emulator and copy telegram-auth.bin here (see below),
-then double-click TelegramAmiga-TUI."
+1. Su un 68020 o superiore, o in un emulatore (WinUAE, FS-UAE, vAmiga),
+   installa il pacchetto AmigaOS 3.x standard e accedi li'.
+2. Copia telegram-auth.bin da quel cassetto in questo, accanto a
+   TelegramAmiga-TUI, e anche data/telegram-peers.txt se vuoi la lista
+   chat gia' pronta. Non condividere mai telegram-auth.bin.
+3. Copia questo cassetto su un volume scrivibile e fai doppio click su
+   TelegramAmiga-TUI. L'account resta usabile su tutte e due le
+   macchine.
+
+Con una password cloud (2FA), il controllo richiede circa 35 minuti su
+un A1200 liscio e molto meno sulle macchine piu' veloci. I puntini
+mostrano che sta lavorando, poi l'accesso si completa.
+
+Il programma ti lascia comunque provare l'accesso sul 68000, ma la via
+sopra e' quella supportata."
+            readme_programs="  TelegramAmiga-TUI  the text client (the window client needs a 68020)"
+            readme_start="Copy this drawer to a writable volume. Log in first on a faster Amiga
+or in an emulator and copy telegram-auth.bin here (see the manual), then
+double-click TelegramAmiga-TUI."
             gui_entry_en=""
             gui_entry_it=""
-            aminet_programs="One text/console client, built for the plain 68000:
-
-  TelegramAmiga-TUI  - the full-screen text client. The Intuition GUI
-                 needs a 68020 or better, so this package ships the
-                 console face alone."
+            aminet_programs="  TelegramAmiga-TUI  the full-screen text client."
+            aminet_tui_hint=""
         fi
     else
         launchers_title_en="One icon, two clients
 ---------------------"
         launchers_title_it="Un'icona, due client
 --------------------"
-        tui_entry_en="- The text/console client is the SAME program: this package ships the GUI
-  icon only, because that is what these machines want. If you prefer the
-  full-screen text client, start it from a Shell, from inside the drawer:
-      TelegramAmiga --mtproto-start-file data/telegram-api.txt telegram-auth.bin
-        data/phone-code-hash.txt data/telegram-peers.txt
-  (one single line). Add \"Protect TelegramAmiga +e\" once if the Shell
-  refuses to run it. Both share the same login and the same saved session."
-        tui_entry_it="- Il client testuale e' lo STESSO programma: questo pacchetto porta solo
-  l'icona della GUI, perche' e' quella che serve su queste macchine. Se
-  preferisci il client testuale a schermo intero, avvialo da Shell dentro
-  il drawer:
-      TelegramAmiga --mtproto-start-file data/telegram-api.txt telegram-auth.bin
-        data/phone-code-hash.txt data/telegram-peers.txt
-  (tutto su una riga sola). Se la Shell si rifiuta di eseguirlo, dai una
-  volta \"Protect TelegramAmiga +e\". Login e sessione salvata sono gli stessi."
-        first_start_en="You need a Telegram account. This client signs in to an existing account
-but cannot create one yet: if you have none, create it first with the
-official Telegram app on a phone, then come back here.
+        tui_entry_en="- The text client is the same program. This package has only the
+  window icon; to start the text client, type in a Shell, inside the
+  drawer:
+$shell_cmd
+  (one line). If the Shell refuses to run it, type
+  \"Protect TelegramAmiga +e\" once. Both use the same login."
+        tui_entry_it="- Il client testuale e' lo stesso programma. Questo pacchetto ha solo
+  l'icona della finestra; per il client testuale scrivi in una Shell,
+  dentro il cassetto:
+$shell_cmd
+  (su una riga sola). Se la Shell si rifiuta di eseguirlo, scrivi una
+  volta \"Protect TelegramAmiga +e\". L'accesso e' lo stesso."
+        first_start_en="$account_en
 
-1. Unpack the drawer and double-click TelegramAmiga.
-2. If there is no saved login, a login panel appears. Enter your phone number
-   in full international form (for example +39 333 1234567), then the code
-   Telegram sends you. That code usually does NOT arrive by SMS: if you are
-   signed in to Telegram anywhere else (phone, PC, web), it is delivered
-   INSIDE Telegram, as a message from the official Telegram service chat.
-   The client tells you on screen where it was sent. If nothing arrives,
-   wait until the code screen offers another way and press S: Telegram
-   then sends the code again, usually by SMS.
-   If your account has a cloud password (2FA), type it on the masked screen
-   (if you do NOT have one, just press Enter to continue).
-3. The client logs in and writes telegram-auth.bin in this drawer. After that
-   it reuses the saved login -- you are not asked for the phone/code again."
-        first_start_it="Ti serve un account Telegram. Questo client accede a un account esistente
-ma non sa ancora crearne uno: se non ce l'hai, crealo prima con l'app
-ufficiale di Telegram su un telefono, poi torna qui.
+1. Copy the drawer to a writable volume and double-click TelegramAmiga.
+$login_steps_en"
+        first_start_it="$account_it
 
-1. Scompatta il drawer e fai doppio click su TelegramAmiga.
-2. Se non c'e' un login salvato, compare il pannello di accesso. Inserisci il
-   numero di telefono in formato internazionale completo (es. +39 333 1234567),
-   poi il codice che Telegram ti invia. Quel codice di solito NON arriva via
-   SMS: se sei collegato a Telegram da qualche altra parte (telefono, PC,
-   web), te lo consegna DENTRO Telegram, come messaggio della chat
-   ufficiale Telegram. Il client ti dice a schermo dove e' stato spedito.
-   Se non arriva nulla, aspetta che la schermata del codice proponga
-   un'altra via e premi S: Telegram lo rimanda, di solito via SMS.
-   Se il tuo account ha una password cloud (2FA), digitala sulla schermata
-   mascherata (se NON ce l'hai, premi Invio).
-3. Il client accede e scrive telegram-auth.bin in questo drawer. Da li' in poi
-   riusa il login salvato -- non ti richiede piu' telefono/codice."
-        readme_programs="  TelegramAmiga  - graphical (Intuition), with scrollbars + mouse.
-                   The same program also runs the text/console client from a
-                   Shell (see the manual)."
-        readme_start="Quick start: copy this drawer to a WRITABLE volume, then double-click
-TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
-        aminet_programs="One program, two faces, one engine and one saved login:
-
-  TelegramAmiga  - the native Intuition/GadTools GUI: chat list with real
-                 profile-picture avatars, message bubbles, scrollbars,
-                 mouse wheel, context menus. This package ships its icon.
-                 The same binary also runs a full-screen text/console client
-                 from a Shell -- the manual gives the command line."
+1. Copia il cassetto su un volume scrivibile e fai doppio click su
+   TelegramAmiga.
+$login_steps_it"
+        readme_programs="  TelegramAmiga  the window client. The same program runs the text
+                 client from a Shell (see the manual)."
+        readme_start="Copy this drawer to a writable volume and double-click TelegramAmiga.
+The first run signs you in: phone, code, 2FA."
+        aminet_programs="  TelegramAmiga  the window client (Intuition/GadTools): chat list with
+                 avatars, bubbles, photos, emoji, menus. The same
+                 program runs a text client from a Shell; the manual
+                 gives the command."
+        aminet_tui_hint=""
     fi
+    notes_title_en="Notes for $1"
+    notes_title_it="Note per $1"
     case "$1" in
     "AmigaOS 3.x (68000)")
         upload_limit="125 MiB"
-        req_en="- A plain 68000 Amiga (A500 / A600 / A1000 / A2000 / CDTV) with AmigaOS
-  2.x/3.x, a TCP/IP stack providing bsdsocket.library (Roadshow, AmiTCP,
+        notes_title_en="Notes for the plain 68000"
+        notes_title_it="Note per il 68000 liscio"
+        req_en="- A plain 68000 Amiga (A500, A600, A1000, A2000, CDTV) with AmigaOS
+  2.x or 3.x, a TCP/IP stack with bsdsocket.library (Roadshow, AmiTCP,
   Miami) and an internet connection.
-- About 2 MB of free FAST RAM. This build is trimmed for such machines: the
-  graphical client is not compiled in at all, and the chat list, history
-  pages and message text are smaller than on the other packages.
-- IMPORTANT: sign in ONCE on a faster Amiga or an emulator and copy
-  telegram-auth.bin here (see \"First start\" below). The first login runs a
-  Diffie-Hellman exchange that a 68000 cannot complete comfortably."
-        notes_en="Notes for the plain 68000
--------------------------
-- The graphical client is NOT in this package at all -- not merely without
-  an icon: window, renderer and JPEG decoder are left out of the build, which
-  is where most of the memory saving comes from. Intuition drawing plus photo
-  decoding needs a 68020 or better anyway; use the standard AmigaOS 3.x
-  package on such a machine.
-- Preparing the login elsewhere: install the normal package on a 68020+
-  Amiga or in WinUAE/FS-UAE/vAmiga, log in, then copy telegram-auth.bin (and
-  data/telegram-peers.txt for the chat list) into this drawer. The same
-  account can stay logged in on both machines.
-- Limits of this profile: 12 chats in the list, 8 messages per page, message
-  text up to 2 KB, downloads in 16 KB chunks. Everything else works as on any
-  other Amiga: send and receive, files, replies, edits, read receipts.
-- Using it: type a message and press Enter to send it. The line under the
-  top one shows your first chats with their keys, F1 to F10: press one to
-  open that chat (a star marks new messages there), or type a chat number;
-  0 opens Saved Messages, Tab goes back to the chat before. /move 5 1 puts
-  chat 5 under F1. /list shows your chats again and /help (or the Help key)
-  the other commands. Messages from chats that are not in your list are
-  counted in the top line, \"(+3 elsewhere)\", instead of scrolling past.
-- Long messages wrap by words; the composer grows to three rows. Quit with
-  /quit, Ctrl+C or the close gadget, then RETURN dismisses the window."
-        req_it="- Un Amiga con 68000 liscio (A500 / A600 / A1000 / A2000 / CDTV) con
-  AmigaOS 2.x/3.x, uno stack TCP/IP che fornisca bsdsocket.library
-  (Roadshow, AmiTCP, Miami) e una connessione internet.
-- Circa 2 MB di FAST RAM libera. Questa build e' ridotta apposta per queste
-  macchine: il client grafico non e' proprio compilato dentro, e lista chat,
-  pagine di storia e testo dei messaggi sono piu' piccoli che negli altri
-  pacchetti.
-- IMPORTANTE: fai l'accesso UNA VOLTA su un Amiga piu' potente o in un
-  emulatore e copia qui telegram-auth.bin (vedi \"Primo avvio\"). Il primo
-  login esegue uno scambio di chiavi Diffie-Hellman che un 68000 non riesce
-  a portare a termine comodamente."
-        notes_it="Note per il 68000 liscio
-------------------------
-- Il client grafico NON e' in questo pacchetto, e non solo come icona:
-  finestra, renderer e decoder JPEG sono esclusi dalla build, ed e' da li'
-  che arriva gran parte del risparmio di memoria. Il disegno Intuition e la
-  decodifica delle foto vogliono comunque un 68020 o superiore: su quelle
-  macchine usa il pacchetto AmigaOS 3.x standard.
-- Preparare il login altrove: installa il pacchetto normale su un Amiga
-  68020+ o in WinUAE/FS-UAE/vAmiga, accedi, poi copia telegram-auth.bin (e
-  data/telegram-peers.txt per avere la lista chat) dentro questo drawer. Lo
-  stesso account puo' restare connesso su entrambe le macchine.
-- Limiti di questo profilo: 12 chat in lista, 8 messaggi per pagina, testo
-  fino a 2 KB per messaggio, download a blocchi da 16 KB. Il resto funziona
-  come su qualsiasi Amiga: invio e ricezione, file, risposte, modifiche,
-  conferme di lettura.
-- Come si usa: scrivi un messaggio e premi Invio per mandarlo. La riga
-  sotto quella in alto mostra le prime chat con i loro tasti, da F1 a F10:
-  premine uno per aprire quella chat (un asterisco segna i messaggi nuovi),
-  oppure scrivi il numero di una chat; 0 apre i Messaggi salvati, Tab torna
-  alla chat di prima. /move 5 1 mette la chat 5 sotto F1. /list rimostra le
-  tue chat e /help (o il tasto Help) gli altri comandi. I messaggi delle
-  chat che non sono nella lista si contano nella riga in alto,
-  \"(+3 elsewhere)\", invece di scorrere nel dialogo.
-- I messaggi lunghi vanno a capo per parole e il composer cresce fino a tre
-  righe. Per uscire: /quit, Ctrl+C o il gadget di chiusura, poi RETURN
-  congeda la finestra."
+- About 2 MB of free fast RAM.
+- A first login made on a faster Amiga or in an emulator (see below)."
+        req_it="- Un Amiga con 68000 liscio (A500, A600, A1000, A2000, CDTV) con
+  AmigaOS 2.x o 3.x, uno stack TCP/IP con bsdsocket.library (Roadshow,
+  AmiTCP, Miami) e una connessione internet.
+- Circa 2 MB di fast RAM libera.
+- Un primo accesso fatto su un Amiga piu' veloce o in un emulatore
+  (vedi sotto)."
+        notes_en="- This build leaves out the window, the renderer and the JPEG decoder,
+  which is where the memory saving comes from. On a 68020 or better use
+  the standard AmigaOS 3.x package.
+- Limits: 12 chats in the list, 8 messages per page, message text up to
+  2 KB, downloads in 16 KB pieces. The rest works as elsewhere: sending
+  and receiving, files, replies, edits, read receipts.
+- Type a message and press Enter to send it. The line under the top one
+  shows your first chats on F1 to F10, with a star for new messages. A
+  chat number opens a chat too, 0 opens Saved Messages, Tab the chat
+  before. /move 5 1 puts chat 5 under F1, /list shows the chats and
+  /help (or the Help key) the other commands. Messages from chats not in
+  your list are counted in the top line: \"(+3 elsewhere)\"."
+        notes_it="- Questa build lascia fuori la finestra, il renderer e il decoder JPEG,
+  ed e' da li' che viene il risparmio di memoria. Su un 68020 o
+  superiore usa il pacchetto AmigaOS 3.x standard.
+- Limiti: 12 chat in lista, 8 messaggi per pagina, testo fino a 2 KB per
+  messaggio, download a pezzi da 16 KB. Il resto funziona come altrove:
+  invio e ricezione, file, risposte, modifiche, conferme di lettura.
+- Scrivi un messaggio e premi Invio per mandarlo. La riga sotto quella
+  in alto mostra le prime chat sui tasti da F1 a F10, con un asterisco
+  per i messaggi nuovi. Anche il numero di una chat la apre, 0 apre i
+  Messaggi salvati, Tab la chat di prima. /move 5 1 mette la chat 5
+  sotto F1, /list mostra le chat e /help (o il tasto Help) gli altri
+  comandi. I messaggi delle chat fuori lista si contano nella riga in
+  alto: \"(+3 elsewhere)\"."
         ;;
     "AmigaOS 3.x")
         # = 32 KiB part x 4000 parts. KEEP IN SYNC with TG_GUI_DL_CHUNK
@@ -430,131 +350,105 @@ TelegramAmiga. First run signs you in (phone -> code -> 2FA)."
         # chunk grew, so the 0.0.7 OS3 package shipped manuals understating
         # the real limit (the binary itself computes and reports 125).
         upload_limit="125 MiB"
-        req_en="- AmigaOS 3.x (3.1 / 3.1.4 / 3.2) with a TCP/IP stack (Roadshow, AmiTCP,
-  Miami/MiamiDx) providing bsdsocket.library, and an internet connection.
-- A 68020 or better CPU (this build uses the 68020 32x32 multiply and will
-  NOT run on a plain 68000). Tested on 68080/Vampire; 020/030/040/060 welcome.
-- A few MB of free RAM. No ixemul.library and no AmiSSL are needed."
-        notes_en="Notes for AmigaOS 3.x
----------------------
-- Photo messages show an instant blurred preview from the message itself, then
-  refine from a small bounded download. Decoded pixels are cached for reopen.
-- The cloud-password (2FA) step is heavy on a 68k (PBKDF2): about 35
-  minutes on a stock A1200. The login completes; the dots show it working.
-- First login: the DH key exchange is heavy on a 68k, so the first start
-  takes a while (it happens once -- the session is saved afterwards).
-- Emoji are drawn as text emoticons (:) :D <3); the console has no emoji font.
-- Changing the Workbench screen mode or colours with the window open needs
-  screennotify.library in LIBS: (Aminet util/libs/ScreenNotify10): with it
-  the window closes when the system asks and comes back on the new screen.
-  Without it the prefs program keeps asking to close the windows; use
-  Settings > Use own screen, or quit before changing the prefs.
-- The text client (TelegramAmiga-TUI): type a message and press Enter to
-  send it; the tabs under the top line show the chats F1..F10 open
-  (/move 5 1 puts chat 5 under F1), a chat number opens one too, 0 Saved
-  Messages, Tab the chat before, /list your chats and /help the other
-  commands."
-        req_it="- AmigaOS 3.x (3.1 / 3.1.4 / 3.2) con uno stack TCP/IP (Roadshow, AmiTCP,
-  Miami/MiamiDx) che fornisca bsdsocket.library, e una connessione internet.
-- Una CPU 68020 o superiore (questa build usa la moltiplicazione 32x32 del
-  68020 e NON gira su un 68000 liscio). Provata su 68080/Vampire; 020/030/040/060
-  benvenute.
+        req_en="- AmigaOS 3.1, 3.1.4 or 3.2 with a TCP/IP stack providing
+  bsdsocket.library (Roadshow, AmiTCP, Miami/MiamiDx) and an internet
+  connection.
+- A 68020 or better. A plain 68000 has its own package.
+- A few MB of free RAM. No ixemul.library, no AmiSSL."
+        req_it="- AmigaOS 3.1, 3.1.4 o 3.2 con uno stack TCP/IP che fornisca
+  bsdsocket.library (Roadshow, AmiTCP, Miami/MiamiDx) e una connessione
+  internet.
+- Un 68020 o superiore. Il 68000 liscio ha un pacchetto suo.
 - Qualche MB di RAM libera. Non servono ixemul.library ne' AmiSSL."
-        notes_it="Note per AmigaOS 3.x
---------------------
-- Le foto mostrano subito l'anteprima sfocata inclusa nel messaggio, poi si
-  rifiniscono con un download limitato. I pixel decodificati restano in cache.
-- Il passo della password cloud (2FA) e' pesante su 68k (PBKDF2): circa
-  35 minuti su un A1200 liscio. L'accesso si completa; i puntini mostrano
-  che sta lavorando.
-- Primo accesso: lo scambio di chiavi DH e' pesante su 68k, quindi il primo
-  avvio richiede un po' di pazienza (succede una volta sola: la sessione
-  viene poi salvata).
-- Per cambiare modo schermo o colori del Workbench con la finestra aperta
-  serve screennotify.library in LIBS: (Aminet util/libs/ScreenNotify10):
-  con la libreria la finestra si chiude quando il sistema lo chiede e torna
-  sul nuovo schermo. Senza, il programma delle preferenze continua a
-  chiedere di chiudere le finestre: usa Settings > Use own screen, oppure
-  esci prima di cambiare le preferenze.
-- Il client testuale (TelegramAmiga-TUI): scrivi un messaggio e premi Invio
-  per mandarlo; le schede sotto la riga in alto mostrano le chat che aprono
-  F1..F10 (/move 5 1 mette la chat 5 sotto F1), anche il numero di una chat
-  ne apre una, 0 i Messaggi salvati, Tab la chat di prima, /list le tue chat
-  e /help gli altri comandi."
+        notes_en="- The first login (a Diffie-Hellman key exchange) takes a while on a
+  68k. It happens once.
+- With a cloud password (2FA), checking it takes about 35 minutes on a
+  stock A1200. The dots show it working, and the login completes.
+- To change the Workbench screen mode or colours with the window open,
+  install screennotify.library in LIBS: (Aminet util/libs/ScreenNotify10):
+  the window then closes when asked and comes back on the new screen.
+  Without it, use Settings > Use own screen, or quit first.
+- Text client (TelegramAmiga-TUI): Enter sends. The tabs under the top
+  line show the chats on F1 to F10 (/move 5 1 puts chat 5 under F1); a
+  chat number opens one, 0 Saved Messages, Tab the chat before, /list
+  the chats, /help the commands."
+        notes_it="- Il primo accesso (uno scambio di chiavi Diffie-Hellman) richiede un
+  po' di tempo su un 68k. Succede una volta sola.
+- Con una password cloud (2FA), il controllo richiede circa 35 minuti su
+  un A1200 liscio. I puntini mostrano che sta lavorando, e l'accesso si
+  completa.
+- Per cambiare modo schermo o colori del Workbench con la finestra
+  aperta, installa screennotify.library in LIBS: (Aminet
+  util/libs/ScreenNotify10): la finestra si chiude quando il sistema lo
+  chiede e torna sul nuovo schermo. Senza, usa Settings > Use own screen
+  oppure esci prima.
+- Client testuale (TelegramAmiga-TUI): Invio manda. Le schede sotto la
+  riga in alto mostrano le chat sui tasti da F1 a F10 (/move 5 1 mette la
+  chat 5 sotto F1); il numero di una chat la apre, 0 i Messaggi salvati,
+  Tab la chat di prima, /list le chat, /help i comandi."
         ;;
     "MorphOS")
         upload_limit="250 MiB"
-        req_en="- MorphOS (3.x) with its TCP/IP stack and an internet connection.
+        req_en="- MorphOS 3.x with its TCP/IP stack and an internet connection.
 - A few MB of free RAM."
-        notes_en="Notes for MorphOS
------------------
-- The chat list is not fetched automatically at first login here: use
-  \"Reload chat list\" in the Telegram menu to pull it in, or type a name in
-  the search box to find/add a single chat. Removed/reordered chats and
-  unread badges persist as everywhere else.
-- In groups the typing line shows \"someone is typing\" (the per-member name
-  fetch is skipped on MorphOS on purpose, to avoid a freeze).
-- Auto-read runs at a gentle pace; emoji are text emoticons.
-- The @ member autocomplete is off on MorphOS (freeze guard).
-- Own-screen mode: MorphOS 3.16 or newer is recommended."
-        req_it="- MorphOS (3.x) con il suo stack TCP/IP e una connessione internet.
+        req_it="- MorphOS 3.x con il suo stack TCP/IP e una connessione internet.
 - Qualche MB di RAM libera."
-        notes_it="Note per MorphOS
-----------------
-- Qui la lista chat non viene scaricata in automatico al primo accesso: usa
-  \"Reload chat list\" nel menu Telegram per caricarla, oppure digita un nome
-  nella casella di ricerca per aggiungere una singola chat. Rimozioni,
-  riordino e badge non letti restano persistenti come altrove.
-- Nei gruppi la riga di scrittura mostra \"someone is typing\" (il recupero del
-  nome del membro e' disattivato su MorphOS apposta, per evitare un freeze).
-- L'autocompletamento @ dei membri e' spento su MorphOS (guardia anti-freeze).
-- Modalita' schermo proprio: consigliato MorphOS 3.16 o piu' recente."
+        notes_en="- The chat list is not fetched at the first login: use \"Reload chat
+  list\" in the Telegram menu, or find chats with the search box.
+- In groups the typing line says \"someone is typing\" and the @ member
+  list is off: fetching a group's members freezes MorphOS.
+- Own screen: MorphOS 3.16 or newer is recommended."
+        notes_it="- La lista chat non viene scaricata al primo accesso: usa \"Reload chat
+  list\" nel menu Telegram, oppure cerca le chat con la casella di
+  ricerca.
+- Nei gruppi la riga di scrittura dice \"someone is typing\" e l'elenco
+  dei membri con @ e' spento: scaricare i membri di un gruppo blocca
+  MorphOS.
+- Schermo proprio: consigliato MorphOS 3.16 o piu' recente."
         ;;
     "AROS aarch64")
         upload_limit="250 MiB"
-        req_en="- AROS for ARM64 (aarch64, ABIv1) on a Raspberry Pi 4, 400 or 5: a native
-  image of 2026-08-22 or newer, with its TCP/IP stack (AROSTCP) up.
+        req_en="- AROS for ARM64 (aarch64, ABIv1) on a Raspberry Pi 4, 400 or 5: the
+  native image of 2026-08-22 or newer, with its TCP/IP stack (AROSTCP)
+  running.
 - A few MB of free RAM."
-        notes_en="Notes for AROS aarch64
-----------------------
-- Full feature set, including read receipts, typing names and history paging.
-- Bring the network up before starting the client (the AROSTCP start
-  script from a Shell or from S:User-Startup: on the Pi images that is the
-  usual advice, rather than the boot switch in the network preferences).
+        req_it="- AROS per ARM64 (aarch64, ABIv1) su un Raspberry Pi 4, 400 o 5:
+  l'immagine nativa del 2026-08-22 o piu' recente, con il suo stack
+  TCP/IP (AROSTCP) attivo.
+- Qualche MB di RAM libera."
+        notes_en="- Start the network before the client: the AROSTCP start script from a
+  Shell or from S:User-Startup works better on the Pi images than the
+  boot switch in the network preferences.
 - The stock image has no wget: copy the drawer onto the SD card from
   another computer, into any drawer on SYS:.
-- Every file the client saves on the card is deleted and recreated rather
-  than rewritten: the AROS FAT handler leaves a rewritten file empty.
-- Validated on a Raspberry Pi 400 and in the QEMU raspi3b machine."
-        req_it="- AROS per ARM64 (aarch64, ABIv1) su un Raspberry Pi 4, 400 o 5: immagine
-  nativa del 2026-08-22 o piu' recente, con il suo stack TCP/IP (AROSTCP) attivo.
-- Qualche MB di RAM libera."
-        notes_it="Note per AROS aarch64
----------------------
-- Set completo di funzioni: read receipt, nomi di chi scrive, paginazione storia.
-- Avvia la rete prima del client (lo script di avvio di AROSTCP da una Shell
-  o da S:User-Startup: sulle immagini per Pi e' il consiglio consueto, meglio
-  dell'interruttore di avvio nelle preferenze di rete).
-- L'immagine di serie non ha wget: copia il cassetto sulla scheda SD da un
-  altro computer, in un cassetto qualsiasi di SYS:.
-- Ogni file che il client salva sulla scheda viene cancellato e ricreato, mai
-  riscritto: il gestore FAT di AROS lascia vuoto un file riscritto.
-- Provato su un Raspberry Pi 400 e nella macchina raspi3b di QEMU."
+- The client deletes and recreates each file it saves instead of
+  rewriting it: the AROS FAT handler leaves a rewritten file empty.
+- Tested on a Raspberry Pi 400 and in QEMU (raspi3b)."
+        notes_it="- Avvia la rete prima del client: sulle immagini per Pi lo script di
+  avvio di AROSTCP, da una Shell o da S:User-Startup, funziona meglio
+  dell'interruttore di avvio nelle preferenze di rete.
+- L'immagine di serie non ha wget: copia il cassetto sulla scheda SD da
+  un altro computer, in un cassetto qualsiasi di SYS:.
+- Il client cancella e ricrea ogni file che salva invece di riscriverlo:
+  il gestore FAT di AROS lascia vuoto un file riscritto.
+- Provato su un Raspberry Pi 400 e in QEMU (raspi3b)."
         ;;
     *)
         upload_limit="250 MiB"
-        req_en="- $1 with a working TCP/IP stack (bsdsocket) and an internet connection.
+        req_en="- $1 with a TCP/IP stack (bsdsocket) and an internet connection.
 - A few MB of free RAM."
-        notes_en="Notes for $1
------------------
-- Full feature set, including read receipts, typing names and history paging."
-        req_it="- $1 con uno stack TCP/IP funzionante (bsdsocket) e una connessione internet.
+        req_it="- $1 con uno stack TCP/IP (bsdsocket) e una connessione internet.
 - Qualche MB di RAM libera."
-        notes_it="Note per $1
------------------
-- Set completo di funzioni: read receipt, nomi di chi scrive, paginazione storia."
+        notes_en="- Nothing specific: everything in this manual applies."
+        notes_it="- Niente di particolare: vale tutto quello che dice il manuale."
         ;;
     esac
+    notes_en="$notes_title_en
+$(printf '%s' "$notes_title_en" | tr -c '\n' '-')
+$notes_en"
+    notes_it="$notes_title_it
+$(printf '%s' "$notes_title_it" | tr -c '\n' '-')
+$notes_it"
 }
 
 write_readme() {
@@ -562,29 +456,18 @@ write_readme() {
 Unofficial Telegram Amiga - $2 - $CHANNEL $VERSION
 =====================================================
 
-A from-scratch, native Telegram (MTProto) client. Zero dependencies: no MUI,
-no ixemul, no AmiSSL. It is unofficial: it uses the Telegram API and is part
-of the Telegram ecosystem, but it is not made by Telegram. One engine:
+A native Telegram client, written from scratch. No MUI, no ixemul, no
+AmiSSL. It uses the Telegram API but is not made by Telegram.
 
 $readme_programs
 
 $readme_start
 
-Highlights in this build: message photos appear first as an instant blurred
-preview, refine progressively, and reuse a decoded-pixel cache when reopened;
-a larger viewer, an optional lightweight text-only mode, and native JPEG photo
-uploads; one-click forwarding to Saved Messages and a destination picker for
-other chats; hidden chats available in local search; and non-blocking file
-transfers up to $upload_limit. Downloads pipeline their chunks and work across
-Telegram datacenters. Drop a file icon on the window to send it, or pick the
-download drawer from the menu. URLs are clickable, menus follow the system
-colours, and AmiKit/AfA_OS text is handled.
+Manuals: Manual-EN.txt (English), Manuale-IT.txt (Italiano).
+Changes: CHANGELOG.txt.
 
-Full instructions:
-  Manuale-IT.txt   (Italiano)
-  Manual-EN.txt    (English)
-
-NEVER share telegram-auth.bin -- once you log in, it holds your Telegram session.
+Never share telegram-auth.bin: after the first login it holds your
+Telegram session.
 
 ${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system, put
 it on a standard drawer for the drawer icon, and let me ship his versions.
@@ -594,20 +477,260 @@ Author: Michele Dipace <michele.dipace@kaffeine.net>   License: MIT
 EOF
 }
 
+# The window section of the manuals; the plain-68000 build has no window.
+manual_window_en() {
+    [ "$gui_icon" = "1" ] || return 0
+    cat <<EOT
+Using the window
+----------------
+Chats
+- The chat list is on the left, the open chat on the right. F1 to F10
+  open chats 1 to 10, Shift+F1 to F10 chats 11 to 20.
+- Each chat shows its unread count until you open it.
+- The search box at the top left finds a chat on Telegram when you press
+  Enter, and adds it to the list.
+- Del, Right-Amiga+R or "Remove chat from list" removes a chat. Search
+  still finds it, marked (hidden), and opening it puts it back. Drag
+  chats to reorder them.
+- The right mouse button on a chat in the list opens its menu: Remove
+  chat, Mute or Unmute, Enable ring (groups and channels), Sound... and
+  Show hidden messages.
+- Saved Messages, the last chat, is your own cloud: send files or notes
+  to it from a phone or PC and pick them up on the Amiga, or the other
+  way round. It cannot be removed.
+
+Messages
+- Scroll with the wheel, the scrollbar or the arrow keys. At the top,
+  older messages load and your place is kept.
+- Click the input line to write; a click inside the text moves the
+  cursor. Enter sends, Shift+Enter starts a new line.
+- Click a message to reply to it. The right mouse button on a message
+  opens its menu: React..., Reply, Forward to Saved, Forward to..., and
+  on your own messages Edit and Delete (for everyone).
+- In a group or a channel, someone else's message offers Hide message:
+  it leaves the chat and stays out. "Show hidden messages" in the chat's
+  menu brings it back. In a basic group Telegram also deletes it for
+  you on every device, and that cannot be undone. The text client has
+  /hide (the last message received, or /hide <id>) and /unhide.
+- One tick means sent, two blue ticks read.
+- In groups, "<name> is typing..." shows who is writing, and @ in the
+  input line opens a member list: Up/Down choose, Enter or Tab inserts,
+  Esc closes.
+- Drag across text to select it. Right-Amiga+C copies, Right-Amiga+X
+  cuts from the input line, Right-Amiga+V pastes; the Edit menu has the
+  same.
+- Reactions show under a message with their count, yours highlighted.
+  React... opens a grid of the reactions the chat allows: a click adds
+  one, a click on yours takes it back. When the chat allows more than
+  ten, the last cell is an arrow that opens them all. In the text client
+  /react <name> reacts to the last message received, /reactions lists
+  the names and /ids shows the message numbers that /react <id> <name>,
+  /forward and /forwardto take.
+- Messages edited on another device change here too.
+
+Emoji
+- The smiley next to Send, or "Insert emoji..." (Amiga+E), opens the
+  panel: recent emoji first, then all of them. Arrows move, Enter
+  inserts, Esc closes; a click inserts too.
+- With "Settings > Emoticons become emoji", a typed :) :D ;) :P :( :'(
+  :O :* <3 or xD becomes its emoji after a space or on sending.
+  Backspace right after undoes it.
+- With "Settings > Enable emoji" off, emoji show as text emoticons.
+- Stickers show the emoji they stand for: their picture format cannot
+  be decoded here.
+
+Photos and previews
+- Photos appear in the message, blurred first, then sharp. Videos show
+  a frame and links a preview, the same way.
+- Click a photo for a larger view. "Settings > Full-size photos" opens
+  the largest copy the screen can show. "Save photo as..." (right mouse
+  button, or S in the viewer) saves it in its own format.
+- With "Settings > Show inline photos" off, photos stay [Photo] labels
+  and nothing loads in the background; click a label to see that photo.
+- With "Settings > Show avatars" off, chats keep their coloured initials
+  and no profile pictures are downloaded.
+- Photos, emoji and avatars start off on AGA/ECS/OCS screens (classic
+  OS4 included) and on 68k CPUs below a 68040. A choice in the Settings
+  menu overrides that and is kept.
+- "Settings > Photo dithering" (Full, Light, Off) applies to paletted
+  screens. RTG screens on MorphOS, AmigaOS 4 and AROS use true colour.
+- "Settings > Photo cache limit" keeps photos/ within 10, 50 (the
+  default) or 200 MB, or Unlimited. "Clear cache..." empties photos/ and
+  leaves avatars/ alone.
+
+Files
+- A file shows as [File: name (size)]. Right mouse button > Download
+  saves it in downloads/, or in the drawer chosen with "Settings >
+  Download drawer..." (RAM: is much faster than a slow disk, and a
+  reboot empties it). A file sent without a name gets one from its type,
+  such as video_1a2b3c4d.mp4.
+- Send a file with "Send file..." (Amiga+F), the paperclip left of the
+  input line, or by dropping its icon on the window: up to $upload_limit
+  on this build. "Send photo..." (Amiga+P) sends a JPEG or PNG as a
+  photo, and a dropped picture asks Photo, File or Cancel. Telegram may
+  re-encode photos as JPEG: send a PNG as File to keep it as it is. A
+  photo over 10 MiB goes as a file.
+- The status line shows progress and speed, and Esc cancels. You can
+  keep chatting during a transfer.
+
+Notifications
+- "Settings > Notifications" chooses between nothing, the count in the
+  window title, the count with a pop-up, and a pop-up with the text.
+- With Beep on, a chat that rings plays the built-in chime or a file
+  picked with "Sound file..." (IFF 8SVX, or WAV where a datatype reads
+  it, up to 1 MB). The sounds/ drawer has six to start with.
+- Direct chats ring; groups and channels stay quiet until you choose
+  Enable ring in their menu. A chat muted in Telegram stays muted here.
+  In the text client /ring on and /ring off do the same for the open
+  chat.
+
+Window and screen
+- The window remembers its size and position
+  (data/telegram-gui-win.txt).
+- "Settings > Use own screen" opens the client on a screen of its own;
+  if that screen cannot open, it falls back to a window.
+- "Iconify" (Amiga+I) leaves an icon on the Workbench; double-click it
+  to come back.
+EOT
+}
+
+manual_window_it() {
+    [ "$gui_icon" = "1" ] || return 0
+    cat <<EOT
+Usare la finestra
+-----------------
+Chat
+- A sinistra la lista chat, a destra la chat aperta. I tasti da F1 a F10
+  aprono le chat da 1 a 10, Shift+F1..F10 quelle da 11 a 20.
+- Ogni chat mostra i messaggi non letti finche' non la apri.
+- La casella di ricerca in alto a sinistra trova una chat su Telegram
+  quando premi Invio, e la aggiunge alla lista.
+- Del, Amiga-destro+R o "Remove chat from list" toglie una chat. La
+  ricerca la trova ancora, segnata (hidden), e aprirla la rimette in
+  lista. Trascina le chat per cambiarne l'ordine.
+- Il tasto destro su una chat della lista apre il suo menu: Remove chat,
+  Mute o Unmute, Enable ring (gruppi e canali), Sound... e Show hidden
+  messages.
+- I Messaggi salvati, l'ultima chat, sono il tuo cloud: mandaci file o
+  appunti dal telefono o dal PC e riprendili sull'Amiga, o al contrario.
+  Non si possono togliere.
+
+Messaggi
+- Scorri con la rotella, la barra o le frecce. In cima si caricano i
+  messaggi piu' vecchi e il punto in cui eri resta fermo.
+- Clicca la riga di input per scrivere; un click dentro il testo sposta
+  il cursore. Invio manda, Shift+Invio va a capo.
+- Clicca un messaggio per rispondere. Il tasto destro su un messaggio
+  apre il suo menu: React..., Reply, Forward to Saved, Forward to..., e
+  sui tuoi messaggi Edit e Delete (per tutti).
+- In un gruppo o in un canale, sul messaggio di un altro c'e' Hide
+  message: esce dalla chat e resta fuori. "Show hidden messages" nel
+  menu della chat lo riporta. In un gruppo semplice Telegram lo cancella
+  anche per te su tutti i dispositivi, e non si torna indietro. Nel
+  client testuale ci sono /hide (l'ultimo messaggio ricevuto, o
+  /hide <id>) e /unhide.
+- Una spunta vuol dire inviato, due spunte azzurre letto.
+- Nei gruppi "<nome> is typing..." dice chi sta scrivendo, e @ nella
+  riga di input apre l'elenco dei membri: Su/Giu' scelgono, Invio o Tab
+  inserisce, Esc chiude.
+- Trascina sul testo per selezionarlo. Amiga-destro+C copia,
+  Amiga-destro+X taglia dalla riga di input, Amiga-destro+V incolla; il
+  menu Edit fa lo stesso.
+- Le reazioni compaiono sotto un messaggio con il loro numero, la tua
+  evidenziata. React... apre una griglia con le reazioni che la chat
+  permette: un click ne aggiunge una, un click sulla tua la toglie. Se
+  la chat ne permette piu' di dieci, l'ultima casella e' una freccia che
+  le apre tutte. Nel client testuale /react <nome> reagisce all'ultimo
+  messaggio ricevuto, /reactions elenca i nomi e /ids mostra i numeri
+  dei messaggi che /react <id> <nome>, /forward e /forwardto accettano.
+- I messaggi modificati da un altro dispositivo cambiano anche qui.
+
+Emoji
+- La faccina accanto a Send, o "Insert emoji..." (Amiga+E), apre il
+  pannello: prima le emoji recenti, poi tutte. Le frecce si muovono,
+  Invio inserisce, Esc chiude; anche un click inserisce.
+- Con "Settings > Emoticons become emoji", un :) :D ;) :P :( :'( :O :*
+  <3 o xD scritto diventa la sua emoji dopo uno spazio o all'invio.
+  Backspace subito dopo lo annulla.
+- Con "Settings > Enable emoji" spento, le emoji diventano emoticon
+  testuali.
+- Gli sticker mostrano l'emoji che rappresentano: il formato della loro
+  immagine qui non si decodifica.
+
+Foto e anteprime
+- Le foto compaiono nel messaggio, prima sfocate, poi nitide. I video
+  mostrano un fotogramma e i link un'anteprima, allo stesso modo.
+- Clicca una foto per vederla piu' grande. "Settings > Full-size
+  photos" apre la copia piu' grande che lo schermo puo' mostrare. "Save
+  photo as..." (tasto destro, o S nel visualizzatore) la salva nel suo
+  formato.
+- Con "Settings > Show inline photos" spento, le foto restano etichette
+  [Photo] e non si carica niente in sottofondo; clicca un'etichetta per
+  vedere quella foto.
+- Con "Settings > Show avatars" spento, le chat tengono le iniziali
+  colorate e non si scaricano le foto profilo.
+- Foto, emoji e avatar partono spenti sugli schermi AGA/ECS/OCS (OS4
+  classic compreso) e sulle CPU 68k sotto il 68040. Una scelta nel menu
+  Settings vale al posto di questa e resta memorizzata.
+- "Settings > Photo dithering" (Full, Light, Off) vale per gli schermi a
+  palette. Gli schermi RTG di MorphOS, AmigaOS 4 e AROS usano i colori
+  veri.
+- "Settings > Photo cache limit" tiene photos/ entro 10, 50 (il valore
+  di partenza) o 200 MB, oppure Unlimited. "Clear cache..." svuota
+  photos/ e non tocca avatars/.
+
+File
+- Un file compare come [File: nome (dimensione)]. Tasto destro >
+  Download lo salva in downloads/, o nel cassetto scelto con "Settings >
+  Download drawer..." (RAM: e' molto piu' veloce di un disco lento, e un
+  riavvio la svuota). Un file mandato senza nome ne prende uno dal suo
+  tipo, come video_1a2b3c4d.mp4.
+- Manda un file con "Send file..." (Amiga+F), con la graffetta a
+  sinistra della riga di input o trascinandone l'icona sulla finestra:
+  fino a $upload_limit su questa build. "Send photo..." (Amiga+P) manda
+  un JPEG o un PNG come foto, e un'immagine trascinata chiede Photo, File
+  o Cancel. Telegram puo' ricodificare le foto in JPEG: manda un PNG come
+  File per tenerlo com'e'. Una foto oltre 10 MiB parte come file.
+- La riga di stato mostra avanzamento e velocita', ed Esc annulla.
+  Durante un trasferimento puoi continuare a scrivere.
+
+Notifiche
+- "Settings > Notifications" sceglie fra niente, il numero nel titolo
+  della finestra, il numero con un pop-up, e un pop-up con il testo.
+- Con Beep acceso, una chat che suona fa sentire il campanello interno
+  o un file scelto con "Sound file..." (IFF 8SVX, o WAV dove un datatype
+  lo legge, fino a 1 MB). Il cassetto sounds/ ne ha sei per cominciare.
+- Le chat dirette suonano; gruppi e canali restano zitti finche' non
+  scegli Enable ring nel loro menu. Una chat silenziata in Telegram resta
+  silenziata anche qui. Nel client testuale /ring on e /ring off fanno
+  lo stesso per la chat aperta.
+
+Finestra e schermo
+- La finestra ricorda dimensione e posizione
+  (data/telegram-gui-win.txt).
+- "Settings > Use own screen" apre il client su uno schermo suo; se lo
+  schermo non si apre, torna alla finestra.
+- "Iconify" (Amiga+I) lascia un'icona sul Workbench; doppio click per
+  tornare.
+EOT
+}
+
 write_manual_en() {
+    window_section=$(manual_window_en)
+    [ -z "$window_section" ] || window_section="$window_section
+
+"
     cat > "$1" <<EOF
-Unofficial Telegram Amiga -- User Manual (English)
-==================================================
+Unofficial Telegram Amiga: user manual
+======================================
 
 Platform: $2
 Version: $VERSION   Build: $COMMIT_ID
 
-Telegram Amiga is a from-scratch, native MTProto Telegram client. You log in
-with a normal Telegram account, see your chats and exchange messages. There are
-no external dependencies (no MUI, no ixemul, no AmiSSL): all the cryptography
-(RSA, Diffie-Hellman, SRP/2FA, AES, SHA) is built in. It is an unofficial
-client: it uses the Telegram API and is part of the Telegram ecosystem, but it
-is not made by Telegram.
+A native Telegram client written from scratch on Telegram's MTProto
+protocol. You log in with a normal Telegram account. It needs no MUI, no
+ixemul and no AmiSSL: the cryptography is built in. It uses the Telegram
+API but is not made by Telegram.
 
 System requirements
 -------------------
@@ -615,238 +738,78 @@ $req_en
 
 $launchers_title_en
 $gui_entry_en$tui_entry_en
-  Long transcript lines wrap by words on narrow screens; continuation rows are
-  indented. The composer grows to three rows, and Shift+Up/Down scrolls by
-  complete logical messages.
-  To quit it: /quit, Ctrl+C, or the window's close gadget. The window then
-  stays so you can read the last lines: one more click on the close gadget
-  dismisses it.
-  Sending by drag-and-drop: type "/sendfile " for a document or "/photo "
-  for a JPEG or PNG photo (words after the path become the caption), then drop
-  the icon straight onto the console window
-  (AmigaOS 3.x, MorphOS, AROS) or onto the "TG drop" Workbench icon (AmigaOS
-  4.x, where the system reserves window drops); the path appears in the input
-  line, Enter sends.
 
-First start (logging in)
-------------------------
+The text client
+---------------
+Long lines wrap by words and the composer grows to three rows.
+Shift+Up/Down scrolls by whole messages. To send a file, type "/sendfile "
+for a document or "/photo " for a JPEG or PNG (words after the path become
+the caption), then drop the file's icon on the console window, or on the
+"TG drop" icon on AmigaOS 4, where the system keeps window drops for
+itself. The path appears in the input line and Enter sends. Quit with
+/quit, Ctrl+C or the close gadget; the window stays open so you can read
+the last lines, and one more click on the gadget closes it.
+
+First start
+-----------
 $first_start_en
 
-Using the GUI
+${window_section}Message times
 -------------
-- Left: your chat list, with an unread count badge per chat (it persists across
-  restarts and clears when you open the chat).
-- Click a chat to open it; the conversation is on the right.
-- Scroll with the wheel, the scrollbar knob or the arrow keys. Scroll to the
-  very top to load older history (it pulls the previous page and keeps your
-  place).
-- Click the input line and type to compose; long messages wrap over several
-  lines. Press Enter to send, Shift+Enter to start a new line. To reply to a
-  message, click its bubble (or right-click it for a context menu) -- it is
-  sent as a reply, with the quoted line
-  shown above it. The menu highlights the item under the pointer; on your
-  OWN messages it also offers Edit (change the text) and Delete (remove for
-  everyone). In a group or a channel, someone else's message offers Hide
-  message instead: it leaves the chat and stays out on every reload, and
-  "Show hidden messages" in that chat's right-click menu in the list brings
-  them back. In a basic group (a small group Telegram never turned into a
-  supergroup) Telegram also deletes it for you alone, so it goes from your
-  other devices too and cannot come back. In the text client /hide hides
-  the last message received (or /hide <id> that one) and /unhide brings the
-  chat's back. Sent messages show a delivery tick: one check = sent, two blue
-  checks = read by the other side -- it updates live.
-- Chat-list avatars show each peer's real profile picture: a blurred preview
-  appears as soon as the chat list loads, and it turns crisp shortly after you
-  open that chat (the photo is cached in the avatars/ drawer).
-  "Settings > Show avatars" turns them off: the coloured initials stay and
-  nothing is downloaded or decoded for them. Like the photos and the emoji it
-  starts off on AGA/ECS/OCS screens (including classic OS4) or 68k CPUs below
-  68040; a manual choice overrides it and is remembered.
-- Photos sent in a conversation appear inside their message bubble. The blurred
-  preview embedded in the message appears without a network request, then the
-  downloaded image replaces it through progressively sharper passes. JPEGs and
-  decoded RGB pixels are cached in photos/, so a viewed chat reopens without
-  repeating the JPEG decode. [Photo] remains the safe fallback on failure.
-- Click a photo to open a fixed-size viewer with a larger copy. It appears first
-  as one complete coarse image, then refines through sharper quality passes;
-  the same window is reused. The larger cache has a -l.jpg suffix in photos/.
-- Right-click a photo (or its [Photo] label) and choose "Save photo as..." to
-  save the received image under any drawer and name. The suggested extension
-  follows the bytes: .png for PNG, .jpg for JPEG, with no conversion. Press S
-  in the open viewer for the same requester. An uncached image is fetched
-  before the requester opens; replacing an existing file requires confirmation.
-- The first-run default is off on native AGA/ECS/OCS screens (also on classic
-  OS4) or when the 68k CPU is below a 68040; explicit toggles override it and are
-  remembered. On any slower machine, uncheck "Settings > Show inline photos".
-  The conversation returns to lightweight [Photo] labels and does no background
-  photo fetch or decode work. Click an individual [Photo] label to load only
-  that image in the viewer. The choice is remembered for the next run.
-- "Settings > Enable emoji" controls the picker, its composer button and
-  graphical emoji in messages. Off closes the picker, restores text emoticons
-  and keeps any emoji already entered in the composer. Its choice is saved
-  independently of photos. It defaults off on AGA/ECS/OCS screens (including
-  classic OS4) or 68k CPUs below 68040; a manual choice overrides it. When
-  enabled, emoji are at least 16 pixels, including with Topaz 8 on OS3. The
-  font stays unchanged and the rows make room; Off restores compact text rows.
-  Avatar sizes stay unchanged when switching emoji on or off.
-- "Settings > Emoticons become emoji" (on by default, with emoji enabled):
-  a typed :) :D ;) :P :( :'( :O :* <3 or xD, standing alone, becomes its
-  emoji when a space follows it or the message is sent. Backspace straight
-  after brings the typed characters back.
-- Videos show a frame and a pasted link shows its preview, with the picture
-  when the page has one. Both go through the same photo pipeline, so the same
-  "Show inline photos" setting governs them. Stickers show the emoji they
-  stand for; their picture is a format this client cannot decode.
-- "Settings > Photo dithering" controls pen-grid photo quality: Full is the
-  default, Light uses a gentler pattern, and Off uses direct colour matching.
-  It affects paletted screens only. Compatible MorphOS, AmigaOS 4 and AROS RTG
-  screens use truecolour pixels and fall back to the pen path automatically if
-  their graphics driver rejects it.
-- "Settings > Photo cache limit" keeps photos/ bounded at 10, 50 or 200 MB
-  (50 MB by default); Unlimited is available when disk space is not a concern.
-  Old files are removed during idle time, while photos currently on screen stay
-  available. "Settings > Clear cache..." asks for confirmation, deletes only
-  photos/ (never avatars/) and keeps already displayed photos on screen.
-- To send a JPEG or PNG as a Telegram photo, use "Send photo..." in the
-  Telegram menu (Amiga+P). Dropping a .jpg/.jpeg/.png on the GUI asks Photo,
-  File or Cancel; ESC also cancels. The file's own bytes decide, not its name,
-  and Telegram's photo limits (width plus height at most 10000, at most 20:1)
-  are checked before anything is uploaded. A photo over 10 MiB is preserved
-  and sent as a document instead. Telegram can re-encode photos as JPEG;
-  choose File, then Download, to preserve an original PNG unchanged.
-- The paperclip at the left of the composer opens the attachment chooser.
-  JPEG/PNG attachments offer Photo, File or Cancel with a caption; other files
-  use normal file upload. The button also works with emoji and photos disabled.
-- "Insert emoji..." in the Telegram menu (Amiga+E), or the smiley button next
-  to Send, opens a panel above the composer: the recent ones first, then the
-  whole set. Arrow keys move, ENTER
-  inserts and keeps the panel open, ESC closes it; a click inserts too. In the
-  composer an emoji shows as a small picture and is edited as one character.
-- Right-click a message and choose "Forward to Saved Messages" for a one-click
-  cloud copy, or "Forward to..." to select another chat with the normal search.
-- Reactions show under a message as small chips, an emoji with its count,
-  yours highlighted. Right-click a message and choose "React...": a grid
-  opens with the reactions the chat allows (ten common ones where all are),
-  yours on the accent colour; a click adds one, and choosing yours again
-  takes it back. When there are more, the last cell is an arrow that opens
-  them all. When a group
-  does not allow that reaction, the status line says so. In the text client
-  the counts follow the line, /react <name> adds one to the last message
-  received (/reactions lists the names), and /ids shows the numbers that
-  /react <id> <name>, /forward and /forwardto take.
-- New messages: "Settings > Notifications" chooses the count in the title,
-  the pop-up, or nothing. With Beep on, a chat that rings plays a sound:
-  the built-in chime, or a file picked with "Sound file..." (IFF 8SVX, or
-  WAV where a datatype reads it, up to 1 MB); the sounds/ drawer has six
-  to start with. Choosing one plays it at once. Right-click a chat in the
-  list for Mute, Enable ring (groups and channels start quiet) and a
-  "Sound..." of its own. In the text client /ring on and /ring off do the
-  same for the open chat, and /ring alone says whether it rings.
-- In groups, type @ in the composer to autocomplete a member: a small list
-  pops up above the input line -- Up/Down select, Enter or Tab inserts
-  @username, Esc closes, typing narrows the matches.
-- FILES: a message carrying a file shows as [File: name (size)]. Right-click
-  it and pick Download -- the file lands in the downloads/ drawer. To send
-  one, use "Send file..." (Amiga+F) from the Telegram menu or from the
-  right-click menu in the conversation, where "Send photo..." sits next to
-  it: a standard file requester picks it, up to $upload_limit on this build.
-  You can also DROP a file icon on the window to send it. Transfers show
-  the percentage and speed in the status line and ESC cancels them, while
-  the client stays usable -- keep chatting while a file moves.
-  To download somewhere else (a RAM: drawer is much quicker on a floppy
-  or slow disk), pick it with "Settings > Download drawer..." -- or put
-  that path on a single line in data/telegram-downloads.txt, e.g. RAM:TGdl
-  -- remember RAM: is emptied by a reboot.
-- SAVED MESSAGES: the last chat in the list is you. Send files or notes to
-  it from your phone or PC and pick them up on the Amiga (or the other way
-  round) -- Telegram's cloud as your transfer drawer. It cannot be removed.
-- Click inside the composer or the search box to place the text cursor
-  exactly where you want to edit.
-- Drag across transcript or composer text to select it. Right-Amiga+C copies;
-  Right-Amiga+X cuts selected composer text; Right-Amiga+V pastes. The same
-  actions are in the Telegram menu.
-- Edits made from another Telegram client update the visible message live.
-  Incoming activity also keeps updating while you type.
-- "Iconify" in the Telegram menu (Amiga+I) closes the window and leaves a
-  TelegramAmiga icon on the Workbench: double-click it to come back.
-- F1..F10 jump to chats 1..10 (Shift+F1..F10 to 11..20).
-- Search box (top-left): type a name and press Enter to find a chat on Telegram
-  and add it to the list -- useful for chats not shown yet. A removed chat stays
-  available in this local filter with a (hidden) marker; opening it restores it.
-- Remove a chat from the list: the Telegram menu (right mouse button), the Del
-  key, or right-Amiga+R (with a confirm). Re-add it later via Search.
-- Reorder the list by drag and drop. Removals, order and unread badges persist.
-- In groups, "<name> is typing..." appears while someone writes.
-
-Emoji and styling
------------------
-Emoji are shown as classic text emoticons (:) :D <3) because Amiga fonts have no
-emoji glyphs; bold/italic/code formatting is rendered with the system font.
-
-Message times
--------------
-Message times follow your Amiga system clock -- the same time Workbench shows --
-so they always match your machine. Just set the Amiga clock to your correct
-local time in the system preferences; there is no separate timezone to set in
-the client (it reads the system clock directly, DST and all).
-
-Window position and own screen
-------------------------------
-The window remembers its size AND position across restarts
-(telegram-gui-win.txt next to the program). To open the GUI on its OWN screen
-(its own "page"), edit that file and append the word own to the geometry line,
-e.g. "820 560 100 50 own"; remove the word to go back to a Workbench window.
-If the screen cannot open (low memory), the program falls back to a normal
-window automatically.
+Times follow the Amiga clock, so set it in the system preferences. If
+the clock was never set (no battery clock), the client takes Telegram's
+time with the time zone from the Locale preferences.
 
 $notes_en
 
-Privacy and safety
-------------------
-telegram-auth.bin holds the saved authorization for your Telegram account: keep
-it private and never share it. Do not download or copy anyone else's
-telegram-auth.bin. When sharing screenshots, hide phone numbers, login codes,
-passwords and private messages.
+Privacy
+-------
+telegram-auth.bin is your logged-in session: never share it, and never
+use someone else's. In screenshots hide phone numbers, codes, passwords
+and private messages.
 
-Advanced: the bundled data/telegram-api.txt holds public Telegram API app
-credentials. Advanced users may replace it with their own (two lines: api_id
-then api_hash).
+data/telegram-api.txt holds the public api credentials the client uses.
+You may replace it with your own: two lines, api_id then api_hash.
 
-Contributions: Javier de las Rivas (javierdlr), and Bohun (bohunamiga), who
-took the build to AROS on ARM. The icon is our own design: Carlo Spadoni
-optimised it for each system, put it on a standard drawer for the drawer
-icon, and let me ship his versions.
-${thanks68k_line_en}Thanks to the testers around the world who run this on real hardware and
-send back what they find -- this client is what it is because of them.
+Credits
+-------
+Contributions: Javier de las Rivas (javierdlr), and Bohun (bohunamiga),
+who took the build to AROS on ARM. The icon is our own design: Carlo
+Spadoni optimised it for each system, put it on a standard drawer for
+the drawer icon, and let me ship his versions.
+${thanks68k_line_en}Thanks to the testers who run it on real hardware and report what they
+find.
 
 The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
-1.1) reduced to sixteen pixels; the licence text ships in the archive.
+1.1) reduced to sixteen pixels; the licence text is in the archive.
 
 Support my work on Patreon: $SUPPORT_URL
 or with a one-time tip on Ko-fi: $KOFI_URL
-Contributions are voluntary; no subscription is required to use this
-software. Both links are also under "Support development..." in the
-window's Telegram menu, and at the end of /help in the text client.
+It is voluntary: nothing is needed to use the program. Both links are
+also under "Support development..." in the Telegram menu and at the end
+of /help in the text client.
 
-License: MIT -- a non-commercial community project. Diary:
+License: MIT. A non-commercial community project. Diary:
 https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/
 EOF
 }
 
 write_manual_it() {
+    window_section=$(manual_window_it)
+    [ -z "$window_section" ] || window_section="$window_section
+
+"
     cat > "$1" <<EOF
-Unofficial Telegram Amiga -- Manuale Utente (Italiano)
-======================================================
+Unofficial Telegram Amiga: manuale
+==================================
 
 Piattaforma: $2
 Versione: $VERSION   Build: $COMMIT_ID
 
-Telegram Amiga e' un client MTProto per Telegram scritto da zero, nativo. Accedi
-con un normale account Telegram, vedi le tue chat e scambi messaggi. Nessuna
-dipendenza esterna (niente MUI, niente ixemul, niente AmiSSL): tutta la
-crittografia (RSA, Diffie-Hellman, SRP/2FA, AES, SHA) e' integrata. E' un
-client non ufficiale: usa le API di Telegram e fa parte dell'ecosistema
-Telegram, ma non e' fatto da Telegram.
+Un client Telegram nativo, scritto da zero sul protocollo MTProto di
+Telegram. Accedi con un normale account Telegram. Non servono MUI, ixemul
+o AmiSSL: la crittografia e' integrata. Usa le API di Telegram ma non e'
+fatto da Telegram.
 
 Requisiti di sistema
 --------------------
@@ -854,226 +817,63 @@ $req_it
 
 $launchers_title_it
 $gui_entry_it$tui_entry_it
-  Le righe lunghe vanno a capo per parole sugli schermi stretti, con un piccolo
-  rientro nelle continuazioni. Il composer cresce fino a tre righe e
-  Shift+Su/Giu scorre per messaggi logici completi.
-  Per uscire: /quit, Ctrl+C o il gadget di chiusura della finestra. La
-  finestra poi resta aperta per farti leggere le ultime righe: un altro
-  click sul gadget la congeda.
-  Per il drag-and-drop scrivi "/sendfile " per un documento oppure "/photo "
-  per una foto JPEG o PNG (le parole dopo il percorso diventano la didascalia),
-  poi trascina l'icona direttamente sulla finestra console
-  (AmigaOS 3.x, MorphOS, AROS) o sull'icona Workbench "TG drop" (AmigaOS 4.x,
-  dove i drop sulla finestra sono riservati al sistema); il percorso compare
-  nella riga di input, Invio lo spedisce.
 
-Primo avvio (accesso)
----------------------
+Il client testuale
+------------------
+Le righe lunghe vanno a capo per parole e il composer cresce fino a tre
+righe. Shift+Su/Giu' scorre per messaggi interi. Per mandare un file
+scrivi "/sendfile " per un documento o "/photo " per un JPEG o PNG (le
+parole dopo il percorso diventano la didascalia), poi trascina l'icona
+del file sulla finestra console, o sull'icona "TG drop" su AmigaOS 4,
+dove i drop sulle finestre li tiene il sistema. Il percorso compare nella
+riga di input e Invio lo manda. Per uscire: /quit, Ctrl+C o il gadget di
+chiusura; la finestra resta aperta per leggere le ultime righe, e un
+altro click sul gadget la chiude.
+
+Primo avvio
+-----------
 $first_start_it
 
-Usare la GUI
-------------
-- A sinistra: la lista chat, con un badge dei messaggi non letti per chat
-  (persiste al riavvio e si azzera quando apri la chat).
-- Clicca una chat per aprirla; la conversazione e' a destra.
-- Scorri con la rotella, il cursore della barra o le frecce. Scorri fino in cima
-  per caricare la storia piu' vecchia (tira la pagina precedente mantenendo la
-  posizione).
-- Clicca la riga di input e scrivi; i messaggi lunghi vanno a capo su piu' righe.
-  Premi Invio per inviare, Shift+Invio per andare a capo. Per rispondere a un
-  messaggio, clicca la sua bolla (o tasto destro per il menu contestuale) --
-  parte come risposta, con la citazione mostrata
-  sopra. Il menu evidenzia la voce sotto il puntatore; sui TUOI messaggi
-  offre anche Edit (modifica il testo) e Delete (elimina per tutti). In un
-  gruppo o in un canale, sui messaggi degli altri offre invece Hide message:
-  il messaggio esce dalla chat e resta fuori a ogni ricarica, e "Show hidden
-  messages" nel menu del tasto destro di quella chat nell'elenco li riporta.
-  In un gruppo semplice (un gruppo piccolo che Telegram non ha mai fatto
-  diventare supergruppo) Telegram lo cancella anche per te solo, quindi
-  sparisce pure dagli altri tuoi dispositivi e non puo' tornare. Nel client
-  testuale /hide nasconde l'ultimo messaggio ricevuto (o /hide <id> quello)
-  e /unhide riporta quelli della chat. I messaggi
-  inviati mostrano la spunta: una = inviato, due azzurre = letto -- in tempo reale.
-- Gli avatar della lista chat mostrano la vera foto profilo: un'anteprima
-  sfocata appare subito col caricamento della lista, e diventa nitida poco dopo
-  che apri quella chat (la foto viene salvata nel cassetto avatars/).
-  "Settings > Show avatars" li spegne: restano le iniziali colorate e non si
-  scarica ne' decodifica nulla per loro. Come foto ed emoji parte spento su
-  schermi AGA/ECS/OCS (anche OS4 classic) oppure con CPU 68k sotto il 68040;
-  una scelta manuale sostituisce il default e resta memorizzata.
-- Le foto inviate in conversazione appaiono dentro la loro bolla. L'anteprima
-  sfocata inclusa nel messaggio compare senza richieste di rete, poi viene
-  sostituita da passate sempre piu' nitide. JPEG e pixel RGB decodificati sono
-  salvati in photos/, quindi riaprire una chat gia' vista non ripete il decode.
-  [Photo] resta il ripiego se Telegram non rende disponibile l'immagine.
-- Clicca una foto per aprire un viewer a dimensione fissa con una copia piu'
-  grande. Appare subito intera e sgranata, poi si rifinisce con passate sempre
-  piu' nitide; la stessa finestra viene riutilizzata. La copia grande in
-  photos/ ha il suffisso -l.jpg.
-- Click destro su una foto (o sulla sua etichetta [Photo]) e scegli
-  "Save photo as..." per salvare l'immagine ricevuta con drawer e nome a scelta.
-  L'estensione suggerita segue i byte: .png per PNG, .jpg per JPEG, senza
-  conversioni. Nel viewer premi S per lo stesso requester. Se la foto non e'
-  in cache viene scaricata prima di aprirlo; sostituire un file chiede conferma.
-- Il primo avvio parte senza foto inline su schermi AGA/ECS/OCS (anche OS4
-  classic) oppure con CPU 68k inferiore al 68040; ogni scelta esplicita
-  sostituisce il default e resta memorizzata. Su una macchina lenta togli la
-  spunta da "Settings > Show inline photos" nel menu
-  Telegram. La conversazione torna alle leggere etichette [Photo] e non avvia
-  download o decodifiche in background. Clicca una singola [Photo] per caricare
-  solo quella immagine nel viewer. La scelta resta memorizzata al riavvio.
-- "Settings > Enable emoji" controlla il pannello, la faccina del composer e
-  le emoji grafiche nei messaggi. Off chiude il pannello, mostra emoticon
-  testuali e conserva le emoji gia' inserite nel composer. La scelta viene
-  salvata separatamente dalle foto. Parte spento su schermi AGA/ECS/OCS
-  (anche OS4 classic) oppure con CPU 68k sotto il 68040; una scelta manuale
-  sostituisce il default. Quando attivo le emoji sono di almeno 16 pixel,
-  anche con Topaz 8 su OS3: il font resta uguale e le righe fanno spazio.
-  Off ripristina le righe compatte con emoticon testuali.
-  La dimensione degli avatar resta uguale attivando o disattivando le emoji.
-- "Settings > Emoticons become emoji" (acceso di default, con le emoji
-  attive): un :) :D ;) :P :( :'( :O :* <3 o xD scritto da solo diventa la
-  sua emoji quando lo segue uno spazio o il messaggio parte. Backspace
-  subito dopo rimette i caratteri scritti.
-- I video mostrano un fotogramma e un link incollato mostra la sua anteprima,
-  con l'immagine se la pagina ne ha una. Passano dalla stessa pipeline delle
-  foto, quindi li governa la stessa impostazione "Show inline photos". Gli
-  sticker mostrano l'emoji che rappresentano: la loro immagine e' in un
-  formato che questo client non sa decodificare.
-- "Settings > Photo dithering" regola la resa delle foto a penne: Full e' il
-  valore predefinito, Light usa una trama piu' leggera e Off usa i colori
-  diretti. Vale solo sugli schermi a palette. Gli schermi RTG compatibili di
-  MorphOS, AmigaOS 4 e AROS usano pixel truecolor e tornano automaticamente
-  alle penne se il driver non accetta quel percorso.
-- "Settings > Photo cache limit" mantiene photos/ entro 10, 50 o 200 MB
-  (50 MB predefiniti); Unlimited e' disponibile quando lo spazio disco non e'
-  un problema. I file piu' vecchi vengono rimossi durante i momenti inattivi,
-  mentre le foto gia' visibili restano a schermo. "Settings > Clear cache..." chiede
-  conferma, svuota solo photos/ (mai avatars/) e conserva le immagini mostrate.
-- Per inviare un JPEG o un PNG come vera foto Telegram usa "Send photo..." nel
-  menu Telegram (Amiga+P). Trascinando un .jpg/.jpeg/.png sulla GUI puoi
-  scegliere Photo, File o Cancel; anche ESC annulla. Decidono i byte del file,
-  non il nome, e i limiti Telegram per le foto (larghezza piu' altezza al
-  massimo 10000, al massimo 20:1) sono controllati prima di caricare. Oltre
-  10 MiB viene inviato come file. Telegram puo' ricodificare le foto in JPEG;
-  scegli File e poi Download per conservare una PNG originale senza modifiche.
-- La graffetta a sinistra del composer apre il selettore degli allegati.
-  JPEG e PNG offrono Photo, File o Cancel con didascalia; gli altri file
-  seguono l'invio normale. Funziona anche con emoji e foto disabilitate.
-- "Insert emoji..." nel menu Telegram (Amiga+E), o la faccina accanto a
-  Send, apre un pannello sopra il composer: prima le emoji recenti, poi tutte. Le frecce si muovono, ENTER
-  inserisce e lascia il pannello aperto, ESC lo chiude; anche un click
-  inserisce. Nel composer un'emoji appare come una piccola figura e si
-  modifica come un carattere solo.
-- Click destro su un messaggio: "Forward to Saved Messages" lo copia con un
-  click nel proprio cloud; "Forward to..." permette di scegliere un'altra chat
-  usando la ricerca normale.
-- Le reazioni compaiono sotto un messaggio come piccole etichette, emoji e
-  numero, la tua evidenziata. Click destro su un messaggio, "React...": si
-  apre una griglia con le reazioni che la chat permette (dieci comuni dove
-  le permette tutte), la tua sul colore d'accento; un click ne aggiunge
-  una, scegliendo di nuovo la tua la togli. Quando ce ne sono di piu',
-  l'ultima casella e' una freccia che le apre tutte. Se
-  il gruppo non permette quella reazione, lo dice la riga di stato. Nel
-  client testuale i conteggi seguono la riga, /react <nome> ne aggiunge
-  una all'ultimo messaggio ricevuto (/reactions elenca i nomi) e /ids
-  mostra i numeri dei messaggi che /react <id> <nome>, /forward e
-  /forwardto accettano.
-- Nuovi messaggi: "Settings > Notifications" sceglie il conteggio nel
-  titolo, il pop-up o niente. Con Beep attivo, una chat che suona fa
-  sentire un suono: il campanello interno, o un file scelto con "Sound
-  file..." (IFF 8SVX, o WAV dove un datatype lo legge, fino a 1 MB); il
-  cassetto sounds/ ne ha sei per cominciare. Quando lo scegli suona subito.
-  Click destro su una chat nell'elenco per Mute, Enable ring (gruppi e
-  canali partono muti) e un "Sound..." tutto suo. Nel client testuale
-  /ring on e /ring off fanno lo stesso per la chat aperta, e /ring da solo
-  dice se suona.
-- Nei gruppi, digita @ nel composer per completare un membro: compare una
-  listina sopra la riga di input -- Su/Giu' selezionano, Invio o Tab inserisce
-  @username, Esc chiude, digitando filtri i risultati.
-- FILE: un messaggio con allegato appare come [File: nome (dimensione)].
-  Click destro -> Download e il file finisce nel cassetto downloads/. Per
-  inviarne uno usa "Send file..." (Amiga+F) dal menu Telegram oppure dal
-  menu del click destro nella conversazione, dove accanto trovi anche
-  "Send photo...": lo scegli dal requester di sistema, fino a $upload_limit
-  su questa build. Puoi anche TRASCINARE l'icona di un file sulla finestra.
-  Durante i trasferimenti vedi percentuale e velocita' nella riga di stato,
-  ESC annulla, e il client resta usabile: puoi continuare a chattare.
-  Per scaricare altrove (un cassetto in RAM: e' molto piu' rapido su
-  floppy o dischi lenti) scegli "Settings > Download drawer...", oppure scrivi
-  il percorso su una riga sola in
-  data/telegram-downloads.txt, per esempio RAM:TGdl -- ricorda che RAM:
-  si svuota al riavvio.
-- MESSAGGI SALVATI: l'ultima chat della lista sei tu. Mandaci file o appunti
-  dal telefono o dal PC e riprendili sull'Amiga (o viceversa) -- il cloud di
-  Telegram come cassetto di scambio. Non si puo' rimuovere.
-- Un click dentro il composer o la casella di ricerca posiziona il cursore
-  esattamente dove vuoi correggere.
-- Trascina sul testo della conversazione o del composer per selezionarlo.
-  Amiga-destro+C copia; Amiga-destro+X taglia il testo selezionato nel composer;
-  Amiga-destro+V incolla. Le stesse azioni sono nel menu Telegram.
-- Le modifiche fatte da un altro client Telegram aggiornano il messaggio
-  visibile in tempo reale. Anche l'attivita' in arrivo continua mentre scrivi.
-- "Iconify" nel menu Telegram (Amiga+I) chiude la finestra e lascia
-  un'icona TelegramAmiga sul Workbench: doppio click per tornare.
-- F1..F10 saltano alle chat 1..10 (Shift+F1..F10 alle 11..20).
-- Casella di ricerca (in alto a sinistra): scrivi un nome e premi Invio per
-  trovare una chat su Telegram e aggiungerla alla lista -- utile per chat non
-  ancora mostrate. Una chat rimossa resta nel filtro locale col marker (hidden):
-  aprendola torna nella lista.
-- Rimuovi una chat dalla lista: menu Telegram (tasto destro), tasto Del, oppure
-  Amiga-destro+R (con conferma). La riaggiungi poi con la Ricerca.
-- Riordina la lista col trascinamento. Rimozioni, ordine e badge persistono.
-- Nei gruppi compare "<nome> sta scrivendo..." mentre qualcuno scrive.
-
-Emoji e stile
--------------
-Le emoji appaiono come emoticon testuali classiche (:) :D <3) perche' i font
-Amiga non hanno glifi emoji; grassetto/corsivo/code usano il font di sistema.
-
-Orari dei messaggi
+${window_section}Orari dei messaggi
 ------------------
-Gli orari dei messaggi seguono l'orologio di sistema dell'Amiga -- lo stesso che
-mostra Workbench -- quindi coincidono sempre con la tua macchina. Basta impostare
-l'orologio dell'Amiga all'ora locale corretta nelle preferenze; non c'e' un fuso
-orario separato da configurare nel client (legge l'orologio di sistema, DST
-compresa).
-
-Posizione finestra e schermo proprio
-------------------------------------
-La finestra ricorda dimensione E posizione tra i riavvii (telegram-gui-win.txt
-accanto al programma). Per aprire la GUI su un SUO schermo (una "pagina"
-propria), modifica quel file aggiungendo la parola own in coda alla riga della
-geometria, es. "820 560 100 50 own"; togli la parola per tornare alla finestra
-su Workbench. Se lo schermo non si puo' aprire (poca memoria), il programma
-ripiega automaticamente sulla finestra normale.
+Gli orari seguono l'orologio dell'Amiga, quindi impostalo nelle
+preferenze di sistema. Se l'orologio non e' mai stato impostato (niente
+orologio a batteria), il client prende l'ora di Telegram con il fuso
+delle preferenze Locale.
 
 $notes_it
 
-Privacy e sicurezza
--------------------
-telegram-auth.bin contiene l'autorizzazione salvata del tuo account Telegram:
-tienilo privato e non condividerlo mai. Non scaricare ne' copiare il
-telegram-auth.bin di altri. Negli screenshot nascondi numeri di telefono, codici
-di accesso, password e messaggi privati.
+Privacy
+-------
+telegram-auth.bin e' la tua sessione: non condividerlo mai e non usare
+quello di qualcun altro. Negli screenshot nascondi numeri di telefono,
+codici, password e messaggi privati.
 
-Avanzato: il data/telegram-api.txt incluso contiene credenziali API pubbliche. Gli
-utenti avanzati possono sostituirlo col proprio (due righe: api_id poi api_hash).
+data/telegram-api.txt contiene le credenziali api pubbliche che il
+client usa. Puoi sostituirlo con le tue: due righe, api_id e poi
+api_hash.
 
+Riconoscimenti
+--------------
 Contributi: Javier de las Rivas (javierdlr) e Bohun (bohunamiga), che ha
-portato la build su AROS ARM. Il disegno dell'icona e' nostro: Carlo Spadoni
-l'ha ottimizzata per ogni sistema, l'ha messa su un cassetto standard per
-l'icona del cassetto e mi ha permesso di distribuire le sue versioni.
-${thanks68k_line_it}Grazie ai tester sparsi per il mondo che lo provano su hardware vero e
-raccontano quello che trovano: questo client e' com'e' grazie a loro.
+portato la build su AROS ARM. Il disegno dell'icona e' nostro: Carlo
+Spadoni l'ha ottimizzata per ogni sistema, l'ha messa su un cassetto
+standard per l'icona del cassetto e mi ha permesso di distribuire le sue
+versioni.
+${thanks68k_line_it}Grazie ai tester che lo provano su hardware vero e raccontano quello che
+trovano.
+
+Le immagini delle emoji sono glifi Noto Emoji (Google, SIL Open Font
+License 1.1) ridotti a sedici pixel; il testo della licenza e'
+nell'archivio.
 
 Sostieni il mio lavoro su Patreon: $SUPPORT_URL
 oppure con un contributo una tantum su Ko-fi: $KOFI_URL
-Il sostegno e' volontario: non serve alcun abbonamento per usare il
-programma. I due link sono anche in "Support development..." nel menu
-Telegram della finestra, e in fondo a /help nel client testuale.
+E' volontario: per usare il programma non serve niente. I due link sono
+anche in "Support development..." nel menu Telegram e in fondo a /help
+nel client testuale.
 
-Licenza: MIT -- progetto di comunita' non commerciale. Diario:
+Licenza: MIT. Un progetto di comunita' non commerciale. Diario:
 https://androidlab.it/telegram-amiga-diario-sviluppo-client-mtproto/
 EOF
 }
@@ -1179,50 +979,38 @@ changelog_section_text() {
 aminet_features_text() {
     if [ "$aminet_kind" = "tui68k" ]; then
         cat <<'EOT'
-WHAT CAN I ACTUALLY DO WITH IT?
--------------------------------
-This archive is the text client alone, built for a plain 68000 Amiga
-(A500, A600, A1000, A2000, CDTV) with about 2 MB of free fast RAM: the
-window, its renderer and the JPEG decoder are left out of the build, so
-the whole program loads in about 1.5 MB.
+WHAT CAN I DO WITH IT?
+----------------------
+This archive is the text client alone, for a plain 68000 Amiga (A500,
+A600, A1000, A2000, CDTV) with about 2 MB of free fast RAM. The window,
+its renderer and the JPEG decoder are left out, so the program loads in
+about 1.5 MB.
 
 Read and send messages in private chats, groups and channels, in a
-full-screen console with colours and a word-wrapping composer of up to
-three rows. Pick a chat from the list or with the F-keys, receive new
-messages live, reply, edit and delete your own messages, see read
-receipts, download received files (/getfile) and send files from disk
-(/sendfile). The pinned Saved Messages chat doubles as a transfer drawer
-between the Amiga and your phone or PC.
+full-screen console with colours and a composer of up to three rows.
+Open chats with the F-keys, receive new messages live, reply, edit and
+delete your own, see read receipts, download files (/getfile) and send
+them (/sendfile). Saved Messages works as a transfer drawer between the
+Amiga and your phone or PC.
 
-Limits of this build: 12 chats in the list, 8 messages per page, message
-text up to 2 KB, downloads in 16 KB pieces. With a 68020 or better, take
-the AmigaOS 3.x archive (TelegramAmiga.lha) instead: it has the window,
-inline photos and emoji.
+Limits: 12 chats in the list, 8 messages per page, message text up to
+2 KB, downloads in 16 KB pieces. With a 68020 or better take the AmigaOS
+3.x archive (TelegramAmiga.lha), which has the window, photos and emoji.
 EOT
         return
     fi
     cat <<EOT
-WHAT CAN I ACTUALLY DO WITH IT?
--------------------------------
-Read and send messages in private chats, groups and channels. Download a
-received file (right-click -> Download) or send one from disk, up to
-$upload_limit on this build, including files over 10 MiB.
-Photos appear immediately as blurred previews, refine from a bounded download
-and reuse decoded pixels from disk when reopened. Click one for a larger
-progressive viewer, or disable inline loading on a slower machine and open
-only the images you choose. Forward one message to Saved Messages in a
-click, or choose another destination through chat search.
-Use the pinned Saved Messages chat as a cloud transfer drawer between the
-Amiga and your phone or PC. Reply to a specific message (right-click it).
-Edit or delete your own messages. See
-real delivery state: one tick = sent, two blue ticks = read, updating
-live. See who is typing. Search for chats. Send messages from your desk
-at work and find the conversation already synced when you get home to
-the Amiga -- and the other way round.
-
-Message times follow your Amiga clock. Unread badges and your chat order
-survive restarts. The window remembers where you left it, and can open
-on its own screen if you prefer a dedicated page for chatting.
+WHAT CAN I DO WITH IT?
+----------------------
+Read and send messages in private chats, groups and channels. Reply,
+react, forward, edit and delete your own messages, hide other people's
+messages in groups. See read receipts and who is typing. Get a pop-up
+and a sound for new messages, chosen per chat. Download and send files,
+up to $upload_limit on this build. Photos, video frames and link
+previews show in the chat, with a viewer for a larger copy; a text-only
+mode keeps slow machines quick. Saved Messages works as a transfer
+drawer between the Amiga and your phone or PC. The window remembers
+where you left it and can open on its own screen.
 EOT
 }
 
@@ -1231,32 +1019,29 @@ aminet_start_text() {
         cat <<'EOT'
 GETTING STARTED
 ---------------
-1. Log in once on a FASTER Amiga (68020 or better) or in an emulator with
-   the normal archive: the login's key exchange is too much for a 68000.
-2. Copy this drawer to a WRITABLE volume of the 68000 machine, then copy
-   telegram-auth.bin and the data drawer from the faster setup into it.
-3. Double-click TelegramAmiga-TUI. The same account can stay logged in on
-   both machines.
+1. Log in once with the normal archive on a 68020 or better, or in an
+   emulator: the login's key exchange is too much for a 68000.
+2. Copy this drawer to a writable volume of the 68000 machine, then copy
+   telegram-auth.bin and the data drawer from the other setup into it.
+3. Double-click TelegramAmiga-TUI. The account stays usable on both.
 
-telegram-auth.bin holds your login. Treat that file like a house key:
-NEVER share it -- anyone who has it has your Telegram session. Full EN and
-IT manuals are in the archive, including notes for the plain 68000.
+telegram-auth.bin holds your login. Never share it: whoever has it is in
+your Telegram account. The archive has full manuals in English and
+Italian, with notes for the plain 68000.
 EOT
         return
     fi
     cat <<EOT
 GETTING STARTED
 ---------------
-1. Copy this drawer to a WRITABLE volume (not from the archive directly).
-2. Double-click TelegramAmiga (or TelegramAmiga-TUI on very low-end setups).
-3. First run walks you through the normal Telegram login: phone number,
-   the code Telegram sends you, and your cloud password if you use
-   two-factor. That is all -- next time it goes straight to your chats.
+1. Copy this drawer to a writable volume.
+2. Double-click TelegramAmiga$aminet_tui_hint.
+3. Sign in: phone number, the code Telegram sends, and the cloud
+   password if you use 2FA. Next time it opens on your chats.
 
-The login is stored in telegram-auth.bin next to the program. Treat that
-file like a house key: NEVER copy it around or share it -- anyone who has
-it has your Telegram session. Full EN and IT manuals are in the archive,
-including per-platform notes and troubleshooting.
+The login is kept in telegram-auth.bin next to the program. Never share
+it: whoever has it is in your Telegram account. The archive has full
+manuals in English and Italian, with notes for each platform.
 EOT
 }
 
@@ -1276,20 +1061,14 @@ Requires:     $requires
 
 WHAT IS THIS?
 -------------
-Unofficial Telegram Amiga: it uses the Telegram API and is part of the
-Telegram ecosystem, but it is not made by Telegram.
+A native Telegram client for the Amiga, written from scratch on
+Telegram's own MTProto protocol: no gateway, no proxy, no web page. You
+sign in with your normal Telegram account. The cryptography (RSA,
+Diffie-Hellman, AES, SHA and the SRP login for 2FA) is built in, so it
+needs no MUI, no ixemul.library and no AmiSSL, only the system's
+bsdsocket stack.
 
-Telegram Amiga brings real, live Telegram chat to the Amiga -- not through
-a gateway, a proxy service or a web wrapper, but by speaking Telegram's
-own MTProto protocol natively, from scratch, on your machine. You sign in
-to your normal Telegram account, your chat list appears, and you talk to
-people (and they talk back) on hardware that may well be older than they
-are.
-
-Everything is built in: RSA, Diffie-Hellman, AES, SHA and the SRP two-
-factor login are implemented inside the program. Zero external
-dependencies -- no MUI, no ixemul.library, no AmiSSL, no TCP helper
-beyond your system's own bsdsocket stack.
+Unofficial: it uses the Telegram API but is not made by Telegram.
 
 $aminet_programs
 
@@ -1303,22 +1082,19 @@ $(changelog_section_text)
 
 A COMMUNITY PROJECT
 -------------------
-MIT licensed, non-commercial, written for the love of the platform.
-Bug reports and wishes are very welcome -- testers on real hardware
-(A1200s, A4000s, Pegasos, Sam, FPGA machines) are what moves this
-project forward.
+MIT licensed and non-commercial. Bug reports and wishes are welcome:
+testers on real hardware are what moves this project forward.
 
 ${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system,
 put it on a standard drawer for the drawer icon, and let me ship his
 versions.
 
-  Source + issues:
+  Source and issues:
   $REPO_URL
   Development diary:
   $DIARY_URL
-  Support my work on Patreon, or with a one-time tip on
-  Ko-fi (voluntary; no subscription is required to use
-  this software):
+  Support my work on Patreon, or with a one-time tip on Ko-fi
+  (voluntary: nothing is needed to use the program):
   $SUPPORT_URL
   $KOFI_URL
 EOF

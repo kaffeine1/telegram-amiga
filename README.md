@@ -127,8 +127,7 @@ put it on a standard drawer for the drawer icon, and let me ship his
 versions with the program. His files are in `assets/icons/carlo-spadoni/`;
 `scripts/build-icons.sh` turns them into one set per platform.
 
-Developed with the help of LLM agents used as engineering tools. Local
-diaries, transcripts and secrets stay out of Git.
+Developed with the help of LLM agents used as engineering tools.
 
 Bug reports: platform and version, real or emulated, CPU, TCP/IP stack
 and what failed. Never post auth files, phone numbers, login codes, 2FA

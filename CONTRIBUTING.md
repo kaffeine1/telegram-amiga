@@ -5,64 +5,53 @@ SPDX-License-Identifier: MIT
 
 # Contributing
 
-Thank you for your interest in Telegram Amiga. This project is a gift to the
-Amiga community and welcomes practical, verifiable contributions that fit the
-cross-platform spirit of the repository.
+Contributions are welcome when they are small, build, and come with a
+test.
 
 ## Principles
 
-- Keep portable code in the `core/` layer whenever possible.
-- Isolate system differences under `platforms/<target>/`.
-- Prefer small, buildable steps over large rewrites.
-- Avoid dependencies that are difficult to obtain on Amiga-like systems.
-- Document the tests you ran, including platform, toolchain and command.
+- Portable code goes in `core/`, system differences in
+  `platforms/<target>/`.
+- C89, and no dependencies that are hard to get on an Amiga.
+- Small steps that build, not large rewrites.
+- Say what you tested: platform, real or emulated, toolchain, command.
 
-## LLM Agent Usage
+## LLM agents
 
-The project accepts contributions prepared with LLM tools or LLM agents,
-provided they are reviewed by a person and accompanied by real or reproducible
-tests. LLM agents are treated as support tools: the value of a contribution
-remains in the quality of the code, the clarity of the patch and the
-verification on Amiga-like targets.
-
-When possible, state whether a change was tested through SSH on real hardware,
-on an emulator, or only through local compilation.
+Patches prepared with LLM tools are accepted when a person has reviewed
+them and they come with real or reproducible tests. Say whether the change
+ran on real hardware, in an emulator, or was only compiled.
 
 ## Targets
 
-The planned targets are:
+| Makefile | Target |
+|---|---|
+| `Makefile.amigaos3-clib2` | AmigaOS 3.x, m68k (the 68000 build: `scripts/build-68000-lowmem.sh`) |
+| `Makefile.amigaos4` | AmigaOS 4, PPC (Docker cross build: `scripts/build-os4.sh`) |
+| `Makefile.morphos-cross` | MorphOS, PPC (see [docs/MORPHOS_CROSS_BUILD.md](docs/MORPHOS_CROSS_BUILD.md)) |
+| `Makefile.aros-i386-abiv0` | AROS i386, ABIv0 |
+| `Makefile.aros-x86_64` | AROS x86_64, ABIv11 |
+| `Makefile.aros-aarch64` | AROS aarch64, ABIv1 (Raspberry Pi) |
+| `Makefile.host` | Linux or macOS, for the self-tests |
 
-- AmigaOS 3.x
-- MorphOS
-- AmigaOS 4.x
-- AROS
+You do not need every system, but a change must not break the others on
+purpose.
 
-You do not need to own every system to contribute, but a change should not
-intentionally break the other targets.
+## Before a pull request
 
-## MorphOS Build
+- Build the target you changed, and the host build with warnings as
+  errors:
 
-```text
-System:Development/gg/bin/make -C Work:Dev/telegram-amiga -f Makefile.morphos all
-```
+  ```sh
+  make -f Makefile.host clean all CFLAGS="-Wall -Wextra -Werror -O2"
+  ```
 
-TLS/OpenSSL on MorphOS is optional:
-
-```text
-System:Development/gg/bin/make -C Work:Dev/telegram-amiga -f Makefile.morphos ENABLE_TLS=1 all
-```
-
-Use `ENABLE_TLS=1` only if the OpenSSL/AmiSSL environment is ready and stable.
-
-## Before Proposing a Patch
-
-- Build at least the target you changed.
-- Run the closest available test, for example `--net-test`, `--http-test` or
-  `--https-test`.
-- Keep the existing author/license headers.
-- Update `README.md` or `ROADMAP.md` if you change behavior or priorities.
+- Run the self-tests CI runs: `--mtproto-self-test`, `--gui-self-test`,
+  `--chat-engine-self-test`, `--chat-render-self-test`,
+  `--chat-list-self-test` and `--gui-driver-self-test`.
+- Keep the author and licence headers.
+- Note user-visible changes in `CHANGELOG.md` under `[Unreleased]`.
 
 ## License
 
-By contributing to the project, you agree that your contribution is distributed
-under the repository's MIT License.
+Contributions are distributed under the repository's MIT License.

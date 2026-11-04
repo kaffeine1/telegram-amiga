@@ -3,49 +3,28 @@ Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 SPDX-License-Identifier: MIT
 -->
 
-# TLS Certificate Validation
+# TLS certificate validation
 
-Current TLS backends encrypt traffic and use SNI where supported. OpenSSL-based
-AROS/MorphOS and AmiSSL-based AmigaOS 3.x/4.x backends can now request
-certificate-chain and hostname validation with `--tls-verify`, optionally
-paired with `--tls-ca-file` or `--tls-ca-path`. AROS, MorphOS, AmigaOS 3.x and
-AmigaOS 4.x have passed live CA-bundle validation smoke tests. Connections
-without validation are acceptable only for supervised testing with disposable
-bot tokens.
+This applies only to the Bot API mode kept in the tree for diagnostics,
+which talks HTTPS to `api.telegram.org`. The client itself speaks MTProto
+over plain TCP with its own encryption and does not use TLS.
 
-## How validation works
-
-With `--tls-verify`, each TLS backend loads a platform-appropriate CA trust
-store, verifies the server certificate chain and hostname, fails closed on
-failure, and prints a clear diagnostic without exposing tokens.
-
-## Per-platform status
-
-All four platforms have passed a supervised live CA-bundle validation smoke test
-against `api.telegram.org`:
-
-- MorphOS / AROS (OpenSSL): use the OpenSSL verification APIs with the system CA
-  path or a documented CA bundle. AROS One i386 alt-abiv0 links OpenSSL 1.1.0h
-  from the AROS SDK and passed with
-  `--tls-verify --tls-ca-file DH0:TGTEST/ca-bundle.crt` (YAM CA bundle from the
-  AROS One DVD).
-- AmigaOS 3.x / 4.x (AmiSSL v5): support explicit `--tls-ca-file`/`--tls-ca-path`
-  and default verify paths; AmigaOS 4.x needs a correct system date for validity
-  checks.
-
-Validation is opt-in (`--tls-verify`); a practical default CA-store strategy is
-still to be documented before enabling it by default.
-
-## Current User-Facing Status
-
-Run:
+The TLS backends (OpenSSL on AROS and MorphOS, AmiSSL v5 on AmigaOS 3.x
+and 4.x) encrypt the traffic and send SNI. Certificate and hostname
+validation is opt-in:
 
 ```text
-TelegramAmiga --telegram-tls-status
+TelegramAmiga --tls-verify --tls-ca-file <bundle>
+TelegramAmiga --tls-verify --tls-ca-path <dir>
 ```
 
-Expected current output includes:
+With `--tls-verify` the backend loads the CA store, checks the chain and
+the hostname, and refuses the connection on failure. All four systems
+passed a supervised test against `api.telegram.org` with a CA bundle (on
+AROS One i386, OpenSSL 1.1.0h from the SDK and the YAM bundle from the
+AROS One DVD). AmigaOS 4 needs a correct system date for the validity
+check.
 
-```text
-certificate validation requested: no
-```
+Without validation, use the Bot API mode only for supervised tests with
+disposable bot tokens. `TelegramAmiga --telegram-tls-status` shows
+whether validation was requested.

@@ -23,6 +23,12 @@ the text client for the plain 68000.
   "on AmigaOS 4" or "on AROS", with the processor (68020+, 68000,
   PowerPC, i386, x86_64, ARM64) in the session details. Every lane used
   to say "0.1 on Amiga", whatever the machine and the release.
+- The manuals, README.txt and the archive readmes are shorter and up to
+  date. The manuals had kept a section saying emoji were text only, put
+  the window settings file outside data/, and told to set the own screen
+  by editing it; the Aminet readme offered the TUI icon on systems whose
+  package has none, and the 68000 manual described a window it does not
+  have.
 
 ### Fixed
 - A file sent without a name of its own, as videos shot on a phone,

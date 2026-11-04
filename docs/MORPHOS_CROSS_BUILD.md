@@ -3,112 +3,46 @@ Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 SPDX-License-Identifier: MIT
 -->
 
-# MorphOS Cross Build
+# MorphOS cross build
 
-This document describes the experimental Docker-based MorphOS cross-build path.
-It is separate from the validated native MorphOS SDK build.
+The MorphOS releases are built in Docker with the pkgsrc cross toolchain
+(`cross/ppc-morphos-gcc`, `cross/ppc-morphos-binutils`,
+`cross/ppc-morphos-sdk`, branch `pkgsrc-2026Q1`).
 
-The cross toolchain is built from pkgsrc `cross/ppc-morphos-gcc`,
-`cross/ppc-morphos-binutils` and `cross/ppc-morphos-sdk`. The default image
-uses the `pkgsrc-2026Q1` branch.
+## The toolchain image
 
-## Build The Toolchain Image
-
-Start Docker Desktop or Colima, then run:
+Start Docker Desktop or Colima, then:
 
 ```sh
-ACCEPT_MORPHOS_SDK_LICENSE=1 \
-ACCEPT_LHA_LICENSE=1 \
+ACCEPT_MORPHOS_SDK_LICENSE=1 ACCEPT_LHA_LICENSE=1 \
 scripts/docker-morphos-cross-image.sh
 ```
 
-The image build downloads pkgsrc, bootstraps it under `/opt/pkg`, and builds
-`cross/ppc-morphos-gcc`. This is expected to take a while on the first run.
-The explicit `ACCEPT_MORPHOS_SDK_LICENSE=1` opt-in is required because pkgsrc
-marks `cross/ppc-morphos-sdk` with the `morphos-sdk-license` condition.
-The explicit `ACCEPT_LHA_LICENSE=1` opt-in is also required because pkgsrc uses
-`archivers/lha` to extract the MorphOS SDK archive.
+The first run bootstraps pkgsrc under `/opt/pkg` and builds the compiler,
+which takes a while. The two variables accept the licences pkgsrc asks
+for: the MorphOS SDK's and that of `archivers/lha`, which unpacks it.
 
-By default this flow uses an embedded Dockerfile template and does not read a
-tracked file from this repository. To use a custom file, pass
-`MORPHOS_CROSS_DOCKERFILE=/path/to/Dockerfile`.
+Overrides: `MAKE_JOBS=8`, `PKGSRC_BRANCH=...`, `IMAGE=...`, and
+`MORPHOS_CROSS_DOCKERFILE=/path/to/Dockerfile` to use your own file
+instead of the embedded template.
 
-Useful overrides:
-
-```sh
-ACCEPT_MORPHOS_SDK_LICENSE=1 ACCEPT_LHA_LICENSE=1 MAKE_JOBS=8 scripts/docker-morphos-cross-image.sh
-ACCEPT_MORPHOS_SDK_LICENSE=1 ACCEPT_LHA_LICENSE=1 PKGSRC_BRANCH=pkgsrc-2026Q1 scripts/docker-morphos-cross-image.sh
-ACCEPT_MORPHOS_SDK_LICENSE=1 ACCEPT_LHA_LICENSE=1 IMAGE=telegram-amiga-morphos-cross:local scripts/docker-morphos-cross-image.sh
-```
-
-```sh
-MORPHOS_CROSS_DOCKERFILE=/path/to/custom-morphos-cross.Dockerfile \
-ACCEPT_MORPHOS_SDK_LICENSE=1 ACCEPT_LHA_LICENSE=1 scripts/docker-morphos-cross-image.sh
-```
-
-## Build Telegram Amiga For MorphOS
-
-After the image exists:
+## The build
 
 ```sh
 scripts/docker-morphos-cross-build.sh
 ```
 
-The default output is:
+It runs `Makefile.morphos-cross` and writes
+`build/morphos-cross/TelegramAmiga`. TLS is off by default (the client
+does not need it; see [TLS_CERTIFICATES.md](TLS_CERTIFICATES.md)).
 
-```text
-build/morphos-cross/TelegramAmiga
-```
+After a build, check the binary's time stamp: when Docker is not running
+the script prints an error without the word "error", and the old binary
+stays in place.
 
-The initial target is an offline build with TLS disabled:
+## On MorphOS
 
-```sh
-ENABLE_TLS=0 scripts/docker-morphos-cross-build.sh
-```
-
-TLS-enabled cross-builds are intentionally not treated as validated yet. To
-experiment, pass compatible MorphOS OpenSSL include and library paths:
-
-```sh
-ENABLE_TLS=1 \
-OPENSSL_CFLAGS="-I/path/to/morphos/openssl/include" \
-OPENSSL_LDFLAGS="-L/path/to/morphos/openssl/lib" \
-scripts/docker-morphos-cross-build.sh
-```
-
-## Validate On MorphOS
-
-Copy `build/morphos-cross/TelegramAmiga` to a MorphOS system. SFTP works well
-with the tested BebboSSH setup:
-
-```text
-put build/morphos-cross/TelegramAmiga RAM:TelegramAmiga-morphos-cross
-```
-
-Then run:
-
-```text
-TelegramAmiga --telegram-json-self-test
-TelegramAmiga --telegram-get-updates-self-test
-TelegramAmiga --telegram-read-once-state-self-test
-TelegramAmiga --telegram-offset-state-self-test
-TelegramAmiga --telegram-inbox-self-test
-TelegramAmiga --telegram-echo-once-self-test
-TelegramAmiga --telegram-send-message-self-test
-TelegramAmiga --telegram-client-state-self-test
-TelegramAmiga --telegram-client-self-test
-TelegramAmiga --telegram-text-client-self-test
-TelegramAmiga --telegram-console-self-test
-TelegramAmiga --telegram-tls-status
-```
-
-Only after those pass should the binary be packaged for testers. For live Bot
-API validation, rebuild with a compatible TLS setup and repeat the MorphOS
-runtime checks from `docs/MORPHOS_TESTER.md`.
-
-## Status
-
-This path has produced a Docker-built binary that passed the offline runtime
-self-tests on real MorphOS. It remains experimental for TLS-enabled/live Bot API
-validation. Keep the native `Makefile.morphos` flow as the reference live build
-until the cross-built TLS path is validated.
+Copy the binary into the drawer on a hard disk, such as `Work:TGh`, not
+RAM: (running from RAM: crashed), with wget from an HTTP server on the
+build machine, then `Protect TelegramAmiga +e`. The release builds
+leave the self-tests out (`NO_SELFTEST=1`); run those on the host.
