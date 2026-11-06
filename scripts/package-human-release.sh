@@ -1271,8 +1271,10 @@ package_one() {
     # ships. Check the binary really carries the pair, without printing it:
     # a build made without the local header would leave every user stuck at
     # the login.
-    api_id_built=$(sed -n 's/^#define TG_API_DEFAULT_ID "\([0-9]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null)
-    api_hash_built=$(sed -n 's/^#define TG_API_DEFAULT_HASH "\([0-9a-f]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null)
+    api_id_built=$(sed -n 's/^#define TG_API_DEFAULT_ID "\([0-9]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null || true)
+    api_hash_built=$(sed -n 's/^#define TG_API_DEFAULT_HASH "\([0-9a-f]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null || true)
+    # (|| true: under set -e a missing header would end the run in silence
+    # here, before the message below could say why.)
     if [ -z "$api_id_built" ] || [ -z "$api_hash_built" ] ||
        ! LC_ALL=C grep -q -a -F "$api_id_built" "$binary" ||
        ! LC_ALL=C grep -q -a -F "$api_hash_built" "$binary"; then

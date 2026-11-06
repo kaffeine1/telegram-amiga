@@ -2989,6 +2989,7 @@ static int tg_mtproto_load_api_credentials_file(const char *path,
     return 0;
 }
 
+#if !defined(TG_API_HAS_DEFAULT)
 static int tg_mtproto_load_api_id_only(const char *path,
                                        char *api_id,
                                        unsigned long api_id_size,
@@ -3058,6 +3059,7 @@ static int tg_mtproto_load_api_id_only(const char *path,
     }
     return 0;
 }
+#endif
 
 /* A complete data/telegram-api.txt wins; when it is missing, empty or broken
    the pair built into the binary takes over, quietly. A drawer copied from
@@ -3095,12 +3097,17 @@ static int tg_mtproto_load_api_id_file(const char *path,
                                        const char *label)
 {
 #if defined(TG_API_HAS_DEFAULT)
-    if (tg_mtproto_load_api_id_only(path, api_id, api_id_size, 0, 0) == 0) {
-        return 0;
-    }
-    (void)stream;
-    (void)label;
-    return tg_mtproto_api_default(api_id, api_id_size, 0, 0UL) ? 0 : 2;
+    /* The file counts only when the whole pair parses, as for the login:
+       a one-line file must not give the session another api_id than the
+       one the login used. */
+    char api_hash[96];
+    int rc;
+
+    rc = tg_mtproto_load_api_credentials(path, api_id, api_id_size,
+                                         api_hash, sizeof(api_hash),
+                                         stream, label);
+    tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
+    return rc;
 #else
     return tg_mtproto_load_api_id_only(path, api_id, api_id_size, stream,
                                        label);
@@ -19188,6 +19195,12 @@ int tg_mtproto_probe_self_test(void)
         (void)remove(api_path);
         return 2;
     }
+    if (tg_mtproto_load_api_id_file(api_path, api_id, sizeof(api_id),
+                                    0, 0) != 0 ||
+        strcmp(api_id, TG_API_DEFAULT_ID) != 0) {
+        (void)remove(api_path);
+        return 2;
+    }
 #else
     if (tg_mtproto_load_api_credentials(missing_api_path, api_id,
                                         sizeof(api_id), api_hash,
@@ -23486,7 +23499,7 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
 #if defined(TG_API_HAS_DEFAULT)
          "Remove data/telegram-api.txt if you made one, or update"},
 #else
-         "data/telegram-api.txt is damaged: install the package again"},
+         "Check the api_id and api_hash in data/telegram-api.txt"},
 #endif
         {"API_ID_PUBLISHED_FLOOD", "Telegram is limiting logins from this app",
          "Try again later"},
@@ -27284,8 +27297,11 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
                           "This program's key file is missing");
         tg_gui_login_copy(tg_gui_session_state.login.last_hint,
                           sizeof(tg_gui_session_state.login.last_hint),
-                          "data/telegram-api.txt is unreadable: install "
-                          "the package again");
+                          /* Only a build without a pair of its own gets
+                             here; packages carry one, so it is a self-made
+                             build that needs the file. */
+                          "Put your api_id and api_hash in "
+                          "data/telegram-api.txt");
         return TG_GUI_LOGIN_ERROR;
     }
     tg_gui_login_copy(tg_gui_session_state.login.phone,

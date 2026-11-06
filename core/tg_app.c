@@ -153,10 +153,9 @@ static int tg_run_mtproto_ensure_api_file(const char *api_file)
         return 0;
     }
 #if defined(TG_API_HAS_DEFAULT)
-    /* No file: the binary carries its own pair (tg_api_default.h). */
-    if (api_status == TG_FILE_OPEN_FAILED) {
-        return 0;
-    }
+    /* The binary carries its own pair (tg_api_default.h): a missing or
+       unreadable file is no reason to stop, the loader falls back. */
+    return 0;
 #endif
     if (api_status != TG_FILE_OPEN_FAILED) {
         printf("Login setup required: cannot read %s (%s).\n", api_file,
