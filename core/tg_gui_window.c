@@ -7250,7 +7250,7 @@ static void tg_gui_menu_set_photo_cache_limit(struct Menu *menu,
 }
 
 static const char tg_gui_about_text[] =
-    TG_APP_TITLE "\n"
+    TG_APP_FULL_TITLE "\n"
     TG_VERSION_CHANNEL " " TG_VERSION "  (built " __DATE__ ")\n\n"
     "A native client for AmigaOS, MorphOS and AROS.\n"
     "Unofficial: it uses the Telegram API and is\n"

@@ -5826,7 +5826,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                                     stream, label) != 0) {
         return 2;
     }
-    fprintf(stream, "%s\n%s\n\n", TG_APP_TITLE, TG_APP_INTRO_NOTE);
+    fprintf(stream, "%s\n%s\n\n", TG_APP_FULL_TITLE, TG_APP_INTRO_NOTE);
     fprintf(stream, "Connecting to Telegram.\n");
     fflush(stream);
 

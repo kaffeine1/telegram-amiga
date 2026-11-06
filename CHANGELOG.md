@@ -20,7 +20,10 @@ the text client for the plain 68000.
 ### Changed
 - The program is called Amigram. The executable, its icons, the drawer
   and the archives carry the new name; the window title and the version
-  string say it too. The files the client keeps, telegram-auth.bin and
+  string say it too. For the first releases "Unofficial Telegram Amiga
+  Client" follows the name in About, on the login screen where it fits,
+  in the text client and in the readmes, so the old name is still
+  recognised. The files the client keeps, telegram-auth.bin and
   the data drawer, keep their names, so copying them from the old
   TelegramAmiga drawer into the new one brings the session, the chats
   and the settings along.

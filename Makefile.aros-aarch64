@@ -8,7 +8,7 @@
 # posixc libc, startup.o and libautoinit automatically; no -nostdlib and no
 # manual SDK paths are needed. Native aarch64 AROS builds can set CC=gcc.
 #
-# No external SSL/TLS libraries required: Telegram Amiga handles all MTProto
+# No external SSL/TLS libraries required: Amigram handles all MTProto
 # encryption internally.
 
 AROS_TOOLCHAIN ?= $(HOME)/aros-toolchains/aros-toolchain-aarch64

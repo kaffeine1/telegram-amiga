@@ -3,9 +3,9 @@ Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 SPDX-License-Identifier: MIT
 -->
 
-# Unofficial Telegram Amiga
+# Amigram - Unofficial Telegram Amiga Client
 
-A native Telegram client for AmigaOS 3, AmigaOS 4, MorphOS and AROS,
+Called TelegramAmiga up to 0.0.99. A native Telegram client for AmigaOS 3, AmigaOS 4, MorphOS and AROS,
 written from scratch in C on Telegram's MTProto protocol. You log in with
 a normal Telegram account. It needs no MUI, no ixemul and no AmiSSL: the
 cryptography is built in.
@@ -15,12 +15,12 @@ It uses the Telegram API but is not made by Telegram.
 One engine, two clients: a window drawn with Intuition and GadTools, and
 a text client for the Shell, which also runs on a plain 68000.
 
-![The Telegram Amiga GUI](assets/screenshots/telegram-amiga-gui.png)
+![The Amigram window](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.99** (2026-11-02), the last alpha. Direct chats,
-groups and channels work on all six platforms. The 0.1 beta comes next
-and will carry the new name, Amigram. What is on `main` is unreleased:
-see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md).
+Status: **alpha 0.0.99** (2026-11-02), the last release as TelegramAmiga.
+Direct chats, groups and channels work on all six platforms. The 0.1 beta,
+the first release as Amigram, is being tested. What is on `main` is
+unreleased: see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md).
 
 The plain-68000 package exists thanks to Paolo Arus (DaRkHoRaCe), who
 tested it on an A600 round after round.
@@ -31,7 +31,7 @@ License: MIT. A non-commercial community project. Development diary:
 <!-- patreon-support:start -->
 ## Support development
 
-Telegram Amiga remains free and open source. If you find it useful, you can [support my work on Patreon](https://www.patreon.com/c/kaffeine1). Contributions help me dedicate time to development, testing and documentation. No subscription is required to use the client; public code, releases and articles remain available to everyone.
+Amigram remains free and open source. If you find it useful, you can [support my work on Patreon](https://www.patreon.com/c/kaffeine1). Contributions help me dedicate time to development, testing and documentation. No subscription is required to use the client; public code, releases and articles remain available to everyone.
 
 If you prefer a one-time contribution, you can [support my work on Ko-fi](https://ko-fi.com/kaffeine1).
 <!-- patreon-support:end -->
@@ -64,12 +64,17 @@ native image for the Raspberry Pi 4, 400 and 5 dated 2026-08-22 or later.
 
 1. Copy the drawer to a writable volume such as `Work:`. The client keeps
    its files next to itself.
-2. Double-click **TelegramAmiga**. On AmigaOS 3, **TelegramAmiga-TUI**
-   opens the text client; elsewhere the manual gives its Shell command.
+2. Double-click **Amigram** (**TelegramAmiga** up to 0.0.99). On
+   AmigaOS 3, **Amigram-TUI** opens the text client; elsewhere the manual
+   gives its Shell command.
 3. The first run asks for your phone number, the code Telegram sends and
    your 2FA password if you have one. The session is saved in
    `telegram-auth.bin` and later runs open on your chats. The client
    cannot create an account: make one first with the official app.
+
+Coming from TelegramAmiga: copy `telegram-auth.bin` and the `data`
+drawer from the old drawer into the new one, and `avatars`, `photos` and
+`downloads` if you want them. Session, chats and settings come along.
 
 On a slow 68k the 2FA check takes time: under a minute on a Vampire, about
 half an hour on a stock A1200. The client works it out offline and then

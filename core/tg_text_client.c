@@ -1111,7 +1111,7 @@ int tg_text_client_run_human(const tg_text_client_config *client_config)
         selected_chat_id[0] = '\0';
     }
 
-    puts(TG_APP_TITLE);
+    puts(TG_APP_FULL_TITLE);
     puts("Type a message. Empty line checks for replies. Type quit to exit.");
     rc = tg_text_client_poll_once(client_config);
     if (rc != 0) {

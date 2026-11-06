@@ -5199,6 +5199,7 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     int lh;
     int mid;
     int footer;
+    const char *title;
 
     width = backend->width(backend);
     height = backend->height(backend);
@@ -5218,8 +5219,14 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     if (!tg_gui_first_paint_logged) {
         tg_gui_log("login paint: title+status");
     }
+    /* The full title where it fits; a 320 pixel screen gets the name. */
+    title = TG_APP_FULL_TITLE;
+    if (backend->text_width(backend, title, (unsigned long)strlen(title)) >
+        width - 8) {
+        title = TG_APP_TITLE;
+    }
     tg_gui_draw_centered(backend, TG_GUI_PEN_ACCENT, width, mid - (3 * lh),
-                         TG_APP_TITLE);
+                         title);
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, mid - (2 * lh),
                          TG_APP_INTRO_NOTE);
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT, width, mid - lh,

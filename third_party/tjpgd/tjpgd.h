@@ -86,7 +86,7 @@ struct JDEC {
 	size_t sz_pool;				/* Size of momory pool (bytes available) */
 	size_t (*infunc)(JDEC*, uint8_t*, size_t);	/* Pointer to jpeg stream input function */
 	void* device;				/* Pointer to I/O device identifiler for the session */
-	/* Telegram Amiga extension: resumable MCU traversal. Entropy/DC state already
+	/* Amigram extension: resumable MCU traversal. Entropy/DC state already
 	   lived in JDEC; these cursors let a caller yield between bounded slices. */
 	uint32_t decomp_x, decomp_y;
 	uint16_t decomp_rst, decomp_rsc;

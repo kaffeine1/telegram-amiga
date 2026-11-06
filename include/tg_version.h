@@ -36,6 +36,13 @@
    qualifier. The TUI title is also how the platform code finds its console
    window again, so both come from here. */
 #define TG_APP_TITLE TG_APP_NAME
+/* The line after the name for the first releases under it, so that whoever
+   knew the old name still recognises the program: About, the login screen
+   where it fits, the text client's banner. The terms (2.3) allow the word
+   Telegram in a title only after "Unofficial". The packaging writes the same
+   line in the readmes and manuals (TAGLINE in package-human-release.sh). */
+#define TG_APP_TAGLINE "Unofficial Telegram Amiga Client"
+#define TG_APP_FULL_TITLE TG_APP_NAME " - " TG_APP_TAGLINE
 #define TG_APP_TUI_TITLE TG_APP_TITLE " TUI"
 /* What the same terms (2.2) ask every client to tell its users, shown under
    the title where the program introduces itself. */
