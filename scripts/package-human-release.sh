@@ -75,6 +75,17 @@ APP_NAME=Amigram
 PREV_NAME=${PREV_NAME:-TelegramAmiga}
 prev_lower=$(printf '%s' "$PREV_NAME" | tr 'A-Z' 'a-z')
 app_lower=$(printf '%s' "$APP_NAME" | tr 'A-Z' 'a-z')
+# The line that follows the name wherever we publish, so that whoever knew the
+# old name still recognises the program: "Amigram - Unofficial Telegram Amiga
+# Client". Telegram's terms (2.3) allow the word Telegram in a title only
+# after "Unofficial". Kept for the first releases after the rename; set it
+# empty to drop it, and every title falls back to the name alone.
+TAGLINE=${TAGLINE-Unofficial Telegram Amiga Client}
+if [ -n "$TAGLINE" ]; then
+    APP_TITLE="$APP_NAME - $TAGLINE"
+else
+    APP_TITLE="$APP_NAME"
+fi
 AMINET_DRAWER=${AMINET_DRAWER:-$APP_NAME}
 AMINET_UPLOADER=${AMINET_UPLOADER:-"michele.dipace@kaffeine.net (Michele Dipace)"}
 AMINET_AUTHOR=${AMINET_AUTHOR:-"Michele Dipace <michele.dipace@kaffeine.net>"}
@@ -485,8 +496,9 @@ $notes_it"
 
 write_readme() {
     cat > "$1" <<EOF
-Amigram - $2 - $CHANNEL $VERSION
-=====================================================
+$APP_TITLE
+$(printf '%s' "$APP_TITLE" | tr -c '\n' '=')
+$2 - $CHANNEL $VERSION
 
 A native Telegram client, written from scratch. No MUI, no ixemul, no
 AmiSSL. It uses the Telegram API but is not made by Telegram.
@@ -753,8 +765,9 @@ write_manual_en() {
 
 "
     cat > "$1" <<EOF
-Amigram: user manual
-====================
+$APP_TITLE
+$(printf '%s' "$APP_TITLE" | tr -c '\n' '=')
+User manual
 
 Platform: $2
 Version: $VERSION   Build: $COMMIT_ID
@@ -832,8 +845,9 @@ write_manual_it() {
 
 "
     cat > "$1" <<EOF
-Amigram: manuale
-================
+$APP_TITLE
+$(printf '%s' "$APP_TITLE" | tr -c '\n' '=')
+Manuale
 
 Piattaforma: $2
 Versione: $VERSION   Build: $COMMIT_ID
@@ -922,11 +936,9 @@ EOF
 # still passed with them in September 2026).
 aminet_meta() {
     aminet_upload=1 # 0 = the lha is built for The AROS Archives only
-    if [ "$PREV_NAME" != "$APP_NAME" ]; then
-        aminet_short="Native Telegram client, ex $PREV_NAME"
-    else
-        aminet_short="Native Telegram chat client"
-    fi
+    # Short: is at most 40 characters: the tagline fits (32), the name is
+    # the archive's own file name anyway.
+    aminet_short=${TAGLINE:-Native Telegram chat client}
     aminet_kind=full
     case "$1" in
     amigaos3)    archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
@@ -959,7 +971,11 @@ aminet_meta() {
     # upload (0.0.96) went with AMINET_NEW and no Replaces:.
     amigaos3-68000) archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
                  lhaname="$APP_NAME-68000"
-                 aminet_short="Telegram text client for 68000 machines"
+                 if [ -n "$TAGLINE" ]; then
+                     aminet_short="$TAGLINE, 68000"
+                 else
+                     aminet_short="Telegram text client for 68000 machines"
+                 fi
                  aminet_kind=tui68k
                  requires="68000, 2 MB fast RAM, TCP/IP, login made on a faster Amiga" ;;
     *) echo "aminet_meta: unknown arch $1" >&2; exit 1 ;;
@@ -1107,6 +1123,8 @@ Requires:     $requires
 
 WHAT IS THIS?
 -------------
+$APP_TITLE.
+
 A native Telegram client for the Amiga, written from scratch on
 Telegram's own MTProto protocol: no gateway, no proxy, no web page. You
 sign in with your normal Telegram account. The cryptography (RSA,
@@ -1404,7 +1422,7 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/$APP_NAME-OS4.lha" ]; then
     cp "$AMINET_ROOT/$APP_NAME-OS4.lha" "$OS4DEPOT_ROOT/$app_lower.lha"
     {
         printf 'name:%s\n' "$APP_NAME"
-        printf 'description:Native MTProto Telegram chat client\n'
+        printf 'description:%s\n' "${TAGLINE:-Native MTProto Telegram chat client}"
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'
@@ -1459,7 +1477,7 @@ write_arosarchives_pair() {
     cp "$aa_src" "$AROSARCHIVES_ROOT/$2.lha"
     {
         printf 'name:%s\n' "$APP_NAME"
-        printf 'description:Native MTProto Telegram chat client\n'
+        printf 'description:%s\n' "${TAGLINE:-Native MTProto Telegram chat client}"
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'
@@ -1505,5 +1523,5 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/$APP_NAME-MOS.lha" ]; then
     echo "  https://www.morphos-storage.net/?page=submit"
     echo "  archive: $AMINET_ROOT/$APP_NAME-MOS.lha"
     echo "  readme:  $AMINET_ROOT/$APP_NAME-MOS.readme"
-    echo "  name: $APP_NAME  version: $VERSION"
+    echo "  name: $APP_NAME  version: $VERSION  title: $APP_TITLE"
 fi

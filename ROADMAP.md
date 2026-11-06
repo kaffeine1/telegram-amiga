@@ -1576,6 +1576,15 @@ the data drawer), so a user who copies the new drawer over the old one
 keeps the session. It lands in the 0.0.9x line, so the 0.1 beta ships
 as Amigram.
 
+For the first releases under the new name, everything published carries
+a line after it: "Amigram - Unofficial Telegram Amiga Client", so that
+whoever knew the old name still finds and recognises the program. The
+terms allow the word Telegram in a title after "Unofficial". It goes in
+the readmes, the manuals, the Aminet Short line, the OS4Depot and AROS
+Archives descriptions, the GitHub release titles and the README; the
+packaging keeps it in one variable, TAGLINE, so dropping it later is one
+line.
+
 One part is not in the code: the name Telegram's login notice and the
 active sessions list show ("TelegramAmiga 0.0.99 on MorphOS") is the
 title of the app registered with the api_id on my.telegram.org. It is
