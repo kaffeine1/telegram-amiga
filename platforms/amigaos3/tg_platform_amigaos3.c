@@ -149,7 +149,7 @@ int tg_platform_run_with_safe_stack(tg_platform_entry_fn entry,
                for less) and how to get it: a bare "needs 1 MiB" left a
                field tester stuck at a 4096-byte Shell prompt. */
             fprintf(stderr,
-                    "Telegram Amiga needs a %lu byte stack; this one is %lu.\n"
+                    TG_APP_NAME " needs a %lu byte stack; this one is %lu.\n"
                     "In a Shell type \"stack %lu\" once, then run it again,\n"
                     "or start it from its icon, which sets the stack for you.\n",
                     (unsigned long)TG_PLATFORM_SAFE_STACK_SIZE, current_size,

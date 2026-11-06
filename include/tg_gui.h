@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
  * SPDX-License-Identifier: MIT
  *
- * Telegram Amiga native GUI (Phase 5b). Portable model + renderer over a thin
+ * Amigram native GUI (Phase 5b). Portable model + renderer over a thin
  * per-platform backend (Intuition/RastPort). The console/TUI is a separate
  * front-end; both share the MTProto core and notification helpers. See
  * docs/GUI_ARCHITECTURE.md.
@@ -737,11 +737,11 @@ void tg_gui_notify_seen(tg_gui_state *state, unsigned long peer_hi,
 int tg_gui_notify_total(const tg_gui_state *state);
 int tg_gui_notify_count_for(const tg_gui_state *state, unsigned long peer_hi,
                             unsigned long peer_lo);
-/* "Unofficial Telegram Amiga (3 new)" while there is news and the mode
+/* "Amigram (3 new)" while there is news and the mode
    shows it, the plain title otherwise. */
 void tg_gui_notify_title(const tg_gui_state *state, char *out,
                          unsigned long size);
-/* The AppIcon label while parked: "TelegramAmiga (3)" or "TelegramAmiga". */
+/* The AppIcon label while parked: "Amigram (3)" or "Amigram". */
 void tg_gui_notify_icon_label(const tg_gui_state *state, char *out,
                               unsigned long size);
 /* The pop-up's two lines for the last news: the chat, then the count or,

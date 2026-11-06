@@ -18,6 +18,12 @@ the text client for the plain 68000.
   AROS Archives pages goes to Ko-fi.
 
 ### Changed
+- The program is called Amigram. The executable, its icons, the drawer
+  and the archives carry the new name; the window title and the version
+  string say it too. The files the client keeps, telegram-auth.bin and
+  the data drawer, keep their names, so copying them from the old
+  TelegramAmiga drawer into the new one brings the session, the chats
+  and the settings along.
 - Telegram's login notice and the list of active sessions name the
   system and the real version: "0.0.99 on MorphOS", "on AmigaOS 3",
   "on AmigaOS 4" or "on AROS", with the processor (68020+, 68000,

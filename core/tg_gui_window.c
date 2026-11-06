@@ -10848,7 +10848,7 @@ static struct BitMap *tg_gui_popup_corners(struct Screen *screen, int left,
 static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
                              int public_screen)
 {
-    static const char sample[] = "Telegram Amiga, a new message!";
+    static const char sample[] = TG_APP_NAME ", a new message!";
     struct TagItem tags[16];
     struct RastPort *srp = &screen->RastPort;
     struct RastPort mrp; /* measures with the pop-up's own font */
@@ -12745,7 +12745,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         }
                         if (ud == (APTR)TG_MENU_ABOUT) {
                             tg_gui_amiga_easyreq(ctx.window,
-                                                 "About Telegram Amiga",
+                                                 "About " TG_APP_NAME,
                                                  tg_gui_about_text);
                         } else if (ud == (APTR)TG_MENU_SUPPORT) {
                             tg_gui_window_support(state, ctx.window);
@@ -15187,7 +15187,7 @@ static struct AppIcon *tg_gui_appicon_relabel(struct AppIcon *icon,
    Ctrl-C break -- wakes us. Returns 1 to reopen the window, 0 to quit.
    Everything is opened lazily and torn down before returning. Unless the
    new-message setting is Off the client keeps reading the network while
-   parked: the label counts the news, "TelegramAmiga (3)", the beep and the
+   parked: the label counts the news, "Amigram (3)", the beep and the
    pop-up come as with the window open, and a double-click or a click on the
    pop-up reopens the window on the chat with the news. With the setting Off
    the park stays what it was: this task, its stack and the AppIcon, asleep. */
@@ -15232,11 +15232,11 @@ static int tg_gui_window_iconify_wait(tg_gui_state *state)
     if (port == 0) {
         goto out;
     }
-    /* Our own program icon (TelegramAmiga.info) so the AppIcon shows the
+    /* Our own program icon (Amigram.info) so the AppIcon shows the
        Telegram image, not a generic tool icon. The pre-0.0.6 name was
        "TelegramGUI"; after the rename that file no longer ships, so this used to
        miss and fall through to GetDefDiskObject (the generic icon seen on OS4). */
-    dobj = GetDiskObject((STRPTR)"PROGDIR:TelegramAmiga");
+    dobj = GetDiskObject((STRPTR)"PROGDIR:" TG_APP_NAME);
     if (dobj == 0) {
         dobj = GetDefDiskObject(WBTOOL);
     }
@@ -15270,7 +15270,7 @@ static int tg_gui_window_iconify_wait(tg_gui_state *state)
         tg_gui_notify_icon_label(state, label, sizeof(label));
         tg_gui_log("window: parked, reading on");
     } else {
-        tg_gui_window_copy(label, sizeof(label), "TelegramAmiga");
+        tg_gui_window_copy(label, sizeof(label), TG_APP_NAME);
     }
     memcpy(shown, label, sizeof(shown));
     icon = AddAppIcon(0UL, 0UL, TG_GUI_APPICON_TEXT(shown), port, 0, dobj,

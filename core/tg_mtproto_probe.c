@@ -11973,7 +11973,7 @@ static int tg_mtproto_chat_prompt_line(const char *prompt,
     for (;;) {
         if (tg_console_tui_resize_pending() && tg_chat_tui_stream != 0) {
             if (tg_console_tui_resize(tg_chat_tui_stream,
-                                      " Telegram Amiga ")) {
+                                      " " TG_APP_NAME " ")) {
                 tg_console_tui_input_caret(
                     tg_chat_tui_stream, tg_console_tui_prompt(), out,
                     line_length, tg_chat_caret);
@@ -15631,7 +15631,7 @@ int tg_mtproto_auth_chat_file(const char *host,
     tg_chat_tab_news = 0U;
     tg_console_tui_tabs_wanted(1);
     tg_console_tui_set_hint("/sendfile path: send a file");
-    if (!chat_raw || !tg_console_tui_enter(stream, " Telegram Amiga ")) {
+    if (!chat_raw || !tg_console_tui_enter(stream, " " TG_APP_NAME " ")) {
         /* No full-screen layout: when the mini-termcap marks the console
            CSI-deaf (the probe sequence went to the screen as glyphs),
            AUTO colours stay off in the linear flow too -- their SGR bytes
@@ -15843,7 +15843,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         line, line_length, tg_chat_input_raw);
         }
         if (tg_console_tui_resize_pending()) {
-            if (tg_console_tui_resize(stream, " Telegram Amiga ")) {
+            if (tg_console_tui_resize(stream, " " TG_APP_NAME " ")) {
                 tg_mtproto_chat_tui_status(peer_index, peer_label);
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label,
                                             line, line_length,
@@ -16484,7 +16484,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                repaint. The same-geometry guard makes it a clean no-op when
                nothing changed. */
             if (tg_console_tui_active()) {
-                if (tg_console_tui_resize(stream, " Telegram Amiga ")) {
+                if (tg_console_tui_resize(stream, " " TG_APP_NAME " ")) {
                     tg_mtproto_chat_tui_status(peer_index, peer_label);
                 } else {
                     tg_mtproto_chat_print_system_line(
@@ -16752,7 +16752,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     sizeof(requested_peer_index), requested_peer_label,
                     sizeof(requested_peer_label), stream);
                 if (tg_chat_tui_stream != 0 && tg_chat_input_raw) {
-                    (void)tg_console_tui_enter(stream, " Telegram Amiga ");
+                    (void)tg_console_tui_enter(stream, " " TG_APP_NAME " ");
                 }
                 if (rc != 0 &&
                     tg_mtproto_peer_cache_text_looks_username(username_arg)) {
@@ -23392,7 +23392,7 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
         {"API_ID_PUBLISHED_FLOOD", "Telegram is limiting logins from this app",
          "Try again later"},
         {"UPDATE_APP_TO_LOGIN", "Telegram wants a newer app to log in",
-         "Look for a new release of Telegram Amiga"}
+         "Look for a new release of " TG_APP_NAME}
     };
     unsigned long i;
     const char *l;

@@ -158,7 +158,7 @@ static int tg_run_mtproto_ensure_api_file(const char *api_file)
     }
 
     printf("Login setup: %s was not found.\n", api_file);
-    puts("TelegramAmiga will create it now.");
+    puts(TG_APP_NAME " will create it now.");
     puts("Enter the Telegram API credentials for this client.");
     if (tg_app_prompt_required_line("api_id: ", api_id,
                                     sizeof(api_id)) != 0 ||
@@ -266,11 +266,11 @@ static int tg_run_mtproto_start_file(const char *api_file,
             puts("exchange. On a plain 68000 that takes a very long time and");
             puts("may run out of stack. Do it once elsewhere instead:");
             puts("");
-            puts(" 1. Run Telegram Amiga on a faster Amiga (68020 or better)");
+            puts(" 1. Run " TG_APP_NAME " on a faster Amiga (68020 or better)");
             puts("    or in an emulator (WinUAE, FS-UAE, vAmiga) using the");
             puts("    standard package, and log in there.");
             puts(" 2. Copy telegram-auth.bin from that drawer into THIS");
-            puts("    drawer, next to TelegramAmiga. Copying");
+            puts("    drawer, next to " TG_APP_NAME ". Copying");
             puts("    data/telegram-peers.txt too brings your chat list.");
             puts(" 3. Start this program again: it reuses that login and");
             puts("    goes straight to the chats.");
@@ -329,7 +329,7 @@ static int tg_run_mtproto_start_file(const char *api_file,
     if (!tg_run_mtproto_peer_cache_exists(peer_cache_file)) {
         puts("Login complete.");
         puts("No cached chat list found.");
-        puts("Use /add name inside TelegramAmiga to search users or groups.");
+        puts("Use /add name inside " TG_APP_NAME " to search users or groups.");
     }
 
     puts("Opening chat.");
@@ -2467,8 +2467,8 @@ static int tg_run_telegram_manual_client_paths(const char *token_file_path,
     }
 
     puts("telegram manual client reply commands:");
-    puts("  TelegramAmiga --telegram-reply-default 1 \"Hello from Amiga\"");
-    puts("  TelegramAmiga --telegram-send-last-default \"Hello from Amiga\"");
+    puts("  " TG_APP_NAME " --telegram-reply-default 1 \"Hello from Amiga\"");
+    puts("  " TG_APP_NAME " --telegram-send-last-default \"Hello from Amiga\"");
     return 0;
 }
 
@@ -4341,7 +4341,7 @@ int tg_app_run(int argc, char **argv)
     tg_config_remove_superseded();
     setvbuf(stderr, (char *)0, _IONBF, 0);
 
-    program_name = "TelegramAmiga";
+    program_name = TG_APP_NAME;
     if (argc > 0 && argv[0] != 0) {
         program_name = argv[0];
     }

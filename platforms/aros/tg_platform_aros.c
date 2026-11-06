@@ -115,7 +115,7 @@ int tg_platform_run_with_safe_stack(tg_platform_entry_fn entry,
                             MEMF_PUBLIC | MEMF_CLEAR);
     if (stack_memory == 0) {
         fprintf(stderr,
-                "Telegram Amiga: not enough memory for the required 1 MiB stack.\n");
+                TG_APP_NAME ": not enough memory for the required 1 MiB stack.\n");
         return 20;
     }
 

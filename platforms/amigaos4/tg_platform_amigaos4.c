@@ -125,7 +125,7 @@ int tg_platform_run_with_safe_stack(tg_platform_entry_fn entry,
                for less) and how to get it: a bare "needs 1 MiB" left a
                field tester stuck at a 4096-byte Shell prompt. */
             fprintf(stderr,
-                    "Telegram Amiga needs a %lu byte stack; this one is %lu.\n"
+                    TG_APP_NAME " needs a %lu byte stack; this one is %lu.\n"
                     "In a Shell type \"stack %lu\" once, then run it again,\n"
                     "or start it from its icon, which sets the stack for you.\n",
                     (unsigned long)TG_PLATFORM_SAFE_STACK_SIZE, current_size,
@@ -1924,7 +1924,7 @@ static void tg_os4_drop_arm(void)
     /* Field result on OS4: the AppWindow registers fine but Workbench never
        delivers console-window drops to it (the con-handler owns those). The
        reliable lane is an APPICON on the same message port: drop the file on
-       the TelegramAmiga icon that appears on the Workbench while the console
+       the Amigram icon that appears on the Workbench while the console
        client runs. Same port, same poll, same injection. */
     tg_os4_icon_base = OpenLibrary((CONST_STRPTR)"icon.library", 36L);
     if (tg_os4_icon_base != 0) {
@@ -1933,7 +1933,7 @@ static void tg_os4_drop_arm(void)
     }
     if (tg_os4_iicon != 0) {
         tg_os4_drop_dobj =
-            tg_os4_iicon->GetDiskObject((STRPTR)"PROGDIR:TelegramAmiga");
+            tg_os4_iicon->GetDiskObject((STRPTR)"PROGDIR:" TG_APP_NAME);
         if (tg_os4_drop_dobj == 0) {
             tg_os4_drop_dobj = tg_os4_iicon->GetDefDiskObject(WBTOOL);
         }

@@ -653,7 +653,7 @@ void tg_gui_notify_title(const tg_gui_state *state, char *out,
 void tg_gui_notify_icon_label(const tg_gui_state *state, char *out,
                               unsigned long size)
 {
-    tg_gui_notify_label(state, "TelegramAmiga", "", out, size);
+    tg_gui_notify_label(state, TG_APP_NAME, "", out, size);
 }
 
 static void tg_gui_copy(char *dest, unsigned long size, const char *src);
@@ -9680,7 +9680,7 @@ int tg_gui_self_test(void)
             return 2;
         }
         tg_gui_notify_icon_label(ns, text, sizeof(text));
-        if (strcmp(text, "TelegramAmiga (3)") != 0) {
+        if (strcmp(text, TG_APP_NAME " (3)") != 0) {
             printf("gui self-test: notify icon label \"%s\"\n", text);
             return 2;
         }
@@ -9953,7 +9953,7 @@ int tg_gui_self_test(void)
             if (kind == 0) {
                 sprintf(want, "%.80s (999 new)", TG_APP_TITLE);
             } else if (kind == 1) {
-                strcpy(want, "TelegramAmiga (999)");
+                strcpy(want, TG_APP_NAME " (999)");
             } else {
                 sprintf(want, "%.47s (999)", ns->notify_last_name);
             }

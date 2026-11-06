@@ -17,7 +17,7 @@
 __attribute__((used))
 #endif
 static const char tg_amiga_ver_tag[] =
-    "$VER: TelegramAmiga " TG_VERSION " (" TG_VERSION_DATE ")";
+    "$VER: " TG_APP_NAME " " TG_VERSION " (" TG_VERSION_DATE ")";
 #include "tg_platform.h"
 
 /* AmigaDOS scans this application-level cookie before entering main(). Keep it
@@ -33,7 +33,7 @@ static const char tg_amiga_stack_cookie[] = TG_PLATFORM_SAFE_STACK_COOKIE;
 /* This 68k build uses 68020 instructions (the 32x32 multiply among them), so
    on a plain 68000 the very first one is an illegal instruction and the user
    gets a bare "#80000004" alert with nothing to act on. Every package ships a
-   binary named TelegramAmiga, so picking the wrong archive is easy: say so in
+   binary of the same name, so picking the wrong archive is easy: say so in
    words instead, and point at the package that does run there. */
 #if defined(__amigaos3__) && !defined(TG_LOWMEM)
 #include <exec/execbase.h>
@@ -238,7 +238,7 @@ static int tg_main_body(int argc, char **argv)
                report says "drag-and-drop does nothing", this says WHY. */
             printf("[file drag-and-drop: %s]\n",
                    tg_platform_console_drop_diag());
-            tui_argv[0] = "TelegramAmiga";
+            tui_argv[0] = TG_APP_NAME;
             tui_argv[1] = "--mtproto-start-file";
             tui_argv[2] = "data/telegram-api.txt";
             tui_argv[3] = "telegram-auth.bin";
@@ -261,7 +261,7 @@ static int tg_main_body(int argc, char **argv)
                    then the window closes for real. */
                 /* The pause reads the cooked (line-buffered) console, so
                    only RETURN ends it -- say exactly that. */
-                printf("\n--- Telegram Amiga closed. "
+                printf("\n--- " TG_APP_NAME " closed. "
                        "Press RETURN to dismiss this window. ---\n");
                 fflush(stdout);
 #ifdef TG_DIAG_TRACE
@@ -285,7 +285,7 @@ static int tg_main_body(int argc, char **argv)
             redir = freopen("NIL:", "w", stderr);
             (void)redir;
             tg_platform_workbench_init();
-            wb_argv[0] = "TelegramAmiga";
+            wb_argv[0] = TG_APP_NAME;
             wb_argv[1] = "--gui-live";
             wb_argv[2] = "data/telegram-peers.txt";
             return tg_main_finish(tg_app_run(3, wb_argv));

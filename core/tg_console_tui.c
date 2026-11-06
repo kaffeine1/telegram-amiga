@@ -11,6 +11,7 @@
 #include "tg_console_tui.h"
 #include "tg_console_ui.h"
 #include "tg_platform.h"
+#include "tg_version.h"
 
 #if defined(TG_DIAG_TRACE)
 /* Diagnostic builds trace the window-size handshake: it is the first time
@@ -2712,7 +2713,7 @@ int tg_console_tui_self_test(FILE *stream)
     fflush(stream);
     (void)tg_platform_stdin_read_char(2UL, &ch);
     if (!tg_console_tui_enter(stream,
-                              " Telegram Amiga -- TUI test (q quits) ")) {
+                              " " TG_APP_NAME " -- TUI test (q quits) ")) {
         tg_platform_stdin_set_raw(0);
         fputs("tui-test: enter failed\n", stream);
         return 2;
