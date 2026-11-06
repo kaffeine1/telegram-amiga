@@ -1272,7 +1272,10 @@ package_one() {
     # a build made without the local header would leave every user stuck at
     # the login.
     api_id_built=$(sed -n 's/^#define TG_API_DEFAULT_ID "\([0-9]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null)
-    if [ -z "$api_id_built" ] || ! LC_ALL=C grep -q -a "$api_id_built" "$binary"; then
+    api_hash_built=$(sed -n 's/^#define TG_API_DEFAULT_HASH "\([0-9a-f]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null)
+    if [ -z "$api_id_built" ] || [ -z "$api_hash_built" ] ||
+       ! LC_ALL=C grep -q -a -F "$api_id_built" "$binary" ||
+       ! LC_ALL=C grep -q -a -F "$api_hash_built" "$binary"; then
         echo "ERROR $platform: $binary does not carry the built-in api pair" >&2
         echo "  (include/tg_api_default.local.h missing at build time? rebuild)" >&2
         exit 1
@@ -1312,7 +1315,7 @@ package_one() {
             echo "ERROR $platform: packaged binary != built binary ($binary)" >&2; exit 1
         fi
         rm -f "$PACKAGE_ROOT/.zipbin"
-        if unzip -l "$PACKAGE_ROOT/$drawer.zip" | grep -qiE "telegram-(auth|peers|seed|password|token)|phone-code-hash"; then
+        if unzip -l "$PACKAGE_ROOT/$drawer.zip" | grep -qiE "telegram-(auth|peers|seed|password|token|api)|phone-code-hash"; then
             echo "ERROR $platform: SESSION FILE LEAK in $drawer.zip" >&2; exit 1
         fi
         echo "$PACKAGE_ROOT/$drawer.zip  [bin $(md5of "$binary" | cut -c1-8)]"
@@ -1347,7 +1350,7 @@ package_one() {
         fi
         # Same guards as the zip path: no leaked session file; the packaged
         # binary is byte-identical to the built one.
-        if "$LHA_BIN" l "$lhafile" | grep -qiE "telegram-(auth|peers|seed|password|token)|phone-code-hash"; then
+        if "$LHA_BIN" l "$lhafile" | grep -qiE "telegram-(auth|peers|seed|password|token|api)|phone-code-hash"; then
             echo "ERROR $platform: SESSION FILE LEAK in $lhafile" >&2; exit 1
         fi
         lhatmp=$(mktemp -d)

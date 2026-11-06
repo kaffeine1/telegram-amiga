@@ -29,8 +29,9 @@ the text client for the plain 68000.
   and the settings along.
 - The Telegram api credentials are inside the program, and the packages
   no longer carry data/telegram-api.txt, as Telegram's terms ask of
-  every client. A data/telegram-api.txt of one's own still takes
-  precedence, for anyone who wants to use their own pair.
+  every client. A complete data/telegram-api.txt of one's own still
+  takes precedence; an empty or broken one, like the copy a drawer moved
+  from TelegramAmiga brings along, no longer stops the login.
 - Telegram's login notice and the list of active sessions name the
   system and the real version: "0.0.99 on MorphOS", "on AmigaOS 3",
   "on AmigaOS 4" or "on AROS", with the processor (68020+, 68000,

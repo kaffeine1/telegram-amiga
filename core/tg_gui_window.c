@@ -10848,7 +10848,10 @@ static struct BitMap *tg_gui_popup_corners(struct Screen *screen, int left,
 static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
                              int public_screen)
 {
-    static const char sample[] = TG_APP_NAME ", a new message!";
+    /* Only measured, never shown: it sets the pop-up's width, tuned in
+       0.0.97 on these 30 characters. It must not follow the program's name,
+       or the rename to a shorter one narrows every pop-up. */
+    static const char sample[] = "Telegram Amiga, a new message!";
     struct TagItem tags[16];
     struct RastPort *srp = &screen->RastPort;
     struct RastPort mrp; /* measures with the pop-up's own font */

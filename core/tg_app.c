@@ -152,7 +152,7 @@ static int tg_run_mtproto_ensure_api_file(const char *api_file)
     if (api_status == TG_FILE_OK) {
         return 0;
     }
-#if defined(TG_API_DEFAULT_ID)
+#if defined(TG_API_HAS_DEFAULT)
     /* No file: the binary carries its own pair (tg_api_default.h). */
     if (api_status == TG_FILE_OPEN_FAILED) {
         return 0;

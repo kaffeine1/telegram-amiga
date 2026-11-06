@@ -2881,12 +2881,12 @@ static void tg_mtproto_copy_trimmed_field(const char *source,
     out[length] = '\0';
 }
 
-/* No data/telegram-api.txt: the pair built into the binary, when the build
-   has one (see tg_api_default.h). Returns 1 when it filled the fields. */
+#if defined(TG_API_HAS_DEFAULT)
+/* The pair built into the binary (see tg_api_default.h), for when
+   data/telegram-api.txt gives none. Returns 1 when it filled the fields. */
 static int tg_mtproto_api_default(char *api_id, unsigned long api_id_size,
                                   char *api_hash, unsigned long api_hash_size)
 {
-#if defined(TG_API_DEFAULT_ID) && defined(TG_API_DEFAULT_HASH)
     if (api_id == 0 || sizeof(TG_API_DEFAULT_ID) > api_id_size) {
         return 0;
     }
@@ -2898,22 +2898,16 @@ static int tg_mtproto_api_default(char *api_id, unsigned long api_id_size,
         strcpy(api_hash, TG_API_DEFAULT_HASH);
     }
     return 1;
-#else
-    (void)api_id;
-    (void)api_id_size;
-    (void)api_hash;
-    (void)api_hash_size;
-    return 0;
-#endif
 }
+#endif
 
-static int tg_mtproto_load_api_credentials(const char *path,
-                                           char *api_id,
-                                           unsigned long api_id_size,
-                                           char *api_hash,
-                                           unsigned long api_hash_size,
-                                           FILE *stream,
-                                           const char *label)
+static int tg_mtproto_load_api_credentials_file(const char *path,
+                                                char *api_id,
+                                                unsigned long api_id_size,
+                                                char *api_hash,
+                                                unsigned long api_hash_size,
+                                                FILE *stream,
+                                                const char *label)
 {
     char text[256];
     unsigned long text_length;
@@ -2937,10 +2931,6 @@ static int tg_mtproto_load_api_credentials(const char *path,
     }
 
     file_status = tg_file_read_text(path, text, sizeof(text), &text_length);
-    if (file_status == TG_FILE_OPEN_FAILED &&
-        tg_mtproto_api_default(api_id, api_id_size, api_hash, api_hash_size)) {
-        return 0;
-    }
     if (file_status == TG_FILE_TOO_LARGE) {
         if (stream != 0 && label != 0) {
             fprintf(stream, "%s: api-file-too-large\n", label);
@@ -2999,7 +2989,7 @@ static int tg_mtproto_load_api_credentials(const char *path,
     return 0;
 }
 
-static int tg_mtproto_load_api_id_file(const char *path,
+static int tg_mtproto_load_api_id_only(const char *path,
                                        char *api_id,
                                        unsigned long api_id_size,
                                        FILE *stream,
@@ -3022,10 +3012,6 @@ static int tg_mtproto_load_api_id_file(const char *path,
     }
 
     file_status = tg_file_read_text(path, text, sizeof(text), &text_length);
-    if (file_status == TG_FILE_OPEN_FAILED &&
-        tg_mtproto_api_default(api_id, api_id_size, 0, 0UL)) {
-        return 0;
-    }
     if (file_status == TG_FILE_TOO_LARGE) {
         if (stream != 0 && label != 0) {
             fprintf(stream, "%s: api-file-too-large\n", label);
@@ -3071,6 +3057,54 @@ static int tg_mtproto_load_api_id_file(const char *path,
         return 2;
     }
     return 0;
+}
+
+/* A complete data/telegram-api.txt wins; when it is missing, empty or broken
+   the pair built into the binary takes over, quietly. A drawer copied from
+   TelegramAmiga brings the file along, and a FAT volume can leave it at 0
+   bytes: neither should stop a login the binary could make. */
+static int tg_mtproto_load_api_credentials(const char *path,
+                                           char *api_id,
+                                           unsigned long api_id_size,
+                                           char *api_hash,
+                                           unsigned long api_hash_size,
+                                           FILE *stream,
+                                           const char *label)
+{
+#if defined(TG_API_HAS_DEFAULT)
+    if (tg_mtproto_load_api_credentials_file(path, api_id, api_id_size,
+                                             api_hash, api_hash_size,
+                                             0, 0) == 0) {
+        return 0;
+    }
+    (void)stream;
+    (void)label;
+    return tg_mtproto_api_default(api_id, api_id_size, api_hash,
+                                  api_hash_size) ? 0 : 2;
+#else
+    return tg_mtproto_load_api_credentials_file(path, api_id, api_id_size,
+                                                api_hash, api_hash_size,
+                                                stream, label);
+#endif
+}
+
+static int tg_mtproto_load_api_id_file(const char *path,
+                                       char *api_id,
+                                       unsigned long api_id_size,
+                                       FILE *stream,
+                                       const char *label)
+{
+#if defined(TG_API_HAS_DEFAULT)
+    if (tg_mtproto_load_api_id_only(path, api_id, api_id_size, 0, 0) == 0) {
+        return 0;
+    }
+    (void)stream;
+    (void)label;
+    return tg_mtproto_api_default(api_id, api_id_size, 0, 0UL) ? 0 : 2;
+#else
+    return tg_mtproto_load_api_id_only(path, api_id, api_id_size, stream,
+                                       label);
+#endif
 }
 
 static int tg_mtproto_check_secret_file_permissions(const char *label,
@@ -19134,14 +19168,24 @@ int tg_mtproto_probe_self_test(void)
 
     (void)remove(api_path);
     (void)remove(missing_api_path);
-    /* A missing file falls back to the pair built into the binary when the
-       build has one (tg_api_default.h), and fails when it has none. */
-#if defined(TG_API_DEFAULT_ID) && defined(TG_API_DEFAULT_HASH)
+    /* A missing file and an incomplete one fall back to the pair built
+       into the binary when the build has one (tg_api_default.h), and fail
+       when it has none; a complete file (below) overrides it. */
+#if defined(TG_API_HAS_DEFAULT)
     if (tg_mtproto_load_api_credentials(missing_api_path, api_id,
                                         sizeof(api_id), api_hash,
                                         sizeof(api_hash), 0, 0) != 0 ||
         strcmp(api_id, TG_API_DEFAULT_ID) != 0 ||
         strcmp(api_hash, TG_API_DEFAULT_HASH) != 0) {
+        return 2;
+    }
+    if (tg_file_write_text(api_path, "12345\n", 6UL) != TG_FILE_OK ||
+        tg_mtproto_load_api_credentials(api_path, api_id, sizeof(api_id),
+                                        api_hash, sizeof(api_hash),
+                                        0, 0) != 0 ||
+        strcmp(api_id, TG_API_DEFAULT_ID) != 0 ||
+        strcmp(api_hash, TG_API_DEFAULT_HASH) != 0) {
+        (void)remove(api_path);
         return 2;
     }
 #else
@@ -19150,7 +19194,6 @@ int tg_mtproto_probe_self_test(void)
                                         sizeof(api_hash), 0, 0) == 0) {
         return 2;
     }
-#endif
     if (tg_file_write_text(api_path, "12345\n", 6UL) != TG_FILE_OK ||
         tg_mtproto_load_api_credentials(api_path, api_id, sizeof(api_id),
                                         api_hash, sizeof(api_hash),
@@ -19158,6 +19201,7 @@ int tg_mtproto_probe_self_test(void)
         (void)remove(api_path);
         return 2;
     }
+#endif
     if (tg_file_write_text(api_path, api_text,
                            (unsigned long)strlen(api_text)) != TG_FILE_OK ||
         tg_mtproto_load_api_credentials(api_path, api_id, sizeof(api_id),
@@ -22750,7 +22794,10 @@ static const char *tg_gui_dl_mime_ext(const char *mime)
         "audio/flac", "flac",         "audio/x-wav", "wav",
         "audio/wav", "wav",           "application/pdf", "pdf",
         "application/zip", "zip",     "application/x-lha", "lha",
-        "application/x-tgsticker", "tgs", "text/plain", "txt"
+        "application/x-tgsticker", "tgs", "text/plain", "txt",
+        "image/jpg", "jpg",           "audio/x-flac", "flac",
+        "audio/aac", "aac",           "audio/x-aac", "aac",
+        "video/3gpp", "3gp",          "audio/opus", "opus"
     };
     unsigned long i;
 
@@ -22771,7 +22818,8 @@ static const char *tg_gui_dl_mime_ext(const char *mime)
                 break;
             }
         }
-        if (*a == '\0' && *b == '\0') {
+        /* "audio/ogg; codecs=opus": the parameters do not count. */
+        if (*a == '\0' && (*b == '\0' || *b == ';' || *b == ' ')) {
             return map[i + 1UL];
         }
     }
@@ -23435,7 +23483,7 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
         {"SEND_CODE_UNAVAILABLE", "No other way to send this code",
          "Look for it in the Telegram app on your phone"},
         {"API_ID_INVALID", "Telegram refused this program's key",
-#if defined(TG_API_DEFAULT_ID)
+#if defined(TG_API_HAS_DEFAULT)
          "Remove data/telegram-api.txt if you made one, or update"},
 #else
          "data/telegram-api.txt is damaged: install the package again"},
@@ -24993,7 +25041,10 @@ static int tg_mtproto_download_window_self_test(void)
         ok = ok && strcmp(shortname, "gif_1a2") == 0;
         if (!ok || strcmp(tg_gui_dl_mime_ext(0), "bin") != 0 ||
             strcmp(tg_gui_dl_mime_ext("video/mp4x"), "bin") != 0 ||
-            strcmp(tg_gui_dl_mime_ext("video/mp"), "bin") != 0) {
+            strcmp(tg_gui_dl_mime_ext("video/mp"), "bin") != 0 ||
+            strcmp(tg_gui_dl_mime_ext("audio/ogg; codecs=opus"), "ogg") != 0 ||
+            strcmp(tg_gui_dl_mime_ext("Image/JPG"), "jpg") != 0 ||
+            strcmp(tg_gui_dl_mime_ext("audio/oggx; x=1"), "bin") != 0) {
             puts("probe self-test: window: download file name");
             return 2;
         }
@@ -27233,13 +27284,8 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
                           "This program's key file is missing");
         tg_gui_login_copy(tg_gui_session_state.login.last_hint,
                           sizeof(tg_gui_session_state.login.last_hint),
-#if defined(TG_API_DEFAULT_ID)
-                          "Fix data/telegram-api.txt, or remove it to use "
-                          "the built-in key");
-#else
                           "data/telegram-api.txt is unreadable: install "
                           "the package again");
-#endif
         return TG_GUI_LOGIN_ERROR;
     }
     tg_gui_login_copy(tg_gui_session_state.login.phone,

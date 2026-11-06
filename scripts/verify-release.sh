@@ -48,7 +48,7 @@ verify() {
     fi
     want=$(md5of "$ROOT_DIR/$localbin"); got=$(md5of "$TMP/bin")
     arch=$(file "$TMP/bin" | grep -c "$archpat" || true)
-    leak=$(unzip -l "$TMP/$tag.zip" | grep -icE "telegram-(auth|peers|seed|password|token)|phone-code-hash" || true)
+    leak=$(unzip -l "$TMP/$tag.zip" | grep -icE "telegram-(auth|peers|seed|password|token|api)|phone-code-hash" || true)
     # The 68000 package ships the TUI icon alone (no window in that build).
     case $tag in
     os3-68000-*) iconfile="Amigram-TUI.info" ;;
@@ -100,7 +100,7 @@ verify_lha() {
     fi
     want=$(md5of "$ROOT_DIR/$localbin"); got=$(md5of "$TMP/lha/Amigram/Amigram")
     arch=$(file "$TMP/lha/Amigram/Amigram" | grep -c "$archpat" || true)
-    leak=$("$LHA_BIN" l "$lhafile" | grep -icE "telegram-(auth|peers|seed|password|token)|phone-code-hash" || true)
+    leak=$("$LHA_BIN" l "$lhafile" | grep -icE "telegram-(auth|peers|seed|password|token|api)|phone-code-hash" || true)
     ok=1
     [ "$want" = "$got" ] || { echo "FAIL $lhalabel: packaged binary $got != local build $want"; ok=0; }
     [ "$arch" -ge 1 ]    || { echo "FAIL $lhalabel: wrong architecture"; ok=0; }
