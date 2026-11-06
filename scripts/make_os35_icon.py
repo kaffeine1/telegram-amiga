@@ -25,7 +25,7 @@ The FORM ICON layout written (verified against the 3.2 CD icons):
 Needs Pillow. The launcher fields follow scripts/make_gui_icon.py.
 
 Usage:
-  make_os35_icon.py IN.png OUT.info --project [--tool TelegramAmiga] [--stack N]
+  make_os35_icon.py IN.png OUT.info --project [--tool Amigram] [--stack N]
   make_os35_icon.py IN.png OUT.info --drawer
   options: --selected SEL.png  --colors 64  --frameless  --matte 170,170,170
            --alpha-cut 32  --no-argb  --size 44  --canvas 46  --planar fs|ordered
@@ -376,7 +376,7 @@ def main(argv):
         sys.stderr.write(__doc__)
         return 2
     drawer = "--drawer" in flags
-    tool = None if drawer else opts.get("--tool", "TelegramAmiga")
+    tool = None if drawer else opts.get("--tool", "Amigram")
     stack = int(opts.get("--stack", "1048576"))
     colors = int(opts.get("--colors", "64"))
     if not 2 <= colors <= 256:

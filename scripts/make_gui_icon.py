@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Turn a classic Workbench icon into the self-launching TelegramAmiga icon.
+"""Turn a classic Workbench icon into the self-launching Amigram icon.
 
-Both launcher icons of a package are the SAME bytes: TelegramAmiga.info owns
-the binary, TelegramAmiga-TUI.info owns a 0-byte marker whose name carries
+Both launcher icons of a package are the SAME bytes: Amigram.info owns
+the binary, Amigram-TUI.info owns a 0-byte marker whose name carries
 "TUI", and the binary tells the two apart by the name it was started with.
 For that to work every icon we ship must be a PROJECT icon (Workbench then
 runs its DefaultTool with the file as the argument), its DefaultTool must be
-TelegramAmiga, and its stack 1048576 (the first login does a DH exchange that
+Amigram, and its stack 1048576 (the first login does a DH exchange that
 Gurus at 262144). This script imposes those three fields on any classic icon,
 including one drawn by somebody else, and touches nothing else: the imagery,
 the tool types and a trailing OS3.5/OS4 colour icon (FORM ICON) are kept
@@ -173,7 +173,7 @@ def main(argv):
         tool = None
         stack = int(args[2]) if len(args) > 2 else 1048576
     else:
-        tool = args[2] if len(args) > 2 else "TelegramAmiga"
+        tool = args[2] if len(args) > 2 else "Amigram"
         stack = int(args[3]) if len(args) > 3 else 1048576
     data = open(src, "rb").read()
     try:

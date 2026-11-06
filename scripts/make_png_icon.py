@@ -4,7 +4,7 @@
 A PNG icon is one PNG, or two concatenated (normal and selected), and the
 first one carries an "icOn" chunk: a list of attributes, each a big-endian
 ULONG tag followed by a ULONG value or a NUL-terminated string. This script
-replaces that chunk with the fields a TelegramAmiga launcher icon needs
+replaces that chunk with the fields an Amigram launcher icon needs
 (type, DefaultTool, stack, an optional drawer geometry) and leaves every
 pixel and every other chunk untouched, CRC recomputed for the new chunk.
 
@@ -16,7 +16,7 @@ Tags as icon.library reads them (AROS workbench/libs/icon/diskobjPNGio.c):
 An unknown tag stops the reader, so nothing else is written.
 
 Usage:
-  make_png_icon.py IN.info OUT.info --project --tool TelegramAmiga --stack 1048576
+  make_png_icon.py IN.info OUT.info --project --tool Amigram --stack 1048576
   make_png_icon.py IN.info OUT.info --drawer
   make_png_icon.py --dump IN.info
 """
@@ -132,7 +132,7 @@ def main(argv):
     if len(args) < 2 or not ({"--project", "--drawer"} & set(flags)):
         sys.stderr.write(__doc__)
         return 2
-    tool = "TelegramAmiga"
+    tool = "Amigram"
     stack = 1048576
     for i, a in enumerate(argv):
         if a == "--tool":
