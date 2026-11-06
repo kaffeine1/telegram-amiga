@@ -15683,6 +15683,15 @@ int tg_mtproto_auth_chat_file(const char *host,
      */
 #if TG_ENABLE_CHAT_RAW_INPUT
     chat_raw = (tg_platform_stdin_set_raw(1) == 0);
+    if (chat_raw) {
+        /* Ctrl+C is ours from here, as in the GUI: it comes in as 0x03 and
+           the pending break ends every prompt and network wait, so the
+           teardown runs. Some consoles (OS 3.2) also send the break signal,
+           and the C library's own check took it inside a stdio call: it
+           printed "***Break" and exited without the teardown, leaving a
+           Workbench console window on the screen with nobody behind it. */
+        tg_platform_break_own();
+    }
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: stdin raw set");
 #endif

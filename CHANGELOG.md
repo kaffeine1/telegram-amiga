@@ -51,6 +51,11 @@ the text client for the plain 68000.
   under what it is, an id and the extension of its type, for example
   "video_1a2b3c4d.mp4", so it opens and each one keeps its own file.
   Saving the same file again still replaces it.
+- Ctrl+C in the text client on AmigaOS 3.2 ended the program inside the C
+  library, which printed "***Break" and skipped the clean exit: started
+  from its icon, the client left its console window on the screen with
+  nothing behind it. Ctrl+C now quits the way /quit does, and the window
+  closes after the last key press.
 
 ## [0.0.99] - 2026-11-02
 
