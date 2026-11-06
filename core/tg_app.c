@@ -200,12 +200,18 @@ static int tg_run_mtproto_peer_cache_exists(const char *peer_cache_file)
 {
     char probe[128];
     unsigned long length;
+    tg_file_status status;
 
     if (peer_cache_file == 0 || peer_cache_file[0] == '\0') {
         return 0;
     }
-    if (tg_file_read_text(peer_cache_file, probe, sizeof(probe), &length) !=
-        TG_FILE_OK) {
+    status = tg_file_read_text(peer_cache_file, probe, sizeof(probe), &length);
+    if (status == TG_FILE_TOO_LARGE) {
+        /* More than the probe holds: a real cache. Counting it as missing
+           printed "No cached chat list found" at every start. */
+        return 1;
+    }
+    if (status != TG_FILE_OK) {
         return 0;
     }
     return length > 0UL;

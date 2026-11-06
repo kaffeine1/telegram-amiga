@@ -56,6 +56,9 @@ the text client for the plain 68000.
   from its icon, the client left its console window on the screen with
   nothing behind it. Ctrl+C now quits the way /quit does, and the window
   closes after the last key press.
+- The text client said "No cached chat list found" at every start once the
+  chat list file had grown past a few lines, which is always. It now says
+  so only when there is no list.
 
 ## [0.0.99] - 2026-11-02
 
