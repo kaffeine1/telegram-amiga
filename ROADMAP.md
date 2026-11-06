@@ -245,6 +245,14 @@ Features are therefore grouped by the work they share.
     left as the override (their section below);
   - the adversarial review of the whole client, and a sanitizer round on
     the code that ships.
+  Decided on 2026-11-06: 0.1 goes out as planned, with nothing added,
+  and new features start with 0.2 (their section below). The release
+  before the rename was meant to announce it; 0.0.99 did not, so the
+  0.1 notes, the readmes and the "coming from TelegramAmiga" section
+  carry the news instead. The MorphOS-Storage maintainer had said a
+  transition release was welcome but not needed.
+- **0.2, what a desktop user expects.** The first feature release after
+  the beta; see "Planned for 0.2" below.
 - **After the beta: skins and translations.** Colours, fonts and more
   still to be defined, and the client in other languages through the
   system's locale.library. Both touch every colour or every word on
@@ -258,6 +266,50 @@ drawn inside the transcript, the part that has to split text runs in
 the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce
 while trying to prove a quiet cycle.
+
+## Planned for 0.2: what a desktop user expects
+
+In November 2026 a second native client appeared on Aminet, built on MUI
+and AmiSSL. Its manual and the API methods its binary calls make a
+useful list of what users of the official apps miss here. Ideas only:
+its code is closed and we never read it, and we keep our own rules, no
+dependencies, the 68000 lane, six systems.
+
+Cheap, protocol only, on the existing window:
+
+- search inside a chat and across all chats (`messages.search`,
+  `messages.searchGlobal`); today the search box finds chat names only;
+- pinned chats at the top of the list and the Archive (`folder_id` 1),
+  which Telegram already sends and we ignore; pin and archive from the
+  chat's menu (`messages.toggleDialogPin`, `folders.editPeerFolders`);
+- mark as read or unread (`messages.markDialogUnread`), leave a group or
+  a channel, delete a chat;
+- drafts kept in step with the other devices (`messages.saveDraft`, and
+  reading `draftMessage` right, which is a bug on `main` today);
+- the pinned message under the chat header, and a jump to the next
+  unread mention (`messages.getUnreadMentions`);
+- Mute in the chat's menu sent to Telegram (`account.updateNotifySettings`),
+  so it reaches the other devices instead of staying local;
+- an ARexx port: open a chat, show, hide, so that notifications and
+  scripts can drive the client;
+- the time zone from `ENV:TZONE` or `ENV:TZ` before the Locale
+  preferences.
+
+Middle, more interface:
+
+- albums and captions when sending (captions have their own section);
+- select several messages (its section), open a downloaded file or show
+  it in its drawer (its section);
+- polls shown and voted (`messages.sendVote`); today a poll shows
+  nothing at all;
+- the update notice (its section);
+- stickers through a WEBP datatype where the user has one (see "let
+  datatypes read what we cannot"): a fallback, never a requirement, and
+  AROS keeps the emoji.
+
+Large, later if at all: chat folders of one's own, scheduled messages, a
+calendar, editing the profile, administering groups. Out of reach by our
+rules: voice messages, which need an Opus decoder.
 
 ## After the 0.1 beta: skins and translations
 
