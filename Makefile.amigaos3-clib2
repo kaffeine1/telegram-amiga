@@ -22,7 +22,7 @@ CSTD ?= c89
 # multilib, and the bigint asm already skips itself at runtime on a bare
 # 68000 (AttnFlags). Release lane stays 68060. Use a separate TARGET/OBJDIR:
 #   make -f Makefile.amigaos3-clib2 M68K_CPU=68000 \
-#     TARGET=build/amigaos3-68000/TelegramAmiga \
+#     TARGET=build/amigaos3-68000/Amigram \
 #     OBJDIR=build/amigaos3-68000/obj clean all
 M68K_CPU ?= 68060
 CFLAGS ?= -std=$(CSTD) -Wall -Wextra -O0 -m$(M68K_CPU) -mcrt=clib2 -Iinclude
@@ -38,7 +38,7 @@ GCC_INCLUDE_FIXED := $(shell $(CC) -print-file-name=include-fixed)
 CFLAGS += -idirafter $(GCC_INCLUDE_FIXED)
 LDFLAGS ?= -mcrt=clib2
 LDLIBS ?= -lamiga
-TARGET ?= build/amigaos3-clib2/TelegramAmiga
+TARGET ?= build/amigaos3-clib2/Amigram
 
 # clib2's default link does not pull libgcc's __muldi3 here, so use the in-tree
 # 64-bit multiply (same as the ixemul build).

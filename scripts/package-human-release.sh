@@ -3,11 +3,11 @@
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 # SPDX-License-Identifier: MIT
 #
-# Build the human-facing release packages for Telegram Amiga.
+# Build the human-facing release packages for Amigram.
 # Version comes from include/tg_version.h (override with VERSION=... if needed).
 #
 # Each package contains ONLY the program (one binary), its self-launching icon
-# (plus the TelegramAmiga-TUI console icon on the 68k line only; no scripts),
+# (plus the Amigram-TUI console icon on the 68k line only; no scripts),
 # the PUBLIC Telegram API app credentials and per-architecture IT/EN manuals.
 # No user session is ever bundled: telegram-auth.bin and the peer cache are
 # created locally by the user on first login (see the manual).
@@ -44,19 +44,19 @@ fi
 
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 
-AMIGAOS3_BINARY=${AMIGAOS3_BINARY:-"$ROOT_DIR/build/amigaos3-clib2/TelegramAmiga"}
+AMIGAOS3_BINARY=${AMIGAOS3_BINARY:-"$ROOT_DIR/build/amigaos3-clib2/Amigram"}
 # Plain-68000 variant (A500/A600/A1000/CDTV class): the text client with the
 # LOWMEM caps, built by scripts/build-68000-lowmem.sh into its own folder
 # (build/amigaos3-68000/ is where any other 68000 build lands). Packaged only
 # when that binary exists, and refused below unless it is that recipe.
-AMIGAOS3_68000_BINARY=${AMIGAOS3_68000_BINARY:-"$ROOT_DIR/build/amigaos3-68000-lowmem/TelegramAmiga"}
-MORPHOS_BINARY=${MORPHOS_BINARY:-"$ROOT_DIR/build/morphos-cross/TelegramAmiga"}
-AMIGAOS4_BINARY=${AMIGAOS4_BINARY:-"$ROOT_DIR/build/amigaos4/TelegramAmiga"}
-AROS_I386_BINARY=${AROS_I386_BINARY:-"$ROOT_DIR/build/aros-i386-abiv0/TelegramAmiga"}
-AROS_X86_64_BINARY=${AROS_X86_64_BINARY:-"$ROOT_DIR/build/aros-x86_64/TelegramAmiga"}
+AMIGAOS3_68000_BINARY=${AMIGAOS3_68000_BINARY:-"$ROOT_DIR/build/amigaos3-68000-lowmem/Amigram"}
+MORPHOS_BINARY=${MORPHOS_BINARY:-"$ROOT_DIR/build/morphos-cross/Amigram"}
+AMIGAOS4_BINARY=${AMIGAOS4_BINARY:-"$ROOT_DIR/build/amigaos4/Amigram"}
+AROS_I386_BINARY=${AROS_I386_BINARY:-"$ROOT_DIR/build/aros-i386-abiv0/Amigram"}
+AROS_X86_64_BINARY=${AROS_X86_64_BINARY:-"$ROOT_DIR/build/aros-x86_64/Amigram"}
 # aarch64 (Raspberry Pi, ABIv1): built on the bench like the x86_64 lane, from
 # 6fbf9d0 straight out of make (no relink). Sixth package since 0.0.94.
-AROS_AARCH64_BINARY=${AROS_AARCH64_BINARY:-"$ROOT_DIR/build/aros-aarch64/TelegramAmiga"}
+AROS_AARCH64_BINARY=${AROS_AARCH64_BINARY:-"$ROOT_DIR/build/aros-aarch64/Amigram"}
 
 # --- Aminet artifacts (.lha + .readme) --------------------------------------
 # Aminet requires a real LhA ENCODER (the Mac's lhasa is extract-only); we use
@@ -67,7 +67,15 @@ AMINET=${AMINET:-1}
 LHA_BIN=${LHA_BIN:-"$HOME/amiga-dev/tools/lha-src/src/lha"}
 AMINET_ROOT=${AMINET_ROOT:-"$PACKAGE_ROOT/aminet"}
 AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"} # set here: package_one stages the aarch64 lha there
-AMINET_DRAWER=${AMINET_DRAWER:-TelegramAmiga}
+# The program's name, and the name its archives had in the release before.
+# The first Amigram release (0.1) replaces the TelegramAmiga archives on every
+# channel through their Replaces fields; from the release after it, set
+# PREV_NAME=Amigram (or change the default) so each release replaces the last.
+APP_NAME=Amigram
+PREV_NAME=${PREV_NAME:-TelegramAmiga}
+prev_lower=$(printf '%s' "$PREV_NAME" | tr 'A-Z' 'a-z')
+app_lower=$(printf '%s' "$APP_NAME" | tr 'A-Z' 'a-z')
+AMINET_DRAWER=${AMINET_DRAWER:-$APP_NAME}
 AMINET_UPLOADER=${AMINET_UPLOADER:-"michele.dipace@kaffeine.net (Michele Dipace)"}
 AMINET_AUTHOR=${AMINET_AUTHOR:-"Michele Dipace <michele.dipace@kaffeine.net>"}
 DIARY_URL="https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/"
@@ -82,8 +90,8 @@ KOFI_URL="https://ko-fi.com/kaffeine1"
 sha_cmd() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
 
 mkdir -p "$PACKAGE_ROOT"
-rm -f "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP".zip "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP".info
-rm -rf "$PACKAGE_ROOT"/Telegram-*-"$DATE_STAMP"
+rm -f "$PACKAGE_ROOT"/"$APP_NAME"-*-"$DATE_STAMP".zip "$PACKAGE_ROOT"/"$APP_NAME"-*-"$DATE_STAMP".info
+rm -rf "$PACKAGE_ROOT"/"$APP_NAME"-*-"$DATE_STAMP"
 if [ "$AMINET" = "1" ]; then rm -rf "$AMINET_ROOT"; mkdir -p "$AMINET_ROOT"; fi
 
 # Which assets/icons/<lane>/ set a platform ships (scripts/build-icons.sh
@@ -127,9 +135,9 @@ dopo giro sul suo A600, la versione 68000 non sarebbe mai uscita.
         thanks68k_para_en=""
         thanks68k_line_it=""
     fi
-    gui_entry_en="- TelegramAmiga: the window client (Intuition/GadTools). Double-click it.
+    gui_entry_en="- Amigram: the window client (Intuition/GadTools). Double-click it.
 "
-    gui_entry_it="- TelegramAmiga: il client a finestra (Intuition/GadTools). Doppio click.
+    gui_entry_it="- Amigram: il client a finestra (Intuition/GadTools). Doppio click.
 "
     account_en="You need a Telegram account. The client cannot create one: make it
 first with the official app on a phone."
@@ -156,58 +164,58 @@ prima con l'app ufficiale su un telefono."
    Invio.
 4. Il client salva l'accesso in telegram-auth.bin, in questo cassetto, e
    non te lo chiede piu'."
-    shell_cmd="      TelegramAmiga --mtproto-start-file data/telegram-api.txt
+    shell_cmd="      Amigram --mtproto-start-file data/telegram-api.txt
         telegram-auth.bin data/phone-code-hash.txt data/telegram-peers.txt"
     if [ "$tui_icon" = "1" ]; then
         launchers_title_en="Two icons
 ---------"
         launchers_title_it="Due icone
 ---------"
-        tui_entry_en="- TelegramAmiga-TUI: the text client, full screen, for slow machines
+        tui_entry_en="- Amigram-TUI: the text client, full screen, for slow machines
   or setups without a mouse. Both use the same login."
-        tui_entry_it="- TelegramAmiga-TUI: il client testuale a schermo intero, per macchine
+        tui_entry_it="- Amigram-TUI: il client testuale a schermo intero, per macchine
   lente o senza mouse. Usano lo stesso accesso."
         first_start_en="$account_en
 
-1. Copy the drawer to a writable volume and double-click TelegramAmiga
-   (or TelegramAmiga-TUI).
+1. Copy the drawer to a writable volume and double-click Amigram
+   (or Amigram-TUI).
 $login_steps_en"
         first_start_it="$account_it
 
 1. Copia il cassetto su un volume scrivibile e fai doppio click su
-   TelegramAmiga (o TelegramAmiga-TUI).
+   Amigram (o Amigram-TUI).
 $login_steps_it"
-        readme_programs="  TelegramAmiga      the window client
-  TelegramAmiga-TUI  the text client"
-        readme_start="Copy this drawer to a writable volume and double-click TelegramAmiga
-(or TelegramAmiga-TUI). The first run signs you in: phone, code, 2FA."
+        readme_programs="  Amigram      the window client
+  Amigram-TUI  the text client"
+        readme_start="Copy this drawer to a writable volume and double-click Amigram
+(or Amigram-TUI). The first run signs you in: phone, code, 2FA."
         aminet_programs="Two clients share one engine and one login:
 
-  TelegramAmiga      the window client (Intuition/GadTools): chat list
+  Amigram      the window client (Intuition/GadTools): chat list
                      with avatars, bubbles, photos, emoji, menus.
-  TelegramAmiga-TUI  the text client, for slow machines, a serial
+  Amigram-TUI  the text client, for slow machines, a serial
                      console or an ssh session."
-        aminet_tui_hint=" (or TelegramAmiga-TUI for the text client)"
+        aminet_tui_hint=" (or Amigram-TUI for the text client)"
         if [ "$gui_icon" = "0" ]; then
             launchers_title_en="The icon
 --------"
             launchers_title_it="L'icona
 -------"
-            tui_entry_en="- TelegramAmiga-TUI: the text client, full screen. It is the only
+            tui_entry_en="- Amigram-TUI: the text client, full screen. It is the only
   icon here: the window client needs a 68020 or better and is not in
   this build.
-- From a Shell: TelegramAmiga-TUI is an empty marker file, not a
+- From a Shell: Amigram-TUI is an empty marker file, not a
   program (running it says \"file is not executable\"). Inside the
   drawer type:
       stack 393216
 $shell_cmd
   The second command is one line. The stack is needed once per Shell (a
   Shell gives 4096 bytes, and the program says so). If the Shell refuses
-  to run it, type \"Protect TelegramAmiga +e\" once."
-            tui_entry_it="- TelegramAmiga-TUI: il client testuale a schermo intero. E' l'unica
+  to run it, type \"Protect Amigram +e\" once."
+            tui_entry_it="- Amigram-TUI: il client testuale a schermo intero. E' l'unica
   icona: il client a finestra vuole un 68020 o superiore e in questa
   build non c'e'.
-- Da Shell: TelegramAmiga-TUI e' un file segnaposto vuoto, non un
+- Da Shell: Amigram-TUI e' un file segnaposto vuoto, non un
   programma (lanciarlo da' \"file is not executable\"). Dentro il
   cassetto scrivi:
       stack 393216
@@ -215,7 +223,7 @@ $shell_cmd
   Il secondo comando sta su una riga sola. Lo stack serve una volta per
   Shell (una Shell ne da' 4096 byte, e il programma lo dice). Se la
   Shell si rifiuta di eseguirlo, scrivi una volta
-  \"Protect TelegramAmiga +e\"."
+  \"Protect Amigram +e\"."
             first_start_en="$account_en
 
 The first login is too heavy for a 68000 (a Diffie-Hellman key
@@ -224,10 +232,10 @@ exchange), so it is made elsewhere:
 1. On a 68020 or better, or in an emulator (WinUAE, FS-UAE, vAmiga),
    install the standard AmigaOS 3.x package and log in there.
 2. Copy telegram-auth.bin from that drawer into this one, next to
-   TelegramAmiga-TUI, and data/telegram-peers.txt too if you want the
+   Amigram-TUI, and data/telegram-peers.txt too if you want the
    chat list ready. Never share telegram-auth.bin.
 3. Copy this drawer to a writable volume and double-click
-   TelegramAmiga-TUI. The account stays usable on both machines.
+   Amigram-TUI. The account stays usable on both machines.
 
 With a cloud password (2FA), checking it takes about 35 minutes on a
 stock A1200 and much less on faster machines. The dots show it working,
@@ -243,10 +251,10 @@ Diffie-Hellman), quindi si fa altrove:
 1. Su un 68020 o superiore, o in un emulatore (WinUAE, FS-UAE, vAmiga),
    installa il pacchetto AmigaOS 3.x standard e accedi li'.
 2. Copia telegram-auth.bin da quel cassetto in questo, accanto a
-   TelegramAmiga-TUI, e anche data/telegram-peers.txt se vuoi la lista
+   Amigram-TUI, e anche data/telegram-peers.txt se vuoi la lista
    chat gia' pronta. Non condividere mai telegram-auth.bin.
 3. Copia questo cassetto su un volume scrivibile e fai doppio click su
-   TelegramAmiga-TUI. L'account resta usabile su tutte e due le
+   Amigram-TUI. L'account resta usabile su tutte e due le
    macchine.
 
 Con una password cloud (2FA), il controllo richiede circa 35 minuti su
@@ -255,13 +263,13 @@ mostrano che sta lavorando, poi l'accesso si completa.
 
 Il programma ti lascia comunque provare l'accesso sul 68000, ma la via
 sopra e' quella supportata."
-            readme_programs="  TelegramAmiga-TUI  the text client (the window client needs a 68020)"
+            readme_programs="  Amigram-TUI  the text client (the window client needs a 68020)"
             readme_start="Copy this drawer to a writable volume. Log in first on a faster Amiga
 or in an emulator and copy telegram-auth.bin here (see the manual), then
-double-click TelegramAmiga-TUI."
+double-click Amigram-TUI."
             gui_entry_en=""
             gui_entry_it=""
-            aminet_programs="  TelegramAmiga-TUI  the full-screen text client."
+            aminet_programs="  Amigram-TUI  the full-screen text client."
             aminet_tui_hint=""
         fi
     else
@@ -274,31 +282,55 @@ double-click TelegramAmiga-TUI."
   drawer:
 $shell_cmd
   (one line). If the Shell refuses to run it, type
-  \"Protect TelegramAmiga +e\" once. Both use the same login."
+  \"Protect Amigram +e\" once. Both use the same login."
         tui_entry_it="- Il client testuale e' lo stesso programma. Questo pacchetto ha solo
   l'icona della finestra; per il client testuale scrivi in una Shell,
   dentro il cassetto:
 $shell_cmd
   (su una riga sola). Se la Shell si rifiuta di eseguirlo, scrivi una
-  volta \"Protect TelegramAmiga +e\". L'accesso e' lo stesso."
+  volta \"Protect Amigram +e\". L'accesso e' lo stesso."
         first_start_en="$account_en
 
-1. Copy the drawer to a writable volume and double-click TelegramAmiga.
+1. Copy the drawer to a writable volume and double-click Amigram.
 $login_steps_en"
         first_start_it="$account_it
 
 1. Copia il cassetto su un volume scrivibile e fai doppio click su
-   TelegramAmiga.
+   Amigram.
 $login_steps_it"
-        readme_programs="  TelegramAmiga  the window client. The same program runs the text
+        readme_programs="  Amigram  the window client. The same program runs the text
                  client from a Shell (see the manual)."
-        readme_start="Copy this drawer to a writable volume and double-click TelegramAmiga.
+        readme_start="Copy this drawer to a writable volume and double-click Amigram.
 The first run signs you in: phone, code, 2FA."
-        aminet_programs="  TelegramAmiga  the window client (Intuition/GadTools): chat list with
+        aminet_programs="  Amigram  the window client (Intuition/GadTools): chat list with
                  avatars, bubbles, photos, emoji, menus. The same
                  program runs a text client from a Shell; the manual
                  gives the command."
         aminet_tui_hint=""
+    fi
+    # The first Amigram release tells TelegramAmiga users what to bring along.
+    if [ "$PREV_NAME" != "$APP_NAME" ]; then
+        coming_en="Coming from $PREV_NAME
+$(printf '%s' "Coming from $PREV_NAME" | tr -c '\n' '-')
+Until 0.0.99 this program was called $PREV_NAME. To keep your session,
+chats and settings, copy from the old drawer into this one:
+telegram-auth.bin and the data drawer, and avatars, photos and downloads
+if you want them. Do not copy the old program or its icons; the old
+drawer can go afterwards.
+
+"
+        coming_it="Chi arriva da $PREV_NAME
+$(printf '%s' "Chi arriva da $PREV_NAME" | tr -c '\n' '-')
+Fino alla 0.0.99 questo programma si chiamava $PREV_NAME. Per tenere
+sessione, chat e impostazioni, copia dal vecchio cassetto in questo:
+telegram-auth.bin e il cassetto data, e avatars, photos e downloads se
+li vuoi. Non copiare il vecchio programma ne' le sue icone; poi il
+vecchio cassetto si puo' togliere.
+
+"
+    else
+        coming_en=""
+        coming_it=""
     fi
     notes_title_en="Notes for $1"
     notes_title_it="Note per $1"
@@ -368,7 +400,7 @@ The first run signs you in: phone, code, 2FA."
   install screennotify.library in LIBS: (Aminet util/libs/ScreenNotify10):
   the window then closes when asked and comes back on the new screen.
   Without it, use Settings > Use own screen, or quit first.
-- Text client (TelegramAmiga-TUI): Enter sends. The tabs under the top
+- Text client (Amigram-TUI): Enter sends. The tabs under the top
   line show the chats on F1 to F10 (/move 5 1 puts chat 5 under F1); a
   chat number opens one, 0 Saved Messages, Tab the chat before, /list
   the chats, /help the commands."
@@ -382,7 +414,7 @@ The first run signs you in: phone, code, 2FA."
   util/libs/ScreenNotify10): la finestra si chiude quando il sistema lo
   chiede e torna sul nuovo schermo. Senza, usa Settings > Use own screen
   oppure esci prima.
-- Client testuale (TelegramAmiga-TUI): Invio manda. Le schede sotto la
+- Client testuale (Amigram-TUI): Invio manda. Le schede sotto la
   riga in alto mostrano le chat sui tasti da F1 a F10 (/move 5 1 mette la
   chat 5 sotto F1); il numero di una chat la apre, 0 i Messaggi salvati,
   Tab la chat di prima, /list le chat, /help i comandi."
@@ -453,7 +485,7 @@ $notes_it"
 
 write_readme() {
     cat > "$1" <<EOF
-Unofficial Telegram Amiga - $2 - $CHANNEL $VERSION
+Amigram - $2 - $CHANNEL $VERSION
 =====================================================
 
 A native Telegram client, written from scratch. No MUI, no ixemul, no
@@ -463,7 +495,7 @@ $readme_programs
 
 $readme_start
 
-Manuals: Manual-EN.txt (English), Manuale-IT.txt (Italiano).
+${coming_en}Manuals: Manual-EN.txt (English), Manuale-IT.txt (Italiano).
 Changes: CHANGELOG.txt.
 
 Never share telegram-auth.bin: after the first login it holds your
@@ -721,8 +753,8 @@ write_manual_en() {
 
 "
     cat > "$1" <<EOF
-Unofficial Telegram Amiga: user manual
-======================================
+Amigram: user manual
+====================
 
 Platform: $2
 Version: $VERSION   Build: $COMMIT_ID
@@ -754,7 +786,7 @@ First start
 -----------
 $first_start_en
 
-${window_section}Message times
+${coming_en}${window_section}Message times
 -------------
 Times follow the Amiga clock, so set it in the system preferences. If
 the clock was never set (no battery clock), the client takes Telegram's
@@ -800,8 +832,8 @@ write_manual_it() {
 
 "
     cat > "$1" <<EOF
-Unofficial Telegram Amiga: manuale
-==================================
+Amigram: manuale
+================
 
 Piattaforma: $2
 Versione: $VERSION   Build: $COMMIT_ID
@@ -834,7 +866,7 @@ Primo avvio
 -----------
 $first_start_it
 
-${window_section}Orari dei messaggi
+${coming_it}${window_section}Orari dei messaggi
 ------------------
 Gli orari seguono l'orologio dell'Amiga, quindi impostalo nelle
 preferenze di sistema. Se l'orologio non e' mai stato impostato (niente
@@ -882,32 +914,36 @@ EOF
 # (the readme Architecture: value), requires. NB the Aminet enum has no
 # x86_64-aros token -> 64-bit AROS uses archval i386-aros, distinguished only by
 # the x86_64-aros FILENAME (verified live, e.g. filesysbox.x86_64-aros).
-# From 0.0.6 the archives are named after the binary (TelegramAmiga) in the
+# From 0.0.6 the archives are named after the binary (Amigram since 0.1) in the
 # classic Aminet suffix style -- the 30-char filename limit rules out the long
-# arch tags (TelegramAmiga.m68k-amigaos.readme would be 33). Replaces: names
+# arch tags (Amigram.m68k-amigaos.readme fits, the old name did not). Replaces: names
 # the previous release of the same archive (lhaold below): Aminet refuses an
 # upload whose Replaces: points at an archive it no longer has, which is what
 # the archive names from before 0.0.6 did to all five 0.0.94 uploads (0.0.93
 # still passed with them in September 2026).
 aminet_meta() {
     aminet_upload=1 # 0 = the lha is built for The AROS Archives only
-    aminet_short="Unofficial native Telegram chat client"
+    if [ "$PREV_NAME" != "$APP_NAME" ]; then
+        aminet_short="Native Telegram client, ex $PREV_NAME"
+    else
+        aminet_short="Native Telegram chat client"
+    fi
     aminet_kind=full
     case "$1" in
     amigaos3)    archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
-                 lhaname="TelegramAmiga"
+                 lhaname="$APP_NAME"
                  requires="68020+ CPU and a bsdsocket.library TCP/IP stack" ;;
     morphos)     archtag="ppc-morphos";  archval="ppc-morphos"
-                 lhaname="TelegramAmiga-MOS"
+                 lhaname="$APP_NAME-MOS"
                  requires="MorphOS 3.x with its TCP/IP stack" ;;
     amigaos4)    archtag="ppc-amigaos";  archval="ppc-amigaos >= 4.0.0"
-                 lhaname="TelegramAmiga-OS4"
+                 lhaname="$APP_NAME-OS4"
                  requires="AmigaOS 4.x with its TCP/IP stack" ;;
     aros-i386)   archtag="i386-aros";    archval="i386-aros"
-                 lhaname="TelegramAmiga-AROS"
+                 lhaname="$APP_NAME-AROS"
                  requires="AROS (i386) with a TCP/IP stack (AROSTCP)" ;;
     aros-x86_64) archtag="x86_64-aros";  archval="i386-aros"
-                 lhaname="TelegramAmiga-AROS64"
+                 lhaname="$APP_NAME-AROS64"
                  requires="AROS (x86_64) with a TCP/IP stack (AROSTCP)" ;;
     # The ARM64 lane is an Aminet upload too since 0.0.95 (first one sent on
     # 2026-10-08). Aminet's architecture list has no ARM token (m68k-amigaos,
@@ -917,19 +953,20 @@ aminet_meta() {
     # the x86_64 lane and our BebboSSH port's aarch64 upload, so it is listed
     # with the other AROS builds. The file name and Requires: say it is ARM.
     aros-aarch64) archtag="aarch64-aros"; archval="i386-aros"
-                 lhaname="TelegramAmiga-ARM64"
+                 lhaname="$APP_NAME-ARM64"
                  requires="AROS aarch64 (ABIv1, Raspberry Pi 4/400/5) with AROSTCP" ;;
     # The plain-68000 text client, on Aminet from 0.0.96 under its own name:
-    # sharing TelegramAmiga with the 68020 package would replace that one.
-    # Its first upload goes with AMINET_NEW=TelegramAmiga-68000 (no Replaces:).
+    # sharing the 68020 package's name would replace that one. Its first
+    # upload (0.0.96) went with AMINET_NEW and no Replaces:.
     amigaos3-68000) archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
-                 lhaname="TelegramAmiga-68000"
-                 aminet_short="Unofficial Telegram text client, 68000"
+                 lhaname="$APP_NAME-68000"
+                 aminet_short="Telegram text client for 68000 machines"
                  aminet_kind=tui68k
                  requires="68000, 2 MB fast RAM, TCP/IP, login made on a faster Amiga" ;;
     *) echo "aminet_meta: unknown arch $1" >&2; exit 1 ;;
     esac
-    if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/$lhaname.lha"; else lhaold=""; fi
+    # Replaces: names the same lane's archive under the previous name.
+    if [ "$aminet_upload" = 1 ]; then lhaold="comm/tcp/$PREV_NAME${lhaname#"$APP_NAME"}.lha"; else lhaold=""; fi
     # AMINET_NEW lists archives Aminet does not have yet (a first upload):
     # Replaces: must name an archive the site has, so those get none.
     case " ${AMINET_NEW:-} " in *" $lhaname "*) lhaold="" ;; esac
@@ -995,7 +1032,7 @@ Amiga and your phone or PC.
 
 Limits: 12 chats in the list, 8 messages per page, message text up to
 2 KB, downloads in 16 KB pieces. With a 68020 or better take the AmigaOS
-3.x archive (TelegramAmiga.lha), which has the window, photos and emoji.
+3.x archive (Amigram.lha), which has the window, photos and emoji.
 EOT
         return
     fi
@@ -1023,7 +1060,7 @@ GETTING STARTED
    emulator: the login's key exchange is too much for a 68000.
 2. Copy this drawer to a writable volume of the 68000 machine, then copy
    telegram-auth.bin and the data drawer from the other setup into it.
-3. Double-click TelegramAmiga-TUI. The account stays usable on both.
+3. Double-click Amigram-TUI. The account stays usable on both.
 
 telegram-auth.bin holds your login. Never share it: whoever has it is in
 your Telegram account. The archive has full manuals in English and
@@ -1035,7 +1072,7 @@ EOT
 GETTING STARTED
 ---------------
 1. Copy this drawer to a writable volume.
-2. Double-click TelegramAmiga$aminet_tui_hint.
+2. Double-click Amigram$aminet_tui_hint.
 3. Sign in: phone number, the code Telegram sends, and the cloud
    password if you use 2FA. Next time it opens on your chats.
 
@@ -1045,10 +1082,20 @@ manuals in English and Italian, with notes for each platform.
 EOT
 }
 
+# The rename notice, in the readme's upper-case headings.
+aminet_coming_text() {
+    [ "$PREV_NAME" != "$APP_NAME" ] || return 0
+    printf '%s\n' "$coming_en" | awk 'NR == 1 { print toupper($0); next } NR == 2 { gsub(/./, "-"); print; next } { print }'
+}
+
 write_aminet_readme() {
     # $4 = the Aminet path this upload replaces; empty for a first upload,
     # and then the Replaces: line is dropped (an empty one would be refused)
     out=$1; archval=$2; requires=$3; replaces=$4
+    coming_block=$(aminet_coming_text)
+    [ -z "$coming_block" ] || coming_block="$coming_block
+
+"
     cat > "$out" <<EOF
 Short:        $aminet_short
 Uploader:     $AMINET_UPLOADER
@@ -1076,7 +1123,7 @@ $(aminet_features_text)
 
 $(aminet_start_text)
 
-WHAT IS NEW IN $VERSION
+${coming_block}WHAT IS NEW IN $VERSION
 $(printf '%*s' $((15 + ${#VERSION})) '' | tr ' ' '-')
 $(changelog_section_text)
 
@@ -1165,7 +1212,7 @@ package_one() {
         fi
     fi
 
-    drawer="Telegram-$suffix-$DATE_STAMP"
+    drawer="$APP_NAME-$suffix-$DATE_STAMP"
     dest="$PACKAGE_ROOT/$drawer"
     rm -rf "$dest"
     mkdir -p "$dest"
@@ -1173,12 +1220,12 @@ package_one() {
     # Per-lane text and icon policy first: the icon block below reads gui_icon.
     fill_platform_text "$platform"
 
-    cp "$binary" "$dest/TelegramAmiga"
+    cp "$binary" "$dest/$APP_NAME"
     # Self-launching, script-free (papiosaur / Easy2Install suggestion). Two
-    # byte-identical flashless icons (DefaultTool = TelegramAmiga, Stack 1 MiB)
+    # byte-identical flashless icons (DefaultTool = Amigram, Stack 1 MiB)
     # both point at the one binary; the binary reads the WBStartup arg names and
-    # picks GUI vs TUI. TelegramAmiga.info owns the binary itself -> GUI.
-    # TelegramAmiga-TUI.info owns a 0-byte marker whose name carries "TUI" -> the
+    # picks GUI vs TUI. Amigram.info owns the binary itself -> GUI.
+    # Amigram-TUI.info owns a 0-byte marker whose name carries "TUI" -> the
     # binary opens a CON: window and runs the console client. No IconX, no shell
     # scripts.
     # One icon set per platform: AmigaOS 3.x gets an OS3.5 colour icon built
@@ -1186,18 +1233,18 @@ package_one() {
     # the same three launcher fields (see scripts/build-icons.sh).
     icons="$ROOT_DIR/assets/icons/$(icon_lane "$platform")"
     if [ "$gui_icon" != "0" ]; then
-        cp "$icons/TelegramAmiga.info" "$dest/TelegramAmiga.info"
+        cp "$icons/$APP_NAME.info" "$dest/$APP_NAME.info"
     fi
     # From 0.0.9 (Michele) the TUI icon ships ONLY on the 68k line, where a
     # console client is what those machines actually want. The PPC and x86
     # packages carry the GUI icon alone; their manuals explain the Shell
     # command for anyone who still wants the text client.
     if [ "$tui_icon" = "1" ]; then
-        : > "$dest/TelegramAmiga-TUI"
+        : > "$dest/$APP_NAME-TUI"
         # The 68000 set asks for the same 384 KB the binary's cookie does, or
         # a Workbench launch would reserve the full megabyte and hand back the
         # memory that build just saved.
-        cp "$icons/TelegramAmiga-TUI.info" "$dest/TelegramAmiga-TUI.info"
+        cp "$icons/$APP_NAME-TUI.info" "$dest/$APP_NAME-TUI.info"
     fi
     # The drawer's own icon sits NEXT to the drawer, under the drawer's name.
     cp "$icons/drawer.info" "$PACKAGE_ROOT/$drawer.info"
@@ -1232,7 +1279,7 @@ package_one() {
     if command -v zip >/dev/null 2>&1; then
         (cd "$PACKAGE_ROOT" && rm -f "$drawer.zip" && zip -qr "$drawer.zip" "$drawer" "$drawer.info")
         # Post-zip guard: the archive must hold THIS binary and no private file.
-        unzip -p "$PACKAGE_ROOT/$drawer.zip" "*/TelegramAmiga" > "$PACKAGE_ROOT/.zipbin" 2>/dev/null
+        unzip -p "$PACKAGE_ROOT/$drawer.zip" "*/$APP_NAME" > "$PACKAGE_ROOT/.zipbin" 2>/dev/null
         if [ "$(md5of "$PACKAGE_ROOT/.zipbin")" != "$(md5of "$binary")" ]; then
             rm -f "$PACKAGE_ROOT/.zipbin"
             echo "ERROR $platform: packaged binary != built binary ($binary)" >&2; exit 1
@@ -1246,7 +1293,7 @@ package_one() {
         echo "$dest"
     fi
 
-    # --- Aminet: TelegramAmiga<suffix>.lha + matching .readme ----------------
+    # --- Aminet: Amigram<suffix>.lha + matching .readme ----------------
     # Reuses the assembled drawer ($dest, incl. LICENSE) but under a clean
     # top-level name ($AMINET_DRAWER) so unpacking yields one tidy directory.
     # Each lane has its own Aminet name, looked up by the package suffix: the
@@ -1278,7 +1325,7 @@ package_one() {
         fi
         lhatmp=$(mktemp -d)
         ( cd "$lhatmp" && "$LHA_BIN" xq "$lhafile" >/dev/null 2>&1 )
-        if [ "$(md5of "$lhatmp/$AMINET_DRAWER/TelegramAmiga")" != "$(md5of "$binary")" ]; then
+        if [ "$(md5of "$lhatmp/$AMINET_DRAWER/$APP_NAME")" != "$(md5of "$binary")" ]; then
             rm -rf "$lhatmp"
             echo "ERROR $platform: lha binary != built binary ($binary)" >&2; exit 1
         fi
@@ -1294,7 +1341,7 @@ package_one() {
             *) arch_want="" ;;
         esac
         if [ -n "$arch_want" ] && \
-           ! file -b "$lhatmp/$AMINET_DRAWER/TelegramAmiga" | grep -q "$arch_want"; then
+           ! file -b "$lhatmp/$AMINET_DRAWER/$APP_NAME" | grep -q "$arch_want"; then
             rm -rf "$lhatmp"
             echo "ERROR $platform: wrong-arch binary inside $lhafile (want $arch_want)" >&2
             exit 1
@@ -1320,16 +1367,16 @@ package_one "AROS aarch64" "$AROS_AARCH64_BINARY" "aros-aarch64" "aros-aarch64"
 package_one "AmigaOS 3.x (68000)" "$AMIGAOS3_68000_BINARY" "amigaos3-68000" "amigaos3"
 
 # --- checksums ---------------------------------------------------------------
-( cd "$PACKAGE_ROOT" && ls Telegram-*-"$DATE_STAMP".zip >/dev/null 2>&1 &&
-  sha_cmd Telegram-*-"$DATE_STAMP".zip > SHA256SUMS-github.txt &&
+( cd "$PACKAGE_ROOT" && ls "$APP_NAME"-*-"$DATE_STAMP".zip >/dev/null 2>&1 &&
+  sha_cmd "$APP_NAME"-*-"$DATE_STAMP".zip > SHA256SUMS-github.txt &&
   echo "$PACKAGE_ROOT/SHA256SUMS-github.txt" ) || true
-if [ "$AMINET" = "1" ] && ls "$AMINET_ROOT"/TelegramAmiga*.lha >/dev/null 2>&1; then
-    ( cd "$AMINET_ROOT" && sha_cmd TelegramAmiga*.lha TelegramAmiga*.readme > SHA256SUMS-aminet.txt )
+if [ "$AMINET" = "1" ] && ls "$AMINET_ROOT"/"$APP_NAME"*.lha >/dev/null 2>&1; then
+    ( cd "$AMINET_ROOT" && sha_cmd "$APP_NAME"*.lha "$APP_NAME"*.readme > SHA256SUMS-aminet.txt )
     echo
     echo "Aminet artifacts ready in: $AMINET_ROOT  (version $VERSION, Type comm/tcp)"
-    aminet_pairs=$(ls "$AMINET_ROOT"/TelegramAmiga*.lha | wc -l | tr -d ' ')
+    aminet_pairs=$(ls "$AMINET_ROOT"/"$APP_NAME"*.lha | wc -l | tr -d ' ')
     echo "Upload (Michele): FTP main.aminet.net -> cd /new -> binary -> put each"
-    echo "  TelegramAmiga[<-suffix>].lha AND matching .readme ($aminet_pairs + $aminet_pairs files)."
+    echo "  $APP_NAME[<-suffix>].lha AND matching .readme ($aminet_pairs + $aminet_pairs files)."
     echo "  Web form may be back at https://aminet.net/upload. See memory/aminet-publishing.md"
 fi
 
@@ -1338,17 +1385,17 @@ fi
 # (their processor keys off the readme). Readme = THEIR header format
 # (name:/description:/.../hend:) + our Aminet body. Queue shows on
 # https://os4depot.net/index.php?function=uploads after ~15 min.
-# In its OWN subdirectory: "telegramamiga.lha" next to "TelegramAmiga.lha"
+# In its OWN subdirectory: "amigram.lha" next to "Amigram.lha"
 # SILENTLY OVERWRITES the Aminet OS3 package on a case-insensitive macOS
 # filesystem -- that shipped an OS4 ELF to every Aminet OS3 downloader in
 # 0.0.7 (field report 2026-07-26, "unable to open tool").
 OS4DEPOT_ROOT=${OS4DEPOT_ROOT:-"$PACKAGE_ROOT/os4depot"}
-if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-OS4.lha" ]; then
+if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/$APP_NAME-OS4.lha" ]; then
     mkdir -p "$OS4DEPOT_ROOT"
-    cp "$AMINET_ROOT/TelegramAmiga-OS4.lha" "$OS4DEPOT_ROOT/telegramamiga.lha"
+    cp "$AMINET_ROOT/$APP_NAME-OS4.lha" "$OS4DEPOT_ROOT/$app_lower.lha"
     {
-        printf 'name:TelegramAmiga\n'
-        printf 'description:Unofficial native MTProto Telegram chat client\n'
+        printf 'name:%s\n' "$APP_NAME"
+        printf 'description:Native MTProto Telegram chat client\n'
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'
@@ -1363,18 +1410,18 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-OS4.lha" ]; then
         # replaces is REQUIRED when updating an existing entry (0.0.8 failed
         # validation on both, 2026-07-31; 0.0.7 passed only because it was new).
         printf 'license:Other\n'
-        printf 'replaces:network/chat/telegramamiga.lha\n'
+        printf 'replaces:network/chat/%s.lha\n' "$prev_lower"
         printf 'distribute:yes\n'
         printf 'minosversion:4.0\n'
         printf 'hend:\n\n'
         # body: the Aminet OS4 readme minus its header block
         awk 'flip { print } /^$/ && !flip { flip = 1 }' \
-            "$AMINET_ROOT/TelegramAmiga-OS4.readme"
-    } > "$OS4DEPOT_ROOT/telegramamiga_lha.readme"
+            "$AMINET_ROOT/$APP_NAME-OS4.readme"
+    } > "$OS4DEPOT_ROOT/${app_lower}_lha.readme"
     rm -f "$AMINET_ROOT/telegramamiga_lha.readme" # pre-0.0.8 location, stale
     echo
-    echo "OS4Depot pair ready in: $OS4DEPOT_ROOT (telegramamiga.lha + readme)"
-    echo "Upload: curl -T telegramamiga.lha ftp://os4depot.net/upload/ --user anonymous:"
+    echo "OS4Depot pair ready in: $OS4DEPOT_ROOT ($app_lower.lha + readme)"
+    echo "Upload: curl -T $app_lower.lha ftp://os4depot.net/upload/ --user anonymous:"
     echo "        then the readme (LAST). Queue: os4depot.net ?function=uploads"
 fi
 
@@ -1392,7 +1439,7 @@ fi
 # an Aminet archive in the same directory on a case-insensitive filesystem.
 # (AROSARCHIVES_ROOT is set at the top, next to AMINET_ROOT.)
 write_arosarchives_pair() {
-    # $1 Aminet base (TelegramAmiga-AROS / -AROS64), $2 their file name,
+    # $1 Aminet base (Amigram-AROS / -AROS64), $2 their file name,
     # $3 requirements text
     # $4 "new" = first upload of this file: the form refuses a replaces: line
     # for a file the site does not have yet; drop the argument from the next
@@ -1402,8 +1449,8 @@ write_arosarchives_pair() {
     [ -f "$aa_src" ] || return 0
     cp "$aa_src" "$AROSARCHIVES_ROOT/$2.lha"
     {
-        printf 'name:TelegramAmiga\n'
-        printf 'description:Unofficial native MTProto Telegram chat client\n'
+        printf 'name:%s\n' "$APP_NAME"
+        printf 'description:Native MTProto Telegram chat client\n'
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'
@@ -1411,7 +1458,7 @@ write_arosarchives_pair() {
         printf 'url:%s\n' "$REPO_URL"
         printf 'donateurl:%s\n' "$KOFI_URL"
         printf 'category:network/chat\n'
-        if [ "${4:-}" != "new" ]; then printf 'replaces:network/chat/%s.lha\n' "$2"; fi
+        if [ "${4:-}" != "new" ]; then printf 'replaces:network/chat/%s.lha\n' "$prev_lower${2#"$app_lower"}"; fi
         printf 'requirements:%s\n' "$3"
         printf 'license:Other\n'
         printf 'distribute:yes\n'
@@ -1419,17 +1466,17 @@ write_arosarchives_pair() {
         awk 'flip { print } /^$/ && !flip { flip = 1 }' "$aa_readme"
     } > "$AROSARCHIVES_ROOT/${2}_lha.readme"
 }
-if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/TelegramAmiga-AROS.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-AROS64.lha" ] || [ -f "$AMINET_ROOT/TelegramAmiga-ARM64.lha" ]; }; then
+if [ "$AMINET" = "1" ] && { [ -f "$AMINET_ROOT/$APP_NAME-AROS.lha" ] || [ -f "$AMINET_ROOT/$APP_NAME-AROS64.lha" ] || [ -f "$AMINET_ROOT/$APP_NAME-ARM64.lha" ]; }; then
     mkdir -p "$AROSARCHIVES_ROOT"
-    write_arosarchives_pair TelegramAmiga-AROS telegramamiga.i386-aros \
+    write_arosarchives_pair "$APP_NAME-AROS" "$app_lower.i386-aros" \
         "AROS i386 ABIv0 (AROS One, Icaros) with its TCP/IP stack"
-    write_arosarchives_pair TelegramAmiga-AROS64 telegramamiga.x86_64-aros-v11 \
+    write_arosarchives_pair "$APP_NAME-AROS64" "$app_lower.x86_64-aros-v11" \
         "AROS x86_64 ABIv11 (AROS One x64) with its TCP/IP stack"
     # Sixth package since 0.0.94: the site already files ARM64 uploads under
     # the aarch64-aros suffix (pintp, commander_keen_4, super_trevor_land).
     # 0.0.94 was its first upload (with "new"); from 0.0.95 on it replaces
     # network/chat/telegramamiga.aarch64-aros.lha like the other two.
-    write_arosarchives_pair TelegramAmiga-ARM64 telegramamiga.aarch64-aros \
+    write_arosarchives_pair "$APP_NAME-ARM64" "$app_lower.aarch64-aros" \
         "AROS aarch64 ABIv1 (Raspberry Pi 4, 400 and 5; native image of 2026-08-22 or newer) with its TCP/IP stack"
     echo
     echo "AROS Archives pairs ready in: $AROSARCHIVES_ROOT (up to 3 x .lha + _lha.readme)"
@@ -1441,13 +1488,13 @@ fi
 
 # --- MorphOS-Storage (fixed release channel since 0.0.6) ---------------------
 # Web form only (https://www.morphos-storage.net/?page=submit), no account but
-# a CAPTCHA: Michele submits. Hand him TelegramAmiga-MOS.lha + its readme and
+# a CAPTCHA: Michele submits. Hand him Amigram-MOS.lha + its readme and
 # the description block; agent prepares, human clicks.
-if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/TelegramAmiga-MOS.lha" ]; then
+if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/$APP_NAME-MOS.lha" ]; then
     echo
     echo "MorphOS-Storage (Michele, web form + captcha):"
     echo "  https://www.morphos-storage.net/?page=submit"
-    echo "  archive: $AMINET_ROOT/TelegramAmiga-MOS.lha"
-    echo "  readme:  $AMINET_ROOT/TelegramAmiga-MOS.readme"
-    echo "  name: TelegramAmiga  version: $VERSION"
+    echo "  archive: $AMINET_ROOT/$APP_NAME-MOS.lha"
+    echo "  readme:  $AMINET_ROOT/$APP_NAME-MOS.readme"
+    echo "  name: $APP_NAME  version: $VERSION"
 fi

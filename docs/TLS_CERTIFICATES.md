@@ -14,8 +14,8 @@ and 4.x) encrypt the traffic and send SNI. Certificate and hostname
 validation is opt-in:
 
 ```text
-TelegramAmiga --tls-verify --tls-ca-file <bundle>
-TelegramAmiga --tls-verify --tls-ca-path <dir>
+Amigram --tls-verify --tls-ca-file <bundle>
+Amigram --tls-verify --tls-ca-path <dir>
 ```
 
 With `--tls-verify` the backend loads the CA store, checks the chain and
@@ -26,5 +26,5 @@ AROS One DVD). AmigaOS 4 needs a correct system date for the validity
 check.
 
 Without validation, use the Bot API mode only for supervised tests with
-disposable bot tokens. `TelegramAmiga --telegram-tls-status` shows
+disposable bot tokens. `Amigram --telegram-tls-status` shows
 whether validation was requested.

@@ -9,7 +9,7 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 IMAGE=${IMAGE:-telegram-amiga-morphos-cross:pkgsrc-2026Q1}
-TARGET=${TARGET:-build/morphos-cross/TelegramAmiga}
+TARGET=${TARGET:-build/morphos-cross/Amigram}
 ENABLE_TLS=${ENABLE_TLS:-0}
 OPENSSL_CFLAGS=${OPENSSL_CFLAGS:-}
 OPENSSL_LDFLAGS=${OPENSSL_LDFLAGS:-}

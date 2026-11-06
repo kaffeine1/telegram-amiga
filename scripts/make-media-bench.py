@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 # SPDX-License-Identifier: MIT
-"""Make the three inputs of `TelegramAmiga --media-bench <drawer>`.
+"""Make the three inputs of `Amigram --media-bench <drawer>`.
 
   avatar.jpg  160x160 baseline JPEG, the size Telegram serves profile
               pictures in

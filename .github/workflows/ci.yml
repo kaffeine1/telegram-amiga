@@ -21,22 +21,22 @@ jobs:
       - name: Build host binary
         run: make -f Makefile.host all
       - name: Minimum stack cookie contract
-        run: strings build/host/TelegramAmiga | grep -F '$STACK:1048576' >/dev/null
+        run: strings build/host/Amigram | grep -F '$STACK:1048576' >/dev/null
       - name: MTProto self-test (TL / crypto / SRP / session)
-        run: ./build/host/TelegramAmiga --mtproto-self-test
+        run: ./build/host/Amigram --mtproto-self-test
       - name: GUI layout self-test
-        run: ./build/host/TelegramAmiga --gui-self-test
+        run: ./build/host/Amigram --gui-self-test
       - name: Chat engine self-test
-        run: ./build/host/TelegramAmiga --chat-engine-self-test
+        run: ./build/host/Amigram --chat-engine-self-test
       - name: Chat transcript renderer golden
-        run: ./build/host/TelegramAmiga --chat-render-self-test
+        run: ./build/host/Amigram --chat-render-self-test
       - name: Chat list renderer golden
-        run: ./build/host/TelegramAmiga --chat-list-self-test
+        run: ./build/host/Amigram --chat-list-self-test
       - name: GUI driver projection self-test
-        run: ./build/host/TelegramAmiga --gui-driver-self-test
+        run: ./build/host/Amigram --gui-driver-self-test
       - name: Platform RNG self-test
         run: |
-          ./build/host/TelegramAmiga --platform-rng-test
+          ./build/host/Amigram --platform-rng-test
           rm -f telegram-seed.bin
       - name: Build with warnings as errors
         run: |
@@ -48,7 +48,7 @@ jobs:
         # function, not on a release build months later.
         run: |
           CPPFLAGS=-DTG_NO_SELFTEST=1 make -f Makefile.host all \
-            TARGET=build/host-stripped/TelegramAmiga \
+            TARGET=build/host-stripped/Amigram \
             CFLAGS="-Wall -Wextra -Werror -O2"
-          ./build/host-stripped/TelegramAmiga --mtproto-self-test 2>&1 | \
+          ./build/host-stripped/Amigram --mtproto-self-test 2>&1 | \
             grep -F 'Self-tests are not compiled into this build.'

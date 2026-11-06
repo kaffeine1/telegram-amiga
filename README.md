@@ -117,7 +117,7 @@ i386, x86_64 and aarch64); details in `docs/`. Host test:
 
 ```sh
 make -f Makefile.host all
-./build/host/TelegramAmiga --mtproto-self-test-fast
+./build/host/Amigram --mtproto-self-test-fast
 ```
 
 ## Notes

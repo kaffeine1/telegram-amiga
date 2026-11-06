@@ -38,10 +38,10 @@ LOWMEM_CFLAGS="-DTG_LOWMEM=1 -DTG_GUI_MAX_CHATS=12 -DTG_GUI_MSG_TEXT_MAX=768 \
 
 cd "$ROOT_DIR"
 make -f Makefile.amigaos3-clib2 clean all M68K_CPU=68000 NO_GUI=1 \
-    TARGET="$OUT_DIR/TelegramAmiga" OBJDIR="$OUT_DIR/obj" \
+    TARGET="$OUT_DIR/Amigram" OBJDIR="$OUT_DIR/obj" \
     EXTRA_CFLAGS="$LOWMEM_CFLAGS ${EXTRA_CFLAGS:-}"
 
-bin="$OUT_DIR/TelegramAmiga"
+bin="$OUT_DIR/Amigram"
 strings "$bin" | grep -F '$STACK:393216' >/dev/null || {
     echo "ERROR: $bin lacks the 384 KB stack cookie of the low-memory build" >&2
     exit 1

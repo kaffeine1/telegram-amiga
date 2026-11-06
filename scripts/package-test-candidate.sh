@@ -120,14 +120,14 @@ move_package() {
     mv "$source_dir" "$FINAL_ROOT/$target_name"
 }
 
-move_package "Telegram-amigaos3-$STAMP" AmigaOS3
-move_package "Telegram-morphos-$STAMP" MorphOS
-move_package "Telegram-amigaos4-$STAMP" AmigaOS4
-move_package "Telegram-aros-i386-$STAMP" AROS-i386
-move_package "Telegram-aros-x86_64-$STAMP" AROS-x86_64
+move_package "Amigram-amigaos3-$STAMP" AmigaOS3
+move_package "Amigram-morphos-$STAMP" MorphOS
+move_package "Amigram-amigaos4-$STAMP" AmigaOS4
+move_package "Amigram-aros-i386-$STAMP" AROS-i386
+move_package "Amigram-aros-x86_64-$STAMP" AROS-x86_64
 
 cat > "$FINAL_ROOT/TEST-ONLY.txt" <<EOF
-Telegram Amiga 0.0.9 $PHASE validation candidate
+Amigram $PHASE validation candidate
 Build: $COMMIT_ID
 
 LOCAL VALIDATION ONLY. This is not a release and must not be redistributed.
@@ -162,8 +162,8 @@ verify_zip() {
     drawer=$1
     archive="$FINAL_ROOT/$drawer.zip"
     extracted="$WORK_ROOT/$drawer.bin"
-    unzip -p "$archive" "$drawer/TelegramAmiga" > "$extracted"
-    if [ "$(md5of "$extracted")" != "$(md5of "$FINAL_ROOT/$drawer/TelegramAmiga")" ]; then
+    unzip -p "$archive" "$drawer/Amigram" > "$extracted"
+    if [ "$(md5of "$extracted")" != "$(md5of "$FINAL_ROOT/$drawer/Amigram")" ]; then
         echo "ERROR: binary mismatch in $archive" >&2
         exit 1
     fi
@@ -174,8 +174,8 @@ verify_iso_binary() {
     iso=$2
     drawer=$3
     extracted="$WORK_ROOT/$drawer-iso.bin"
-    isoinfo "$extension" -i "$iso" -x /TelegramAmiga > "$extracted"
-    if [ "$(md5of "$extracted")" != "$(md5of "$FINAL_ROOT/$drawer/TelegramAmiga")" ]; then
+    isoinfo "$extension" -i "$iso" -x /Amigram > "$extracted"
+    if [ "$(md5of "$extracted")" != "$(md5of "$FINAL_ROOT/$drawer/Amigram")" ]; then
         echo "ERROR: binary mismatch in $iso" >&2
         exit 1
     fi

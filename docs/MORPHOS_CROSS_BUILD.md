@@ -33,7 +33,7 @@ scripts/docker-morphos-cross-build.sh
 ```
 
 It runs `Makefile.morphos-cross` and writes
-`build/morphos-cross/TelegramAmiga`. TLS is off by default (the client
+`build/morphos-cross/Amigram`. TLS is off by default (the client
 does not need it; see [TLS_CERTIFICATES.md](TLS_CERTIFICATES.md)).
 
 After a build, check the binary's time stamp: when Docker is not running
@@ -44,5 +44,5 @@ stays in place.
 
 Copy the binary into the drawer on a hard disk, such as `Work:TGh`, not
 RAM: (running from RAM: crashed), with wget from an HTTP server on the
-build machine, then `Protect TelegramAmiga +e`. The release builds
+build machine, then `Protect Amigram +e`. The release builds
 leave the self-tests out (`NO_SELFTEST=1`); run those on the host.

@@ -23,28 +23,28 @@ echo "sync tracked files -> $WS"
 mkdir -p "$WS"
 git -C "$ROOT_DIR" ls-files -z | rsync -a --from0 --files-from=- "$ROOT_DIR/" "$WS/"
 
-rm -f "$WS/build/amigaos4/TelegramAmiga"
+rm -f "$WS/build/amigaos4/Amigram"
 cd "$OS4_CROSS"
 # The container gcc throws sporadic cc1 ICEs under emulation; rerunning make
 # WITHOUT clean resumes from the broken object. Try clean once, then resume.
 attempt=1
 while [ "$attempt" -le 6 ]; do
     [ "$attempt" = 1 ] && MK="clean all" || MK="all"
-    ./bin/os4-run bash -lc "cd telegram-amiga && make -f Makefile.amigaos4 $MK TARGET=build/amigaos4/TelegramAmiga" >/dev/null 2>&1 || true
-    [ -f "$WS/build/amigaos4/TelegramAmiga" ] && break
+    ./bin/os4-run bash -lc "cd telegram-amiga && make -f Makefile.amigaos4 $MK TARGET=build/amigaos4/Amigram" >/dev/null 2>&1 || true
+    [ -f "$WS/build/amigaos4/Amigram" ] && break
     echo "  attempt $attempt: cc1 ICE? resuming without clean..." >&2
     attempt=$((attempt + 1))
 done
 
-SRC="$WS/build/amigaos4/TelegramAmiga"
+SRC="$WS/build/amigaos4/Amigram"
 [ -f "$SRC" ] || { echo "ERROR: OS4 build failed after retries" >&2; exit 1; }
 
 mkdir -p "$ROOT_DIR/build/amigaos4"
-cp "$SRC" "$ROOT_DIR/build/amigaos4/TelegramAmiga"   # <-- the copy-back, the easy-to-forget step
+cp "$SRC" "$ROOT_DIR/build/amigaos4/Amigram"   # <-- the copy-back, the easy-to-forget step
 
 if command -v md5 >/dev/null 2>&1; then
-    md5sum_out=$(md5 -q "$ROOT_DIR/build/amigaos4/TelegramAmiga")
+    md5sum_out=$(md5 -q "$ROOT_DIR/build/amigaos4/Amigram")
 else
-    md5sum_out=$(md5sum "$ROOT_DIR/build/amigaos4/TelegramAmiga" | awk '{print $1}')
+    md5sum_out=$(md5sum "$ROOT_DIR/build/amigaos4/Amigram" | awk '{print $1}')
 fi
-echo "OK -> build/amigaos4/TelegramAmiga  ($md5sum_out, $(wc -c < "$ROOT_DIR/build/amigaos4/TelegramAmiga" | tr -d ' ')b)"
+echo "OK -> build/amigaos4/Amigram  ($md5sum_out, $(wc -c < "$ROOT_DIR/build/amigaos4/Amigram" | tr -d ' ')b)"
