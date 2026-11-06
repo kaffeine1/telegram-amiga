@@ -800,8 +800,8 @@ telegram-auth.bin is your logged-in session: never share it, and never
 use someone else's. In screenshots hide phone numbers, codes, passwords
 and private messages.
 
-data/telegram-api.txt holds the public api credentials the client uses.
-You may replace it with your own: two lines, api_id then api_hash.
+The client carries its own Telegram api credentials. To use yours, put
+them in data/telegram-api.txt: two lines, api_id then api_hash.
 
 Credits
 -------
@@ -881,9 +881,8 @@ telegram-auth.bin e' la tua sessione: non condividerlo mai e non usare
 quello di qualcun altro. Negli screenshot nascondi numeri di telefono,
 codici, password e messaggi privati.
 
-data/telegram-api.txt contiene le credenziali api pubbliche che il
-client usa. Puoi sostituirlo con le tue: due righe, api_id e poi
-api_hash.
+Il client ha le sue credenziali api di Telegram. Per usare le tue,
+mettile in data/telegram-api.txt: due righe, api_id e poi api_hash.
 
 Riconoscimenti
 --------------
@@ -1249,7 +1248,17 @@ package_one() {
     # The drawer's own icon sits NEXT to the drawer, under the drawer's name.
     cp "$icons/drawer.info" "$PACKAGE_ROOT/$drawer.info"
     mkdir -p "$dest/data"
-    cp "$ROOT_DIR/assets/public-telegram-api.txt" "$dest/data/telegram-api.txt"
+    # From 0.1 the api pair lives in the binary (include/tg_api_default.h);
+    # data/telegram-api.txt is only the user's own override and no longer
+    # ships. Check the binary really carries the pair, without printing it:
+    # a build made without the local header would leave every user stuck at
+    # the login.
+    api_id_built=$(sed -n 's/^#define TG_API_DEFAULT_ID "\([0-9]*\)".*/\1/p' "$ROOT_DIR/include/tg_api_default.local.h" 2>/dev/null)
+    if [ -z "$api_id_built" ] || ! LC_ALL=C grep -q -a "$api_id_built" "$binary"; then
+        echo "ERROR $platform: $binary does not carry the built-in api pair" >&2
+        echo "  (include/tg_api_default.local.h missing at build time? rebuild)" >&2
+        exit 1
+    fi
     # Notification sounds for the GUI (0.0.98): short 8SVX samples made by
     # scripts/make-sounds.py, ours and readable by every system's datatype.
     # The 68000 text client only flashes the screen, so it gets none.

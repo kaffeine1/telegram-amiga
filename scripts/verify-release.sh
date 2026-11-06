@@ -58,10 +58,11 @@ verify() {
     # Since 0.0.9 the TUI marker and its icon ship on the 68k lane only (the
     # other platforms reach the TUI from a Shell), so the expected file count
     # is one higher there. Everything else is identical on every lane.
-    files=$(unzip -l "$TMP/$tag.zip" | grep -cE "Manual-EN.txt|Manuale-IT.txt|/Amigram$|/Amigram-TUI$|telegram-api.txt" || true)
+    # From 0.1 data/telegram-api.txt no longer ships: the pair is built in.
+    files=$(unzip -l "$TMP/$tag.zip" | grep -cE "Manual-EN.txt|Manuale-IT.txt|/Amigram$|/Amigram-TUI$" || true)
     case $tag in
-    os3-*) want_files=5 ;;
-    *)     want_files=4 ;;
+    os3-*) want_files=4 ;;
+    *)     want_files=3 ;;
     esac
     ok=1
     [ "$want" = "$got" ] || { echo "FAIL $tag: published binary $got != local build $want"; ok=0; }

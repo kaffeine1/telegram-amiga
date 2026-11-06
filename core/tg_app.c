@@ -19,6 +19,7 @@
 #include "tg_file.h"
 #include "tg_gui.h"
 #include "tg_version.h"
+#include "tg_api_default.h"
 #include "tg_gui_driver.h"
 #include "tg_gui_session.h"
 #include "tg_https.h"
@@ -151,6 +152,12 @@ static int tg_run_mtproto_ensure_api_file(const char *api_file)
     if (api_status == TG_FILE_OK) {
         return 0;
     }
+#if defined(TG_API_DEFAULT_ID)
+    /* No file: the binary carries its own pair (tg_api_default.h). */
+    if (api_status == TG_FILE_OPEN_FAILED) {
+        return 0;
+    }
+#endif
     if (api_status != TG_FILE_OPEN_FAILED) {
         printf("Login setup required: cannot read %s (%s).\n", api_file,
                tg_file_status_name(api_status));

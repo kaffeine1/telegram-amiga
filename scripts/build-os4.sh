@@ -22,6 +22,13 @@ WS="$OS4_CROSS/work/telegram-amiga"
 echo "sync tracked files -> $WS"
 mkdir -p "$WS"
 git -C "$ROOT_DIR" ls-files -z | rsync -a --from0 --files-from=- "$ROOT_DIR/" "$WS/"
+# One untracked file goes too: the api pair the binary carries
+# (include/tg_api_default.h). It ends up inside the shipped binary anyway.
+if [ -f "$ROOT_DIR/include/tg_api_default.local.h" ]; then
+    cp "$ROOT_DIR/include/tg_api_default.local.h" "$WS/include/"
+else
+    echo "WARNING: include/tg_api_default.local.h missing: this binary will need data/telegram-api.txt" >&2
+fi
 
 rm -f "$WS/build/amigaos4/Amigram"
 cd "$OS4_CROSS"

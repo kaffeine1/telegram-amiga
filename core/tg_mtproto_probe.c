@@ -75,6 +75,7 @@
 #endif
 #include "tg_net.h"
 #include "tg_platform.h"
+#include "tg_api_default.h"
 
 /* What initConnection tells Telegram about us. The login notice and the
    active sessions list read "<app title> <app_version> on <device_model>":
@@ -2880,6 +2881,32 @@ static void tg_mtproto_copy_trimmed_field(const char *source,
     out[length] = '\0';
 }
 
+/* No data/telegram-api.txt: the pair built into the binary, when the build
+   has one (see tg_api_default.h). Returns 1 when it filled the fields. */
+static int tg_mtproto_api_default(char *api_id, unsigned long api_id_size,
+                                  char *api_hash, unsigned long api_hash_size)
+{
+#if defined(TG_API_DEFAULT_ID) && defined(TG_API_DEFAULT_HASH)
+    if (api_id == 0 || sizeof(TG_API_DEFAULT_ID) > api_id_size) {
+        return 0;
+    }
+    if (api_hash != 0 && sizeof(TG_API_DEFAULT_HASH) > api_hash_size) {
+        return 0;
+    }
+    strcpy(api_id, TG_API_DEFAULT_ID);
+    if (api_hash != 0) {
+        strcpy(api_hash, TG_API_DEFAULT_HASH);
+    }
+    return 1;
+#else
+    (void)api_id;
+    (void)api_id_size;
+    (void)api_hash;
+    (void)api_hash_size;
+    return 0;
+#endif
+}
+
 static int tg_mtproto_load_api_credentials(const char *path,
                                            char *api_id,
                                            unsigned long api_id_size,
@@ -2910,6 +2937,10 @@ static int tg_mtproto_load_api_credentials(const char *path,
     }
 
     file_status = tg_file_read_text(path, text, sizeof(text), &text_length);
+    if (file_status == TG_FILE_OPEN_FAILED &&
+        tg_mtproto_api_default(api_id, api_id_size, api_hash, api_hash_size)) {
+        return 0;
+    }
     if (file_status == TG_FILE_TOO_LARGE) {
         if (stream != 0 && label != 0) {
             fprintf(stream, "%s: api-file-too-large\n", label);
@@ -2991,6 +3022,10 @@ static int tg_mtproto_load_api_id_file(const char *path,
     }
 
     file_status = tg_file_read_text(path, text, sizeof(text), &text_length);
+    if (file_status == TG_FILE_OPEN_FAILED &&
+        tg_mtproto_api_default(api_id, api_id_size, 0, 0UL)) {
+        return 0;
+    }
     if (file_status == TG_FILE_TOO_LARGE) {
         if (stream != 0 && label != 0) {
             fprintf(stream, "%s: api-file-too-large\n", label);
@@ -19099,11 +19134,23 @@ int tg_mtproto_probe_self_test(void)
 
     (void)remove(api_path);
     (void)remove(missing_api_path);
+    /* A missing file falls back to the pair built into the binary when the
+       build has one (tg_api_default.h), and fails when it has none. */
+#if defined(TG_API_DEFAULT_ID) && defined(TG_API_DEFAULT_HASH)
+    if (tg_mtproto_load_api_credentials(missing_api_path, api_id,
+                                        sizeof(api_id), api_hash,
+                                        sizeof(api_hash), 0, 0) != 0 ||
+        strcmp(api_id, TG_API_DEFAULT_ID) != 0 ||
+        strcmp(api_hash, TG_API_DEFAULT_HASH) != 0) {
+        return 2;
+    }
+#else
     if (tg_mtproto_load_api_credentials(missing_api_path, api_id,
                                         sizeof(api_id), api_hash,
                                         sizeof(api_hash), 0, 0) == 0) {
         return 2;
     }
+#endif
     if (tg_file_write_text(api_path, "12345\n", 6UL) != TG_FILE_OK ||
         tg_mtproto_load_api_credentials(api_path, api_id, sizeof(api_id),
                                         api_hash, sizeof(api_hash),
@@ -23388,7 +23435,11 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
         {"SEND_CODE_UNAVAILABLE", "No other way to send this code",
          "Look for it in the Telegram app on your phone"},
         {"API_ID_INVALID", "Telegram refused this program's key",
+#if defined(TG_API_DEFAULT_ID)
+         "Remove data/telegram-api.txt if you made one, or update"},
+#else
          "data/telegram-api.txt is damaged: install the package again"},
+#endif
         {"API_ID_PUBLISHED_FLOOD", "Telegram is limiting logins from this app",
          "Try again later"},
         {"UPDATE_APP_TO_LOGIN", "Telegram wants a newer app to log in",
@@ -27182,8 +27233,13 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
                           "This program's key file is missing");
         tg_gui_login_copy(tg_gui_session_state.login.last_hint,
                           sizeof(tg_gui_session_state.login.last_hint),
+#if defined(TG_API_DEFAULT_ID)
+                          "Fix data/telegram-api.txt, or remove it to use "
+                          "the built-in key");
+#else
                           "data/telegram-api.txt is unreadable: install "
                           "the package again");
+#endif
         return TG_GUI_LOGIN_ERROR;
     }
     tg_gui_login_copy(tg_gui_session_state.login.phone,
