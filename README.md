@@ -5,10 +5,10 @@ SPDX-License-Identifier: MIT
 
 # Amigram - Unofficial Telegram Amiga Client
 
-Called TelegramAmiga up to 0.0.99. A native Telegram client for AmigaOS 3, AmigaOS 4, MorphOS and AROS,
-written from scratch in C on Telegram's MTProto protocol. You log in with
-a normal Telegram account. It needs no MUI, no ixemul and no AmiSSL: the
-cryptography is built in.
+Called TelegramAmiga up to 0.0.99. A native Telegram client for AmigaOS 3,
+AmigaOS 4, MorphOS and AROS, written from scratch in C on Telegram's
+MTProto protocol. You log in with a normal Telegram account. It needs no
+MUI, no ixemul and no AmiSSL: the cryptography is built in.
 
 It uses the Telegram API but is not made by Telegram.
 
@@ -17,10 +17,11 @@ a text client for the Shell, which also runs on a plain 68000.
 
 ![The Amigram window](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **alpha 0.0.99** (2026-11-02), the last release as TelegramAmiga.
-Direct chats, groups and channels work on all six platforms. The 0.1 beta,
-the first release as Amigram, is being tested. What is on `main` is
-unreleased: see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md).
+Status: **beta 0.1** (2026-11-07), the first release as Amigram. Direct
+chats, groups and channels work on all six platforms. 0.1 adds no
+features: it brings the new name, carries the Telegram api credentials
+inside the client and fixes what the beta round found. New features start
+with 0.2: see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md).
 
 The plain-68000 package exists thanks to Paolo Arus (DaRkHoRaCe), who
 tested it on an A600 round after round.
@@ -38,18 +39,19 @@ If you prefer a one-time contribution, you can [support my work on Ko-fi](https:
 
 ## Platforms & releases
 
-Each package holds the client, its icons, a public `telegram-api.txt`, the
-manuals in English and Italian and the changelog. No private files.
+Each package holds the client, its icons, the manuals in English and
+Italian and the changelog. The Telegram api credentials are inside the
+client. No private files.
 
 | Platform | CPU | Release |
 |---|---|---|
-| AmigaOS 3.x (68020+) | m68k | [os3-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-alpha-0.0.99) |
-| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-alpha-0.0.99) |
-| AmigaOS 4.x | PPC | [os4-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-alpha-0.0.99) |
-| MorphOS | PPC | [morphos-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-alpha-0.0.99) |
-| AROS i386 (ABIv0) | x86 | [aros-i386-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-alpha-0.0.99) |
-| AROS x86_64 | x86-64 | [aros-x86_64-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-alpha-0.0.99) |
-| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-alpha-0.0.99](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-alpha-0.0.99) |
+| AmigaOS 3.x (68020+) | m68k | [os3-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-beta-0.1) |
+| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-beta-0.1) |
+| AmigaOS 4.x | PPC | [os4-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-beta-0.1) |
+| MorphOS | PPC | [morphos-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-beta-0.1) |
+| AROS i386 (ABIv0) | x86 | [aros-i386-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-beta-0.1) |
+| AROS x86_64 | x86-64 | [aros-x86_64-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-beta-0.1) |
+| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-beta-0.1) |
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases>.
 

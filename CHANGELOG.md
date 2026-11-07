@@ -1,12 +1,14 @@
 # Changelog
 
-Telegram Amiga, a from-scratch native MTProto Telegram client for
-AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386, x86_64 and, from 0.0.94,
-aarch64). Dates use YYYY-MM-DD. Each release ships on every platform lane
-of its time unless noted: six from 0.0.94, seven from 0.0.96, which adds
-the text client for the plain 68000.
+Amigram (TelegramAmiga up to 0.0.99), a from-scratch native MTProto
+Telegram client for AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS (i386,
+x86_64 and, from 0.0.94, aarch64). Dates use YYYY-MM-DD. Each release
+ships on every platform lane of its time unless noted: six from 0.0.94,
+seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
+
+## [0.1] - 2026-11-07
 
 ### Added
 - Shift+Enter starts a new line in the message instead of sending it,
@@ -34,7 +36,7 @@ the text client for the plain 68000.
   takes precedence; an empty or broken one, like the copy a drawer moved
   from TelegramAmiga brings along, no longer stops the login.
 - Telegram's login notice and the list of active sessions name the
-  system and the real version: "0.0.99 on MorphOS", "on AmigaOS 3",
+  system and the real version: "0.1 on MorphOS", "on AmigaOS 3",
   "on AmigaOS 4" or "on AROS", with the processor (68020+, 68000,
   PowerPC, i386, x86_64, ARM64) in the session details. Every lane used
   to say "0.1 on Amiga", whatever the machine and the release.

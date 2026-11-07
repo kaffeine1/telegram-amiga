@@ -250,7 +250,11 @@ Features are therefore grouped by the work they share.
   before the rename was meant to announce it; 0.0.99 did not, so the
   0.1 notes, the readmes and the "coming from TelegramAmiga" section
   carry the news instead. The MorphOS-Storage maintainer had said a
-  transition release was welcome but not needed.
+  transition release was welcome but not needed. RELEASED 2026-11-07,
+  without the AmiUpdate entry, which waits for its account. Validated on
+  a stock A1200, a Vampire, a PiStorm under AfA OS, a G5 under MorphOS
+  and a Raspberry Pi 400, as a plain 68000 in WinUAE, and in the OS4,
+  MorphOS, AROS i386, x86_64 and aarch64 VMs.
 - **0.2, what a desktop user expects.** The first feature release after
   the beta; see "Planned for 0.2" below.
 - **After the beta: skins and translations.** Colours, fonts and more
