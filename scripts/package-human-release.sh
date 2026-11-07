@@ -437,12 +437,12 @@ vecchio cassetto si puo' togliere.
         req_it="- MorphOS 3.x con il suo stack TCP/IP e una connessione internet.
 - Qualche MB di RAM libera."
         notes_en="- The chat list is not fetched at the first login: use \"Reload chat
-  list\" in the Telegram menu, or find chats with the search box.
+  list\" in the Amigram menu, or find chats with the search box.
 - In groups the typing line says \"someone is typing\" and the @ member
   list is off: fetching a group's members freezes MorphOS.
 - Own screen: MorphOS 3.16 or newer is recommended."
         notes_it="- La lista chat non viene scaricata al primo accesso: usa \"Reload chat
-  list\" nel menu Telegram, oppure cerca le chat con la casella di
+  list\" nel menu Amigram, oppure cerca le chat con la casella di
   ricerca.
 - Nei gruppi la riga di scrittura dice \"someone is typing\" e l'elenco
   dei membri con @ e' spento: scaricare i membri di un gruppo blocca
@@ -831,7 +831,7 @@ The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
 Support my work on Patreon: $SUPPORT_URL
 or with a one-time tip on Ko-fi: $KOFI_URL
 It is voluntary: nothing is needed to use the program. Both links are
-also under "Support development..." in the Telegram menu and at the end
+also under "Support development..." in the Amigram menu and at the end
 of /help in the text client.
 
 License: MIT. A non-commercial community project. Diary:
@@ -915,7 +915,7 @@ nell'archivio.
 Sostieni il mio lavoro su Patreon: $SUPPORT_URL
 oppure con un contributo una tantum su Ko-fi: $KOFI_URL
 E' volontario: per usare il programma non serve niente. I due link sono
-anche in "Support development..." nel menu Telegram e in fondo a /help
+anche in "Support development..." nel menu Amigram e in fondo a /help
 nel client testuale.
 
 Licenza: MIT. Un progetto di comunita' non commerciale. Diario:

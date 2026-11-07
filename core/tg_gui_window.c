@@ -7015,7 +7015,7 @@ static unsigned long tg_gui_clip_read_text(char *out, unsigned long out_size)
    so item positions are free to move. */
 static struct NewMenu tg_gui_newmenu[] = {
 /* Project */
-    { NM_TITLE, (STRPTR)"Telegram", 0, 0, 0, 0 },
+    { NM_TITLE, (STRPTR)TG_APP_NAME, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Iconify", (STRPTR)"I", 0, 0,
       (APTR)TG_MENU_ICONIFY },
     { NM_ITEM,  (STRPTR)"About...", 0, 0, 0,

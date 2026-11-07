@@ -12,7 +12,7 @@ the text client for the plain 68000.
 - Shift+Enter starts a new line in the message instead of sending it,
   as in the official clients (issue #18). Enter still sends.
 - Ko-fi beside Patreon, for a one-time tip: "Support development..." in
-  the window's Telegram menu now has a button for each, and the text
+  the window's first menu now has a button for each, and the text
   client's /help, the manuals and the Aminet readme name both links,
   as the README already does. The Donate button on the OS4Depot and
   AROS Archives pages goes to Ko-fi.
@@ -26,7 +26,8 @@ the text client for the plain 68000.
   recognised. The files the client keeps, telegram-auth.bin and
   the data drawer, keep their names, so copying them from the old
   TelegramAmiga drawer into the new one brings the session, the chats
-  and the settings along.
+  and the settings along. The window's first menu, the one with About
+  and Quit, is called Amigram too.
 - The Telegram api credentials are inside the program, and the packages
   no longer carry data/telegram-api.txt, as Telegram's terms ask of
   every client. A complete data/telegram-api.txt of one's own still
