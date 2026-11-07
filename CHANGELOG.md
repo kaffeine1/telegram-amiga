@@ -8,6 +8,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Fixed
+- A message deleted for everyone somewhere else (on the phone, in the
+  web client, by a group admin) now leaves the open chat in the window
+  at once; before, it stayed until the chat was opened again
+  (issue #19).
+
 ## [0.1] - 2026-11-07
 
 ### Added

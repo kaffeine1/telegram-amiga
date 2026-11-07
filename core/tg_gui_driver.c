@@ -693,6 +693,20 @@ int tg_gui_driver_remove_by_id(tg_gui_chat_driver *gui, unsigned long message_id
             }
             gui->state->message_count -= 1;
             gui->state->msg_gen++;
+            /* The highlighted row is an index: keep it on its message, or
+               drop it with this one. A reply to this message has nothing
+               left to quote. (An open context menu follows its message by
+               id on its own.) */
+            if (gui->state->selected_msg == i) {
+                gui->state->selected_msg = -1;
+            } else if (gui->state->selected_msg > i) {
+                gui->state->selected_msg -= 1;
+            }
+            if (gui->state->reply_to_id == message_id) {
+                gui->state->reply_to_id = 0UL;
+                gui->state->reply_sender[0] = '\0';
+                gui->state->reply_snippet[0] = '\0';
+            }
             return 1;
         }
     }
@@ -2165,16 +2179,33 @@ int tg_gui_driver_self_test(void)
                 return 2;
             }
         }
-        /* Delete: drop by id, shifting the tail up. */
+        /* Delete: drop by id, shifting the tail up; the highlighted row
+           stays on its message and a reply to the gone one is dropped. */
         {
             unsigned long gen;
 
             gen = ds->msg_gen;
+            ds->selected_msg = 2; /* 700 */
+            ds->reply_to_id = 500UL;
+            strcpy(ds->reply_sender, "Ada");
+            strcpy(ds->reply_snippet, "ciao");
             if (tg_gui_driver_remove_by_id(&dg, 500UL) != 1 ||
                 ds->message_count != 2 || ds->messages[0].id != 600UL ||
                 ds->msg_gen != gen + 1UL ||
                 tg_gui_driver_remove_by_id(&dg, 999UL) != 0) {
                 puts("gui driver self-test: delete remove_by_id wrong");
+                return 2;
+            }
+            if (ds->selected_msg != 1 || ds->reply_to_id != 0UL ||
+                ds->reply_sender[0] != '\0' || ds->reply_snippet[0] != '\0') {
+                puts("gui driver self-test: delete left selection or reply");
+                return 2;
+            }
+            ds->selected_msg = 0; /* 600 */
+            if (tg_gui_driver_remove_by_id(&dg, 600UL) != 1 ||
+                ds->message_count != 1 || ds->messages[0].id != 700UL ||
+                ds->selected_msg != -1) {
+                puts("gui driver self-test: deleting the highlighted row");
                 return 2;
             }
         }

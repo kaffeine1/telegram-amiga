@@ -225,6 +225,13 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_UPDATE_NEW_CHANNEL_MESSAGE_CONSTRUCTOR 0x62ba04d9UL
 #define TG_MTPROTO_UPDATE_EDIT_MESSAGE_CONSTRUCTOR 0xe40370a3UL
 #define TG_MTPROTO_UPDATE_EDIT_CHANNEL_MESSAGE_CONSTRUCTOR 0x1b3f4df7UL
+/* core.telegram.org/constructor/updateDeleteMessages and
+   /constructor/updateDeleteChannelMessages, verified 2026-11-07 (layer 225):
+   updateDeleteMessages#a20db0e5 messages:Vector<int> pts:int pts_count:int
+   updateDeleteChannelMessages#c32d5b12 channel_id:long messages:Vector<int>
+   pts:int pts_count:int */
+#define TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR 0xa20db0e5UL
+#define TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR 0xc32d5b12UL
 /* https://core.telegram.org/constructor/updateWebPage and
    /constructor/updateChannelWebPage, verified 2026-09-08 (layer 214). */
 #define TG_MTPROTO_UPDATE_WEBPAGE_CONSTRUCTOR 0x7f891213UL
@@ -499,6 +506,27 @@ typedef struct tg_chat_edit_sink {
     unsigned long count;
 } tg_chat_edit_sink;
 static tg_chat_edit_sink *tg_chat_edit_target = 0;
+/* Messages deleted elsewhere (another device, the web client, a group admin)
+   arrive as updateDeleteMessages / updateDeleteChannelMessages: ids only, and
+   no peer in the first one, whose ids come from the account's single sequence
+   for private chats and basic groups. The receive loop queues them here and
+   the GUI tick takes them out of the open chat. A longer batch (a whole
+   history cleared) keeps its last ids; reopening the chat drops the rest. */
+#if defined(TG_LOWMEM)
+#define TG_CHAT_DELETE_QUEUE_MAX 16U
+#else
+#define TG_CHAT_DELETE_QUEUE_MAX 64U
+#endif
+typedef struct tg_chat_delete_entry {
+    unsigned long channel_hi; /* 0/0: a private chat or a basic group */
+    unsigned long channel_lo;
+    unsigned long message_id;
+} tg_chat_delete_entry;
+typedef struct tg_chat_delete_sink {
+    tg_chat_delete_entry queue[TG_CHAT_DELETE_QUEUE_MAX];
+    unsigned long count;
+} tg_chat_delete_sink;
+static tg_chat_delete_sink *tg_chat_delete_target = 0;
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
 #define TG_CHAT_WEBPAGE_QUEUE_MAX 8U
@@ -3928,13 +3956,79 @@ static void tg_chat_webpage_parse_update(tg_mtproto_tl_reader *reader,
     tg_gui_log("webpage: update queued");
 }
 
+/* updateDeleteMessages / updateDeleteChannelMessages, the reader just past
+   the constructor: queue every id for the GUI tick. The envelope scan offers
+   any aligned constructor match, so the update counts only when its vector
+   and both pts fields fit in what is left of the body. */
+static void tg_chat_delete_parse_update(tg_mtproto_tl_reader *reader,
+                                         unsigned long constructor)
+{
+    unsigned long channel_hi = 0UL;
+    unsigned long channel_lo = 0UL;
+    unsigned long vector_constructor;
+    unsigned long count;
+    unsigned long id;
+    unsigned long i;
+    unsigned long j;
+    tg_chat_delete_entry *entry;
+
+    if (tg_chat_delete_target == 0) {
+        return;
+    }
+    if (constructor == TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR &&
+        (tg_mtproto_tl_read_u64(reader, &channel_hi, &channel_lo) !=
+             TG_MTPROTO_TL_OK ||
+         (channel_hi == 0UL && channel_lo == 0UL))) {
+        return;
+    }
+    if (tg_mtproto_tl_read_u32(reader, &vector_constructor) !=
+            TG_MTPROTO_TL_OK ||
+        vector_constructor != TG_MTPROTO_TL_VECTOR_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u32(reader, &count) != TG_MTPROTO_TL_OK ||
+        count == 0UL || reader->length - reader->offset < 8UL ||
+        count > (reader->length - reader->offset - 8UL) / 4UL) {
+        return;
+    }
+    for (i = 0UL; i < count; ++i) {
+        if (tg_mtproto_tl_read_u32(reader, &id) != TG_MTPROTO_TL_OK) {
+            return;
+        }
+        if (id == 0UL) {
+            continue;
+        }
+        for (j = 0UL; j < tg_chat_delete_target->count; ++j) {
+            entry = &tg_chat_delete_target->queue[j];
+            if (entry->message_id == id && entry->channel_hi == channel_hi &&
+                entry->channel_lo == channel_lo) {
+                break;
+            }
+        }
+        if (j < tg_chat_delete_target->count) {
+            continue;
+        }
+        if (tg_chat_delete_target->count >= TG_CHAT_DELETE_QUEUE_MAX) {
+            memmove(tg_chat_delete_target->queue,
+                    tg_chat_delete_target->queue + 1,
+                    (TG_CHAT_DELETE_QUEUE_MAX - 1U) *
+                        sizeof(*tg_chat_delete_target->queue));
+            tg_chat_delete_target->count = TG_CHAT_DELETE_QUEUE_MAX - 1U;
+        }
+        entry = &tg_chat_delete_target->queue[tg_chat_delete_target->count++];
+        entry->channel_hi = channel_hi;
+        entry->channel_lo = channel_lo;
+        entry->message_id = id;
+    }
+}
+
 /* A Vector<Update> is not length-prefixed per item. The normal collector can
    therefore consume only its first known item safely: a Message parser may
    intentionally stop after text when optional media/reply fields follow.
    Remote edits still have a strong aligned signature
    updateEdit*(message#9815cec8 ...), so scan the complete updates envelope and
    validate every candidate with the real Message parser. This catches an edit
-   preceded by read/draft/status updates, as observed with Saved Messages. */
+   preceded by read/draft/status updates, as observed with Saved Messages.
+   Deletions are caught the same way, here and in getDifference's other
+   updates, which reach this scan too. */
 static void tg_chat_edit_scan_updates(const unsigned char *body,
                                       unsigned long body_length,
                                       unsigned long start_offset)
@@ -3955,6 +4049,13 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_edit_parse_update(&reader);
+        } else if (constructor ==
+                       TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR ||
+                   constructor ==
+                       TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_delete_parse_update(&reader, constructor);
         } else if (constructor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
@@ -4073,6 +4174,11 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     if (update_ctor == TG_MTPROTO_UPDATE_EDIT_MESSAGE_CONSTRUCTOR ||
         update_ctor == TG_MTPROTO_UPDATE_EDIT_CHANNEL_MESSAGE_CONSTRUCTOR) {
         tg_chat_edit_parse_update(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR ||
+        update_ctor == TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR) {
+        tg_chat_delete_parse_update(reader, update_ctor);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
@@ -19829,6 +19935,113 @@ int tg_mtproto_probe_self_test(void)
             }
         }
 
+        /* Deleted elsewhere: updateDeleteMessages in updateShort (no peer)
+           and updateDeleteChannelMessages behind another item in a vector,
+           and a short vector that runs off the body queues nothing. */
+        {
+            tg_chat_delete_sink del_sink;
+
+            memset(&del_sink, 0, sizeof(del_sink));
+            tg_chat_delete_target = &del_sink;
+            tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+            ok = tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 2UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 101UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 102UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 900UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 2UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 1700000005UL) ==
+                     TG_MTPROTO_TL_OK;
+            if (ok) {
+                tg_chat_notify_collect(payload, writer.length);
+            }
+            if (!ok || del_sink.count != 2UL ||
+                del_sink.queue[0].message_id != 101UL ||
+                del_sink.queue[1].message_id != 102UL ||
+                del_sink.queue[0].channel_hi != 0UL ||
+                del_sink.queue[0].channel_lo != 0UL) {
+                tg_chat_nq = 0;
+                tg_chat_typing_target = 0;
+                tg_chat_edit_target = 0;
+                tg_chat_delete_target = 0;
+                puts("probe self-test: updateDeleteMessages short wrong");
+                return 2;
+            }
+
+            memset(&del_sink, 0, sizeof(del_sink));
+            tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+            ok = tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATES_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 2UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 0xdeadbeefUL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 0UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer,
+                     TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u64(&writer, 0x7UL, 0x8899UL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 1UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 55UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 31UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 1UL) == TG_MTPROTO_TL_OK;
+            if (ok) {
+                tg_chat_notify_collect(payload, writer.length);
+            }
+            if (!ok || del_sink.count != 1UL ||
+                del_sink.queue[0].message_id != 55UL ||
+                del_sink.queue[0].channel_hi != 0x7UL ||
+                del_sink.queue[0].channel_lo != 0x8899UL) {
+                tg_chat_nq = 0;
+                tg_chat_typing_target = 0;
+                tg_chat_edit_target = 0;
+                tg_chat_delete_target = 0;
+                puts("probe self-test: updateDeleteChannelMessages wrong");
+                return 2;
+            }
+
+            memset(&del_sink, 0, sizeof(del_sink));
+            tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+            ok = tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &writer, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 5UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 101UL) == TG_MTPROTO_TL_OK;
+            if (ok) {
+                tg_chat_notify_collect(payload, writer.length);
+            }
+            tg_chat_delete_target = 0;
+            if (!ok || del_sink.count != 0UL) {
+                tg_chat_nq = 0;
+                tg_chat_typing_target = 0;
+                tg_chat_edit_target = 0;
+                puts("probe self-test: truncated delete must queue nothing");
+                return 2;
+            }
+        }
+
         tg_chat_nq = 0;
         tg_chat_typing_target = 0;
         tg_chat_edit_target = 0;
@@ -20392,6 +20605,7 @@ static struct {
        the open chat (the poll backstop still runs). Armed at open. */
     tg_chat_read_outbox_sink read_outbox_sink;
     tg_chat_edit_sink edit_sink;   /* remote message edits, armed at open */
+    tg_chat_delete_sink delete_sink; /* messages deleted elsewhere */
     tg_chat_typing_sink typing;     /* live "is typing" sink, armed at open */
     unsigned long open_peer_constructor;
     unsigned long open_peer_id_hi;  /* the open chat's peer id, to match typing */
@@ -20860,6 +21074,9 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
     memset(&tg_gui_session_state.edit_sink, 0,
            sizeof(tg_gui_session_state.edit_sink));
     tg_chat_edit_target = &tg_gui_session_state.edit_sink;
+    memset(&tg_gui_session_state.delete_sink, 0,
+           sizeof(tg_gui_session_state.delete_sink));
+    tg_chat_delete_target = &tg_gui_session_state.delete_sink;
     tg_mtproto_set_session_updates(1);
     tg_gui_chat_driver_bind(&tg_gui_session_state.gui_driver, state,
                             &tg_gui_session_state.driver);
@@ -20902,6 +21119,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
         tg_chat_typing_target = 0;
         tg_chat_read_outbox_target = 0;
         tg_chat_edit_target = 0;
+        tg_chat_delete_target = 0;
         return 2;
     }
     tg_gui_log("open: connected");
@@ -26690,6 +26908,40 @@ static int tg_gui_session_apply_edit_updates(void)
     return dirty;
 }
 
+/* Takes the messages deleted elsewhere out of the open chat: a channel's or
+   supergroup's by its id, the shared-sequence ids from whichever private
+   chat, basic group or Saved Messages is open. */
+static int tg_gui_session_apply_delete_updates(void)
+{
+    unsigned long i;
+    int dirty = 0;
+    int open_channel = tg_gui_session_state.open_peer_constructor ==
+        TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+
+    for (i = 0UL; i < tg_gui_session_state.delete_sink.count; ++i) {
+        const tg_chat_delete_entry *entry =
+            &tg_gui_session_state.delete_sink.queue[i];
+        int channel = entry->channel_hi != 0UL || entry->channel_lo != 0UL;
+
+        if (tg_gui_session_state.current_peer_index[0] == '\0' ||
+            channel != open_channel ||
+            (channel &&
+             (entry->channel_hi != tg_gui_session_state.open_peer_id_hi ||
+              entry->channel_lo != tg_gui_session_state.open_peer_id_lo))) {
+            continue;
+        }
+        if (tg_gui_driver_remove_by_id(&tg_gui_session_state.gui_driver,
+                                       entry->message_id)) {
+            dirty = 1;
+        }
+    }
+    if (dirty) {
+        tg_gui_log("delete: removed messages deleted elsewhere");
+    }
+    tg_gui_session_state.delete_sink.count = 0UL;
+    return dirty;
+}
+
 static int tg_gui_session_apply_read_update(void)
 {
     int dirty;
@@ -26851,6 +27103,9 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
 
     dirty = 0;
     if (tg_gui_session_apply_edit_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_delete_updates()) {
         dirty = 1;
     }
     if (tg_gui_session_apply_webpage_updates()) {
@@ -27168,6 +27423,7 @@ void tg_gui_session_close(void)
         tg_chat_typing_target = 0;
         tg_chat_read_outbox_target = 0;
         tg_chat_edit_target = 0;
+        tg_chat_delete_target = 0;
         return;
     }
     tg_gui_log("close: closing context");
@@ -27205,6 +27461,7 @@ void tg_gui_session_close(void)
     tg_chat_typing_target = 0;
     tg_chat_read_outbox_target = 0;
     tg_chat_edit_target = 0;
+    tg_chat_delete_target = 0;
     tg_gui_session_state.open = 0;
 }
 
