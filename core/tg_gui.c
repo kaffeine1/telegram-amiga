@@ -1980,6 +1980,10 @@ static void tg_gui_paint_scrollbar(tg_gui_backend *backend, int x, int track_y,
 static int tg_gui_input_text_w(const tg_gui_state *state, int width, int sidebar_w);
 static int tg_gui_input_rows(const tg_gui_state *state, tg_gui_backend *backend,
                              int width, int sidebar_w);
+static int tg_gui_input_wrap(const tg_gui_state *state,
+                             tg_gui_backend *backend, int width,
+                             int sidebar_w, unsigned long *starts,
+                             unsigned long *lengths);
 
 /* Byte offset in text[0..len] whose glyph boundary sits closest to dx --
    the shared half of click-to-place-the-caret (F8). Latin-1: 1 byte = 1
@@ -2137,12 +2141,7 @@ int tg_gui_input_click_caret(const tg_gui_state *state,
     if (state->input[0] == '\0') {
         return 0; /* empty input: anywhere in the box is offset 0 */
     }
-    n = tg_gui_wrap(backend, state->input,
-                    tg_gui_input_text_w(state, width, sidebar_w), starts, lengths,
-                    TG_GUI_WRAP_MAX_LINES);
-    if (n < 1) {
-        n = 1;
-    }
+    n = tg_gui_input_wrap(state, backend, width, sidebar_w, starts, lengths);
     first = (n > rows) ? (n - rows) : 0;
     line = first + ((y - (box_top + TG_GUI_INPUT_TEXT_PAD)) / lh);
     if (line < first) {
@@ -3535,6 +3534,36 @@ static int tg_gui_input_text_w(const tg_gui_state *state, int width, int sidebar
     return w;
 }
 
+/* The composer's lines: tg_gui_wrap's, plus the empty line that a final
+   line feed opens, where the caret stands after Shift+Enter (issue #18:
+   without it the caret stayed on the line above, one blank further right,
+   and the box grew only at the next key). A message bubble keeps no such
+   trailing line, so this stays the composer's own. */
+static int tg_gui_input_wrap(const tg_gui_state *state,
+                             tg_gui_backend *backend, int width,
+                             int sidebar_w, unsigned long *starts,
+                             unsigned long *lengths)
+{
+    unsigned long total = (unsigned long)strlen(state->input);
+    int n;
+
+    n = tg_gui_wrap(backend, state->input,
+                    tg_gui_input_text_w(state, width, sidebar_w), starts,
+                    lengths, TG_GUI_WRAP_MAX_LINES);
+    if (n < 1) {
+        n = 1;
+        starts[0] = 0UL;
+        lengths[0] = total;
+    }
+    if (total > 0UL && state->input[total - 1UL] == '\n' &&
+        n < TG_GUI_WRAP_MAX_LINES) {
+        starts[n] = total;
+        lengths[n] = 0UL;
+        ++n;
+    }
+    return n;
+}
+
 /* Number of wrapped input rows to show (1..TG_GUI_INPUT_MAX_ROWS). */
 static int tg_gui_input_rows(const tg_gui_state *state, tg_gui_backend *backend,
                              int width, int sidebar_w)
@@ -3546,12 +3575,7 @@ static int tg_gui_input_rows(const tg_gui_state *state, tg_gui_backend *backend,
     if (state->mode != TG_GUI_MODE_CHAT || state->input[0] == '\0') {
         return 1;
     }
-    n = tg_gui_wrap(backend, state->input,
-                    tg_gui_input_text_w(state, width, sidebar_w), starts, lengths,
-                    TG_GUI_WRAP_MAX_LINES);
-    if (n < 1) {
-        n = 1;
-    }
+    n = tg_gui_input_wrap(state, backend, width, sidebar_w, starts, lengths);
     if (n > TG_GUI_INPUT_MAX_ROWS) {
         n = TG_GUI_INPUT_MAX_ROWS;
     }
@@ -4180,14 +4204,8 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
         int first;
         int k;
 
-        n = tg_gui_wrap(backend, state->input,
-                        tg_gui_input_text_w(state, width, sidebar_w), starts, lengths,
-                        TG_GUI_WRAP_MAX_LINES);
-        if (n < 1) {
-            n = 1;
-            starts[0] = 0UL;
-            lengths[0] = (unsigned long)strlen(state->input);
-        }
+        n = tg_gui_input_wrap(state, backend, width, sidebar_w, starts,
+                              lengths);
         /* If the message wraps past the box, show its LAST `rows` lines so the
            caret (normally at the end while typing) stays in view. */
         first = (n > rows) ? (n - rows) : 0;
@@ -8973,6 +8991,31 @@ int tg_gui_self_test(void)
                                  rec.first_text_x, y) != TG_GUI_HIT_INPUT) {
                 puts("gui self-test: paperclip overlaps input or shifts caret clicks");
                 return 2;
+            }
+            /* Shift+Enter (issue #18): a final line feed opens an empty
+               row at once, which grows the box and takes the caret. */
+            {
+                int lh = rec.line_h;
+                int row1 = (720 - (lh + 6)) - (2 * lh + 14) +
+                           TG_GUI_INPUT_TEXT_PAD + lh + 1;
+
+                strcpy(draft->input, "abc\n");
+                draft->input_caret = 4;
+                if (tg_gui_input_rows(draft, &b, 1280, sw) != 2 ||
+                    tg_gui_input_click_caret(draft, &b,
+                                             rec.first_text_x + 6,
+                                             row1) != 4) {
+                    puts("gui self-test: a final line feed opens no row");
+                    return 2;
+                }
+                strcpy(draft->input, "abc\n\n");
+                draft->input_caret = 5;
+                if (tg_gui_input_rows(draft, &b, 1280, sw) != 3) {
+                    puts("gui self-test: two final line feeds, not 3 rows");
+                    return 2;
+                }
+                strcpy(draft->input, "abc");
+                draft->input_caret = 2;
             }
             /* The login field centres the same 8-pixel font (baseline 6):
                as much air above the glyphs as below, emoji cell or not. */

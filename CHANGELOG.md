@@ -13,6 +13,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   web client, by a group admin) now leaves the open chat in the window
   at once; before, it stayed until the chat was opened again
   (issue #19).
+- Shift+Enter at the end of the message shows its new line at once, with
+  the caret at its start. Before, the caret stayed on the line above,
+  one blank further right, and the box grew only at the next key, so a
+  second Shift+Enter seemed to add two lines (issue #18).
 
 ## [0.1] - 2026-11-07
 
