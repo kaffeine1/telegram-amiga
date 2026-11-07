@@ -1755,10 +1755,19 @@ void tg_platform_workbench_tui_console_close(void)
        WAIT window, two field reports): one keypress -- or a close-click
        EOF where the handler provides it -- ends the pause, then every
        handle goes and the window dies with the last Close(). */
-    SetMode(Input(), 0);
     {
         char ch;
 
+        /* Drop what is already waiting first. On OS 3.2 Ctrl+C sends the
+           break signal and leaves its 0x03 byte too; a slow machine notices
+           the signal first and quits with the byte still unread, and the
+           pause took it as the keypress and closed at once. */
+        while (WaitForChar(Input(), 0) != 0) {
+            if (Read(Input(), &ch, 1) != 1) {
+                break;
+            }
+        }
+        SetMode(Input(), 0);
         (void)Read(Input(), &ch, 1);
     }
     /* Close the freopen'd "*" stdio streams -- nothing may print after
