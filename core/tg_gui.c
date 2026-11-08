@@ -2391,6 +2391,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             int slot_h;
             int name_baseline;
             int name_limit;
+            int time_x = 0;
 
             /* The peer cache carries no last-message preview, so a row is a
                single line: the name and the unread badge sit on the avatar's
@@ -2434,7 +2435,14 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             /* Name clips before the time column (two-line) or before the badge
                / row edge (single-line). */
             if (has_preview) {
-                name_limit = list_w - 38;
+                /* The time column is right-aligned by its real width: "07/10"
+                   in an 8-pixel font is 40 pixels, more than a fixed slot. */
+                time_x = list_w - 8;
+                if (chat->time[0] != '\0') {
+                    time_x -= backend->text_width(
+                        backend, chat->time, (unsigned long)strlen(chat->time));
+                }
+                name_limit = time_x - 6;
             } else {
                 name_limit = (chat->unread > 0 ||
                               (chat->pinned && badge_w > 0))
@@ -2446,11 +2454,11 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             if (has_preview) {
                 int preview_limit;
 
-                backend->draw_text(backend, preview_pen, sidebar_w - 34,
+                backend->draw_text(backend, preview_pen, time_x,
                                    name_baseline, chat->time,
                                    (unsigned long)strlen(chat->time));
                 preview_limit = (chat->unread > 0) ? (badge_x - 4)
-                                                   : (sidebar_w - 10);
+                                                   : (list_w - 10);
                 tg_gui_draw_clipped(backend, preview_pen, text_x,
                                     tg_gui_navigation_baseline(backend, y + slot_h,
                                                                slot_h),
