@@ -26,6 +26,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   row) and reach the other devices. The pins are read when the client
   starts and on Reload chat list; Saved Messages stays at the bottom.
 
+### Changed
+- The paperclip at the left of the message box is redrawn after the
+  desktop client's: a thin clip tilted on its side, outer and inner
+  loop, in crisp one-pixel lines. It comes in two sizes, 16 pixels for
+  small fonts and 20 when the box is taller.
+
 ### Fixed
 - A message deleted for everyone somewhere else (on the phone, in the
   web client, by a group admin) now leaves the open chat in the window

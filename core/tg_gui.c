@@ -3664,33 +3664,51 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
 
 /* --- Emoji picker --------------------------------------------------------- */
 
-/* A small monochrome paperclip, drawn with the current theme's pens. This
-   independent 16px outline needs no image datatype, file or palette. */
+/* The paperclip at the left of the input, in the manner of Telegram
+   Desktop's: a thin clip tilted 45 degrees, its outer loop and inner loop
+   joined at the top. Pixel art in the current theme's dim pen, one-pixel
+   45-degree strands (the only clean diagonal in one bit), so it needs no
+   image datatype, file or palette. 16 px for small fonts, 20 px when the
+   field is tall enough; the button is 22 px wide. */
+static const unsigned long tg_gui_attach_rows16[16] = {
+    0x00000UL, 0x00000UL, 0x00070UL, 0x00088UL, 0x00108UL, 0x00208UL,
+    0x00490UL, 0x00920UL, 0x01248UL, 0x02490UL, 0x02320UL, 0x02040UL,
+    0x02080UL, 0x01100UL, 0x00e00UL, 0x00000UL
+};
+static const unsigned long tg_gui_attach_rows20[20] = {
+    0x00000UL, 0x00000UL, 0x00060UL, 0x00090UL, 0x00108UL, 0x00208UL,
+    0x00410UL, 0x00920UL, 0x01248UL, 0x02490UL, 0x04920UL, 0x09240UL,
+    0x11480UL, 0x10900UL, 0x10200UL, 0x10400UL, 0x08800UL, 0x07000UL,
+    0x00000UL, 0x00000UL
+};
+
 static void tg_gui_paint_attach_button(tg_gui_backend *backend, int sidebar_w,
                                        int box_top, int input_h)
 {
-    static const unsigned short rows[16] = {
-        0x0020U, 0x00f0U, 0x0198U, 0x038cU,
-        0x078cU, 0x0718U, 0x0f18U, 0x1e30U,
-        0x3c6cU, 0x38ccU, 0x3998U, 0x2fb0U,
-        0x3760U, 0x18c0U, 0x0fc0U, 0x0200U
-    };
-    int bx = sidebar_w + 8 + (TG_GUI_ATTACH_BUTTON_W - 16) / 2;
-    int by = box_top + (input_h - 4 - 16) / 2;
+    const unsigned long *rows = tg_gui_attach_rows16;
+    int n = 16;
+    int bx;
+    int by;
     int y;
 
-    for (y = 0; y < 16; ++y) {
+    if (input_h - 4 >= 22) {
+        rows = tg_gui_attach_rows20;
+        n = 20;
+    }
+    bx = sidebar_w + 8 + (TG_GUI_ATTACH_BUTTON_W - n) / 2;
+    by = box_top + (input_h - 4 - n) / 2;
+    for (y = 0; y < n; ++y) {
         int x = 0;
 
-        while (x < 16) {
+        while (x < n) {
             int start;
 
-            if ((rows[y] & (0x8000U >> x)) == 0U) {
+            if ((rows[y] & (1UL << (n - 1 - x))) == 0UL) {
                 ++x;
                 continue;
             }
             start = x++;
-            while (x < 16 && (rows[y] & (0x8000U >> x)) != 0U) {
+            while (x < n && (rows[y] & (1UL << (n - 1 - x))) != 0UL) {
                 ++x;
             }
             backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
