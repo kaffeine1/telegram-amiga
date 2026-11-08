@@ -279,21 +279,35 @@ useful list of what users of the official apps miss here. Ideas only:
 its code is closed and we never read it, and we keep our own rules, no
 dependencies, the 68000 lane, six systems.
 
-Cheap, protocol only, on the existing window:
+State checked against the code on 2026-11-08. Already there, so off
+this list: captions when sending a photo (the send-photo dialog), and
+reading drafts, which no longer stop the chat list (the `draftMessage`
+fix of 0.0.98). Done since the beta, on `main`: messages deleted
+elsewhere leave the open chat (issue #19), Shift+Enter shows its line
+at once (issue #18), and a reply always names the message it answers,
+a photo included.
+
+Cheap, protocol only, on the existing window. Half done means part of
+it works today:
 
 - search inside a chat and across all chats (`messages.search`,
-  `messages.searchGlobal`); today the search box finds chat names only;
-- pinned chats at the top of the list and the Archive (`folder_id` 1),
-  which Telegram already sends and we ignore; pin and archive from the
+  `messages.searchGlobal`). Half done: the search box finds chat names
+  and, on the server, people and public channels (`contacts.search`),
+  never the messages;
+- pinned chats at the top of the list (`pinned` in the dialogs, which
+  we ignore) and the Archive (`folder_id` 1). Half done: archived chats
+  stay out of the list, but cannot be reached; pin and archive from the
   chat's menu (`messages.toggleDialogPin`, `folders.editPeerFolders`);
 - mark as read or unread (`messages.markDialogUnread`), leave a group or
-  a channel, delete a chat;
-- drafts kept in step with the other devices (`messages.saveDraft`, and
-  reading `draftMessage` right, which is a bug on `main` today);
+  a channel, delete a chat. Half done: Remove chat hides a chat from
+  the list on this machine only;
+- drafts shown and kept in step with the other devices
+  (`messages.saveDraft`). Half done: they are read without harm, never
+  shown;
 - the pinned message under the chat header, and a jump to the next
   unread mention (`messages.getUnreadMentions`);
-- Mute in the chat's menu sent to Telegram (`account.updateNotifySettings`),
-  so it reaches the other devices instead of staying local;
+- Mute in the chat's menu sent to Telegram (`account.updateNotifySettings`).
+  Half done: Telegram's own mute is read, ours stays on this machine;
 - an ARexx port: open a chat, show, hide, so that notifications and
   scripts can drive the client;
 - the time zone from `ENV:TZONE` or `ENV:TZ` before the Locale
@@ -301,7 +315,7 @@ Cheap, protocol only, on the existing window:
 
 Middle, more interface:
 
-- albums and captions when sending (captions have their own section);
+- albums when sending, several photos in one message;
 - select several messages (its section), open a downloaded file or show
   it in its drawer (its section);
 - polls shown and voted (`messages.sendVote`); today a poll shows
