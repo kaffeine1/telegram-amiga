@@ -291,9 +291,11 @@ Cheap, protocol only, on the existing window. Half done means part of
 it works today:
 
 - search inside a chat and across all chats (`messages.search`,
-  `messages.searchGlobal`). Half done: the search box finds chat names
-  and, on the server, people and public channels (`contacts.search`),
-  never the messages;
+  `messages.searchGlobal`). Inside a chat done on `main` (Find in chat,
+  Amiga+S: hits in the sidebar, a click shows the chat around the
+  message); across all chats still to do, and the text client has no
+  /find yet. The search box also finds chat names and, on the server,
+  people and public channels (`contacts.search`);
 - pinned chats at the top of the list (`pinned` in the dialogs, which
   we ignore) and the Archive (`folder_id` 1). Half done: archived chats
   stay out of the list, but cannot be reached; pin and archive from the

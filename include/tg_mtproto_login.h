@@ -678,6 +678,34 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer(
     unsigned long offset_id, /* page older: server returns id < offset_id; 0 = newest */
     unsigned long limit);
 
+/* The same with add_offset: negative = that many messages newer than
+   offset_id come first, to centre a page on one message. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit);
+
+/* messages.search in one chat (no filter, newest first, below offset_id
+   when non-zero). query_utf8 must be non-empty. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long offset_id,
+    unsigned long limit);
+
 /* channels.getParticipants(channelParticipantsRecent) for a supergroup -- resolves
    member id->name for the typing indicator. The reply carries users:Vector<User>. */
 tg_mtproto_tl_status tg_mtproto_build_channels_get_participants_recent(

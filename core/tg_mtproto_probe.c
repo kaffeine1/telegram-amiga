@@ -55,6 +55,8 @@
 #define tg_gui_window_photo_cache_file_removed(path) ((void)0)
 #define tg_avatar_expand_stripped(src, len, out, cap, out_len) (1)
 #define tg_gui_chat_driver_bind(gui, state, chat_driver) ((void)0)
+#define tg_gui_search_driver_bind(gui, state, chat_driver) ((void)0)
+#define tg_gui_driver_index_of(gui, message_id) ((void)(gui), (void)(message_id), -1)
 #define tg_gui_driver_append_own(gui, text, own, snippet, sent_id) ((void)0)
 #define tg_gui_driver_set_read_outbox_max(gui, read_max) (0)
 #define tg_gui_driver_reset_read_outbox(gui) ((void)0)
@@ -615,6 +617,12 @@ static const char *tg_chat_notify_cached_sender_name(unsigned long id_hi,
    server returns the page BELOW it, then restores 0. The print-history path reads
    it when building the query; every other caller leaves it 0 (newest-pinned). */
 static unsigned long tg_mtproto_history_offset_id_override = 0UL;
+/* The same fetch as a messages.search: non-NULL holds the UTF-8 query, set
+   by tg_gui_session_search_messages around its one call. */
+static const char *tg_mtproto_history_search_query = 0;
+/* getHistory add_offset: negative centres the page on offset_id (the jump
+   to a search hit); 0 everywhere else. */
+static long tg_mtproto_history_add_offset_override = 0L;
 
 /* Server-side total message count for the last getHistory, used by the open path
    to arm the forced "pull older" scrollbar when the chat has more history than the
@@ -13850,7 +13858,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     const char *peer_label,
     const char *own_label)
 {
-    unsigned char query[64];
+    unsigned char query[256]; /* a search carries its query string */
     unsigned long limit;
     unsigned long peer_constructor;
     unsigned long peer_id_hi;
@@ -13894,10 +13902,17 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     is_group = (peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR ||
                 peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR);
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-    if (tg_mtproto_build_messages_get_history_peer(
-            &writer, peer_constructor, peer_id_hi, peer_id_lo,
-            access_hash_hi, access_hash_lo, has_access_hash,
-            tg_mtproto_history_offset_id_override, limit) !=
+    if ((tg_mtproto_history_search_query != 0
+             ? tg_mtproto_build_messages_search_peer(
+                   &writer, peer_constructor, peer_id_hi, peer_id_lo,
+                   access_hash_hi, access_hash_lo, has_access_hash,
+                   tg_mtproto_history_search_query,
+                   tg_mtproto_history_offset_id_override, limit)
+             : tg_mtproto_build_messages_get_history_peer_at(
+                   &writer, peer_constructor, peer_id_hi, peer_id_lo,
+                   access_hash_hi, access_hash_lo, has_access_hash,
+                   tg_mtproto_history_offset_id_override,
+                   tg_mtproto_history_add_offset_override, limit)) !=
         TG_MTPROTO_TL_OK) {
         tg_mtproto_close_quiet_stream(quiet, stream);
         return 2;
@@ -21492,6 +21507,167 @@ int tg_gui_session_load_older(FILE *stream, int allow_drop_newest)
        failed fetch (rc != 0 -> < 0 so the caller does not latch the chat start). */
     if (loaded > 0) {
         return loaded;
+    }
+    return (rc == 0) ? 0 : -1;
+}
+
+/* Public: search the open chat's messages for `query` (Latin-1, as typed)
+   with messages.search. The hits replace the sidebar rows, newest first, one
+   per message (sender, opening text, date; the row's index is the message
+   id). Returns the number of hits, or -1 when the search could not run. */
+int tg_gui_session_search_messages(const char *query, FILE *stream)
+{
+    FILE *quiet;
+    unsigned long prev_timeout;
+    unsigned long dummy_last_seen;
+    unsigned long dummy_printed;
+    tg_gui_chat_driver collector;
+    tg_chat_driver collect_driver;
+    tg_gui_state *gst;
+    const char *wire;
+    const char *limit;
+    int rc;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char query_utf8[TG_GUI_SEARCH_MAX * 2 + 4];
+#endif
+
+    gst = tg_gui_session_state.gui_driver.state;
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        query == 0 || query[0] == '\0' ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+    wire = query;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    /* Latin-1 keymap -> UTF-8 for the wire, as for a sent message. */
+    if (tg_mtproto_latin1_to_utf8(query, query_utf8, sizeof(query_utf8))) {
+        wire = query_utf8;
+    }
+#endif
+    /* MorphOS keeps its small replies (the bsdsocket freeze guard). */
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+    limit = "12";
+#else
+    limit = "20";
+#endif
+    tg_gui_log("search_messages: start");
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    gst->chat_count = 0;
+    tg_gui_search_driver_bind(&collector, gst, &collect_driver);
+    dummy_last_seen = 0UL;
+    dummy_printed = 0UL;
+    tg_mtproto_history_search_query = wire;
+    tg_chat_message_driver_override = &collect_driver;
+    rc = tg_mtproto_auth_print_history_text_peer_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, limit, quiet,
+        &dummy_last_seen, &dummy_printed, 0, 1, 0,
+        tg_gui_session_state.current_peer_label,
+        tg_gui_session_state.own_label);
+    tg_chat_message_driver_override = 0;
+    tg_mtproto_history_search_query = 0;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log("search_messages: done");
+#if defined(TG_NO_GUI)
+    (void)collector;
+    (void)collect_driver;
+#endif
+    if (rc != 0 && gst->chat_count == 0) {
+        return -1;
+    }
+    return gst->chat_count;
+}
+
+/* Public: show the open chat around one message (a search hit): reload the
+   transcript with a getHistory page centred on message_id, highlight it and
+   ask the next paint to bring it into view. When the page does not reach the
+   newest message, the ring bottom is marked stale, so the jump button and a
+   send reload the newest as after deep paging. Returns 1 when the message is
+   shown, 0 when the page came back without it, -1 on failure. */
+int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream)
+{
+    FILE *quiet;
+    unsigned long prev_timeout;
+    unsigned long dummy_last_seen;
+    unsigned long dummy_printed;
+    unsigned long newest_known;
+    unsigned long max_id;
+    const char *limit;
+    long before;
+    tg_gui_state *gst;
+    int rc;
+    int k;
+    int at;
+
+    gst = tg_gui_session_state.gui_driver.state;
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        message_id == 0UL ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+    limit = "12";
+    before = -6L;
+#elif defined(__m68k__)
+    limit = "20";
+    before = -10L;
+#else
+    limit = "30";
+    before = -15L;
+#endif
+    tg_gui_log("jump_to_message: start");
+    newest_known = tg_gui_session_state.last_seen_message_id;
+    gst->message_count = 0;
+    gst->msg_gen++;
+    gst->unread_below = 0;
+    gst->transcript_scroll = 0;
+    gst->selected_msg = -1;
+    gst->newest_dropped = 0; /* the page below appends; set again after */
+    tg_gui_session_reactions_polled = (time_t)0;
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    dummy_last_seen = 0UL;
+    dummy_printed = 0UL;
+    tg_mtproto_history_offset_id_override = message_id;
+    tg_mtproto_history_add_offset_override = before;
+    tg_chat_message_driver_override = &tg_gui_session_state.driver;
+    rc = tg_mtproto_auth_print_history_text_peer_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, limit, quiet,
+        &dummy_last_seen, &dummy_printed, 0, 1, 0,
+        tg_gui_session_state.current_peer_label,
+        tg_gui_session_state.own_label);
+    tg_chat_message_driver_override = 0;
+    tg_mtproto_history_offset_id_override = 0UL;
+    tg_mtproto_history_add_offset_override = 0L;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log("jump_to_message: done");
+    max_id = 0UL;
+    for (k = 0; k < gst->message_count; ++k) {
+        if (gst->messages[k].id > max_id) {
+            max_id = gst->messages[k].id;
+        }
+    }
+    /* Older history is assumed until paging finds the chat start. */
+    gst->more_above = (gst->message_count > 0) ? 1 : 0;
+    gst->newest_dropped =
+        (gst->message_count > 0 && max_id < newest_known) ? 1 : 0;
+    at = tg_gui_driver_index_of(&tg_gui_session_state.gui_driver, message_id);
+    if (at >= 0) {
+        gst->selected_msg = at;
+        gst->msg_scroll_to_sel = 1;
+        return 1;
     }
     return (rc == 0) ? 0 : -1;
 }

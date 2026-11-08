@@ -376,6 +376,15 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
         state->message_count += 1;
         state->msg_gen++;
     } else {
+        /* The ring holds an older stretch of the chat (deep paging, a jump
+           to a search hit): a live message belongs after the newest, which
+           is not loaded, so appending it here would glue it to an old one.
+           Count it for the jump button, whose reload brings it. */
+        if (state->newest_dropped) {
+            state->unread_below += 1;
+            state->msg_gen++;
+            return;
+        }
         /* Keep the most recent TG_GUI_MAX_MESSAGES: drop the oldest when full. */
         if (state->message_count >= TG_GUI_MAX_MESSAGES) {
             int i;
@@ -1061,6 +1070,114 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
     chat_driver->on_message = tg_gui_driver_on_message;
     chat_driver->on_chat_list_changed = tg_gui_driver_on_chat_list_changed;
     chat_driver->on_notification = tg_gui_driver_on_notification;
+}
+
+/* --- message search hits ------------------------------------------------ */
+
+/* One search hit per row, newest first in the sidebar: the fetch hands rows
+   oldest first, so each lands on top and pushes the rest down (the oldest
+   falls off a full list). */
+static void tg_gui_search_driver_on_message(void *ctx,
+                                            const tg_chat_message_row *row)
+{
+    tg_gui_chat_driver *gui;
+    tg_gui_state *state;
+    tg_gui_chat *hit;
+    const char *who;
+    char line[TG_GUI_TEXT_MAX];
+    unsigned long i;
+    int k;
+
+    gui = (tg_gui_chat_driver *)ctx;
+    if (gui == 0 || gui->state == 0 || row == 0 || row->id == 0UL ||
+        row->is_service) {
+        return;
+    }
+    state = gui->state;
+    if (state->chat_count < 0) {
+        state->chat_count = 0;
+    }
+    if (state->chat_count >= TG_GUI_MAX_CHATS) {
+        state->chat_count = TG_GUI_MAX_CHATS - 1;
+    }
+    for (k = state->chat_count; k > 0; --k) {
+        state->chats[k] = state->chats[k - 1];
+    }
+    state->chat_count += 1;
+    hit = &state->chats[0];
+    memset(hit, 0, sizeof(*hit));
+    if (row->is_out) {
+        who = (row->own_label != 0) ? row->own_label : "";
+    } else if (row->sender != 0) {
+        who = row->sender;
+    } else if (!row->is_group && row->peer_label != 0) {
+        who = row->peer_label;
+    } else {
+        who = "";
+    }
+    tg_gui_driver_copy_latin1(hit->name, sizeof(hit->name), who);
+    tg_gui_strip_markers(hit->name, sizeof(hit->name), hit->name);
+    tg_gui_driver_copy_latin1(line, sizeof(line), row->text);
+    tg_gui_strip_markers(hit->preview, sizeof(hit->preview), line);
+    for (i = 0UL; hit->preview[i] != '\0'; ++i) {
+        if (hit->preview[i] == '\n' || hit->preview[i] == '\r' ||
+            hit->preview[i] == '\t') {
+            hit->preview[i] = ' ';
+        }
+    }
+    if (row->has_time) {
+        time_t when = (time_t)row->local_epoch;
+        struct tm *parts = gmtime(&when);
+        unsigned long day = row->local_epoch / TG_GUI_DAY_SECONDS + 1UL;
+
+        if (parts != 0) {
+            if (state->today != 0UL && day == state->today) {
+                sprintf(hit->time, "%02d:%02d", parts->tm_hour % 24,
+                        parts->tm_min % 60);
+            } else {
+                sprintf(hit->time, "%02d/%02d", parts->tm_mday % 32,
+                        (parts->tm_mon + 1) % 13);
+            }
+        }
+    }
+    hit->initials[0] = (hit->name[0] != '\0') ? hit->name[0] : '?';
+    if (hit->initials[0] >= 'a' && hit->initials[0] <= 'z') {
+        hit->initials[0] = (char)(hit->initials[0] - 32);
+    }
+    hit->initials[1] = '\0';
+    hit->avatar_color = tg_gui_driver_color_for(who);
+    hit->index = row->id; /* a message id here, never a peer */
+}
+
+void tg_gui_search_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
+                               tg_chat_driver *chat_driver)
+{
+    if (gui == 0 || chat_driver == 0) {
+        return;
+    }
+    gui->state = state;
+    gui->prepend_at = -1;
+    gui->prepend_allow_drop = 0;
+    chat_driver->ctx = gui;
+    chat_driver->on_message = tg_gui_search_driver_on_message;
+    chat_driver->on_chat_list_changed = 0;
+    chat_driver->on_notification = 0;
+}
+
+int tg_gui_driver_index_of(const tg_gui_chat_driver *gui,
+                           unsigned long message_id)
+{
+    int i;
+
+    if (gui == 0 || gui->state == 0 || message_id == 0UL) {
+        return -1;
+    }
+    for (i = 0; i < gui->state->message_count; ++i) {
+        if (gui->state->messages[i].id == message_id) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 /* --- self-test ---------------------------------------------------------- */
@@ -2241,6 +2358,80 @@ int tg_gui_driver_self_test(void)
         rd.on_message(rd.ctx, &row);
         if (strcmp(rs->messages[4].reply_text, "solo questo") != 0) {
             puts("gui driver self-test: a server quote wins over the target");
+            return 2;
+        }
+    }
+
+    /* Find in chat: hits land in the sidebar newest first, on one line, the
+       row's index being the message id; service rows are left out. */
+    {
+        tg_gui_state *ss = tg_gui_test_scratch_state();
+        tg_gui_chat_driver sg;
+        tg_chat_driver sd;
+        tg_chat_message_row row;
+
+        memset(ss, 0, sizeof(*ss));
+        ss->today = 1700000000UL / TG_GUI_DAY_SECONDS + 1UL;
+        tg_gui_search_driver_bind(&sg, ss, &sd);
+        memset(&row, 0, sizeof(row));
+        row.is_group = 1;
+        row.sender = "anna";
+        row.id = 300UL;
+        row.text = "prima\nriga";
+        row.has_time = 1;
+        row.local_epoch = 1700000000UL - 3UL * TG_GUI_DAY_SECONDS;
+        sd.on_message(sd.ctx, &row);
+        row.is_service = 1;
+        row.id = 305UL;
+        row.text = "Anna joined";
+        sd.on_message(sd.ctx, &row);
+        row.is_service = 0;
+        row.is_out = 1;
+        row.own_label = "Io";
+        row.id = 310UL;
+        row.text = "\034ciao\034";
+        row.local_epoch = 1700000000UL; /* today, 22:13 */
+        sd.on_message(sd.ctx, &row);
+        if (ss->chat_count != 2 || ss->chats[0].index != 310UL ||
+            ss->chats[1].index != 300UL ||
+            strcmp(ss->chats[0].name, "Io") != 0 ||
+            strcmp(ss->chats[0].preview, "ciao") != 0 ||
+            strcmp(ss->chats[0].time, "22:13") != 0 ||
+            strcmp(ss->chats[1].name, "anna") != 0 ||
+            strcmp(ss->chats[1].preview, "prima riga") != 0 ||
+            strcmp(ss->chats[1].time, "11/11") != 0 ||
+            ss->chats[1].initials[0] != 'A') {
+            puts("gui driver self-test: search hits newest first, one line");
+            return 2;
+        }
+        if (tg_gui_driver_index_of(&sg, 300UL) != -1) {
+            puts("gui driver self-test: hits are not transcript messages");
+            return 2;
+        }
+    }
+
+    /* A live message while the ring holds an older stretch (after a jump to
+       a hit) is counted for the jump button, not glued to the old page. */
+    {
+        tg_gui_state *ls = tg_gui_test_scratch_state();
+        tg_gui_chat_driver lg;
+        tg_chat_driver ld;
+        tg_chat_message_row row;
+
+        memset(ls, 0, sizeof(*ls));
+        tg_gui_chat_driver_bind(&lg, ls, &ld);
+        memset(&row, 0, sizeof(row));
+        row.sender = "Anna";
+        row.id = 40UL;
+        row.text = "vecchio";
+        ld.on_message(ld.ctx, &row);
+        ls->newest_dropped = 1;
+        row.id = 900UL;
+        row.text = "nuovo";
+        ld.on_message(ld.ctx, &row);
+        if (ls->message_count != 1 || ls->unread_below != 1 ||
+            tg_gui_driver_index_of(&lg, 40UL) != 0) {
+            puts("gui driver self-test: no live message on a stale ring");
             return 2;
         }
     }

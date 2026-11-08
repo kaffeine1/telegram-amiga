@@ -2185,6 +2185,9 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
         if (state->forward_pick_active) {
             placeholder = "Choose destination...";
             placeholder_len = 21UL;
+        } else if (state->msg_search_active) {
+            placeholder = "Find in this chat...";
+            placeholder_len = 20UL;
         } else if (state->search_active) {
             placeholder = "Type a name, ENTER...";
             placeholder_len = 20UL;
@@ -4575,6 +4578,32 @@ static void tg_gui_paint_main(const tg_gui_state *state,
             /* The painter owns the geometry: clamp the offset the event loop
                advanced freely (cast away const to write the model's own field). */
             st = (tg_gui_state *)state;
+            /* One-shot after a jump to a search hit: centre the selected
+               message (scroll counts pixels up from the newest-pinned
+               bottom, so it is the height below the message plus half its
+               own, less half the view). */
+            if (st->msg_scroll_to_sel) {
+                st->msg_scroll_to_sel = 0;
+                if (st->selected_msg >= 0 &&
+                    st->selected_msg < st->message_count) {
+                    int below = 0;
+                    int own_h;
+
+                    for (j = st->selected_msg + 1; j < st->message_count; ++j) {
+                        below += tg_gui_message_height_kept(
+                            state, backend, j, area_w, lh,
+                            tg_gui_message_grouped(state, j), layout_metrics);
+                    }
+                    own_h = tg_gui_message_height_kept(
+                        state, backend, st->selected_msg, area_w, lh,
+                        tg_gui_message_grouped(state, st->selected_msg),
+                        layout_metrics);
+                    st->transcript_scroll = below + own_h / 2 - avail / 2;
+                    if (st->transcript_scroll > real_max) {
+                        st->transcript_scroll = real_max;
+                    }
+                }
+            }
             if (st->transcript_scroll > max_scroll) {
                 st->transcript_scroll = max_scroll;
             }

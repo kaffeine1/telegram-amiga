@@ -40,6 +40,8 @@
 #define TG_INPUT_DIALOG_PEER_CONSTRUCTOR 0xfcaafeb7UL
 #define TG_MESSAGES_PEER_DIALOGS_CONSTRUCTOR 0x3371c354UL
 #define TG_MESSAGES_GET_HISTORY_CONSTRUCTOR 0x4423e6c5UL
+#define TG_MESSAGES_SEARCH_CONSTRUCTOR 0x29ee847aUL
+#define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
 #define TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR 0xfe05dc9aUL
 /* messages.forwardMessages#978928ca at layer 214, verified against the
    official TDLib schema revision that declares MTPROTO_LAYER = 214. */
@@ -1105,6 +1107,26 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer(
     unsigned long offset_id,
     unsigned long limit)
 {
+    return tg_mtproto_build_messages_get_history_peer_at(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, offset_id, 0L, limit);
+}
+
+/* messages.getHistory with add_offset: a negative add_offset with offset_id
+   set returns that many messages NEWER than offset_id first, then the older
+   ones, so a page can be centred on a message (the jump to a search hit). */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit)
+{
     tg_mtproto_tl_status status;
 
     if (writer == 0 || limit == 0UL) {
@@ -1123,10 +1145,15 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer(
         status = tg_mtproto_tl_write_u32(writer, offset_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL);
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset_date */
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL);
+        /* add_offset:int, two's complement on the wire. */
+        status = tg_mtproto_tl_write_u32(
+            writer, add_offset < 0L
+                        ? (unsigned long)(0xFFFFFFFFUL -
+                                          (unsigned long)(-(add_offset + 1L)))
+                        : (unsigned long)add_offset);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, limit);
@@ -1139,6 +1166,68 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL);
+    }
+    return status;
+}
+
+/* messages.search#29ee847a flags:# peer:InputPeer q:string
+   from_id:flags.0?InputPeer saved_peer_id:flags.2?InputPeer
+   saved_reaction:flags.3?Vector<Reaction> top_msg_id:flags.1?int
+   filter:MessagesFilter min_date:int max_date:int offset_id:int
+   add_offset:int limit:int max_id:int min_id:int hash:long
+   = messages.Messages (TDLib telegram_api.tl, checked 2026-11-08). Text
+   search in one chat, newest first, below offset_id when it is set; the
+   reply is the same messages.Messages a getHistory returns. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long offset_id,
+    unsigned long limit)
+{
+    tg_mtproto_tl_status status;
+    int k;
+
+    if (writer == 0 || query_utf8 == 0 || query_utf8[0] == '\0' ||
+        limit == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, TG_MESSAGES_SEARCH_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_bytes(
+            writer, (const unsigned char *)query_utf8,
+            (unsigned long)strlen(query_utf8));
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR);
+    }
+    /* min_date, max_date, offset_id, add_offset, limit, max_id, min_id. */
+    for (k = 0; k < 7 && status == TG_MTPROTO_TL_OK; ++k) {
+        unsigned long v = 0UL;
+
+        if (k == 2) {
+            v = offset_id;
+        } else if (k == 4) {
+            v = limit;
+        }
+        status = tg_mtproto_tl_write_u32(writer, v);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* hash */
     }
     return status;
 }
@@ -8986,6 +9075,43 @@ int tg_mtproto_login_self_test(void)
         query[6] != 0xbcU || query[7] != 0x27U ||
         query[36] != 10U) {
         return 2;
+    }
+    /* getHistory centred on a message: offset_id 500, add_offset -5 (two's
+       complement), limit 10, on a basic group. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_history_peer_at(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 500UL, -5L, 10UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 48UL ||
+        query[16] != 0xf4U || query[17] != 0x01U ||
+        query[18] != 0x00U || query[19] != 0x00U ||
+        query[24] != 0xfbU || query[25] != 0xffU ||
+        query[26] != 0xffU || query[27] != 0xffU ||
+        query[28] != 10U) {
+        return 2;
+    }
+    /* messages.search#29ee847a in a basic group: flags 0, q "ciao" (TL string
+       padded to 8), inputMessagesFilterEmpty#57e2f66c, limit 20 -> 68 bytes. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_peer(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, "ciao", 0UL, 20UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 68UL ||
+        query[0] != 0x7aU || query[1] != 0x84U ||
+        query[2] != 0xeeU || query[3] != 0x29U ||
+        query[4] != 0x00U || query[7] != 0x00U ||
+        query[8] != 0xb9U || query[9] != 0x5cU ||
+        query[20] != 4U || query[21] != 'c' || query[24] != 'o' ||
+        query[28] != 0x6cU || query[29] != 0xf6U ||
+        query[30] != 0xe2U || query[31] != 0x57U ||
+        query[40] != 0x00U || query[48] != 20U || query[60] != 0x00U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_peer(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, "", 0UL, 20UL) == TG_MTPROTO_TL_OK) {
+        return 2; /* an empty query is refused */
     }
     /* channels.getParticipants(recent): lock the verified layer-214 hashes + the
        LE int64 (lo-then-hi) layout. channel_id=0x1122334455667788,

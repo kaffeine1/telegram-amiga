@@ -270,6 +270,18 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream);
    nothing pageable) -- the caller must NOT treat < 0 as the chat start. */
 int tg_gui_session_load_older(FILE *stream, int allow_drop_newest);
 
+/* Searches the open chat's messages for `query` (Latin-1, as typed) with
+   messages.search. The hits replace the sidebar rows, newest first: name =
+   sender, preview = opening text, time = date, index = message id. Returns
+   the number of hits, or -1 when the search could not run. */
+int tg_gui_session_search_messages(const char *query, FILE *stream);
+
+/* Shows the open chat around message_id (a search hit): reloads the
+   transcript centred on it, highlights it and asks the next paint to scroll
+   it into view; a page that misses the newest marks the ring bottom stale
+   (newest_dropped). 1 = shown, 0 = not in the page, -1 = failed. */
+int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream);
+
 /* Sends `text` to the open chat and echoes it into the transcript. When
    reply_to_msg_id != 0 the message is sent as a reply to that message id.
    Returns 0 on success, non-zero on failure or when no chat is open. */

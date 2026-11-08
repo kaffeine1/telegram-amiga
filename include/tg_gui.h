@@ -333,6 +333,7 @@ typedef struct tg_gui_state {
     int message_count;
     int chat_scroll;       /* first visible chat row in the sidebar (0 = top) */
     int chat_scroll_to_sel; /* one-shot: next paint scrolls the list to selected_chat */
+    int msg_scroll_to_sel;  /* one-shot: next paint centres selected_msg */
     int transcript_scroll; /* PIXELS scrolled up from the newest-pinned bottom (0 = newest) */
     int input_h;           /* composer box height (px), cached by the painter for the hit-test */
     int nav_lh;            /* native font + leading, cached for sidebar mouse geometry */
@@ -421,6 +422,10 @@ typedef struct tg_gui_state {
     int in_search;
     int in_filter;   /* sidebar shows the LOCAL search filter; the final row
                         (index 0) is "Search Telegram..." = go online */
+    /* Find in chat: the search box searches the open chat's messages
+       (ENTER runs messages.search). in_search then marks the sidebar as
+       showing the hits, whose index is a message id, not a peer. */
+    int msg_search_active;
     int focus_tint_unseen; /* the screen gave the row tint the background's
                               own pen (too few colours): the arrow focus gets
                               a frame, as the tint alone would not show */

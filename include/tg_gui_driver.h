@@ -40,6 +40,18 @@ typedef struct tg_gui_chat_driver {
 void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
                              tg_chat_driver *chat_driver);
 
+/* Binds chat_driver so each row becomes a message-search hit in the sidebar
+   instead of a transcript bubble: rows arrive oldest first and land newest
+   first in state->chats (name = sender, preview = text on one line, time =
+   HH:MM today or the date, index = the message id). The caller empties the
+   list (chat_count = 0) before the fetch. */
+void tg_gui_search_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
+                               tg_chat_driver *chat_driver);
+
+/* Index of the shown message with this server id, -1 when not shown. */
+int tg_gui_driver_index_of(const tg_gui_chat_driver *gui,
+                           unsigned long message_id);
+
 /* Maps a sender name to a stable avatar tint index [0, TG_GUI_AVATAR_COLORS).
    Exposed so the chat-list projection can colour the same name identically. */
 int tg_gui_driver_color_for(const char *name);
