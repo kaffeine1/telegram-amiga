@@ -86,6 +86,7 @@ typedef struct tg_chat_message_row {
     const char *own_label;     /* this account's name, for is_out */
     const char *sender;        /* resolved incoming sender, NULL if unknown */
     const char *reply_quote;   /* quoted snippet if this is a reply, else NULL */
+    unsigned long reply_to_id; /* id of the replied-to message, 0 if not a reply */
     unsigned long from_id_hi;  /* sender user id, to match a live typing update */
     unsigned long from_id_lo;
     int has_document;          /* F9: message carries a downloadable document */

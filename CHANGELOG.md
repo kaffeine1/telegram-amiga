@@ -17,6 +17,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the caret at its start. Before, the caret stayed on the line above,
   one blank further right, and the box grew only at the next key, so a
   second Shift+Enter seemed to add two lines (issue #18).
+- A reply now always shows which message it answers: the window draws
+  the sender and the start of that message above it, and the text
+  client quotes it when it is on the same page. Before, only a reply
+  that quoted a piece of text was marked, so a reply to a photo, or a
+  plain reply, looked like an ordinary message. When the answered
+  message is not loaded yet, the reply says so and fills in when it
+  arrives.
 
 ## [0.1] - 2026-11-07
 

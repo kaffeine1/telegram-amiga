@@ -14052,6 +14052,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
             {
                 const char *sender = 0;
                 tg_chat_message_row row;
+                char reply_target[TG_MTPROTO_MESSAGE_REPLY_QUOTE_MAX];
                 /* Drawn as the user's own; the filter above stays on the
                    server's flag, as the text client prints its own echo. */
                 int own = tg_mtproto_message_is_own(&texts.messages[i],
@@ -14127,6 +14128,44 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                      !row.is_service) /* a pin quotes in its own line */
                         ? texts.messages[i].reply_quote
                         : 0;
+                /* A reply without a quote names its target by id only: the
+                   window resolves it against its transcript; the text client
+                   quotes the target when it is in this page. */
+                row.reply_to_id = (texts.messages[i].has_reply && !row.is_service)
+                                      ? texts.messages[i].reply_to_msg_id
+                                      : 0UL;
+                if (row.reply_to_id != 0UL && row.reply_quote == 0 &&
+                    tg_chat_message_driver_override == 0) {
+                    unsigned long rj;
+                    unsigned long rn;
+
+                    strcpy(reply_target, "earlier message");
+                    for (rj = 0UL; rj < texts.count; ++rj) {
+                        if (texts.messages[rj].id == row.reply_to_id) {
+                            for (rn = 0UL; rn + 1UL < sizeof(reply_target) &&
+                                           texts.messages[rj].text[rn] != '\0';
+                                 ++rn) {
+                                char c = texts.messages[rj].text[rn];
+
+                                reply_target[rn] =
+                                    (c == '\n' || c == '\r' || c == '\t') ? ' ' : c;
+                            }
+                            /* Never end on a cut UTF-8 sequence: back up to
+                               the lead byte of the one the cut went through. */
+                            while (rn > 0UL &&
+                                   ((unsigned char)texts.messages[rj].text[rn] &
+                                    0xC0U) == 0x80U) {
+                                --rn;
+                            }
+                            reply_target[rn] = '\0';
+                            if (rn == 0UL) {
+                                strcpy(reply_target, "media");
+                            }
+                            break;
+                        }
+                    }
+                    row.reply_quote = reply_target;
+                }
                 row.pending_webpage_hi = texts.messages[i].pending_webpage_hi;
                 row.pending_webpage_lo = texts.messages[i].pending_webpage_lo;
                 if (peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {

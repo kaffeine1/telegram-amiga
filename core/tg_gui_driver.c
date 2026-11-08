@@ -183,6 +183,86 @@ static void tg_gui_driver_set_time(tg_gui_message *message,
     }
 }
 
+/* A reply whose header carries no quote names its target only by id (the
+   usual case, and always when the target is a photo): show the target's
+   sender and opening text, as the official clients do. */
+#define TG_GUI_REPLY_UNSEEN "Reply to an earlier message"
+
+static void tg_gui_driver_reply_from(tg_gui_message *reply,
+                                     const tg_gui_message *target)
+{
+    char body[TG_GUI_REPLY_MAX];
+    unsigned long n;
+    unsigned long i;
+
+    tg_gui_strip_markers(body, sizeof(body), target->text);
+    for (i = 0UL; body[i] != '\0'; ++i) {
+        if (body[i] == '\n' || body[i] == '\r' || body[i] == '\t') {
+            body[i] = ' ';
+        }
+    }
+    n = 0UL;
+    reply->reply_text[0] = '\0';
+    if (target->sender[0] != '\0' && !target->is_system) {
+        /* Half the line at most for the name; unit-safe cut. */
+        tg_gui_strip_markers(reply->reply_text, sizeof(reply->reply_text) / 2UL,
+                             target->sender);
+        n = (unsigned long)strlen(reply->reply_text);
+        if (body[0] != '\0' && n + 3UL < sizeof(reply->reply_text)) {
+            reply->reply_text[n++] = ':';
+            reply->reply_text[n++] = ' ';
+            reply->reply_text[n] = '\0';
+        }
+    }
+    tg_gui_strip_markers(reply->reply_text + n, sizeof(reply->reply_text) - n,
+                         body);
+    if (reply->reply_text[0] == '\0') {
+        tg_gui_driver_copy(reply->reply_text, sizeof(reply->reply_text),
+                           TG_GUI_REPLY_UNSEEN);
+    }
+    reply->reply_pending = 0U;
+    reply->layout_key = 0UL;
+}
+
+/* Fill a new reply from a target already in the transcript, or leave the
+   stand-in for the target to fill when it arrives (load-older paging brings
+   targets after their replies). */
+static void tg_gui_driver_resolve_reply(tg_gui_state *state,
+                                        tg_gui_message *reply)
+{
+    int i;
+
+    for (i = 0; i < state->message_count; ++i) {
+        tg_gui_message *m = &state->messages[i];
+
+        if (m != reply && m->id != 0UL && m->id == reply->reply_to_id) {
+            tg_gui_driver_reply_from(reply, m);
+            return;
+        }
+    }
+    tg_gui_driver_copy(reply->reply_text, sizeof(reply->reply_text),
+                       TG_GUI_REPLY_UNSEEN);
+    reply->reply_pending = 1U;
+}
+
+static void tg_gui_driver_fill_pending_replies(tg_gui_state *state,
+                                               const tg_gui_message *target)
+{
+    int i;
+
+    if (target->id == 0UL) {
+        return;
+    }
+    for (i = 0; i < state->message_count; ++i) {
+        tg_gui_message *m = &state->messages[i];
+
+        if (m != target && m->reply_pending && m->reply_to_id == target->id) {
+            tg_gui_driver_reply_from(m, target);
+            state->msg_gen++;
+        }
+    }
+}
+
 static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
 {
     /* any outcome below mutates or may mutate the transcript layout */
@@ -365,6 +445,12 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                              message->reply_text);
     }
     message->id = row->id;
+    message->reply_to_id = row->reply_to_id;
+    if (message->reply_text[0] == '\0' && message->reply_to_id != 0UL &&
+        !message->is_system) {
+        tg_gui_driver_resolve_reply(state, message);
+    }
+    tg_gui_driver_fill_pending_replies(state, message);
     if (row->reactions != 0) message->reactions = *row->reactions;
     message->reactions_unknown = row->reactions == 0 && row->reactions_unknown
                                      ? 1U : 0U;
@@ -2094,6 +2180,67 @@ int tg_gui_driver_self_test(void)
         }
         if (tg_gui_driver_has_unseen_own(&rg)) {
             puts("gui driver self-test: no unseen-own after read");
+            return 2;
+        }
+    }
+
+    /* A reply without a server quote shows its target's sender and text;
+       a target not yet loaded leaves a stand-in it fills when it arrives. */
+    {
+        tg_gui_state *rs = tg_gui_test_scratch_state();
+        tg_gui_chat_driver rg;
+        tg_chat_driver rd;
+        tg_chat_message_row row;
+
+        memset(rs, 0, sizeof(*rs));
+        tg_gui_chat_driver_bind(&rg, rs, &rd);
+        memset(&row, 0, sizeof(row));
+        row.is_group = 1;
+        row.sender = "Anna";
+        row.id = 100UL;
+        row.text = "[Photo]";
+        rd.on_message(rd.ctx, &row);
+        row.sender = "Marco";
+        row.id = 101UL;
+        row.text = "bella";
+        row.reply_to_id = 100UL;
+        rd.on_message(rd.ctx, &row);
+        if (rs->message_count != 2 ||
+            strcmp(rs->messages[1].reply_text, "Anna: [Photo]") != 0 ||
+            rs->messages[1].reply_pending) {
+            puts("gui driver self-test: a reply to a photo must name it");
+            return 2;
+        }
+        row.id = 102UL;
+        row.text = "e questa?";
+        row.reply_to_id = 50UL;
+        rd.on_message(rd.ctx, &row);
+        if (strcmp(rs->messages[2].reply_text, TG_GUI_REPLY_UNSEEN) != 0 ||
+            !rs->messages[2].reply_pending) {
+            puts("gui driver self-test: an unseen target needs the stand-in");
+            return 2;
+        }
+        rg.prepend_at = 0;
+        rg.prepend_allow_drop = 1;
+        row.sender = "Anna";
+        row.id = 50UL;
+        row.text = "riga\nvecchia";
+        row.reply_to_id = 0UL;
+        rd.on_message(rd.ctx, &row);
+        rg.prepend_at = -1;
+        if (rs->message_count != 4 ||
+            strcmp(rs->messages[3].reply_text, "Anna: riga vecchia") != 0 ||
+            rs->messages[3].reply_pending) {
+            puts("gui driver self-test: an older target must fill its reply");
+            return 2;
+        }
+        row.id = 103UL;
+        row.text = "citata";
+        row.reply_to_id = 100UL;
+        row.reply_quote = "solo questo";
+        rd.on_message(rd.ctx, &row);
+        if (strcmp(rs->messages[4].reply_text, "solo questo") != 0) {
+            puts("gui driver self-test: a server quote wins over the target");
             return 2;
         }
     }
