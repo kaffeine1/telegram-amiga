@@ -21437,6 +21437,10 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     if (tg_gui_session_state.gui_driver.state != 0) {
         tg_gui_session_state.gui_driver.state->message_count = 0;
         tg_gui_session_state.gui_driver.state->msg_gen++;
+        /* A highlighted message is an index into the old transcript (a
+           search hit, a context menu): it would land on another one. */
+        tg_gui_session_state.gui_driver.state->selected_msg = -1;
+        tg_gui_session_state.gui_driver.state->msg_scroll_to_sel = 0;
         tg_gui_session_state.gui_driver.state->newest_dropped = 0;
         tg_gui_session_state.gui_driver.state->unread_below = 0;
         /* A new chat asks its reactions on the first tick: the history
