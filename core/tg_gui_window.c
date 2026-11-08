@@ -9408,6 +9408,10 @@ static void tg_gui_window_end_msg_search(tg_gui_state *state)
     if (state->in_search) {
         state->in_search = 0;
         tg_gui_session_refresh_chats();
+        /* The rebuilt list starts at the top: bring the open chat back
+           into view (on a long list it sat below the fold). */
+        state->nav_chat = -1;
+        state->chat_scroll_to_sel = 1;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Live - F1-F10 chats, Amiga+Q quits");
@@ -9442,6 +9446,8 @@ static void tg_gui_window_run_msg_search(tg_gui_state *state,
         /* The fetch emptied the list: put the chats back. */
         state->in_search = 0;
         tg_gui_session_refresh_chats();
+        state->nav_chat = -1;
+        state->chat_scroll_to_sel = 1;
         tg_gui_window_copy(state->status, sizeof(state->status),
                            n < 0 ? "Search failed (network?)"
                                  : "No message found - edit and ENTER");
@@ -12244,6 +12250,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 case 'E': key_menu_action = (APTR)TG_MENU_EMOJI; break;
                 case 'I': key_menu_action = (APTR)TG_MENU_ICONIFY; break;
                 case 'Q': key_menu_action = (APTR)TG_MENU_QUIT; break;
+                case 'S': key_menu_action = (APTR)TG_MENU_FINDCHAT; break;
                 default: break; /* unknown shortcut: swallowed, never typed */
                 }
                 msg_class = 0; /* consumed: keep it out of every text field */
