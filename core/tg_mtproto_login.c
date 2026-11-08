@@ -41,6 +41,8 @@
 #define TG_MESSAGES_PEER_DIALOGS_CONSTRUCTOR 0x3371c354UL
 #define TG_MESSAGES_GET_HISTORY_CONSTRUCTOR 0x4423e6c5UL
 #define TG_MESSAGES_SEARCH_CONSTRUCTOR 0x29ee847aUL
+#define TG_MESSAGES_GET_PINNED_DIALOGS_CONSTRUCTOR 0xd6b94df2UL
+#define TG_MESSAGES_TOGGLE_DIALOG_PIN_CONSTRUCTOR 0xa731e257UL
 #define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
 #define TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR 0xfe05dc9aUL
 /* messages.forwardMessages#978928ca at layer 214, verified against the
@@ -1166,6 +1168,59 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL);
+    }
+    return status;
+}
+
+/* messages.getPinnedDialogs#d6b94df2 folder_id:int = messages.PeerDialogs
+   (TDLib telegram_api.tl, checked 2026-11-08). Only the pinned dialogs, in
+   their order: a small reply, unlike a full getDialogs. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_pinned_dialogs(
+    tg_mtproto_tl_writer *writer, unsigned long folder_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_GET_PINNED_DIALOGS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, folder_id);
+    }
+    return status;
+}
+
+/* messages.toggleDialogPin#a731e257 flags:# pinned:flags.0?true
+   peer:InputDialogPeer = Bool (checked as above). */
+tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
+    tg_mtproto_tl_writer *writer,
+    int pinned,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_TOGGLE_DIALOG_PIN_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, pinned ? 1UL : 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_DIALOG_PEER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
     }
     return status;
 }
@@ -3648,6 +3703,7 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
         }
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    peer->pinned = (flags & 4UL) != 0UL ? 1 : 0;
     if ((flags & 1UL) != 0UL &&
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
@@ -9438,7 +9494,7 @@ int tg_mtproto_login_self_test(void)
         tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
             TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 4UL) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_write_u32(&writer, TG_PEER_CHAT_CONSTRUCTOR) !=
             TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_write_u64(&writer, 0UL, 0x87654321UL) !=
@@ -9474,8 +9530,43 @@ int tg_mtproto_login_self_test(void)
         peer_list.peers[1].id_lo != 0x87654321UL ||
         peer_list.peers[1].top_message != 21UL ||
         peer_list.peers[1].read_outbox_max_id != 20UL ||
-        peer_list.peers[1].unread_count != 4UL) {
+        peer_list.peers[1].unread_count != 4UL ||
+        peer_list.peers[0].pinned || !peer_list.peers[1].pinned) {
         return 2;
+    }
+    /* getPinnedDialogs(folder 0): 8 bytes. toggleDialogPin on a basic group:
+       flags 1 = pin, inputDialogPeer#fcaafeb7, inputPeerChat -> 20 bytes. */
+    {
+        unsigned char pin_query[32];
+        tg_mtproto_tl_writer pw;
+
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_get_pinned_dialogs(&pw, 0UL) !=
+                TG_MTPROTO_TL_OK ||
+            pw.length != 8UL || pin_query[0] != 0xf2U ||
+            pin_query[1] != 0x4dU || pin_query[2] != 0xb9U ||
+            pin_query[3] != 0xd6U || pin_query[4] != 0x00U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_toggle_dialog_pin(
+                &pw, 1, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 24UL || pin_query[0] != 0x57U ||
+            pin_query[1] != 0xe2U || pin_query[2] != 0x31U ||
+            pin_query[3] != 0xa7U || pin_query[4] != 0x01U ||
+            pin_query[8] != 0xb7U || pin_query[9] != 0xfeU ||
+            pin_query[10] != 0xaaU || pin_query[11] != 0xfcU ||
+            pin_query[12] != 0xb9U || pin_query[16] != 0x08U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_toggle_dialog_pin(
+                &pw, 0, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pin_query[4] != 0x00U) {
+            return 2;
+        }
     }
     /* The same body parses under messages.peerDialogs too -- the getPeerDialogs
        reply leads with the dialogs vector, so the read_outbox cursor (the "seen"

@@ -13799,6 +13799,25 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                            sizeof(state->status),
                                            "Hidden messages shown again");
                     } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_PIN) {
+                        int want = state->chats[ci].pinned ? 0 : 1;
+                        int prc;
+
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           want ? "Pinning..." : "Unpinning...");
+                        tg_gui_window_paint(state, &backend);
+                        prc = tg_gui_session_set_pinned(state->chats[ci].index,
+                                                        want, stdout);
+                        tg_gui_window_copy(
+                            state->status, sizeof(state->status),
+                            prc == 0 ? (want ? "Pinned to the top"
+                                             : "Unpinned")
+                                     : (prc == 1
+                                            ? "Too many pinned chats - unpin one"
+                                            : "Could not change the pin"));
+                        state->chat_scroll_to_sel = 1;
+                    } else if (ci >= 0 && ci < state->chat_count &&
                                (it == TG_GUI_CTX_CHAT_MUTE ||
                                 it == TG_GUI_CTX_CHAT_RING ||
                                 it == TG_GUI_CTX_CHAT_SOUND ||

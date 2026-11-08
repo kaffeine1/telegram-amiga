@@ -132,6 +132,7 @@ typedef struct tg_chat_list_row {
     int is_current;                     /* the currently open chat */
     unsigned long peer_id_hi;           /* peer id, to match notifications to a row */
     unsigned long peer_id_lo;
+    int pinned;                         /* pinned on Telegram: listed first */
 } tg_chat_list_row;
 
 /* The driver callback surface. on_message renders one transcript row;

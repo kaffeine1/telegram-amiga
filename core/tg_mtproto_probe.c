@@ -18133,6 +18133,7 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 
 #if !defined(TG_NO_SELFTEST)
 static int tg_gui_hidden_projection_self_test(void);
+static int tg_gui_pins_self_test(void);
 static int tg_gui_session_server_time_self_test(void);
 
 #if !defined(TG_NO_SELFTEST)
@@ -20170,6 +20171,9 @@ int tg_mtproto_probe_self_test(void)
     if (tg_gui_hidden_projection_self_test() != 0) {
         return 2;
     }
+    if (tg_gui_pins_self_test() != 0) {
+        return 2;
+    }
 
     /* Foreground viewer demand survives a full inline queue and is selected
        first. This pins the scheduler rule without opening a network context. */
@@ -21041,6 +21045,119 @@ const char *tg_gui_session_open_error(void)
     return tg_gui_session_open_why;
 }
 
+/* --- pinned chats --------------------------------------------------------
+   Telegram's own pins, read with messages.getPinnedDialogs (a small reply
+   with just the pinned dialogs, safe on MorphOS where a full getDialogs is
+   not) when the session opens, on Reload chat list and after Pin/Unpin. The
+   sidebar shows them first, in Telegram's order, with the pin mark; the rest
+   keep the local order of the peer cache. In memory only: the list is read
+   again at every start. */
+#define TG_GUI_PINS_MAX 16
+typedef struct tg_gui_pin {
+    int is_user;
+    unsigned long id_hi;
+    unsigned long id_lo;
+} tg_gui_pin;
+static tg_gui_pin tg_gui_pins[TG_GUI_PINS_MAX];
+static int tg_gui_pin_count = 0;
+
+static int tg_gui_pin_matches(const tg_gui_pin *pin, const tg_chat_list_row *row)
+{
+    return row->index != TG_GUI_SAVED_PEER_INDEX &&
+           row->peer_id_hi == pin->id_hi && row->peer_id_lo == pin->id_lo &&
+           (row->is_user ? 1 : 0) == pin->is_user;
+}
+
+/* Pinned rows first, in pin order, marked; the others after them in the
+   order they had. Stable and in place. */
+static void tg_gui_pins_apply(tg_chat_list_row *rows, int count)
+{
+    int out = 0;
+    int p;
+    int j;
+
+    for (j = 0; j < count; ++j) {
+        rows[j].pinned = 0;
+    }
+    for (p = 0; p < tg_gui_pin_count && out < count; ++p) {
+        for (j = out; j < count; ++j) {
+            if (tg_gui_pin_matches(&tg_gui_pins[p], &rows[j])) {
+                tg_chat_list_row moved = rows[j];
+
+                memmove(&rows[out + 1], &rows[out],
+                        (size_t)(j - out) * sizeof(rows[0]));
+                rows[out] = moved;
+                rows[out].pinned = 1;
+                ++out;
+                break;
+            }
+        }
+    }
+}
+
+static int tg_gui_session_fetch_pins(FILE *stream);
+static void tg_gui_session_reload_chats(void);
+
+#if !defined(TG_NO_SELFTEST)
+/* Pins move their rows to the top in Telegram's order and mark them; the
+   rest keep their order; Saved Messages and a same-id peer of the other
+   kind are not matched. */
+static int tg_gui_pins_self_test(void)
+{
+    tg_chat_list_row rows[5];
+    int ok;
+    int i;
+
+    memset(rows, 0, sizeof(rows));
+    for (i = 0; i < 4; ++i) {
+        rows[i].index = (unsigned long)(i + 1);
+        rows[i].peer_id_lo = (unsigned long)(100 + i);
+        rows[i].is_user = 1;
+    }
+    rows[2].is_user = 0;             /* id 102 is a group */
+    rows[4].index = TG_GUI_SAVED_PEER_INDEX;
+    tg_gui_pin_count = 3;
+    tg_gui_pins[0].is_user = 1;      /* id 103, a user: row 4 */
+    tg_gui_pins[0].id_hi = 0UL;
+    tg_gui_pins[0].id_lo = 103UL;
+    tg_gui_pins[1].is_user = 1;      /* id 102 as a user: no such row */
+    tg_gui_pins[1].id_hi = 0UL;
+    tg_gui_pins[1].id_lo = 102UL;
+    tg_gui_pins[2].is_user = 0;      /* id 102, the group: row 3 */
+    tg_gui_pins[2].id_hi = 0UL;
+    tg_gui_pins[2].id_lo = 102UL;
+    tg_gui_pins_apply(rows, 5);
+    ok = rows[0].index == 4UL && rows[0].pinned &&
+         rows[1].index == 3UL && rows[1].pinned &&
+         rows[2].index == 1UL && !rows[2].pinned &&
+         rows[3].index == 2UL && !rows[3].pinned &&
+         rows[4].index == TG_GUI_SAVED_PEER_INDEX && !rows[4].pinned;
+    tg_gui_pin_count = 0;
+    tg_gui_pins_apply(rows, 5);
+    ok = ok && !rows[0].pinned && !rows[1].pinned;
+    if (!ok) {
+        puts("probe self-test: pinned chats not first in pin order");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
+/* 1 when the peer is pinned on Telegram (as last read). */
+int tg_gui_session_chat_pinned(unsigned long peer_id_hi,
+                               unsigned long peer_id_lo)
+{
+    int p;
+
+    for (p = 0; p < tg_gui_pin_count; ++p) {
+        if (tg_gui_pins[p].id_hi == peer_id_hi &&
+            tg_gui_pins[p].id_lo == peer_id_lo) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* The cached chat list, projected into the sidebar the way a live session
    does it (hidden chats left out, Saved Messages added), for a window that
    opens before the connection or stays offline. */
@@ -21060,6 +21177,7 @@ int tg_gui_session_project_cached(const char *peer_cache_file,
     count = tg_gui_chat_list_project(peer_cache_file, TG_GUI_HIDDEN_FILE, 0UL,
                                      rows, TG_CHAT_LIST_MAX, &missing, 0, 0);
     tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+    tg_gui_pins_apply(rows, count);
     if (tg_gui_session_state.driver.on_chat_list_changed != 0 && count > 0) {
         tg_gui_session_state.driver.on_chat_list_changed(
             tg_gui_session_state.driver.ctx, rows, count);
@@ -21244,6 +21362,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
                                          0UL, rows, TG_CHAT_LIST_MAX, &missing,
                                          0, 0);
         tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+        tg_gui_pins_apply(rows, count);
         if (tg_gui_session_state.driver.on_chat_list_changed != 0 &&
             count > 0) {
             tg_gui_session_state.driver.on_chat_list_changed(
@@ -21251,6 +21370,10 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
         }
     }
     tg_gui_session_state.open = 1;
+    /* Telegram's pinned chats go first in the list. */
+    if (tg_gui_session_fetch_pins(stream) == 0 && tg_gui_pin_count > 0) {
+        tg_gui_session_reload_chats();
+    }
     tg_mtproto_avatar_store_load(); /* blurred previews from the last run */
     tg_gui_log("open: ready");
     return 0;
@@ -21674,6 +21797,34 @@ int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream)
 
 /* Re-project the peer cache into the GUI sidebar (after it changed, e.g. a search
    result was added). Mirrors the projection in tg_gui_session_open. */
+/* After the sidebar is rebuilt (the driver resets selected_chat to 0), point
+   it back at the chat open in the transcript, found by its peer id, or the
+   Saved Messages row for the self chat. Left alone while the sidebar shows
+   something else (the caller is restoring it then too, so this is right). */
+static void tg_gui_session_reselect_open(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int k;
+
+    if (gst == 0) {
+        return;
+    }
+    for (k = 0; k < gst->chat_count; ++k) {
+        if (strcmp(tg_gui_session_state.current_peer_index, "self") == 0
+                ? gst->chats[k].index == TG_GUI_SAVED_PEER_INDEX
+                : ((tg_gui_session_state.open_peer_id_hi != 0UL ||
+                    tg_gui_session_state.open_peer_id_lo != 0UL) &&
+                   gst->chats[k].index != TG_GUI_SAVED_PEER_INDEX &&
+                   gst->chats[k].peer_id_hi ==
+                       tg_gui_session_state.open_peer_id_hi &&
+                   gst->chats[k].peer_id_lo ==
+                       tg_gui_session_state.open_peer_id_lo)) {
+            gst->selected_chat = k;
+            return;
+        }
+    }
+}
+
 static void tg_gui_session_reload_chats(void)
 {
     tg_chat_list_row *rows = tg_chat_list_scratch;
@@ -21688,11 +21839,150 @@ static void tg_gui_session_reload_chats(void)
                                      TG_GUI_HIDDEN_FILE, 0UL, rows,
                                      TG_CHAT_LIST_MAX, &missing, 0, 0);
     tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+    tg_gui_pins_apply(rows, count);
     /* ALWAYS fire, even with count 0: skipping the callback on an emptied
        list left the window's chat_count stale, and the remove flow then
        opened a neighbour from rows that no longer existed (stuck UI). */
     tg_gui_session_state.driver.on_chat_list_changed(
         tg_gui_session_state.driver.ctx, rows, count);
+    tg_gui_session_reselect_open();
+}
+
+/* Read Telegram's pinned chats into tg_gui_pins. 0 = read (the list may be
+   empty), non-zero = the request failed and the old list stays. */
+static int tg_gui_session_fetch_pins(FILE *stream)
+{
+    unsigned char query[16];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    static tg_mtproto_dialog_peer_list pinned;
+    static const char label[] = "mtproto messages.getPinnedDialogs";
+    FILE *quiet;
+    unsigned long i;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_pinned_dialogs(&writer, 0UL) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, query,
+        writer.length, &result, quiet, label, 16U);
+    if (rc == 0 &&
+        result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+        rc = 1;
+    }
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 1;
+    }
+    if (rc == 0 &&
+        tg_mtproto_parse_dialog_peer_list(result.result_constructor,
+                                          result.result_body,
+                                          result.result_body_length,
+                                          &pinned) != TG_MTPROTO_TL_OK) {
+        rc = 1;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("pins: fetch failed");
+        return rc;
+    }
+    tg_gui_pin_count = 0;
+    for (i = 0UL; i < pinned.count && tg_gui_pin_count < TG_GUI_PINS_MAX;
+         ++i) {
+        /* The Archive folder's own entry has no peer: left out. */
+        if (pinned.peers[i].peer_constructor == 0UL) {
+            continue;
+        }
+        tg_gui_pins[tg_gui_pin_count].is_user =
+            pinned.peers[i].peer_constructor ==
+                    TG_MTPROTO_PEER_USER_CONSTRUCTOR
+                ? 1 : 0;
+        tg_gui_pins[tg_gui_pin_count].id_hi = pinned.peers[i].id_hi;
+        tg_gui_pins[tg_gui_pin_count].id_lo = pinned.peers[i].id_lo;
+        ++tg_gui_pin_count;
+    }
+    return 0;
+}
+
+/* Public: pin (pinned = 1) or unpin the chat at this 1-based cache index on
+   Telegram, then read the pins again and redraw the list. 0 = done, 1 =
+   Telegram refused (the pin limit), 2 = failed. */
+int tg_gui_session_set_pinned(unsigned long peer_index, int pinned,
+                              FILE *stream)
+{
+    unsigned char query[64];
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    static const char label[] = "mtproto messages.toggleDialogPin";
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL) {
+        return 2;
+    }
+    if (peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        strcpy(index_text, "self");
+    } else {
+        sprintf(index_text, "%lu", peer_index % 100000000UL);
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, label) != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_toggle_dialog_pin(&writer, pinned, pc, ph,
+                                                    pl, ahh, ahl, hah) !=
+        TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, query,
+        writer.length, &result, quiet, label, 4U);
+    if (rc != 0) {
+        rc = 2;
+    } else if (result.result_constructor ==
+               TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+        char emsg[48];
+
+        emsg[0] = '\0';
+        (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                         result.result_body_length + 4U,
+                                         &ecode, emsg, sizeof(emsg));
+        rc = (strstr(emsg, "PINNED") != 0) ? 1 : 2;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return rc;
+    }
+    (void)tg_gui_session_fetch_pins(stream);
+    tg_gui_session_reload_chats();
+    return 0;
 }
 
 /* F10: appends the pinned "Saved Messages" row (the self chat / cloud
@@ -21862,6 +22152,7 @@ int tg_gui_session_reload_chat_list(FILE *stream)
             prev = tg_gui_probe_cache.count;
         }
         tg_mtproto_close_quiet_stream(q, stream);
+        (void)tg_gui_session_fetch_pins(stream); /* pins changed elsewhere */
         tg_gui_session_reload_chats();
         return 0;
     }

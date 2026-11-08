@@ -373,6 +373,7 @@ typedef struct tg_mtproto_dialog_peer {
     unsigned long top_message;
     unsigned long unread_count;
     unsigned long read_outbox_max_id; /* peer has read our msgs up to this id */
+    int pinned;                       /* dialog flags.2: pinned to the top */
 } tg_mtproto_dialog_peer;
 
 typedef struct tg_mtproto_dialog_peer_list {
@@ -691,6 +692,23 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
     unsigned long offset_id,
     long add_offset,
     unsigned long limit);
+
+/* messages.getPinnedDialogs#d6b94df2 folder_id:int -> messages.peerDialogs
+   with the pinned dialogs of that folder (0 = the main list), in order. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_pinned_dialogs(
+    tg_mtproto_tl_writer *writer, unsigned long folder_id);
+
+/* messages.toggleDialogPin#a731e257 flags:# pinned:flags.0?true
+   peer:InputDialogPeer -> Bool. pinned = 1 pins, 0 unpins. */
+tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
+    tg_mtproto_tl_writer *writer,
+    int pinned,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
 
 /* messages.search in one chat (no filter, newest first, below offset_id
    when non-zero). query_utf8 must be non-empty. */

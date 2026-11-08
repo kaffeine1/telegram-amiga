@@ -177,6 +177,8 @@ unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
 /* Plain GUI text and the composer keep emoji pairs but drop style markers.
    dest may equal src. */
 void tg_gui_strip_markers(char *dest, unsigned long size, const char *src);
+/* Width of the pinned chat's pin mark for this line height. */
+int tg_gui_pin_mark_width(int lh);
 /* Only our own painter draws a pair as a glyph: any font shows its prefix
    byte as a box. Text that leaves the painter (the pop-up, a requester, a
    window title, the clipboard) is copied with each pair turned into its text
@@ -267,6 +269,7 @@ typedef struct tg_gui_chat {
     unsigned long peer_id_lo;
     int is_group;             /* basic groups and channels start quiet */
     int flash;                /* a notification landed since last opened: blink the badge */
+    int pinned;               /* pinned on Telegram: first in the list, pin mark */
 } tg_gui_chat;
 
 /* Window mode: the normal chat UI, or one of the first-login screens shown when
@@ -846,6 +849,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
+#define TG_GUI_CTX_CHAT_PIN 35 /* Pin / Unpin the chat on Telegram */
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a

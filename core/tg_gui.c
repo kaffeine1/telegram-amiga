@@ -2213,6 +2213,31 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
     }
 }
 
+/* The pin mark of a pinned chat, as Telegram Desktop puts it at the right
+   of the row: an upright push pin from rectangles only (cap, body, flange,
+   needle), scaled from the line height. Returns its width. */
+int tg_gui_pin_mark_width(int lh)
+{
+    int u = (lh >= 12) ? lh / 12 : 1;
+
+    return 7 * u;
+}
+
+static void tg_gui_draw_pin_mark(tg_gui_backend *backend, int pen, int x,
+                                 int centre_y, int lh)
+{
+    int u = (lh >= 12) ? lh / 12 : 1;
+    int y = centre_y - (9 * u) / 2;
+
+    backend->fill_rect(backend, pen, tg_gui_make_rect(x + u, y, 5 * u, u));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + 2 * u, y + u, 3 * u, 3 * u));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x, y + 4 * u, 7 * u, u));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + 3 * u, y + 5 * u, u, 4 * u));
+}
+
 static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                  tg_gui_backend *backend, int sidebar_w,
                                  int content_h, int lh)
@@ -2396,13 +2421,25 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                 }
                 badge_x = list_w - 8 - badge_w;
             }
+            /* A pinned chat without unread messages shows the pin mark
+               where the badge would be (Telegram Desktop's place for it). */
+            if (chat->pinned && chat->unread <= 0) {
+                badge_w = tg_gui_pin_mark_width(lh);
+                badge_x = list_w - 8 - badge_w;
+                tg_gui_draw_pin_mark(backend, preview_pen, badge_x,
+                                     has_preview ? y + slot_h + slot_h / 2
+                                                 : y + row_h / 2,
+                                     lh);
+            }
             /* Name clips before the time column (two-line) or before the badge
                / row edge (single-line). */
             if (has_preview) {
                 name_limit = list_w - 38;
             } else {
-                name_limit = (chat->unread > 0) ? (badge_x - 6)
-                                                : (list_w - 10);
+                name_limit = (chat->unread > 0 ||
+                              (chat->pinned && badge_w > 0))
+                                 ? (badge_x - 6)
+                                 : (list_w - 10);
             }
             tg_gui_draw_clipped(backend, name_pen, text_x, name_baseline,
                                 chat->name, name_limit - text_x);
@@ -5488,6 +5525,12 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
     int n = 0;
 
     if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
+        if (state->chats[state->ctx_chat - 1].index !=
+            TG_GUI_SAVED_PEER_INDEX) {
+            labels[n] = state->chats[state->ctx_chat - 1].pinned ? "Unpin"
+                                                                 : "Pin";
+            ids[n++] = TG_GUI_CTX_CHAT_PIN;
+        }
         labels[n] = "Remove chat";
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
         labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE ?
@@ -7171,38 +7214,55 @@ static int tg_gui_notify_menu_self_test(void)
 
     state->chat_count = 1;
     state->ctx_chat = 1;
-    if (tg_gui_context_items(state, labels, ids) != 4 ||
-        ids[0] != TG_GUI_CTX_CHAT_REMOVE || ids[1] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[1], "Mute") != 0 || ids[2] != TG_GUI_CTX_CHAT_SOUND ||
-        strcmp(labels[2], "Sound...") != 0 ||
-        ids[3] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        strcmp(labels[3], "Default sound") != 0) {
+    state->chats[0].index = 5UL;
+    state->chats[0].pinned = 0;
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
+        ids[1] != TG_GUI_CTX_CHAT_REMOVE || ids[2] != TG_GUI_CTX_CHAT_MUTE ||
+        strcmp(labels[2], "Mute") != 0 || ids[3] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[3], "Sound...") != 0 ||
+        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        strcmp(labels[4], "Default sound") != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
-    state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
+    state->chats[0].pinned = 1;
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        strcmp(labels[0], "Unpin") != 0) {
+        puts("gui self-test: a pinned chat's menu cannot unpin");
+        return 2;
+    }
+    state->chats[0].pinned = 0;
+    state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
     if (tg_gui_context_items(state, labels, ids) != 4 ||
-        strcmp(labels[1], "Unmute") != 0) {
+        ids[0] != TG_GUI_CTX_CHAT_REMOVE) {
+        puts("gui self-test: Saved Messages offers no pin");
+        return 2;
+    }
+    state->chats[0].index = 5UL;
+    state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        strcmp(labels[2], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
-        ids[2] != TG_GUI_CTX_CHAT_RING || strcmp(labels[2], "Enable ring") != 0 ||
-        ids[3] != TG_GUI_CTX_CHAT_SOUND ||
-        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        ids[3] != TG_GUI_CTX_CHAT_RING || strcmp(labels[3], "Enable ring") != 0 ||
+        ids[4] != TG_GUI_CTX_CHAT_SOUND ||
+        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
-        strcmp(labels[1], "Mute") != 0 || strcmp(labels[2], "Disable ring") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        strcmp(labels[2], "Mute") != 0 || strcmp(labels[3], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
     state->ctx_hidden_count = 2UL;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        ids[5] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+    if (tg_gui_context_items(state, labels, ids) != 7 ||
+        ids[6] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
         puts("gui self-test: group menu cannot show hidden messages");
         return 2;
     }

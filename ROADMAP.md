@@ -296,10 +296,15 @@ it works today:
   message); across all chats still to do, and the text client has no
   /find yet. The search box also finds chat names and, on the server,
   people and public channels (`contacts.search`);
-- pinned chats at the top of the list (`pinned` in the dialogs, which
-  we ignore) and the Archive (`folder_id` 1). Half done: archived chats
-  stay out of the list, but cannot be reached; pin and archive from the
-  chat's menu (`messages.toggleDialogPin`, `folders.editPeerFolders`);
+- pinned chats at the top of the list and the Archive (`folder_id` 1).
+  Pins done on `main`: read with `messages.getPinnedDialogs` at start
+  and on Reload chat list, listed first with a pin mark, Pin and Unpin
+  in the chat's menu (`messages.toggleDialogPin`); still missing: Saved
+  Messages pinned, the order of the pins changed by dragging
+  (`messages.reorderPinnedDialogs`), pins changed on another device
+  while running (`updatePinnedDialogs`). Archive still to do: archived
+  chats stay out of the list but cannot be reached; archive from the
+  chat's menu (`folders.editPeerFolders`);
 - mark as read or unread (`messages.markDialogUnread`), leave a group or
   a channel, delete a chat. Half done: Remove chat hides a chat from
   the list on this machine only;

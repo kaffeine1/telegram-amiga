@@ -19,6 +19,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   chat the jump button brings back the newest messages, and messages
   that arrive meanwhile are counted on it rather than glued below the
   old ones.
+- Pinned chats. The chats pinned on Telegram (on the phone, in the
+  desktop client or here) come first in the chat list, in Telegram's
+  order, with a pin mark at the right of the row where the unread badge
+  would be. Pin and Unpin are in the chat's menu (right click on the
+  row) and reach the other devices. The pins are read when the client
+  starts and on Reload chat list; Saved Messages stays at the bottom.
 
 ### Fixed
 - A message deleted for everyone somewhere else (on the phone, in the
