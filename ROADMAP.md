@@ -957,9 +957,12 @@ anyone calls the transcript rendering done.
 
 On borrowing: the desktop client is worth studying for how a feature
 should behave, and that is how it will be used here, as a reference for
-behaviour and layout. Not for code. Telegram Desktop is GPLv3 and this
-project is MIT, so lifting source from it, or porting it line by line,
-is not something we can do. Where facts are needed rather than ideas,
+behaviour and layout. Up to the 0.1 beta this project was MIT and
+Telegram Desktop's GPLv3 code was out of reach. Since the move to the
+GPL version 3 or later the licences match, so a piece of it can come in
+when it is worth it, credited in the commit and in the file; our own
+structures and the screen budget of these machines still decide the
+shape. Where facts are needed rather than ideas,
 the safer wells are the published TL schema and TDLib, which carries a
 permissive licence, and for the emoji list and its categories the
 Unicode data files, which is where everyone else gets them anyway.
