@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Console UI role colours. See tg_console_ui.h for the model.
  *

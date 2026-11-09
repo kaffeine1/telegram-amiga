@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 # Native AROS distributions usually expose the compiler as plain "gcc".
 # Cross-builds can still override this from the command line, for example:

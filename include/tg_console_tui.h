@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Full-screen console TUI for the interactive chat: a status bar pinned to
  * the top row, a transcript region that scrolls in the middle and an input

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # EXPERIMENTAL: AmigaOS 3.x build with the native clib2 runtime instead of
 # ixemul, so the resulting binary needs no ixemul.library at runtime.

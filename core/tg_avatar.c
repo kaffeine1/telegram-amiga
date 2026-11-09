@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Avatar v1: expand a Telegram "stripped thumb" (the ~30-40 byte inline JPEG
  * skeleton in userProfilePhoto/chatPhoto) into a real baseline JPEG, decode it

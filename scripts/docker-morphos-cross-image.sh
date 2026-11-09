@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build the Docker image containing pkgsrc cross/ppc-morphos-gcc.
 
@@ -34,7 +34,7 @@ else
     DOCKERFILE_TMP=$DOCKERFILE_PATH
     cat > "$DOCKERFILE_PATH" <<'EOF'
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 FROM debian:bookworm
 

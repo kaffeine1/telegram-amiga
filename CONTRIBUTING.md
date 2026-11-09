@@ -1,6 +1,6 @@
 <!--
 Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-SPDX-License-Identifier: MIT
+SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
 # Contributing
@@ -54,4 +54,7 @@ purpose.
 
 ## License
 
-Contributions are distributed under the repository's MIT License.
+Contributions are distributed under the repository's license, the GNU
+General Public License version 3 or later (see `LICENSE`). Code
+contributed up to the 0.1 beta came under the MIT License and keeps
+its notice in `docs/LICENSE-MIT-up-to-0.1.txt`.

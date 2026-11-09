@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Phase 5b milestone 0: the native window backend behind tg_gui_backend.
  * One file, two branches -- the OS4 interface model and the classic shared

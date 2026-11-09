@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * GUI chat driver: projects chat-engine rows into tg_gui_state. See
  * tg_gui_driver.h. The console driver prints a row; this one appends it to the

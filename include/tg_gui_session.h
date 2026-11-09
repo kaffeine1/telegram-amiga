@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Live GUI session bridge (Phase 5b, slice 3). A thin, non-interactive driver
  * over the same MTProto chat core the console uses: it holds an authenticated

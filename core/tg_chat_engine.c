@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Driver-agnostic chat-session model. See tg_chat_engine.h. Owns the updates
  * cursor, the /diff flag and the cross-chat notification queue (collected by

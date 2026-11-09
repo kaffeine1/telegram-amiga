@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Portable model + renderer for the native GUI line. The per-platform backend
  * supplies only metrics and draw primitives (see tg_gui.h); everything about

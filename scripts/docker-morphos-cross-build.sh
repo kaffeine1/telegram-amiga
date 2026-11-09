@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build the MorphOS tester with the pkgsrc ppc-morphos cross toolchain image.
 

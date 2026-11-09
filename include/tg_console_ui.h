@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Console UI helpers: semantic colour roles rendered as ECMA-48 SGR
  * sequences. Amiga-family consoles (AmigaOS 3.x CON:, MorphOS, AmigaOS 4.x,

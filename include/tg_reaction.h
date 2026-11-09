@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT */
+ * SPDX-License-Identifier: GPL-3.0-or-later */
 #ifndef TG_REACTION_H
 #define TG_REACTION_H
 

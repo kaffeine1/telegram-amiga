@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 # Host-side MorphOS cross-build using pkgsrc cross/ppc-morphos-gcc.
 # The resulting binary must still be validated on a real MorphOS target.

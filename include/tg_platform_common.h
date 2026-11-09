@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Shared internal helpers for the AmigaOS 3.x, AmigaOS 4.x, MorphOS and AROS
  * platform backends: IPv4 literal parsing without DNS, block-to-KB arithmetic,

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The GUI chat driver: the bridge that lets the chat engine feed the native
  * GUI. It implements tg_chat_driver.on_message (the seam from step 3) by

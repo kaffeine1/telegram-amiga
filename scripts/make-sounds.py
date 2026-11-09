@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds the notification sounds shipped in the GUI packages (sounds/):
 # short IFF 8SVX samples synthesised here from sines, so they carry no

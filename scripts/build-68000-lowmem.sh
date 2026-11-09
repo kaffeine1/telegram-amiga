@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build the plain-68000 package's binary (A500 / A600 / A1000 / CDTV class):
 # the text client only (NO_GUI), the low-memory caps and a 384 KB stack, into

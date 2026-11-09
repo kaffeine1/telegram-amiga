@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build the human-facing release packages for Amigram.
 # Version comes from include/tg_version.h (override with VERSION=... if needed).
@@ -517,7 +517,8 @@ ${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for e
 it on a standard drawer for the drawer icon, and let me ship his versions.
 
 Version: $VERSION   Build: $COMMIT_ID
-Author: Michele Dipace <michele.dipace@kaffeine.net>   License: MIT
+Author: Michele Dipace <michele.dipace@kaffeine.net>
+License: GNU GPL version 3 or later, text in LICENSE
 EOF
 }
 
@@ -834,7 +835,8 @@ It is voluntary: nothing is needed to use the program. Both links are
 also under "Support development..." in the Amigram menu and at the end
 of /help in the text client.
 
-License: MIT. A non-commercial community project. Diary:
+License: GNU GPL version 3 or later (MIT up to the 0.1 beta); the
+text is in the LICENSE file. A non-commercial community project. Diary:
 https://androidlab.it/en/telegram-amiga-mtproto-client-development-diary/
 EOF
 }
@@ -918,7 +920,9 @@ E' volontario: per usare il programma non serve niente. I due link sono
 anche in "Support development..." nel menu Amigram e in fondo a /help
 nel client testuale.
 
-Licenza: MIT. Un progetto di comunita' non commerciale. Diario:
+Licenza: GNU GPL versione 3 o successive (MIT fino alla beta 0.1); il
+testo e' nel file LICENSE. Un progetto di comunita' non commerciale.
+Diario:
 https://androidlab.it/telegram-amiga-diario-sviluppo-client-mtproto/
 EOF
 }
@@ -1146,8 +1150,9 @@ $(changelog_section_text)
 
 A COMMUNITY PROJECT
 -------------------
-MIT licensed and non-commercial. Bug reports and wishes are welcome:
-testers on real hardware are what moves this project forward.
+Free software under the GNU GPL version 3 or later, and non-commercial.
+Bug reports and wishes are welcome: testers on real hardware are what
+moves this project forward.
 
 ${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system,
 put it on a standard drawer for the drawer icon, and let me ship his
@@ -1438,10 +1443,10 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/$APP_NAME-OS4.lha" ]; then
         printf 'requirements:AmigaOS 4.x with its TCP/IP stack\n'
         # license must be one of THEIR values (help/help_submit.txt):
         # Other APL BSD Commercial Emailware Freeware GPL LGPL MPL
-        # "Public domain" Shareware -- MIT is not in the list, so: Other.
+        # "Public domain" Shareware -- GPL from 0.1.x (MIT up to 0.1 was Other).
         # replaces is REQUIRED when updating an existing entry (0.0.8 failed
         # validation on both, 2026-07-31; 0.0.7 passed only because it was new).
-        printf 'license:Other\n'
+        printf 'license:GPL\n'
         printf 'replaces:network/chat/%s.lha\n' "$prev_lower"
         printf 'distribute:yes\n'
         printf 'minosversion:4.0\n'
@@ -1492,7 +1497,7 @@ write_arosarchives_pair() {
         printf 'category:network/chat\n'
         if [ "${4:-}" != "new" ]; then printf 'replaces:network/chat/%s.lha\n' "$prev_lower${2#"$app_lower"}"; fi
         printf 'requirements:%s\n' "$3"
-        printf 'license:Other\n'
+        printf 'license:GPL\n'
         printf 'distribute:yes\n'
         printf 'hend:\n\n'
         awk 'flip { print } /^$/ && !flip { flip = 1 }' "$aa_readme"

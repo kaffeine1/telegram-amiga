@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build the AmigaOS 4 binary CLEAN in the os4-cross docker workspace and COPY IT
 # BACK into this repo's build/amigaos4/. OS4 is the only lane that builds in a

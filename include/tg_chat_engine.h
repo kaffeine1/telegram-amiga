@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Driver-agnostic chat-session model (Phase 5b), being extracted incrementally
  * from core/tg_mtproto_probe.c with the console/TUI as the behavioural oracle.

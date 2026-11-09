@@ -27,6 +27,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   starts and on Reload chat list; Saved Messages stays at the bottom.
 
 ### Changed
+- Amigram is now free software under the GNU General Public License,
+  version 3 or later (the LICENSE file in every archive). Up to and
+  including the 0.1 beta it was under the MIT License: those releases
+  stay under it, and so does the code contributed in that time.
 - The paperclip at the left of the message box is redrawn after the
   desktop client's: a thin clip tilted on its side, outer and inner
   loop, in crisp one-pixel lines. It comes in two sizes, 16 pixels for

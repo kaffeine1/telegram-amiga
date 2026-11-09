@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Amigram native GUI (Phase 5b). Portable model + renderer over a thin
  * per-platform backend (Intuition/RastPort). The console/TUI is a separate
