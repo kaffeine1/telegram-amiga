@@ -34,7 +34,7 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   chat's menu (right click on its row) moves it there and Unarchive, in
   the Archive, brings it back; both reach the other devices, and a chat
   moved on another device follows here. A large Archive shows its most
-  recent chats (64, or 16 on 68k). The text client leaves the archived
+  recent chats (32, or 16 on 68k). The text client leaves the archived
   chats out of /list.
 - Pinned chats. The chats pinned on Telegram (on the phone, in the
   desktop client or here) come first in the chat list, in Telegram's
@@ -54,6 +54,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   small fonts and 20 when the box is taller.
 
 ### Fixed
+- Reload chat list read the first page of the chat list over and over:
+  it stopped at 30 chats plus the pinned ones (10 on MorphOS), however
+  many the account had. It now reads page after page to the end of the
+  list or until the list is full, and so do the first login and Browse
+  all chats. It also no longer adds, as chats, people who merely wrote
+  the last message of a group or were forwarded from.
 - After a chat was dragged to another place in the list, two rows
   stayed lit: the open chat and the row that took the dragged one's
   place. The second went away only at the next redraw.

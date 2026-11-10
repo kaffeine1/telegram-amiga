@@ -310,12 +310,12 @@ it works today:
   and lists it in place of the chat list, Archive and Unarchive in the
   chat's menu (`folders.editPeerFolders`), moves made elsewhere follow
   (`updateFolderPeers`); still missing: the unread count of the Archive
-  on the main list, and more than the most recent 64 chats (16 on 68k).
-  Found on the way: Reload chat list asks its later pages without the
-  date of the last dialog, so the server answers with the first page
-  again and the list stops at 30 chats plus the pinned ones (10 on
-  MorphOS); the Archive already pages with the date, the reload is to
-  be moved to the same code;
+  on the main list, and more than the most recent 32 chats (16 on 68k).
+  Fixed on the way: Reload chat list asked its later pages without the
+  date of the last dialog, so the server answered with the first page
+  again and the list stopped at 30 chats plus the pinned ones (10 on
+  MorphOS); the reload, the first login and the Archive now page with
+  that date;
 - mark as read or unread (`messages.markDialogUnread`), leave a group or
   a channel, delete a chat. Half done: Remove chat hides a chat from
   the list on this machine only;

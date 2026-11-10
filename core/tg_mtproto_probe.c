@@ -8408,69 +8408,6 @@ static int tg_mtproto_peer_cache_available(const char *path)
            tg_mtproto_peer_cache_public_count(&tg_peer_cache_scratch) > 0UL;
 }
 
-static int tg_mtproto_peer_cache_next_offset(
-    const tg_mtproto_peer_cache *cache,
-    unsigned long *offset_id,
-    unsigned long *peer_constructor,
-    unsigned long *id_hi,
-    unsigned long *id_lo,
-    unsigned long *access_hash_hi,
-    unsigned long *access_hash_lo,
-    int *has_access_hash)
-{
-    const tg_mtproto_peer_cache_entry *entry;
-    unsigned long i;
-
-    if (offset_id != 0) {
-        *offset_id = 0UL;
-    }
-    if (peer_constructor != 0) {
-        *peer_constructor = 0UL;
-    }
-    if (id_hi != 0) {
-        *id_hi = 0UL;
-    }
-    if (id_lo != 0) {
-        *id_lo = 0UL;
-    }
-    if (access_hash_hi != 0) {
-        *access_hash_hi = 0UL;
-    }
-    if (access_hash_lo != 0) {
-        *access_hash_lo = 0UL;
-    }
-    if (has_access_hash != 0) {
-        *has_access_hash = 0;
-    }
-    if (cache == 0 || cache->count == 0UL || offset_id == 0 ||
-        peer_constructor == 0 || id_hi == 0 || id_lo == 0 ||
-        access_hash_hi == 0 || access_hash_lo == 0 || has_access_hash == 0) {
-        return 1;
-    }
-    i = cache->count;
-    while (i > 0UL) {
-        --i;
-        entry = &cache->entries[i];
-        if (entry->top_message == 0UL || entry->is_self) {
-            continue;
-        }
-        if ((entry->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
-             entry->peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) &&
-            !entry->has_access_hash) {
-            continue;
-        }
-        *offset_id = entry->top_message;
-        *peer_constructor = entry->peer_constructor;
-        *id_hi = entry->id_hi;
-        *id_lo = entry->id_lo;
-        *access_hash_hi = entry->access_hash_hi;
-        *access_hash_lo = entry->access_hash_lo;
-        *has_access_hash = entry->has_access_hash;
-        return 0;
-    }
-    return 1;
-}
-
 static void tg_mtproto_merge_peer_cache(tg_mtproto_peer_cache *dest,
                                         const tg_mtproto_peer_cache *fresh)
 {
@@ -8850,28 +8787,43 @@ static int tg_mtproto_chat_drain_difference_on_context(
     return 0;
 }
 
-int tg_mtproto_auth_list_peers_file(const char *host,
-                                    const char *port,
-                                    const char *api_file,
-                                    const char *auth_file,
-                                    const char *dc_id_text,
-                                    const char *limit_text,
-                                    const char *peer_cache_file,
-                                    FILE *stream)
+/* Where the next page of the dialog list starts: the last dialog of the
+   page read last, by the date and id of its top message and its peer. The
+   date is the part that matters: asked without it, the server answers with
+   the first page again, which is why the reload used to stop at one page.
+   Not valid before a page is read, nor after a short one (the end). */
+static struct {
+    int valid;
+    unsigned long date;
+    unsigned long id;
+    unsigned long peer_constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    int has_access_hash;
+} tg_list_peers_cursor;
+
+/* One page of the main dialog list merged into the peer cache file: the
+   first page (next = 0), or the one after the page read last (next = 1;
+   returns 3 when there is none to ask). */
+static int tg_mtproto_list_peers_page(const char *host,
+                                      const char *port,
+                                      const char *api_file,
+                                      const char *auth_file,
+                                      const char *dc_id_text,
+                                      const char *limit_text,
+                                      const char *peer_cache_file,
+                                      FILE *stream, int next)
 {
     unsigned char query[128];
     unsigned long limit;
     unsigned long i;
-    unsigned long offset_id;
-    unsigned long offset_peer_constructor;
-    unsigned long offset_id_hi;
-    unsigned long offset_id_lo;
-    unsigned long offset_access_hash_hi;
-    unsigned long offset_access_hash_lo;
-    int offset_has_access_hash;
+    unsigned long in_page;
     int has_existing_cache;
     char api_id[32];
     tg_mtproto_dialogs_summary dialogs;
+    const tg_mtproto_peer_cache_entry *last;
     static tg_mtproto_peer_cache cache;
     static tg_mtproto_peer_cache existing_cache;
     tg_mtproto_rpc_result result;
@@ -8885,39 +8837,40 @@ int tg_mtproto_auth_list_peers_file(const char *host,
         }
         return 2;
     }
+    if (next && !tg_list_peers_cursor.valid) {
+        return 3;
+    }
     if (tg_mtproto_load_api_id_file(api_file, api_id, sizeof(api_id),
                                     stream, label) != 0) {
         return 2;
     }
     has_existing_cache =
         tg_mtproto_load_peer_cache_file(peer_cache_file, &existing_cache) == 0;
-    if (has_existing_cache &&
-        tg_mtproto_peer_cache_next_offset(&existing_cache, &offset_id,
-                                          &offset_peer_constructor,
-                                          &offset_id_hi, &offset_id_lo,
-                                          &offset_access_hash_hi,
-                                          &offset_access_hash_lo,
-                                          &offset_has_access_hash) == 0) {
-        fprintf(stream, "%s: page offset top %lu from cached peers %lu\n",
-                label, offset_id, existing_cache.count);
-    } else {
-        offset_id = 0UL;
-        offset_peer_constructor = 0UL;
-        offset_id_hi = 0UL;
-        offset_id_lo = 0UL;
-        offset_access_hash_hi = 0UL;
-        offset_access_hash_lo = 0UL;
-        offset_has_access_hash = 0;
-        fprintf(stream, "%s: page offset first\n", label);
-    }
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-    if (tg_mtproto_build_messages_get_dialogs_page(
-            &writer, limit, offset_id, offset_peer_constructor, offset_id_hi,
-            offset_id_lo, offset_access_hash_hi, offset_access_hash_lo,
-            offset_has_access_hash) != TG_MTPROTO_TL_OK) {
-        fprintf(stream, "%s: query-build-failed\n", label);
-        return 2;
+    if (next) {
+        fprintf(stream, "%s: page offset top %lu\n", label,
+                tg_list_peers_cursor.id);
+        /* The pinned dialogs came with the first page. */
+        if (tg_mtproto_build_messages_get_dialogs_folder_page(
+                &writer, 0UL, 1, limit, tg_list_peers_cursor.date,
+                tg_list_peers_cursor.id,
+                tg_list_peers_cursor.peer_constructor,
+                tg_list_peers_cursor.id_hi, tg_list_peers_cursor.id_lo,
+                tg_list_peers_cursor.access_hash_hi,
+                tg_list_peers_cursor.access_hash_lo,
+                tg_list_peers_cursor.has_access_hash) != TG_MTPROTO_TL_OK) {
+            fprintf(stream, "%s: query-build-failed\n", label);
+            return 2;
+        }
+    } else {
+        fprintf(stream, "%s: page offset first\n", label);
+        if (tg_mtproto_build_messages_get_dialogs(&writer, limit) !=
+            TG_MTPROTO_TL_OK) {
+            fprintf(stream, "%s: query-build-failed\n", label);
+            return 2;
+        }
     }
+    tg_list_peers_cursor.valid = 0;
     if (tg_mtproto_send_saved_query_limited(
             host, port, api_id, auth_file, dc_id_text, query, writer.length,
             &result, stream, label, 2U, 0) != 0) {
@@ -8944,6 +8897,54 @@ int tg_mtproto_auth_list_peers_file(const char *host,
                 label, result.result_constructor);
         return 2;
     }
+    /* Only the dialogs are chats of the list. The reply's users also name
+       who wrote a group's last message, where a forward came from and the
+       chat on top of the Archive: the parser keeps them when it reads the
+       reply to the end, and they used to join the list as chats nobody had
+       (the more pages, the more of them). They are left out here; the
+       account's own entry stays. */
+    {
+        unsigned long out_n = 0UL;
+
+        for (i = 0UL; i < cache.count; ++i) {
+            if (!cache.entries[i].from_dialog && !cache.entries[i].is_self) {
+                continue;
+            }
+            if (out_n != i) {
+                cache.entries[out_n] = cache.entries[i];
+            }
+            ++out_n;
+        }
+        cache.count = out_n;
+    }
+    /* The next page starts after the last dialog of this one. A page with
+       fewer dialogs than asked is the last (the first one brings the
+       pinned dialogs on top of the limit, so it is never short by them). */
+    last = 0;
+    in_page = 0UL;
+    for (i = 0UL; i < cache.count; ++i) {
+        if (!cache.entries[i].from_dialog) {
+            continue; /* Saved Messages is a dialog like the others */
+        }
+        ++in_page;
+        if (cache.entries[i].top_message != 0UL) {
+            last = &cache.entries[i];
+        }
+    }
+    if (last != 0 && in_page >= limit) {
+        tg_list_peers_cursor.id = last->top_message;
+        tg_list_peers_cursor.peer_constructor = last->peer_constructor;
+        tg_list_peers_cursor.id_hi = last->id_hi;
+        tg_list_peers_cursor.id_lo = last->id_lo;
+        tg_list_peers_cursor.access_hash_hi = last->access_hash_hi;
+        tg_list_peers_cursor.access_hash_lo = last->access_hash_lo;
+        tg_list_peers_cursor.has_access_hash = last->has_access_hash;
+        tg_list_peers_cursor.date = tg_mtproto_find_message_date(
+            result.result_body, result.result_body_length,
+            last->peer_constructor, last->id_hi, last->id_lo,
+            last->top_message);
+        tg_list_peers_cursor.valid = tg_list_peers_cursor.date != 0UL;
+    }
     if (has_existing_cache) {
         tg_mtproto_merge_peer_cache(&existing_cache, &cache);
         cache = existing_cache;
@@ -8953,6 +8954,7 @@ int tg_mtproto_auth_list_peers_file(const char *host,
         return 2;
     }
     fprintf(stream, "%s: ok\n", label);
+
     fprintf(stream, "%s: constructor 0x%08lx\n", label,
             dialogs.constructor);
     fprintf(stream, "%s: peers %lu total_dialogs %lu users %lu chats %lu\n",
@@ -8983,6 +8985,59 @@ int tg_mtproto_auth_list_peers_file(const char *host,
     }
     fprintf(stream, "%s: peer_cache_saved %s\n", label, peer_cache_file);
     return 0;
+}
+
+/* The first page of the dialog list, merged into the peer cache file. */
+int tg_mtproto_auth_list_peers_file(const char *host,
+                                    const char *port,
+                                    const char *api_file,
+                                    const char *auth_file,
+                                    const char *dc_id_text,
+                                    const char *limit_text,
+                                    const char *peer_cache_file,
+                                    FILE *stream)
+{
+    return tg_mtproto_list_peers_page(host, port, api_file, auth_file,
+                                      dc_id_text, limit_text, peer_cache_file,
+                                      stream, 0);
+}
+
+/* The page after the one read last, by either call. 3 when the last page
+   was the end of the list (or no page was read): nothing is asked. */
+int tg_mtproto_auth_list_peers_next_file(const char *host,
+                                         const char *port,
+                                         const char *api_file,
+                                         const char *auth_file,
+                                         const char *dc_id_text,
+                                         const char *limit_text,
+                                         const char *peer_cache_file,
+                                         FILE *stream)
+{
+    return tg_mtproto_list_peers_page(host, port, api_file, auth_file,
+                                      dc_id_text, limit_text, peer_cache_file,
+                                      stream, 1);
+}
+
+/* Page number `iter` (from 0) of a paged read of the dialog list into a
+   cache file: the first page, then each one after the last. Non-zero ends
+   the read: a failure, or 3 when the page before was the end of the list. */
+static int tg_mtproto_list_peers_paged(int iter, const char *host,
+                                       const char *api_file,
+                                       const char *auth_file,
+                                       const char *dc_id_text,
+                                       const char *limit_text,
+                                       const char *peer_cache_file,
+                                       FILE *stream)
+{
+    return iter == 0
+               ? tg_mtproto_auth_list_peers_file(host, "443", api_file,
+                                                 auth_file, dc_id_text,
+                                                 limit_text, peer_cache_file,
+                                                 stream)
+               : tg_mtproto_auth_list_peers_next_file(host, "443", api_file,
+                                                      auth_file, dc_id_text,
+                                                      limit_text,
+                                                      peer_cache_file, stream);
 }
 
 static void tg_mtproto_normalize_username(const char *input,
@@ -21074,12 +21129,9 @@ static int tg_gui_archived_loaded = 0;
 static int tg_gui_archive_view = 0; /* 1: the sidebar shows the Archive */
 /* How many archived chats the peer cache takes, the most recent ones: the
    cache is the chat list of every view (and of the text client), so the
-   Archive gets a share of it, not all of it. */
-#if defined(__m68k__)
+   Archive gets a quarter of it and Reload chat list leaves that much free
+   when there is an Archive to show. */
 #define TG_GUI_ARCHIVE_SHOWN_MAX (TG_MTPROTO_PEER_CACHE_MAX / 4U)
-#else
-#define TG_GUI_ARCHIVE_SHOWN_MAX (TG_MTPROTO_PEER_CACHE_MAX / 2U)
-#endif
 static int tg_gui_archive_partial = 0; /* the last fetch stopped before the end */
 
 static void tg_gui_archived_load(void)
@@ -21638,23 +21690,20 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
 #if !(defined(__MORPHOS__) || defined(__MORPHOS))
         FILE *q;
         int iter;
-        unsigned long prev;
 
         q = tg_mtproto_open_quiet_stream(stream);
-        prev = 0UL;
         for (iter = 0; iter < 8; ++iter) { /* 8 x 30 covers the 128-entry cache */
-            if (tg_mtproto_auth_list_peers_file(host, "443", api_file, auth_file,
-                                                dc_id_text, "30", peer_cache_file,
-                                                q) != 0) {
-                break; /* a page failed -> keep whatever pages already landed */
+            if (tg_mtproto_list_peers_paged(iter, host, api_file, auth_file,
+                                            dc_id_text, "30", peer_cache_file,
+                                            q) != 0) {
+                break; /* the end of the list, or a page failed: keep
+                          whatever pages already landed */
             }
             if (tg_mtproto_load_peer_cache_file(peer_cache_file,
                                                 &tg_gui_probe_cache) != 0 ||
-                tg_gui_probe_cache.count <= prev ||
                 tg_gui_probe_cache.count >= TG_MTPROTO_PEER_CACHE_MAX) {
-                break; /* no new dialogs this page, or the cache is full */
+                break; /* the cache is full */
             }
-            prev = tg_gui_probe_cache.count;
         }
         tg_mtproto_close_quiet_stream(q, stream);
 #endif
@@ -22460,12 +22509,14 @@ int tg_gui_session_reload_chat_list(FILE *stream)
     {
         FILE *q;
         int iter;
-        unsigned long prev = 0UL;
 
         q = tg_mtproto_open_quiet_stream(stream);
+        /* Page after page until the end of the list, the page budget or a
+           full cache. A page of chats already known does not stop it: the
+           new ones may be further down. */
         for (iter = 0; iter < TG_GUI_RELOAD_PAGES; ++iter) {
-            if (tg_mtproto_auth_list_peers_file(
-                    tg_gui_session_state.host, "443",
+            if (tg_mtproto_list_peers_paged(
+                    iter, tg_gui_session_state.host,
                     tg_gui_session_state.api_file,
                     tg_gui_session_state.auth_file,
                     tg_gui_session_state.dc_id_text, TG_GUI_RELOAD_PAGE,
@@ -22475,11 +22526,34 @@ int tg_gui_session_reload_chat_list(FILE *stream)
             if (tg_mtproto_load_peer_cache_file(
                     tg_gui_session_state.peer_cache_file,
                     &tg_gui_probe_cache) != 0 ||
-                tg_gui_probe_cache.count <= prev ||
                 tg_gui_probe_cache.count >= TG_MTPROTO_PEER_CACHE_MAX) {
                 break;
             }
-            prev = tg_gui_probe_cache.count;
+            /* The Archive's share of the cache stays free for it. */
+            {
+                unsigned long reserve =
+                    (unsigned long)tg_gui_session_archived_count();
+                unsigned long main_n = 0UL;
+                unsigned long k;
+
+                if (reserve > TG_GUI_ARCHIVE_SHOWN_MAX) {
+                    reserve = TG_GUI_ARCHIVE_SHOWN_MAX;
+                }
+                for (k = 0UL; k < tg_gui_probe_cache.count; ++k) {
+                    const tg_mtproto_peer_cache_entry *e =
+                        &tg_gui_probe_cache.entries[k];
+
+                    if (tg_gui_archived_find(
+                            e->peer_constructor ==
+                                TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                            e->id_hi, e->id_lo) < 0) {
+                        ++main_n;
+                    }
+                }
+                if (main_n + reserve >= TG_MTPROTO_PEER_CACHE_MAX) {
+                    break;
+                }
+            }
         }
         tg_mtproto_close_quiet_stream(q, stream);
         (void)tg_gui_session_fetch_pins(stream); /* pins changed elsewhere */
@@ -23235,24 +23309,21 @@ int tg_gui_session_search_run(const char *query, FILE *stream)
     remove(TG_GUI_SEARCH_TMP_CACHE);
     {
         int iter;
-        unsigned long prev = 0UL;
 
         for (iter = 0; iter < TG_GUI_RELOAD_PAGES; ++iter) {
-            if (tg_mtproto_auth_list_peers_file(
-                    tg_gui_session_state.host, "443",
+            if (tg_mtproto_list_peers_paged(
+                    iter, tg_gui_session_state.host,
                     tg_gui_session_state.api_file,
                     tg_gui_session_state.auth_file,
                     tg_gui_session_state.dc_id_text, TG_GUI_RELOAD_PAGE,
                     TG_GUI_SEARCH_TMP_CACHE, quiet) != 0) {
-                break; /* match against whatever pages landed */
+                break; /* the end, or match against whatever pages landed */
             }
             if (tg_mtproto_load_peer_cache_file(TG_GUI_SEARCH_TMP_CACHE,
                                                 &tg_gui_probe_cache) != 0 ||
-                tg_gui_probe_cache.count <= prev ||
                 tg_gui_probe_cache.count >= TG_MTPROTO_PEER_CACHE_MAX) {
                 break;
             }
-            prev = tg_gui_probe_cache.count;
         }
         if (tg_mtproto_load_peer_cache_file(TG_GUI_SEARCH_TMP_CACHE,
                                             &tg_gui_probe_cache) == 0) {
@@ -23463,8 +23534,8 @@ int tg_gui_session_archive_refresh(FILE *stream)
             const tg_mtproto_peer_cache_entry *e =
                 &tg_gui_probe_cache.entries[i];
 
-            if (!e->from_dialog || e->is_self || e->folder_id != 1UL) {
-                continue;
+            if (!e->from_dialog || e->folder_id != 1UL) {
+                continue; /* an archived Saved Messages counts as a dialog */
             }
             ++in_page;
             if (e->top_message != 0UL) {

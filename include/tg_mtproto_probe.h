@@ -175,6 +175,16 @@ int tg_mtproto_auth_list_peers_file(const char *host,
                                     const char *limit_text,
                                     const char *peer_cache_file,
                                     FILE *stream);
+/* The page of the dialog list after the one read last (by either call),
+   merged into the same file. 3 when there is no further page. */
+int tg_mtproto_auth_list_peers_next_file(const char *host,
+                                         const char *port,
+                                         const char *api_file,
+                                         const char *auth_file,
+                                         const char *dc_id_text,
+                                         const char *limit_text,
+                                         const char *peer_cache_file,
+                                         FILE *stream);
 /* One-shot live peer-cache refresh for the GUI sidebar: derives host/DC from
    the saved session and runs list-peers (with a heavy-account retry). See the
    definition in tg_mtproto_probe.c. */
