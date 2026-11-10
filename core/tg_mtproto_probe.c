@@ -11636,7 +11636,7 @@ static void tg_chat_history_add(const char *text)
     "Commands: /list /search /add /move /remove /swap /saved /peers\n" \
     "          /history /forward /forwardto /react /reactions /ids\n" \
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
-    "          /diff /color /bell /ring /help /quit\n"
+    "          /diff /color /bell /ring /find /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -15441,6 +15441,7 @@ static const char *const tg_chat_help_lines[] = {
     "  /move 5 1       chat 5 becomes number 1, the one F1 opens",
     "  /remove n       remove chat n from the list",
     "  /history        show the recent messages again",
+    "  /find words     find messages in this chat, the newest ten",
     "  /forward [id]   forward the latest (or that id) to Saved Messages",
     "  /forwardto n [id]  forward the latest (or that id) to chat n",
     "  /react [id] name   react to the last one received (or that id):",
@@ -16434,6 +16435,44 @@ int tg_mtproto_auth_chat_file(const char *host,
                     "Type a number, /search text, or /add name.\n");
             tg_console_tui_capture_end(tui_cap, stream);
         }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        if (tg_mtproto_chat_named_command_arg(line, "/find", &cmd_arg)) {
+            /* Find in chat for the text client: messages.search on the open
+               chat, the hits printed like a page of history, oldest first. */
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Choose a chat first with /list or /add name.");
+            } else if (cmd_arg == 0 || cmd_arg[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Use /find words: it searches this chat's messages.");
+            } else {
+                FILE *tui_cap = tg_console_tui_capture_begin(stream);
+                unsigned long found = 0UL;
+                const char *wire = cmd_arg;
+#if TG_MTPROTO_DISPLAY_LATIN1
+                static char find_utf8[TG_CHAT_HISTORY_LEN * 2 + 4];
+
+                if (tg_mtproto_latin1_to_utf8(cmd_arg, find_utf8,
+                                              sizeof(find_utf8))) {
+                    wire = find_utf8;
+                }
+#endif
+                tg_mtproto_history_search_query = wire;
+                rc = tg_mtproto_auth_print_history_text_peer_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, "10", tui_cap,
+                    0, &found, 0, 1, 0, peer_label, own_label);
+                tg_mtproto_history_search_query = 0;
+                if (rc != 0) {
+                    fprintf(tui_cap, "Could not search now.\n");
+                } else if (found == 0UL) {
+                    fprintf(tui_cap, "No message found.\n");
+                }
+                tg_console_tui_capture_end(tui_cap, stream);
+            }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -18148,6 +18187,9 @@ static int tg_mtproto_upload_window_self_test(void);
 static int tg_mtproto_first_contact_self_test(void);
 static int tg_mtproto_display_text_self_test(void);
 static int tg_chat_notify_cached_sender_self_test(void);
+#if !defined(TG_NO_GUI)
+static int tg_gui_global_line_self_test(void);
+#endif
 
 static int tg_chat_notify_sender_fixture(tg_mtproto_tl_writer *writer,
                                           unsigned long outer, int mode,
@@ -18399,6 +18441,11 @@ static int tg_chat_notify_sender_self_test(void)
     if (!ok || tg_chat_notify_cached_sender_self_test() != 0) {
         return 2;
     }
+#if !defined(TG_NO_GUI)
+    if (tg_gui_global_line_self_test() != 0) {
+        return 2;
+    }
+#endif
     return 0;
 }
 
@@ -22458,6 +22505,336 @@ static int tg_gui_search_open_entry(const tg_mtproto_peer_cache_entry *selected,
         (void)tg_gui_session_open_chat(idx, stream);
     }
     return 0;
+}
+
+/* --- Find in all chats (messages.searchGlobal) -------------------------- */
+
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+#define TG_GUI_GLOBAL_HITS_MAX 12 /* small replies: the bsdsocket guard */
+#else
+#define TG_GUI_GLOBAL_HITS_MAX 20
+#endif
+
+#if !defined(TG_NO_GUI)
+/* The hits of the last search across chats: which chat, which message, and
+   the sidebar row drawn for it. The rows are kept because opening a hit
+   rebuilds the chat list under them; the chats themselves (names, access
+   hashes) stay in tg_gui_search_results, as for the online picker. */
+typedef struct tg_gui_global_hit {
+    unsigned long peer_constructor;
+    unsigned long peer_id_hi;
+    unsigned long peer_id_lo;
+    unsigned long message_id;
+} tg_gui_global_hit;
+
+static tg_gui_global_hit tg_gui_global_hits[TG_GUI_GLOBAL_HITS_MAX];
+static tg_gui_chat tg_gui_global_rows[TG_GUI_GLOBAL_HITS_MAX];
+static int tg_gui_global_hit_count = 0;
+static tg_mtproto_dialog_peer
+    tg_gui_global_dests[TG_MTPROTO_MESSAGE_TEXT_LIST_MAX];
+
+static const tg_mtproto_peer_cache_entry *tg_gui_global_entry(
+    unsigned long peer_constructor, unsigned long id_hi, unsigned long id_lo)
+{
+    unsigned long k;
+
+    for (k = 0UL; k < tg_gui_search_results.count; ++k) {
+        const tg_mtproto_peer_cache_entry *e =
+            &tg_gui_search_results.entries[k];
+
+        if (e->peer_constructor == peer_constructor && e->id_hi == id_hi &&
+            e->id_lo == id_lo) {
+            return e;
+        }
+    }
+    return 0;
+}
+
+/* "who: text" for the row's second line, UTF-8, cut on a whole character. */
+static void tg_gui_global_line(char *out, unsigned long out_size,
+                               const char *who, const char *text)
+{
+    unsigned long o = 0UL;
+    unsigned long i;
+
+    if (who != 0 && who[0] != '\0') {
+        for (i = 0UL; who[i] != '\0' && o + 3UL < out_size; ++i) {
+            out[o++] = who[i];
+        }
+        if (o + 3UL < out_size) {
+            out[o++] = ':';
+            out[o++] = ' ';
+        }
+    }
+    for (i = 0UL; text != 0 && text[i] != '\0' && o + 1UL < out_size; ++i) {
+        out[o++] = text[i];
+    }
+    while (o > 0UL && text != 0 && text[i] != '\0' &&
+           ((unsigned char)text[i] & 0xC0U) == 0x80U) {
+        --o; /* the cut fell inside a UTF-8 sequence */
+        --i;
+    }
+    out[o] = '\0';
+}
+
+#if !defined(TG_NO_SELFTEST)
+static int tg_gui_global_line_self_test(void)
+{
+    char out[12];
+
+    tg_gui_global_line(out, sizeof(out), "Anna", "ciao");
+    if (strcmp(out, "Anna: ciao") != 0) {
+        puts("mtproto self-test: a hit's line does not name who wrote it");
+        return 2;
+    }
+    tg_gui_global_line(out, sizeof(out), 0, "ciao");
+    if (strcmp(out, "ciao") != 0) {
+        puts("mtproto self-test: a hit's line without a sender");
+        return 2;
+    }
+    /* Eleven bytes fit: "Io: " and three whole U+00E9, never half of the
+       fourth. */
+    tg_gui_global_line(out, sizeof(out), "Io",
+                       "\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9");
+    if (strcmp(out, "Io: \xc3\xa9\xc3\xa9\xc3\xa9") != 0) {
+        puts("mtproto self-test: a hit's line cuts a character in half");
+        return 2;
+    }
+    return 0;
+}
+#endif
+#endif /* !TG_NO_GUI */
+
+/* Public: search every chat of the account for `query` (Latin-1, as typed)
+   with messages.searchGlobal. The hits replace the sidebar rows, newest
+   first: the chat's name, who wrote it and how the message starts, its
+   date; the row's index is the hit's number, from 1, for
+   tg_gui_session_search_global_open. Returns the number of hits, or -1 when
+   the search could not run. */
+int tg_gui_session_search_global(const char *query, FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)query;
+    (void)stream;
+    return -1;
+#else
+    unsigned char qbuf[320];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_gui_chat_driver collector;
+    tg_chat_driver collect_driver;
+    tg_gui_state *gst;
+    FILE *quiet;
+    const char *wire;
+    unsigned long prev_timeout;
+    unsigned long i;
+    long display_delta;
+    int src[TG_GUI_GLOBAL_HITS_MAX];
+    int rc;
+    int k;
+    static char line[TG_GUI_TEXT_MAX * 2];
+    static const char label[] = "gui messages.searchGlobal";
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char query_utf8[TG_GUI_SEARCH_MAX * 2 + 4];
+#endif
+
+    gst = tg_gui_session_state.gui_driver.state;
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        query == 0 || query[0] == '\0') {
+        return -1;
+    }
+    wire = query;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(query, query_utf8, sizeof(query_utf8))) {
+        wire = query_utf8;
+    }
+#endif
+    tg_mtproto_tl_writer_init(&writer, qbuf, sizeof(qbuf));
+    if (tg_mtproto_build_messages_search_global(
+            &writer, wire, (unsigned long)TG_GUI_GLOBAL_HITS_MAX) !=
+        TG_MTPROTO_TL_OK) {
+        return -1;
+    }
+    if (tg_shared_message_texts_busy) {
+        return -1;
+    }
+    tg_gui_log("search_global: start");
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, qbuf,
+        writer.length, &result, quiet, label, 600U);
+    if (rc == 0 &&
+        result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+        rc = 2;
+    }
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("search_global: failed");
+        return -1;
+    }
+    tg_shared_message_texts_busy = 1;
+    if (tg_mtproto_parse_message_text_list_dests(
+            result.result_constructor, result.result_body,
+            result.result_body_length, &tg_shared_message_texts,
+            tg_gui_global_dests) != TG_MTPROTO_TL_OK) {
+        tg_shared_message_texts_busy = 0;
+        tg_gui_log("search_global: unreadable reply");
+        return -1;
+    }
+    /* The reply's own chats and users name the hits and open them later;
+       the online picker's list is replaced, so its rows are void. */
+    tg_mtproto_parse_message_peers(result.result_body,
+                                   result.result_body_length,
+                                   &tg_gui_search_results);
+    tg_gui_search_openable_n = 0;
+    tg_gui_global_hit_count = 0;
+    for (i = 0UL; i < tg_shared_message_texts.count &&
+                  tg_gui_global_hit_count < TG_GUI_GLOBAL_HITS_MAX; ++i) {
+        const tg_mtproto_message_text *m = &tg_shared_message_texts.messages[i];
+        const tg_mtproto_dialog_peer *d = &tg_gui_global_dests[i];
+        const tg_mtproto_peer_cache_entry *e;
+        tg_gui_global_hit *hit;
+
+        if (m->id == 0UL || m->service_action != 0UL ||
+            tg_hidden_msgs_skip(d->peer_constructor, d->id_hi, d->id_lo,
+                                m->id)) {
+            continue;
+        }
+        e = tg_gui_global_entry(d->peer_constructor, d->id_hi, d->id_lo);
+        if (e == 0 ||
+            (!e->is_self && !tg_mtproto_peer_cache_entry_is_openable(e))) {
+            continue; /* a chat the reply does not let us open */
+        }
+        hit = &tg_gui_global_hits[tg_gui_global_hit_count];
+        hit->peer_constructor = d->peer_constructor;
+        hit->peer_id_hi = d->id_hi;
+        hit->peer_id_lo = d->id_lo;
+        hit->message_id = m->id;
+        src[tg_gui_global_hit_count] = (int)i;
+        ++tg_gui_global_hit_count;
+    }
+    /* The search driver puts each row on top: hand it the oldest first. */
+    display_delta = tg_mtproto_display_delta(
+        tg_gui_session_state.context.server_time_delta_seconds,
+        tg_mtproto_local_clock_skew());
+    gst->chat_count = 0;
+    tg_gui_search_driver_bind(&collector, gst, &collect_driver);
+    for (k = tg_gui_global_hit_count; k > 0; --k) {
+        const tg_mtproto_message_text *m =
+            &tg_shared_message_texts.messages[src[k - 1]];
+        const tg_gui_global_hit *hit = &tg_gui_global_hits[k - 1];
+        const tg_mtproto_peer_cache_entry *e = tg_gui_global_entry(
+            hit->peer_constructor, hit->peer_id_hi, hit->peer_id_lo);
+        tg_chat_message_row row;
+        const char *who = 0;
+
+        memset(&row, 0, sizeof(row));
+        if (tg_mtproto_message_is_own(m, hit->peer_constructor)) {
+            who = e->is_self ? 0 : "You";
+        } else if (hit->peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+                   m->from_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+            who = tg_mtproto_cache_user_name(&tg_gui_search_results,
+                                             m->from_id_hi, m->from_id_lo);
+        }
+        tg_gui_global_line(line, sizeof(line), who, m->text);
+        row.id = (unsigned long)k; /* the hit's number, not a message id */
+        row.text = line;
+        row.sender = e->is_self
+                         ? "Saved Messages"
+                         : (e->title[0] != '\0' ? e->title : e->username);
+        row.has_time = (m->date != 0UL);
+        row.local_epoch =
+            row.has_time ? tg_mtproto_chat_local_epoch(m->date, display_delta)
+                         : 0UL;
+        collect_driver.on_message(collect_driver.ctx, &row);
+    }
+    tg_shared_message_texts_busy = 0;
+    for (k = 0; k < tg_gui_global_hit_count && k < gst->chat_count; ++k) {
+        tg_gui_global_rows[k] = gst->chats[k];
+    }
+    tg_gui_log("search_global: done");
+    return tg_gui_global_hit_count;
+#endif
+}
+
+/* Public: open the chat of hit number `hit` (from 1) around its message,
+   then put the hits back in the sidebar so another one can be picked.
+   1 = shown, 0 = the message is no longer there, -1 = failed, -2 = the hit
+   list is gone (search again). */
+int tg_gui_session_search_global_open(unsigned long hit, FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)hit;
+    (void)stream;
+    return -2;
+#else
+    const tg_gui_global_hit *h;
+    const tg_mtproto_peer_cache_entry *e;
+    tg_gui_state *gst;
+    unsigned long idx;
+    int rc;
+    int k;
+
+    gst = tg_gui_session_state.gui_driver.state;
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        hit == 0UL || hit > (unsigned long)tg_gui_global_hit_count) {
+        return -2;
+    }
+    h = &tg_gui_global_hits[hit - 1UL];
+    e = tg_gui_global_entry(h->peer_constructor, h->peer_id_hi,
+                            h->peer_id_lo);
+    if (e == 0) {
+        return -2; /* another search took the list of chats */
+    }
+    if (e->is_self) {
+        idx = TG_GUI_SAVED_PEER_INDEX;
+    } else if (tg_gui_search_cache_entry(e, stream, 1, &idx) != 0) {
+        return -1;
+    }
+    if (idx != tg_gui_session_current_peer_index()) {
+        /* Another chat: the real list for a moment, to select and name the
+           row the usual way, then the chat itself. */
+        tg_gui_session_reload_chats();
+        for (k = 0; k < gst->chat_count; ++k) {
+            if (gst->chats[k].index == idx) {
+                const char *nm = gst->chats[k].name;
+                unsigned long ti;
+
+                gst->selected_chat = k;
+                for (ti = 0UL; ti + 1UL < sizeof(gst->title) &&
+                               nm[ti] != '\0'; ++ti) {
+                    gst->title[ti] = nm[ti];
+                }
+                gst->title[ti] = '\0';
+                /* Being read now: the badge goes, and stays gone when the
+                   chat list comes back. */
+                gst->chats[k].unread = 0;
+                gst->chats[k].flash = 0;
+                tg_gui_note_open_chat(gst);
+                tg_gui_session_persist_unread();
+                break;
+            }
+        }
+        (void)tg_gui_session_open_chat(idx, stream);
+    }
+    rc = tg_gui_session_jump_to_message(h->message_id, stream);
+    for (k = 0; k < tg_gui_global_hit_count; ++k) {
+        gst->chats[k] = tg_gui_global_rows[k];
+    }
+    gst->chat_count = tg_gui_global_hit_count;
+    gst->selected_chat = (int)(hit - 1UL);
+    return rc;
+#endif
 }
 
 /* Case-insensitive substring match, ASCII folding only -- the twin of the

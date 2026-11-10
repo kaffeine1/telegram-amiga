@@ -724,6 +724,13 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     unsigned long offset_id,
     unsigned long limit);
 
+/* messages.searchGlobal: the same text search across every chat of the
+   account, first page, newest first. query_utf8 must be non-empty. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_global(
+    tg_mtproto_tl_writer *writer,
+    const char *query_utf8,
+    unsigned long limit);
+
 /* channels.getParticipants(channelParticipantsRecent) for a supergroup -- resolves
    member id->name for the typing indicator. The reply carries users:Vector<User>. */
 tg_mtproto_tl_status tg_mtproto_build_channels_get_participants_recent(
@@ -998,6 +1005,12 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
     const unsigned char *body,
     unsigned long body_length,
     tg_mtproto_message_text_list *out);
+tg_mtproto_tl_status tg_mtproto_parse_message_text_list_dests(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_message_text_list *out,
+    tg_mtproto_dialog_peer *dests);
 
 /* The line a service message reads as, in the words of the official clients:
    "Anna added Marco", "You pinned a message", "Marco joined Telegram".

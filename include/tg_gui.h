@@ -429,6 +429,10 @@ typedef struct tg_gui_state {
        (ENTER runs messages.search). in_search then marks the sidebar as
        showing the hits, whose index is a message id, not a peer. */
     int msg_search_active;
+    /* The same box searching every chat (messages.searchGlobal): a hit's
+       index is then its number in the session's hit list, from 1. Read
+       only while msg_search_active is set. */
+    int msg_search_global;
     int focus_tint_unseen; /* the screen gave the row tint the background's
                               own pen (too few colours): the arrow focus gets
                               a frame, as the tint alone would not show */

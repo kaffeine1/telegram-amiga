@@ -41,6 +41,7 @@
 #define TG_MESSAGES_PEER_DIALOGS_CONSTRUCTOR 0x3371c354UL
 #define TG_MESSAGES_GET_HISTORY_CONSTRUCTOR 0x4423e6c5UL
 #define TG_MESSAGES_SEARCH_CONSTRUCTOR 0x29ee847aUL
+#define TG_MESSAGES_SEARCH_GLOBAL_CONSTRUCTOR 0x4bc6589aUL
 #define TG_MESSAGES_GET_PINNED_DIALOGS_CONSTRUCTOR 0xd6b94df2UL
 #define TG_MESSAGES_TOGGLE_DIALOG_PIN_CONSTRUCTOR 0xa731e257UL
 #define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
@@ -1283,6 +1284,56 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* hash */
+    }
+    return status;
+}
+
+/* messages.searchGlobal#4bc6589a flags:# broadcasts_only:flags.1?true
+   groups_only:flags.2?true users_only:flags.3?true folder_id:flags.0?int
+   q:string filter:MessagesFilter min_date:int max_date:int offset_rate:int
+   offset_peer:InputPeer offset_id:int limit:int = messages.Messages
+   (layer 214 schema, checked 2026-11-10). Text search across every chat of
+   the account, newest first: no flags, no filter, the first page
+   (offset_rate 0, inputPeerEmpty, offset_id 0). */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_global(
+    tg_mtproto_tl_writer *writer,
+    const char *query_utf8,
+    unsigned long limit)
+{
+    tg_mtproto_tl_status status;
+    int k;
+
+    if (writer == 0 || query_utf8 == 0 || query_utf8[0] == '\0' ||
+        limit == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_SEARCH_GLOBAL_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_bytes(
+            writer, (const unsigned char *)query_utf8,
+            (unsigned long)strlen(query_utf8));
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR);
+    }
+    /* min_date, max_date, offset_rate. */
+    for (k = 0; k < 3 && status == TG_MTPROTO_TL_OK; ++k) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_PEER_EMPTY_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset_id */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, limit);
     }
     return status;
 }
@@ -6878,8 +6929,23 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
     unsigned long body_length,
     tg_mtproto_message_text_list *out)
 {
+    return tg_mtproto_parse_message_text_list_dests(constructor, body,
+                                                    body_length, out, 0);
+}
+
+/* The same walk; with dests (TG_MTPROTO_MESSAGE_TEXT_LIST_MAX entries)
+   dests[i] is the chat messages[i] belongs to, its peer_id. A page of one
+   chat needs none; a search across chats tells its hits apart by it. */
+tg_mtproto_tl_status tg_mtproto_parse_message_text_list_dests(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_message_text_list *out,
+    tg_mtproto_dialog_peer *dests)
+{
     tg_mtproto_tl_reader reader;
     tg_mtproto_message_text message;
+    tg_mtproto_dialog_peer dest;
     unsigned long flags;
     unsigned long count;
     unsigned long scratch;
@@ -6942,7 +7008,8 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
             (reader.offset + 4UL <= reader.length) ?
                 tg_read_u32_le(reader.buffer + reader.offset) : 0UL;
         message_start = reader.offset;
-        if (tg_read_common_message_text(&reader, &message, 0, 0) !=
+        if (tg_read_common_message_text(&reader, &message,
+                                        dests != 0 ? &dest : 0, 0) !=
             TG_MTPROTO_TL_OK) {
             /*
              * Older parser paths can stop on media tails such as
@@ -6966,6 +7033,9 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list(
         if (message.has_text) {
             if (out->count < TG_MTPROTO_MESSAGE_TEXT_LIST_MAX) {
                 out->messages[out->count] = message;
+                if (dests != 0) {
+                    dests[out->count] = dest;
+                }
                 ++out->count;
             } else {
                 out->truncated = 1;
@@ -7541,6 +7611,58 @@ static int tg_message_cut_self_test(void)
         if ((unsigned char)t[k] != 0xC3U ||
             (unsigned char)t[k + 1UL] != 0xA9U) {
             puts("login self-test: a cut message keeps half a character");
+            return 2;
+        }
+    }
+
+    /* A search across chats: two hits, one in a private chat and one in a
+       channel, and the dest-aware walk names the chat of each. */
+    {
+        static tg_mtproto_dialog_peer dests[TG_MTPROTO_MESSAGE_TEXT_LIST_MAX];
+
+        tg_mtproto_tl_writer_init(&writer, rpc, sizeof(rpc));
+        if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2002UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2225UL) != TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "ciao a te") != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 77UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_PEER_CHANNEL_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x0badcafeUL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2000UL) != TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "ciao dal canale") != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_message_text_list_dests(
+                TG_MESSAGES_MESSAGES_CONSTRUCTOR, rpc, writer.length, &list,
+                dests) != TG_MTPROTO_TL_OK ||
+            list.count != 2UL || list.messages[0].id != 2002UL ||
+            dests[0].peer_constructor != TG_PEER_USER_CONSTRUCTOR ||
+            dests[0].id_lo != 0x12345678UL ||
+            list.messages[1].id != 77UL ||
+            dests[1].peer_constructor != TG_PEER_CHANNEL_CONSTRUCTOR ||
+            dests[1].id_lo != 0x0badcafeUL ||
+            strcmp(list.messages[1].text, "ciao dal canale") != 0) {
+            puts("login self-test: search hits do not name their chats");
             return 2;
         }
     }
@@ -9168,6 +9290,30 @@ int tg_mtproto_login_self_test(void)
             &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
             0UL, 0UL, 0, "", 0UL, 20UL) == TG_MTPROTO_TL_OK) {
         return 2; /* an empty query is refused */
+    }
+    /* messages.searchGlobal#4bc6589a: flags 0, q "ciao", no filter, no
+       dates, offset_rate 0, inputPeerEmpty#7f3b18ea, offset_id 0, limit 20
+       -> 44 bytes. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_global(&writer, "ciao", 20UL) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 44UL ||
+        query[0] != 0x9aU || query[1] != 0x58U ||
+        query[2] != 0xc6U || query[3] != 0x4bU ||
+        query[4] != 0x00U || query[7] != 0x00U ||
+        query[8] != 4U || query[9] != 'c' || query[12] != 'o' ||
+        query[16] != 0x6cU || query[17] != 0xf6U ||
+        query[18] != 0xe2U || query[19] != 0x57U ||
+        query[20] != 0x00U || query[31] != 0x00U ||
+        query[32] != 0xeaU || query[33] != 0x18U ||
+        query[34] != 0x3bU || query[35] != 0x7fU ||
+        query[36] != 0x00U || query[40] != 20U || query[43] != 0x00U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_global(&writer, "", 20UL) ==
+        TG_MTPROTO_TL_OK) {
+        return 2;
     }
     /* channels.getParticipants(recent): lock the verified layer-214 hashes + the
        LE int64 (lo-then-hi) layout. channel_id=0x1122334455667788,

@@ -20,6 +20,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   chat the jump button brings back the newest messages, and messages
   that arrive meanwhile are counted on it rather than glued below the
   old ones.
+- Find in all chats (Edit menu, Amiga+G): the same search box searches
+  the messages of every chat of the account. Each message found shows
+  the name of its chat, who wrote it and how it starts, and its date; a
+  click or ENTER opens that chat around the message, and the list of
+  results stays in place for the next one until ESC. A chat that was not
+  in the chat list is added to it when opened this way.
+- /find words in the text client: it searches the messages of the open
+  chat and prints the newest ten found, like a page of history.
 - Pinned chats. The chats pinned on Telegram (on the phone, in the
   desktop client or here) come first in the chat list, in Telegram's
   order, with a pin mark at the right of the row where the unread badge

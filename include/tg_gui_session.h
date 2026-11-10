@@ -282,6 +282,17 @@ int tg_gui_session_search_messages(const char *query, FILE *stream);
    (newest_dropped). 1 = shown, 0 = not in the page, -1 = failed. */
 int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream);
 
+/* Searches every chat of the account for `query` (messages.searchGlobal).
+   The hits replace the sidebar rows, newest first: the chat's name, who
+   wrote it and how the message starts, its date; a row's index is the hit's
+   number, from 1. Returns the number of hits, or -1 when it could not run. */
+int tg_gui_session_search_global(const char *query, FILE *stream);
+
+/* Opens the chat of hit number `hit` around its message and puts the hits
+   back in the sidebar. 1 = shown, 0 = the message is gone, -1 = failed,
+   -2 = the hit list is gone (search again). */
+int tg_gui_session_search_global_open(unsigned long hit, FILE *stream);
+
 /* 1 when the chat with this peer id is pinned on Telegram (as last read). */
 int tg_gui_session_chat_pinned(unsigned long peer_id_hi,
                                unsigned long peer_id_lo);

@@ -559,6 +559,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_NOTIFY_CHIME 34
 #define TG_MENU_SUPPORT 35
 #define TG_MENU_FINDCHAT 36
+#define TG_MENU_FINDALL 37
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -7065,6 +7066,8 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Find in chat...", (STRPTR)"S", 0, 0,
       (APTR)TG_MENU_FINDCHAT },
+    { NM_ITEM,  (STRPTR)"Find in all chats...", (STRPTR)"G", 0, 0,
+      (APTR)TG_MENU_FINDALL },
 /* Settings */
     { NM_TITLE, (STRPTR)"Settings", 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Use own screen", 0, CHECKIT | MENUTOGGLE, 0,
@@ -9371,14 +9374,24 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
    Typing only edits the query (each search is a server round trip, so it
    waits for ENTER); the hits replace the chat list, newest first, and a
    click or ENTER shows the chat around that message. ESC ends it. */
+static const char *tg_gui_window_msg_search_prompt(const tg_gui_state *state)
+{
+    return state->msg_search_global
+               ? "All chats: type, ENTER searches (ESC ends)"
+               : "Find in chat: type, ENTER searches (ESC ends)";
+}
+
+/* global = 0 searches the open chat, 1 every chat of the account. */
 static void tg_gui_window_begin_msg_search(tg_gui_state *state,
-                                           tg_gui_backend *backend)
+                                           tg_gui_backend *backend,
+                                           int global)
 {
     if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
         state->forward_pick_active ||
-        tg_gui_session_current_peer_index() == 0UL) {
+        (!global && tg_gui_session_current_peer_index() == 0UL)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Open a chat first, then Find in chat");
+                           global ? "Not connected: no search yet"
+                                  : "Open a chat first, then Find in chat");
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -9389,19 +9402,21 @@ static void tg_gui_window_begin_msg_search(tg_gui_state *state,
     }
     state->composing = 0;
     state->msg_search_active = 1;
+    state->msg_search_global = global ? 1 : 0;
     state->search_active = 1;
     state->search_query[0] = '\0';
     state->search_caret = 0;
     state->nav_chat = -1;
     state->cursor_on = 1;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Find in chat: type, ENTER searches (ESC ends)");
+                       tg_gui_window_msg_search_prompt(state));
     tg_gui_window_paint(state, backend);
 }
 
 static void tg_gui_window_end_msg_search(tg_gui_state *state)
 {
     state->msg_search_active = 0;
+    state->msg_search_global = 0;
     state->search_active = 0;
     state->search_query[0] = '\0';
     state->search_caret = 0;
@@ -9429,9 +9444,12 @@ static void tg_gui_window_run_msg_search(tg_gui_state *state,
         return;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Searching this chat...");
+                       state->msg_search_global ? "Searching all chats..."
+                                                : "Searching this chat...");
     tg_gui_window_paint(state, backend);
-    n = tg_gui_session_search_messages(state->search_query, stdout);
+    n = state->msg_search_global
+            ? tg_gui_session_search_global(state->search_query, stdout)
+            : tg_gui_session_search_messages(state->search_query, stdout);
     if (n > 0) {
         char line[64];
 
@@ -9472,7 +9490,18 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Loading the message...");
     tg_gui_window_paint(state, backend);
-    rc = tg_gui_session_jump_to_message(state->chats[row].index, stdout);
+    if (state->msg_search_global) {
+        /* The hit's chat is opened first when it is not the open one; the
+           session puts the hits back in the sidebar afterwards. */
+        rc = tg_gui_session_search_global_open(state->chats[row].index,
+                                               stdout);
+        state->nav_chat = -1;
+        state->transcript_scroll = 0;
+        tg_gui_notify_seen(state, state->open_chat.peer_id_hi,
+                           state->open_chat.peer_id_lo);
+    } else {
+        rc = tg_gui_session_jump_to_message(state->chats[row].index, stdout);
+    }
     if (older_exhausted != 0) {
         *older_exhausted = 0;
     }
@@ -9482,7 +9511,9 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
     tg_gui_window_copy(state->status, sizeof(state->status),
                        rc > 0 ? "Found - another hit, or ESC ends the search"
                               : (rc == 0 ? "That message is no longer there"
-                                         : "Could not load it (network?)"));
+                                         : (rc == -2
+                                                ? "Search again (ENTER)"
+                                                : "Could not load it (network?)")));
     tg_gui_window_paint(state, backend);
 }
 
@@ -9537,7 +9568,7 @@ static void tg_gui_window_msg_search_key(tg_gui_state *state,
         state->in_search = 0;
         tg_gui_session_refresh_chats();
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Find in chat: type, ENTER searches (ESC ends)");
+                           tg_gui_window_msg_search_prompt(state));
     }
     state->cursor_on = 1;
     tg_gui_window_paint(state, backend);
@@ -12251,6 +12282,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 case 'I': key_menu_action = (APTR)TG_MENU_ICONIFY; break;
                 case 'Q': key_menu_action = (APTR)TG_MENU_QUIT; break;
                 case 'S': key_menu_action = (APTR)TG_MENU_FINDCHAT; break;
+                case 'G': key_menu_action = (APTR)TG_MENU_FINDALL; break;
                 default: break; /* unknown shortcut: swallowed, never typed */
                 }
                 msg_class = 0; /* consumed: keep it out of every text field */
@@ -12975,7 +13007,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                        state->selected_chat,
                                                        &backend);
                         } else if (ud == (APTR)TG_MENU_FINDCHAT) {
-                            tg_gui_window_begin_msg_search(state, &backend);
+                            tg_gui_window_begin_msg_search(state, &backend, 0);
+                        } else if (ud == (APTR)TG_MENU_FINDALL) {
+                            tg_gui_window_begin_msg_search(state, &backend, 1);
                         } else if (ud == (APTR)TG_MENU_SENDFILE) {
                             tg_gui_window_send_file(state, ctx.window,
                                                     &backend);
@@ -13807,7 +13841,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                            "Hidden messages shown again");
                     } else if (it == TG_GUI_CTX_CHAT_FIND) {
                         /* Find in chat, from the menu over the open chat. */
-                        tg_gui_window_begin_msg_search(state, &backend);
+                        tg_gui_window_begin_msg_search(state, &backend, 0);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_PIN) {
                         int want = state->chats[ci].pinned ? 0 : 1;

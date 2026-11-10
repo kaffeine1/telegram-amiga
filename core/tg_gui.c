@@ -2185,6 +2185,9 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
         if (state->forward_pick_active) {
             placeholder = "Choose destination...";
             placeholder_len = 21UL;
+        } else if (state->msg_search_active && state->msg_search_global) {
+            placeholder = "Find in all chats...";
+            placeholder_len = 20UL;
         } else if (state->msg_search_active) {
             placeholder = "Find in this chat...";
             placeholder_len = 20UL;

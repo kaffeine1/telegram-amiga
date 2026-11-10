@@ -291,11 +291,14 @@ Cheap, protocol only, on the existing window. Half done means part of
 it works today:
 
 - search inside a chat and across all chats (`messages.search`,
-  `messages.searchGlobal`). Inside a chat done on `main` (Find in chat,
-  Amiga+S: hits in the sidebar, a click shows the chat around the
-  message); across all chats still to do, and the text client has no
-  /find yet. The search box also finds chat names and, on the server,
-  people and public channels (`contacts.search`);
+  `messages.searchGlobal`). Done on `main`: Find in chat (Amiga+S: hits
+  in the sidebar, a click shows the chat around the message), Find in
+  all chats (Amiga+G: the same list, each hit with its chat's name, a
+  click opens that chat on the message), and /find in the text client
+  for the open chat. Only the first page of hits is shown (20, 12 on
+  MorphOS): more pages are still to do. The search box also finds chat
+  names and, on the server, people and public channels
+  (`contacts.search`);
 - pinned chats at the top of the list and the Archive (`folder_id` 1).
   Pins done on `main`: read with `messages.getPinnedDialogs` at start
   and on Reload chat list, listed first with a pin mark, Pin and Unpin
