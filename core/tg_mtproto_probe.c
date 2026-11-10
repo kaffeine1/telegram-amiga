@@ -234,6 +234,11 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
    pts:int pts_count:int */
 #define TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR 0xa20db0e5UL
 #define TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR 0xc32d5b12UL
+/* updateFolderPeers#19360dc0 folder_peers:Vector<FolderPeer> pts:int
+   pts_count:int, folderPeer#e9baa668 peer:Peer folder_id:int (layer 214
+   schema, checked 2026-11-10): chats moved in or out of the Archive. */
+#define TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR 0x19360dc0UL
+#define TG_MTPROTO_FOLDER_PEER_CONSTRUCTOR 0xe9baa668UL
 /* https://core.telegram.org/constructor/updateWebPage and
    /constructor/updateChannelWebPage, verified 2026-09-08 (layer 214). */
 #define TG_MTPROTO_UPDATE_WEBPAGE_CONSTRUCTOR 0x7f891213UL
@@ -529,6 +534,18 @@ typedef struct tg_chat_delete_sink {
     unsigned long count;
 } tg_chat_delete_sink;
 static tg_chat_delete_sink *tg_chat_delete_target = 0;
+/* Chats another device moved in or out of the Archive, kept until the
+   window's session applies them (collected only while it is open, like the
+   deletions above). */
+#define TG_CHAT_FOLDER_QUEUE_MAX 8U
+typedef struct tg_chat_folder_entry {
+    unsigned long peer_constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long folder_id;
+} tg_chat_folder_entry;
+static tg_chat_folder_entry tg_chat_folder_queue[TG_CHAT_FOLDER_QUEUE_MAX];
+static unsigned long tg_chat_folder_count = 0UL;
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
 #define TG_CHAT_WEBPAGE_QUEUE_MAX 8U
@@ -3968,6 +3985,45 @@ static void tg_chat_webpage_parse_update(tg_mtproto_tl_reader *reader,
    the constructor: queue every id for the GUI tick. The envelope scan offers
    any aligned constructor match, so the update counts only when its vector
    and both pts fields fit in what is left of the body. */
+static void tg_chat_folder_parse_update(tg_mtproto_tl_reader *reader)
+{
+    unsigned long vector_constructor;
+    unsigned long count;
+    unsigned long i;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: nobody keeps an Archive */
+    }
+    if (tg_mtproto_tl_read_u32(reader, &vector_constructor) !=
+            TG_MTPROTO_TL_OK ||
+        vector_constructor != TG_MTPROTO_TL_VECTOR_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u32(reader, &count) != TG_MTPROTO_TL_OK ||
+        count == 0UL || count > (reader->length - reader->offset) / 20UL) {
+        return;
+    }
+    for (i = 0UL; i < count; ++i) {
+        tg_chat_folder_entry entry;
+        unsigned long ctor;
+
+        if (tg_mtproto_tl_read_u32(reader, &ctor) != TG_MTPROTO_TL_OK ||
+            ctor != TG_MTPROTO_FOLDER_PEER_CONSTRUCTOR ||
+            tg_mtproto_tl_read_u32(reader, &entry.peer_constructor) !=
+                TG_MTPROTO_TL_OK ||
+            (entry.peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+             entry.peer_constructor != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+             entry.peer_constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) ||
+            tg_mtproto_tl_read_u64(reader, &entry.id_hi, &entry.id_lo) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &entry.folder_id) !=
+                TG_MTPROTO_TL_OK) {
+            return;
+        }
+        if (tg_chat_folder_count < TG_CHAT_FOLDER_QUEUE_MAX) {
+            tg_chat_folder_queue[tg_chat_folder_count++] = entry;
+        }
+    }
+}
+
 static void tg_chat_delete_parse_update(tg_mtproto_tl_reader *reader,
                                          unsigned long constructor)
 {
@@ -4064,6 +4120,10 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_delete_parse_update(&reader, constructor);
+        } else if (constructor == TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_folder_parse_update(&reader);
         } else if (constructor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
@@ -4187,6 +4247,10 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     if (update_ctor == TG_MTPROTO_UPDATE_DELETE_MESSAGES_CONSTRUCTOR ||
         update_ctor == TG_MTPROTO_UPDATE_DELETE_CHANNEL_MESSAGES_CONSTRUCTOR) {
         tg_chat_delete_parse_update(reader, update_ctor);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR) {
+        tg_chat_folder_parse_update(reader);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
@@ -9306,6 +9370,10 @@ int tg_mtproto_gui_refresh_peer_cache(const char *api_file,
 #endif
 }
 
+/* Defined with the archived-chats set, further down. */
+static int tg_gui_archived_find(int is_user, unsigned long id_hi,
+                                unsigned long id_lo);
+
 int tg_mtproto_chat_list_parse(const char *path, unsigned long current_index,
                                tg_chat_list_row *rows, int max, int *file_missing)
 {
@@ -9484,6 +9552,24 @@ static void tg_mtproto_print_peer_cache_public(const char *path, FILE *stream,
     if (file_missing) {
         fprintf(stream, "No cached chats yet.\n");
         return;
+    }
+    /* The chats the window keeps in Telegram's Archive stay out of this
+       list too; their numbers still open them. */
+    {
+        int in = 0;
+        int out = 0;
+
+        for (in = 0; in < count; ++in) {
+            if (tg_gui_archived_find(rows[in].is_user, rows[in].peer_id_hi,
+                                     rows[in].peer_id_lo) >= 0) {
+                continue;
+            }
+            if (out != in) {
+                rows[out] = rows[in];
+            }
+            ++out;
+        }
+        count = out;
     }
     tg_mtproto_chat_list_render_console(stream, rows, count);
     /* The GUI pins Saved Messages as the last sidebar row; the console pins
@@ -20968,6 +21054,124 @@ static void tg_gui_hidden_mark_name(char *name)
 
 /* Parse once and keep the cache's public indexes intact. Normal sidebar
    projection omits hidden rows; local search includes them with a marker. */
+/* --- archived chats ------------------------------------------------------
+   Telegram's Archive is folder 1 of the dialog list. The chats in it are
+   kept here by peer, in memory and in data/telegram-archived.txt: the main
+   list leaves them out, the Archive view shows only them. The set is read
+   from the server when the Archive is opened and on Reload chat list
+   (tg_gui_session_archive_refresh), changed by Archive / Unarchive here and
+   by updateFolderPeers when another device moves a chat. */
+#define TG_GUI_ARCHIVED_FILE "data/telegram-archived.txt"
+#define TG_GUI_ARCHIVED_MAX TG_MTPROTO_PEER_CACHE_MAX
+typedef struct tg_gui_archived_peer {
+    int is_user;
+    unsigned long id_hi;
+    unsigned long id_lo;
+} tg_gui_archived_peer;
+static tg_gui_archived_peer tg_gui_archived[TG_GUI_ARCHIVED_MAX];
+static int tg_gui_archived_count = 0;
+static int tg_gui_archived_loaded = 0;
+static int tg_gui_archive_view = 0; /* 1: the sidebar shows the Archive */
+/* How many archived chats the peer cache takes, the most recent ones: the
+   cache is the chat list of every view (and of the text client), so the
+   Archive gets a share of it, not all of it. */
+#if defined(__m68k__)
+#define TG_GUI_ARCHIVE_SHOWN_MAX (TG_MTPROTO_PEER_CACHE_MAX / 4U)
+#else
+#define TG_GUI_ARCHIVE_SHOWN_MAX (TG_MTPROTO_PEER_CACHE_MAX / 2U)
+#endif
+static int tg_gui_archive_partial = 0; /* the last fetch stopped before the end */
+
+static void tg_gui_archived_load(void)
+{
+    FILE *f;
+    int is_user;
+    unsigned long hi;
+    unsigned long lo;
+
+    if (tg_gui_archived_loaded) {
+        return;
+    }
+    tg_gui_archived_loaded = 1;
+    tg_gui_archived_count = 0;
+    f = fopen(TG_GUI_ARCHIVED_FILE, "r");
+    if (f == 0) {
+        return;
+    }
+    while (tg_gui_archived_count < (int)TG_GUI_ARCHIVED_MAX &&
+           fscanf(f, "%d %lx %lx", &is_user, &hi, &lo) == 3) {
+        tg_gui_archived[tg_gui_archived_count].is_user = is_user ? 1 : 0;
+        tg_gui_archived[tg_gui_archived_count].id_hi = hi;
+        tg_gui_archived[tg_gui_archived_count].id_lo = lo;
+        ++tg_gui_archived_count;
+    }
+    fclose(f);
+}
+
+static void tg_gui_archived_save(void)
+{
+    FILE *f;
+    int i;
+
+    if (tg_gui_archived_count == 0) {
+        remove(TG_GUI_ARCHIVED_FILE);
+        return;
+    }
+    (void)mkdir("data", 0777);
+    f = tg_file_fopen_replace(TG_GUI_ARCHIVED_FILE, "w");
+    if (f == 0) {
+        return;
+    }
+    for (i = 0; i < tg_gui_archived_count; ++i) {
+        fprintf(f, "%d %08lx %08lx\n", tg_gui_archived[i].is_user,
+                tg_gui_archived[i].id_hi, tg_gui_archived[i].id_lo);
+    }
+    fclose(f);
+}
+
+static int tg_gui_archived_find(int is_user, unsigned long id_hi,
+                                unsigned long id_lo)
+{
+    int i;
+
+    tg_gui_archived_load();
+    for (i = 0; i < tg_gui_archived_count; ++i) {
+        if (tg_gui_archived[i].is_user == (is_user ? 1 : 0) &&
+            tg_gui_archived[i].id_hi == id_hi &&
+            tg_gui_archived[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* Returns 1 when the set changed. */
+static int tg_gui_archived_set(int is_user, unsigned long id_hi,
+                               unsigned long id_lo, int archived)
+{
+    int at = tg_gui_archived_find(is_user, id_hi, id_lo);
+
+    if (archived) {
+        if (at >= 0 || tg_gui_archived_count >= (int)TG_GUI_ARCHIVED_MAX ||
+            (id_hi == 0UL && id_lo == 0UL)) {
+            return 0;
+        }
+        tg_gui_archived[tg_gui_archived_count].is_user = is_user ? 1 : 0;
+        tg_gui_archived[tg_gui_archived_count].id_hi = id_hi;
+        tg_gui_archived[tg_gui_archived_count].id_lo = id_lo;
+        ++tg_gui_archived_count;
+        return 1;
+    }
+    if (at < 0) {
+        return 0;
+    }
+    memmove(&tg_gui_archived[at], &tg_gui_archived[at + 1],
+            (size_t)(tg_gui_archived_count - at - 1) *
+                sizeof(tg_gui_archived[0]));
+    --tg_gui_archived_count;
+    return 1;
+}
+
 static int tg_gui_chat_list_project(const char *cache_path,
                                     const char *hidden_path,
                                     unsigned long current_index,
@@ -20990,6 +21194,14 @@ static int tg_gui_chat_list_project(const char *cache_path,
         if (hidden && !include_hidden) {
             continue;
         }
+        /* The main list leaves the archived chats out and the Archive view
+           shows only them; the name filter (include_hidden) sees them all. */
+        if (!include_hidden &&
+            (tg_gui_archived_find(rows[i].is_user, rows[i].peer_id_hi,
+                                  rows[i].peer_id_lo) >= 0) !=
+                (tg_gui_archive_view != 0)) {
+            continue;
+        }
         if (out != i) {
             rows[out] = rows[i];
         }
@@ -21007,9 +21219,14 @@ static int tg_gui_hidden_projection_self_test(void)
     static const char cache_path[] = "tg-hidden-cache-selftest.tmp";
     static const char hidden_path[] = "tg-hidden-list-selftest.tmp";
     tg_chat_list_row rows[4];
+    tg_gui_archived_peer saved_first;
     FILE *f;
     int missing;
     int count;
+    int saved_loaded;
+    int saved_count;
+    int saved_view;
+    int ok;
 
     f = tg_file_fopen_replace(cache_path, "w");
     if (f == 0) {
@@ -21032,26 +21249,72 @@ static int tg_gui_hidden_projection_self_test(void)
     fputs("00000000 00000002\n", f);
     fclose(f);
 
+    /* An empty archived set of its own: the drawer's real one is left
+       alone, and put back at the end. */
+    saved_loaded = tg_gui_archived_loaded;
+    saved_count = tg_gui_archived_count;
+    saved_view = tg_gui_archive_view;
+    saved_first = tg_gui_archived[0];
+    tg_gui_archived_loaded = 1;
+    tg_gui_archived_count = 0;
+    tg_gui_archive_view = 0;
+    ok = 1;
     missing = 0;
     count = tg_gui_chat_list_project(cache_path, hidden_path, 0UL, rows, 4,
                                      &missing, 0, 0);
     if (missing || count != 2 || rows[0].index != 1UL ||
         rows[1].index != 3UL) {
-        remove(cache_path);
-        remove(hidden_path);
         puts("probe self-test: hidden sidebar projection wrong");
-        return 2;
+        ok = 0;
     }
-    count = tg_gui_chat_list_project(cache_path, hidden_path, 0UL, rows, 4,
-                                     &missing, 1, 1);
+    /* The group goes to the Archive: the main list keeps the first chat
+       only, the Archive view shows the group alone, and the name filter
+       still sees every chat. A user with the same id is another peer. */
+    if (ok && (!tg_gui_archived_set(0, 0UL, 3UL, 1) ||
+               tg_gui_archived_set(0, 0UL, 3UL, 1) ||
+               tg_gui_archived_find(1, 0UL, 3UL) >= 0)) {
+        puts("probe self-test: the archived set does not hold a chat");
+        ok = 0;
+    }
+    if (ok) {
+        count = tg_gui_chat_list_project(cache_path, hidden_path, 0UL, rows,
+                                         4, &missing, 0, 0);
+        if (count != 1 || rows[0].index != 1UL) {
+            puts("probe self-test: an archived chat stays in the main list");
+            ok = 0;
+        }
+    }
+    if (ok) {
+        tg_gui_archive_view = 1;
+        count = tg_gui_chat_list_project(cache_path, hidden_path, 0UL, rows,
+                                         4, &missing, 0, 0);
+        tg_gui_archive_view = 0;
+        if (count != 1 || rows[0].index != 3UL) {
+            puts("probe self-test: the Archive view does not list its chat");
+            ok = 0;
+        }
+    }
+    if (ok) {
+        count = tg_gui_chat_list_project(cache_path, hidden_path, 0UL, rows,
+                                         4, &missing, 1, 1);
+        if (missing || count != 3 || rows[1].index != 2UL ||
+            strcmp(rows[1].name, "Hidden Peer (hidden)") != 0) {
+            puts("probe self-test: hidden filter projection wrong");
+            ok = 0;
+        }
+    }
+    if (ok && (!tg_gui_archived_set(0, 0UL, 3UL, 0) ||
+               tg_gui_archived_count != 0)) {
+        puts("probe self-test: a chat does not leave the archived set");
+        ok = 0;
+    }
     remove(cache_path);
     remove(hidden_path);
-    if (missing || count != 3 || rows[1].index != 2UL ||
-        strcmp(rows[1].name, "Hidden Peer (hidden)") != 0) {
-        puts("probe self-test: hidden filter projection wrong");
-        return 2;
-    }
-    return 0;
+    tg_gui_archived[0] = saved_first;
+    tg_gui_archived_count = saved_count;
+    tg_gui_archived_loaded = saved_loaded;
+    tg_gui_archive_view = saved_view;
+    return ok ? 0 : 2;
 }
 #endif /* !TG_NO_SELFTEST */
 
@@ -21874,6 +22137,12 @@ static void tg_gui_session_reselect_open(void)
             return;
         }
     }
+    /* The open chat is not in this list (it sits in the Archive while the
+       main list shows, or the other way round): no row is the open one. */
+    if (tg_gui_session_state.current_peer_index[0] != '\0' &&
+        (tg_gui_archived_count > 0 || tg_gui_archive_view)) {
+        gst->selected_chat = -1;
+    }
 }
 
 static void tg_gui_session_reload_chats(void)
@@ -21889,13 +22158,19 @@ static void tg_gui_session_reload_chats(void)
     count = tg_gui_chat_list_project(tg_gui_session_state.peer_cache_file,
                                      TG_GUI_HIDDEN_FILE, 0UL, rows,
                                      TG_CHAT_LIST_MAX, &missing, 0, 0);
-    tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+    if (!tg_gui_archive_view) {
+        tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+    }
     tg_gui_pins_apply(rows, count);
     /* ALWAYS fire, even with count 0: skipping the callback on an emptied
        list left the window's chat_count stale, and the remove flow then
        opened a neighbour from rows that no longer existed (stuck UI). */
     tg_gui_session_state.driver.on_chat_list_changed(
         tg_gui_session_state.driver.ctx, rows, count);
+    if (tg_gui_session_state.gui_driver.state != 0) {
+        tg_gui_session_state.gui_driver.state->archive_view =
+            tg_gui_archive_view;
+    }
     tg_gui_session_reselect_open();
 }
 
@@ -22116,6 +22391,10 @@ int tg_gui_session_unhide_chat(unsigned long peer_index, FILE *stream)
         return rc;
     }
     tg_gui_hidden_forget(ph, pl);
+    /* A chat picked by name is shown in the list it lives in. */
+    tg_gui_archive_view =
+        tg_gui_archived_find(pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR, ph, pl) >=
+        0;
     return 0;
 }
 
@@ -22204,6 +22483,7 @@ int tg_gui_session_reload_chat_list(FILE *stream)
         }
         tg_mtproto_close_quiet_stream(q, stream);
         (void)tg_gui_session_fetch_pins(stream); /* pins changed elsewhere */
+        (void)tg_gui_session_archive_refresh(stream); /* and the Archive */
         tg_gui_session_reload_chats();
         return 0;
     }
@@ -22473,6 +22753,11 @@ static int tg_gui_search_open_entry(const tg_mtproto_peer_cache_entry *selected,
     if (tg_gui_search_cache_entry(selected, stream, 1, &idx) != 0) {
         return 1;
     }
+    /* The list the chat lives in: the Archive for an archived one. */
+    tg_gui_archive_view =
+        tg_gui_archived_find(
+            selected->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+            selected->id_hi, selected->id_lo) >= 0;
 
     tg_gui_session_reload_chats();
     {
@@ -22802,8 +23087,17 @@ int tg_gui_session_search_global_open(unsigned long hit, FILE *stream)
         return -1;
     }
     if (idx != tg_gui_session_current_peer_index()) {
-        /* Another chat: the real list for a moment, to select and name the
-           row the usual way, then the chat itself. */
+        /* Another chat: the real list for a moment (the Archive for an
+           archived chat), to select and name the row the usual way, then
+           the chat itself. */
+        if (!e->is_self) {
+            tg_gui_archive_view =
+                tg_gui_archived_find(
+                    e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                    e->id_hi, e->id_lo) >= 0;
+        } else {
+            tg_gui_archive_view = 0;
+        }
         tg_gui_session_reload_chats();
         for (k = 0; k < gst->chat_count; ++k) {
             if (gst->chats[k].index == idx) {
@@ -23039,6 +23333,325 @@ openable:
         }
     }
     return tg_gui_search_openable_n;
+}
+
+/* --- the Archive: read it, show it, move chats in and out ---------------- */
+
+int tg_gui_session_archive_view(void)
+{
+    return tg_gui_archive_view;
+}
+
+/* Public: show the Archive (1) or the main list (0) in the sidebar. */
+void tg_gui_session_set_archive_view(int on)
+{
+    tg_gui_archive_view = on ? 1 : 0;
+    tg_gui_session_reload_chats();
+}
+
+int tg_gui_session_archived_count(void)
+{
+    tg_gui_archived_load();
+    return tg_gui_archived_count;
+}
+
+/* 1 when the last read of the Archive stopped before its end (a large
+   Archive: the list shows its most recent chats). */
+int tg_gui_session_archive_partial(void)
+{
+    return tg_gui_archive_partial;
+}
+
+/* Public: read the Archive (folder 1 of the dialog list) from Telegram. The
+   archived chats found are added to the peer cache when they were not in it,
+   so they open like any other chat, and the archived set becomes what the
+   server says: a chat another device brought back to the main list returns
+   to it here. When the Archive is larger than one fetch can hold, the chats
+   seen are added to the set and the others are left as they were. Returns
+   the number of archived chats known, or -1 when the fetch failed (the set
+   then stays as it was). Does not redraw the list. */
+int tg_gui_session_archive_refresh(FILE *stream)
+{
+    unsigned char query[128];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+    unsigned long prev_timeout;
+    unsigned long page;
+    unsigned long offset_date;
+    unsigned long offset_id;
+    unsigned long offset_pc;
+    unsigned long offset_hi;
+    unsigned long offset_lo;
+    unsigned long offset_ahh;
+    unsigned long offset_ahl;
+    unsigned long gathered;
+    unsigned long i;
+    int offset_hah;
+    int iter;
+    int pages;
+    int complete;
+    int cache_changed;
+    static const char label[] = "gui messages.getDialogs archive";
+
+    if (!tg_gui_session_state.open || stream == 0 ||
+        tg_mtproto_parse_ulong_arg(TG_GUI_RELOAD_PAGE, &page) != 0) {
+        return -1;
+    }
+    tg_gui_archived_load();
+    tg_gui_log("archive: refresh start");
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(12UL);
+    /* The pages gather in tg_gui_search_results (the online picker's list is
+       replaced), each one parsed in tg_gui_probe_cache first. */
+    tg_gui_search_openable_n = 0;
+    tg_gui_search_results.count = 0UL;
+    pages = 0;
+    /* Every archived dialog came back when a page brings none that is new,
+       or fewer than asked: only then is a chat missing from the fetch out
+       of the Archive. A fetch that stops on a failure, on the page budget
+       or on a full list is partial. */
+    complete = 0;
+    gathered = 0UL;
+    offset_date = 0UL;
+    offset_id = 0UL;
+    offset_pc = 0UL;
+    offset_hi = 0UL;
+    offset_lo = 0UL;
+    offset_ahh = 0UL;
+    offset_ahl = 0UL;
+    offset_hah = 0;
+    for (iter = 0; iter < TG_GUI_RELOAD_PAGES; ++iter) {
+        const tg_mtproto_peer_cache_entry *last = 0;
+        unsigned long in_page = 0UL;
+        unsigned long fresh = 0UL;
+        int rc;
+        char line[96];
+
+        if (gathered >= TG_GUI_ARCHIVE_SHOWN_MAX) {
+            break; /* as many as the list will take */
+        }
+
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        /* The pinned dialogs come with the first page only. */
+        if (tg_mtproto_build_messages_get_dialogs_folder_page(
+                &writer, 1UL, pages > 0, page, offset_date, offset_id,
+                offset_pc, offset_hi, offset_lo, offset_ahh, offset_ahl,
+                offset_hah) != TG_MTPROTO_TL_OK) {
+            break;
+        }
+        memset(&result, 0, sizeof(result));
+        rc = tg_mtproto_send_saved_query_on_context(
+            tg_gui_session_state.host, tg_gui_session_state.port,
+            tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+            tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+            query, writer.length, &result, quiet, label, 600U);
+        if (rc != 0 ||
+            result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
+            tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
+            tg_mtproto_parse_dialog_peer_cache(
+                result.result_constructor, result.result_body,
+                result.result_body_length, &tg_gui_probe_cache) !=
+                TG_MTPROTO_TL_OK) {
+            break;
+        }
+        ++pages;
+        /* The server sends the main list's pinned chats along with the
+           first page of the Archive: only folder 1 counts, here and below. */
+        for (i = 0UL; i < tg_gui_probe_cache.count; ++i) {
+            const tg_mtproto_peer_cache_entry *e =
+                &tg_gui_probe_cache.entries[i];
+
+            if (!e->from_dialog || e->is_self || e->folder_id != 1UL) {
+                continue;
+            }
+            ++in_page;
+            if (e->top_message != 0UL) {
+                last = e;
+            }
+            if (tg_gui_search_results.count == 0UL ||
+                tg_mtproto_peer_cache_find_local(
+                    &tg_gui_search_results, e->peer_constructor, e->id_hi,
+                    e->id_lo) == 0) {
+                ++fresh;
+            }
+        }
+        /* The next page starts after the last archived dialog of this one,
+           found by its top message: the date is in the reply's messages. */
+        if (last != 0) {
+            offset_id = last->top_message;
+            offset_pc = last->peer_constructor;
+            offset_hi = last->id_hi;
+            offset_lo = last->id_lo;
+            offset_ahh = last->access_hash_hi;
+            offset_ahl = last->access_hash_lo;
+            offset_hah = last->has_access_hash;
+            offset_date = tg_mtproto_find_message_date(
+                result.result_body, result.result_body_length, offset_pc,
+                offset_hi, offset_lo, offset_id);
+        } else {
+            offset_date = 0UL;
+        }
+        if (tg_gui_search_results.count == 0UL) {
+            tg_gui_search_results = tg_gui_probe_cache;
+        } else {
+            tg_mtproto_merge_peer_cache(&tg_gui_search_results,
+                                        &tg_gui_probe_cache);
+        }
+        gathered += fresh;
+        sprintf(line, "archive: page %d archived=%lu new=%lu held=%lu date=%d",
+                pages, in_page % 100000UL, fresh % 100000UL,
+                tg_gui_search_results.count % 100000UL, offset_date != 0UL);
+        tg_gui_log(line);
+        if (fresh == 0UL || in_page < page) {
+            complete = 1;
+            break;
+        }
+        if (offset_date == 0UL ||
+            tg_gui_search_results.count >= TG_MTPROTO_PEER_CACHE_MAX) {
+            break; /* no way to ask the next page, or the list is full */
+        }
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (pages == 0) {
+        tg_gui_search_results.count = 0UL;
+        /* The probe cache was scratch space: back to the real list. */
+        (void)tg_mtproto_load_peer_cache_file(
+            tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache);
+        tg_gui_log("archive: refresh failed");
+        return -1;
+    }
+    if (complete) {
+        tg_gui_archived_count = 0;
+    }
+    tg_gui_archive_partial = !complete;
+    cache_changed = 0;
+    if (tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
+                                        &tg_gui_probe_cache) != 0) {
+        tg_gui_probe_cache.count = 0UL;
+    }
+    {
+        unsigned long kept = 0UL;
+        unsigned long other = 0UL;
+        unsigned long listed = 0UL; /* archived chats the cache holds */
+        char line[96];
+
+        for (i = 0UL; i < tg_gui_search_results.count; ++i) {
+            const tg_mtproto_peer_cache_entry *e =
+                &tg_gui_search_results.entries[i];
+
+            if (e->is_self || !e->from_dialog ||
+                !tg_mtproto_peer_cache_entry_is_openable(e)) {
+                continue;
+            }
+            /* Only the dialogs the server itself marks as archived. */
+            if (e->folder_id != 1UL) {
+                ++other;
+                continue;
+            }
+            ++kept;
+            (void)tg_gui_archived_set(
+                e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                e->id_hi, e->id_lo, 1);
+            /* Into the peer cache when new: the most recent ones up to the
+               Archive's share, a few slots left free for the chats a search
+               adds. top_message 0 keeps it out of the paging offset of the
+               main list (Reload chat list pages from the last dialog). */
+            if (tg_mtproto_peer_cache_find_local(&tg_gui_probe_cache,
+                                                 e->peer_constructor,
+                                                 e->id_hi, e->id_lo) != 0) {
+                ++listed;
+            } else if (listed < TG_GUI_ARCHIVE_SHOWN_MAX &&
+                       tg_gui_probe_cache.count + 8UL <
+                           TG_MTPROTO_PEER_CACHE_MAX) {
+                ++listed;
+                tg_mtproto_peer_cache_entry *slot =
+                    &tg_gui_probe_cache.entries[tg_gui_probe_cache.count];
+
+                *slot = *e;
+                slot->top_message = 0UL;
+                tg_gui_probe_cache.count += 1UL;
+                cache_changed = 1;
+            }
+        }
+        sprintf(line, "archive: kept=%lu other_folder=%lu complete=%d",
+                kept % 100000UL, other % 100000UL, complete);
+        tg_gui_log(line);
+    }
+    if (cache_changed) {
+        (void)tg_mtproto_save_peer_cache_file(
+            tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache, 0,
+            "chat cache");
+    }
+    tg_gui_archived_save();
+    tg_gui_search_results.count = 0UL;
+    tg_gui_log("archive: refresh done");
+    return tg_gui_archived_count;
+}
+
+/* Public: archive (archived = 1) or bring back (0) the chat at this 1-based
+   cache index on Telegram, then redraw the list. 0 = done, 2 = failed. */
+int tg_gui_session_set_archived(unsigned long peer_index, int archived,
+                                FILE *stream)
+{
+    unsigned char query[64];
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    static const char label[] = "mtproto folders.editPeerFolders";
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, label) != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_folders_edit_peer_folder(
+            &writer, archived ? 1UL : 0UL, pc, ph, pl, ahh, ahl, hah) !=
+        TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, query,
+        writer.length, &result, quiet, label, 16U);
+    if (rc != 0) {
+        rc = 2;
+    } else if (result.result_constructor ==
+               TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+        rc = 2;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return rc;
+    }
+    if (tg_gui_archived_set(pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR, ph, pl,
+                            archived)) {
+        tg_gui_archived_save();
+    }
+    tg_gui_session_reload_chats();
+    return 0;
 }
 
 /* UTF-8 (wire) -> Latin-1 (GUI display), for search-result titles that reach
@@ -27984,12 +28597,47 @@ unsigned int tg_gui_session_take_changes(void)
     return changes;
 }
 
+/* Chats another device (or the server, when a message arrives in an
+   archived chat that is not muted) moved in or out of the Archive. */
+static int tg_gui_session_apply_folder_updates(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    unsigned long i;
+    int changed = 0;
+
+    for (i = 0UL; i < tg_chat_folder_count; ++i) {
+        const tg_chat_folder_entry *entry = &tg_chat_folder_queue[i];
+
+        if (tg_gui_archived_set(
+                entry->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                entry->id_hi, entry->id_lo, entry->folder_id == 1UL)) {
+            changed = 1;
+        }
+    }
+    tg_chat_folder_count = 0UL;
+    if (!changed) {
+        return 0;
+    }
+    tg_gui_archived_save();
+    tg_gui_log("archive: changed elsewhere");
+    /* Redraw the list unless it shows something else (search results, the
+       name filter, a forward picker): those put the list back themselves. */
+    if (gst != 0 && !gst->in_search && !gst->in_filter &&
+        !gst->forward_pick_active) {
+        tg_gui_session_reload_chats();
+    }
+    return 1;
+}
+
 static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
 {
     int dirty;
 
     dirty = 0;
     if (tg_gui_session_apply_edit_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_folder_updates()) {
         dirty = 1;
     }
     if (tg_gui_session_apply_delete_updates()) {

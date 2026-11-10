@@ -293,6 +293,23 @@ int tg_gui_session_search_global(const char *query, FILE *stream);
    -2 = the hit list is gone (search again). */
 int tg_gui_session_search_global_open(unsigned long hit, FILE *stream);
 
+/* The Archive (folder 1 of Telegram's dialog list). The sidebar shows either
+   the main list, without the archived chats, or the Archive. */
+int tg_gui_session_archive_view(void);       /* 1: the Archive is on show */
+void tg_gui_session_set_archive_view(int on); /* switches and redraws */
+int tg_gui_session_archived_count(void);     /* archived chats known */
+int tg_gui_session_archive_partial(void);    /* 1: the last read was cut short */
+
+/* Reads the Archive from Telegram: the archived chats become openable (they
+   join the peer cache) and the archived set follows the server. Returns the
+   number of archived chats known, -1 when the fetch failed. No redraw. */
+int tg_gui_session_archive_refresh(FILE *stream);
+
+/* Archives (1) or brings back to the main list (0) the chat at this 1-based
+   cache index, on Telegram, then redraws the list. 0 = done, 2 = failed. */
+int tg_gui_session_set_archived(unsigned long peer_index, int archived,
+                                FILE *stream);
+
 /* 1 when the chat with this peer id is pinned on Telegram (as last read). */
 int tg_gui_session_chat_pinned(unsigned long peer_id_hi,
                                unsigned long peer_id_lo);

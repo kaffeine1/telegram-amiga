@@ -433,6 +433,10 @@ typedef struct tg_gui_state {
        index is then its number in the session's hit list, from 1. Read
        only while msg_search_active is set. */
     int msg_search_global;
+    /* The sidebar lists Telegram's Archive instead of the main list (set by
+       the session whenever it projects the list). The open chat may then be
+       in neither: selected_chat is -1 and no row is highlighted. */
+    int archive_view;
     int focus_tint_unseen; /* the screen gave the row tint the background's
                               own pen (too few colours): the arrow focus gets
                               a frame, as the tint alone would not show */
@@ -855,6 +859,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
 #define TG_GUI_CTX_CHAT_PIN 35 /* Pin / Unpin the chat on Telegram */
 #define TG_GUI_CTX_CHAT_FIND 36 /* Find in chat, in the menu over the chat */
+#define TG_GUI_CTX_CHAT_ARCHIVE 37 /* Archive, or Unarchive in the Archive */
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a

@@ -28,6 +28,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   in the chat list is added to it when opened this way.
 - /find words in the text client: it searches the messages of the open
   chat and prints the newest ten found, like a page of history.
+- The Archive. Archived chats (Amigram menu, Amiga+A) shows the chats
+  kept in Telegram's Archive in place of the chat list; ESC, or the menu
+  item again, goes back. They open like any other chat. Archive in a
+  chat's menu (right click on its row) moves it there and Unarchive, in
+  the Archive, brings it back; both reach the other devices, and a chat
+  moved on another device follows here. A large Archive shows its most
+  recent chats (64, or 16 on 68k). The text client leaves the archived
+  chats out of /list.
 - Pinned chats. The chats pinned on Telegram (on the phone, in the
   desktop client or here) come first in the chat list, in Telegram's
   order, with a pin mark at the right of the row where the unread badge

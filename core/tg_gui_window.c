@@ -560,6 +560,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_SUPPORT 35
 #define TG_MENU_FINDCHAT 36
 #define TG_MENU_FINDALL 37
+#define TG_MENU_ARCHIVE 38
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -7046,6 +7047,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_REMOVE },
     { NM_ITEM,  (STRPTR)"Reload chat list", 0, 0, 0,
       (APTR)TG_MENU_RELOAD },
+    { NM_ITEM,  (STRPTR)"Archived chats", (STRPTR)"A", 0, 0,
+      (APTR)TG_MENU_ARCHIVE },
     { NM_ITEM,  (STRPTR)"Send file...", (STRPTR)"F", 0, 0,
       (APTR)TG_MENU_SENDFILE },
     { NM_ITEM,  (STRPTR)"Send photo...", (STRPTR)"P", 0, 0,
@@ -9365,6 +9368,73 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
                                           ? "No chats found"
                                           : "No match - try a name or @username"));
     }
+    tg_gui_window_paint(state, backend);
+}
+
+/* --- The Archive ---------------------------------------------------------- */
+
+/* Show Telegram's Archive in the sidebar (on = 1) or go back to the main
+   list (0). Entering reads the Archive from the server first; when that
+   fails the archived chats already known are shown. The open chat stays
+   open: it may then be in neither list, with no row highlighted. */
+static void tg_gui_window_show_archive(tg_gui_state *state,
+                                       tg_gui_backend *backend, int on)
+{
+    char line[TG_GUI_NAME_MAX];
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        state->forward_pick_active) {
+        return;
+    }
+    /* The search box and its result lists give way first. */
+    state->search_active = 0;
+    state->msg_search_active = 0;
+    state->msg_search_global = 0;
+    state->search_query[0] = '\0';
+    state->search_caret = 0;
+    state->in_search = 0;
+    state->in_filter = 0;
+    state->nav_chat = -1;
+    state->chat_scroll = 0;
+    if (on) {
+        int n;
+        int fresh;
+
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Reading the archive...");
+        tg_gui_window_paint(state, backend);
+        n = tg_gui_session_archive_refresh(stdout);
+        fresh = n >= 0;
+        if (!fresh) {
+            n = tg_gui_session_archived_count();
+        }
+        if (n <= 0) {
+            tg_gui_session_set_archive_view(0);
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               fresh ? "The archive is empty"
+                                     : "Could not read the archive (network?)");
+        } else {
+            tg_gui_session_set_archive_view(1);
+            /* A large Archive shows its most recent chats only. */
+            if (!fresh) {
+                sprintf(line, "Archive (offline): %d chats - ESC goes back",
+                        state->chat_count % 10000);
+            } else if (tg_gui_session_archive_partial() ||
+                       state->chat_count < n) {
+                sprintf(line, "Archive: newest %d chats - ESC goes back",
+                        state->chat_count % 10000);
+            } else {
+                sprintf(line, "Archive: %d chats - ESC goes back",
+                        state->chat_count % 10000);
+            }
+            tg_gui_window_copy(state->status, sizeof(state->status), line);
+        }
+    } else {
+        tg_gui_session_set_archive_view(0);
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Live - F1-F10 chats, Amiga+Q quits");
+    }
+    state->chat_scroll_to_sel = 1;
     tg_gui_window_paint(state, backend);
 }
 
@@ -12283,6 +12353,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 case 'Q': key_menu_action = (APTR)TG_MENU_QUIT; break;
                 case 'S': key_menu_action = (APTR)TG_MENU_FINDCHAT; break;
                 case 'G': key_menu_action = (APTR)TG_MENU_FINDALL; break;
+                case 'A': key_menu_action = (APTR)TG_MENU_ARCHIVE; break;
                 default: break; /* unknown shortcut: swallowed, never typed */
                 }
                 msg_class = 0; /* consumed: keep it out of every text field */
@@ -12695,7 +12766,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    closed the program as soon as a word was typed before
                    clicking the text field, and ESC after the ESC that
                    cancels typing closed it too. */
-                if ((msg_code == 13 || msg_code == 10) &&
+                if (msg_code == 27 && state->archive_view) {
+                    /* ESC with nothing else to cancel: back from the
+                       Archive to the main list. */
+                    tg_gui_window_show_archive(state, &backend, 0);
+                } else if ((msg_code == 13 || msg_code == 10) &&
                            state->nav_chat >= 0 &&
                            state->nav_chat != state->selected_chat &&
                            state->nav_chat < state->chat_count &&
@@ -13010,6 +13085,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_begin_msg_search(state, &backend, 0);
                         } else if (ud == (APTR)TG_MENU_FINDALL) {
                             tg_gui_window_begin_msg_search(state, &backend, 1);
+                        } else if (ud == (APTR)TG_MENU_ARCHIVE) {
+                            tg_gui_window_show_archive(
+                                state, &backend, !state->archive_view);
                         } else if (ud == (APTR)TG_MENU_SENDFILE) {
                             tg_gui_window_send_file(state, ctx.window,
                                                     &backend);
@@ -13842,6 +13920,37 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (it == TG_GUI_CTX_CHAT_FIND) {
                         /* Find in chat, from the menu over the open chat. */
                         tg_gui_window_begin_msg_search(state, &backend, 0);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_ARCHIVE) {
+                        int want = state->archive_view ? 0 : 1;
+                        int arc;
+
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           want ? "Archiving..."
+                                                : "Bringing it back...");
+                        tg_gui_window_paint(state, &backend);
+                        arc = tg_gui_session_set_archived(
+                            state->chats[ci].index, want, stdout);
+                        state->nav_chat = -1;
+                        if (arc != 0) {
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status),
+                                               "Could not move the chat");
+                        } else if (!want &&
+                                   tg_gui_session_archived_count() == 0) {
+                            /* The last one left the Archive: nothing to
+                               show there any more. */
+                            tg_gui_window_show_archive(state, &backend, 0);
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status),
+                                               "Back in your chats");
+                        } else {
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                want ? "Archived (Amigram menu, Archived chats)"
+                                     : "Back in your chats");
+                        }
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_PIN) {
                         int want = state->chats[ci].pinned ? 0 : 1;

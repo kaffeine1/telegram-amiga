@@ -374,6 +374,7 @@ typedef struct tg_mtproto_dialog_peer {
     unsigned long unread_count;
     unsigned long read_outbox_max_id; /* peer has read our msgs up to this id */
     int pinned;                       /* dialog flags.2: pinned to the top */
+    unsigned long folder_id;          /* dialog flags.4: 1 = in the Archive */
 } tg_mtproto_dialog_peer;
 
 typedef struct tg_mtproto_dialog_peer_list {
@@ -404,6 +405,9 @@ typedef struct tg_mtproto_peer_cache_entry {
     int is_self;
     int is_bot;
     int from_dialog;
+    /* The folder its dialog came in (1 = the Archive), as the last dialog
+       list read said. In memory only: the peers file does not keep it. */
+    unsigned long folder_id;
     char title[128];
     char username[96];
     /* Avatar v1: profile-photo id/dc + inline stripped thumb, captured from
@@ -709,6 +713,43 @@ tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
     unsigned long access_hash_hi,
     unsigned long access_hash_lo,
     int has_access_hash);
+
+/* folders.editPeerFolders for one chat: folder_id 1 archives it, 0 brings
+   it back to the main list. */
+tg_mtproto_tl_status tg_mtproto_build_folders_edit_peer_folder(
+    tg_mtproto_tl_writer *writer,
+    unsigned long folder_id,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+
+/* One page of a folder's dialogs (0 the main list, 1 the Archive). The page
+   after a dialog is asked with the date and id of its top message and its
+   peer; exclude_pinned leaves the pinned dialogs out of later pages. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_dialogs_folder_page(
+    tg_mtproto_tl_writer *writer,
+    unsigned long folder_id,
+    int exclude_pinned,
+    unsigned long limit,
+    unsigned long offset_date,
+    unsigned long offset_id,
+    unsigned long offset_peer_constructor,
+    unsigned long offset_peer_id_hi,
+    unsigned long offset_peer_id_lo,
+    unsigned long offset_access_hash_hi,
+    unsigned long offset_access_hash_lo,
+    int offset_has_access_hash);
+
+/* The date of a message of a chat inside a reply body, 0 when absent. */
+unsigned long tg_mtproto_find_message_date(const unsigned char *body,
+                                           unsigned long body_length,
+                                           unsigned long peer_constructor,
+                                           unsigned long peer_id_hi,
+                                           unsigned long peer_id_lo,
+                                           unsigned long message_id);
 
 /* messages.search in one chat (no filter, newest first, below offset_id
    when non-zero). query_utf8 must be non-empty. */

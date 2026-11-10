@@ -44,6 +44,8 @@
 #define TG_MESSAGES_SEARCH_GLOBAL_CONSTRUCTOR 0x4bc6589aUL
 #define TG_MESSAGES_GET_PINNED_DIALOGS_CONSTRUCTOR 0xd6b94df2UL
 #define TG_MESSAGES_TOGGLE_DIALOG_PIN_CONSTRUCTOR 0xa731e257UL
+#define TG_FOLDERS_EDIT_PEER_FOLDERS_CONSTRUCTOR 0x6847d0abUL
+#define TG_INPUT_FOLDER_PEER_CONSTRUCTOR 0xfbd2c296UL
 #define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
 #define TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR 0xfe05dc9aUL
 /* messages.forwardMessages#978928ca at layer 214, verified against the
@@ -852,6 +854,32 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_dialogs_page(
     unsigned long offset_access_hash_lo,
     int offset_has_access_hash)
 {
+    return tg_mtproto_build_messages_get_dialogs_folder_page(
+        writer, 0UL, 0, limit, 0UL, offset_id, offset_peer_constructor,
+        offset_peer_id_hi, offset_peer_id_lo, offset_access_hash_hi,
+        offset_access_hash_lo, offset_has_access_hash);
+}
+
+/* messages.getDialogs#a0f4cb4f flags:# exclude_pinned:flags.0?true
+   folder_id:flags.1?int offset_date:int offset_id:int offset_peer:InputPeer
+   limit:int hash:long (layer 214 schema, checked 2026-11-10). One page of a
+   folder's dialogs: 0 the main list, 1 the Archive. The next page starts
+   after a dialog given by the date and id of its top message and its peer;
+   without the date the server answers with the first page again. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_dialogs_folder_page(
+    tg_mtproto_tl_writer *writer,
+    unsigned long folder_id,
+    int exclude_pinned,
+    unsigned long limit,
+    unsigned long offset_date,
+    unsigned long offset_id,
+    unsigned long offset_peer_constructor,
+    unsigned long offset_peer_id_hi,
+    unsigned long offset_peer_id_lo,
+    unsigned long offset_access_hash_hi,
+    unsigned long offset_access_hash_lo,
+    int offset_has_access_hash)
+{
     tg_mtproto_tl_status status;
 
     if (writer == 0 || limit == 0UL) {
@@ -861,16 +889,17 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_dialogs_page(
                                      TG_MESSAGES_GET_DIALOGS_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
         /* flags bit1: folder_id present. folder_id 0 = the MAIN folder only,
-           so archived chats stay out of the sidebar (0.0.8; archive
-           management itself is a future release). Without the flag the
-           server returns archived dialogs mixed in. */
-        status = tg_mtproto_tl_write_u32(writer, 2UL);
+           so archived chats stay out of the sidebar; 1 = the Archive, read
+           on its own. Without the flag the server returns archived dialogs
+           mixed in. */
+        status = tg_mtproto_tl_write_u32(writer,
+                                         exclude_pinned ? 3UL : 2UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* folder_id: main */
+        status = tg_mtproto_tl_write_u32(writer, folder_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset_date */
+        status = tg_mtproto_tl_write_u32(writer, offset_date);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, offset_id);
@@ -1222,6 +1251,48 @@ tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
+    }
+    return status;
+}
+
+/* folders.editPeerFolders#6847d0ab folder_peers:Vector<InputFolderPeer>
+   = Updates, with inputFolderPeer#fbd2c296 peer:InputPeer folder_id:int
+   (layer 214 schema, checked 2026-11-10). Moves one chat to a folder: 1 the
+   Archive, 0 back to the main list. */
+tg_mtproto_tl_status tg_mtproto_build_folders_edit_peer_folder(
+    tg_mtproto_tl_writer *writer,
+    unsigned long folder_id,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_FOLDERS_EDIT_PEER_FOLDERS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_FOLDER_PEER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, folder_id);
     }
     return status;
 }
@@ -3764,7 +3835,7 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 16UL) != 0UL &&
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_tl_read_u32(reader, &peer->folder_id) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 32UL) != 0UL &&
@@ -6673,6 +6744,7 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_cache(
             if (entry != 0) {
                 entry->top_message = peer.top_message;
                 entry->unread_count = peer.unread_count;
+                entry->folder_id = peer.folder_id;
                 entry->from_dialog = 1;
             }
         }
@@ -7663,6 +7735,20 @@ static int tg_message_cut_self_test(void)
             dests[1].id_lo != 0x0badcafeUL ||
             strcmp(list.messages[1].text, "ciao dal canale") != 0) {
             puts("login self-test: search hits do not name their chats");
+            return 2;
+        }
+        /* The same body gives a message's date by chat and id (what a page
+           of dialogs is continued from); another chat's id finds nothing. */
+        if (tg_mtproto_find_message_date(rpc, writer.length,
+                                         TG_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                         0x0badcafeUL, 77UL) != 2000UL ||
+            tg_mtproto_find_message_date(rpc, writer.length,
+                                         TG_PEER_USER_CONSTRUCTOR, 0UL,
+                                         0x12345678UL, 2002UL) != 2225UL ||
+            tg_mtproto_find_message_date(rpc, writer.length,
+                                         TG_PEER_USER_CONSTRUCTOR, 0UL,
+                                         0x12345678UL, 77UL) != 0UL) {
+            puts("login self-test: a message's date is not found by chat");
             return 2;
         }
     }
@@ -9683,7 +9769,7 @@ int tg_mtproto_login_self_test(void)
     /* getPinnedDialogs(folder 0): 8 bytes. toggleDialogPin on a basic group:
        flags 1 = pin, inputDialogPeer#fcaafeb7, inputPeerChat -> 20 bytes. */
     {
-        unsigned char pin_query[32];
+        unsigned char pin_query[48];
         tg_mtproto_tl_writer pw;
 
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
@@ -9711,6 +9797,44 @@ int tg_mtproto_login_self_test(void)
                 &pw, 0, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
                 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
             pin_query[4] != 0x00U) {
+            return 2;
+        }
+        /* folders.editPeerFolders#6847d0ab, one inputFolderPeer#fbd2c296 of
+           a basic group into folder 1: 4 + vector 8 + 4 + inputPeerChat 12
+           + folder 4 = 32 bytes. */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_folders_edit_peer_folder(
+                &pw, 1UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 32UL || pin_query[0] != 0xabU ||
+            pin_query[1] != 0xd0U || pin_query[2] != 0x47U ||
+            pin_query[3] != 0x68U || pin_query[4] != 0x15U ||
+            pin_query[7] != 0x1cU || pin_query[8] != 0x01U ||
+            pin_query[12] != 0x96U || pin_query[13] != 0xc2U ||
+            pin_query[14] != 0xd2U || pin_query[15] != 0xfbU ||
+            pin_query[16] != 0xb9U || pin_query[20] != 0x08U ||
+            pin_query[28] != 0x01U || pin_query[31] != 0x00U) {
+            return 2;
+        }
+        /* A later page of the Archive: flags 3 (exclude_pinned + folder),
+           folder_id 1, the offset date and id, inputPeerEmpty when no peer
+           is given, limit 10, hash 0 -> 36 bytes. The plain call still asks
+           the main list from the start. */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_get_dialogs_folder_page(
+                &pw, 1UL, 1, 10UL, 0x11223344UL, 77UL, 0UL, 0UL, 0UL, 0UL,
+                0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 36UL || pin_query[4] != 0x03U ||
+            pin_query[8] != 0x01U || pin_query[12] != 0x44U ||
+            pin_query[15] != 0x11U || pin_query[16] != 77U ||
+            pin_query[20] != 0xeaU || pin_query[24] != 10U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_get_dialogs(&pw, 10UL) !=
+                TG_MTPROTO_TL_OK ||
+            pin_query[4] != 0x02U || pin_query[8] != 0x00U ||
+            pin_query[12] != 0x00U) {
             return 2;
         }
     }
@@ -10537,6 +10661,47 @@ tg_mtproto_tl_status tg_mtproto_read_update_message_page(
         memset(page_out, 0, sizeof(*page_out));
     }
     return tg_read_common_message_text(reader, out, out_dest, page_out);
+}
+
+/* The date of message `message_id` of the chat `peer` inside a reply body,
+   0 when it is not there. A page of dialogs carries the top message of each
+   one; its date is what the next page is asked from. The body is scanned
+   for message constructors, as the resync does, and the leading fields of a
+   message are good even when its tail (a media) is not read. */
+unsigned long tg_mtproto_find_message_date(const unsigned char *body,
+                                           unsigned long body_length,
+                                           unsigned long peer_constructor,
+                                           unsigned long peer_id_hi,
+                                           unsigned long peer_id_lo,
+                                           unsigned long message_id)
+{
+    static tg_mtproto_message_text probe;
+    tg_mtproto_dialog_peer dest;
+    tg_mtproto_tl_reader reader;
+    unsigned long pos;
+
+    if (body == 0 || message_id == 0UL) {
+        return 0UL;
+    }
+    for (pos = 0UL; pos + 16UL <= body_length; pos += 4UL) {
+        unsigned long constructor = tg_read_u32_le(body + pos);
+
+        if (constructor != TG_MESSAGE_CONSTRUCTOR &&
+            constructor != TG_MESSAGE_SERVICE_CONSTRUCTOR) {
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&reader, body, body_length);
+        reader.offset = pos;
+        memset(&probe, 0, sizeof(probe));
+        memset(&dest, 0, sizeof(dest));
+        (void)tg_read_common_message_text(&reader, &probe, &dest, 0);
+        if (probe.id == message_id && probe.date != 0UL &&
+            dest.peer_constructor == peer_constructor &&
+            dest.id_hi == peer_id_hi && dest.id_lo == peer_id_lo) {
+            return probe.date;
+        }
+    }
+    return 0UL;
 }
 
 int tg_mtproto_resync_message_text(tg_mtproto_tl_reader *reader,

@@ -2194,6 +2194,9 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
         } else if (state->search_active) {
             placeholder = "Type a name, ENTER...";
             placeholder_len = 20UL;
+        } else if (state->archive_view) {
+            placeholder = "Archive - ESC goes back";
+            placeholder_len = 23UL;
         } else {
             placeholder = "Search chats...";
             placeholder_len = 15UL;
@@ -2301,7 +2304,9 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                             : state->selected_chat;
 
         st->chat_scroll_to_sel = 0;
-        if (target < st->chat_scroll) {
+        if (target < 0) {
+            /* no row is the open chat (it is in the other list) */
+        } else if (target < st->chat_scroll) {
             st->chat_scroll = target;
         } else if (target >= st->chat_scroll + view_rows) {
             st->chat_scroll = target - view_rows + 1;
@@ -4468,6 +4473,10 @@ static void tg_gui_paint_header(const tg_gui_state *state,
         } else if (state->selected_chat >= 0 &&
                    state->selected_chat < state->chat_count) {
             open_chat = &state->chats[state->selected_chat];
+        } else if (state->open_chat_valid) {
+            /* The open chat is in the other list (the Archive, or the main
+               list while the Archive shows). */
+            open_chat = &state->open_chat;
         }
         if (open_chat != 0) {
             int av = tg_gui_avatar_size(backend, 1);
@@ -5449,12 +5458,26 @@ void tg_gui_note_open_chat(tg_gui_state *state)
     state->open_chat_valid = 1;
 }
 
+/* The row of the chat open in the transcript: its sidebar row, or the copy
+   taken when it was opened while it sits in the other list (selected_chat
+   -1). NULL when there is neither. */
+static const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state)
+{
+    if (state == 0) {
+        return 0;
+    }
+    if (state->selected_chat >= 0 &&
+        state->selected_chat < state->chat_count) {
+        return &state->chats[state->selected_chat];
+    }
+    return state->open_chat_valid ? &state->open_chat : 0;
+}
+
 int tg_gui_open_chat_is_self(const tg_gui_state *state)
 {
-    return state != 0 && state->selected_chat >= 0 &&
-           state->selected_chat < state->chat_count &&
-           state->chats[state->selected_chat].index ==
-               TG_GUI_SAVED_PEER_INDEX;
+    const tg_gui_chat *row = tg_gui_open_chat_row(state);
+
+    return row != 0 && row->index == TG_GUI_SAVED_PEER_INDEX;
 }
 
 int tg_gui_context_follow(tg_gui_state *state)
@@ -5573,9 +5596,15 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
     if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
         if (state->chats[state->ctx_chat - 1].index !=
             TG_GUI_SAVED_PEER_INDEX) {
-            labels[n] = state->chats[state->ctx_chat - 1].pinned ? "Unpin"
-                                                                 : "Pin";
-            ids[n++] = TG_GUI_CTX_CHAT_PIN;
+            /* Pins belong to the main list; the Archive offers the way
+               back instead. */
+            if (!state->archive_view) {
+                labels[n] = state->chats[state->ctx_chat - 1].pinned
+                                ? "Unpin" : "Pin";
+                ids[n++] = TG_GUI_CTX_CHAT_PIN;
+            }
+            labels[n] = state->archive_view ? "Unarchive" : "Archive";
+            ids[n++] = TG_GUI_CTX_CHAT_ARCHIVE;
         }
         labels[n] = "Remove chat";
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
@@ -5641,9 +5670,8 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = "Delete";
             ids[n] = TG_GUI_CTX_DELETE;
             ++n;
-        } else if (!m->is_system && state->selected_chat >= 0 &&
-                   state->selected_chat < state->chat_count &&
-                   state->chats[state->selected_chat].is_group) {
+        } else if (!m->is_system && tg_gui_open_chat_row(state) != 0 &&
+                   tg_gui_open_chat_row(state)->is_group) {
             /* Telegram lets nobody delete someone else's message for
                themselves in a supergroup: the client hides it instead. */
             labels[n] = "Hide message";
@@ -7265,22 +7293,34 @@ static int tg_gui_notify_menu_self_test(void)
     state->ctx_chat = 1;
     state->chats[0].index = 5UL;
     state->chats[0].pinned = 0;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
         ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
-        ids[1] != TG_GUI_CTX_CHAT_REMOVE || ids[2] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[2], "Mute") != 0 || ids[3] != TG_GUI_CTX_CHAT_SOUND ||
-        strcmp(labels[3], "Sound...") != 0 ||
-        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        strcmp(labels[4], "Default sound") != 0) {
+        ids[1] != TG_GUI_CTX_CHAT_ARCHIVE ||
+        strcmp(labels[1], "Archive") != 0 ||
+        ids[2] != TG_GUI_CTX_CHAT_REMOVE || ids[3] != TG_GUI_CTX_CHAT_MUTE ||
+        strcmp(labels[3], "Mute") != 0 || ids[4] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[4], "Sound...") != 0 ||
+        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        strcmp(labels[5], "Default sound") != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->chats[0].pinned = 1;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
         strcmp(labels[0], "Unpin") != 0) {
         puts("gui self-test: a pinned chat's menu cannot unpin");
         return 2;
     }
+    /* In the Archive the menu leads with the way back, and has no pin. */
+    state->archive_view = 1;
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        ids[0] != TG_GUI_CTX_CHAT_ARCHIVE ||
+        strcmp(labels[0], "Unarchive") != 0 ||
+        ids[1] != TG_GUI_CTX_CHAT_REMOVE) {
+        puts("gui self-test: an archived chat's menu cannot unarchive");
+        return 2;
+    }
+    state->archive_view = 0;
     state->chats[0].pinned = 0;
     state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
     if (tg_gui_context_items(state, labels, ids) != 4 ||
@@ -7290,28 +7330,28 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
-        strcmp(labels[2], "Unmute") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        strcmp(labels[3], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        ids[3] != TG_GUI_CTX_CHAT_RING || strcmp(labels[3], "Enable ring") != 0 ||
-        ids[4] != TG_GUI_CTX_CHAT_SOUND ||
-        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+    if (tg_gui_context_items(state, labels, ids) != 7 ||
+        ids[4] != TG_GUI_CTX_CHAT_RING || strcmp(labels[4], "Enable ring") != 0 ||
+        ids[5] != TG_GUI_CTX_CHAT_SOUND ||
+        ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        strcmp(labels[2], "Mute") != 0 || strcmp(labels[3], "Disable ring") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 7 ||
+        strcmp(labels[3], "Mute") != 0 || strcmp(labels[4], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
     state->ctx_hidden_count = 2UL;
-    if (tg_gui_context_items(state, labels, ids) != 7 ||
-        ids[6] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
+        ids[7] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
         puts("gui self-test: group menu cannot show hidden messages");
         return 2;
     }

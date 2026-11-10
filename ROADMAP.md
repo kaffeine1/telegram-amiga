@@ -305,9 +305,17 @@ it works today:
   in the chat's menu (`messages.toggleDialogPin`); still missing: Saved
   Messages pinned, the order of the pins changed by dragging
   (`messages.reorderPinnedDialogs`), pins changed on another device
-  while running (`updatePinnedDialogs`). Archive still to do: archived
-  chats stay out of the list but cannot be reached; archive from the
-  chat's menu (`folders.editPeerFolders`);
+  while running (`updatePinnedDialogs`). Archive done on `main`:
+  Archived chats (Amiga+A) reads folder 1 with `messages.getDialogs`
+  and lists it in place of the chat list, Archive and Unarchive in the
+  chat's menu (`folders.editPeerFolders`), moves made elsewhere follow
+  (`updateFolderPeers`); still missing: the unread count of the Archive
+  on the main list, and more than the most recent 64 chats (16 on 68k).
+  Found on the way: Reload chat list asks its later pages without the
+  date of the last dialog, so the server answers with the first page
+  again and the list stops at 30 chats plus the pinned ones (10 on
+  MorphOS); the Archive already pages with the date, the reload is to
+  be moved to the same code;
 - mark as read or unread (`messages.markDialogUnread`), leave a group or
   a channel, delete a chat. Half done: Remove chat hides a chat from
   the list on this machine only;
