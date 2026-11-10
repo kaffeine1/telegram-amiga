@@ -2215,11 +2215,14 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
 
 /* The pin mark of a pinned chat, as Telegram Desktop puts it at the right
    of the row: an upright push pin from rectangles only (cap, body, flange,
-   needle). It is nearly as tall as the text (two pixels less, ten at the
-   least) and its width is odd, so the needle sits dead centre. */
+   needle). Its height is halfway between the nine pixels of the smallest
+   font and the text height, and its width is odd, so the needle sits dead
+   centre. */
 static int tg_gui_pin_mark_height(int lh)
 {
-    return (lh - 2 > 10) ? lh - 2 : 10;
+    int h = (lh + 8) / 2;
+
+    return (h > 9) ? h : 9;
 }
 
 int tg_gui_pin_mark_width(int lh)
