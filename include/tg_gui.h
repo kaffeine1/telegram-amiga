@@ -271,6 +271,7 @@ typedef struct tg_gui_chat {
     int flash;                /* a notification landed since last opened: blink the badge */
     int pinned;               /* pinned on Telegram: first in the list, pin mark */
     int unread_mark;          /* marked as unread: an empty badge when unread is 0 */
+    int draft;                /* preview is this chat's draft: "Draft:" before it */
 } tg_gui_chat;
 
 /* Window mode: the normal chat UI, or one of the first-login screens shown when

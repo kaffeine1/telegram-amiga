@@ -36,6 +36,19 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   moved on another device follows here. A large Archive shows its most
   recent chats (32, or 16 on 68k). The text client leaves the archived
   chats out of /list.
+- Drafts. What is left unsent in the composer stays with its chat: it
+  is saved on Telegram when another chat is opened or the client is
+  closed, so the other devices show it, and it comes back in the
+  composer when the chat is opened again. A chat that holds a draft
+  shows it under its name in the chat list, after "Draft:". Drafts
+  written on other devices are read when the client starts and on Reload
+  chat list, and followed while it runs: the open chat's composer takes
+  the change as long as nothing else was typed in it. Sending the
+  message clears the draft everywhere; emptying the composer (ESC) and
+  leaving the chat deletes it. A draft is plain text here: the formatting
+  or the reply set on another device are not shown, and stay on Telegram
+  until the text is changed. The newest 16 drafts are kept (8 on 68k);
+  Saved Messages and forum topics have none yet. The window only.
 - Mark as unread and Mark as read in a chat's menu (right click on its
   row). Unread sets Telegram's own mark, a round dot in place of the
   count, on every device; read marks the chat's messages as read on
@@ -63,8 +76,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   desktop client's: a thin clip tilted on its side, outer and inner
   loop, in crisp one-pixel lines. It comes in two sizes, 16 pixels for
   small fonts and 20 when the box is taller.
+- Clicking another chat while typing no longer throws the text away: it
+  becomes the draft of the chat being left.
 
 ### Fixed
+- Opening another chat while a message was being edited left the edit
+  armed: the next ENTER tried to edit a message with that number in the
+  other chat. The edit now ends with the chat.
 - Reload chat list read the first page of the chat list over and over:
   it stopped at 30 chats plus the pinned ones (10 on MorphOS), however
   many the account had. It now reads page after page to the end of the

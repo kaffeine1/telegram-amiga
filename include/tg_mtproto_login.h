@@ -782,6 +782,34 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_unread_marks(
     unsigned long body_length,
     tg_mtproto_dialog_peer_list *out);
 
+/* Drafts. messages.saveDraft with plain text (an empty text deletes the
+   draft), messages.getAllDrafts, and one updateDraftMessage read from the
+   reader just past its constructor: the chat, the text (cut to the buffer,
+   *was_cut says so), *has_text 0 when the draft was deleted. A topic's
+   draft or one this client cannot read fails. */
+tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
+    tg_mtproto_tl_writer *writer,
+    const char *message,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+tg_mtproto_tl_status tg_mtproto_build_messages_get_all_drafts(
+    tg_mtproto_tl_writer *writer);
+tg_mtproto_tl_status tg_mtproto_read_update_draft(
+    tg_mtproto_tl_reader *reader,
+    tg_mtproto_dialog_peer *peer,
+    int *has_text,
+    char *text,
+    unsigned long text_size,
+    int *was_cut,
+    unsigned long *date);
+/* The next messages.sendMessage built clears the chat's draft too (on) or
+   leaves it (off, the default). */
+void tg_mtproto_send_set_clear_draft(int on);
+
 /* messages.deleteHistory for this account only (not for a channel), and the
    offset its messages.affectedHistory reply leaves to delete. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(

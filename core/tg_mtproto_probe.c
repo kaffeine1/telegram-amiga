@@ -238,6 +238,7 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
    pts_count:int, folderPeer#e9baa668 peer:Peer folder_id:int (layer 214
    schema, checked 2026-11-10): chats moved in or out of the Archive. */
 #define TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR 0x19360dc0UL
+#define TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR 0xedfc111eUL
 #define TG_MTPROTO_FOLDER_PEER_CONSTRUCTOR 0xe9baa668UL
 /* https://core.telegram.org/constructor/updateWebPage and
    /constructor/updateChannelWebPage, verified 2026-09-08 (layer 214). */
@@ -546,6 +547,12 @@ typedef struct tg_chat_folder_entry {
 } tg_chat_folder_entry;
 static tg_chat_folder_entry tg_chat_folder_queue[TG_CHAT_FOLDER_QUEUE_MAX];
 static unsigned long tg_chat_folder_count = 0UL;
+/* A draft written, changed or deleted on another device: the window's
+   session keeps it (defined with the drafts, further down). */
+#if !defined(TG_NO_GUI)
+static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
+                                const char *utf8, unsigned long date);
+#endif
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
 #define TG_CHAT_WEBPAGE_QUEUE_MAX 8U
@@ -4024,6 +4031,33 @@ static void tg_chat_folder_parse_update(tg_mtproto_tl_reader *reader)
     }
 }
 
+/* updateDraftMessage, the reader just past the constructor. The envelope
+   scan offers any aligned match, so the update counts only when it reads
+   as a draft from its flags to its text. */
+static void tg_chat_draft_parse_update(tg_mtproto_tl_reader *reader)
+{
+#if defined(TG_NO_GUI)
+    (void)reader;
+#else
+    /* The composer's text is Latin-1 and at most one buffer long: twice
+       that in UTF-8 holds any draft it could take. */
+    static char utf8[(TG_GUI_MSG_TEXT_MAX * 2) + 1];
+    tg_mtproto_dialog_peer peer;
+    unsigned long date;
+    int has_text;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: nobody shows a draft */
+    }
+    if (tg_mtproto_read_update_draft(reader, &peer, &has_text, utf8,
+                                     sizeof(utf8), 0, &date) !=
+        TG_MTPROTO_TL_OK) {
+        return;
+    }
+    tg_gui_draft_ingest(&peer, has_text ? utf8 : "", date);
+#endif
+}
+
 static void tg_chat_delete_parse_update(tg_mtproto_tl_reader *reader,
                                          unsigned long constructor)
 {
@@ -4124,6 +4158,10 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_folder_parse_update(&reader);
+        } else if (constructor == TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_draft_parse_update(&reader);
         } else if (constructor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
@@ -4251,6 +4289,10 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     }
     if (update_ctor == TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR) {
         tg_chat_folder_parse_update(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
+        tg_chat_draft_parse_update(reader);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
@@ -18314,6 +18356,9 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 #if !defined(TG_NO_SELFTEST)
 static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
+#if !defined(TG_NO_GUI)
+static int tg_gui_drafts_self_test(void);
+#endif
 static int tg_gui_session_server_time_self_test(void);
 
 #if !defined(TG_NO_SELFTEST)
@@ -20362,6 +20407,11 @@ int tg_mtproto_probe_self_test(void)
     if (tg_gui_pins_self_test() != 0) {
         return 2;
     }
+#if !defined(TG_NO_GUI)
+    if (tg_gui_drafts_self_test() != 0) {
+        return 2;
+    }
+#endif
 
     /* Foreground viewer demand survives a full inline queue and is selected
        first. This pins the scheduler rule without opening a network context. */
@@ -21471,6 +21521,327 @@ static void tg_gui_mark_set(int is_user, unsigned long id_hi,
     }
 }
 
+/* --- drafts ---------------------------------------------------------------
+   The text left unsent in a chat's composer, kept in step with Telegram:
+   read with messages.getAllDrafts when the session opens and on Reload chat
+   list, followed live (updateDraftMessage), saved with messages.saveDraft
+   when the chat is left or the program closes, and cleared by the message
+   that sends it. Kept as the composer holds it (Latin-1 with the emoji
+   pairs), so opening the chat is a plain copy. In memory only: Telegram
+   keeps them. Plain text: a draft's formatting and its reply are not
+   shown, and stay on Telegram for as long as the text is not changed here.
+   The window only: the text client has no composer to fill. */
+static int tg_gui_session_peer_request(const unsigned char *query,
+                                       unsigned long length,
+                                       tg_mtproto_rpc_result *result,
+                                       const char *label, char *emsg,
+                                       unsigned long emsg_size, FILE *quiet);
+#if !defined(TG_NO_GUI)
+#if defined(__m68k__)
+#define TG_GUI_DRAFTS_MAX 8
+#else
+#define TG_GUI_DRAFTS_MAX 16
+#endif
+typedef struct tg_gui_draft {
+    int is_user;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long date;
+    char text[TG_GUI_MSG_TEXT_MAX];
+} tg_gui_draft;
+static tg_gui_draft tg_gui_drafts[TG_GUI_DRAFTS_MAX];
+static int tg_gui_draft_count = 0;
+/* A draft changed outside the composer: the next tick redraws the list. */
+static int tg_gui_drafts_changed = 0;
+/* ...and it is the open chat's, whose composer still held the draft as it
+   was: the tick puts the new text there. */
+static int tg_gui_draft_follow = 0;
+/* A send failed in this chat: its draft is not deleted on leaving, though
+   the composer is empty by then. */
+static int tg_gui_draft_keep = 0;
+
+static int tg_gui_draft_find(int is_user, unsigned long id_hi,
+                             unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_draft_count; ++i) {
+        if (tg_gui_drafts[i].is_user == (is_user ? 1 : 0) &&
+            tg_gui_drafts[i].id_hi == id_hi &&
+            tg_gui_drafts[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* The chat's draft, or 0 when it has none: what the chat list asks for. */
+static const char *tg_gui_draft_lookup(int is_user, unsigned long id_hi,
+                                       unsigned long id_lo)
+{
+    int at = tg_gui_draft_find(is_user, id_hi, id_lo);
+
+    return at >= 0 ? tg_gui_drafts[at].text : 0;
+}
+
+/* Keeps the chat's draft, or forgets it when the text is empty. When the
+   table is full the oldest draft makes room: it stays on Telegram, it is
+   only not shown here. 1 = something changed. */
+static int tg_gui_draft_set(int is_user, unsigned long id_hi,
+                            unsigned long id_lo, const char *text,
+                            unsigned long date)
+{
+    int at = tg_gui_draft_find(is_user, id_hi, id_lo);
+    unsigned long i;
+
+    if (text == 0 || text[0] == '\0') {
+        if (at < 0) {
+            return 0;
+        }
+        memmove(&tg_gui_drafts[at], &tg_gui_drafts[at + 1],
+                (size_t)(tg_gui_draft_count - at - 1) *
+                    sizeof(tg_gui_drafts[0]));
+        --tg_gui_draft_count;
+        return 1;
+    }
+    if (at >= 0 && strcmp(tg_gui_drafts[at].text, text) == 0) {
+        if (date != 0UL) {
+            tg_gui_drafts[at].date = date;
+        }
+        return 0;
+    }
+    if (at < 0) {
+        if (tg_gui_draft_count < TG_GUI_DRAFTS_MAX) {
+            at = tg_gui_draft_count++;
+        } else {
+            int k;
+
+            at = 0;
+            for (k = 1; k < tg_gui_draft_count; ++k) {
+                if (tg_gui_drafts[k].date < tg_gui_drafts[at].date) {
+                    at = k;
+                }
+            }
+        }
+        tg_gui_drafts[at].is_user = is_user ? 1 : 0;
+        tg_gui_drafts[at].id_hi = id_hi;
+        tg_gui_drafts[at].id_lo = id_lo;
+    }
+    for (i = 0UL; i + 1UL < sizeof(tg_gui_drafts[at].text) &&
+                  text[i] != '\0'; ++i) {
+        tg_gui_drafts[at].text[i] = text[i];
+    }
+    tg_gui_drafts[at].text[i] = '\0';
+    tg_gui_drafts[at].date = date;
+    return 1;
+}
+
+static int tg_gui_draft_is_open_peer(unsigned long peer_constructor,
+                                     unsigned long id_hi, unsigned long id_lo)
+{
+    return tg_gui_session_state.open &&
+           tg_gui_session_state.open_peer_constructor != 0UL &&
+           tg_gui_session_state.open_peer_constructor == peer_constructor &&
+           tg_gui_session_state.open_peer_id_hi == id_hi &&
+           tg_gui_session_state.open_peer_id_lo == id_lo;
+}
+
+/* Whether the composer holds something a draft could be: a chat is shown
+   and no message is being edited in place. */
+static int tg_gui_draft_composer_free(const tg_gui_state *gst)
+{
+    return gst != 0 && gst->mode == TG_GUI_MODE_CHAT &&
+           gst->edit_to_id == 0UL;
+}
+
+static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
+                                const char *utf8, unsigned long date)
+{
+    static char shown[TG_GUI_MSG_TEXT_MAX];
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int is_user;
+    int follows = 0;
+
+    if (peer == 0) {
+        return;
+    }
+    is_user = peer->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    shown[0] = '\0';
+    if (utf8 != 0 && utf8[0] != '\0') {
+        tg_gui_driver_text_from_utf8(shown, sizeof(shown), utf8);
+    }
+    /* The open chat's composer follows the draft only while it still holds
+       the draft as it was: text typed here is never replaced. It is only
+       read now: this may run inside a send, which still needs it. */
+    if (tg_gui_draft_is_open_peer(peer->peer_constructor, peer->id_hi,
+                                  peer->id_lo) &&
+        tg_gui_draft_composer_free(gst)) {
+        const char *old = tg_gui_draft_lookup(is_user, peer->id_hi,
+                                              peer->id_lo);
+
+        follows = strcmp(gst->input, old != 0 ? old : "") == 0;
+    }
+    if (tg_gui_draft_set(is_user, peer->id_hi, peer->id_lo, shown, date)) {
+        tg_gui_drafts_changed = 1;
+        if (follows) {
+            tg_gui_draft_follow = 1;
+        }
+    }
+}
+
+/* The open chat's draft into the composer (or an empty composer). */
+static void tg_gui_draft_enter(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    const char *text;
+    unsigned long i;
+
+    tg_gui_draft_keep = 0;
+    if (gst == 0 || gst->mode != TG_GUI_MODE_CHAT) {
+        return;
+    }
+    text = tg_gui_session_state.open_peer_constructor != 0UL
+               ? tg_gui_draft_lookup(
+                     tg_gui_session_state.open_peer_constructor ==
+                         TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                     tg_gui_session_state.open_peer_id_hi,
+                     tg_gui_session_state.open_peer_id_lo)
+               : 0;
+    if (text == 0) {
+        text = "";
+    }
+    for (i = 0UL; i + 1UL < sizeof(gst->input) && text[i] != '\0'; ++i) {
+        gst->input[i] = text[i];
+    }
+    gst->input[i] = '\0';
+    gst->input_caret = (int)i;
+    gst->in_sel_active = 0;
+    gst->history_pos = -1;
+    gst->history_draft[0] = '\0';
+}
+
+/* The open chat is about to be left (another chat opens, or the program
+   closes): what its composer holds becomes its draft, on Telegram too,
+   when it is not the draft already. An empty composer deletes the draft.
+   Called while the session still describes the chat being left. */
+static void tg_gui_draft_leave(FILE *stream)
+{
+    static unsigned char query[(TG_GUI_MSG_TEXT_MAX * 2) + 64];
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char wire[(TG_GUI_MSG_TEXT_MAX * 2) + 1];
+#endif
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    const char *old;
+    const char *text;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int is_user;
+    char emsg[48];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 ||
+        tg_gui_session_state.open_peer_constructor == 0UL ||
+        !tg_gui_draft_composer_free(gst)) {
+        return;
+    }
+    is_user = tg_gui_session_state.open_peer_constructor ==
+              TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    old = tg_gui_draft_lookup(is_user, tg_gui_session_state.open_peer_id_hi,
+                              tg_gui_session_state.open_peer_id_lo);
+    if (strcmp(gst->input, old != 0 ? old : "") == 0) {
+        return; /* nothing typed, or the draft as it came */
+    }
+    if (gst->input[0] == '\0' && tg_gui_draft_keep) {
+        return; /* emptied by a send that failed, not by the user */
+    }
+    text = gst->input;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(gst->input, wire, sizeof(wire))) {
+        text = wire;
+    }
+#endif
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    /* The cache index is only the way to the access hash: the chat it
+       names must still be the open one (a removed chat shifts the rest). */
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "draft peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    if (tg_mtproto_build_messages_save_draft(&writer, text, pc, ph, pl, ahh,
+                                             ahl, hah) != TG_MTPROTO_TL_OK ||
+        tg_gui_session_peer_request(query, writer.length, &result,
+                                    "mtproto messages.saveDraft", emsg,
+                                    sizeof(emsg), quiet) != 0) {
+        char line[96];
+
+        /* Kept here all the same: coming back to the chat finds the text,
+           even if Telegram did not get it. */
+        sprintf(line, "draft: save failed (%.48s)",
+                emsg[0] != '\0' ? emsg : "no answer");
+        tg_gui_log(line);
+    } else {
+        tg_gui_log(gst->input[0] != '\0' ? "draft: saved"
+                                         : "draft: deleted");
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (tg_gui_draft_set(is_user, ph, pl, gst->input,
+                         tg_gui_session_server_time())) {
+        tg_gui_drafts_changed = 1;
+    }
+}
+
+/* A message is about to go to the open chat: it takes the chat's draft
+   with it (clear_draft), when the chat has one. Returns whether it does. */
+static int tg_gui_draft_send_begin(void)
+{
+    int has;
+
+    has = tg_gui_session_state.open_peer_constructor != 0UL &&
+          tg_gui_draft_find(tg_gui_session_state.open_peer_constructor ==
+                                TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                            tg_gui_session_state.open_peer_id_hi,
+                            tg_gui_session_state.open_peer_id_lo) >= 0;
+    tg_mtproto_send_set_clear_draft(has);
+    return has;
+}
+
+static void tg_gui_draft_send_end(int had, int sent)
+{
+    tg_mtproto_send_set_clear_draft(0);
+    if (!sent) {
+        tg_gui_draft_keep = 1;
+        return;
+    }
+    if (had &&
+        tg_gui_draft_set(tg_gui_session_state.open_peer_constructor ==
+                             TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                         tg_gui_session_state.open_peer_id_hi,
+                         tg_gui_session_state.open_peer_id_lo, "", 0UL)) {
+        tg_gui_drafts_changed = 1;
+    }
+}
+#else
+#define tg_gui_draft_enter() ((void)0)
+#define tg_gui_draft_leave(stream) ((void)(stream))
+#define tg_gui_draft_send_begin() (0)
+#define tg_gui_draft_send_end(had, sent) ((void)(had), (void)(sent))
+#endif
+
 /* Pinned rows first, in pin order, marked; the others after them in the
    order they had. Stable and in place. The unread marks go on here too:
    every projection of the list passes through. */
@@ -21505,12 +21876,80 @@ static void tg_gui_pins_apply(tg_chat_list_row *rows, int count)
 
 static int tg_gui_session_fetch_pins(FILE *stream);
 static int tg_gui_session_fetch_marks(FILE *stream);
+static int tg_gui_session_fetch_drafts(FILE *stream);
 static void tg_gui_session_reload_chats(void);
 
 #if !defined(TG_NO_SELFTEST)
 /* Pins move their rows to the top in Telegram's order and mark them; the
    rest keep their order; Saved Messages and a same-id peer of the other
    kind are not matched. */
+#if !defined(TG_NO_GUI)
+/* The drafts kept for the window: set, replaced, deleted, the oldest one
+   making room when the table is full, and one arriving as Telegram sends
+   it (UTF-8) ending up as the composer writes it (Latin-1). */
+static int tg_gui_drafts_self_test(void)
+{
+    tg_mtproto_dialog_peer peer;
+    const char *got;
+    int saved_count = tg_gui_draft_count;
+    int saved_changed = tg_gui_drafts_changed;
+    int ok = 1;
+    int i;
+
+    tg_gui_draft_count = 0;
+    ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao", 10UL) == 1;
+    ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao", 11UL) == 0;
+    ok = ok && tg_gui_draft_set(0, 0UL, 7UL, "gruppo", 12UL) == 1;
+    got = tg_gui_draft_lookup(1, 0UL, 7UL);
+    ok = ok && got != 0 && strcmp(got, "ciao") == 0;
+    got = tg_gui_draft_lookup(0, 0UL, 7UL);
+    ok = ok && got != 0 && strcmp(got, "gruppo") == 0;
+    ok = ok && tg_gui_draft_lookup(1, 0UL, 8UL) == 0;
+    ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao!", 13UL) == 1;
+    got = tg_gui_draft_lookup(1, 0UL, 7UL);
+    ok = ok && got != 0 && strcmp(got, "ciao!") == 0;
+    ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "", 0UL) == 1;
+    ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "", 0UL) == 0;
+    ok = ok && tg_gui_draft_lookup(1, 0UL, 7UL) == 0 &&
+         tg_gui_draft_count == 1;
+    /* Full: the oldest (the group, date 12) makes room for the next. */
+    for (i = 1; i < TG_GUI_DRAFTS_MAX; ++i) {
+        ok = ok && tg_gui_draft_set(1, 0UL, (unsigned long)(100 + i), "x",
+                                    (unsigned long)(100 + i)) == 1;
+    }
+    ok = ok && tg_gui_draft_count == TG_GUI_DRAFTS_MAX;
+    ok = ok && tg_gui_draft_set(1, 0UL, 999UL, "new", 500UL) == 1;
+    ok = ok && tg_gui_draft_count == TG_GUI_DRAFTS_MAX &&
+         tg_gui_draft_lookup(0, 0UL, 7UL) == 0 &&
+         tg_gui_draft_lookup(1, 0UL, 999UL) != 0 &&
+         tg_gui_draft_lookup(1, 0UL, 101UL) != 0;
+    /* As it arrives: "perche'" with its accent in UTF-8, kept in Latin-1;
+       an empty text deletes it. */
+    tg_gui_draft_count = 0;
+    tg_gui_drafts_changed = 0;
+    memset(&peer, 0, sizeof(peer));
+    peer.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    peer.id_lo = 42UL;
+    tg_gui_draft_ingest(&peer, "perch\xc3\xa9 no", 20UL);
+    got = tg_gui_draft_lookup(1, 0UL, 42UL);
+    ok = ok && got != 0 && strcmp(got, "perch\xe9 no") == 0 &&
+         tg_gui_drafts_changed == 1;
+    tg_gui_drafts_changed = 0;
+    tg_gui_draft_ingest(&peer, "perch\xc3\xa9 no", 21UL);
+    ok = ok && tg_gui_drafts_changed == 0;
+    tg_gui_draft_ingest(&peer, "", 22UL);
+    ok = ok && tg_gui_draft_lookup(1, 0UL, 42UL) == 0 &&
+         tg_gui_drafts_changed == 1;
+    tg_gui_draft_count = saved_count;
+    tg_gui_drafts_changed = saved_changed;
+    if (!ok) {
+        puts("mtproto self-test: drafts table wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
 static int tg_gui_pins_self_test(void)
 {
     tg_chat_list_row rows[5];
@@ -21661,6 +22100,13 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
     tg_mtproto_set_session_updates(1);
     tg_gui_chat_driver_bind(&tg_gui_session_state.gui_driver, state,
                             &tg_gui_session_state.driver);
+#if !defined(TG_NO_GUI)
+    tg_gui_session_state.gui_driver.draft_text = tg_gui_draft_lookup;
+    tg_gui_draft_count = 0;
+    tg_gui_drafts_changed = 0;
+    tg_gui_draft_follow = 0;
+    tg_gui_draft_keep = 0;
+#endif
 
     /* A busy account's first connect can be slow to stream in (notably on a
        MorphOS bsdsocket link), so allow a generous per-recv window for the
@@ -21783,8 +22229,16 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
                       tg_gui_pin_count > 0;
         int marks_ok = tg_gui_session_fetch_marks(stream) == 0 &&
                        tg_gui_mark_count > 0;
+        int drafts_ok = tg_gui_session_fetch_drafts(stream) == 0;
 
-        if (pins_ok || marks_ok) {
+#if !defined(TG_NO_GUI)
+        drafts_ok = drafts_ok && tg_gui_draft_count > 0;
+        tg_gui_drafts_changed = 0; /* the list is drawn right here */
+        tg_gui_draft_follow = 0;   /* no chat is open yet */
+#else
+        drafts_ok = 0;
+#endif
+        if (pins_ok || marks_ok || drafts_ok) {
             tg_gui_session_reload_chats();
         }
     }
@@ -21805,11 +22259,25 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     unsigned long printed;
     unsigned long prev_timeout;
     const char *history_limit;
+    char next_index[sizeof(tg_gui_session_state.current_peer_index)];
+    int other_chat;
 
     if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL) {
         return 0;
     }
     tg_gui_log("open_chat: start");
+    /* Another chat (not this one read again): what the composer holds
+       stays behind as the draft of the chat being left. */
+    if (peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        strcpy(next_index, "self");
+    } else {
+        sprintf(next_index, "%lu", peer_index);
+    }
+    other_chat =
+        strcmp(next_index, tg_gui_session_state.current_peer_index) != 0;
+    if (other_chat) {
+        tg_gui_draft_leave(stream);
+    }
     tg_chat_reactions_count = 0;
     tg_chat_webpage_count = 0UL;
     /* Do not finish an old chat's thumbnails after the user switched. Fresh
@@ -21865,6 +22333,10 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         tg_gui_session_state.gui_driver.state->reply_to_id = 0UL;
         tg_gui_session_state.gui_driver.state->reply_sender[0] = '\0';
         tg_gui_session_state.gui_driver.state->reply_snippet[0] = '\0';
+        /* Nor a message being edited: its id means another message there. */
+        if (other_chat) {
+            tg_gui_session_state.gui_driver.state->edit_to_id = 0UL;
+        }
     }
     tg_gui_session_state.last_seen_message_id = 0UL;
     /* Restart the read-receipt cursor: the loaded history starts as "sent",
@@ -21961,6 +22433,10 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     tg_gui_session_fetch_open_avatar(quiet);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
+    /* The composer takes this chat's draft, or starts empty. */
+    if (other_chat) {
+        tg_gui_draft_enter();
+    }
     tg_gui_log("open_chat: done");
     return 1; /* the selection changed -> always repaint */
 }
@@ -22402,6 +22878,66 @@ static int tg_gui_session_fetch_marks(FILE *stream)
     return 0;
 }
 
+/* Reads every draft Telegram holds (messages.getAllDrafts: an Updates
+   with one updateDraftMessage per chat) and replaces the ones kept here.
+   0 = read, anything else = the drafts stay as they were. */
+static int tg_gui_session_fetch_drafts(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return 0;
+#else
+    unsigned char query[8];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_reader reader;
+    static const char label[] = "mtproto messages.getAllDrafts";
+    FILE *quiet;
+    unsigned long offset;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_all_drafts(&writer) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_gui_session_peer_request(query, writer.length, &result, label, 0,
+                                     0UL, quiet);
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 1;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("drafts: fetch failed");
+        return rc;
+    }
+    /* The reply is the whole truth: a draft deleted elsewhere while this
+       client was closed is simply not in it. */
+    tg_gui_draft_count = 0;
+    for (offset = 0UL; offset + 8UL <= result.result_body_length;
+         offset += 4UL) {
+        if (tg_mtproto_read_u32_le(result.result_body + offset) ==
+            TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, result.result_body,
+                                      result.result_body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_draft_parse_update(&reader);
+        }
+    }
+    {
+        char line[48];
+
+        sprintf(line, "drafts: %d read", tg_gui_draft_count);
+        tg_gui_log(line);
+    }
+    return 0;
+#endif
+}
+
 /* Public: pin (pinned = 1) or unpin the chat at this 1-based cache index on
    Telegram, then read the pins again and redraw the list. 0 = done, 1 =
    Telegram refused (the pin limit), 2 = failed. */
@@ -22671,6 +23207,7 @@ int tg_gui_session_reload_chat_list(FILE *stream)
         tg_mtproto_close_quiet_stream(q, stream);
         (void)tg_gui_session_fetch_pins(stream); /* pins changed elsewhere */
         (void)tg_gui_session_fetch_marks(stream); /* and the unread marks */
+        (void)tg_gui_session_fetch_drafts(stream); /* and the drafts */
         (void)tg_gui_session_archive_refresh(stream); /* and the Archive */
         tg_gui_session_reload_chats();
         return 0;
@@ -24218,6 +24755,7 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     unsigned long sent_id;
     unsigned long prev_timeout;
     int rc;
+    int had_draft;
     const char *send_text;
 #if TG_MTPROTO_DISPLAY_LATIN1
     /* Worst case 2x the composer buffer (every byte a high Latin-1 char),
@@ -24249,6 +24787,7 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         send_text = send_line;
     }
 #endif
+    had_draft = tg_gui_draft_send_begin();
     rc = tg_mtproto_auth_send_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
@@ -24256,6 +24795,7 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, send_text, reply_to_msg_id,
         &sent_id, quiet);
+    tg_gui_draft_send_end(had_draft, rc == 0);
     if (rc == 0) {
         /* Show the sent message at once, optimistically, with no extra network
            round-trip -- a confirm-poll is slow and unreliable on MorphOS (it
@@ -29079,12 +29619,45 @@ static int tg_gui_session_apply_folder_updates(void)
     return 1;
 }
 
+/* A draft changed on another device, or was sent from here: the list shows
+   it, and the open chat's composer takes it when it was following. */
+static int tg_gui_session_apply_draft_updates(void)
+{
+#if defined(TG_NO_GUI)
+    return 0;
+#else
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+    if (!tg_gui_drafts_changed) {
+        return 0;
+    }
+    tg_gui_drafts_changed = 0;
+    if (tg_gui_draft_follow) {
+        int keep = tg_gui_draft_keep;
+
+        tg_gui_draft_follow = 0;
+        if (tg_gui_draft_composer_free(gst)) {
+            tg_gui_draft_enter();
+        }
+        tg_gui_draft_keep = keep;
+    }
+    if (gst != 0 && !gst->in_search && !gst->in_filter &&
+        !gst->forward_pick_active) {
+        tg_gui_session_reload_chats();
+    }
+    return 1;
+#endif
+}
+
 static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
 {
     int dirty;
 
     dirty = 0;
     if (tg_gui_session_apply_edit_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_draft_updates()) {
         dirty = 1;
     }
     if (tg_gui_session_apply_folder_updates()) {
@@ -29400,6 +29973,12 @@ int tg_gui_session_tick(FILE *stream)
 
 void tg_gui_session_close(void)
 {
+    /* What the composer holds stays on Telegram as the open chat's draft.
+       Only over a link that works: a dead one would hold the exit for the
+       length of a timeout. */
+    if (tg_gui_session_state.open && tg_gui_session_link_failed == 0UL) {
+        tg_gui_draft_leave(stdout);
+    }
     tg_gui_session_link_failed = 0UL;
     tg_mtproto_avatar_store_save(); /* keep the previews for next run */
     tg_gui_photo_queue_reset();

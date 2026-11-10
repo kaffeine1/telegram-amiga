@@ -883,6 +883,43 @@ static void tg_gui_driver_initials(char *dest, unsigned long size,
     dest[out] = '\0';
 }
 
+void tg_gui_driver_text_from_utf8(char *dest, unsigned long size,
+                                  const char *utf8)
+{
+    tg_gui_driver_copy_latin1(dest, size, utf8);
+}
+
+/* A draft on the one line a chat row has for it: line breaks and tabs
+   become spaces, the cut never splits an emoji pair. */
+static void tg_gui_driver_draft_preview(char *dest, unsigned long size,
+                                        const char *draft)
+{
+    unsigned long i = 0UL;
+    unsigned long o = 0UL;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    while (draft != 0 && draft[i] != '\0' && o + 1UL < size) {
+        unsigned char c = (unsigned char)draft[i];
+        unsigned long emoji;
+
+        if ((c == TG_GUI_EMOJI_PREFIX0 || c == TG_GUI_EMOJI_PREFIX1) &&
+            draft[i + 1UL] != '\0' &&
+            tg_gui_emoji_pair_at(draft, i + 2UL, i, &emoji)) {
+            if (o + 2UL >= size) {
+                break;
+            }
+            dest[o++] = draft[i++];
+            dest[o++] = draft[i++];
+            continue;
+        }
+        dest[o++] = (c == '\n' || c == '\r' || c == '\t') ? ' ' : (char)c;
+        ++i;
+    }
+    dest[o] = '\0';
+}
+
 static void tg_gui_driver_on_chat_list_changed(void *ctx,
                                                const tg_chat_list_row *rows,
                                                int count)
@@ -933,6 +970,17 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         chat->flash = 0;
         chat->pinned = rows[i].pinned ? 1 : 0;
         chat->unread_mark = rows[i].unread_mark ? 1 : 0;
+        if (gui->draft_text != 0 && rows[i].index != TG_GUI_SAVED_PEER_INDEX) {
+            const char *draft = gui->draft_text(rows[i].is_user ? 1 : 0,
+                                                rows[i].peer_id_hi,
+                                                rows[i].peer_id_lo);
+
+            if (draft != 0 && draft[0] != '\0') {
+                tg_gui_driver_draft_preview(chat->preview,
+                                            sizeof(chat->preview), draft);
+                chat->draft = chat->preview[0] != '\0';
+            }
+        }
         if (rows[i].is_current) {
             state->selected_chat = state->chat_count;
         }
@@ -1068,6 +1116,7 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
     gui->state = state;
     gui->prepend_at = -1; /* append by default; load-older flips it transiently */
     gui->prepend_allow_drop = 0;
+    gui->draft_text = 0;
     chat_driver->ctx = gui;
     chat_driver->on_message = tg_gui_driver_on_message;
     chat_driver->on_chat_list_changed = tg_gui_driver_on_chat_list_changed;
@@ -1680,6 +1729,20 @@ static int tg_gui_driver_reactions_self_test(void)
     return ok;
 }
 
+/* The drafts of the self-test: user 0x200 holds one, of two lines. */
+static const char *tg_gui_driver_test_draft(int is_user,
+                                            unsigned long peer_id_hi,
+                                            unsigned long peer_id_lo)
+{
+    if (is_user && peer_id_hi == 0UL && peer_id_lo == 0x200UL) {
+        return "due righe\n\x80! fine";
+    }
+    if (!is_user && peer_id_lo == 0x300UL) {
+        return "not Anna's: a group with her id";
+    }
+    return 0;
+}
+
 int tg_gui_driver_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -2091,6 +2154,38 @@ int tg_gui_driver_self_test(void)
             puts("gui driver self-test: chat avatar colour out of range");
             return 2;
         }
+        if (state.chats[1].draft || state.chats[1].preview[0] != '\0') {
+            puts("gui driver self-test: a draft with no drafts to ask");
+            return 2;
+        }
+        /* A chat that holds a draft shows it on one line under its name;
+           a group with the same id as a user is another chat. */
+        gui.draft_text = tg_gui_driver_test_draft;
+        driver.on_chat_list_changed(driver.ctx, list, 4);
+        gui.draft_text = 0;
+        if (!state.chats[1].draft ||
+            strcmp(state.chats[1].preview, "due righe \x80! fine") != 0 ||
+            state.chats[0].draft || state.chats[2].draft ||
+            state.chats[2].preview[0] != '\0') {
+            puts("gui driver self-test: draft in the chat list wrong");
+            return 2;
+        }
+        {
+            char cut[6];
+
+            /* The cut keeps an emoji pair whole. */
+            tg_gui_driver_draft_preview(cut, sizeof(cut), "abcd\x80!");
+            if (strcmp(cut, "abcd") != 0) {
+                puts("gui driver self-test: draft cut split an emoji pair");
+                return 2;
+            }
+            tg_gui_driver_text_from_utf8(cut, sizeof(cut), "perch\xc3\xa9");
+            if (strcmp(cut, "perch") != 0) {
+                puts("gui driver self-test: text_from_utf8 cut wrong");
+                return 2;
+            }
+        }
+        driver.on_chat_list_changed(driver.ctx, list, 4);
 
         /* Notifications bump the matching row's badge and flash it (unless it
            is the open chat); unknown peers are ignored. */

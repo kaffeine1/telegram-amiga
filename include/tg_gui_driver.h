@@ -31,6 +31,12 @@ typedef struct tg_gui_chat_driver {
        top); 0 refuses the insert so on-screen newest rows are never evicted (the
        fits-the-window case) -- paging then simply stops at the ring's capacity. */
     int prepend_allow_drop;
+    /* The draft a chat holds, in the composer's own text (Latin-1 with the
+       emoji pairs), or 0 when it holds none. Set by the session after the
+       bind; 0 = no drafts (the tests, the demo). The chat list shows it
+       under the name. */
+    const char *(*draft_text)(int is_user, unsigned long peer_id_hi,
+                              unsigned long peer_id_lo);
 } tg_gui_chat_driver;
 
 /* Binds chat_driver (the engine-facing vtable) so its on_message appends to
@@ -47,6 +53,12 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
    list (chat_count = 0) before the fetch. */
 void tg_gui_search_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
                                tg_chat_driver *chat_driver);
+
+/* UTF-8 from Telegram into the text the GUI draws and the composer edits:
+   Latin-1, an emoji the glyph sheet knows as its two-byte pair, line breaks
+   kept. Cut to the buffer on a character boundary. */
+void tg_gui_driver_text_from_utf8(char *dest, unsigned long size,
+                                  const char *utf8);
 
 /* Index of the shown message with this server id, -1 when not shown. */
 int tg_gui_driver_index_of(const tg_gui_chat_driver *gui,

@@ -2485,17 +2485,34 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                 chat->name, name_limit - text_x);
             if (has_preview) {
                 int preview_limit;
+                int preview_x = text_x;
+                int preview_base = tg_gui_navigation_baseline(
+                    backend, y + slot_h, slot_h);
 
                 backend->draw_text(backend, preview_pen, time_x,
                                    name_baseline, chat->time,
                                    (unsigned long)strlen(chat->time));
                 preview_limit = badge_on ? (badge_x - 4)
                                          : (list_w - 10);
-                tg_gui_draw_clipped(backend, preview_pen, text_x,
-                                    tg_gui_navigation_baseline(backend, y + slot_h,
-                                                               slot_h),
-                                    chat->preview,
-                                    preview_limit - text_x);
+                /* A draft says so before its text, in the link pen so it
+                   stands apart from a message (the official clients use
+                   red, which the palette does not have). */
+                if (chat->draft) {
+                    static const char label[] = "Draft: ";
+                    unsigned long label_len = sizeof(label) - 1UL;
+                    int label_w = backend->text_width(backend, label,
+                                                      label_len);
+
+                    if (preview_x + label_w < preview_limit) {
+                        backend->draw_text(backend, TG_GUI_PEN_LINK,
+                                           preview_x, preview_base, label,
+                                           label_len);
+                        preview_x += label_w;
+                    }
+                }
+                tg_gui_draw_clipped(backend, preview_pen, preview_x,
+                                    preview_base, chat->preview,
+                                    preview_limit - preview_x);
             }
             if (badge_on) {
                 int badge_top;
@@ -8708,6 +8725,41 @@ int tg_gui_self_test(void)
             puts("gui self-test: day lines wrong");
             return 2;
         }
+    }
+
+    /* A chat that holds a draft shows it under the name, after "Draft: ";
+       a plain preview has no such label. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        tg_gui_chat saved_chat = state.chats[0];
+        int pass;
+
+        for (pass = 0; pass < 2; ++pass) {
+            tg_gui_copy(state.chats[0].preview,
+                        sizeof(state.chats[0].preview), "unsent words");
+            state.chats[0].draft = pass == 0;
+            state.chats[0].unread = 0;
+            state.chats[0].unread_mark = 0;
+            memset(&rec, 0, sizeof(rec));
+            rec.width = 640;
+            rec.height = 480;
+            rec.watch_text[0] = "Draft: ";
+            rec.watch_text[1] = state.chats[0].preview;
+            b.context = &rec;
+            tg_gui_paint(&state, &b);
+            if (rec.watch_hits[1] != 1 ||
+                rec.watch_hits[0] != (pass == 0 ? 1 : 0) ||
+                (pass == 0 && (rec.watch_y[0] != rec.watch_y[1] ||
+                               rec.watch_x[1] <= rec.watch_x[0]))) {
+                printf("gui self-test: draft row pass %d drew %d/%d at %d/%d\n",
+                       pass, rec.watch_hits[0], rec.watch_hits[1],
+                       rec.watch_x[0], rec.watch_x[1]);
+                state.chats[0] = saved_chat;
+                return 2;
+            }
+        }
+        state.chats[0] = saved_chat;
     }
 
     /* Save-as naming/path joining is platform-neutral. Existing destinations

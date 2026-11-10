@@ -49,6 +49,8 @@
 #define TG_CHANNELS_READ_HISTORY_CONSTRUCTOR 0xcc104937UL
 #define TG_MESSAGES_MARK_DIALOG_UNREAD_CONSTRUCTOR 0x8c5006f8UL
 #define TG_MESSAGES_GET_DIALOG_UNREAD_MARKS_CONSTRUCTOR 0x21202222UL
+#define TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR 0x54ae308eUL
+#define TG_MESSAGES_GET_ALL_DRAFTS_CONSTRUCTOR 0x6a3f8d65UL
 #define TG_MESSAGES_DELETE_HISTORY_CONSTRUCTOR 0xb08f922aUL
 #define TG_MESSAGES_DELETE_CHAT_USER_CONSTRUCTOR 0xa2185cabUL
 #define TG_CHANNELS_LEAVE_CHANNEL_CONSTRUCTOR 0xf836aa95UL
@@ -1430,6 +1432,160 @@ static tg_mtproto_tl_status tg_read_vector_count(tg_mtproto_tl_reader *reader,
 static tg_mtproto_tl_status tg_read_peer_ref(tg_mtproto_tl_reader *reader,
                                              tg_mtproto_dialog_peer *peer);
 
+/* messages.saveDraft#54ae308e flags:# no_webpage:flags.1?true
+   invert_media:flags.6?true reply_to:flags.4?InputReplyTo peer:InputPeer
+   message:string entities:flags.3?Vector<MessageEntity>
+   media:flags.5?InputMedia effect:flags.7?long
+   suggested_post:flags.8?SuggestedPost = Bool;
+   Plain text only; an empty message deletes the draft. */
+tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
+    tg_mtproto_tl_writer *writer,
+    const char *message,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, message);
+    }
+    return status;
+}
+
+/* messages.getAllDrafts#6a3f8d65 = Updates: one updateDraftMessage for
+   every chat that holds a draft. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_all_drafts(
+    tg_mtproto_tl_writer *writer)
+{
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_mtproto_tl_write_u32(writer,
+                                   TG_MESSAGES_GET_ALL_DRAFTS_CONSTRUCTOR);
+}
+
+/* The InputReplyTo of a draft, skipped: only what a plain reply or a reply
+   with an unformatted quote carries. Anything else fails, and the draft
+   with it. */
+static tg_mtproto_tl_status tg_skip_draft_reply_to(
+    tg_mtproto_tl_reader *reader)
+{
+    unsigned long constructor;
+    unsigned long flags;
+    unsigned long scratch;
+
+    /* inputReplyToMessage#869fbe10 flags:# reply_to_msg_id:int
+       top_msg_id:flags.0?int reply_to_peer_id:flags.1?InputPeer
+       quote_text:flags.2?string quote_entities:flags.3?Vector<MessageEntity>
+       quote_offset:flags.4?int monoforum_peer_id:flags.5?InputPeer
+       todo_item_id:flags.6?int */
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+        constructor != TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & ~(1UL | 4UL | 16UL)) != 0UL ||
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 1UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 4UL) != 0UL && tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 16UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* updateDraftMessage#edfc111e flags:# peer:Peer top_msg_id:flags.0?int
+   saved_peer_id:flags.1?Peer draft:DraftMessage, the reader just past the
+   constructor. Gives the chat and the draft's text: *has_text is 0 when
+   the draft was deleted (draftMessageEmpty, or an empty text). A draft of
+   a forum topic, one with a reply this client cannot skip, or anything
+   that does not read as a draft, fails: the caller leaves it alone. The
+   date is 0 when formatting or media stand before it. */
+tg_mtproto_tl_status tg_mtproto_read_update_draft(
+    tg_mtproto_tl_reader *reader,
+    tg_mtproto_dialog_peer *peer,
+    int *has_text,
+    char *text,
+    unsigned long text_size,
+    int *was_cut,
+    unsigned long *date)
+{
+    unsigned long flags;
+    unsigned long constructor;
+    unsigned long scratch;
+
+    if (reader == 0 || peer == 0 || has_text == 0 || text == 0 ||
+        text_size == 0UL || date == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    *has_text = 0;
+    *date = 0UL;
+    text[0] = '\0';
+    if (was_cut != 0) {
+        *was_cut = 0;
+    }
+    memset(peer, 0, sizeof(*peer));
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        flags != 0UL || /* a topic's or a Saved Messages sub-chat's draft */
+        tg_read_peer_ref(reader, peer) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (constructor == TG_DRAFT_MESSAGE_EMPTY_CONSTRUCTOR) {
+        if ((flags & ~1UL) != 0UL) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if ((flags & 1UL) != 0UL &&
+            tg_mtproto_tl_read_u32(reader, date) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        return TG_MTPROTO_TL_OK;
+    }
+    if (constructor != TG_DRAFT_MESSAGE_CONSTRUCTOR ||
+        (flags & ~(2UL | 8UL | 16UL | 32UL | 64UL | 128UL | 256UL)) != 0UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 16UL) != 0UL &&
+        tg_skip_draft_reply_to(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (tg_read_string_copy_cut(reader, text, text_size, was_cut) !=
+        TG_MTPROTO_TL_OK) {
+        text[0] = '\0';
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & (8UL | 32UL)) == 0UL &&
+        tg_mtproto_tl_read_u32(reader, &scratch) == TG_MTPROTO_TL_OK) {
+        *date = scratch;
+    }
+    *has_text = text[0] != '\0';
+    return TG_MTPROTO_TL_OK;
+}
+
 /* The reply: Vector<DialogPeer>, dialogPeer#e56dbf05 peer:Peer or
    dialogPeerFolder#514519e2 folder_id:int (left out). Fills out->peers with
    the peers and returns OK; a body that is not such a vector is INVALID. */
@@ -1766,6 +1922,22 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_user(
 
 /* inputReplyToMessage#869fbe10 flags:# reply_to_msg_id:int ... (layer 214).
    Plain reply: flags=0, so no top_msg_id/quote/monoforum/todo are serialized. */
+/* messages.sendMessage flags: bit 0 a reply, bit 7 clear_draft. The draft
+   is cleared only when the caller says the text sent is what the composer
+   held (the window), never for a line typed elsewhere. */
+static int tg_send_clear_draft = 0;
+
+void tg_mtproto_send_set_clear_draft(int on)
+{
+    tg_send_clear_draft = on ? 1 : 0;
+}
+
+static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
+{
+    return ((reply_to_msg_id != 0UL) ? 1UL : 0UL) |
+           (tg_send_clear_draft ? 128UL : 0UL);
+}
+
 static tg_mtproto_tl_status tg_write_input_reply_to_message(
     tg_mtproto_tl_writer *writer, unsigned long reply_to_msg_id)
 {
@@ -1798,7 +1970,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_self(
                                      TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer,
-                                         (reply_to_msg_id != 0UL) ? 1UL : 0UL);
+                                         tg_send_message_flags(reply_to_msg_id));
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, TG_INPUT_PEER_SELF_CONSTRUCTOR);
@@ -1835,7 +2007,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_user(
                                      TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer,
-                                         (reply_to_msg_id != 0UL) ? 1UL : 0UL);
+                                         tg_send_message_flags(reply_to_msg_id));
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer_user(writer, user_id_hi, user_id_lo,
@@ -1875,7 +2047,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_peer(
                                      TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer,
-                                         (reply_to_msg_id != 0UL) ? 1UL : 0UL);
+                                         tg_send_message_flags(reply_to_msg_id));
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -10187,6 +10359,139 @@ int tg_mtproto_login_self_test(void)
             pin_query[1] != 0x22U || pin_query[2] != 0x20U ||
             pin_query[3] != 0x21U || pin_query[4] != 0x00U) {
             return 2;
+        }
+        /* Drafts: saveDraft with a text and with none (that deletes it),
+           getAllDrafts, and the clear_draft bit of a message sent. */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_save_draft(
+                &pw, "ciao", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 28UL || pin_query[0] != 0x8eU ||
+            pin_query[1] != 0x30U || pin_query[2] != 0xaeU ||
+            pin_query[3] != 0x54U || pin_query[4] != 0x00U ||
+            pin_query[8] != 0xb9U || pin_query[20] != 0x04U ||
+            pin_query[21] != 'c' || pin_query[24] != 'o') {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_save_draft(
+                &pw, "", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 24UL || pin_query[20] != 0x00U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_get_all_drafts(&pw) !=
+                TG_MTPROTO_TL_OK ||
+            pw.length != 4UL || pin_query[0] != 0x65U ||
+            pin_query[1] != 0x8dU || pin_query[2] != 0x3fU ||
+            pin_query[3] != 0x6aU) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        tg_mtproto_send_set_clear_draft(1);
+        if (tg_mtproto_build_messages_send_self(&pw, "x", 0UL, 1UL, 2UL) !=
+                TG_MTPROTO_TL_OK ||
+            pin_query[4] != 0x80U) {
+            tg_mtproto_send_set_clear_draft(0);
+            return 2;
+        }
+        tg_mtproto_send_set_clear_draft(0);
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_send_self(&pw, "x", 7UL, 1UL, 2UL) !=
+                TG_MTPROTO_TL_OK ||
+            pin_query[4] != 0x01U) {
+            return 2;
+        }
+        /* updateDraftMessage read back: a plain draft, one that replies
+           with a quote, a deleted one, and the ones left alone. */
+        {
+            unsigned char ub[96];
+            tg_mtproto_tl_writer uw;
+            tg_mtproto_tl_reader ur;
+            tg_mtproto_dialog_peer up;
+            char ut[8];
+            int has = 0;
+            int cut = 0;
+            unsigned long when = 0UL;
+
+            tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
+            if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, TG_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&uw, 0UL, 77UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 2UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&uw, "ciao a tutti") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 1700000000UL) !=
+                    TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+            if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
+                                             &cut, &when) !=
+                    TG_MTPROTO_TL_OK ||
+                !has || !cut || strcmp(ut, "ciao a ") != 0 ||
+                when != 1700000000UL ||
+                up.peer_constructor != TG_PEER_USER_CONSTRUCTOR ||
+                up.id_lo != 77UL) {
+                return 2;
+            }
+            tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
+            if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, TG_PEER_CHAT_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&uw, 0UL, 78UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 16UL | 8UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(
+                    &uw, TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 4UL | 16UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 55UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&uw, "quoted") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 3UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&uw, "si") != TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+            if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
+                                             &cut, &when) !=
+                    TG_MTPROTO_TL_OK ||
+                !has || cut || strcmp(ut, "si") != 0 || when != 0UL ||
+                up.id_lo != 78UL) {
+                return 2;
+            }
+            tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
+            if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, TG_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&uw, 0UL, 77UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(
+                    &uw, TG_DRAFT_MESSAGE_EMPTY_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&uw, 9UL) != TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+            has = 1;
+            if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
+                                             &cut, &when) !=
+                    TG_MTPROTO_TL_OK ||
+                has || ut[0] != '\0' || when != 9UL) {
+                return 2;
+            }
+            /* A forum topic's draft (top_msg_id) is not this chat's. */
+            ub[0] = 0x01U;
+            tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+            if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
+                                             &cut, &when) ==
+                TG_MTPROTO_TL_OK) {
+                return 2;
+            }
         }
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_delete_history(

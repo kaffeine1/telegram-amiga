@@ -14469,9 +14469,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->search_active = 0;
                             state->msg_search_active = 0;
                             if (state->composing) {
+                                /* The text stays: it becomes the draft of
+                                   the chat being left (the session saves
+                                   it when another chat opens). */
                                 state->composing = 0;
-                                state->input[0] = '\0';
-                                state->input_caret = 0;
                                 state->history_pos = -1;
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),

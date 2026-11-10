@@ -327,9 +327,12 @@ it works today:
   Telegram, which every official client does; a mark changed on another
   device while running (`updateDialogUnreadMark`); deleting a private
   chat for both sides;
-- drafts shown and kept in step with the other devices
-  (`messages.saveDraft`). Half done: they are read without harm, never
-  shown;
+- drafts shown and kept in step with the other devices: done in the
+  window (`messages.getAllDrafts` at start and on Reload,
+  `updateDraftMessage` live, `messages.saveDraft` on leaving a chat and
+  on closing, `clear_draft` on the message sent). Still missing: the
+  reply and the formatting of a draft, drafts in Saved Messages and in
+  forum topics, and the text client;
 - the pinned message under the chat header, and a jump to the next
   unread mention (`messages.getUnreadMentions`);
 - Mute in the chat's menu sent to Telegram (`account.updateNotifySettings`).
