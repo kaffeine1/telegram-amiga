@@ -932,6 +932,7 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         chat->is_group = !rows[i].is_user;
         chat->flash = 0;
         chat->pinned = rows[i].pinned ? 1 : 0;
+        chat->unread_mark = rows[i].unread_mark ? 1 : 0;
         if (rows[i].is_current) {
             state->selected_chat = state->chat_count;
         }

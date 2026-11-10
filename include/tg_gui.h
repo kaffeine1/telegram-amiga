@@ -270,6 +270,7 @@ typedef struct tg_gui_chat {
     int is_group;             /* basic groups and channels start quiet */
     int flash;                /* a notification landed since last opened: blink the badge */
     int pinned;               /* pinned on Telegram: first in the list, pin mark */
+    int unread_mark;          /* marked as unread: an empty badge when unread is 0 */
 } tg_gui_chat;
 
 /* Window mode: the normal chat UI, or one of the first-login screens shown when
@@ -860,6 +861,10 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_PIN 35 /* Pin / Unpin the chat on Telegram */
 #define TG_GUI_CTX_CHAT_FIND 36 /* Find in chat, in the menu over the chat */
 #define TG_GUI_CTX_CHAT_ARCHIVE 37 /* Archive, or Unarchive in the Archive */
+#define TG_GUI_CTX_CHAT_READ 38 /* Mark as read / Mark as unread */
+#define TG_GUI_CTX_CHAT_LEAVE 39 /* Leave a group or channel, delete a chat */
+#define TG_GUI_CTX_LIST_ARCHIVE 40 /* the list itself: Archived chats / back */
+#define TG_GUI_CTX_LIST_RELOAD 41 /* the list itself: Reload chat list */
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a

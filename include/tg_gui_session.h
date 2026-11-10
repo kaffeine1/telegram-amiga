@@ -310,6 +310,21 @@ int tg_gui_session_archive_refresh(FILE *stream);
 int tg_gui_session_set_archived(unsigned long peer_index, int archived,
                                 FILE *stream);
 
+/* Marks the chat at this 1-based cache index as unread (1: Telegram's
+   unread mark) or as read (0: reads its messages and clears the mark), then
+   redraws the list. 0 = done, 2 = failed. */
+int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
+                               FILE *stream);
+
+/* What leaving a chat means for it: 0 a private chat, 1 a basic group, 2 a
+   channel or a supergroup, -1 unknown. */
+int tg_gui_session_chat_kind(unsigned long peer_index);
+
+/* Takes the chat off the account on Telegram: leaves a group or a channel,
+   deletes a private chat's (and a basic group's) history for this account.
+   The chat then leaves the list here. 0 = done, 2 = failed. */
+int tg_gui_session_leave_chat(unsigned long peer_index, FILE *stream);
+
 /* 1 when the chat with this peer id is pinned on Telegram (as last read). */
 int tg_gui_session_chat_pinned(unsigned long peer_id_hi,
                                unsigned long peer_id_lo);

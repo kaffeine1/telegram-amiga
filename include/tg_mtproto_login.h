@@ -751,6 +751,64 @@ unsigned long tg_mtproto_find_message_date(const unsigned char *body,
                                            unsigned long peer_id_lo,
                                            unsigned long message_id);
 
+/* Marks a chat read up to max_id: messages.readHistory, or
+   channels.readHistory for a channel or a supergroup. */
+tg_mtproto_tl_status tg_mtproto_build_read_history_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long max_id);
+
+/* messages.markDialogUnread: sets (1) or clears (0) the unread mark. */
+tg_mtproto_tl_status tg_mtproto_build_messages_mark_dialog_unread(
+    tg_mtproto_tl_writer *writer,
+    int unread,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+
+/* messages.getDialogUnreadMarks and its Vector<DialogPeer> reply. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_dialog_unread_marks(
+    tg_mtproto_tl_writer *writer);
+tg_mtproto_tl_status tg_mtproto_parse_dialog_unread_marks(
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_dialog_peer_list *out);
+
+/* messages.deleteHistory for this account only (not for a channel), and the
+   offset its messages.affectedHistory reply leaves to delete. */
+tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+tg_mtproto_tl_status tg_mtproto_parse_affected_history_offset(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    unsigned long *offset);
+
+/* Leaves a channel or supergroup (channels.leaveChannel) or a basic group
+   (messages.deleteChatUser with inputUserSelf). */
+tg_mtproto_tl_status tg_mtproto_build_leave_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+
 /* messages.search in one chat (no filter, newest first, below offset_id
    when non-zero). query_utf8 must be non-empty. */
 tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(

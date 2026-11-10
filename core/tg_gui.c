@@ -2416,6 +2416,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             int slot_h;
             int name_baseline;
             int name_limit;
+            int badge_on;
             int time_x = 0;
 
             /* The peer cache carries no last-message preview, so a row is a
@@ -2435,7 +2436,13 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             badge[0] = '\0';
             badge_w = 0;
             badge_x = list_w - 10;
-            if (chat->unread > 0) {
+            /* A chat marked as unread with nothing new to count shows the
+               badge empty, a round dot, as the official clients do. */
+            badge_on = chat->unread > 0 || chat->unread_mark;
+            if (badge_on && chat->unread <= 0) {
+                badge_w = lh + 4;
+                badge_x = list_w - 8 - badge_w;
+            } else if (chat->unread > 0) {
                 int num_w;
 
                 sprintf(badge, "%d", chat->unread > 999 ? 999 : chat->unread);
@@ -2449,7 +2456,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             }
             /* A pinned chat without unread messages shows the pin mark
                where the badge would be (Telegram Desktop's place for it). */
-            if (chat->pinned && chat->unread <= 0) {
+            if (chat->pinned && !badge_on) {
                 badge_w = tg_gui_pin_mark_width(lh);
                 badge_x = list_w - 8 - badge_w;
                 tg_gui_draw_pin_mark(backend, preview_pen, badge_x,
@@ -2469,7 +2476,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                 }
                 name_limit = time_x - 6;
             } else {
-                name_limit = (chat->unread > 0 ||
+                name_limit = (badge_on ||
                               (chat->pinned && badge_w > 0))
                                  ? (badge_x - 6)
                                  : (list_w - 10);
@@ -2482,15 +2489,15 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                 backend->draw_text(backend, preview_pen, time_x,
                                    name_baseline, chat->time,
                                    (unsigned long)strlen(chat->time));
-                preview_limit = (chat->unread > 0) ? (badge_x - 4)
-                                                   : (list_w - 10);
+                preview_limit = badge_on ? (badge_x - 4)
+                                         : (list_w - 10);
                 tg_gui_draw_clipped(backend, preview_pen, text_x,
                                     tg_gui_navigation_baseline(backend, y + slot_h,
                                                                slot_h),
                                     chat->preview,
                                     preview_limit - text_x);
             }
-            if (chat->unread > 0) {
+            if (badge_on) {
                 int badge_top;
                 int badge_h;
                 int num_x;
@@ -5605,6 +5612,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             }
             labels[n] = state->archive_view ? "Unarchive" : "Archive";
             ids[n++] = TG_GUI_CTX_CHAT_ARCHIVE;
+            labels[n] = (state->chats[state->ctx_chat - 1].unread > 0 ||
+                         state->chats[state->ctx_chat - 1].unread_mark)
+                            ? "Mark as read" : "Mark as unread";
+            ids[n++] = TG_GUI_CTX_CHAT_READ;
         }
         labels[n] = "Remove chat";
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
@@ -5624,6 +5635,19 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = "Show hidden messages";
             ids[n++] = TG_GUI_CTX_CHAT_SHOW_HIDDEN;
         }
+        /* Gone from Telegram, not just from this list: last of the chat's
+           own items, and asked again before it happens. */
+        if (state->chats[state->ctx_chat - 1].index !=
+            TG_GUI_SAVED_PEER_INDEX) {
+            labels[n] = state->chats[state->ctx_chat - 1].is_group
+                            ? "Leave..." : "Delete chat...";
+            ids[n++] = TG_GUI_CTX_CHAT_LEAVE;
+        }
+        /* The list's own commands, as in the Amigram menu. */
+        labels[n] = state->archive_view ? "Back to chats" : "Archived chats";
+        ids[n++] = TG_GUI_CTX_LIST_ARCHIVE;
+        labels[n] = "Reload chat list";
+        ids[n++] = TG_GUI_CTX_LIST_RELOAD;
         return n;
     }
     if (state->ctx_react && state->ctx_msg >= 0 &&
@@ -7293,65 +7317,86 @@ static int tg_gui_notify_menu_self_test(void)
     state->ctx_chat = 1;
     state->chats[0].index = 5UL;
     state->chats[0].pinned = 0;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
         ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
         ids[1] != TG_GUI_CTX_CHAT_ARCHIVE ||
         strcmp(labels[1], "Archive") != 0 ||
-        ids[2] != TG_GUI_CTX_CHAT_REMOVE || ids[3] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[3], "Mute") != 0 || ids[4] != TG_GUI_CTX_CHAT_SOUND ||
-        strcmp(labels[4], "Sound...") != 0 ||
-        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        strcmp(labels[5], "Default sound") != 0) {
+        ids[2] != TG_GUI_CTX_CHAT_READ ||
+        strcmp(labels[2], "Mark as unread") != 0 ||
+        ids[3] != TG_GUI_CTX_CHAT_REMOVE || ids[4] != TG_GUI_CTX_CHAT_MUTE ||
+        strcmp(labels[4], "Mute") != 0 || ids[5] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[5], "Sound...") != 0 ||
+        ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        strcmp(labels[6], "Default sound") != 0 ||
+        ids[7] != TG_GUI_CTX_CHAT_LEAVE ||
+        strcmp(labels[7], "Delete chat...") != 0 ||
+        ids[8] != TG_GUI_CTX_LIST_ARCHIVE ||
+        strcmp(labels[8], "Archived chats") != 0 ||
+        ids[9] != TG_GUI_CTX_LIST_RELOAD) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->chats[0].pinned = 1;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
         strcmp(labels[0], "Unpin") != 0) {
         puts("gui self-test: a pinned chat's menu cannot unpin");
         return 2;
     }
+    /* A chat with something unread, or marked so, offers to mark it read. */
+    state->chats[0].unread_mark = 1;
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
+        strcmp(labels[2], "Mark as read") != 0) {
+        puts("gui self-test: a marked chat's menu cannot mark it read");
+        return 2;
+    }
+    state->chats[0].unread_mark = 0;
     /* In the Archive the menu leads with the way back, and has no pin. */
     state->archive_view = 1;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
+    if (tg_gui_context_items(state, labels, ids) != 9 ||
         ids[0] != TG_GUI_CTX_CHAT_ARCHIVE ||
         strcmp(labels[0], "Unarchive") != 0 ||
-        ids[1] != TG_GUI_CTX_CHAT_REMOVE) {
+        ids[1] != TG_GUI_CTX_CHAT_READ ||
+        ids[2] != TG_GUI_CTX_CHAT_REMOVE ||
+        strcmp(labels[7], "Back to chats") != 0) {
         puts("gui self-test: an archived chat's menu cannot unarchive");
         return 2;
     }
     state->archive_view = 0;
     state->chats[0].pinned = 0;
     state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
-    if (tg_gui_context_items(state, labels, ids) != 4 ||
-        ids[0] != TG_GUI_CTX_CHAT_REMOVE) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        ids[0] != TG_GUI_CTX_CHAT_REMOVE ||
+        ids[4] != TG_GUI_CTX_LIST_ARCHIVE ||
+        ids[5] != TG_GUI_CTX_LIST_RELOAD) {
         puts("gui self-test: Saved Messages offers no pin");
         return 2;
     }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        strcmp(labels[3], "Unmute") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
+        strcmp(labels[4], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 7 ||
-        ids[4] != TG_GUI_CTX_CHAT_RING || strcmp(labels[4], "Enable ring") != 0 ||
-        ids[5] != TG_GUI_CTX_CHAT_SOUND ||
-        ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+    if (tg_gui_context_items(state, labels, ids) != 11 ||
+        ids[5] != TG_GUI_CTX_CHAT_RING || strcmp(labels[5], "Enable ring") != 0 ||
+        ids[6] != TG_GUI_CTX_CHAT_SOUND ||
+        ids[7] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        ids[8] != TG_GUI_CTX_CHAT_LEAVE || strcmp(labels[8], "Leave...") != 0) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 7 ||
-        strcmp(labels[3], "Mute") != 0 || strcmp(labels[4], "Disable ring") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 11 ||
+        strcmp(labels[4], "Mute") != 0 || strcmp(labels[5], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
     state->ctx_hidden_count = 2UL;
-    if (tg_gui_context_items(state, labels, ids) != 8 ||
-        ids[7] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+    if (tg_gui_context_items(state, labels, ids) != 12 ||
+        ids[8] != TG_GUI_CTX_CHAT_SHOW_HIDDEN ||
+        ids[9] != TG_GUI_CTX_CHAT_LEAVE) {
         puts("gui self-test: group menu cannot show hidden messages");
         return 2;
     }

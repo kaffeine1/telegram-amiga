@@ -21430,8 +21430,50 @@ static int tg_gui_pin_matches(const tg_gui_pin *pin, const tg_chat_list_row *row
            (row->is_user ? 1 : 0) == pin->is_user;
 }
 
+/* The chats marked as unread on Telegram, read with
+   messages.getDialogUnreadMarks when the session opens and on Reload chat
+   list, changed by Mark as unread / Mark as read here. In memory only. */
+#define TG_GUI_MARKS_MAX 32
+static tg_gui_pin tg_gui_marks[TG_GUI_MARKS_MAX];
+static int tg_gui_mark_count = 0;
+
+static int tg_gui_mark_find(int is_user, unsigned long id_hi,
+                            unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_mark_count; ++i) {
+        if (tg_gui_marks[i].is_user == (is_user ? 1 : 0) &&
+            tg_gui_marks[i].id_hi == id_hi && tg_gui_marks[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void tg_gui_mark_set(int is_user, unsigned long id_hi,
+                            unsigned long id_lo, int unread)
+{
+    int at = tg_gui_mark_find(is_user, id_hi, id_lo);
+
+    if (unread) {
+        if (at < 0 && tg_gui_mark_count < TG_GUI_MARKS_MAX) {
+            tg_gui_marks[tg_gui_mark_count].is_user = is_user ? 1 : 0;
+            tg_gui_marks[tg_gui_mark_count].id_hi = id_hi;
+            tg_gui_marks[tg_gui_mark_count].id_lo = id_lo;
+            ++tg_gui_mark_count;
+        }
+    } else if (at >= 0) {
+        memmove(&tg_gui_marks[at], &tg_gui_marks[at + 1],
+                (size_t)(tg_gui_mark_count - at - 1) *
+                    sizeof(tg_gui_marks[0]));
+        --tg_gui_mark_count;
+    }
+}
+
 /* Pinned rows first, in pin order, marked; the others after them in the
-   order they had. Stable and in place. */
+   order they had. Stable and in place. The unread marks go on here too:
+   every projection of the list passes through. */
 static void tg_gui_pins_apply(tg_chat_list_row *rows, int count)
 {
     int out = 0;
@@ -21440,6 +21482,10 @@ static void tg_gui_pins_apply(tg_chat_list_row *rows, int count)
 
     for (j = 0; j < count; ++j) {
         rows[j].pinned = 0;
+        rows[j].unread_mark =
+            rows[j].index != TG_GUI_SAVED_PEER_INDEX &&
+            tg_gui_mark_find(rows[j].is_user, rows[j].peer_id_hi,
+                             rows[j].peer_id_lo) >= 0;
     }
     for (p = 0; p < tg_gui_pin_count && out < count; ++p) {
         for (j = out; j < count; ++j) {
@@ -21458,6 +21504,7 @@ static void tg_gui_pins_apply(tg_chat_list_row *rows, int count)
 }
 
 static int tg_gui_session_fetch_pins(FILE *stream);
+static int tg_gui_session_fetch_marks(FILE *stream);
 static void tg_gui_session_reload_chats(void);
 
 #if !defined(TG_NO_SELFTEST)
@@ -21729,9 +21776,17 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
         }
     }
     tg_gui_session_state.open = 1;
-    /* Telegram's pinned chats go first in the list. */
-    if (tg_gui_session_fetch_pins(stream) == 0 && tg_gui_pin_count > 0) {
-        tg_gui_session_reload_chats();
+    /* Telegram's pinned chats go first in the list, and the chats marked
+       as unread show their dot. */
+    {
+        int pins_ok = tg_gui_session_fetch_pins(stream) == 0 &&
+                      tg_gui_pin_count > 0;
+        int marks_ok = tg_gui_session_fetch_marks(stream) == 0 &&
+                       tg_gui_mark_count > 0;
+
+        if (pins_ok || marks_ok) {
+            tg_gui_session_reload_chats();
+        }
     }
     tg_mtproto_avatar_store_load(); /* blurred previews from the last run */
     tg_gui_log("open: ready");
@@ -22289,6 +22344,64 @@ static int tg_gui_session_fetch_pins(FILE *stream)
     return 0;
 }
 
+/* Read the chats marked as unread into tg_gui_marks. 0 = read (the list may
+   be empty), non-zero = the request failed and the old list stays. */
+static int tg_gui_session_fetch_marks(FILE *stream)
+{
+    unsigned char query[16];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    static tg_mtproto_dialog_peer_list marked;
+    static const char label[] = "mtproto messages.getDialogUnreadMarks";
+    FILE *quiet;
+    unsigned long i;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_dialog_unread_marks(&writer) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, query,
+        writer.length, &result, quiet, label, 16U);
+    if (rc == 0 &&
+        result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+        rc = 1;
+    }
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 1;
+    }
+    /* A bare Vector<DialogPeer>: the vector constructor is the result's. */
+    if (rc == 0 &&
+        (result.result_constructor != TG_MTPROTO_TL_VECTOR_CONSTRUCTOR ||
+         tg_mtproto_parse_dialog_unread_marks(
+             result.result_body - 4U, result.result_body_length + 4U,
+             &marked) != TG_MTPROTO_TL_OK)) {
+        rc = 1;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("marks: fetch failed");
+        return rc;
+    }
+    tg_gui_mark_count = 0;
+    for (i = 0UL; i < marked.count; ++i) {
+        tg_gui_mark_set(marked.peers[i].peer_constructor ==
+                            TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                        marked.peers[i].id_hi, marked.peers[i].id_lo, 1);
+    }
+    return 0;
+}
+
 /* Public: pin (pinned = 1) or unpin the chat at this 1-based cache index on
    Telegram, then read the pins again and redraw the list. 0 = done, 1 =
    Telegram refused (the pin limit), 2 = failed. */
@@ -22557,6 +22670,7 @@ int tg_gui_session_reload_chat_list(FILE *stream)
         }
         tg_mtproto_close_quiet_stream(q, stream);
         (void)tg_gui_session_fetch_pins(stream); /* pins changed elsewhere */
+        (void)tg_gui_session_fetch_marks(stream); /* and the unread marks */
         (void)tg_gui_session_archive_refresh(stream); /* and the Archive */
         tg_gui_session_reload_chats();
         return 0;
@@ -23721,6 +23835,271 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
                             archived)) {
         tg_gui_archived_save();
     }
+    tg_gui_session_reload_chats();
+    return 0;
+}
+
+/* --- read / unread, leave, delete: a chat's state on Telegram ------------ */
+
+/* One request about the chat at a cache index, on the session's connection.
+   0 = the server took it, 1 = it answered with an RPC error (its text in
+   emsg), 2 = it could not be sent. */
+static int tg_gui_session_peer_request(const unsigned char *query,
+                                       unsigned long length,
+                                       tg_mtproto_rpc_result *result,
+                                       const char *label, char *emsg,
+                                       unsigned long emsg_size, FILE *quiet)
+{
+    int rc;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    memset(result, 0, sizeof(*result));
+    rc = tg_mtproto_send_saved_query_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, query,
+        length, result, quiet, label, 16U);
+    if (rc != 0) {
+        return 2;
+    }
+    if (result->result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+        char text[48];
+
+        text[0] = '\0';
+        (void)tg_mtproto_print_rpc_error(label, result, quiet);
+        (void)tg_mtproto_parse_rpc_error(result->result_body - 4U,
+                                         result->result_body_length + 4U,
+                                         &ecode, text, sizeof(text));
+        if (emsg != 0 && emsg_size > 0UL) {
+            unsigned long i;
+
+            for (i = 0UL; i + 1UL < emsg_size && text[i] != '\0'; ++i) {
+                emsg[i] = text[i];
+            }
+            emsg[i] = '\0';
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/* Public: mark the chat at this 1-based cache index as unread (unread = 1:
+   Telegram's unread mark, a dot on every device) or as read (0: its
+   messages are read up to the newest and the mark is cleared). Redraws the
+   list. 0 = done, 2 = failed. */
+int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
+                               FILE *stream)
+{
+    unsigned char query[64];
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    int is_user;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_gui_state *gst;
+    FILE *quiet;
+    int rc;
+
+    gst = tg_gui_session_state.gui_driver.state;
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, "mark unread") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    is_user = pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    rc = 0;
+    if (!unread) {
+        /* Read everything: an id above any message's reads up to the
+           newest, whatever it is by now. */
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_read_history_peer(&writer, pc, ph, pl, ahh, ahl,
+                                               hah, 0x7fffffffUL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_gui_session_peer_request(query, writer.length, &result,
+                                        "mtproto readHistory", 0, 0UL,
+                                        quiet) != 0) {
+            rc = 2;
+        }
+    }
+    if (rc == 0) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_mark_dialog_unread(
+                &writer, unread, pc, ph, pl, ahh, ahl, hah) !=
+                TG_MTPROTO_TL_OK ||
+            tg_gui_session_peer_request(query, writer.length, &result,
+                                        "mtproto messages.markDialogUnread",
+                                        0, 0UL, quiet) != 0) {
+            /* Clearing a mark that was not there is no failure once the
+               messages are read. */
+            rc = unread ? 2 : 0;
+        }
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return rc;
+    }
+    tg_gui_mark_set(is_user, ph, pl, unread);
+    if (!unread && gst != 0) {
+        int k;
+
+        /* The count goes with the read, here and in the cache. */
+        for (k = 0; k < gst->chat_count; ++k) {
+            if (gst->chats[k].index == peer_index) {
+                gst->chats[k].unread = 0;
+                gst->chats[k].flash = 0;
+                break;
+            }
+        }
+        tg_gui_session_persist_unread();
+    }
+    tg_gui_session_reload_chats();
+    return 0;
+}
+
+/* Public: what leaving the chat at this cache index means: 0 a private chat
+   (its history is deleted), 1 a basic group, 2 a channel or a supergroup,
+   -1 unknown. */
+int tg_gui_session_chat_kind(unsigned long peer_index)
+{
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return -1;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stdout);
+    rc = tg_mtproto_load_peer_cache_peer(
+        tg_gui_session_state.peer_cache_file, index_text, &pc, &ph, &pl,
+        &ahh, &ahl, &hah, quiet, "chat kind");
+    tg_mtproto_close_quiet_stream(quiet, stdout);
+    if (rc != 0) {
+        return -1;
+    }
+    if (pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+        return 0;
+    }
+    if (pc == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR) {
+        return 1;
+    }
+    return pc == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ? 2 : -1;
+}
+
+/* Public: take the chat at this 1-based cache index off the account, on
+   Telegram: a channel or a supergroup is left; a basic group is left and
+   its history deleted; a private chat has its history deleted for this
+   account (the other side keeps theirs). The chat then leaves the list
+   here (its row stays in the cache, hidden, as Remove chat does). 0 = done,
+   2 = failed (nothing, or not everything, was done). */
+int tg_gui_session_leave_chat(unsigned long peer_index, FILE *stream)
+{
+    unsigned char query[64];
+    char index_text[24];
+    char emsg[48];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, "leave chat") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    rc = 0;
+    if (pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+        int lrc;
+
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_leave_peer(&writer, pc, ph, pl, ahh, ahl, hah) !=
+            TG_MTPROTO_TL_OK) {
+            rc = 2;
+        } else {
+            lrc = tg_gui_session_peer_request(query, writer.length, &result,
+                                              "mtproto leave", emsg,
+                                              sizeof(emsg), quiet);
+            /* Already out (left or removed elsewhere) is as good as left. */
+            if (lrc == 2 ||
+                (lrc == 1 && strstr(emsg, "NOT_PARTICIPANT") == 0 &&
+                 strstr(emsg, "CHANNEL_PRIVATE") == 0 &&
+                 strstr(emsg, "PEER_ID_INVALID") == 0)) {
+                rc = 2;
+            }
+        }
+    }
+    if (rc == 0 && pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        int round;
+
+        /* A long history goes in several calls: the reply says how much is
+           left. Bounded, so a server that never reaches 0 cannot hold us. */
+        for (round = 0; round < 20; ++round) {
+            unsigned long left = 0UL;
+
+            tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+            if (tg_mtproto_build_messages_delete_history(
+                    &writer, pc, ph, pl, ahh, ahl, hah) != TG_MTPROTO_TL_OK ||
+                tg_gui_session_peer_request(query, writer.length, &result,
+                                            "mtproto messages.deleteHistory",
+                                            emsg, sizeof(emsg), quiet) != 0) {
+                rc = 2;
+                break;
+            }
+            if (tg_mtproto_parse_affected_history_offset(
+                    result.result_constructor, result.result_body,
+                    result.result_body_length, &left) != TG_MTPROTO_TL_OK ||
+                left == 0UL) {
+                break;
+            }
+        }
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return rc;
+    }
+    /* Out of every list here: the marks and the Archive forget it, and the
+       row is hidden like a removed chat. */
+    tg_gui_mark_set(pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR, ph, pl, 0);
+    if (tg_gui_archived_set(pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR, ph, pl,
+                            0)) {
+        tg_gui_archived_save();
+    }
+    (void)tg_gui_hidden_add(ph, pl);
     tg_gui_session_reload_chats();
     return 0;
 }

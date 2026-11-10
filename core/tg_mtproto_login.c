@@ -45,6 +45,16 @@
 #define TG_MESSAGES_GET_PINNED_DIALOGS_CONSTRUCTOR 0xd6b94df2UL
 #define TG_MESSAGES_TOGGLE_DIALOG_PIN_CONSTRUCTOR 0xa731e257UL
 #define TG_FOLDERS_EDIT_PEER_FOLDERS_CONSTRUCTOR 0x6847d0abUL
+#define TG_MESSAGES_READ_HISTORY_CONSTRUCTOR 0x0e306d3aUL
+#define TG_CHANNELS_READ_HISTORY_CONSTRUCTOR 0xcc104937UL
+#define TG_MESSAGES_MARK_DIALOG_UNREAD_CONSTRUCTOR 0x8c5006f8UL
+#define TG_MESSAGES_GET_DIALOG_UNREAD_MARKS_CONSTRUCTOR 0x21202222UL
+#define TG_MESSAGES_DELETE_HISTORY_CONSTRUCTOR 0xb08f922aUL
+#define TG_MESSAGES_DELETE_CHAT_USER_CONSTRUCTOR 0xa2185cabUL
+#define TG_CHANNELS_LEAVE_CHANNEL_CONSTRUCTOR 0xf836aa95UL
+#define TG_DIALOG_PEER_CONSTRUCTOR 0xe56dbf05UL
+#define TG_DIALOG_PEER_FOLDER_CONSTRUCTOR 0x514519e2UL
+#define TG_MESSAGES_AFFECTED_HISTORY_CONSTRUCTOR 0xb45c69d1UL
 #define TG_INPUT_FOLDER_PEER_CONSTRUCTOR 0xfbd2c296UL
 #define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
 #define TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR 0xfe05dc9aUL
@@ -1293,6 +1303,292 @@ tg_mtproto_tl_status tg_mtproto_build_folders_edit_peer_folder(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, folder_id);
+    }
+    return status;
+}
+
+/* inputChannel#f35aec28 channel_id:long access_hash:long. */
+static tg_mtproto_tl_status tg_write_input_channel(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo)
+{
+    tg_mtproto_tl_status status;
+
+    status = tg_mtproto_tl_write_u32(writer, TG_INPUT_CHANNEL_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, channel_id_hi, channel_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi,
+                                         access_hash_lo);
+    }
+    return status;
+}
+
+/* Marks a chat read up to max_id (layer 214 schema, checked 2026-11-10):
+   messages.readHistory#e306d3a peer:InputPeer max_id:int for a private chat
+   or a basic group, channels.readHistory#cc104937 channel:InputChannel
+   max_id:int for a channel or a supergroup. */
+tg_mtproto_tl_status tg_mtproto_build_read_history_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long max_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    if (peer_constructor == TG_PEER_CHANNEL_CONSTRUCTOR) {
+        if (!has_access_hash) {
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_CHANNELS_READ_HISTORY_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_write_input_channel(writer, peer_id_hi, peer_id_lo,
+                                            access_hash_hi, access_hash_lo);
+        }
+    } else {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_MESSAGES_READ_HISTORY_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                         peer_id_lo, access_hash_hi,
+                                         access_hash_lo, has_access_hash);
+        }
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, max_id);
+    }
+    return status;
+}
+
+/* messages.markDialogUnread#8c5006f8 flags:# unread:flags.0?true
+   parent_peer:flags.1?InputPeer peer:InputDialogPeer = Bool (layer 214
+   schema, checked 2026-11-10): sets or clears the "marked as unread" dot. */
+tg_mtproto_tl_status tg_mtproto_build_messages_mark_dialog_unread(
+    tg_mtproto_tl_writer *writer,
+    int unread,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_MESSAGES_MARK_DIALOG_UNREAD_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, unread ? 1UL : 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_DIALOG_PEER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    return status;
+}
+
+/* messages.getDialogUnreadMarks#21202222 flags:# parent_peer:flags.0?InputPeer
+   = Vector<DialogPeer>: the chats marked as unread, a small reply. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_dialog_unread_marks(
+    tg_mtproto_tl_writer *writer)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_MESSAGES_GET_DIALOG_UNREAD_MARKS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    return status;
+}
+
+static tg_mtproto_tl_status tg_read_vector_count(tg_mtproto_tl_reader *reader,
+                                                 unsigned long *count);
+static tg_mtproto_tl_status tg_read_peer_ref(tg_mtproto_tl_reader *reader,
+                                             tg_mtproto_dialog_peer *peer);
+
+/* The reply: Vector<DialogPeer>, dialogPeer#e56dbf05 peer:Peer or
+   dialogPeerFolder#514519e2 folder_id:int (left out). Fills out->peers with
+   the peers and returns OK; a body that is not such a vector is INVALID. */
+tg_mtproto_tl_status tg_mtproto_parse_dialog_unread_marks(
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_dialog_peer_list *out)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long count;
+    unsigned long i;
+
+    if (body == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(out, 0, sizeof(*out));
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_read_vector_count(&reader, &count) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    for (i = 0UL; i < count; ++i) {
+        tg_mtproto_dialog_peer peer;
+        unsigned long constructor;
+        unsigned long scratch;
+
+        memset(&peer, 0, sizeof(peer));
+        if (tg_mtproto_tl_read_u32(&reader, &constructor) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if (constructor == TG_DIALOG_PEER_FOLDER_CONSTRUCTOR) {
+            if (tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK) {
+                return TG_MTPROTO_TL_INVALID_DATA;
+            }
+            continue;
+        }
+        if (constructor != TG_DIALOG_PEER_CONSTRUCTOR ||
+            tg_read_peer_ref(&reader, &peer) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if (out->count < TG_MTPROTO_DIALOG_PEER_MAX) {
+            out->peers[out->count++] = peer;
+        } else {
+            out->truncated = 1;
+        }
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* messages.deleteHistory#b08f922a flags:# just_clear:flags.0?true
+   revoke:flags.1?true peer:InputPeer max_id:int min_date:flags.2?int
+   max_date:flags.3?int = messages.AffectedHistory (layer 214 schema,
+   checked 2026-11-10). No flags: the whole history goes for this account
+   only, on all its devices, and the chat leaves the dialog list; the other
+   side keeps its copy. A long history takes several calls: the reply's
+   offset says whether to call again. */
+tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || peer_constructor == TG_PEER_CHANNEL_CONSTRUCTOR) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT; /* a channel is left instead */
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_DELETE_HISTORY_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* max_id: all */
+    }
+    return status;
+}
+
+/* messages.affectedHistory#b45c69d1 pts:int pts_count:int offset:int: the
+   offset left to delete, 0 when the history is gone. OK and *offset = 0 for
+   any other reply read as "done". */
+tg_mtproto_tl_status tg_mtproto_parse_affected_history_offset(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    unsigned long *offset)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long scratch;
+
+    if (body == 0 || offset == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    *offset = 0UL;
+    if (constructor != TG_MESSAGES_AFFECTED_HISTORY_CONSTRUCTOR) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(&reader, offset) != TG_MTPROTO_TL_OK) {
+        *offset = 0UL;
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* Leaving a group or a channel (layer 214 schema, checked 2026-11-10):
+   channels.leaveChannel#f836aa95 channel:InputChannel for a channel or a
+   supergroup, messages.deleteChatUser#a2185cab flags:#
+   revoke_history:flags.0?true chat_id:long user_id:InputUser with
+   inputUserSelf#f7c1b13f for a basic group. A private chat cannot be left. */
+tg_mtproto_tl_status tg_mtproto_build_leave_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    if (peer_constructor == TG_PEER_CHANNEL_CONSTRUCTOR) {
+        if (!has_access_hash) {
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_CHANNELS_LEAVE_CHANNEL_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_write_input_channel(writer, peer_id_hi, peer_id_lo,
+                                            access_hash_hi, access_hash_lo);
+        }
+        return status;
+    }
+    if (peer_constructor != TG_PEER_CHAT_CONSTRUCTOR) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_DELETE_CHAT_USER_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, peer_id_hi, peer_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_USER_SELF_CONSTRUCTOR);
     }
     return status;
 }
@@ -9836,6 +10132,146 @@ int tg_mtproto_login_self_test(void)
             pin_query[4] != 0x02U || pin_query[8] != 0x00U ||
             pin_query[12] != 0x00U) {
             return 2;
+        }
+        /* Read, unread mark, delete and leave, on a basic group
+           (inputPeerChat, 12 bytes) and on a channel (inputChannel, 20). */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_read_history_peer(
+                &pw, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0, 0x7fffffffUL) != TG_MTPROTO_TL_OK ||
+            pw.length != 20UL || pin_query[0] != 0x3aU ||
+            pin_query[1] != 0x6dU || pin_query[2] != 0x30U ||
+            pin_query[3] != 0x0eU || pin_query[4] != 0xb9U ||
+            pin_query[8] != 0x08U || pin_query[16] != 0xffU ||
+            pin_query[19] != 0x7fU) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_read_history_peer(
+                &pw, TG_PEER_CHANNEL_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0x11223344UL, 0x55667788UL, 1, 9UL) != TG_MTPROTO_TL_OK ||
+            pw.length != 28UL || pin_query[0] != 0x37U ||
+            pin_query[1] != 0x49U || pin_query[2] != 0x10U ||
+            pin_query[3] != 0xccU || pin_query[4] != 0x28U ||
+            pin_query[7] != 0xf3U || pin_query[8] != 0x08U ||
+            pin_query[16] != 0x88U || pin_query[24] != 9U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_read_history_peer(
+                &pw, TG_PEER_CHANNEL_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0, 9UL) == TG_MTPROTO_TL_OK) {
+            return 2; /* a channel needs its access hash */
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_mark_dialog_unread(
+                &pw, 1, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 24UL || pin_query[0] != 0xf8U ||
+            pin_query[1] != 0x06U || pin_query[2] != 0x50U ||
+            pin_query[3] != 0x8cU || pin_query[4] != 0x01U ||
+            pin_query[8] != 0xb7U || pin_query[12] != 0xb9U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_mark_dialog_unread(
+                &pw, 0, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pin_query[4] != 0x00U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_get_dialog_unread_marks(&pw) !=
+                TG_MTPROTO_TL_OK ||
+            pw.length != 8UL || pin_query[0] != 0x22U ||
+            pin_query[1] != 0x22U || pin_query[2] != 0x20U ||
+            pin_query[3] != 0x21U || pin_query[4] != 0x00U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_delete_history(
+                &pw, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 24UL || pin_query[0] != 0x2aU ||
+            pin_query[1] != 0x92U || pin_query[2] != 0x8fU ||
+            pin_query[3] != 0xb0U || pin_query[4] != 0x00U ||
+            pin_query[8] != 0xb9U || pin_query[20] != 0x00U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_delete_history(
+                &pw, TG_PEER_CHANNEL_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0x11223344UL, 0x55667788UL, 1) == TG_MTPROTO_TL_OK) {
+            return 2; /* a channel's history is not ours to delete */
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_leave_peer(
+                &pw, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 20UL || pin_query[0] != 0xabU ||
+            pin_query[1] != 0x5cU || pin_query[2] != 0x18U ||
+            pin_query[3] != 0xa2U || pin_query[4] != 0x00U ||
+            pin_query[8] != 0x08U || pin_query[16] != 0x3fU ||
+            pin_query[19] != 0xf7U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_leave_peer(
+                &pw, TG_PEER_CHANNEL_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0x11223344UL, 0x55667788UL, 1) != TG_MTPROTO_TL_OK ||
+            pw.length != 24UL || pin_query[0] != 0x95U ||
+            pin_query[1] != 0xaaU || pin_query[2] != 0x36U ||
+            pin_query[3] != 0xf8U || pin_query[4] != 0x28U ||
+            pin_query[8] != 0x08U || pin_query[16] != 0x88U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_leave_peer(
+                &pw, TG_PEER_USER_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0x11223344UL, 0x55667788UL, 1) == TG_MTPROTO_TL_OK) {
+            return 2; /* a private chat is deleted, not left */
+        }
+        /* The unread marks: a folder entry is skipped, a chat is kept. */
+        {
+            static tg_mtproto_dialog_peer_list marks;
+            unsigned long left = 7UL;
+
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_tl_write_u32(&pw, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw, 2UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw,
+                                        TG_DIALOG_PEER_FOLDER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw, TG_DIALOG_PEER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw, TG_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&pw, 0UL, 0x00abcdefUL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_parse_dialog_unread_marks(pin_query, pw.length,
+                                                     &marks) !=
+                    TG_MTPROTO_TL_OK ||
+                marks.count != 1UL ||
+                marks.peers[0].peer_constructor != TG_PEER_USER_CONSTRUCTOR ||
+                marks.peers[0].id_lo != 0x00abcdefUL) {
+                return 2;
+            }
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_tl_write_u32(&pw, 5UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw, 5UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&pw, 300UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_parse_affected_history_offset(
+                    TG_MESSAGES_AFFECTED_HISTORY_CONSTRUCTOR, pin_query,
+                    pw.length, &left) != TG_MTPROTO_TL_OK ||
+                left != 300UL ||
+                tg_mtproto_parse_affected_history_offset(
+                    0x12345678UL, pin_query, pw.length, &left) ==
+                    TG_MTPROTO_TL_OK ||
+                left != 0UL) {
+                return 2;
+            }
         }
     }
     /* The same body parses under messages.peerDialogs too -- the getPeerDialogs

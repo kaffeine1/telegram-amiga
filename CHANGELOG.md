@@ -36,6 +36,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   moved on another device follows here. A large Archive shows its most
   recent chats (32, or 16 on 68k). The text client leaves the archived
   chats out of /list.
+- Mark as unread and Mark as read in a chat's menu (right click on its
+  row). Unread sets Telegram's own mark, a round dot in place of the
+  count, on every device; read marks the chat's messages as read on
+  Telegram and clears the dot. The marks set on other devices are read
+  when the client starts and on Reload chat list.
+- Leave... and Delete chat... in a chat's menu, on Telegram and not only
+  in this list as Remove chat does: a group or a channel is left; a
+  private chat has its messages deleted for you, on all your devices,
+  while the other person keeps theirs. Both ask first.
+- Archived chats and Reload chat list are also in the menu that a right
+  click on the chat list opens.
 - Pinned chats. The chats pinned on Telegram (on the phone, in the
   desktop client or here) come first in the chat list, in Telegram's
   order, with a pin mark at the right of the row where the unread badge

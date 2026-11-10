@@ -7482,6 +7482,62 @@ static int tg_gui_amiga_confirm_remove(struct Window *win, const char *name)
     return (int)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* Asks before a chat leaves the account on Telegram, which no other device
+   brings back. kind: 0 a private chat (its history is deleted for this
+   account), 1 a basic group, 2 a channel or a supergroup. 1 = go ahead. */
+static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
+                                      int kind)
+{
+    struct EasyStruct es;
+    char shown[3 * TG_GUI_NAME_MAX]; /* an emoticon outgrows its pair */
+    char body[sizeof(shown) + 240];
+    const char *pre;
+    const char *post;
+    const char *p;
+    int n;
+
+    if (kind == 0) {
+        pre = "Delete this chat on Telegram?\n\n";
+        post = "\n\nIts messages are deleted for you, on all your\n"
+               "devices. The other person keeps theirs.\n"
+               "This cannot be undone.";
+    } else if (kind == 1) {
+        pre = "Leave this group?\n\n";
+        post = "\n\nYou leave it on Telegram and its messages are\n"
+               "deleted for you. To come back, someone has to\n"
+               "add you again.";
+    } else {
+        pre = "Leave this group or channel?\n\n";
+        post = "\n\nYou leave it on Telegram, on all your devices.\n"
+               "A private one needs a new invitation to come\n"
+               "back.";
+    }
+    n = 0;
+    for (p = pre; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+        body[n++] = *p;
+    }
+    if (name != 0) {
+        tg_gui_emoji_expand_pairs(shown, sizeof(shown), name);
+        for (p = shown; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+            if (*p != '%') {
+                body[n++] = *p;
+            }
+        }
+    }
+    for (p = post; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+        body[n++] = *p;
+    }
+    body[n] = '\0';
+
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    es.es_Title = (STRPTR)(kind == 0 ? "Delete chat" : "Leave");
+    es.es_TextFormat = (STRPTR)body;
+    es.es_GadgetFormat = (STRPTR)(kind == 0 ? "Delete|Cancel"
+                                            : "Leave|Cancel");
+    return (int)tg_gui_amiga_easyreq_args(win, &es);
+}
+
 /* One-line confirm before deleting a message for everyone. 1 = Delete. */
 static int tg_gui_amiga_confirm_delete(struct Window *win)
 {
@@ -8824,6 +8880,94 @@ static void tg_gui_window_remove_chat(tg_gui_state *state,
         state->open_chat_valid = 0;
         tg_gui_window_paint(state, backend);
     }
+}
+
+/* "Leave..." / "Delete chat..." of a chat's menu: takes the chat off the
+   account on Telegram after asking, then off the list here. When it was the
+   open chat a neighbour is opened, as after Remove chat. */
+static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
+                                     int sel, tg_gui_backend *backend)
+{
+    char name[TG_GUI_NAME_MAX];
+    unsigned long idx;
+    int was_open;
+    int kind;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        state->in_search || sel < 0 || sel >= state->chat_count) {
+        return;
+    }
+    idx = state->chats[sel].index;
+    was_open = sel == state->selected_chat;
+    if (idx == 0UL || idx == TG_GUI_SAVED_PEER_INDEX) {
+        return;
+    }
+    tg_gui_window_copy(name, sizeof(name), state->chats[sel].name);
+    kind = tg_gui_session_chat_kind(idx);
+    if (kind < 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not read this chat");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    /* The menu this came from is closed: draw the window without it
+       before the requester holds everything. */
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_amiga_confirm_leave(win, name, kind) != 1) {
+        return; /* cancelled */
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       kind == 0 ? "Deleting the chat..." : "Leaving...");
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_leave_chat(idx, stdout) != 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           kind == 0 ? "Could not delete it (network?)"
+                                     : "Could not leave (network?)");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    state->nav_chat = -1;
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       kind == 0 ? "Chat deleted" : "Left");
+    if (!was_open) {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (state->chat_count > 0) {
+        int nsel = (sel < state->chat_count) ? sel : (state->chat_count - 1);
+        tg_gui_window_open_selection(state, nsel, backend);
+    } else {
+        state->selected_chat = 0;
+        state->message_count = 0;
+        state->msg_gen++;
+        state->title[0] = '\0';
+        state->subtitle[0] = '\0';
+        state->open_chat_valid = 0;
+        tg_gui_window_paint(state, backend);
+    }
+}
+
+/* "Reload chat list", from the menu and from the list's own menu: pages
+   the dialog list again from the server. Blocking but bounded. */
+static void tg_gui_window_reload_list(tg_gui_state *state,
+                                      tg_gui_backend *backend)
+{
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open()) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Reloading chat list...");
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_reload_chat_list(stdout) == 0) {
+        char rl[64];
+
+        sprintf(rl, "Chat list reloaded (%d chats)", state->chat_count);
+        tg_gui_window_copy(state->status, sizeof(state->status), rl);
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Reload failed");
+    }
+    tg_gui_window_paint(state, backend);
 }
 
 /* Persist the last window GEOMETRY (size + position) to a small file next to
@@ -13654,28 +13798,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             }
                         } else if (ud == (APTR)TG_MENU_RELOAD) {
                             /* Re-page the dialog list on demand (start-up
-                               no longer refetches). Blocking but bounded:
-                               a few 30-dialog pages. */
-                            int rrc;
-
-                            tg_gui_window_copy(state->status,
-                                               sizeof(state->status),
-                                               "Reloading chat list...");
-                            tg_gui_window_paint(state, &backend);
-                            rrc = tg_gui_session_reload_chat_list(stdout);
-                            if (rrc == 0) {
-                                char rl[64];
-
-                                sprintf(rl, "Chat list reloaded (%d chats)",
-                                        state->chat_count);
-                                tg_gui_window_copy(state->status,
-                                                   sizeof(state->status), rl);
-                            } else {
-                                tg_gui_window_copy(state->status,
-                                                   sizeof(state->status),
-                                                   "Reload failed");
-                            }
-                            tg_gui_window_paint(state, &backend);
+                               no longer refetches). */
+                            tg_gui_window_reload_list(state, &backend);
                         } else if (ud == (APTR)TG_MENU_OWNSCREEN) {
                             /* Flip own-screen mode and reopen: persist the new
                                flag now so the reopen (which reloads geometry)
@@ -13920,6 +14044,33 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (it == TG_GUI_CTX_CHAT_FIND) {
                         /* Find in chat, from the menu over the open chat. */
                         tg_gui_window_begin_msg_search(state, &backend, 0);
+                    } else if (it == TG_GUI_CTX_LIST_ARCHIVE) {
+                        tg_gui_window_show_archive(state, &backend,
+                                                   !state->archive_view);
+                    } else if (it == TG_GUI_CTX_LIST_RELOAD) {
+                        tg_gui_window_reload_list(state, &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_LEAVE) {
+                        tg_gui_window_leave_chat(state, ctx.window, ci,
+                                                 &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_READ) {
+                        int want_unread = !(state->chats[ci].unread > 0 ||
+                                            state->chats[ci].unread_mark);
+                        int mrc;
+
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Marking...");
+                        tg_gui_window_paint(state, &backend);
+                        mrc = tg_gui_session_mark_unread(
+                            state->chats[ci].index, want_unread, stdout);
+                        state->nav_chat = -1;
+                        tg_gui_window_copy(
+                            state->status, sizeof(state->status),
+                            mrc != 0 ? "Could not change it (network?)"
+                                     : (want_unread ? "Marked as unread"
+                                                    : "Marked as read"));
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_ARCHIVE) {
                         int want = state->archive_view ? 0 : 1;

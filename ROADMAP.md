@@ -317,8 +317,16 @@ it works today:
   MorphOS); the reload, the first login and the Archive now page with
   that date;
 - mark as read or unread (`messages.markDialogUnread`), leave a group or
-  a channel, delete a chat. Half done: Remove chat hides a chat from
-  the list on this machine only;
+  a channel, delete a chat. Done on `main`, in the chat's menu: Mark as
+  unread and Mark as read (`messages.readHistory`,
+  `channels.readHistory`), the marks read with
+  `messages.getDialogUnreadMarks`; Leave... (`channels.leaveChannel`,
+  `messages.deleteChatUser`) and Delete chat...
+  (`messages.deleteHistory`, for this account only), both after a
+  confirmation. Still missing: opening a chat does not mark it read on
+  Telegram, which every official client does; a mark changed on another
+  device while running (`updateDialogUnreadMark`); deleting a private
+  chat for both sides;
 - drafts shown and kept in step with the other devices
   (`messages.saveDraft`). Half done: they are read without harm, never
   shown;
