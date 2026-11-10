@@ -13806,6 +13806,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                            sizeof(state->status),
                                            "Hidden messages shown again");
                     } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_FIND) {
+                        /* Find in chat on the row under the menu: open
+                           that chat first when it is not the open one. */
+                        if (ci != state->selected_chat) {
+                            tg_gui_window_open_selection(state, ci, &backend);
+                        }
+                        tg_gui_window_begin_msg_search(state, &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_PIN) {
                         int want = state->chats[ci].pinned ? 0 : 1;
                         int prc;
@@ -14192,25 +14200,34 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                persist + reproject if it actually moves. */
                             int target = tg_gui_chat_drop_target(
                                 state, ctx.line_h, state->drag_cur_y);
-                            int dest = (target > state->drag_src) ? (target - 1)
-                                                                  : target;
+                            int src = state->drag_src;
+                            int dest = (target > src) ? (target - 1) : target;
 
+                            /* The drag ends HERE, before the repaint: painted
+                               with it still armed, the row that took the
+                               dragged one's place kept the "lifted" tint next
+                               to the open chat, two rows lit after the drop. */
+                            state->drag_src = -1;
+                            state->drag_active = 0;
                             if (dest < 0) {
                                 dest = 0;
                             }
                             if (dest >= state->chat_count) {
                                 dest = state->chat_count - 1;
                             }
-                            if (dest != state->drag_src &&
-                                state->chats[state->drag_src].index !=
+                            if (dest != src &&
+                                state->chats[src].index !=
                                     TG_GUI_SAVED_PEER_INDEX &&
                                 state->chats[dest].index !=
                                     TG_GUI_SAVED_PEER_INDEX) {
                                 /* Hidden rows are absent from the sidebar, so
                                    use each visible row's stable cache index. */
                                 (void)tg_gui_session_reorder_chat(
-                                    state->chats[state->drag_src].index,
+                                    state->chats[src].index,
                                     state->chats[dest].index, stdout);
+                                /* The rows were renumbered: an arrow focus
+                                   would now sit on another chat. */
+                                state->nav_chat = -1;
                             }
                             tg_gui_window_paint(state, &backend);
                         }

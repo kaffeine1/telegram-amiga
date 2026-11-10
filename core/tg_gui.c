@@ -2215,27 +2215,41 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
 
 /* The pin mark of a pinned chat, as Telegram Desktop puts it at the right
    of the row: an upright push pin from rectangles only (cap, body, flange,
-   needle), scaled from the line height. Returns its width. */
+   needle). It is nearly as tall as the text (two pixels less, ten at the
+   least) and its width is odd, so the needle sits dead centre. */
+static int tg_gui_pin_mark_height(int lh)
+{
+    return (lh - 2 > 10) ? lh - 2 : 10;
+}
+
 int tg_gui_pin_mark_width(int lh)
 {
-    int u = (lh >= 12) ? lh / 12 : 1;
-
-    return 7 * u;
+    return ((tg_gui_pin_mark_height(lh) * 7) / 9) | 1;
 }
 
 static void tg_gui_draw_pin_mark(tg_gui_backend *backend, int pen, int x,
                                  int centre_y, int lh)
 {
-    int u = (lh >= 12) ? lh / 12 : 1;
-    int y = centre_y - (9 * u) / 2;
+    int h = tg_gui_pin_mark_height(lh);
+    int w = tg_gui_pin_mark_width(lh);
+    int t = (h + 4) / 9;          /* thickness of cap and flange */
+    int cap_in = (w + 3) / 7;     /* the cap is narrower than the flange */
+    int body_in = cap_in + ((w >= 7) ? w / 7 : 1);
+    int needle_h = (h * 4) / 9;
+    int body_h = h - 2 * t - needle_h;
+    int nw = (w / 7) | 1;         /* needle, odd like the width */
+    int y = centre_y - h / 2;
 
-    backend->fill_rect(backend, pen, tg_gui_make_rect(x + u, y, 5 * u, u));
     backend->fill_rect(backend, pen,
-                       tg_gui_make_rect(x + 2 * u, y + u, 3 * u, 3 * u));
+                       tg_gui_make_rect(x + cap_in, y, w - 2 * cap_in, t));
     backend->fill_rect(backend, pen,
-                       tg_gui_make_rect(x, y + 4 * u, 7 * u, u));
+                       tg_gui_make_rect(x + body_in, y + t, w - 2 * body_in,
+                                        body_h));
     backend->fill_rect(backend, pen,
-                       tg_gui_make_rect(x + 3 * u, y + 5 * u, u, 4 * u));
+                       tg_gui_make_rect(x, y + t + body_h, w, t));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + (w - nw) / 2, y + 2 * t + body_h,
+                                        nw, needle_h));
 }
 
 static void tg_gui_paint_sidebar(const tg_gui_state *state,
@@ -5557,6 +5571,8 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                                                  : "Pin";
             ids[n++] = TG_GUI_CTX_CHAT_PIN;
         }
+        labels[n] = "Find in chat";
+        ids[n++] = TG_GUI_CTX_CHAT_FIND;
         labels[n] = "Remove chat";
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
         labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE ?
@@ -7242,53 +7258,55 @@ static int tg_gui_notify_menu_self_test(void)
     state->ctx_chat = 1;
     state->chats[0].index = 5UL;
     state->chats[0].pinned = 0;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
         ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
-        ids[1] != TG_GUI_CTX_CHAT_REMOVE || ids[2] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[2], "Mute") != 0 || ids[3] != TG_GUI_CTX_CHAT_SOUND ||
-        strcmp(labels[3], "Sound...") != 0 ||
-        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        strcmp(labels[4], "Default sound") != 0) {
+        ids[1] != TG_GUI_CTX_CHAT_FIND ||
+        strcmp(labels[1], "Find in chat") != 0 ||
+        ids[2] != TG_GUI_CTX_CHAT_REMOVE || ids[3] != TG_GUI_CTX_CHAT_MUTE ||
+        strcmp(labels[3], "Mute") != 0 || ids[4] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[4], "Sound...") != 0 ||
+        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        strcmp(labels[5], "Default sound") != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->chats[0].pinned = 1;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
         strcmp(labels[0], "Unpin") != 0) {
         puts("gui self-test: a pinned chat's menu cannot unpin");
         return 2;
     }
     state->chats[0].pinned = 0;
     state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
-    if (tg_gui_context_items(state, labels, ids) != 4 ||
-        ids[0] != TG_GUI_CTX_CHAT_REMOVE) {
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        ids[0] != TG_GUI_CTX_CHAT_FIND || ids[1] != TG_GUI_CTX_CHAT_REMOVE) {
         puts("gui self-test: Saved Messages offers no pin");
         return 2;
     }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
-        strcmp(labels[2], "Unmute") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        strcmp(labels[3], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        ids[3] != TG_GUI_CTX_CHAT_RING || strcmp(labels[3], "Enable ring") != 0 ||
-        ids[4] != TG_GUI_CTX_CHAT_SOUND ||
-        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+    if (tg_gui_context_items(state, labels, ids) != 7 ||
+        ids[4] != TG_GUI_CTX_CHAT_RING || strcmp(labels[4], "Enable ring") != 0 ||
+        ids[5] != TG_GUI_CTX_CHAT_SOUND ||
+        ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        strcmp(labels[2], "Mute") != 0 || strcmp(labels[3], "Disable ring") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 7 ||
+        strcmp(labels[3], "Mute") != 0 || strcmp(labels[4], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
     state->ctx_hidden_count = 2UL;
-    if (tg_gui_context_items(state, labels, ids) != 7 ||
-        ids[6] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
+        ids[7] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
         puts("gui self-test: group menu cannot show hidden messages");
         return 2;
     }

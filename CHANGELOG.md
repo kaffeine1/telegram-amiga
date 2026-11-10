@@ -10,7 +10,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ### Added
 - Find in chat (Edit menu, Amiga+S): the search box at the top of the
-  chat list searches the messages of the open chat on Telegram. Type the
+  chat list searches the messages of the open chat on Telegram; it is
+  also in the chat's menu (right click on its row), where it opens that
+  chat first. Type the
   words and press ENTER; the messages found take the place of the chat
   list, newest first, with who wrote them, how they start and their
   date. A click or ENTER on one shows the chat around that message, with
@@ -22,7 +24,7 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - Pinned chats. The chats pinned on Telegram (on the phone, in the
   desktop client or here) come first in the chat list, in Telegram's
   order, with a pin mark at the right of the row where the unread badge
-  would be. Pin and Unpin are in the chat's menu (right click on the
+  would be, nearly as tall as the text. Pin and Unpin are in the chat's menu (right click on the
   row) and reach the other devices. The pins are read when the client
   starts and on Reload chat list; Saved Messages stays at the bottom.
 
@@ -37,6 +39,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   small fonts and 20 when the box is taller.
 
 ### Fixed
+- After a chat was dragged to another place in the list, two rows
+  stayed lit: the open chat and the row that took the dragged one's
+  place. The second went away only at the next redraw.
 - A message deleted for everyone somewhere else (on the phone, in the
   web client, by a group admin) now leaves the open chat in the window
   at once; before, it stayed until the chat was opened again
