@@ -5677,6 +5677,9 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
        appears over a conversation) so it need not be reached via the menubar.
        "Download drawer..." is deliberately NOT here (issue #11): it is a
        preference, not a message action, so it lives in the menus only. */
+    labels[n] = "Find in chat";
+    ids[n] = TG_GUI_CTX_CHAT_FIND;
+    ++n;
     labels[n] = "Send file...";
     ids[n] = TG_GUI_CTX_SENDFILE;
     ++n;
