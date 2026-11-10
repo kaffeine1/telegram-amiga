@@ -5574,8 +5574,6 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                                                  : "Pin";
             ids[n++] = TG_GUI_CTX_CHAT_PIN;
         }
-        labels[n] = "Find in chat";
-        ids[n++] = TG_GUI_CTX_CHAT_FIND;
         labels[n] = "Remove chat";
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
         labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE ?
@@ -7264,55 +7262,53 @@ static int tg_gui_notify_menu_self_test(void)
     state->ctx_chat = 1;
     state->chats[0].index = 5UL;
     state->chats[0].pinned = 0;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
         ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
-        ids[1] != TG_GUI_CTX_CHAT_FIND ||
-        strcmp(labels[1], "Find in chat") != 0 ||
-        ids[2] != TG_GUI_CTX_CHAT_REMOVE || ids[3] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[3], "Mute") != 0 || ids[4] != TG_GUI_CTX_CHAT_SOUND ||
-        strcmp(labels[4], "Sound...") != 0 ||
-        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        strcmp(labels[5], "Default sound") != 0) {
+        ids[1] != TG_GUI_CTX_CHAT_REMOVE || ids[2] != TG_GUI_CTX_CHAT_MUTE ||
+        strcmp(labels[2], "Mute") != 0 || ids[3] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[3], "Sound...") != 0 ||
+        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
+        strcmp(labels[4], "Default sound") != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->chats[0].pinned = 1;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
         strcmp(labels[0], "Unpin") != 0) {
         puts("gui self-test: a pinned chat's menu cannot unpin");
         return 2;
     }
     state->chats[0].pinned = 0;
     state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
-    if (tg_gui_context_items(state, labels, ids) != 5 ||
-        ids[0] != TG_GUI_CTX_CHAT_FIND || ids[1] != TG_GUI_CTX_CHAT_REMOVE) {
+    if (tg_gui_context_items(state, labels, ids) != 4 ||
+        ids[0] != TG_GUI_CTX_CHAT_REMOVE) {
         puts("gui self-test: Saved Messages offers no pin");
         return 2;
     }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
-        strcmp(labels[3], "Unmute") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        strcmp(labels[2], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 7 ||
-        ids[4] != TG_GUI_CTX_CHAT_RING || strcmp(labels[4], "Enable ring") != 0 ||
-        ids[5] != TG_GUI_CTX_CHAT_SOUND ||
-        ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        ids[3] != TG_GUI_CTX_CHAT_RING || strcmp(labels[3], "Enable ring") != 0 ||
+        ids[4] != TG_GUI_CTX_CHAT_SOUND ||
+        ids[5] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 7 ||
-        strcmp(labels[3], "Mute") != 0 || strcmp(labels[4], "Disable ring") != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 6 ||
+        strcmp(labels[2], "Mute") != 0 || strcmp(labels[3], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
     state->ctx_hidden_count = 2UL;
-    if (tg_gui_context_items(state, labels, ids) != 8 ||
-        ids[7] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
+    if (tg_gui_context_items(state, labels, ids) != 7 ||
+        ids[6] != TG_GUI_CTX_CHAT_SHOW_HIDDEN) {
         puts("gui self-test: group menu cannot show hidden messages");
         return 2;
     }

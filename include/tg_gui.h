@@ -850,7 +850,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
 #define TG_GUI_CTX_CHAT_PIN 35 /* Pin / Unpin the chat on Telegram */
-#define TG_GUI_CTX_CHAT_FIND 36 /* Find in chat, on that chat */
+#define TG_GUI_CTX_CHAT_FIND 36 /* Find in chat, in the menu over the chat */
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a

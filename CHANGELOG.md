@@ -11,10 +11,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 ### Added
 - Find in chat (Edit menu, Amiga+S): the search box at the top of the
   chat list searches the messages of the open chat on Telegram; it is
-  also in the menu of a message and in the chat's menu (right click on
-  its row), where it opens that chat first. Type the words and press ENTER; the messages found take
-  the place of the chat list, newest first, with who wrote them, how
-  they start and their date. A click or ENTER on one shows the chat around that message, with
+  also in the menu that a right click inside the chat opens. Type the
+  words and press ENTER; the messages found take the place of the chat
+  list, newest first, with who wrote them, how they start and their
+  date. A click or ENTER on one shows the chat around that message, with
   the message highlighted in the middle; another hit can be picked right
   away, and ESC brings the chat list back. From an older stretch of the
   chat the jump button brings back the newest messages, and messages

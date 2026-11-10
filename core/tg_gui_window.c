@@ -13806,13 +13806,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                            sizeof(state->status),
                                            "Hidden messages shown again");
                     } else if (it == TG_GUI_CTX_CHAT_FIND) {
-                        /* Find in chat. From a chat's row it opens that
-                           chat first when it is not the open one; from a
-                           message's menu the chat is already open. */
-                        if (ci >= 0 && ci < state->chat_count &&
-                            ci != state->selected_chat) {
-                            tg_gui_window_open_selection(state, ci, &backend);
-                        }
+                        /* Find in chat, from the menu over the open chat. */
                         tg_gui_window_begin_msg_search(state, &backend);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_PIN) {
