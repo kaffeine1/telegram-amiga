@@ -93,6 +93,7 @@ typedef struct tg_chat_message_row {
     int has_photo;             /* 0.0.9: message carries an inline photo */
     int photo_ready;           /* its selected JPEG is present in photos/ */
     int photo_only;            /* text is the synthetic "[Photo]" fallback */
+    int photo_is_link;         /* a link preview's picture: a click opens the link */
     unsigned long photo_id_hi;
     unsigned long photo_id_lo;
     unsigned long photo_width;

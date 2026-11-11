@@ -14695,6 +14695,23 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                         if (mi >= 0 && mi < state->message_count &&
                             state->messages[mi].has_photo) {
+                            char page_url[256];
+
+                            /* The picture of a link preview stands for the
+                               page: the click opens the link, as on the
+                               other clients. With no browser to hand it
+                               to, it shows the picture as before. */
+                            if (state->messages[mi].photo_is_link &&
+                                tg_gui_first_url(&state->messages[mi],
+                                                 page_url,
+                                                 sizeof(page_url)) &&
+                                tg_platform_open_url(page_url) == 0) {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    "Opening URL in the browser...");
+                                tg_gui_window_paint(state, &backend);
+                                continue;
+                            }
                             if (tg_gui_photo_viewer_show(
                                     &viewer, &ctx, &state->messages[mi]) == 0) {
                                 tg_gui_window_copy(state->status,

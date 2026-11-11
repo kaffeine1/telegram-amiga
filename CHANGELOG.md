@@ -88,6 +88,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   they are.
 
 ### Fixed
+- A link with a preview could be impossible to open: when the message
+  hid its address behind a word, nothing in the bubble could be clicked
+  but the picture, and that opened the picture. The address of the page
+  now stands on a line of its own under the preview whenever the message
+  does not show it, and a click on the preview's picture opens the link,
+  as on the other clients. Where no browser command is installed, and
+  for a page that is a picture itself, the click still shows the picture.
 - A chat muted on Telegram could still pop up and ring here: its mute
   was only known for the chats of the last Reload chat list, not after a
   normal start. The client now asks Telegram about a chat the first time

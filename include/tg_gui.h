@@ -306,6 +306,8 @@ typedef struct tg_gui_message {
     int has_photo;                     /* 0.0.9: inline photo metadata present */
     int photo_ready;                   /* cached JPEG is ready for the backend */
     int photo_only;                    /* hide the synthetic label once drawn */
+    int photo_is_link;                 /* a link preview's picture: a click
+                                          opens the link, not the viewer */
     unsigned long photo_id_hi;
     unsigned long photo_id_lo;
     unsigned long photo_width;
@@ -945,6 +947,10 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
 
 /* Copies the selected substring into out (NUL-terminated). 1 = a non-empty
    selection was copied, 0 = no live selection. */
+/* The first address in the message's text, the one its link preview is
+   for: 1 and the address in out, 0 when the text holds none. */
+int tg_gui_first_url(const tg_gui_message *m, char *out,
+                     unsigned long out_size);
 int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
                   unsigned long out_size);
 int tg_gui_selection_get(const tg_gui_state *state, char *out,

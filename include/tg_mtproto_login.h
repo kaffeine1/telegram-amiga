@@ -185,13 +185,36 @@ typedef struct tg_mtproto_photo_meta {
 /* The bounded part of a WebPage that both clients can display. The parser
    stops after its photo; embed/document/instant-view tails are not consumed. */
 #define TG_MTPROTO_WEBPAGE_TEXT_MAX 280U
+#define TG_MTPROTO_WEBPAGE_URL_MAX 256U
 typedef struct tg_mtproto_web_page {
     unsigned long id_hi;
     unsigned long id_lo;
     int pending;
     char text[TG_MTPROTO_WEBPAGE_TEXT_MAX];
     tg_mtproto_photo_meta photo;
+    /* The page's address, to open it: empty when it does not fit whole (a
+       cut address would open something else). */
+    char url[TG_MTPROTO_WEBPAGE_URL_MAX];
+    /* Its picture stands for the page (an article, a video, a site), so a
+       click on it opens the address; 0 when the page is the picture itself
+       (type "photo") or has no address to open. */
+    int opens_link;
 } tg_mtproto_web_page;
+
+/* What goes under a message's own text for this preview: the label lines,
+   then the page's address on a line of its own when the message does not
+   show it already (a link hidden behind a word), so that there is always
+   something to click. message_text may be UTF-8 or Latin-1: addresses are
+   ASCII. room is how many bytes the message can still take, the line break
+   before the suffix included: the address goes in only if it fits whole (a
+   cut one would open something else). Empty when the preview has nothing
+   to add. Returns whether the address is shown, by the message or by the
+   suffix. */
+#define TG_MTPROTO_WEBPAGE_SUFFIX_MAX \
+    (TG_MTPROTO_WEBPAGE_TEXT_MAX + TG_MTPROTO_WEBPAGE_URL_MAX + 2U)
+int tg_mtproto_web_page_suffix(const tg_mtproto_web_page *page,
+                               const char *message_text, unsigned long room,
+                               char *out, unsigned long out_size);
 
 tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
                                              tg_mtproto_web_page *out);
@@ -499,6 +522,7 @@ typedef struct tg_mtproto_message_text {
        synthetic "[Photo]" fallback from a real caption. */
     tg_mtproto_photo_meta photo;
     int photo_only;
+    int photo_is_link; /* the photo is a link preview's: a click opens the link */
     unsigned long pending_webpage_hi;
     unsigned long pending_webpage_lo;
     /* A service message (someone joined, a message was pinned, a call...):

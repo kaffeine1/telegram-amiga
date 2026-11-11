@@ -4999,6 +4999,30 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
    A "link" is the whitespace-delimited word around ch, stripped of the
    style markers and wrapping punctuation, starting with http(s):// or www.
    Pure text scan: entities already put the URL text in the message body. */
+int tg_gui_first_url(const tg_gui_message *m, char *out,
+                     unsigned long out_size)
+{
+    long i;
+    int at_word = 1;
+
+    if (m == 0 || out == 0) {
+        return 0;
+    }
+    for (i = 0L; m->text[i] != '\0'; ++i) {
+        char c = m->text[i];
+
+        if (c == ' ' || c == '\n' || c == '\t') {
+            at_word = 1;
+            continue;
+        }
+        if (at_word && tg_gui_url_at(m, i, out, out_size)) {
+            return 1;
+        }
+        at_word = 0;
+    }
+    return 0;
+}
+
 int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
                   unsigned long out_size)
 {
@@ -7030,6 +7054,20 @@ static int tg_gui_markup_self_test(void)
         if (!tg_gui_url_at(&state->messages[0], 10L, got, sizeof(got)) ||
             strcmp(got, "https://example.org/a*_`~") != 0) {
             puts("gui self-test: URL export changed literal punctuation");
+            return 2;
+        }
+        /* The first address of a message, the one its preview is for. */
+        strcpy(state->messages[0].text,
+               "leggi (qui) e poi\n[Link: Sito - Titolo]\n"
+               "https://example.org/uno www.example.org/due");
+        if (!tg_gui_first_url(&state->messages[0], got, sizeof(got)) ||
+            strcmp(got, "https://example.org/uno") != 0) {
+            printf("gui self-test: first URL is \"%s\"\n", got);
+            return 2;
+        }
+        strcpy(state->messages[0].text, "nessun indirizzo qui");
+        if (tg_gui_first_url(&state->messages[0], got, sizeof(got))) {
+            puts("gui self-test: found an address in plain words");
             return 2;
         }
     }

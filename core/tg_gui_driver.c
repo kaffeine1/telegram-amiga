@@ -415,6 +415,7 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     message->has_photo = row->has_photo;
     message->photo_ready = row->photo_ready;
     message->photo_only = row->photo_only;
+    message->photo_is_link = row->photo_is_link;
     message->photo_id_hi = row->photo_id_hi;
     message->photo_id_lo = row->photo_id_lo;
     message->photo_width = row->photo_width;
@@ -733,9 +734,11 @@ int tg_gui_driver_apply_webpage(tg_gui_chat_driver *gui,
                                 int photo_ready)
 {
     static char text[TG_GUI_MSG_TEXT_MAX];
-    char suffix[TG_MTPROTO_WEBPAGE_TEXT_MAX];
+    char wire[TG_MTPROTO_WEBPAGE_SUFFIX_MAX];
+    char suffix[TG_MTPROTO_WEBPAGE_SUFFIX_MAX];
     unsigned long n;
     int dirty;
+    int shows_url;
     int i;
 
     if (gui == 0 || gui->state == 0 || page == 0 || page->pending ||
@@ -743,7 +746,6 @@ int tg_gui_driver_apply_webpage(tg_gui_chat_driver *gui,
         return 0;
     }
     dirty = 0;
-    tg_gui_driver_copy_latin1(suffix, sizeof(suffix), page->text);
     for (i = 0; i < gui->state->message_count; ++i) {
         tg_gui_message *m = &gui->state->messages[i];
 
@@ -753,6 +755,11 @@ int tg_gui_driver_apply_webpage(tg_gui_chat_driver *gui,
         }
         tg_gui_driver_copy(text, sizeof(text), m->text);
         n = (unsigned long)strlen(text);
+        /* The same lines the history gives this message when read again:
+           the label, and the address when the text does not show it. */
+        shows_url = tg_mtproto_web_page_suffix(page, text, sizeof(text) - n,
+                                               wire, sizeof(wire));
+        tg_gui_driver_copy_latin1(suffix, sizeof(suffix), wire);
         if (suffix[0] != '\0' && n + 1UL < sizeof(text)) {
             if (n != 0UL) text[n++] = '\n';
             tg_gui_driver_copy(text + n, sizeof(text) - n, suffix);
@@ -763,6 +770,8 @@ int tg_gui_driver_apply_webpage(tg_gui_chat_driver *gui,
         m->has_photo = page->photo.has_photo;
         m->photo_ready = photo_ready;
         m->photo_only = 0;
+        m->photo_is_link = shows_url && page->photo.has_photo &&
+                           page->opens_link;
         m->photo_id_hi = page->photo.id_hi;
         m->photo_id_lo = page->photo.id_lo;
         m->photo_width = page->photo.width;
@@ -1362,6 +1371,18 @@ static int tg_gui_driver_webpage_self_test(void)
                 strcmp(state->messages[0].sender, "Test sender") ||
                 strcmp(state->messages[0].reply_text, "Test reply") ||
                 !state->messages[0].has_photo || state->messages[0].photo_id_lo != 42UL ||
+                /* An article's picture opens its link; the message that
+                   shows the address itself (pass 3) does not get it twice. */
+                !state->messages[0].photo_is_link ||
+                (pass == 3 &&
+                 strcmp(state->messages[0].text,
+                        "https://example.invalid/late\n"
+                        "[Link: Test site - Late title]\nFirst description.") != 0) ||
+                (pass == 4 &&
+                 strcmp(state->messages[0].text,
+                        "Channel link\n"
+                        "[Link: Test site - Late title]\nFirst description.\n"
+                        "https://example.invalid/late") != 0) ||
                 state->messages[0].photo_width != 320UL || state->inline_photos != 0 ||
                 !state->messages[1].is_own || state->messages[1].read_state != TG_GUI_READ_SENT ||
                 strcmp(state->messages[1].reply_text, "Own reply") ||
@@ -1394,8 +1415,12 @@ static int tg_gui_driver_webpage_self_test(void)
     if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state->msg_gen == gen ||
         state->message_count != 3 || state->messages[2].has_photo ||
         state->messages[2].pending_webpage_hi != 0UL || state->messages[2].pending_webpage_lo != 0UL ||
+        /* The text does not show the address: it goes under the label,
+           so that there is something to click. No picture, no link on it. */
         strcmp(state->messages[2].text,
-               "Cached link\n[Link: Test site - Cached title]\nCached description.") != 0) return 0;
+               "Cached link\n[Link: Test site - Cached title]\nCached description."
+               "\nhttps://example.invalid/cached") != 0 ||
+        state->messages[2].photo_is_link) return 0;
 
     /* Saved Messages: the same cached page inside the Message of a full Updates. */
     tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
@@ -1415,7 +1440,8 @@ static int tg_gui_driver_webpage_self_test(void)
     tg_gui_driver_set_pending_webpage(&gui, sent.id, sent.webpage.id_hi, sent.webpage.id_lo);
     if (!tg_gui_driver_apply_webpage(&gui, &sent.webpage, 0) || state->message_count != 4 ||
         strcmp(state->messages[3].text,
-               "Saved link\n[Link: Test site - Cached title]\nCached description.") != 0) return 0;
+               "Saved link\n[Link: Test site - Cached title]\nCached description."
+               "\nhttps://example.invalid/cached") != 0) return 0;
 
     /* A page read off ANOTHER message of the same Updates must not leak onto
        ours (no Message matches the sent id here), and a plain message hands

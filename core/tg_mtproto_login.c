@@ -6817,16 +6817,19 @@ tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
     char site[TG_WEBPAGE_SITE_MAX];
     char title[TG_WEBPAGE_TITLE_MAX];
     char desc[TG_WEBPAGE_DESC_MAX];
+    char type[12];
     unsigned long ctor;
     unsigned long flags;
     unsigned long scratch;
     unsigned long n;
     unsigned long i;
+    int url_cut = 0;
 
     if (reader == 0 || out == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     memset(out, 0, sizeof(*out));
+    type[0] = '\0';
     site[0] = '\0';
     title[0] = '\0';
     desc[0] = '\0';
@@ -6854,15 +6857,29 @@ tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
     }
     if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u64(reader, &out->id_hi, &out->id_lo) != TG_MTPROTO_TL_OK ||
-        tg_skip_string(reader) != TG_MTPROTO_TL_OK ||  /* url */
+        tg_read_string_copy_cut(reader, out->url, sizeof(out->url),
+                                &url_cut) != TG_MTPROTO_TL_OK ||
         tg_skip_string(reader) != TG_MTPROTO_TL_OK ||  /* display_url */
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    /* The address is kept only whole, and only if it can stand in a line
+       of text: no blanks, no control or marker bytes. */
+    for (i = 0UL; out->url[i] != '\0'; ++i) {
+        if ((unsigned char)out->url[i] <= ' ') {
+            url_cut = 1;
+            break;
+        }
+    }
+    if (url_cut) {
+        out->url[0] = '\0';
+    }
     if ((flags & 1UL) != 0UL && /* type: "article", "photo", "video", ... */
-        tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+        tg_read_string_copy(reader, type, sizeof(type)) !=
+            TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    out->opens_link = out->url[0] != '\0' && strcmp(type, "photo") != 0;
     if ((flags & 2UL) != 0UL &&
         tg_read_string_copy(reader, site, sizeof(site)) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
@@ -6924,11 +6941,96 @@ tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
     return TG_MTPROTO_TL_OK;
 }
 
+/* Whether the text shows this address already: compared without the
+   scheme and a closing slash, and without regard to case, since a message
+   says "Example.com/a" where the page says "https://example.com/a". */
+static int tg_text_mentions_url(const char *text, const char *url)
+{
+    unsigned long len;
+    unsigned long i;
+    unsigned long k;
+
+    if (text == 0 || url == 0) {
+        return 0;
+    }
+    if (strncmp(url, "https://", 8U) == 0) {
+        url += 8;
+    } else if (strncmp(url, "http://", 7U) == 0) {
+        url += 7;
+    }
+    len = (unsigned long)strlen(url);
+    while (len > 0UL && url[len - 1UL] == '/') {
+        --len;
+    }
+    if (len == 0UL) {
+        return 0;
+    }
+    for (i = 0UL; text[i] != '\0'; ++i) {
+        for (k = 0UL; k < len; ++k) {
+            unsigned char a = (unsigned char)text[i + k];
+            unsigned char b = (unsigned char)url[k];
+
+            if (a == '\0') {
+                return 0; /* the rest of the text is shorter than it */
+            }
+            if (a >= 'A' && a <= 'Z') {
+                a = (unsigned char)(a - 'A' + 'a');
+            }
+            if (b >= 'A' && b <= 'Z') {
+                b = (unsigned char)(b - 'A' + 'a');
+            }
+            if (a != b) {
+                break;
+            }
+        }
+        if (k == len) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int tg_mtproto_web_page_suffix(const tg_mtproto_web_page *page,
+                               const char *message_text, unsigned long room,
+                               char *out, unsigned long out_size)
+{
+    unsigned long n = 0UL;
+    unsigned long need;
+
+    if (out == 0 || out_size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (page == 0) {
+        return 0;
+    }
+    tg_label_append(out, out_size, &n, page->text);
+    if (page->url[0] == '\0') {
+        return 0;
+    }
+    if (tg_text_mentions_url(message_text, page->url)) {
+        return 1;
+    }
+    /* The break before the suffix, the one before the address, the
+       address, the terminator. */
+    need = (message_text != 0 && message_text[0] != '\0' ? 1UL : 0UL) + n +
+           (n != 0UL ? 1UL : 0UL) + (unsigned long)strlen(page->url) + 1UL;
+    if (need > room || need > out_size) {
+        return 0;
+    }
+    if (n != 0UL) {
+        tg_label_append(out, out_size, &n, "\n");
+    }
+    tg_label_append(out, out_size, &n, page->url);
+    return 1;
+}
+
 static void tg_mtproto_append_web_page(tg_mtproto_tl_reader *reader,
                                        tg_mtproto_message_text *out,
                                        tg_mtproto_web_page *page_out)
 {
     tg_mtproto_web_page page;
+    char suffix[TG_MTPROTO_WEBPAGE_SUFFIX_MAX];
     unsigned long n;
 
     if (tg_mtproto_read_web_page(reader, &page) != TG_MTPROTO_TL_OK) {
@@ -6941,11 +7043,17 @@ static void tg_mtproto_append_web_page(tg_mtproto_tl_reader *reader,
     out->pending_webpage_lo = page.pending ? page.id_lo : 0UL;
     out->photo = page.photo;
     n = (unsigned long)strlen(out->text);
-    if (page.text[0] != '\0') {
+    /* The picture opens the link only when the text has the address to
+       open. */
+    out->photo_is_link =
+        tg_mtproto_web_page_suffix(&page, out->text, sizeof(out->text) - n,
+                                   suffix, sizeof(suffix)) &&
+        page.photo.has_photo && page.opens_link;
+    if (suffix[0] != '\0') {
         if (n != 0UL) {
             tg_label_append(out->text, sizeof(out->text), &n, "\n");
         }
-        tg_label_append(out->text, sizeof(out->text), &n, page.text);
+        tg_label_append(out->text, sizeof(out->text), &n, suffix);
     }
     out->has_text = out->text[0] != '\0';
 }
@@ -9392,6 +9500,104 @@ int tg_mtproto_login_self_test(void)
         if (!page_out.pending || page_out.id_lo != 9UL ||
             page_out.text[0] != '\0') {
             puts("0.0.94 self-test: the pending page was not handed over");
+            return 2;
+        }
+    }
+
+    /* The page's address is kept, and stands under the preview when the
+       message does not show it: a link hidden behind a word had nothing to
+       click. */
+    {
+        unsigned char wire[512];
+        tg_mtproto_tl_writer ww;
+        tg_mtproto_tl_reader wr;
+        static tg_mtproto_message_text msg;
+        static tg_mtproto_web_page page;
+        char suffix[TG_MTPROTO_WEBPAGE_SUFFIX_MAX];
+        char long_url[300];
+        tg_mtproto_tl_status ws;
+        int pass;
+
+        for (pass = 0; pass < 3; ++pass) {
+            /* 0: an article; 1: the page is a picture; 2: an address too
+               long to keep whole. */
+            memset(long_url, 'a', sizeof(long_url) - 1U);
+            memcpy(long_url, "https://x.y/", 12U);
+            long_url[sizeof(long_url) - 1U] = '\0';
+            tg_mtproto_tl_writer_init(&ww, wire, sizeof(wire));
+            ws = tg_mtproto_tl_write_u32(&ww, 0xe89c45b2UL);
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 5UL);
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u64(&ww, 0UL, 20UL);
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+                pass == 2 ? long_url : "https://Example.org/Page/");
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "example.org");
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 0UL);
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+                pass == 1 ? "photo" : "article");
+            if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "Titolo");
+            if (ws != TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            tg_mtproto_tl_reader_init(&wr, wire, ww.length);
+            if (tg_mtproto_read_web_page(&wr, &page) != TG_MTPROTO_TL_OK ||
+                strcmp(page.text, "[Link: Titolo]") != 0 ||
+                strcmp(page.url, pass == 2 ? ""
+                                           : "https://Example.org/Page/") != 0 ||
+                page.opens_link != (pass == 0)) {
+                printf("link self-test: page %d kept \"%s\" (%d)\n", pass,
+                       page.url, page.opens_link);
+                return 2;
+            }
+        }
+        /* An article with its address. A message that hides the link gets
+           the address; one that shows it, in whatever case and with or
+           without the scheme or the last slash, does not. */
+        tg_mtproto_tl_writer_init(&ww, wire, sizeof(wire));
+        ws = tg_mtproto_tl_write_u32(&ww, 0xe89c45b2UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 4UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u64(&ww, 0UL, 21UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww,
+            "https://Example.org/Page/");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "example.org");
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_mtproto_tl_write_u32(&ww, 0UL);
+        if (ws == TG_MTPROTO_TL_OK) ws = tg_write_string(&ww, "Titolo");
+        tg_mtproto_tl_reader_init(&wr, wire, ww.length);
+        if (ws != TG_MTPROTO_TL_OK ||
+            tg_mtproto_read_web_page(&wr, &page) != TG_MTPROTO_TL_OK ||
+            !page.opens_link) {
+            return 2;
+        }
+        if (!tg_mtproto_web_page_suffix(&page, "leggi qui", 400UL, suffix,
+                                        sizeof(suffix)) ||
+            strcmp(suffix, "[Link: Titolo]\nhttps://Example.org/Page/") != 0 ||
+            !tg_mtproto_web_page_suffix(&page, "vedi EXAMPLE.ORG/page ok",
+                                        400UL, suffix, sizeof(suffix)) ||
+            strcmp(suffix, "[Link: Titolo]") != 0 ||
+            !tg_mtproto_web_page_suffix(&page, "http://example.org/Page/",
+                                        400UL, suffix, sizeof(suffix)) ||
+            strcmp(suffix, "[Link: Titolo]") != 0 ||
+            /* another page of the same site is not this address */
+            !tg_mtproto_web_page_suffix(&page, "example.org/pag", 400UL,
+                                        suffix, sizeof(suffix)) ||
+            strcmp(suffix, "[Link: Titolo]\nhttps://Example.org/Page/") != 0 ||
+            /* no room for the whole address: the label alone, and no link */
+            tg_mtproto_web_page_suffix(&page, "leggi qui", 30UL, suffix,
+                                       sizeof(suffix)) ||
+            strcmp(suffix, "[Link: Titolo]") != 0) {
+            printf("link self-test: suffix is \"%s\"\n", suffix);
+            return 2;
+        }
+        /* Through the message reader: the hidden link's address under the
+           label; no picture here, so nothing for a click on one to open. */
+        memset(&msg, 0, sizeof(msg));
+        strcpy(msg.text, "leggi qui");
+        msg.has_text = 1;
+        tg_mtproto_tl_reader_init(&wr, wire, ww.length);
+        tg_mtproto_append_web_page(&wr, &msg, 0);
+        if (strcmp(msg.text,
+                   "leggi qui\n[Link: Titolo]\nhttps://Example.org/Page/") != 0 ||
+            msg.photo_is_link) {
+            printf("link self-test: hidden link reads \"%s\"\n", msg.text);
             return 2;
         }
     }
