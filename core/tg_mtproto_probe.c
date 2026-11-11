@@ -21947,6 +21947,12 @@ static tg_gui_pinned_msg tg_gui_pinned_list[TG_GUI_PINNED_MAX];
 static int tg_gui_pinned_count = 0; /* latest pin first */
 static int tg_gui_pinned_at = 0;    /* the one on the bar */
 static int tg_gui_pinned_pending = 0;
+/* Asking failed: the next polls try again, this many times at most. */
+static int tg_gui_pinned_retries = 0;
+#define TG_GUI_PINNED_RETRIES 3
+/* ...and the idle path keeps out of it meanwhile: it runs ten times a
+   second, the poll once every few seconds and after draining the link. */
+static int tg_gui_pinned_step_failed = 0;
 
 /* Puts the current one on the window's bar (or takes the bar away).
    1 = the bar changed. */
@@ -21995,6 +22001,8 @@ static void tg_gui_pinned_note_update(unsigned long peer_constructor,
 {
     if (tg_gui_draft_is_open_peer(peer_constructor, id_hi, id_lo)) {
         tg_gui_pinned_pending = 1;
+        tg_gui_pinned_retries = TG_GUI_PINNED_RETRIES;
+        tg_gui_pinned_step_failed = 0;
     }
 }
 
@@ -22008,6 +22016,8 @@ static void tg_gui_pinned_chat_opened(int other_chat)
         (void)tg_gui_pinned_show();
     }
     tg_gui_pinned_pending = 1;
+    tg_gui_pinned_retries = TG_GUI_PINNED_RETRIES;
+    tg_gui_pinned_step_failed = 0;
 }
 
 /* One line for the bar from a message's text: no style markers, the line
@@ -22040,7 +22050,7 @@ static void tg_gui_pinned_line(char *dest, unsigned long size,
 /* Asks Telegram the open chat's latest pinned messages and hands the
    window the one to show: the one it showed before if it is still pinned,
    else the latest. 1 = the bar changed (shown, changed or gone), 0 = as it
-   was, or could not ask. */
+   was, -1 = could not ask (the caller tries again later). */
 static int tg_gui_session_fetch_pinned(FILE *stream)
 {
     unsigned char query[96];
@@ -22092,7 +22102,7 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (rc != 0) {
         tg_gui_log("pinned: could not ask");
-        return 0;
+        return -1;
     }
     shown_id = tg_gui_pinned_count > 0 &&
                tg_gui_pinned_at < tg_gui_pinned_count
@@ -24763,11 +24773,16 @@ static int tg_gui_session_peer_request(const unsigned char *query,
         emsg[0] = '\0';
     }
     memset(result, 0, sizeof(*result));
+    /* The ceiling counts every packet read while waiting, and on a lively
+       account the updates of other chats come first: at 16 a request made
+       right after a chat opened ran out before its answer came, and a
+       request that runs out also drops the connection. The idle-time
+       budget is what bounds the wait. */
     rc = tg_mtproto_send_saved_query_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
         tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, query,
-        length, result, quiet, label, 16U);
+        length, result, quiet, label, 200U);
     if (rc != 0) {
         return 2;
     }
@@ -30219,9 +30234,21 @@ int tg_gui_session_pinned_step(FILE *stream)
         tg_gui_session_state.current_peer_index[0] == '\0') {
         return 0;
     }
+    if (tg_gui_pinned_step_failed) {
+        return 0; /* the poll tries again, after it has drained the link */
+    }
     tg_gui_pinned_pending = 0;
-    if (!tg_gui_session_fetch_pinned(stream)) {
-        return 0;
+    {
+        int prc = tg_gui_session_fetch_pinned(stream);
+
+        if (prc < 0 && tg_gui_pinned_retries > 0) {
+            --tg_gui_pinned_retries;
+            tg_gui_pinned_pending = 1;
+            tg_gui_pinned_step_failed = 1;
+        }
+        if (prc <= 0) {
+            return 0;
+        }
     }
     tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
     return 1;
@@ -30530,10 +30557,16 @@ int tg_gui_session_tick(FILE *stream)
         /* The chat's pinned message: asked here, after the chat is on
            screen, and again when a pin changes. */
         if (tg_gui_pinned_pending) {
+            int prc;
+
             tg_gui_pinned_pending = 0;
-            if (tg_gui_session_fetch_pinned(quiet)) {
+            prc = tg_gui_session_fetch_pinned(quiet);
+            if (prc > 0) {
                 dirty = 1;
                 tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+            } else if (prc < 0 && tg_gui_pinned_retries > 0) {
+                --tg_gui_pinned_retries;
+                tg_gui_pinned_pending = 1; /* the next poll asks again */
             }
         }
 #endif
