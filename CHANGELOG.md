@@ -151,14 +151,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   it works in basic groups and on MorphOS, where it never opened), then
   the group's recent members; each line shows the name and, when there
   is one, the username, and what is typed narrows it by either. It holds
-  up to 32 people (12 on 68k) and shows eight at a time, scrolling under
+  up to 64 people (12 on 68k) and shows eight at a time, scrolling under
   the highlight with the cursor keys or the mouse wheel. From
   three letters on, when nobody listed matches, Telegram is asked for
   the members that do, so someone who has not written lately can be
   found in a large group. People without a username can be mentioned
   too: their first name is written, and the message tells Telegram whose
   name it is, as the official clients do. MorphOS now asks for the
-  member list like the other systems (a short one, 24 members).
+  member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
 - A link with a preview could be impossible to open: when the message

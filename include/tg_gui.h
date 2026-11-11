@@ -202,7 +202,7 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
 #if defined(__m68k__)
 #define TG_GUI_MENTION_MAX 12
 #else
-#define TG_GUI_MENTION_MAX 32
+#define TG_GUI_MENTION_MAX 64 /* the members asked for, all in one list */
 #endif
 #define TG_GUI_MENTION_ROWS 8
 #define TG_GUI_MENTION_LEN 56

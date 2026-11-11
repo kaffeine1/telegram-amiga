@@ -11740,7 +11740,8 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
    until 0.2, when a large reply was thought to freeze its network stack; the
    freezes of that time turned out to be something else (repaints racing the
    layers, getDialogs), and photos and files of megabytes have gone through the
-   same stack since. It asks for few members all the same, like the 68k. Returns
+   same stack since. It first asked for 24 members, like the 68k; that went well
+   on a real machine, and it now asks for 64 like the other systems. Returns
    0 on a parsed reply, non-zero otherwise (caller falls back to "someone"). */
 static int tg_mtproto_gui_fetch_group_members(
     const char *host,
@@ -11764,10 +11765,10 @@ static int tg_mtproto_gui_fetch_group_members(
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     static const char label[] = "mtproto channels.getParticipants";
-#if defined(__m68k__) || defined(__MORPHOS__) || defined(__MORPHOS)
-    const unsigned long member_limit = 24UL; /* tighter box, smaller reply */
+#if defined(__m68k__)
+    const unsigned long member_limit = 24UL; /* tighter box */
 #else
-    const unsigned long member_limit = 64UL; /* == peer-cache capacity */
+    const unsigned long member_limit = 64UL; /* what the mention list holds */
 #endif
 
     if (out_members != 0) {
@@ -26579,8 +26580,6 @@ unsigned long tg_gui_session_show_hidden(unsigned long peer_id_hi,
    clients do it. The window only. */
 #if defined(__m68k__)
 #define TG_GUI_PEOPLE_MAX 40
-#elif defined(__MORPHOS__) || defined(__MORPHOS)
-#define TG_GUI_PEOPLE_MAX 48
 #else
 #define TG_GUI_PEOPLE_MAX 96
 #endif

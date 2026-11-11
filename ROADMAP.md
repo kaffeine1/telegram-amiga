@@ -1074,14 +1074,15 @@ anywhere on MorphOS (reported in the 0.0.93 field round as "no popup
 after @", and again in the 0.2 cycle). Now the popup offers the people
 the client has heard of in the open group: who wrote the messages loaded
 (any kind of group, no request), the recent members where Telegram lists
-them (MorphOS included, 24 of them: the freezes of that hunt turned out
-to be repaints racing the layers and `getDialogs`, not the size of a
-reply), and, when nobody known matches three letters or more, the members
-Telegram finds (`channelParticipantsSearch`). Someone without a username
-is mentioned by first name with an `inputMessageEntityMentionName`
-entity, the first entity `messages.sendMessage` carries here. Still
-missing: the full member list of a basic group (`messages.getFullChat`),
-so in one of those only who wrote lately is offered.
+them (64 of them, 24 on 68k; MorphOS included: the freezes of that hunt
+turned out to be repaints racing the layers and `getDialogs`, not the
+size of a reply), and, when nobody known matches three letters or more,
+the members Telegram finds (`channelParticipantsSearch`). Someone without
+a username is mentioned by first name with an
+`inputMessageEntityMentionName` entity, the first entity
+`messages.sendMessage` carries here. Still missing: the full member list
+of a basic group (`messages.getFullChat`), so in one of those only who
+wrote lately is offered.
 
 ## Planned: split long pastes into protocol-sized messages
 

@@ -9929,7 +9929,8 @@ int tg_gui_self_test(void)
        scrolling under the highlight; the cursor keys go round the ends,
        the wheel stops at them; a click names the person on that line; a
        window with little room shows fewer lines, the highlighted one
-       among them. */
+       among them. Twenty people: not where the list holds fewer (68k). */
+#if TG_GUI_MENTION_MAX >= 20
     {
         tg_gui_record rec;
         tg_gui_backend b = backend;
@@ -10060,6 +10061,7 @@ int tg_gui_self_test(void)
         state.mention_sel = 0;
         state.mention_top = 0;
     }
+#endif
 
     /* The ARexx port: what a command line asks, and the chat a name
        means. */
