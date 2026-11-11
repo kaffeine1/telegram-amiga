@@ -571,6 +571,7 @@ typedef struct tg_gui_state {
     int settings_own_screen;
     char settings_download[TG_GUI_NAME_MAX];
     int set_x, set_y, set_w, set_row_h, set_rows, set_hint_y;
+    int set_close_x, set_close_w; /* the Close button, in the title row */
     int ctx_muted; /* Telegram holds the menu's chat muted: it offers Unmute */
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
@@ -961,6 +962,7 @@ int tg_gui_settings_page(tg_gui_state *state, int dir);
 #define TG_GUI_SET_HIT_OUTSIDE (-2) /* beside the panel: it closes */
 #define TG_GUI_SET_HIT_UP (-3)      /* the title row: a page up */
 #define TG_GUI_SET_HIT_DOWN (-4)    /* the hint row: a page down */
+#define TG_GUI_SET_HIT_CLOSE (-5)   /* the Close button: it closes */
 int tg_gui_settings_hit(const tg_gui_state *state, int x, int y);
 
 /* The ARexx port's commands (the port is the window's; this is the part

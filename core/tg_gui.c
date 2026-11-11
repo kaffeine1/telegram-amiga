@@ -6982,6 +6982,7 @@ void tg_gui_settings_show(tg_gui_state *state, int open)
     state->settings_scroll = 0;
     state->settings_sel = tg_gui_settings_first_line();
     state->set_rows = 0;
+    state->set_close_w = 0;
 }
 
 int tg_gui_settings_selected(const tg_gui_state *state)
@@ -7060,6 +7061,10 @@ int tg_gui_settings_hit(const tg_gui_state *state, int x, int y)
         return TG_GUI_SET_HIT_OUTSIDE;
     }
     if (y < state->set_y) {
+        if (state->set_close_w > 0 && x >= state->set_close_x &&
+            x < state->set_close_x + state->set_close_w) {
+            return TG_GUI_SET_HIT_CLOSE;
+        }
         return TG_GUI_SET_HIT_UP;
     }
     if (y >= state->set_hint_y) {
@@ -7136,14 +7141,29 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
                        tg_gui_navigation_baseline(backend, 2, rh), title,
                        sizeof(title) - 1UL);
     {
-        const char *top = st->settings_scroll > 0 ? "more above"
-                                                  : "ESC closes";
-        unsigned long n = (unsigned long)strlen(top);
+        /* The way out for the mouse: a button at the right of the title. */
+        static const char close_label[] = "Close";
+        static const char above[] = "more above";
+        unsigned long cn = sizeof(close_label) - 1UL;
+        int cw = backend->text_width(backend, close_label, cn) + 16;
+        int cx = right - cw;
 
-        backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM,
-                           right - backend->text_width(backend, top, n),
-                           tg_gui_navigation_baseline(backend, 2, rh), top,
-                           n);
+        st->set_close_x = cx;
+        st->set_close_w = cw;
+        backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                           tg_gui_make_rect(cx, 1, cw, rh));
+        backend->draw_text(backend, TG_GUI_PEN_ACCENT_TEXT, cx + 8,
+                           tg_gui_navigation_baseline(backend, 1, rh),
+                           close_label, cn);
+        if (st->settings_scroll > 0) {
+            unsigned long n = sizeof(above) - 1UL;
+
+            backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM,
+                               cx - 10 -
+                                   backend->text_width(backend, above, n),
+                               tg_gui_navigation_baseline(backend, 2, rh),
+                               above, n);
+        }
     }
     backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                        tg_gui_make_rect(x0 + 6, rh + 2, w - 12, 1));
@@ -7196,7 +7216,7 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
     }
     hint = st->settings_scroll < max_scroll
                ? "more below - Up/Down, SPACE changes"
-               : "Up/Down move, SPACE or a click changes";
+               : "Up/Down move, SPACE or a click changes, ESC closes";
     backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                        tg_gui_make_rect(x0 + 6, hint_y, w - 12, 1));
     tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT_DIM, left,
@@ -9740,7 +9760,7 @@ int tg_gui_self_test(void)
         rec.watch_text[1] = "Photos and emoji";
         rec.watch_text[2] = "Built-in chime";
         rec.watch_text[3] = "< Count and pop-up >";
-        rec.watch_text[4] = "ESC closes";
+        rec.watch_text[4] = "Close";
         b.context = &rec;
         tg_gui_paint(&state, &b);
         ok_set = ok_set && rec.watch_hits[0] == 1 && rec.watch_hits[1] == 1 &&
@@ -9760,6 +9780,14 @@ int tg_gui_self_test(void)
                  tg_gui_settings_hit(&state, 20, 200) ==
                      TG_GUI_SET_HIT_OUTSIDE &&
                  tg_gui_settings_hit(&state, state.set_x + 40, 3) ==
+                     TG_GUI_SET_HIT_UP &&
+                 /* The Close button, at the right of the title row. */
+                 state.set_close_w > 0 &&
+                 state.set_close_x + state.set_close_w <= 640 &&
+                 rec.watch_x[4] > state.set_close_x &&
+                 tg_gui_settings_hit(&state, state.set_close_x + 2, 3) ==
+                     TG_GUI_SET_HIT_CLOSE &&
+                 tg_gui_settings_hit(&state, state.set_close_x - 2, 3) ==
                      TG_GUI_SET_HIT_UP &&
                  tg_gui_settings_hit(&state, state.set_x + 40,
                                      state.set_hint_y + 3) ==

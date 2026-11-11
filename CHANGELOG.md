@@ -44,7 +44,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   moves the bar to the one pinned before it, round to the latest again.
   They are read from Telegram right after the chat opens and again when
   someone pins or unpins a message there. The latest 8 pins are kept (5
-  on MorphOS, 4 on 68k).
+  on MorphOS, 4 on 68k). A message just pinned, here or by someone else
+  while the chat is open, is the one the bar shows, at once; one just
+  unpinned leaves the bar at once.
 - Unread mentions. When messages of the open chat mention you and you
   have not seen them, a round "@" button with their number shows at the
   bottom right, over the jump button. A click shows the chat around the
@@ -139,9 +141,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   that a click moves on, or an action that opens a requester, in four
   groups (new messages, photos and emoji, window and files, ARexx). Up
   and Down move, SPACE, ENTER or a click change the line, LEFT and RIGHT
-  step a choice, ESC or a click beside the panel closes it. It follows
-  the theme and the screen's font, scrolls when the window is short, and
-  stays open across the switch to an own screen.
+  step a choice; a Close button at the top right, ESC, or a click on the
+  chat list closes it. It follows the theme and the screen's font,
+  scrolls when the window is short, and stays open across the switch to
+  an own screen.
 
 ### Fixed
 - A link with a preview could be impossible to open: when the message

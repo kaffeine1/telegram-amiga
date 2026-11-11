@@ -633,8 +633,9 @@ Settings
 - "Settings..." in the first menu (Amiga+T) opens the settings over the
   chat: every preference is a line there. Up and Down move, SPACE,
   ENTER or a click change the line, LEFT and RIGHT step a choice back
-  and on, ESC closes. Where this manual says "Settings > ...", it is a
-  line of that panel.
+  and on. The Close button at the top right, ESC, or a click on the chat
+  list closes it. Where this manual says "Settings > ...", it is a line
+  of that panel.
 
 Window and screen
 - The window remembers its size and position
@@ -782,8 +783,9 @@ Impostazioni
 - "Settings..." nel primo menu (Amiga+T) apre le impostazioni sopra la
   chat: ogni preferenza e' una riga. Su e Giu' si spostano, SPAZIO,
   INVIO o un click cambiano la riga, SINISTRA e DESTRA fanno girare una
-  scelta indietro e avanti, ESC chiude. Dove questo manuale dice
-  "Settings > ...", e' una riga di quel pannello.
+  scelta indietro e avanti. Lo chiudono il pulsante Close in alto a
+  destra, ESC, o un click sull'elenco delle chat. Dove questo manuale
+  dice "Settings > ...", e' una riga di quel pannello.
 
 Finestra e schermo
 - La finestra ricorda dimensione e posizione

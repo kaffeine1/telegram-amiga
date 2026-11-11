@@ -12950,10 +12950,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             }
             /* The settings panel has the keyboard and the mouse while it is
                open: Up/Down move, SPACE, ENTER or a click change the line
-               (LEFT and RIGHT step a choice back and on), ESC or a press
-               beside the panel closes it. What a line changes goes through
-               the same action its menu item used to send, so there is one
-               place that sets each preference. Nothing else gets the event:
+               (LEFT and RIGHT step a choice back and on), ESC, the Close
+               button or a press beside the panel closes it. A line's change
+               goes through the action its menu item used to send, so one
+               place sets each preference. Nothing else gets the event:
                no typing, no chat switching under the panel. */
             if (state->settings_open && state->mode == TG_GUI_MODE_CHAT &&
                 key_menu_action == 0 &&
@@ -12997,7 +12997,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state, (int)mouse_x - ctx.origin_x,
                         (int)mouse_y - ctx.origin_y);
 
-                    if (set_hit == TG_GUI_SET_HIT_OUTSIDE) {
+                    if (set_hit == TG_GUI_SET_HIT_OUTSIDE ||
+                        set_hit == TG_GUI_SET_HIT_CLOSE) {
                         tg_gui_settings_show(state, 0);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
@@ -14880,6 +14881,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                sizeof(state->status),
                                                "Could not reach Telegram");
                         }
+                        /* The bar has the message already (or has let go
+                           of it): shown now, not at the next answer. */
+                        tg_gui_window_paint(state, &backend);
                     } else if (it == TG_GUI_CTX_COPY && m != 0 &&
                                m->text[0] != '\0') {
                         static char ctxsel[TG_GUI_MSG_TEXT_MAX];
