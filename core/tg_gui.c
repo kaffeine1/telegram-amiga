@@ -6183,7 +6183,16 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ids[n] = TG_GUI_CTX_HIDE;
             ++n;
         }
-        if (m->has_document) { /* incoming OR own: you can save either */
+        if (m->has_document && state->ctx_file_saved) {
+            /* Already saved from here and still on disk: what one does
+               with a file one has. */
+            labels[n] = "Open";
+            ids[n] = TG_GUI_CTX_FILE_OPEN;
+            ++n;
+            labels[n] = "Show in drawer";
+            ids[n] = TG_GUI_CTX_FILE_SHOW;
+            ++n;
+        } else if (m->has_document) { /* incoming OR own: you can save either */
             labels[n] = "Download";
             ids[n] = TG_GUI_CTX_DOWNLOAD;
             ++n;
@@ -9800,7 +9809,50 @@ int tg_gui_self_test(void)
         state.messages[0].is_own = 1;
         state.messages[0].has_document = 1;
         state.messages[0].has_photo = 1;
+        /* A file not saved yet offers Download; one that a download from
+           here saved offers Open and Show in drawer in its place, which
+           makes the longest menu there is. */
+        state.ctx_file_saved = 0;
         count = tg_gui_context_items(&state, labels, ids);
+        {
+            int saw_download = 0;
+            int saw_open = 0;
+
+            for (i = 0; i < count; ++i) {
+                saw_download |= ids[i] == TG_GUI_CTX_DOWNLOAD;
+                saw_open |= ids[i] == TG_GUI_CTX_FILE_OPEN ||
+                            ids[i] == TG_GUI_CTX_FILE_SHOW;
+            }
+            if (count != TG_GUI_CTX_MENU_ITEMS - 1 || !saw_download ||
+                saw_open) {
+                puts("gui self-test: a file not saved must offer Download");
+                return 2;
+            }
+        }
+        state.ctx_file_saved = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        {
+            int saw_download = 0;
+            int at_open = -1;
+            int at_show = -1;
+
+            for (i = 0; i < count; ++i) {
+                saw_download |= ids[i] == TG_GUI_CTX_DOWNLOAD;
+                if (ids[i] == TG_GUI_CTX_FILE_OPEN &&
+                    strcmp(labels[i], "Open") == 0) {
+                    at_open = i;
+                }
+                if (ids[i] == TG_GUI_CTX_FILE_SHOW &&
+                    strcmp(labels[i], "Show in drawer") == 0) {
+                    at_show = i;
+                }
+            }
+            if (saw_download || at_open < 0 || at_show != at_open + 1) {
+                puts("gui self-test: a saved file must offer Open and "
+                     "Show in drawer");
+                return 2;
+            }
+        }
         saw_saved = 0;
         saw_picker = 0;
         saw_photo_save = 0;
@@ -9825,6 +9877,7 @@ int tg_gui_self_test(void)
             }
         }
         state.ctx_msg_pinned = 0;
+        state.ctx_file_saved = 0;
         state.messages[0].id = 0UL;
         state.messages[0].is_own = 0;
         state.messages[0].has_document = 0;

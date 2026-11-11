@@ -238,6 +238,16 @@ int tg_gui_session_transfer_step(unsigned long *done, unsigned long *total);
    display: downloads count real bytes, uploads count confirmed parts. */
 unsigned long tg_gui_session_transfer_bytes(void);
 
+/* Where the file of this message of the open chat was saved by a download
+   from this client, when it is still there: 1 = `out` holds its path
+   (relative to the program's drawer, or absolute when the download drawer
+   is elsewhere). 0 = never saved from here, or moved or deleted since. */
+int tg_gui_session_saved_path(unsigned long message_id, char *out,
+                              unsigned long size);
+
+/* Whether a file is a program of these systems: opening one runs it. */
+int tg_gui_session_file_is_program(const char *path);
+
 /* Directory downloads are written to: "downloads" unless
    data/telegram-downloads.txt says otherwise (one line, e.g. "RAM:TGdl").
    Borrowed, do not free; stable for the whole run. */

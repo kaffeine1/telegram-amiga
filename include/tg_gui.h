@@ -594,6 +594,9 @@ typedef struct tg_gui_state {
     int set_close_x, set_close_w; /* the Close button, in the title row */
     int ctx_muted; /* Telegram holds the menu's chat muted: it offers Unmute */
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
+    /* The menu's message carries a file that a download from here saved
+       and that is still on disk: Open and Show in drawer, not Download. */
+    int ctx_file_saved;
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
     int ctx_react; /* the React chooser replaces the message menu */
     /* Several messages are being selected, to delete or forward them
@@ -955,13 +958,15 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_POLL_RETRACT 44 /* Take back vote */
 #define TG_GUI_CTX_POLL_SEND 45 /* several answers chosen: send them */
 #define TG_GUI_CTX_SELECT 46 /* Select: start choosing several messages */
+#define TG_GUI_CTX_FILE_OPEN 47 /* Open the file a download saved */
+#define TG_GUI_CTX_FILE_SHOW 60 /* Show that file's drawer */
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
-#define TG_GUI_CTX_MENU_ITEMS 14 /* the longest message menu */
+#define TG_GUI_CTX_MENU_ITEMS 15 /* the longest message menu */
 #define TG_GUI_CTX_ITEMS_MAX TG_GUI_REACT_CHOICES_MAX /* the whole chooser */
 
 /* Attachment chooser: known image extensions get the Photo/File dialog;

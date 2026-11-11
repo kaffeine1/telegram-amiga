@@ -366,7 +366,12 @@ Middle, more interface:
   `messages.deleteMessages` or `channels.deleteMessages` for the lot).
   Still missing from its section: the click in the gutter left of a
   bubble, and "also for the other person" in a private chat;
-- open a downloaded file or show it in its drawer (its section);
+- open a downloaded file or show it in its drawer: done (Open and Show
+  in drawer in the menu of a message whose file was saved,
+  `OpenWorkbenchObjectA`, the record in `data/telegram-saved.txt`, a
+  confirmation before a program is run). Still missing from its
+  section: the file's icon selected in the drawer
+  (`ChangeWorkbenchSelectionA`) and the MultiView fallback on 3.0/3.1;
 - polls shown and voted: done (`messageMediaPoll` written out as the
   message's text, `messages.sendVote` from the message's menu, the
   answers in the menu's place, `updateMessagePoll` followed while the
@@ -1408,7 +1413,7 @@ nothing in the transfer or login paths, so it fits the 0.0.9x line in
 one of the slots after the 0.0.95 speed release. The text client gets
 it later, if at all: its /forward stays one message at a time.
 
-## Planned: open a downloaded file, or show it in its drawer
+## Done for 0.2: open a downloaded file, or show it in its drawer
 
 Once a file has come down, the desktop client's menu on that message
 offers to open it and to show it in its folder. Here the only trace of a

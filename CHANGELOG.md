@@ -47,6 +47,18 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Open a downloaded file, or show it in its drawer. Once a download
+  from this client has saved a message's file, the message's menu offers
+  Open and Show in drawer in place of Download. Open hands the file to
+  the Workbench as a double click on its icon would (workbench.library
+  44: AmigaOS 3.5 and later, AmigaOS 4, MorphOS, AROS); Show in drawer
+  opens the drawer it is in. A program is opened only after a
+  confirmation, since opening one runs it. On an older Workbench the
+  status line says where the file is. Where each file went is kept in
+  `data/telegram-saved.txt` (the latest 48, 16 on 68k) and checked when
+  the menu opens: a file moved or deleted by hand brings Download back.
+  Files downloaded by an earlier version are not known until they are
+  downloaded again.
 - Several messages at once. Select, in a message's menu, starts a
   selection: a click on a message marks it or takes its mark away, and
   Shift+click marks everything from the message last clicked to that

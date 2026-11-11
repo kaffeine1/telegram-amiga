@@ -18969,6 +18969,7 @@ static int tg_gui_pins_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
+static int tg_gui_saved_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
 
@@ -21075,7 +21076,8 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
 #if !defined(TG_NO_GUI)
-    if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0) {
+    if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0 ||
+        tg_gui_saved_self_test() != 0) {
         return 2;
     }
 #endif
@@ -30780,6 +30782,14 @@ static int tg_mtproto_file_is_amiga_executable(const char *path)
            magic[3] == 'F';
 }
 
+/* Public: whether a file is a program of these systems (the same check
+   that gives a download its run bit): opening one runs it, so the window
+   asks before. */
+int tg_gui_session_file_is_program(const char *path)
+{
+    return tg_mtproto_file_is_amiga_executable(path);
+}
+
 #if !defined(TG_NO_SELFTEST)
 /* Host-runnable: the sniff must say yes to both loadable families, and no
    to a HUNK object file, a text file and a short file. */
@@ -31320,6 +31330,289 @@ int tg_gui_session_transfer_busy(void)
     return tg_gui_transfer_dir;
 }
 
+#if !defined(TG_NO_GUI)
+/* --- files saved ---------------------------------------------------------
+   Where the files downloaded from messages went, so that the message's
+   menu can open one or show it in its drawer: the chat, the message, the
+   path written (the download drawer can change between two downloads).
+   Kept in data/, the latest few; a file moved or deleted by hand is found
+   missing when its menu opens, and forgotten. The window only. */
+#define TG_GUI_SAVED_FILE "data/telegram-saved.txt"
+#if defined(__m68k__)
+#define TG_GUI_SAVED_MAX 16
+#else
+#define TG_GUI_SAVED_MAX 48
+#endif
+#define TG_GUI_SAVED_PATH_MAX 160
+typedef struct tg_gui_saved_entry {
+    int is_user;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long msg_id;
+    char path[TG_GUI_SAVED_PATH_MAX];
+} tg_gui_saved_entry;
+static tg_gui_saved_entry tg_gui_saved_list[TG_GUI_SAVED_MAX];
+static int tg_gui_saved_count = 0;
+static int tg_gui_saved_loaded = 0;
+static const char *tg_gui_saved_file = TG_GUI_SAVED_FILE;
+/* The download under way: whose message it is. */
+static int tg_gui_dl_is_user = 0;
+static unsigned long tg_gui_dl_peer_hi = 0UL;
+static unsigned long tg_gui_dl_peer_lo = 0UL;
+static unsigned long tg_gui_dl_msg_id = 0UL;
+
+static void tg_gui_saved_load(void)
+{
+    char line[TG_GUI_SAVED_PATH_MAX + 64];
+    FILE *f;
+
+    if (tg_gui_saved_loaded) {
+        return;
+    }
+    tg_gui_saved_loaded = 1;
+    tg_gui_saved_count = 0;
+    f = fopen(tg_gui_saved_file, "r");
+    if (f == 0) {
+        return;
+    }
+    while (tg_gui_saved_count < TG_GUI_SAVED_MAX &&
+           fgets(line, (int)sizeof(line), f) != 0) {
+        tg_gui_saved_entry *e = &tg_gui_saved_list[tg_gui_saved_count];
+        char kind = 0;
+        int used = 0;
+        unsigned long n;
+
+        /* "U <hi> <lo> <message> <path to the end of the line>" */
+        if (sscanf(line, "%c %lx %lx %lu %n", &kind, &e->id_hi, &e->id_lo,
+                   &e->msg_id, &used) < 4 ||
+            used <= 0 || (kind != 'U' && kind != 'G') || e->msg_id == 0UL) {
+            continue;
+        }
+        n = (unsigned long)strlen(line + used);
+        while (n > 0UL && (line[used + n - 1UL] == '\n' ||
+                           line[used + n - 1UL] == '\r')) {
+            line[used + --n] = '\0';
+        }
+        if (n == 0UL || n >= sizeof(e->path)) {
+            continue;
+        }
+        strcpy(e->path, line + used);
+        e->is_user = kind == 'U';
+        ++tg_gui_saved_count;
+    }
+    fclose(f);
+}
+
+static void tg_gui_saved_store(void)
+{
+    FILE *f = tg_file_fopen_replace(tg_gui_saved_file, "w");
+    int k;
+
+    if (f == 0) {
+        return; /* kept for this run all the same */
+    }
+    for (k = 0; k < tg_gui_saved_count; ++k) {
+        const tg_gui_saved_entry *e = &tg_gui_saved_list[k];
+
+        fprintf(f, "%c %lx %lx %lu %s\n", e->is_user ? 'U' : 'G', e->id_hi,
+                e->id_lo, e->msg_id, e->path);
+    }
+    fclose(f);
+}
+
+static int tg_gui_saved_find(int is_user, unsigned long id_hi,
+                             unsigned long id_lo, unsigned long msg_id)
+{
+    int k;
+
+    tg_gui_saved_load();
+    for (k = 0; k < tg_gui_saved_count; ++k) {
+        const tg_gui_saved_entry *e = &tg_gui_saved_list[k];
+
+        if (e->is_user == (is_user ? 1 : 0) && e->id_hi == id_hi &&
+            e->id_lo == id_lo && e->msg_id == msg_id) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+static void tg_gui_saved_drop(int at)
+{
+    if (at < 0 || at >= tg_gui_saved_count) {
+        return;
+    }
+    memmove(&tg_gui_saved_list[at], &tg_gui_saved_list[at + 1],
+            (size_t)(tg_gui_saved_count - at - 1) *
+                sizeof(tg_gui_saved_list[0]));
+    --tg_gui_saved_count;
+}
+
+/* A download finished: where its file is. The same message saved again
+   takes the new place; with the list full the oldest record goes. */
+static void tg_gui_saved_note(int is_user, unsigned long id_hi,
+                              unsigned long id_lo, unsigned long msg_id,
+                              const char *path)
+{
+    tg_gui_saved_entry *e;
+    int at;
+
+    if (msg_id == 0UL || path == 0 || path[0] == '\0' ||
+        strlen(path) >= (size_t)TG_GUI_SAVED_PATH_MAX ||
+        strchr(path, '\n') != 0 || strchr(path, '\r') != 0) {
+        return;
+    }
+    at = tg_gui_saved_find(is_user, id_hi, id_lo, msg_id);
+    if (at >= 0) {
+        tg_gui_saved_drop(at);
+    }
+    if (tg_gui_saved_count >= TG_GUI_SAVED_MAX) {
+        tg_gui_saved_drop(0);
+    }
+    e = &tg_gui_saved_list[tg_gui_saved_count++];
+    e->is_user = is_user ? 1 : 0;
+    e->id_hi = id_hi;
+    e->id_lo = id_lo;
+    e->msg_id = msg_id;
+    strcpy(e->path, path);
+    tg_gui_saved_store();
+}
+
+/* Public: where the file of this message of the open chat was saved, when
+   it is still there. 1 = `out` holds the path; 0 = never saved from here,
+   or gone since (the record is dropped then). */
+int tg_gui_session_saved_path(unsigned long message_id, char *out,
+                              unsigned long size)
+{
+    FILE *f;
+    int at;
+
+    if (out != 0 && size > 0UL) {
+        out[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || message_id == 0UL ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 0;
+    }
+    at = tg_gui_saved_find(tg_gui_session_state.open_peer_constructor ==
+                               TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                           tg_gui_session_state.open_peer_id_hi,
+                           tg_gui_session_state.open_peer_id_lo, message_id);
+    if (at < 0) {
+        return 0;
+    }
+    f = fopen(tg_gui_saved_list[at].path, "rb");
+    if (f == 0) {
+        tg_gui_saved_drop(at); /* moved or deleted by hand */
+        tg_gui_saved_store();
+        return 0;
+    }
+    fclose(f);
+    if (out != 0 && size > 0UL) {
+        unsigned long i;
+
+        for (i = 0UL; i + 1UL < size &&
+                      tg_gui_saved_list[at].path[i] != '\0'; ++i) {
+            out[i] = tg_gui_saved_list[at].path[i];
+        }
+        out[i] = '\0';
+    }
+    return 1;
+}
+#endif /* !TG_NO_GUI: files saved */
+
+#if !defined(TG_NO_GUI) && !defined(TG_NO_SELFTEST)
+/* The record of saved files: found for its chat and message only, kept
+   across a restart, dropped when the file is gone, the oldest making room
+   in a full list, and nothing written for a path that would break the
+   file's lines. On a file of its own, never the user's. */
+static int tg_gui_saved_self_test(void)
+{
+    static const char record[] = "tg-saved-selftest.txt";
+    static const char target[] = "tg-saved-selftest.bin";
+    char got[TG_GUI_SAVED_PATH_MAX];
+    const char *saved_file = tg_gui_saved_file;
+    int saved_open = tg_gui_session_state.open;
+    unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+    unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+    unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+    FILE *f;
+    int ok;
+    int k;
+
+    tg_gui_saved_file = record;
+    (void)remove(record);
+    tg_gui_saved_count = 0;
+    tg_gui_saved_loaded = 0;
+    f = fopen(target, "wb");
+    ok = f != 0;
+    if (f != 0) {
+        fputs("x", f);
+        fclose(f);
+    }
+    tg_gui_session_state.open = 1;
+    tg_gui_session_state.open_peer_constructor =
+        TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    tg_gui_session_state.open_peer_id_hi = 0UL;
+    tg_gui_session_state.open_peer_id_lo = 7UL;
+    ok = ok && tg_gui_session_saved_path(55UL, got, sizeof(got)) == 0;
+    tg_gui_saved_note(1, 0UL, 7UL, 55UL, target);
+    tg_gui_saved_note(1, 0UL, 7UL, 56UL, "bad\nname"); /* refused */
+    ok = ok && tg_gui_saved_count == 1 &&
+         tg_gui_session_saved_path(55UL, got, sizeof(got)) == 1 &&
+         strcmp(got, target) == 0 &&
+         tg_gui_session_saved_path(56UL, got, sizeof(got)) == 0 &&
+         got[0] == '\0';
+    /* Another chat, and a group with the same number, are other chats. */
+    tg_gui_session_state.open_peer_id_lo = 8UL;
+    ok = ok && tg_gui_session_saved_path(55UL, got, sizeof(got)) == 0;
+    tg_gui_session_state.open_peer_id_lo = 7UL;
+    tg_gui_session_state.open_peer_constructor =
+        TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    ok = ok && tg_gui_session_saved_path(55UL, got, sizeof(got)) == 0;
+    tg_gui_session_state.open_peer_constructor =
+        TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    /* After a restart: read back from the file. */
+    tg_gui_saved_count = 0;
+    tg_gui_saved_loaded = 0;
+    ok = ok && tg_gui_session_saved_path(55UL, got, sizeof(got)) == 1 &&
+         strcmp(got, target) == 0 && tg_gui_saved_count == 1;
+    /* The same message saved again takes the new place, once. */
+    tg_gui_saved_note(1, 0UL, 7UL, 55UL, target);
+    ok = ok && tg_gui_saved_count == 1;
+    /* The file deleted by hand: not found, and forgotten for good. */
+    (void)remove(target);
+    ok = ok && tg_gui_session_saved_path(55UL, got, sizeof(got)) == 0 &&
+         tg_gui_saved_count == 0;
+    tg_gui_saved_loaded = 0;
+    ok = ok && tg_gui_session_saved_path(55UL, got, sizeof(got)) == 0 &&
+         tg_gui_saved_count == 0;
+    /* Full: the oldest record makes room. */
+    for (k = 0; k <= TG_GUI_SAVED_MAX; ++k) {
+        tg_gui_saved_note(0, 0UL, 9UL, 100UL + (unsigned long)k, "some/file");
+    }
+    ok = ok && tg_gui_saved_count == TG_GUI_SAVED_MAX &&
+         tg_gui_saved_find(0, 0UL, 9UL, 100UL) < 0 &&
+         tg_gui_saved_find(0, 0UL, 9UL, 101UL) == 0 &&
+         tg_gui_saved_find(0, 0UL, 9UL,
+                           100UL + (unsigned long)TG_GUI_SAVED_MAX) ==
+             TG_GUI_SAVED_MAX - 1;
+    (void)remove(record);
+    tg_gui_saved_file = saved_file;
+    tg_gui_saved_count = 0;
+    tg_gui_saved_loaded = 0;
+    tg_gui_session_state.open = saved_open;
+    tg_gui_session_state.open_peer_constructor = saved_pc;
+    tg_gui_session_state.open_peer_id_hi = saved_hi;
+    tg_gui_session_state.open_peer_id_lo = saved_lo;
+    if (!ok) {
+        puts("mtproto self-test: the record of saved files is wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
 int tg_gui_session_transfer_start_download(unsigned long msg_id, FILE *stream)
 {
     tg_mtproto_file_ctx fc;
@@ -31340,6 +31633,15 @@ int tg_gui_session_transfer_start_download(unsigned long msg_id, FILE *stream)
         return rc;
     }
     tg_gui_transfer_dir = 1;
+#if !defined(TG_NO_GUI)
+    /* Whose message this is, for the record of where its file goes. */
+    tg_gui_dl_is_user = tg_gui_session_state.open_peer_constructor ==
+                        TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    tg_gui_dl_peer_hi = tg_gui_session_state.open_peer_id_hi;
+    tg_gui_dl_peer_lo = tg_gui_session_state.open_peer_id_lo;
+    tg_gui_dl_msg_id = tg_gui_session_state.open_peer_constructor != 0UL
+                           ? msg_id : 0UL;
+#endif
     return 0;
 }
 
@@ -31443,7 +31745,29 @@ int tg_gui_session_transfer_end(char *out_path, unsigned long out_path_size)
         out_path[0] = '\0';
     }
     if (tg_gui_transfer_dir == 1) {
+#if !defined(TG_NO_GUI)
+        /* The path is wanted here whether or not the caller asks for it. */
+        static char saved_path[TG_GUI_SAVED_PATH_MAX];
+
+        rc = tg_mtproto_download_end(saved_path, sizeof(saved_path));
+        if (out_path != 0 && out_path_size > 0UL) {
+            unsigned long i;
+
+            for (i = 0UL; i + 1UL < out_path_size && saved_path[i] != '\0';
+                 ++i) {
+                out_path[i] = saved_path[i];
+            }
+            out_path[i] = '\0';
+        }
+        if (rc == 0) {
+            tg_gui_saved_note(tg_gui_dl_is_user, tg_gui_dl_peer_hi,
+                              tg_gui_dl_peer_lo, tg_gui_dl_msg_id,
+                              saved_path);
+        }
+        tg_gui_dl_msg_id = 0UL;
+#else
         rc = tg_mtproto_download_end(out_path, out_path_size);
+#endif
     } else if (tg_gui_transfer_dir == 2) {
         rc = tg_mtproto_upload_end();
     }

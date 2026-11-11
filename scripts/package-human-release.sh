@@ -633,6 +633,13 @@ Files
   Download drawer..." (RAM: is much faster than a slow disk, and a
   reboot empties it). A file sent without a name gets one from its type,
   such as video_1a2b3c4d.mp4.
+- Once a file is downloaded, its message's menu offers Open and Show in
+  drawer in place of Download. Open hands the file to the Workbench, as
+  a double click on its icon would; Show in drawer opens the drawer it
+  is in. A program is run only after you confirm it: run one only if
+  you trust who sent it. On a Workbench that cannot open files for a
+  program (3.0, 3.1) the status line says where the file is. If you
+  move or delete the file, the menu offers Download again.
 - Send a file with "Send file..." (Amiga+F), the paperclip left of the
   input line, or by dropping its icon on the window: up to $upload_limit
   on this build. "Send photo..." (Amiga+P) sends a JPEG or PNG as a
@@ -807,6 +814,14 @@ File
   Download drawer..." (RAM: e' molto piu' veloce di un disco lento, e un
   riavvio la svuota). Un file mandato senza nome ne prende uno dal suo
   tipo, come video_1a2b3c4d.mp4.
+- Quando un file e' stato scaricato, il menu del suo messaggio offre
+  Open e Show in drawer al posto di Download. Open passa il file al
+  Workbench, come un doppio click sulla sua icona; Show in drawer apre
+  il cassetto in cui si trova. Un programma viene avviato solo dopo la
+  tua conferma: avvialo solo se ti fidi di chi l'ha mandato. Su un
+  Workbench che non sa aprire i file per conto di un programma (3.0,
+  3.1) la riga di stato dice dov'e' il file. Se sposti o cancelli il
+  file, il menu torna a offrire Download.
 - Manda un file con "Send file..." (Amiga+F), con la graffetta a
   sinistra della riga di input o trascinandone l'icona sulla finestra:
   fino a $upload_limit su questa build. "Send photo..." (Amiga+P) manda

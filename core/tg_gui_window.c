@@ -9049,6 +9049,137 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
     }
 }
 
+/* Hands a file to the Workbench as a double click on its icon would, or
+   with `parent` its drawer, which opens as a window (workbench.library 44,
+   OpenWorkbenchObjectA: AmigaOS 3.5 and later, AmigaOS 4, MorphOS, AROS).
+   The name goes as an absolute path: the Workbench does not share this
+   program's current directory. The library base is the one this file
+   shares with the drop support and the iconified wait: used as it is when
+   one of them holds it, opened and closed here when not. 1 = the
+   Workbench took it; the log says where it stopped when not. */
+static int tg_gui_amiga_wb_open(const char *path, int parent)
+{
+    char full[256];
+    BPTR lock;
+    int opened = 0;
+    int ok = 0;
+
+    if (path == 0 || path[0] == '\0') {
+        return 0;
+    }
+    lock = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (lock == 0) {
+        tg_gui_log("wb open: no lock on the file");
+        return 0;
+    }
+    if (parent) {
+        BPTR dir = ParentDir(lock);
+
+        UnLock(lock);
+        lock = dir;
+        if (lock == 0) {
+            tg_gui_log("wb open: the file has no drawer");
+            return 0;
+        }
+    }
+    if (!NameFromLock(lock, (STRPTR)full, (LONG)sizeof(full))) {
+        UnLock(lock);
+        tg_gui_log("wb open: path too long");
+        return 0;
+    }
+    UnLock(lock);
+    if (WorkbenchBase == 0) {
+        WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 44L);
+        opened = WorkbenchBase != 0;
+    }
+    if (WorkbenchBase == 0 || WorkbenchBase->lib_Version < 44) {
+        tg_gui_log("wb open: workbench.library older than 44");
+    } else {
+#if defined(__amigaos4__)
+        int got = 0;
+
+        if (IWorkbench == 0) {
+            IWorkbench = (struct WorkbenchIFace *)GetInterface(
+                WorkbenchBase, "main", 1L, 0);
+            got = IWorkbench != 0;
+        }
+        if (IWorkbench != 0) {
+            ok = OpenWorkbenchObjectA((APTR)full, 0) ? 1 : 0;
+        }
+        if (got) {
+            DropInterface((struct Interface *)IWorkbench);
+            IWorkbench = 0;
+        }
+#else
+        ok = OpenWorkbenchObjectA((APTR)full, 0) ? 1 : 0;
+#endif
+        tg_gui_log(ok ? "wb open: the Workbench took it"
+                      : "wb open: the Workbench refused");
+    }
+    if (opened) {
+        CloseLibrary(WorkbenchBase);
+        WorkbenchBase = 0;
+    }
+    return ok;
+}
+
+/* "Saved in <path>" for the status line, which is short: the end of the
+   path is what tells the file. */
+static void tg_gui_window_status_saved_in(tg_gui_state *state,
+                                          const char *path)
+{
+    char line[64];
+    unsigned long n = (unsigned long)strlen(path);
+
+    sprintf(line, "Saved in %s%.35s", n > 35UL ? "..." : "",
+            n > 35UL ? path + (n - 35UL) : path);
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+}
+
+/* Open, or Show in drawer, on a message whose file a download from here
+   saved. Opening runs a program, so one is opened only after asking; a
+   Workbench that cannot open things for us gets told where the file is. */
+static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
+                                    tg_gui_backend *backend,
+                                    unsigned long message_id, int show)
+{
+    char path[200];
+
+    if (!tg_gui_session_saved_path(message_id, path, sizeof(path))) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "That file is no longer where it was saved");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (!show && tg_gui_session_file_is_program(path)) {
+        struct EasyStruct es;
+        LONG pick;
+
+        es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+        es.es_Flags = 0UL;
+        es.es_Title = (APTR)"Open file";
+        es.es_TextFormat =
+            (APTR)"This file is a program: opening it runs it.\n"
+                  "Run it only if you trust who sent it.";
+        es.es_GadgetFormat = (APTR)"Run|Show in drawer|Cancel";
+        pick = tg_gui_amiga_easyreq_args(win, &es);
+        if (pick == 0) {
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        show = pick == 2;
+    }
+    if (tg_gui_amiga_wb_open(path, show)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           show ? "Its drawer is open on the Workbench"
+                                : "Handed to the Workbench");
+    } else {
+        /* No Workbench that opens things (3.0, 3.1), or it refused. */
+        tg_gui_window_status_saved_in(state, path);
+    }
+    tg_gui_window_paint(state, backend);
+}
+
 /* Sends the vote on the poll of message `m` of the open chat (the answers
    in `mask`; none takes the vote back) and says how it went. The message
    shows the result: Telegram's answer carries the votes. */
@@ -14765,6 +14896,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_msg_pinned =
                                 tg_gui_session_message_pinned(
                                     state->messages[mi].id);
+                            /* A file that a download from here saved, and
+                               that is still there: Open and Show in
+                               drawer take Download's place. */
+                            state->ctx_file_saved =
+                                state->messages[mi].has_document &&
+                                tg_gui_session_saved_path(
+                                    state->messages[mi].id, 0, 0UL);
                             /* A poll: Vote... while it is open and not
                                voted, Take back vote once it is (a quiz
                                answer stays). */
@@ -14974,6 +15112,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (changed && it == TG_GUI_CTX_CHAT_SOUND) {
                             tg_gui_notify_sound(value.sound);
                         }
+                    } else if ((it == TG_GUI_CTX_FILE_OPEN ||
+                                it == TG_GUI_CTX_FILE_SHOW) &&
+                               m != 0 && m->has_document && m->id != 0UL) {
+                        tg_gui_window_file_open(state, ctx.window, &backend,
+                                                m->id,
+                                                it == TG_GUI_CTX_FILE_SHOW);
                     } else if (it == TG_GUI_CTX_SELECT && m != 0 &&
                                !m->is_system && m->id != 0UL) {
                         /* Select: this message is the first chosen; the
