@@ -9049,6 +9049,38 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
     }
 }
 
+/* Sends the vote on the poll of message `m` of the open chat (the answers
+   in `mask`; none takes the vote back) and says how it went. The message
+   shows the result: Telegram's answer carries the votes. */
+static void tg_gui_window_poll_vote(tg_gui_state *state,
+                                    tg_gui_backend *backend,
+                                    const tg_gui_message *m,
+                                    unsigned long mask)
+{
+    char why[48];
+    int rc;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       mask != 0UL ? "Voting..." : "Taking the vote back...");
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_poll_vote(m->id, m->poll_id_hi, m->poll_id_lo, mask,
+                                  why, sizeof(why), stdout);
+    if (rc == 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           mask != 0UL ? "Voted" : "Vote taken back");
+    } else if (rc == 1) {
+        char line[96];
+
+        sprintf(line, "Telegram refused the vote (%.40s)",
+                why[0] != '\0' ? why : "no reason given");
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not reach Telegram");
+    }
+    tg_gui_window_paint(state, backend);
+}
+
 /* Recompute the '@' mention popup after a composer edit or caret move: token
    under the caret (tg_gui_mention_token) -> the people of the open group it
    begins (the session knows them). Selection resets to the top match on every
@@ -14503,6 +14535,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_notify_override_get(state->notify_override_path,
                             chat->peer_id_hi, chat->peer_id_lo, &value);
                         state->ctx_react = 0;
+                        state->ctx_poll = 0;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
                         state->ctx_muted =
@@ -14535,12 +14568,34 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                             state->ctx_visible = 1;
                             state->ctx_react = 0;
+                            state->ctx_poll = 0;
                             state->ctx_chat = 0;
                             state->ctx_msg = mi;
                             state->ctx_msg_id = state->messages[mi].id;
                             state->ctx_msg_pinned =
                                 tg_gui_session_message_pinned(
                                     state->messages[mi].id);
+                            /* A poll: Vote... while it is open and not
+                               voted, Take back vote once it is (a quiz
+                               answer stays). */
+                            state->ctx_poll_open = 0;
+                            state->ctx_poll_voted = 0;
+                            if (state->messages[mi].poll_id_hi != 0UL ||
+                                state->messages[mi].poll_id_lo != 0UL) {
+                                int p_closed = 0;
+                                int p_voted = 0;
+                                int p_quiz = 0;
+
+                                if (tg_gui_session_poll_state(
+                                        state->messages[mi].poll_id_hi,
+                                        state->messages[mi].poll_id_lo,
+                                        &p_closed, &p_voted, 0, &p_quiz)) {
+                                    state->ctx_poll_open =
+                                        !p_closed && !p_voted;
+                                    state->ctx_poll_voted =
+                                        !p_closed && p_voted && !p_quiz;
+                                }
+                            }
                             state->ctx_x = hx;
                             state->ctx_y = hy;
                             state->ctx_hover = -1;
@@ -14592,8 +14647,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         (mi >= 0 && mi < state->message_count)
                             ? &state->messages[mi]
                             : 0;
+                    /* The menu listed a poll's answers (it is closed, or
+                       opened again, below). */
+                    int was_poll = state->ctx_poll;
 
                     state->ctx_visible = 0;
+                    state->ctx_poll = 0;
                     if (ci >= 0 && ci < state->chat_count &&
                         it == TG_GUI_CTX_CHAT_REMOVE) {
                         tg_gui_window_remove_chat(state, ctx.window, ci,
@@ -14725,6 +14784,72 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (changed && it == TG_GUI_CTX_CHAT_SOUND) {
                             tg_gui_notify_sound(value.sound);
                         }
+                    } else if (it == TG_GUI_CTX_POLL && m != 0 &&
+                               m->id != 0UL) {
+                        /* Vote...: the poll's answers take the menu. */
+                        int multiple = 0;
+
+                        state->poll_mask = 0UL;
+                        state->poll_item_count = tg_gui_session_poll_choices(
+                            m->poll_id_hi, m->poll_id_lo, 0UL, &multiple,
+                            &state->poll_items[0][0], TG_GUI_POLL_ITEM_LEN,
+                            TG_GUI_POLL_ITEMS_MAX);
+                        state->poll_multiple = multiple;
+                        if (state->poll_item_count > 0) {
+                            state->ctx_react = 0;
+                            state->ctx_poll = 1;
+                            state->ctx_visible = 1;
+                            state->ctx_hover = -1;
+                            state->ctx_w = tg_gui_context_menu_measure(
+                                state, &backend);
+                        } else {
+                            tg_gui_window_copy(state->status,
+                                sizeof(state->status),
+                                "This poll is no longer loaded: open the "
+                                "chat again to vote.");
+                        }
+                    } else if (was_poll && m != 0 && m->id != 0UL &&
+                               it >= TG_GUI_CTX_POLL_FIRST &&
+                               it < TG_GUI_CTX_POLL_FIRST +
+                                        state->poll_item_count) {
+                        unsigned long bit =
+                            1UL << (it - TG_GUI_CTX_POLL_FIRST);
+
+                        if (state->poll_multiple) {
+                            /* Several answers: the mark turns, the menu
+                               stays for the next one and for Send vote. */
+                            int multiple = 0;
+
+                            state->poll_mask ^= bit;
+                            state->poll_item_count =
+                                tg_gui_session_poll_choices(
+                                    m->poll_id_hi, m->poll_id_lo,
+                                    state->poll_mask, &multiple,
+                                    &state->poll_items[0][0],
+                                    TG_GUI_POLL_ITEM_LEN,
+                                    TG_GUI_POLL_ITEMS_MAX);
+                            if (state->poll_item_count > 0) {
+                                state->ctx_poll = 1;
+                                state->ctx_visible = 1;
+                            }
+                        } else {
+                            tg_gui_window_poll_vote(state, &backend, m, bit);
+                        }
+                    } else if (was_poll && m != 0 && m->id != 0UL &&
+                               it == TG_GUI_CTX_POLL_SEND) {
+                        if (state->poll_mask == 0UL) {
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status),
+                                               "Choose at least one answer");
+                            state->ctx_poll = 1;
+                            state->ctx_visible = 1;
+                        } else {
+                            tg_gui_window_poll_vote(state, &backend, m,
+                                                    state->poll_mask);
+                        }
+                    } else if (it == TG_GUI_CTX_POLL_RETRACT && m != 0 &&
+                               m->id != 0UL) {
+                        tg_gui_window_poll_vote(state, &backend, m, 0UL);
                     } else if (it == TG_GUI_CTX_REACT && m != 0 &&
                                !m->is_system && m->id != 0UL) {
                         /* A group or a channel may allow only some

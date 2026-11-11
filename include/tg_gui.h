@@ -197,6 +197,10 @@ void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src);
 /* '@' mention autocomplete popup (composer). */
+/* A poll's answers as its menu lists them: what the protocol keeps, a mark
+   and the text each. */
+#define TG_GUI_POLL_ITEMS_MAX 12
+#define TG_GUI_POLL_ITEM_LEN 56
 /* How many people the popup holds at a time (what is typed narrows them),
    and how many of them it shows: the list scrolls under the highlight. */
 #if defined(__m68k__)
@@ -323,6 +327,10 @@ typedef struct tg_gui_message {
     unsigned long photo_height;
     unsigned long pending_webpage_hi;
     unsigned long pending_webpage_lo;
+    /* The poll the message carries (0, 0 = none): its text is the poll
+       written out, and its menu offers the vote. */
+    unsigned long poll_id_hi;
+    unsigned long poll_id_lo;
     /* The renderer's own: the height it worked out for this message and a
        key of everything that height depends on (0 = none yet). */
     unsigned long layout_key;
@@ -585,6 +593,19 @@ typedef struct tg_gui_state {
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
     int ctx_react; /* the React chooser replaces the message menu */
+    /* The menu's message carries a poll. ctx_poll_open: it can be voted
+       ("Vote..."); ctx_poll_voted: this account's vote can be taken back.
+       ctx_poll: the poll's answers replace the message menu, one a line
+       (poll_items, as the session wrote them); with poll_multiple each
+       has a mark, poll_mask says which are chosen, and a last line sends
+       the vote. */
+    int ctx_poll_open;
+    int ctx_poll_voted;
+    int ctx_poll;
+    int poll_multiple;
+    unsigned long poll_mask;
+    int poll_item_count;
+    char poll_items[TG_GUI_POLL_ITEMS_MAX][TG_GUI_POLL_ITEM_LEN];
     /* What the chooser offers: every reaction the open chat allows that
        the emoji sheet draws, in the chat's order (or Telegram's, when the
        chat allows all). The first grid shows the ten defaults when
@@ -914,6 +935,11 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_LIST_ARCHIVE 40 /* the list itself: Archived chats / back */
 #define TG_GUI_CTX_LIST_RELOAD 41 /* the list itself: Reload chat list */
 #define TG_GUI_CTX_MSG_PIN 42 /* Pin / Unpin the message in its chat */
+#define TG_GUI_CTX_POLL 43 /* Vote...: the poll's answers take the menu */
+#define TG_GUI_CTX_POLL_RETRACT 44 /* Take back vote */
+#define TG_GUI_CTX_POLL_SEND 45 /* several answers chosen: send them */
+/* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
+#define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a

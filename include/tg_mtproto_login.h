@@ -542,7 +542,86 @@ typedef struct tg_mtproto_message_text {
        then the message's own (none when it had no field). A reader that
        stops earlier (a media or an entity it cannot walk) leaves 0. */
     unsigned char reactions_known;
+    /* The poll this message carries (0, 0 = none): its text is the poll
+       written out, and tg_mtproto_poll_find gives the poll itself. */
+    unsigned long poll_id_hi;
+    unsigned long poll_id_lo;
 } tg_mtproto_message_text;
+
+/* --- polls ---------------------------------------------------------------
+   A poll as its message carries it (messageMediaPoll: the Poll and its
+   PollResults), kept so that it can be voted and written out again when
+   the votes change. The texts are UTF-8 as Telegram sends them, cut to
+   the buffers. The results are known once this account has voted or the
+   poll is closed: Telegram sends none before. */
+#if defined(__m68k__)
+#define TG_MTPROTO_POLL_ANSWERS_MAX 10
+#define TG_MTPROTO_POLLS_MAX 3
+#else
+#define TG_MTPROTO_POLL_ANSWERS_MAX 12
+#define TG_MTPROTO_POLLS_MAX 8
+#endif
+#define TG_MTPROTO_POLL_QUESTION_MAX 160
+#define TG_MTPROTO_POLL_ANSWER_MAX 64
+#define TG_MTPROTO_POLL_OPTION_MAX 8
+typedef struct tg_mtproto_poll_answer {
+    char text[TG_MTPROTO_POLL_ANSWER_MAX];
+    unsigned char option[TG_MTPROTO_POLL_OPTION_MAX]; /* what a vote sends */
+    unsigned char option_len;
+    unsigned char chosen;  /* this account voted it */
+    unsigned char correct; /* a quiz's right answer, once known */
+    unsigned long voters;
+} tg_mtproto_poll_answer;
+typedef struct tg_mtproto_poll {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned char closed;
+    unsigned char multiple; /* several answers may be chosen */
+    unsigned char quiz;
+    unsigned char public_voters;
+    unsigned char has_results; /* the voters of each answer are known */
+    unsigned char results_min; /* ...but not which ones this account chose */
+    unsigned char voted;       /* this account chose at least one */
+    unsigned char answer_count;
+    unsigned long total_voters;
+    char question[TG_MTPROTO_POLL_QUESTION_MAX];
+    tg_mtproto_poll_answer answers[TG_MTPROTO_POLL_ANSWERS_MAX];
+} tg_mtproto_poll;
+
+/* The poll with this id among the latest few read, 0 when not kept. */
+const tg_mtproto_poll *tg_mtproto_poll_find(unsigned long id_hi,
+                                            unsigned long id_lo);
+
+/* The poll written out as the text of its message: the question, an
+   answer a line (numbered; with its share of the votes once the results
+   are known, and a mark on the ones this account chose and on a quiz's
+   right one), and a last line with the votes and what kind of poll it
+   is. UTF-8, cut to the buffer between two characters. */
+void tg_mtproto_poll_text(const tg_mtproto_poll *poll, char *out,
+                          unsigned long size);
+
+/* updateMessagePoll#aca1657b flags:# poll_id:long poll:flags.0?Poll
+   results:PollResults, the reader just past the constructor: the poll
+   kept takes the new votes (and the new poll, when it comes along).
+   1 = a kept poll changed, and *id_hi / *id_lo say which. */
+int tg_mtproto_read_update_message_poll(tg_mtproto_tl_reader *reader,
+                                        unsigned long *id_hi,
+                                        unsigned long *id_lo);
+
+/* messages.sendVote#10ea6184 peer:InputPeer msg_id:int
+   options:Vector<bytes>: the answers of `poll` whose bit is set in
+   `mask` (bit 0 = the first); none takes the vote back. */
+tg_mtproto_tl_status tg_mtproto_build_messages_send_vote(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    const tg_mtproto_poll *poll,
+    unsigned long mask);
 
 tg_mtproto_tl_status tg_mtproto_read_message_reactions(
     tg_mtproto_tl_reader *reader, tg_reactions *out);

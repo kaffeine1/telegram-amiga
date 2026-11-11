@@ -468,6 +468,26 @@ int tg_gui_session_mention_pick(int index, char *insert, unsigned long size);
    same word in a later message is not a mention. */
 void tg_gui_session_mentions_forget(void);
 
+/* Polls. A message that carries one shows it written out; these are for
+   its menu. poll_state: 1 = the poll is held, with what it is.
+   poll_choices: its answers as the menu lists them (`item_size` bytes
+   apart), with a mark each where several may be chosen (`mask` says which
+   are); returns how many. poll_vote: votes the answers in `mask` (none
+   takes the vote back) on that message of the open chat; 0 = done and
+   shown, 1 = Telegram refused (emsg says why), 2 = failed. */
+int tg_gui_session_poll_state(unsigned long poll_id_hi,
+                              unsigned long poll_id_lo, int *closed,
+                              int *voted, int *multiple, int *quiz);
+int tg_gui_session_poll_choices(unsigned long poll_id_hi,
+                                unsigned long poll_id_lo, unsigned long mask,
+                                int *multiple, char *items,
+                                unsigned long item_size, int max);
+int tg_gui_session_poll_vote(unsigned long message_id,
+                             unsigned long poll_id_hi,
+                             unsigned long poll_id_lo, unsigned long mask,
+                             char *emsg, unsigned long emsg_size,
+                             FILE *stream);
+
 /* Searches Telegram for `query` (contacts.search), adds the first openable
    result to the peer cache and opens it. Small reply, MorphOS-safe. Returns 0 =
    opened, 1 = no result / network issue, 2 = bad args. */

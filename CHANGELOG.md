@@ -47,6 +47,18 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Polls. A poll used to show as "[Media]"; it now shows its question,
+  its answers, numbered, and what kind it is (a quiz, several answers
+  allowed, closed). Vote... in the message's menu (right click) lists
+  the answers in the menu's place: a click votes; where several answers
+  are allowed each has a mark that a click turns, and Send vote sends
+  them. Once voted, or when the poll is yours or closed, each answer
+  shows its share of the votes, yours are marked, and a quiz marks the
+  right one; the votes of the others follow while the chat is open
+  (`updateMessagePoll`). Take back vote undoes a vote, except in a
+  quiz. The text client shows the poll the same way and cannot vote
+  yet. The latest 8 polls read can be voted (3 on 68k); an older one
+  still shows, and can be voted after opening its chat again.
 - Unread mentions. When messages of the open chat mention you and you
   have not seen them, a round "@" button with their number shows at the
   bottom right, over the jump button. A click shows the chat around the

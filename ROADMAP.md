@@ -362,8 +362,11 @@ Middle, more interface:
 - albums when sending, several photos in one message;
 - select several messages (its section), open a downloaded file or show
   it in its drawer (its section);
-- polls shown and voted (`messages.sendVote`); today a poll shows
-  nothing at all;
+- polls shown and voted: done (`messageMediaPoll` written out as the
+  message's text, `messages.sendVote` from the message's menu, the
+  answers in the menu's place, `updateMessagePoll` followed while the
+  chat is open). Still missing: voting in the text client, a quiz's
+  explanation, who voted in a public poll, creating a poll;
 - the update notice (its section);
 - stickers through a WEBP datatype where the user has one (see "let
   datatypes read what we cannot"): a fallback, never a requirement, and

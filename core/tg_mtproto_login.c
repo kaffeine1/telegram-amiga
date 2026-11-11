@@ -6929,6 +6929,455 @@ static tg_mtproto_tl_status tg_skip_common_message(
     return TG_MTPROTO_TL_OK;
 }
 
+/* --- polls ---------------------------------------------------------------
+   poll#58747131 id:long flags:# closed:flags.0?true public_voters:flags.1?true
+     multiple_choice:flags.2?true quiz:flags.3?true question:TextWithEntities
+     answers:Vector<PollAnswer> close_period:flags.4?int close_date:flags.5?int
+   pollAnswer#ff16e2ca text:TextWithEntities option:bytes
+   textWithEntities#751f3146 text:string entities:Vector<MessageEntity>
+   pollResults#7adf2420 flags:# min:flags.0?true
+     results:flags.1?Vector<PollAnswerVoters> total_voters:flags.2?int
+     recent_voters:flags.3?Vector<Peer> solution:flags.4?string
+     solution_entities:flags.4?Vector<MessageEntity>
+   pollAnswerVoters#3b6ddad2 flags:# chosen:flags.0?true correct:flags.1?true
+     option:bytes voters:int
+   Read from the layer 214 schema. */
+#define TG_MESSAGE_MEDIA_POLL_CONSTRUCTOR 0x4bd6e798UL
+#define TG_POLL_CONSTRUCTOR 0x58747131UL
+#define TG_POLL_ANSWER_CONSTRUCTOR 0xff16e2caUL
+#define TG_TEXT_WITH_ENTITIES_CONSTRUCTOR 0x751f3146UL
+#define TG_POLL_RESULTS_CONSTRUCTOR 0x7adf2420UL
+#define TG_POLL_ANSWER_VOTERS_CONSTRUCTOR 0x3b6ddad2UL
+#define TG_MESSAGES_SEND_VOTE_CONSTRUCTOR 0x10ea6184UL
+
+/* The latest polls read, the newest use last: a poll outside them is
+   still shown (its text was written when it was read), only not voted. */
+static tg_mtproto_poll tg_poll_table[TG_MTPROTO_POLLS_MAX];
+static unsigned long tg_poll_stamp[TG_MTPROTO_POLLS_MAX];
+static unsigned long tg_poll_clock = 0UL;
+static tg_mtproto_poll tg_poll_scratch; /* large: not on the stack */
+
+static tg_mtproto_tl_status tg_skip_message_entity_vector(
+    tg_mtproto_tl_reader *reader);
+
+static int tg_poll_slot(unsigned long id_hi, unsigned long id_lo)
+{
+    int i;
+
+    if (id_hi == 0UL && id_lo == 0UL) {
+        return -1;
+    }
+    for (i = 0; i < TG_MTPROTO_POLLS_MAX; ++i) {
+        if (tg_poll_table[i].id_hi == id_hi &&
+            tg_poll_table[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+const tg_mtproto_poll *tg_mtproto_poll_find(unsigned long id_hi,
+                                            unsigned long id_lo)
+{
+    int at = tg_poll_slot(id_hi, id_lo);
+
+    return at >= 0 ? &tg_poll_table[at] : 0;
+}
+
+/* textWithEntities: the text into the buffer, the entities walked past. */
+static tg_mtproto_tl_status tg_read_text_with_entities(
+    tg_mtproto_tl_reader *reader, char *text, unsigned long size)
+{
+    unsigned long constructor;
+
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+        constructor != TG_TEXT_WITH_ENTITIES_CONSTRUCTOR ||
+        tg_read_string_copy_cut(reader, text, size, 0) != TG_MTPROTO_TL_OK ||
+        tg_skip_message_entity_vector(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* A Poll, constructor included. Answers past the ones kept are walked
+   and left out; an option longer than the buffer cannot be voted and
+   makes the poll unreadable rather than half right. */
+static tg_mtproto_tl_status tg_read_poll(tg_mtproto_tl_reader *reader,
+                                         tg_mtproto_poll *poll)
+{
+    unsigned long constructor;
+    unsigned long flags;
+    unsigned long count;
+    unsigned long scratch;
+    unsigned long i;
+
+    memset(poll, 0, sizeof(*poll));
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+        constructor != TG_POLL_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u64(reader, &poll->id_hi, &poll->id_lo) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_read_text_with_entities(reader, poll->question,
+                                   sizeof(poll->question)) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+        count > 64UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    poll->closed = (flags & 1UL) != 0UL;
+    poll->public_voters = (flags & 2UL) != 0UL;
+    poll->multiple = (flags & 4UL) != 0UL;
+    poll->quiz = (flags & 8UL) != 0UL;
+    for (i = 0UL; i < count; ++i) {
+        char skipped[4];
+        unsigned char option[TG_MTPROTO_POLL_OPTION_MAX];
+        unsigned long option_len = 0UL;
+        int keep = i < (unsigned long)TG_MTPROTO_POLL_ANSWERS_MAX;
+        tg_mtproto_poll_answer *a = keep ? &poll->answers[i] : 0;
+
+        if (tg_mtproto_tl_read_u32(reader, &constructor) !=
+                TG_MTPROTO_TL_OK ||
+            constructor != TG_POLL_ANSWER_CONSTRUCTOR ||
+            tg_read_text_with_entities(reader, keep ? a->text : skipped,
+                                       keep ? sizeof(a->text)
+                                            : sizeof(skipped)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_read_bytes_copy(reader, option, sizeof(option),
+                               &option_len) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if (keep) {
+            memcpy(a->option, option, (size_t)option_len);
+            a->option_len = (unsigned char)option_len;
+            poll->answer_count = (unsigned char)(i + 1UL);
+        }
+    }
+    if ((flags & 16UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 32UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* A PollResults onto the poll just read (or the one kept): the voters of
+   each answer by its option, and the total. What follows them (the
+   recent voters, a quiz's explanation) is not read: no caller needs the
+   reader past this point. */
+static tg_mtproto_tl_status tg_read_poll_results(tg_mtproto_tl_reader *reader,
+                                                 tg_mtproto_poll *poll)
+{
+    unsigned long constructor;
+    unsigned long flags;
+    unsigned long count;
+    unsigned long i;
+    int k;
+
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+        constructor != TG_POLL_RESULTS_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    poll->has_results = 0;
+    poll->results_min = (flags & 1UL) != 0UL;
+    if ((flags & 2UL) != 0UL) {
+        if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+            count > 64UL) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        for (k = 0; k < (int)poll->answer_count; ++k) {
+            poll->answers[k].voters = 0UL;
+            if (!poll->results_min) {
+                poll->answers[k].chosen = 0;
+                poll->answers[k].correct = 0;
+            }
+        }
+        if (!poll->results_min) {
+            poll->voted = 0;
+        }
+        for (i = 0UL; i < count; ++i) {
+            unsigned char option[TG_MTPROTO_POLL_OPTION_MAX];
+            unsigned long option_len = 0UL;
+            unsigned long aflags;
+            unsigned long voters;
+
+            if (tg_mtproto_tl_read_u32(reader, &constructor) !=
+                    TG_MTPROTO_TL_OK ||
+                constructor != TG_POLL_ANSWER_VOTERS_CONSTRUCTOR ||
+                tg_mtproto_tl_read_u32(reader, &aflags) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_read_bytes_copy(reader, option, sizeof(option),
+                                   &option_len) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_read_u32(reader, &voters) !=
+                    TG_MTPROTO_TL_OK) {
+                return TG_MTPROTO_TL_INVALID_DATA;
+            }
+            for (k = 0; k < (int)poll->answer_count; ++k) {
+                tg_mtproto_poll_answer *a = &poll->answers[k];
+
+                if ((unsigned long)a->option_len == option_len &&
+                    memcmp(a->option, option, (size_t)option_len) == 0) {
+                    a->voters = voters;
+                    if (!poll->results_min) {
+                        a->chosen = (aflags & 1UL) != 0UL;
+                        a->correct = (aflags & 2UL) != 0UL;
+                        if (a->chosen) {
+                            poll->voted = 1;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        poll->has_results = 1;
+    }
+    if ((flags & 4UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &poll->total_voters) !=
+            TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* Keeps the poll, in the place of the same poll or of the one unused for
+   longest. What this account chose is carried over when the copy coming
+   in does not say (results that are "min", or none at all). Returns the
+   poll as kept. */
+static const tg_mtproto_poll *tg_poll_store(const tg_mtproto_poll *in)
+{
+    tg_mtproto_poll *slot;
+    int at = tg_poll_slot(in->id_hi, in->id_lo);
+    int k;
+
+    if (in->id_hi == 0UL && in->id_lo == 0UL) {
+        return 0;
+    }
+    if (at < 0) {
+        at = 0;
+        for (k = 1; k < TG_MTPROTO_POLLS_MAX; ++k) {
+            if (tg_poll_stamp[k] < tg_poll_stamp[at]) {
+                at = k;
+            }
+        }
+        tg_poll_table[at] = *in;
+    } else {
+        tg_mtproto_poll old = tg_poll_table[at];
+
+        tg_poll_table[at] = *in;
+        slot = &tg_poll_table[at];
+        if (!in->has_results || in->results_min) {
+            slot->voted = old.voted;
+            for (k = 0; k < (int)slot->answer_count &&
+                        k < (int)old.answer_count; ++k) {
+                slot->answers[k].chosen = old.answers[k].chosen;
+                slot->answers[k].correct = old.answers[k].correct;
+                if (!in->has_results) {
+                    slot->answers[k].voters = old.answers[k].voters;
+                }
+            }
+            if (!in->has_results) {
+                slot->has_results = old.has_results;
+                slot->total_voters = old.total_voters;
+            }
+        }
+    }
+    tg_poll_stamp[at] = ++tg_poll_clock;
+    return &tg_poll_table[at];
+}
+
+static void tg_poll_text_add(char *out, unsigned long size, unsigned long *n,
+                             const char *s)
+{
+    while (*s != '\0' && *n + 1UL < size) {
+        out[(*n)++] = *s++;
+    }
+    out[*n] = '\0';
+}
+
+void tg_mtproto_poll_text(const tg_mtproto_poll *poll, char *out,
+                          unsigned long size)
+{
+    char number[40];
+    unsigned long n = 0UL;
+    int k;
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (poll == 0) {
+        return;
+    }
+    tg_poll_text_add(out, size, &n, poll->quiz ? "[Quiz] " : "[Poll] ");
+    tg_poll_text_add(out, size, &n, poll->question);
+    for (k = 0; k < (int)poll->answer_count; ++k) {
+        const tg_mtproto_poll_answer *a = &poll->answers[k];
+
+        if (poll->has_results) {
+            /* The share of the votes cast, rounded to the nearest. */
+            unsigned long share =
+                poll->total_voters > 0UL
+                    ? ((a->voters * 100UL) + (poll->total_voters / 2UL)) /
+                          poll->total_voters
+                    : 0UL;
+
+            if (share > 100UL) {
+                share = 100UL; /* several answers each: more votes than voters */
+            }
+            sprintf(number, "\n%d. %lu%% ", k + 1, share);
+        } else {
+            sprintf(number, "\n%d. ", k + 1);
+        }
+        tg_poll_text_add(out, size, &n, number);
+        tg_poll_text_add(out, size, &n, a->text);
+        if (a->chosen && a->correct) {
+            tg_poll_text_add(out, size, &n, " (your answer, right)");
+        } else if (a->chosen) {
+            tg_poll_text_add(out, size, &n,
+                             poll->quiz ? " (your answer)" : " (your vote)");
+        } else if (a->correct) {
+            tg_poll_text_add(out, size, &n, " (right)");
+        }
+    }
+    if (poll->has_results) {
+        sprintf(number, "\n%lu %s", poll->total_voters,
+                poll->total_voters == 1UL ? "vote" : "votes");
+        tg_poll_text_add(out, size, &n, number);
+    } else {
+        tg_poll_text_add(out, size, &n,
+                         poll->closed ? "\nNo results"
+                                      : "\nVote to see the results");
+    }
+    if (poll->closed) {
+        tg_poll_text_add(out, size, &n, ", closed");
+    } else if (poll->multiple && !poll->voted) {
+        tg_poll_text_add(out, size, &n, ", several answers allowed");
+    }
+    /* Cut inside a character: back to its start. A character that is
+       whole at the very end stays. */
+    if (n + 1UL >= size && n > 0UL) {
+        unsigned long lead = n;
+
+        while (lead > 0UL &&
+               ((unsigned char)out[lead - 1UL] & 0xc0U) == 0x80U) {
+            --lead;
+        }
+        if (lead > 0UL && (unsigned char)out[lead - 1UL] >= 0xc0U) {
+            unsigned char c = (unsigned char)out[lead - 1UL];
+            unsigned long need = c >= 0xf0U ? 4UL : c >= 0xe0U ? 3UL : 2UL;
+
+            if (n - (lead - 1UL) < need) {
+                n = lead - 1UL;
+                out[n] = '\0';
+            }
+        }
+    }
+}
+
+int tg_mtproto_read_update_message_poll(tg_mtproto_tl_reader *reader,
+                                        unsigned long *id_hi,
+                                        unsigned long *id_lo)
+{
+    const tg_mtproto_poll *kept;
+    unsigned long flags;
+    unsigned long hi;
+    unsigned long lo;
+
+    if (reader == 0 ||
+        tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & ~1UL) != 0UL ||
+        tg_mtproto_tl_read_u64(reader, &hi, &lo) != TG_MTPROTO_TL_OK) {
+        return 0;
+    }
+    kept = tg_mtproto_poll_find(hi, lo);
+    if (kept == 0) {
+        return 0; /* a poll this client does not hold: nothing shows it */
+    }
+    if ((flags & 1UL) != 0UL) {
+        /* The poll comes along. What this account chose travels with the
+           results below, when they say it. */
+        int k;
+
+        if (tg_read_poll(reader, &tg_poll_scratch) != TG_MTPROTO_TL_OK ||
+            tg_poll_scratch.id_hi != hi || tg_poll_scratch.id_lo != lo) {
+            return 0;
+        }
+        tg_poll_scratch.voted = kept->voted;
+        for (k = 0; k < (int)tg_poll_scratch.answer_count &&
+                    k < (int)kept->answer_count; ++k) {
+            tg_poll_scratch.answers[k].chosen = kept->answers[k].chosen;
+            tg_poll_scratch.answers[k].correct = kept->answers[k].correct;
+        }
+    } else {
+        tg_poll_scratch = *kept;
+    }
+    if (tg_read_poll_results(reader, &tg_poll_scratch) != TG_MTPROTO_TL_OK) {
+        return 0;
+    }
+    (void)tg_poll_store(&tg_poll_scratch);
+    if (id_hi != 0) {
+        *id_hi = hi;
+    }
+    if (id_lo != 0) {
+        *id_lo = lo;
+    }
+    return 1;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_send_vote(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    const tg_mtproto_poll *poll,
+    unsigned long mask)
+{
+    tg_mtproto_tl_status status;
+    unsigned long count = 0UL;
+    int k;
+
+    if (writer == 0 || poll == 0 || message_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    for (k = 0; k < (int)poll->answer_count; ++k) {
+        if ((mask & (1UL << k)) != 0UL) {
+            ++count;
+        }
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_SEND_VOTE_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, count);
+    }
+    for (k = 0; k < (int)poll->answer_count && status == TG_MTPROTO_TL_OK;
+         ++k) {
+        if ((mask & (1UL << k)) != 0UL) {
+            status = tg_mtproto_tl_write_bytes(
+                writer, poll->answers[k].option,
+                (unsigned long)poll->answers[k].option_len);
+        }
+    }
+    return status;
+}
+
 /* A short bracketed placeholder for a media-only message (no caption), so the
    transcript shows "[Photo]" instead of an empty bubble. The client does not
    download media -- this is awareness only. Constructor ids verified against the
@@ -7586,6 +8035,25 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                     if (tg_mtproto_tl_read_u32(reader, &mflags) ==
                             TG_MTPROTO_TL_OK) {
                         tg_mtproto_append_web_page(reader, out, page_out);
+                    }
+                } else if (media_ctor == TG_MESSAGE_MEDIA_POLL_CONSTRUCTOR) {
+                    /* messageMediaPoll: poll:Poll results:PollResults. It
+                       used to show as "[Media]": the poll is written out as
+                       the message's text (a poll has no caption) and kept,
+                       so that it can be voted. */
+                    if (tg_read_poll(reader, &tg_poll_scratch) ==
+                            TG_MTPROTO_TL_OK) {
+                        const tg_mtproto_poll *kept;
+
+                        (void)tg_read_poll_results(reader, &tg_poll_scratch);
+                        kept = tg_poll_store(&tg_poll_scratch);
+                        if (kept != 0) {
+                            out->poll_id_hi = kept->id_hi;
+                            out->poll_id_lo = kept->id_lo;
+                            tg_mtproto_poll_text(kept, out->text,
+                                                 sizeof(out->text));
+                            out->has_text = out->text[0] != '\0';
+                        }
                     }
                 }
                 if (!out->has_text) { /* non-document media, or no caption */
@@ -9040,6 +9508,208 @@ static int tg_service_message_self_test(void)
     return 0;
 }
 
+/* A poll on the wire, as the self-test writes it: the question, two
+   answers with options "0" and "1". */
+static void tg_poll_test_text(tg_mtproto_tl_writer *w, const char *text)
+{
+    (void)tg_mtproto_tl_write_u32(w, TG_TEXT_WITH_ENTITIES_CONSTRUCTOR);
+    (void)tg_write_string(w, text);
+    (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+}
+
+static void tg_poll_test_poll(tg_mtproto_tl_writer *w, unsigned long id_lo,
+                              unsigned long flags)
+{
+    (void)tg_mtproto_tl_write_u32(w, TG_POLL_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(w, 0UL, id_lo);
+    (void)tg_mtproto_tl_write_u32(w, flags);
+    tg_poll_test_text(w, "Pizza o pasta?");
+    (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, 2UL);
+    (void)tg_mtproto_tl_write_u32(w, TG_POLL_ANSWER_CONSTRUCTOR);
+    tg_poll_test_text(w, "Pizza");
+    (void)tg_mtproto_tl_write_bytes(w, (const unsigned char *)"0", 1UL);
+    (void)tg_mtproto_tl_write_u32(w, TG_POLL_ANSWER_CONSTRUCTOR);
+    tg_poll_test_text(w, "Pasta");
+    (void)tg_mtproto_tl_write_bytes(w, (const unsigned char *)"1", 1UL);
+    if ((flags & 16UL) != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, 60UL); /* close_period */
+    }
+}
+
+/* PollResults: voters of "0" and "1" (0xffffffff = no results vector),
+   whether "0" is this account's choice, whether "1" is the right one. */
+static void tg_poll_test_results(tg_mtproto_tl_writer *w, int min,
+                                 unsigned long v0, unsigned long v1,
+                                 int chosen0, int correct1)
+{
+    int have = v0 != 0xffffffffUL;
+
+    (void)tg_mtproto_tl_write_u32(w, TG_POLL_RESULTS_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, (min ? 1UL : 0UL) |
+                                         (have ? 2UL | 4UL : 0UL));
+    if (!have) {
+        return;
+    }
+    (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, 2UL);
+    (void)tg_mtproto_tl_write_u32(w, TG_POLL_ANSWER_VOTERS_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, chosen0 ? 1UL : 0UL);
+    (void)tg_mtproto_tl_write_bytes(w, (const unsigned char *)"0", 1UL);
+    (void)tg_mtproto_tl_write_u32(w, v0);
+    (void)tg_mtproto_tl_write_u32(w, TG_POLL_ANSWER_VOTERS_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, correct1 ? 2UL : 0UL);
+    (void)tg_mtproto_tl_write_bytes(w, (const unsigned char *)"1", 1UL);
+    (void)tg_mtproto_tl_write_u32(w, v1);
+    (void)tg_mtproto_tl_write_u32(w, v0 + v1); /* total_voters */
+}
+
+/* Polls: read off the wire, written out as text before and after the
+   vote, the votes of an update taken without losing what this account
+   chose, the vote request, and the oldest poll making room. */
+static int tg_poll_self_test(void)
+{
+    static unsigned char wire[512];
+    static char text[320];
+    tg_mtproto_tl_writer w;
+    tg_mtproto_tl_reader r;
+    const tg_mtproto_poll *p;
+    unsigned long hi = 9UL;
+    unsigned long lo = 9UL;
+    int ok;
+    int k;
+
+    memset(tg_poll_table, 0, sizeof(tg_poll_table));
+    memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
+    /* As a message carries it: no results before the vote. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    tg_poll_test_poll(&w, 0x55UL, 16UL);
+    tg_poll_test_results(&w, 0, 0xffffffffUL, 0UL, 0, 0);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+         tg_read_poll_results(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+         r.offset == w.length;
+    p = ok ? tg_poll_store(&tg_poll_scratch) : 0;
+    ok = ok && p != 0 && p->id_lo == 0x55UL && p->answer_count == 2 &&
+         !p->multiple && !p->quiz && !p->closed && !p->has_results &&
+         !p->voted && p->answers[1].option_len == 1 &&
+         p->answers[1].option[0] == '1' &&
+         tg_mtproto_poll_find(0UL, 0x55UL) == p &&
+         tg_mtproto_poll_find(0UL, 0x56UL) == 0 &&
+         tg_mtproto_poll_find(0UL, 0UL) == 0;
+    tg_mtproto_poll_text(p, text, sizeof(text));
+    ok = ok && strcmp(text, "[Poll] Pizza o pasta?\n1. Pizza\n2. Pasta\n"
+                            "Vote to see the results") == 0;
+    /* The vote request: the second answer, then the vote taken back. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && tg_mtproto_build_messages_send_vote(
+                   &w, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x0102UL, 0UL, 0UL, 0,
+                   77UL, p, 2UL) == TG_MTPROTO_TL_OK &&
+         w.length == 4UL + 12UL + 4UL + 8UL + 4UL &&
+         wire[0] == 0x84U && wire[1] == 0x61U && wire[2] == 0xeaU &&
+         wire[3] == 0x10U && wire[16] == 77U && wire[20] == 0x15U &&
+         wire[24] == 0x01U && wire[28] == 0x01U && wire[29] == '1';
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && tg_mtproto_build_messages_send_vote(
+                   &w, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x0102UL, 0UL, 0UL, 0,
+                   77UL, p, 0UL) == TG_MTPROTO_TL_OK &&
+         w.length == 4UL + 12UL + 4UL + 8UL && wire[24] == 0x00U;
+    /* The vote comes back as an update, results alone: 3 and 1, the
+       first one chosen. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x55UL);
+    tg_poll_test_results(&w, 0, 3UL, 1UL, 1, 0);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_mtproto_read_update_message_poll(&r, &hi, &lo) == 1 &&
+         hi == 0UL && lo == 0x55UL;
+    p = tg_mtproto_poll_find(0UL, 0x55UL);
+    tg_mtproto_poll_text(p, text, sizeof(text));
+    ok = ok && p != 0 && p->has_results && p->voted &&
+         p->total_voters == 4UL &&
+         strcmp(text, "[Poll] Pizza o pasta?\n1. 75% Pizza (your vote)\n"
+                      "2. 25% Pasta\n4 votes") == 0;
+    /* Someone else votes: "min" results, the poll along with them. What
+       this account chose stays. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x55UL);
+    tg_poll_test_poll(&w, 0x55UL, 1UL); /* and it is closed now */
+    tg_poll_test_results(&w, 1, 4UL, 2UL, 0, 0);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_mtproto_read_update_message_poll(&r, &hi, &lo) == 1;
+    p = tg_mtproto_poll_find(0UL, 0x55UL);
+    tg_mtproto_poll_text(p, text, sizeof(text));
+    ok = ok && p != 0 && p->voted && p->closed &&
+         strcmp(text, "[Poll] Pizza o pasta?\n1. 67% Pizza (your vote)\n"
+                      "2. 33% Pasta\n6 votes, closed") == 0;
+    /* An update for a poll not held, or one that is not an update. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x99UL);
+    tg_poll_test_results(&w, 0, 3UL, 1UL, 1, 0);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_mtproto_read_update_message_poll(&r, &hi, &lo) == 0;
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x55UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0x12345678UL);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_mtproto_read_update_message_poll(&r, &hi, &lo) == 0;
+    /* A quiz, several answers allowed, its right answer known. */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    tg_poll_test_poll(&w, 0x56UL, 4UL | 8UL);
+    tg_poll_test_results(&w, 0, 1UL, 1UL, 1, 1);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+         tg_read_poll_results(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK;
+    p = tg_poll_store(&tg_poll_scratch);
+    tg_mtproto_poll_text(p, text, sizeof(text));
+    ok = ok && p != 0 && p->quiz && p->multiple &&
+         strcmp(text, "[Quiz] Pizza o pasta?\n1. 50% Pizza (your answer)\n"
+                      "2. 50% Pasta (right)\n2 votes") == 0;
+    /* A short buffer cuts the text; a poll with no vote yet says what
+       kind it is. */
+    tg_mtproto_poll_text(p, text, 12UL);
+    ok = ok && strcmp(text, "[Quiz] Pizz") == 0;
+    /* ...and never in the middle of a character. */
+    strcpy(tg_poll_scratch.question, "Caff\xc3\xa8 o t\xc3\xa8?");
+    tg_poll_scratch.id_lo = 0x58UL;
+    p = tg_poll_store(&tg_poll_scratch);
+    tg_mtproto_poll_text(p, text, 13UL);
+    ok = ok && strcmp(text, "[Quiz] Caff") == 0;
+    tg_mtproto_poll_text(p, text, 14UL);
+    ok = ok && strcmp(text, "[Quiz] Caff\xc3\xa8") == 0;
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    tg_poll_test_poll(&w, 0x57UL, 4UL);
+    tg_poll_test_results(&w, 0, 0xffffffffUL, 0UL, 0, 0);
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+         tg_read_poll_results(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK;
+    p = tg_poll_store(&tg_poll_scratch);
+    tg_mtproto_poll_text(p, text, sizeof(text));
+    ok = ok && strcmp(text, "[Poll] Pizza o pasta?\n1. Pizza\n2. Pasta\n"
+                            "Vote to see the results, several answers "
+                            "allowed") == 0;
+    /* The table full: the poll unused for longest makes room. */
+    for (k = 0; k < TG_MTPROTO_POLLS_MAX; ++k) {
+        tg_poll_scratch.id_lo = 0x100UL + (unsigned long)k;
+        (void)tg_poll_store(&tg_poll_scratch);
+    }
+    ok = ok && tg_mtproto_poll_find(0UL, 0x55UL) == 0 &&
+         tg_mtproto_poll_find(0UL, 0x100UL) != 0 &&
+         tg_mtproto_poll_find(
+             0UL, 0x100UL + (unsigned long)(TG_MTPROTO_POLLS_MAX - 1)) != 0;
+    memset(tg_poll_table, 0, sizeof(tg_poll_table));
+    memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
+    if (!ok) {
+        printf("login self-test: polls wrong (\"%s\")\n", text);
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
@@ -9370,7 +10040,7 @@ int tg_mtproto_login_self_test(void)
     tg_mtproto_tl_writer writer;
 
     if (tg_peer_notify_self_test() != 0 ||
-        tg_entity_marker_self_test() != 0) {
+        tg_entity_marker_self_test() != 0 || tg_poll_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)

@@ -5741,6 +5741,7 @@ int tg_gui_context_follow(tg_gui_state *state)
     }
     state->ctx_visible = 0;
     state->ctx_react = 0;
+    state->ctx_poll = 0;
     state->ctx_msg = -1;
     state->ctx_msg_id = 0UL;
     return 0;
@@ -5886,6 +5887,25 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         ids[n++] = TG_GUI_CTX_LIST_RELOAD;
         return n;
     }
+    /* A poll's answers, one a line; with several allowed, each carries
+       its mark and a last line sends the vote. */
+    if (state->ctx_poll && state->ctx_msg >= 0 &&
+        state->ctx_msg < state->message_count &&
+        state->messages[state->ctx_msg].id != 0UL &&
+        (state->messages[state->ctx_msg].poll_id_hi != 0UL ||
+         state->messages[state->ctx_msg].poll_id_lo != 0UL) &&
+        state->poll_item_count > 0) {
+        while (n < state->poll_item_count && n < TG_GUI_POLL_ITEMS_MAX) {
+            labels[n] = state->poll_items[n];
+            ids[n] = TG_GUI_CTX_POLL_FIRST + n;
+            ++n;
+        }
+        if (state->poll_multiple) {
+            labels[n] = "Send vote";
+            ids[n++] = TG_GUI_CTX_POLL_SEND;
+        }
+        return n;
+    }
     if (state->ctx_react && state->ctx_msg >= 0 &&
         state->ctx_msg < state->message_count &&
         state->messages[state->ctx_msg].id != 0UL &&
@@ -5912,6 +5932,17 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         !state->messages[state->ctx_msg].is_system) {
         labels[n] = "React...";
         ids[n++] = TG_GUI_CTX_REACT;
+        /* A poll: the vote, or taking it back, right under. */
+        if (state->messages[state->ctx_msg].poll_id_hi != 0UL ||
+            state->messages[state->ctx_msg].poll_id_lo != 0UL) {
+            if (state->ctx_poll_open) {
+                labels[n] = "Vote...";
+                ids[n++] = TG_GUI_CTX_POLL;
+            } else if (state->ctx_poll_voted) {
+                labels[n] = "Take back vote";
+                ids[n++] = TG_GUI_CTX_POLL_RETRACT;
+            }
+        }
     }
     labels[n] = "Reply";
     ids[n] = TG_GUI_CTX_REPLY;
@@ -9584,6 +9615,74 @@ int tg_gui_self_test(void)
         if (count != TG_GUI_CTX_MENU_ITEMS || !saw_saved || !saw_picker ||
             !saw_photo_save || !saw_pin || !saw_unpin) {
             puts("gui self-test: forwarding context items missing");
+            return 2;
+        }
+    }
+
+    /* A poll's message: Vote... right under React... while it can be
+       voted, Take back vote once it is, neither when it is closed; and
+       the answers in the menu's place, with Send vote when several may
+       be chosen. */
+    {
+        const char *labels[TG_GUI_CTX_ITEMS_MAX];
+        int ids[TG_GUI_CTX_ITEMS_MAX];
+        int plain;
+        int count;
+        int ok_poll;
+
+        state.ctx_visible = 1;
+        state.ctx_chat = 0;
+        state.ctx_react = 0;
+        state.ctx_poll = 0;
+        state.ctx_msg = 0;
+        state.messages[0].id = 123UL;
+        plain = tg_gui_context_items(&state, labels, ids);
+        state.messages[0].poll_id_lo = 7UL;
+        state.ctx_poll_open = 0;
+        state.ctx_poll_voted = 0;
+        ok_poll = tg_gui_context_items(&state, labels, ids) == plain;
+        state.ctx_poll_open = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count == plain + 1 && count <= TG_GUI_CTX_MENU_ITEMS &&
+                  ids[0] == TG_GUI_CTX_REACT && ids[1] == TG_GUI_CTX_POLL &&
+                  strcmp(labels[1], "Vote...") == 0;
+        state.ctx_poll_open = 0;
+        state.ctx_poll_voted = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count == plain + 1 &&
+                  ids[1] == TG_GUI_CTX_POLL_RETRACT &&
+                  strcmp(labels[1], "Take back vote") == 0;
+        /* The answers: one of two, then several with their marks. */
+        strcpy(state.poll_items[0], "Pizza");
+        strcpy(state.poll_items[1], "Pasta");
+        state.poll_item_count = 2;
+        state.poll_multiple = 0;
+        state.ctx_poll = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count == 2 && ids[0] == TG_GUI_CTX_POLL_FIRST &&
+                  ids[1] == TG_GUI_CTX_POLL_FIRST + 1 &&
+                  strcmp(labels[1], "Pasta") == 0;
+        state.poll_multiple = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count == 3 && ids[2] == TG_GUI_CTX_POLL_SEND &&
+                  strcmp(labels[2], "Send vote") == 0;
+        /* No answers to show, or a message without a poll: the usual
+           menu. */
+        state.poll_item_count = 0;
+        ok_poll = ok_poll &&
+                  tg_gui_context_items(&state, labels, ids) == plain + 1;
+        state.poll_item_count = 2;
+        state.messages[0].poll_id_lo = 0UL;
+        ok_poll = ok_poll && tg_gui_context_items(&state, labels, ids) == plain;
+        state.ctx_poll = 0;
+        state.ctx_poll_voted = 0;
+        state.poll_item_count = 0;
+        state.poll_multiple = 0;
+        state.ctx_visible = 0;
+        state.ctx_msg = -1;
+        state.messages[0].id = 0UL;
+        if (!ok_poll) {
+            puts("gui self-test: a poll's menu is wrong");
             return 2;
         }
     }

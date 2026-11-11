@@ -579,6 +579,14 @@ Messages
   the names and /ids shows the message numbers that /react <id> <name>,
   /forward and /forwardto take.
 - Messages edited on another device change here too.
+- A poll shows its question and its answers, numbered. To vote, open
+  the menu of the poll's message (right mouse button) and choose
+  Vote...: the answers take the menu's place, and a click votes. Where
+  the poll allows several answers each has a mark, a click turns it,
+  and Send vote sends them. Once you have voted the message shows the
+  share of each answer and the number of votes, and follows the votes
+  of the others while the chat is open. Take back vote, in the same
+  menu, undoes it; the answer given to a quiz stays.
 
 Emoji
 - The smiley next to Send, or "Insert emoji..." (Amiga+E), opens the
@@ -732,6 +740,14 @@ Messaggi
   messaggio ricevuto, /reactions elenca i nomi e /ids mostra i numeri
   dei messaggi che /react <id> <nome>, /forward e /forwardto accettano.
 - I messaggi modificati da un altro dispositivo cambiano anche qui.
+- Un sondaggio mostra la domanda e le risposte, numerate. Per votare
+  apri il menu del messaggio del sondaggio (tasto destro) e scegli
+  Vote...: le risposte prendono il posto del menu, e un click vota. Se
+  il sondaggio permette piu' risposte ognuna ha un segno, un click lo
+  cambia, e Send vote le manda. Dopo il voto il messaggio mostra la
+  percentuale di ogni risposta e il numero dei voti, e segue i voti
+  degli altri finche' la chat e' aperta. Take back vote, nello stesso
+  menu, lo ritira; la risposta data a un quiz resta.
 
 Emoji
 - La faccina accanto a Send, o "Insert emoji..." (Amiga+E), apre il

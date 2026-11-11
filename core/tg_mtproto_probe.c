@@ -241,6 +241,7 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR 0xedfc111eUL
 #define TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0xbec268efUL
 #define TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR 0xed85eab5UL
+#define TG_MTPROTO_UPDATE_MESSAGE_POLL_CONSTRUCTOR 0xaca1657bUL
 #define TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR 0x5bb98608UL
 #define TG_MTPROTO_FOLDER_PEER_CONSTRUCTOR 0xe9baa668UL
 /* https://core.telegram.org/constructor/updateWebPage and
@@ -563,6 +564,10 @@ static void tg_gui_pinned_note_update(unsigned long peer_constructor,
                                       unsigned long id_hi,
                                       unsigned long id_lo, int pinned,
                                       unsigned long message_id);
+/* A poll's votes changed: the window's session writes its message out
+   again (defined with the polls, further down). */
+static void tg_gui_poll_note_changed(unsigned long id_hi,
+                                     unsigned long id_lo);
 /* Someone of the open group, as a reply named them: who an "@" in the
    composer can mention (defined with the mentions, further down). */
 static void tg_gui_people_note(const tg_mtproto_peer_cache_entry *entry);
@@ -4352,6 +4357,22 @@ static void tg_chat_folder_parse_update(tg_mtproto_tl_reader *reader)
     }
 }
 
+/* updateMessagePoll, the reader just past the constructor: the poll kept
+   takes the new votes, and the window shows them. The envelope scan
+   offers any aligned match: the reader counts it only when it reads as a
+   poll's results for a poll this client holds. */
+static void tg_chat_poll_parse_update(tg_mtproto_tl_reader *reader)
+{
+    unsigned long id_hi;
+    unsigned long id_lo;
+
+    if (tg_mtproto_read_update_message_poll(reader, &id_hi, &id_lo)) {
+#if !defined(TG_NO_GUI)
+        tg_gui_poll_note_changed(id_hi, id_lo);
+#endif
+    }
+}
+
 /* updatePinnedMessages#ed85eab5 flags:# pinned:flags.0?true peer:Peer
    messages:Vector<int> pts:int pts_count:int, and
    updatePinnedChannelMessages#5bb98608 flags:# pinned:flags.0?true
@@ -4555,6 +4576,11 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             reader.offset = offset + 4UL;
             tg_chat_pinned_parse_update(&reader, constructor);
         } else if (constructor ==
+                   TG_MTPROTO_UPDATE_MESSAGE_POLL_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_poll_parse_update(&reader);
+        } else if (constructor ==
                    TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR) {
             /* A chat muted or unmuted on another device: the table the
                pop-up and the ring ask takes it (nothing to redraw). */
@@ -4701,6 +4727,10 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     if (update_ctor == TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR ||
         update_ctor == TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR) {
         tg_chat_pinned_parse_update(reader, update_ctor);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_MESSAGE_POLL_CONSTRUCTOR) {
+        tg_chat_poll_parse_update(reader);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
@@ -14813,6 +14843,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.has_photo = texts.messages[i].photo.has_photo;
                 row.photo_only = texts.messages[i].photo_only;
                 row.photo_is_link = texts.messages[i].photo_is_link;
+                row.poll_id_hi = texts.messages[i].poll_id_hi;
+                row.poll_id_lo = texts.messages[i].poll_id_lo;
                 row.photo_id_hi = texts.messages[i].photo.id_hi;
                 row.photo_id_lo = texts.messages[i].photo.id_lo;
                 row.photo_width = texts.messages[i].photo.width;
@@ -27337,6 +27369,255 @@ static int tg_gui_mentions_self_test(void)
 }
 #endif
 
+#if !defined(TG_NO_GUI)
+/* --- polls ---------------------------------------------------------------
+   A message that carries a poll shows it written out (the protocol reader
+   does that); here the poll is voted from the message's menu, and written
+   out again when its votes change, by this account's vote or by an update
+   while the chat is open. The window only: the text client shows the poll
+   as it was read. */
+#define TG_GUI_POLL_CHANGES_MAX 4
+static unsigned long tg_gui_poll_changed_hi[TG_GUI_POLL_CHANGES_MAX];
+static unsigned long tg_gui_poll_changed_lo[TG_GUI_POLL_CHANGES_MAX];
+static int tg_gui_poll_changed_count = 0;
+
+static void tg_gui_poll_note_changed(unsigned long id_hi,
+                                     unsigned long id_lo)
+{
+    int k;
+
+    for (k = 0; k < tg_gui_poll_changed_count; ++k) {
+        if (tg_gui_poll_changed_hi[k] == id_hi &&
+            tg_gui_poll_changed_lo[k] == id_lo) {
+            return;
+        }
+    }
+    if (tg_gui_poll_changed_count >= TG_GUI_POLL_CHANGES_MAX) {
+        /* The oldest goes: its message is written out again when the chat
+           is next read. */
+        for (k = 1; k < tg_gui_poll_changed_count; ++k) {
+            tg_gui_poll_changed_hi[k - 1] = tg_gui_poll_changed_hi[k];
+            tg_gui_poll_changed_lo[k - 1] = tg_gui_poll_changed_lo[k];
+        }
+        --tg_gui_poll_changed_count;
+    }
+    tg_gui_poll_changed_hi[tg_gui_poll_changed_count] = id_hi;
+    tg_gui_poll_changed_lo[tg_gui_poll_changed_count] = id_lo;
+    ++tg_gui_poll_changed_count;
+}
+
+/* The messages of the open chat that carry this poll take its text as it
+   is now. 1 = one of them changed. */
+static int tg_gui_poll_rewrite(unsigned long id_hi, unsigned long id_lo)
+{
+    static char text[2048];
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    const tg_mtproto_poll *poll = tg_mtproto_poll_find(id_hi, id_lo);
+    int dirty = 0;
+    int i;
+
+    if (gst == 0 || poll == 0) {
+        return 0;
+    }
+    tg_mtproto_poll_text(poll, text, sizeof(text));
+    for (i = 0; i < gst->message_count; ++i) {
+        if (gst->messages[i].poll_id_hi == id_hi &&
+            gst->messages[i].poll_id_lo == id_lo &&
+            gst->messages[i].id != 0UL) {
+            unsigned long before = gst->msg_gen;
+
+            (void)tg_gui_driver_update_text_utf8(
+                &tg_gui_session_state.gui_driver, gst->messages[i].id, text);
+            if (gst->msg_gen != before) {
+                dirty = 1;
+            }
+        }
+    }
+    return dirty;
+}
+
+/* The polls an update changed, written out again. 1 = the chat changed. */
+static int tg_gui_session_apply_poll_updates(void)
+{
+    int dirty = 0;
+
+    while (tg_gui_poll_changed_count > 0) {
+        --tg_gui_poll_changed_count;
+        if (tg_gui_poll_rewrite(
+                tg_gui_poll_changed_hi[tg_gui_poll_changed_count],
+                tg_gui_poll_changed_lo[tg_gui_poll_changed_count])) {
+            dirty = 1;
+        }
+    }
+    return dirty;
+}
+
+/* Public: what the menu of a poll's message needs to know. 1 = the poll
+   is held (one read too long ago is not: it shows, it cannot be voted). */
+int tg_gui_session_poll_state(unsigned long poll_id_hi,
+                              unsigned long poll_id_lo, int *closed,
+                              int *voted, int *multiple, int *quiz)
+{
+    const tg_mtproto_poll *poll = tg_mtproto_poll_find(poll_id_hi,
+                                                       poll_id_lo);
+
+    if (poll == 0) {
+        return 0;
+    }
+    if (closed != 0) {
+        *closed = poll->closed;
+    }
+    if (voted != 0) {
+        *voted = poll->voted;
+    }
+    if (multiple != 0) {
+        *multiple = poll->multiple;
+    }
+    if (quiz != 0) {
+        *quiz = poll->quiz;
+    }
+    return 1;
+}
+
+/* Public: the poll's answers as the menu lists them, `item_size` bytes
+   apart in `items`, as the window draws text. Where several may be
+   chosen each starts with its mark, "[x] " for the ones in `mask` and
+   "[ ] " for the others. Returns how many, 0 when the poll is not held. */
+int tg_gui_session_poll_choices(unsigned long poll_id_hi,
+                                unsigned long poll_id_lo, unsigned long mask,
+                                int *multiple, char *items,
+                                unsigned long item_size, int max)
+{
+    const tg_mtproto_poll *poll = tg_mtproto_poll_find(poll_id_hi,
+                                                       poll_id_lo);
+    int k;
+
+    if (multiple != 0) {
+        *multiple = 0;
+    }
+    if (poll == 0 || items == 0 || item_size < 8UL || max <= 0) {
+        return 0;
+    }
+    if (multiple != 0) {
+        *multiple = poll->multiple;
+    }
+    for (k = 0; k < (int)poll->answer_count && k < max; ++k) {
+        char shown[TG_MTPROTO_POLL_ANSWER_MAX + 1];
+        char *dst = items + ((unsigned long)k * item_size);
+        unsigned long len;
+        unsigned long o = 0UL;
+        unsigned long i;
+
+        if (poll->multiple) {
+            const char *mark = (mask & (1UL << k)) != 0UL ? "[x] " : "[ ] ";
+
+            while (*mark != '\0' && o + 1UL < item_size) {
+                dst[o++] = *mark++;
+            }
+        }
+        tg_gui_driver_text_from_utf8(shown, sizeof(shown),
+                                     poll->answers[k].text);
+        len = (unsigned long)strlen(shown);
+        for (i = 0UL; i < len && o + 1UL < item_size;) {
+            unsigned char c = (unsigned char)shown[i];
+
+            /* The menu draws plain text: no emoji pair, no line break. */
+            if (tg_gui_emoji_pair_at(shown, len, i, 0)) {
+                i += 2UL;
+                continue;
+            }
+            ++i;
+            dst[o++] = (char)(c < 0x20U ? ' ' : c);
+        }
+        dst[o] = '\0';
+        if (dst[poll->multiple ? 4 : 0] == '\0') {
+            sprintf(dst + o, "%d", k + 1); /* an answer of emoji alone */
+        }
+    }
+    return k;
+}
+
+/* Public: votes the poll of this message of the open chat, the answers
+   whose bit is set in `mask` (none takes the vote back). The message
+   shows the result at once: Telegram's answer carries the votes.
+   0 = done, 1 = Telegram refused (emsg says why), 2 = failed. */
+int tg_gui_session_poll_vote(unsigned long message_id,
+                             unsigned long poll_id_hi,
+                             unsigned long poll_id_lo, unsigned long mask,
+                             char *emsg, unsigned long emsg_size,
+                             FILE *stream)
+{
+    static unsigned char query[32 + (TG_MTPROTO_POLL_ANSWERS_MAX *
+                                     (TG_MTPROTO_POLL_OPTION_MAX + 4))];
+    static const char label[] = "mtproto messages.sendVote";
+    const tg_mtproto_poll *poll = tg_mtproto_poll_find(poll_id_hi,
+                                                       poll_id_lo);
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long at;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        poll == 0 || tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "poll peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_send_vote(&writer, pc, ph, pl, ahh, ahl,
+                                             hah, message_id, poll, mask) ==
+             TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "poll: Telegram refused the vote"
+                           : "poll: vote failed");
+        return rc;
+    }
+    /* The answer is the update with the poll's votes as they are now. */
+    for (at = 0UL; at + 8UL <= result.result_body_length; at += 4UL) {
+        if (tg_mtproto_read_u32_le(result.result_body + at) ==
+            TG_MTPROTO_UPDATE_MESSAGE_POLL_CONSTRUCTOR) {
+            tg_mtproto_tl_reader reader;
+
+            tg_mtproto_tl_reader_init(&reader, result.result_body,
+                                      result.result_body_length);
+            reader.offset = at + 4UL;
+            tg_chat_poll_parse_update(&reader);
+        }
+    }
+    tg_gui_log(mask != 0UL ? "poll: voted" : "poll: vote taken back");
+    (void)tg_gui_session_apply_poll_updates(); /* the caller repaints */
+    return 0;
+}
+#endif /* !TG_NO_GUI: polls */
+
 /* Avatar v2 (safe scope): ONE bounded download of the OPEN chat's small
    profile photo, at open_chat time only -- never from the live tick, and never
    on MorphOS (same discipline as the member fetch). Cached as a flat
@@ -32091,6 +32372,11 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     if (tg_gui_session_apply_delete_updates()) {
         dirty = 1;
     }
+#if !defined(TG_NO_GUI)
+    if (tg_gui_session_apply_poll_updates()) {
+        dirty = 1;
+    }
+#endif
     if (tg_gui_session_apply_webpage_updates()) {
         dirty = 1;
     }
