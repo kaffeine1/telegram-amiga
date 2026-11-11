@@ -636,6 +636,15 @@ Window and screen
   if that screen cannot open, it falls back to a window.
 - "Iconify" (Amiga+I) leaves an icon on the Workbench; double-click it
   to come back.
+
+ARexx
+- The program has an ARexx port named AMIGRAM (AMIGRAM.1 for a second
+  copy), for scripts and the Shell:
+      rx "address AMIGRAM 'SHOW'"
+  SHOW brings the window up, from its icon too; HIDE leaves it on its
+  icon; OPEN <name> opens the chat with that name, or the first whose
+  name starts with it or contains it; QUIT ends the program. The result
+  code is 0, 5 when OPEN finds no such chat, 10 for an unknown command.
 EOT
 }
 
@@ -757,6 +766,16 @@ Finestra e schermo
   schermo non si apre, torna alla finestra.
 - "Iconify" (Amiga+I) lascia un'icona sul Workbench; doppio click per
   tornare.
+
+ARexx
+- Il programma ha una porta ARexx di nome AMIGRAM (AMIGRAM.1 per una
+  seconda copia), per gli script e la Shell:
+      rx "address AMIGRAM 'SHOW'"
+  SHOW porta su la finestra, anche dall'icona; HIDE la lascia sulla sua
+  icona; OPEN <nome> apre la chat con quel nome, o la prima il cui nome
+  comincia cosi' o lo contiene; QUIT chiude il programma. Il codice di
+  ritorno e' 0, 5 se OPEN non trova la chat, 10 per un comando
+  sconosciuto.
 EOT
 }
 

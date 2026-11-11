@@ -5898,6 +5898,126 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
     return n;
 }
 
+static int tg_gui_fold(int c)
+{
+    c &= 0xff;
+    if (c >= 'A' && c <= 'Z') {
+        return c - 'A' + 'a';
+    }
+    /* Latin-1 capitals, the multiplication sign aside. */
+    if (c >= 0xc0 && c <= 0xde && c != 0xd7) {
+        return c + 0x20;
+    }
+    return c;
+}
+
+int tg_gui_rexx_command(char *text, const char **arg)
+{
+    static const struct {
+        const char *word;
+        int code;
+    } words[] = {
+        {"show", TG_GUI_REXX_SHOW},
+        {"hide", TG_GUI_REXX_HIDE},
+        {"open", TG_GUI_REXX_OPEN},
+        {"quit", TG_GUI_REXX_QUIT},
+    };
+    char *s = text;
+    char *rest;
+    unsigned long n;
+    unsigned long len;
+    int k;
+
+    if (arg != 0) {
+        *arg = "";
+    }
+    if (text == 0) {
+        return TG_GUI_REXX_UNKNOWN;
+    }
+    while (*s == ' ' || *s == '\t') {
+        ++s;
+    }
+    for (n = 0UL; s[n] != '\0' && s[n] != ' ' && s[n] != '\t'; ++n) {
+    }
+    rest = s + n;
+    while (*rest == ' ' || *rest == '\t') {
+        ++rest;
+    }
+    len = (unsigned long)strlen(rest);
+    while (len > 0UL && (rest[len - 1UL] == ' ' || rest[len - 1UL] == '\t' ||
+                         rest[len - 1UL] == '\n' || rest[len - 1UL] == '\r')) {
+        rest[--len] = '\0';
+    }
+    if (len >= 2UL && (rest[0] == '"' || rest[0] == '\'') &&
+        rest[len - 1UL] == rest[0]) {
+        rest[len - 1UL] = '\0';
+        ++rest;
+    }
+    for (k = 0; k < (int)(sizeof(words) / sizeof(words[0])); ++k) {
+        unsigned long i;
+
+        if (strlen(words[k].word) != n) {
+            continue;
+        }
+        for (i = 0UL; i < n; ++i) {
+            if (tg_gui_fold(s[i]) != words[k].word[i]) {
+                break;
+            }
+        }
+        if (i == n) {
+            /* Only OPEN takes an argument, and must have one. */
+            if ((words[k].code == TG_GUI_REXX_OPEN) != (rest[0] != '\0')) {
+                return TG_GUI_REXX_UNKNOWN;
+            }
+            if (arg != 0) {
+                *arg = rest;
+            }
+            return words[k].code;
+        }
+    }
+    return TG_GUI_REXX_UNKNOWN;
+}
+
+int tg_gui_chat_by_name(const tg_gui_state *state, const char *name)
+{
+    unsigned long want;
+    int pass;
+    int i;
+
+    if (state == 0 || name == 0 || name[0] == '\0') {
+        return -1;
+    }
+    want = (unsigned long)strlen(name);
+    /* 0: the whole name; 1: its start; 2: anywhere in it. */
+    for (pass = 0; pass < 3; ++pass) {
+        for (i = 0; i < state->chat_count; ++i) {
+            const char *row = state->chats[i].name;
+            unsigned long have = (unsigned long)strlen(row);
+            unsigned long at;
+
+            if (have < want || (pass == 0 && have != want)) {
+                continue;
+            }
+            for (at = 0UL; at + want <= have; ++at) {
+                unsigned long k;
+
+                for (k = 0UL; k < want; ++k) {
+                    if (tg_gui_fold(row[at + k]) != tg_gui_fold(name[k])) {
+                        break;
+                    }
+                }
+                if (k == want) {
+                    return i;
+                }
+                if (pass < 2) {
+                    break; /* only from the first letter */
+                }
+            }
+        }
+    }
+    return -1;
+}
+
 int tg_gui_attachment_is_photo(const char *path)
 {
     const char *dot;
@@ -8936,6 +9056,57 @@ int tg_gui_self_test(void)
             }
         }
         state.chats[0] = saved_chat;
+    }
+
+    /* The ARexx port: what a command line asks, and the chat a name
+       means. */
+    {
+        char line[48];
+        const char *arg = 0;
+        tg_gui_chat saved[3];
+        int saved_count = state.chat_count;
+        int ok_rx = 1;
+
+        strcpy(line, "show");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_SHOW;
+        strcpy(line, "  HIDE  ");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_HIDE;
+        strcpy(line, "Quit");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_QUIT;
+        strcpy(line, "open \"Mario Rossi\" ");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_OPEN &&
+                strcmp(arg, "Mario Rossi") == 0;
+        strcpy(line, "OPEN amiga ita");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_OPEN &&
+                strcmp(arg, "amiga ita") == 0;
+        /* OPEN wants a name, the others take none, and nothing else is a
+           command. */
+        strcpy(line, "open");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        strcpy(line, "show now");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        strcpy(line, "shower");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        strcpy(line, "");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+
+        memcpy(saved, state.chats, sizeof(saved));
+        state.chat_count = 3;
+        strcpy(state.chats[0].name, "Amiga Italia");
+        strcpy(state.chats[1].name, "Amiga");
+        strcpy(state.chats[2].name, "Caff\xe8 Amiga");
+        ok_rx = ok_rx && tg_gui_chat_by_name(&state, "amiga") == 1 &&
+                tg_gui_chat_by_name(&state, "AMIGA I") == 0 &&
+                tg_gui_chat_by_name(&state, "CAFF\xc8") == 2 &&
+                tg_gui_chat_by_name(&state, "italia") == 0 &&
+                tg_gui_chat_by_name(&state, "morphos") == -1 &&
+                tg_gui_chat_by_name(&state, "") == -1;
+        memcpy(state.chats, saved, sizeof(saved));
+        state.chat_count = saved_count;
+        if (!ok_rx) {
+            puts("gui self-test: ARexx command or chat name wrong");
+            return 2;
+        }
     }
 
     /* Unread mentions put an "@" button in the jump button's column; none,

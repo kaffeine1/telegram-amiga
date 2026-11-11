@@ -50,6 +50,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   bottom right, over the jump button. A click shows the chat around the
   oldest of them, highlighted, and marks that mention as read on
   Telegram; the next click goes to the next one.
+- An ARexx port, AMIGRAM (AMIGRAM.1 when a copy already runs), for
+  scripts and the Shell: `rx "address AMIGRAM 'SHOW'"`. SHOW brings the
+  window up, from its AppIcon too; HIDE parks it on the AppIcon; OPEN
+  <name> opens the chat with that name, or the first whose name starts
+  with it or contains it, in either case of letters; QUIT ends the
+  program. The result code is 0, 5 when OPEN finds no such chat, 10 for
+  an unknown command. It needs no ARexx library: any program that sends
+  an ARexx message can use it.
 - The time zone from the environment. On a machine whose clock is not
   set (no battery clock: it starts in 1978), message times were shown
   in the time zone of the Locale preferences, which know no summer time.
@@ -117,7 +125,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   and the chat shows its newest messages, a moment after the chat opens
   and again as new messages arrive; not while the window is behind, not
   while an older stretch of the chat is on screen, and not for the chat
-  the program opens by itself at start, until a key or the mouse is used.
+  the program opens by itself at start, until you type or click in it:
+  picking another chat leaves it unread.
 
 ### Fixed
 - A link with a preview could be impossible to open: when the message

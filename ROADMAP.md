@@ -349,8 +349,9 @@ it works today:
   first time a chat's mute is needed). Still missing: a mute for a few
   hours, a mark on muted chats in the list, the text client's own
   command;
-- an ARexx port: open a chat, show, hide, so that notifications and
-  scripts can drive the client;
+- an ARexx port: done, AMIGRAM with SHOW, HIDE, OPEN <name> and QUIT,
+  the window open or parked. Still missing: commands that answer with
+  text (the unread count, the open chat) and one that sends a message;
 - the time zone from `ENV:TZONE` or `ENV:TZ` before the Locale
   preferences: done, for the POSIX form with its summer time, used when
   the machine's clock is not set.

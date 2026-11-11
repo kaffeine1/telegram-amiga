@@ -86,6 +86,7 @@
 #include <libraries/asl.h>
 #include <workbench/workbench.h>
 #include <workbench/startup.h>
+#include <rexx/storage.h>
 #include <proto/wb.h>
 #include <proto/icon.h>
 #include <proto/asl.h>
@@ -6443,6 +6444,11 @@ static void tg_gui_window_paint_composer_edit(tg_gui_state *state,
 #define TG_GUI_TOPUP_MAX 3
 #endif
 
+/* The user has opened a chat, or typed or clicked in the open one, since
+   the program started. Until then the chat the program opens by itself at
+   start is not marked as read on Telegram: nobody chose to look at it. */
+static int tg_gui_chat_touched = 0;
+
 /* Switch to chat `sel`: show its header + an empty transcript at once, then
    fetch the history. The instant first paint keeps the switch responsive on a
    slow link instead of the window appearing frozen on the old chat until the
@@ -6457,6 +6463,7 @@ static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
         tg_gui_window_paint(state, backend);
         return;
     }
+    tg_gui_chat_touched = 1; /* a chat opened on purpose is one to read */
     state->selected_chat = sel;
     state->nav_chat = -1;     /* the arrow focus is consumed by the open */
     state->selected_msg = -1; /* new chat: no message highlighted yet */
@@ -9743,6 +9750,7 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
         state->chats[row].index == 0UL) {
         return;
     }
+    tg_gui_chat_touched = 1;
     state->selected_chat = row;
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Loading the message...");
@@ -10839,9 +10847,6 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
     }
 }
 
-/* Set by the first key or mouse button the window gets: until then the
-   chat the program opened by itself is not marked as read. */
-static int tg_gui_user_acted = 0;
 
 static void tg_gui_window_poll_session(const tg_gui_state *state,
                                        time_t session_boot,
@@ -10875,9 +10880,10 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
     }
     /* A chat in front of the user is read, on Telegram too: the window is
        the active one, the chat shows its newest messages, and the user has
-       touched the program since it started (the chat it opens by itself at
-       start is not read behind the user's back). */
-    if (tg_gui_user_acted && !state->notify_away &&
+       opened a chat or touched the open one since the program started (the
+       chat it opens by itself at start is not read behind the user's
+       back). */
+    if (tg_gui_chat_touched && !state->notify_away &&
         state->mode == TG_GUI_MODE_CHAT && state->transcript_scroll == 0 &&
         !state->newest_dropped && tg_gui_session_read_step(stdout)) {
         tg_gui_window_session_changed(session_dirty, header_dirty);
@@ -11773,6 +11779,132 @@ static void tg_gui_window_notify_open(tg_gui_state *state,
     }
 }
 
+/* --- the ARexx port --------------------------------------------------------
+   A public message port, AMIGRAM (AMIGRAM.1 and so on when a copy already
+   runs), that takes ARexx commands from scripts and from the Shell:
+       rx "address AMIGRAM 'SHOW'"
+   SHOW brings the window up (from its AppIcon too), HIDE parks it on the
+   AppIcon, OPEN <name> opens a chat by its name, QUIT ends the program.
+   The result code is 0, 5 when OPEN finds no such chat (or the chat list
+   is showing something else), 10 for a command it does not know.
+   rexxsyslib.library is not needed: a command is a message whose first
+   argument is the line, answered with a number. The port lives from the
+   first window to the end of the program, across the AppIcon. */
+static struct MsgPort *tg_gui_rexx_port = 0;
+static char tg_gui_rexx_port_name[16];
+
+static void tg_gui_rexx_open(void)
+{
+    struct MsgPort *port;
+    int n;
+
+    if (tg_gui_rexx_port != 0) {
+        return;
+    }
+    port = CreateMsgPort();
+    if (port == 0) {
+        return;
+    }
+    /* The name is looked for and taken in one breath. */
+    Forbid();
+    for (n = 0; n < 9; ++n) {
+        if (n == 0) {
+            strcpy(tg_gui_rexx_port_name, "AMIGRAM");
+        } else {
+            sprintf(tg_gui_rexx_port_name, "AMIGRAM.%d", n);
+        }
+        if (FindPort((STRPTR)tg_gui_rexx_port_name) == 0) {
+            break;
+        }
+    }
+    if (n < 9) {
+        port->mp_Node.ln_Name = (char *)tg_gui_rexx_port_name;
+        port->mp_Node.ln_Pri = 0;
+        AddPort(port);
+        tg_gui_rexx_port = port;
+    }
+    Permit();
+    if (tg_gui_rexx_port == 0) {
+        DeleteMsgPort(port);
+        return;
+    }
+    tg_gui_log("arexx: port open");
+}
+
+static void tg_gui_rexx_reply(struct Message *m, long rc)
+{
+    if (m->mn_Length >= sizeof(struct RexxMsg)) {
+        struct RexxMsg *rm = (struct RexxMsg *)m;
+
+        rm->rm_Result1 = (LONG)rc;
+        rm->rm_Result2 = 0;
+    }
+    ReplyMsg(m);
+}
+
+static void tg_gui_rexx_close(void)
+{
+    struct Message *m;
+
+    if (tg_gui_rexx_port == 0) {
+        return;
+    }
+    RemPort(tg_gui_rexx_port); /* nobody finds it from here on */
+    while ((m = GetMsg(tg_gui_rexx_port)) != 0) {
+        tg_gui_rexx_reply(m, 20L); /* the program is going */
+    }
+    DeleteMsgPort(tg_gui_rexx_port);
+    tg_gui_rexx_port = 0;
+}
+
+static ULONG tg_gui_rexx_sigmask(void)
+{
+    return tg_gui_rexx_port != 0 ? (1UL << tg_gui_rexx_port->mp_SigBit)
+                                 : 0UL;
+}
+
+/* The next command waiting at the port: its code (TG_GUI_REXX_*) and, for
+   OPEN, the chat's name. The message comes back to be answered with
+   tg_gui_rexx_reply once the command is done; 0 = nothing waiting. */
+static struct Message *tg_gui_rexx_get(int *code, char *arg,
+                                       unsigned long arg_size)
+{
+    struct Message *m;
+    char line[TG_GUI_NAME_MAX + 16];
+    const char *rest = "";
+    const char *text = 0;
+    unsigned long i;
+
+    *code = TG_GUI_REXX_UNKNOWN;
+    arg[0] = '\0';
+    if (tg_gui_rexx_port == 0) {
+        return 0;
+    }
+    m = GetMsg(tg_gui_rexx_port);
+    if (m == 0) {
+        return 0;
+    }
+    /* Anyone can send anything to a public port: only a message the size
+       of an ARexx one, carrying a command, is read as one. */
+    if (m->mn_Length >= sizeof(struct RexxMsg) &&
+        (((struct RexxMsg *)m)->rm_Action & 0xff000000UL) == RXCOMM) {
+        text = (const char *)((struct RexxMsg *)m)->rm_Args[0];
+    }
+    if (text == 0) {
+        return m;
+    }
+    for (i = 0UL; i + 1UL < sizeof(line) && text[i] != '\0'; ++i) {
+        line[i] = text[i];
+    }
+    line[i] = '\0';
+    *code = tg_gui_rexx_command(line, &rest);
+    for (i = 0UL; i + 1UL < arg_size && rest[i] != '\0'; ++i) {
+        arg[i] = rest[i];
+    }
+    arg[i] = '\0';
+    return m;
+}
+
 static int tg_gui_run_window_once(tg_gui_state *state)
 {
     tg_gui_amiga_ctx ctx;
@@ -12396,6 +12528,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             wait_mask |= tg_gui_popup_sigmask(&notify_ui.popup);
             wait_mask |= (ULONG)tg_platform_gui_drop_sigmask();
             wait_mask |= wbn_mask;
+            wait_mask |= tg_gui_rexx_sigmask();
             /* 0.0.8 1b: while a transfer is active the loop must not sleep --
                each turn drains events, then pumps ONE chunk/part below. The
                network RPC inside the step paces the loop, so this is not a
@@ -12408,6 +12541,51 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             if (timer_ok &&
                 (wake_signals & (1UL << timer_port->mp_SigBit)) != 0UL) {
                 photo_tick = 1;
+            }
+        }
+        /* ARexx commands, the window open. */
+        {
+            struct Message *rxm;
+            char rx_arg[TG_GUI_NAME_MAX];
+            int rx_code;
+
+            while (!done && (rxm = tg_gui_rexx_get(&rx_code, rx_arg,
+                                                   sizeof(rx_arg))) != 0) {
+                long rx_rc = 0L;
+
+                if (rx_code == TG_GUI_REXX_SHOW) {
+                    ScreenToFront(ctx.window->WScreen);
+                    WindowToFront(ctx.window);
+                    ActivateWindow(ctx.window);
+                } else if (rx_code == TG_GUI_REXX_HIDE) {
+                    tg_gui_log("arexx: hide");
+                    done = 2; /* park on the AppIcon, as the menu item */
+                } else if (rx_code == TG_GUI_REXX_QUIT) {
+                    tg_gui_log("arexx: quit");
+                    done = 1;
+                } else if (rx_code == TG_GUI_REXX_OPEN) {
+                    /* Only from the chat list itself: search results and
+                       the forward picker are other rows. */
+                    int row = (state->mode == TG_GUI_MODE_CHAT &&
+                               !state->in_search && !state->in_filter &&
+                               !state->forward_pick_active &&
+                               tg_gui_session_is_open())
+                                  ? tg_gui_chat_by_name(state, rx_arg) : -1;
+
+                    if (row < 0) {
+                        rx_rc = 5L;
+                    } else if (row != state->selected_chat) {
+                        state->composing = 0;
+                        state->search_active = 0;
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Live - F1-F10 chats, Amiga+Q quits");
+                        tg_gui_window_open_selection(state, row, &backend);
+                    }
+                } else {
+                    rx_rc = 10L;
+                }
+                tg_gui_rexx_reply(rxm, rx_rc);
             }
         }
         /* A Workbench reset coming: on the Workbench screen the window
@@ -12531,9 +12709,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             if (msg_class == IDCMP_VANILLAKEY || msg_class == IDCMP_RAWKEY) {
                 last_key_time = time(0);
             }
-            if (msg_class == IDCMP_VANILLAKEY || msg_class == IDCMP_RAWKEY ||
-                msg_class == IDCMP_MOUSEBUTTONS) {
-                tg_gui_user_acted = 1;
+            /* A key typed, or a press inside the chat itself: the user is
+               at the open chat. A press on the chat list is not: it is
+               about to leave it. */
+            if (msg_class == IDCMP_VANILLAKEY ||
+                (msg_class == IDCMP_MOUSEBUTTONS && msg_code == SELECTDOWN &&
+                 (int)mouse_x - ctx.origin_x >=
+                     tg_gui_sidebar_w(ctx.inner_w))) {
+                tg_gui_chat_touched = 1;
             }
             /* Amiga+<key> is a menu shortcut, NEVER text. Intuition only turns
                it into a MENUPICK for the RIGHT Amiga and only while the menu
@@ -14868,6 +15051,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->search_active = 0;
                             state->msg_search_active = 0;
                             state->search_query[0] = '\0';
+                            tg_gui_chat_touched = 1;
                             (void)tg_gui_session_search_open_result(hit, stdout);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
@@ -16036,9 +16220,51 @@ static int tg_gui_window_iconify_wait(tg_gui_state *state)
             wait_mask |= 1UL << timer_port->mp_SigBit;
         }
         wait_mask |= tg_gui_popup_sigmask(&ui.popup);
+        wait_mask |= tg_gui_rexx_sigmask();
         sigs = Wait(wait_mask);
         if ((sigs & SIGBREAKF_CTRL_C) != 0UL) {
             break; /* a clean quit */
+        }
+        /* ARexx commands, the window parked: SHOW and OPEN bring it back. */
+        {
+            struct Message *rxm;
+            char rx_arg[TG_GUI_NAME_MAX];
+            int rx_code;
+            int rx_quit = 0;
+
+            while ((rxm = tg_gui_rexx_get(&rx_code, rx_arg,
+                                          sizeof(rx_arg))) != 0) {
+                long rx_rc = 0L;
+
+                if (rx_code == TG_GUI_REXX_SHOW) {
+                    reopen = 1;
+                    done = 1;
+                } else if (rx_code == TG_GUI_REXX_OPEN) {
+                    int row = (state != 0 && state->mode == TG_GUI_MODE_CHAT)
+                                  ? tg_gui_chat_by_name(state, rx_arg) : -1;
+
+                    if (row < 0) {
+                        rx_rc = 5L;
+                    } else {
+                        /* The window opens that chat as it comes up, the
+                           way a click on a pop-up does. */
+                        state->notify_open_pending = 1;
+                        state->notify_open_hi = state->chats[row].peer_id_hi;
+                        state->notify_open_lo = state->chats[row].peer_id_lo;
+                        reopen = 1;
+                        done = 1;
+                    }
+                } else if (rx_code == TG_GUI_REXX_QUIT) {
+                    rx_quit = 1;
+                } else if (rx_code != TG_GUI_REXX_HIDE) {
+                    rx_rc = 10L;
+                }
+                tg_gui_rexx_reply(rxm, rx_rc);
+            }
+            if (rx_quit) {
+                tg_gui_log("arexx: quit");
+                break; /* a clean quit, as Ctrl-C */
+            }
         }
         while ((m = GetMsg(port)) != 0) {
             ReplyMsg(m); /* the double-click */
@@ -16206,6 +16432,7 @@ int tg_gui_run_window(tg_gui_state *state)
         state->photo_cache_limit_mb = TG_GUI_PHOTO_CACHE_DEFAULT_MB;
     }
     tg_gui_photo_cache_begin(state->photo_cache_limit_mb);
+    tg_gui_rexx_open();
     for (;;) {
         int rc = tg_gui_run_window_once(state);
 
@@ -16213,10 +16440,12 @@ int tg_gui_run_window(tg_gui_state *state)
             continue; /* own-screen toggle: reopen immediately, no AppIcon */
         }
         if (rc != 2) {
+            tg_gui_rexx_close();
             tg_gui_photo_cache_end();
             return rc;
         }
         if (!tg_gui_window_iconify_wait(state)) {
+            tg_gui_rexx_close();
             tg_gui_photo_cache_end();
             return 0; /* AppIcon failed or Ctrl-C: a clean quit */
         }

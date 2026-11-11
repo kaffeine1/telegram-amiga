@@ -100,7 +100,7 @@ reconnects, so let it run. There is no need to turn 2FA off.
 - New-message notifications: window title, pop-up, sound (the built-in one
   or a file of your choice) and AppIcon. Mute and ring per chat.
 - Typing indicator, read receipts, hiding messages in groups.
-- Own screen, Iconify, dark theme, remembered window.
+- Own screen, Iconify, dark theme, remembered window, an ARexx port.
 - Text client: chats as tabs under F1 to F10, `/` lists the commands.
 
 ## Not yet

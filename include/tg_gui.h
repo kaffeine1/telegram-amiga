@@ -898,6 +898,23 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 /* Attachment chooser: known image extensions get the Photo/File dialog;
    validation of the actual bytes still belongs to the upload gate. */
 int tg_gui_attachment_is_photo(const char *path);
+
+/* The ARexx port's commands (the port is the window's; this is the part
+   that needs no Amiga): what a command line asks, and the chat a name
+   means. SHOW brings the window up, HIDE parks it on its AppIcon, OPEN
+   <name> opens a chat, QUIT ends the program. The command word may be in
+   any case; OPEN's argument comes back in *arg, without the quotes around
+   it if it had any (it points into text, which is cut there). */
+#define TG_GUI_REXX_UNKNOWN 0
+#define TG_GUI_REXX_SHOW 1
+#define TG_GUI_REXX_HIDE 2
+#define TG_GUI_REXX_OPEN 3
+#define TG_GUI_REXX_QUIT 4
+int tg_gui_rexx_command(char *text, const char **arg);
+/* The row of the chat a name means, -1 when none: the chat with exactly
+   that name first, then the first whose name starts with it, then the
+   first that contains it. Letters match in either case. */
+int tg_gui_chat_by_name(const tg_gui_state *state, const char *name);
 /* Save-as helpers shared by the native requester and host self-test. The
    suggested extension follows the cached file's JPEG/PNG signature. */
 int tg_gui_photo_default_filename(char *out, unsigned long out_size,
