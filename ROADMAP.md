@@ -323,8 +323,9 @@ it works today:
   `messages.getDialogUnreadMarks`; Leave... (`channels.leaveChannel`,
   `messages.deleteChatUser`) and Delete chat...
   (`messages.deleteHistory`, for this account only), both after a
-  confirmation. Still missing: opening a chat does not mark it read on
-  Telegram, which every official client does; a mark changed on another
+  confirmation. A chat on screen is marked as read on Telegram
+  (`readHistory` from the window's idle path). Still missing: the same
+  in the text client; a mark changed on another
   device while running (`updateDialogUnreadMark`); deleting a private
   chat for both sides;
 - drafts shown and kept in step with the other devices: done in the

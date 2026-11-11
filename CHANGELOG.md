@@ -95,6 +95,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   and the status line says so; mutes set by older versions keep working
   and Unmute clears them. Sound and previews of the chat are left as
   they are.
+- A chat on screen is now marked as read on Telegram, as every official
+  client does: the other devices stop counting its messages and the
+  sender sees them read. It happens while the window is the active one
+  and the chat shows its newest messages, a moment after the chat opens
+  and again as new messages arrive; not while the window is behind, not
+  while an older stretch of the chat is on screen, and not for the chat
+  the program opens by itself at start, until a key or the mouse is used.
 
 ### Fixed
 - A link with a preview could be impossible to open: when the message

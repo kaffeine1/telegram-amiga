@@ -316,6 +316,12 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
 int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
                                FILE *stream);
 
+/* The open chat is in front of the user and shows its newest message: mark
+   what it shows as read on Telegram, unless this visit already has. Call
+   it from the idle path while that holds; it sends one small request per
+   new message. 1 = the chat list changed. */
+int tg_gui_session_read_step(FILE *stream);
+
 /* The open chat's pinned messages, shown one at a time on the bar under
    the header (state->pinned_*). _step asks Telegram for them when that is
    due, a chat just opened or a pin changed: call it from the idle path;

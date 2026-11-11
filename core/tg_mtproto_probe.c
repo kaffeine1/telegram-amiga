@@ -22149,8 +22149,30 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
     }
     return tg_gui_pinned_show();
 }
+
+/* --- reading -------------------------------------------------------------
+   A chat on screen is read: its messages are marked as read on Telegram
+   (messages.readHistory / channels.readHistory up to the newest one
+   shown), as every official client does, so the other devices stop
+   counting them and the sender sees them read. The window says when the
+   chat really is in front of the user (tg_gui_session_read_step); here it
+   is only remembered how far this visit has read, so that one request
+   goes out per new message and none when nothing is new. */
+static unsigned long tg_gui_read_sent_id = 0UL;
+/* Asking failed for this message: wait for a newer one, do not ask ten
+   times a second. */
+static unsigned long tg_gui_read_failed_id = 0UL;
+
+static void tg_gui_read_chat_opened(int other_chat)
+{
+    if (other_chat) {
+        tg_gui_read_sent_id = 0UL;
+        tg_gui_read_failed_id = 0UL;
+    }
+}
 #else
 #define tg_gui_pinned_chat_opened(other_chat) ((void)(other_chat))
+#define tg_gui_read_chat_opened(other_chat) ((void)(other_chat))
 #endif
 
 /* Pinned rows first, in pin order, marked; the others after them in the
@@ -22817,6 +22839,7 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         tg_gui_draft_enter();
     }
     tg_gui_pinned_chat_opened(other_chat);
+    tg_gui_read_chat_opened(other_chat);
     tg_gui_log("open_chat: done");
     return 1; /* the selection changed -> always repaint */
 }
@@ -30249,6 +30272,88 @@ int tg_gui_session_pinned_step(FILE *stream)
         if (prc <= 0) {
             return 0;
         }
+    }
+    tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+    return 1;
+#endif
+}
+
+/* Public: the open chat is in front of the user, at its newest message:
+   what it shows is marked as read on Telegram, if this visit has not read
+   that far already. The window calls it from its idle path while that
+   holds. 1 = the chat list changed (an unread mark went). */
+int tg_gui_session_read_step(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return 0;
+#else
+    unsigned char query[64];
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long target = 0UL;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int is_user;
+    int k;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 0;
+    }
+    for (k = 0; k < gst->message_count; ++k) {
+        if (gst->messages[k].id > target) {
+            target = gst->messages[k].id;
+        }
+    }
+    if (target == 0UL || target <= tg_gui_read_sent_id ||
+        target == tg_gui_read_failed_id) {
+        return 0;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "read peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        tg_gui_read_failed_id = target;
+        return 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    if (tg_mtproto_build_read_history_peer(&writer, pc, ph, pl, ahh, ahl,
+                                           hah, target) != TG_MTPROTO_TL_OK ||
+        tg_gui_session_peer_request(query, writer.length, &result,
+                                    "mtproto readHistory", 0, 0UL,
+                                    quiet) != 0) {
+        tg_net_set_connect_timeout_seconds(prev_timeout);
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        tg_gui_read_failed_id = target;
+        tg_gui_log("read: could not tell Telegram");
+        return 0;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_read_sent_id = target;
+    tg_gui_read_failed_id = 0UL;
+    tg_gui_log("read: told Telegram");
+    /* Reading takes Telegram's "marked as unread" dot away too. */
+    is_user = pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    if (tg_gui_mark_find(is_user, ph, pl) < 0) {
+        return 0;
+    }
+    tg_gui_mark_set(is_user, ph, pl, 0);
+    if (!gst->in_search && !gst->in_filter && !gst->forward_pick_active) {
+        tg_gui_session_reload_chats();
     }
     tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
     return 1;

@@ -10839,6 +10839,10 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
     }
 }
 
+/* Set by the first key or mouse button the window gets: until then the
+   chat the program opened by itself is not marked as read. */
+static int tg_gui_user_acted = 0;
+
 static void tg_gui_window_poll_session(const tg_gui_state *state,
                                        time_t session_boot,
                                        unsigned long watch_seconds,
@@ -10867,6 +10871,15 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
     /* The pinned bar of a chat just opened: asked here, a moment after the
        chat is on screen, not at the next poll some seconds away. */
     if (tg_gui_session_pinned_step(stdout)) {
+        tg_gui_window_session_changed(session_dirty, header_dirty);
+    }
+    /* A chat in front of the user is read, on Telegram too: the window is
+       the active one, the chat shows its newest messages, and the user has
+       touched the program since it started (the chat it opens by itself at
+       start is not read behind the user's back). */
+    if (tg_gui_user_acted && !state->notify_away &&
+        state->mode == TG_GUI_MODE_CHAT && state->transcript_scroll == 0 &&
+        !state->newest_dropped && tg_gui_session_read_step(stdout)) {
         tg_gui_window_session_changed(session_dirty, header_dirty);
     }
     if ((state->composing || tg_gui_session_transfer_busy()) &&
@@ -12517,6 +12530,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                IDCMP_INTUITICKS handler below. */
             if (msg_class == IDCMP_VANILLAKEY || msg_class == IDCMP_RAWKEY) {
                 last_key_time = time(0);
+            }
+            if (msg_class == IDCMP_VANILLAKEY || msg_class == IDCMP_RAWKEY ||
+                msg_class == IDCMP_MOUSEBUTTONS) {
+                tg_gui_user_acted = 1;
             }
             /* Amiga+<key> is a menu shortcut, NEVER text. Intuition only turns
                it into a MENUPICK for the RIGHT Amiga and only while the menu
