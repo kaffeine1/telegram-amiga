@@ -855,6 +855,287 @@ static long tg_mtproto_local_clock_skew(void)
    clock more than 15 hours away from the server is wrong, not elsewhere. */
 #define TG_MTPROTO_CLOCK_OFF_SECONDS 54000L
 
+/* --- the time zone from the environment -----------------------------------
+   ENV:TZONE or ENV:TZ in the POSIX form, "CET-1CEST,M3.5.0,M10.5.0/3": the
+   standard zone and its offset west of UTC (so UTC+1 is "-1"), then the
+   summer zone and the two days the clock changes. It is asked only when
+   the machine's clock cannot be the time of day (no battery clock, 1978):
+   it then comes before the Locale preferences, which know no summer time.
+   Only the "Mm.w.d" form of the change days is read, the one every zone
+   string in use has; without them the zone has no summer time here. */
+typedef struct tg_tz_rule {
+    int month; /* 1..12 */
+    int week;  /* 1..5, 5 = the last */
+    int day;   /* 0 = Sunday */
+    long time; /* seconds after midnight, local time of before the change */
+} tg_tz_rule;
+
+typedef struct tg_tz {
+    long std_east; /* seconds east of UTC, standard time */
+    long dst_east; /* ...in summer time */
+    int has_dst;
+    tg_tz_rule start;
+    tg_tz_rule end;
+} tg_tz;
+
+/* [+|-]hh[:mm[:ss]] -> seconds; the sign as written. 0 = not a time. */
+static int tg_tz_read_time(const char **p, long *out)
+{
+    const char *s = *p;
+    long v[3];
+    long sign = 1L;
+    int n = 0;
+
+    v[0] = v[1] = v[2] = 0L;
+    if (*s == '+' || *s == '-') {
+        sign = *s == '-' ? -1L : 1L;
+        ++s;
+    }
+    if (*s < '0' || *s > '9') {
+        return 0;
+    }
+    while (n < 3) {
+        long x = 0L;
+        int digits = 0;
+
+        while (*s >= '0' && *s <= '9' && digits < 3) {
+            x = x * 10L + (long)(*s - '0');
+            ++s;
+            ++digits;
+        }
+        if (digits == 0) {
+            return 0;
+        }
+        v[n++] = x;
+        if (*s != ':') {
+            break;
+        }
+        ++s;
+    }
+    if (v[0] > 167L || v[1] > 59L || v[2] > 59L) {
+        return 0;
+    }
+    *out = sign * (v[0] * 3600L + v[1] * 60L + v[2]);
+    *p = s;
+    return 1;
+}
+
+/* A zone name: three or more letters, or anything between < and >. */
+static int tg_tz_skip_name(const char **p)
+{
+    const char *s = *p;
+    int n = 0;
+
+    if (*s == '<') {
+        ++s;
+        while (*s != '\0' && *s != '>') {
+            ++s;
+            ++n;
+        }
+        if (*s != '>') {
+            return 0;
+        }
+        ++s;
+    } else {
+        while ((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z')) {
+            ++s;
+            ++n;
+        }
+    }
+    if (n < 3) {
+        return 0;
+    }
+    *p = s;
+    return 1;
+}
+
+static int tg_tz_read_rule(const char **p, tg_tz_rule *rule)
+{
+    const char *s = *p;
+    long field[3];
+    int k;
+
+    if (*s != 'M') {
+        return 0;
+    }
+    ++s;
+    for (k = 0; k < 3; ++k) {
+        long x = 0L;
+        int digits = 0;
+
+        while (*s >= '0' && *s <= '9' && digits < 2) {
+            x = x * 10L + (long)(*s - '0');
+            ++s;
+            ++digits;
+        }
+        if (digits == 0 || (k < 2 && *s != '.')) {
+            return 0;
+        }
+        field[k] = x;
+        if (k < 2) {
+            ++s;
+        }
+    }
+    if (field[0] < 1L || field[0] > 12L || field[1] < 1L || field[1] > 5L ||
+        field[2] > 6L) {
+        return 0;
+    }
+    rule->month = (int)field[0];
+    rule->week = (int)field[1];
+    rule->day = (int)field[2];
+    rule->time = 7200L; /* 02:00 unless the string says otherwise */
+    if (*s == '/') {
+        ++s;
+        if (!tg_tz_read_time(&s, &rule->time)) {
+            return 0;
+        }
+    }
+    *p = s;
+    return 1;
+}
+
+/* 1 = the string is a zone this client understands. */
+static int tg_tz_parse(const char *text, tg_tz *tz)
+{
+    const char *s = text;
+    long west;
+
+    if (text == 0 || tz == 0) {
+        return 0;
+    }
+    memset(tz, 0, sizeof(*tz));
+    while (*s == ' ' || *s == ':') {
+        ++s;
+    }
+    if (!tg_tz_skip_name(&s) || !tg_tz_read_time(&s, &west) ||
+        west > 50400L || west < -50400L) {
+        return 0;
+    }
+    tz->std_east = -west;
+    tz->dst_east = tz->std_east + 3600L;
+    if (*s == '\0' || *s == '\n' || *s == '\r') {
+        return 1; /* no summer time */
+    }
+    if (!tg_tz_skip_name(&s)) {
+        return 0;
+    }
+    if (*s != ',' && *s != '\0' && *s != '\n' && *s != '\r') {
+        if (!tg_tz_read_time(&s, &west) || west > 50400L ||
+            west < -50400L) {
+            return 0;
+        }
+        tz->dst_east = -west;
+    }
+    if (*s != ',') {
+        return 1; /* a summer zone with no days: none kept here */
+    }
+    ++s;
+    if (!tg_tz_read_rule(&s, &tz->start) || *s != ',') {
+        return 1;
+    }
+    ++s;
+    if (!tg_tz_read_rule(&s, &tz->end)) {
+        return 1;
+    }
+    tz->has_dst = 1;
+    return 1;
+}
+
+/* Days from 1970-01-01 to the first day of a year, and of a month in it. */
+static long tg_tz_days_to_year(long year)
+{
+    long y = year - 1L;
+
+    return 365L * (year - 1970L) + (y / 4L - 1969L / 4L) -
+           (y / 100L - 1969L / 100L) + (y / 400L - 1969L / 400L);
+}
+
+static int tg_tz_leap(long year)
+{
+    return (year % 4L == 0L && year % 100L != 0L) || year % 400L == 0L;
+}
+
+/* The instant of a change, in seconds since 1970 of the clock it is
+   written in (local, not UTC). */
+static long tg_tz_rule_seconds(const tg_tz_rule *rule, long year)
+{
+    static const int month_days[12] = {31, 28, 31, 30, 31, 30,
+                                       31, 31, 30, 31, 30, 31};
+    long days = tg_tz_days_to_year(year);
+    long first_wday;
+    long day;
+    int in_month = month_days[rule->month - 1];
+    int m;
+
+    for (m = 1; m < rule->month; ++m) {
+        days += month_days[m - 1] + (m == 2 && tg_tz_leap(year) ? 1 : 0);
+    }
+    if (rule->month == 2 && tg_tz_leap(year)) {
+        in_month = 29;
+    }
+    first_wday = (days + 4L) % 7L; /* 1970-01-01 was a Thursday */
+    day = (long)rule->day - first_wday;
+    if (day < 0L) {
+        day += 7L;
+    }
+    day += 7L * (long)(rule->week - 1);
+    while (day >= (long)in_month) {
+        day -= 7L; /* week 5 is the last one the month has */
+    }
+    return (days + day) * 86400L + rule->time;
+}
+
+/* Seconds east of UTC at this UTC instant, summer time included. */
+static long tg_tz_offset_east(const tg_tz *tz, unsigned long utc)
+{
+    long year;
+    long start;
+    long end;
+    long now = (long)utc;
+
+    if (tz == 0) {
+        return 0L;
+    }
+    if (!tz->has_dst) {
+        return tz->std_east;
+    }
+    /* The year of the standard-time date: a change never sits so close to
+       the new year that the zone's offset moves it into another year. */
+    year = 1970L + (now + tz->std_east) / 31556952L;
+    while (tg_tz_days_to_year(year + 1L) * 86400L <= now + tz->std_east) {
+        ++year;
+    }
+    while (tg_tz_days_to_year(year) * 86400L > now + tz->std_east) {
+        --year;
+    }
+    /* The start is written in standard time, the end in summer time. */
+    start = tg_tz_rule_seconds(&tz->start, year) - tz->std_east;
+    end = tg_tz_rule_seconds(&tz->end, year) - tz->dst_east;
+    if (start < end) {
+        return (now >= start && now < end) ? tz->dst_east : tz->std_east;
+    }
+    /* South of the equator the summer runs over the new year. */
+    return (now >= end && now < start) ? tz->std_east : tz->dst_east;
+}
+
+/* The zone string to use: ENV:TZONE, then ENV:TZ (the C library reads
+   them through getenv on every system this runs on). The self-test puts
+   its own here; "" means none. */
+static const char *tg_tz_override = 0;
+
+static int tg_tz_from_environment(tg_tz *tz)
+{
+    const char *text = tg_tz_override;
+
+    if (text == 0) {
+        text = getenv("TZONE");
+        if (text == 0 || !tg_tz_parse(text, tz)) {
+            text = getenv("TZ");
+        }
+    }
+    return text != 0 && text[0] != '\0' && tg_tz_parse(text, tz);
+}
+
 /*
  * The delta the display subtracts from a server date: server UTC minus the
  * wall clock. A machine without a battery clock (a stock A1200 or A600)
@@ -870,6 +1151,19 @@ static long tg_mtproto_display_delta(long server_delta, long skew)
 
     if (delta > TG_MTPROTO_CLOCK_OFF_SECONDS ||
         delta < -TG_MTPROTO_CLOCK_OFF_SECONDS) {
+        tg_tz tz;
+
+        /* The zone the user set in the environment comes first: it knows
+           the summer time, the Locale preferences do not. */
+        if (tg_tz_from_environment(&tz)) {
+            unsigned long lib_now = (unsigned long)time(0);
+            unsigned long server_now =
+                server_delta < 0L
+                    ? lib_now - (unsigned long)(0L - server_delta)
+                    : lib_now + (unsigned long)server_delta;
+
+            return -tg_tz_offset_east(&tz, server_now);
+        }
         return -skew;
     }
     return delta;
@@ -19581,12 +19875,68 @@ int tg_mtproto_probe_self_test(void)
     /* Message times: a set clock in summer time with a Locale that says
        UTC+1 keeps its two hours; a clock left on 1978, or a day off, falls
        back to the Locale zone instead of anchoring the times on it. */
+    tg_tz_override = ""; /* no zone in the environment for these */
     if (tg_mtproto_display_delta(-3600L, 3600L) != -7200L ||
         tg_mtproto_display_delta(1539240700L, 3600L) != -3600L ||
         tg_mtproto_display_delta(-90000L, 3600L) != -3600L ||
         tg_mtproto_display_delta(54000L, 0L) != 54000L) {
+        tg_tz_override = 0;
         puts("probe self-test: an unset clock still anchors message times");
         return 2;
+    }
+    /* The zone from the environment: read, with its summer time, and used
+       before the Locale zone when the clock is not the time of day. */
+    {
+        tg_tz tz;
+        int ok_tz = 1;
+
+        /* Central Europe: +1, +2 from the last Sunday of March 01:00 UTC to
+           the last Sunday of October 01:00 UTC. 2026: 29 March, 25 October. */
+        ok_tz = ok_tz && tg_tz_parse("CET-1CEST,M3.5.0,M10.5.0/3", &tz) &&
+                tz.std_east == 3600L && tz.dst_east == 7200L && tz.has_dst &&
+                tg_tz_offset_east(&tz, 1774745999UL) == 3600L && /* 00:59:59 */
+                tg_tz_offset_east(&tz, 1774746000UL) == 7200L && /* 01:00:00 */
+                tg_tz_offset_east(&tz, 1792889999UL) == 7200L &&
+                tg_tz_offset_east(&tz, 1792890000UL) == 3600L &&
+                tg_tz_offset_east(&tz, 1767225600UL) == 3600L && /* 1 Jan */
+                tg_tz_offset_east(&tz, 1783000000UL) == 7200L;   /* July */
+        /* New York: -5, -4 from the second Sunday of March to the first of
+           November (2026: 8 March 07:00 UTC, 1 November 06:00 UTC). */
+        ok_tz = ok_tz && tg_tz_parse("EST5EDT,M3.2.0,M11.1.0", &tz) &&
+                tz.std_east == -18000L && tz.dst_east == -14400L &&
+                tg_tz_offset_east(&tz, 1772953199UL) == -18000L &&
+                tg_tz_offset_east(&tz, 1772953200UL) == -14400L &&
+                tg_tz_offset_east(&tz, 1793512799UL) == -14400L &&
+                tg_tz_offset_east(&tz, 1793512800UL) == -18000L;
+        /* Sydney: the summer runs over the new year. */
+        ok_tz = ok_tz &&
+                tg_tz_parse("AEST-10AEDT,M10.1.0,M4.1.0/3", &tz) &&
+                tg_tz_offset_east(&tz, 1767225600UL) == 39600L && /* Jan */
+                tg_tz_offset_east(&tz, 1783000000UL) == 36000L;   /* July */
+        /* No summer time, half hours, a name in brackets. */
+        ok_tz = ok_tz && tg_tz_parse("IST-5:30", &tz) && !tz.has_dst &&
+                tg_tz_offset_east(&tz, 1783000000UL) == 19800L &&
+                tg_tz_parse("<+03>-3", &tz) && tz.std_east == 10800L &&
+                tg_tz_parse("CET-1CEST", &tz) && !tz.has_dst &&
+                tg_tz_offset_east(&tz, 1783000000UL) == 3600L;
+        /* What is not a zone is left to the Locale preferences. */
+        ok_tz = ok_tz && !tg_tz_parse("Europe/Rome", &tz) &&
+                !tg_tz_parse("", &tz) && !tg_tz_parse("CE-1", &tz) &&
+                !tg_tz_parse("CET", &tz) && !tg_tz_parse("CET-99", &tz);
+        /* An unset clock: the environment's zone, not the Locale's hour. */
+        tg_tz_override = "IST-5:30";
+        ok_tz = ok_tz &&
+                tg_mtproto_display_delta(1539240700L, 3600L) == -19800L &&
+                /* a clock that is set keeps its own time */
+                tg_mtproto_display_delta(-3600L, 3600L) == -7200L;
+        tg_tz_override = "Europe/Rome";
+        ok_tz = ok_tz &&
+                tg_mtproto_display_delta(1539240700L, 3600L) == -3600L;
+        tg_tz_override = 0;
+        if (!ok_tz) {
+            puts("probe self-test: time zone from the environment wrong");
+            return 2;
+        }
     }
     /* Saved Messages: what the user wrote there is theirs without the
        server's outgoing flag; a forwarded message keeps its source. */

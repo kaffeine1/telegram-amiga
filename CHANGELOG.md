@@ -50,6 +50,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   bottom right, over the jump button. A click shows the chat around the
   oldest of them, highlighted, and marks that mention as read on
   Telegram; the next click goes to the next one.
+- The time zone from the environment. On a machine whose clock is not
+  set (no battery clock: it starts in 1978), message times were shown
+  in the time zone of the Locale preferences, which know no summer time.
+  If `ENV:TZONE` or `ENV:TZ` holds a zone in the usual form, for example
+  `CET-1CEST,M3.5.0,M10.5.0/3`, that zone is used instead, with its
+  summer time. A clock that is set keeps showing its own time, as before.
 - Pin and Unpin in a message's menu (right click on the message). In a
   group or a channel the message is pinned for everyone, without
   notifying the members; in a private chat the pin is yours alone, the

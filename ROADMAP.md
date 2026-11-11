@@ -352,7 +352,8 @@ it works today:
 - an ARexx port: open a chat, show, hide, so that notifications and
   scripts can drive the client;
 - the time zone from `ENV:TZONE` or `ENV:TZ` before the Locale
-  preferences.
+  preferences: done, for the POSIX form with its summer time, used when
+  the machine's clock is not set.
 
 Middle, more interface:
 
