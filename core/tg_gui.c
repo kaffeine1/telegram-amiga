@@ -4660,6 +4660,40 @@ static void tg_gui_paint_main(const tg_gui_state *state,
 
     /* Both header lines and their emoji fit above this stable boundary. */
     y = header_h;
+    /* The pinned message, when the chat has one: a bar of one line between
+       the header and the messages, which start below it. A click on it
+       shows the message (the event loop reads the rect cached here). */
+    ((tg_gui_state *)state)->pin_h = 0;
+    if (state->pinned_id != 0UL && state->pinned_text[0] != '\0') {
+        static const char label[] = "Pinned: ";
+        unsigned long label_len = sizeof(label) - 1UL;
+        int bar_h = tg_gui_native_line_height(backend) + 8;
+        int bar_x = sidebar_w + 6;
+        int bar_w = area_x + area_w - bar_x;
+
+        if (y + bar_h + 2 * lh < transcript_bottom && bar_w > 60) {
+            int base = tg_gui_navigation_baseline(backend, y, bar_h);
+            int label_w = backend->text_width(backend, label, label_len);
+            int tx = bar_x + 9;
+
+            backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                               tg_gui_make_rect(bar_x, y, bar_w, bar_h));
+            backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                               tg_gui_make_rect(bar_x, y, 3, bar_h));
+            if (tx + label_w < bar_x + bar_w) {
+                backend->draw_text(backend, TG_GUI_PEN_LINK, tx, base, label,
+                                   label_len);
+                tx += label_w;
+            }
+            tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT, tx, base,
+                                state->pinned_text, bar_x + bar_w - 6 - tx);
+            ((tg_gui_state *)state)->pin_x = bar_x;
+            ((tg_gui_state *)state)->pin_y = y;
+            ((tg_gui_state *)state)->pin_w = bar_w;
+            ((tg_gui_state *)state)->pin_h = bar_h;
+            y += bar_h + 2;
+        }
+    }
     transcript_top = y;
     /* Pixel-granular transcript scroll: transcript_scroll is a PIXEL offset up
        from the newest-pinned position (0 = newest pinned to the bottom). This
@@ -5222,6 +5256,12 @@ int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
 
         if (last > state->message_count) {
             last = state->message_count;
+        }
+        /* The pinned bar covers the top of the transcript: nothing under
+           it can be picked. */
+        if (state->pin_h > 0 && y >= state->pin_y &&
+            y < state->pin_y + state->pin_h) {
+            return TG_GUI_HIT_NONE;
         }
         for (mi = last - 1; mi >= 0; --mi) {
             if (state->messages[mi].has_photo && state->photo_w[mi] > 0 &&
@@ -8810,6 +8850,100 @@ int tg_gui_self_test(void)
             }
         }
         state.chats[0] = saved_chat;
+    }
+
+    /* The pinned message has a bar of its own under the header: its label
+       and its text on one line, and nothing under the bar to pick. No
+       pinned message, no bar. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int header_bottom;
+        int lh_now;
+        int ok_bar = 1;
+
+        state.pinned_id = 0UL;
+        state.pinned_text[0] = '\0';
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "Pinned: ";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        header_bottom = tg_gui_header_h(&b);
+        ok_bar = ok_bar && rec.watch_hits[0] == 0 && state.pin_h == 0;
+
+        state.pinned_id = 77UL;
+        tg_gui_copy(state.pinned_text, sizeof(state.pinned_text),
+                    "regole del gruppo");
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "Pinned: ";
+        rec.watch_text[1] = state.pinned_text;
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        lh_now = b.line_height(&b);
+        ok_bar = ok_bar && rec.watch_hits[0] == 1 && rec.watch_hits[1] == 1 &&
+                 rec.watch_y[0] == rec.watch_y[1] &&
+                 rec.watch_x[1] > rec.watch_x[0] && state.pin_h > 0 &&
+                 state.pin_y == header_bottom &&
+                 state.pin_x >= tg_gui_sidebar_w(640) &&
+                 rec.watch_y[0] > state.pin_y &&
+                 rec.watch_y[0] <= state.pin_y + state.pin_h &&
+                 tg_gui_hit_test(&state, 640, 480, lh_now,
+                                 state.pin_x + 20,
+                                 state.pin_y + state.pin_h / 2) ==
+                     TG_GUI_HIT_NONE;
+        /* In a window too short for the messages they reach up under the
+           bar: a click just below it picks one, a click on it picks none. */
+        if (ok_bar) {
+            unsigned long saved_ids[TG_GUI_MAX_MESSAGES];
+            int below;
+            int on_bar;
+            int k;
+
+            /* Only a message with a server id can be picked. */
+            for (k = 0; k < state.message_count; ++k) {
+                saved_ids[k] = state.messages[k].id;
+                state.messages[k].id = (unsigned long)(900 + k);
+            }
+            memset(&rec, 0, sizeof(rec));
+            rec.width = 640;
+            rec.height = 170;
+            b.context = &rec;
+            tg_gui_paint(&state, &b);
+            below = tg_gui_hit_test(&state, 640, 170, lh_now,
+                                    state.pin_x + 20,
+                                    state.pin_y + state.pin_h + 6);
+            on_bar = tg_gui_hit_test(&state, 640, 170, lh_now,
+                                     state.pin_x + 20,
+                                     state.pin_y + state.pin_h / 2);
+            for (k = 0; k < state.message_count; ++k) {
+                state.messages[k].id = saved_ids[k];
+            }
+            if (state.pin_h <= 0 || below > TG_GUI_HIT_MESSAGE_BASE ||
+                on_bar != TG_GUI_HIT_NONE) {
+                printf("gui self-test: short window, bar %d+%d, click below "
+                       "%d, on it %d\n",
+                       state.pin_y, state.pin_h, below, on_bar);
+                state.pinned_id = 0UL;
+                state.pinned_text[0] = '\0';
+                return 2;
+            }
+        }
+        if (!ok_bar) {
+            printf("gui self-test: pinned bar drew %d/%d, bar %d+%d under "
+                   "a header of %d\n",
+                   rec.watch_hits[0], rec.watch_hits[1], state.pin_y,
+                   state.pin_h, header_bottom);
+            state.pinned_id = 0UL;
+            state.pinned_text[0] = '\0';
+            return 2;
+        }
+        state.pinned_id = 0UL;
+        state.pinned_text[0] = '\0';
+        tg_gui_paint(&state, &b);
     }
 
     /* Save-as naming/path joining is platform-neutral. Existing destinations

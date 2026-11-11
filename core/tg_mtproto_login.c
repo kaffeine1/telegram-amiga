@@ -64,6 +64,7 @@
 #define TG_MESSAGES_AFFECTED_HISTORY_CONSTRUCTOR 0xb45c69d1UL
 #define TG_INPUT_FOLDER_PEER_CONSTRUCTOR 0xfbd2c296UL
 #define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
+#define TG_INPUT_MESSAGES_FILTER_PINNED_CONSTRUCTOR 0x1bb00451UL
 #define TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR 0xfe05dc9aUL
 /* messages.forwardMessages#978928ca at layer 214, verified against the
    official TDLib schema revision that declares MTPROTO_LAYER = 214. */
@@ -1838,6 +1839,19 @@ tg_mtproto_tl_status tg_mtproto_build_leave_peer(
    = messages.Messages (TDLib telegram_api.tl, checked 2026-11-08). Text
    search in one chat, newest first, below offset_id when it is set; the
    reply is the same messages.Messages a getHistory returns. */
+static tg_mtproto_tl_status tg_build_messages_search(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long filter_constructor,
+    unsigned long offset_id,
+    unsigned long limit);
+
 tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -1850,11 +1864,52 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     unsigned long offset_id,
     unsigned long limit)
 {
+    if (query_utf8 == 0 || query_utf8[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_build_messages_search(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, query_utf8,
+        TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR, offset_id, limit);
+}
+
+/* The chat's pinned messages, newest pin first: the same search with no
+   words and inputMessagesFilterPinned#1bb00451 (layer 214 schema). It
+   answers for a private chat, a group and a channel alike, and with
+   limit 1 it is the message the official clients show under the header. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long limit)
+{
+    return tg_build_messages_search(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, "",
+        TG_INPUT_MESSAGES_FILTER_PINNED_CONSTRUCTOR, 0UL, limit);
+}
+
+static tg_mtproto_tl_status tg_build_messages_search(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long filter_constructor,
+    unsigned long offset_id,
+    unsigned long limit)
+{
     tg_mtproto_tl_status status;
     int k;
 
-    if (writer == 0 || query_utf8 == 0 || query_utf8[0] == '\0' ||
-        limit == 0UL) {
+    if (writer == 0 || query_utf8 == 0 || limit == 0UL) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     status = tg_mtproto_tl_write_u32(writer, TG_MESSAGES_SEARCH_CONSTRUCTOR);
@@ -1872,8 +1927,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
             (unsigned long)strlen(query_utf8));
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer,
-                                         TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR);
+        status = tg_mtproto_tl_write_u32(writer, filter_constructor);
     }
     /* min_date, max_date, offset_id, add_offset, limit, max_id, min_id. */
     for (k = 0; k < 7 && status == TG_MTPROTO_TL_OK; ++k) {
@@ -10303,6 +10357,20 @@ int tg_mtproto_login_self_test(void)
             &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
             0UL, 0UL, 0, "", 0UL, 20UL) == TG_MTPROTO_TL_OK) {
         return 2; /* an empty query is refused */
+    }
+    /* The pinned messages of the same group: no words (an empty TL string,
+       4 bytes), inputMessagesFilterPinned#1bb00451, limit 1 -> 64 bytes. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_pinned(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 1UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 64UL ||
+        query[0] != 0x7aU || query[3] != 0x29U || query[4] != 0x00U ||
+        query[8] != 0xb9U || query[20] != 0x00U ||
+        query[24] != 0x51U || query[25] != 0x04U ||
+        query[26] != 0xb0U || query[27] != 0x1bU ||
+        query[36] != 0x00U || query[44] != 1U || query[56] != 0x00U) {
+        return 2;
     }
     /* messages.searchGlobal#4bc6589a: flags 0, q "ciao", no filter, no
        dates, offset_rate 0, inputPeerEmpty#7f3b18ea, offset_id 0, limit 20

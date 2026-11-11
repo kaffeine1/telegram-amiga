@@ -240,6 +240,8 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR 0x19360dc0UL
 #define TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR 0xedfc111eUL
 #define TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0xbec268efUL
+#define TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR 0xed85eab5UL
+#define TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR 0x5bb98608UL
 #define TG_MTPROTO_FOLDER_PEER_CONSTRUCTOR 0xe9baa668UL
 /* https://core.telegram.org/constructor/updateWebPage and
    /constructor/updateChannelWebPage, verified 2026-09-08 (layer 214). */
@@ -553,6 +555,11 @@ static unsigned long tg_chat_folder_count = 0UL;
 #if !defined(TG_NO_GUI)
 static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
                                 const char *utf8, unsigned long date);
+/* A message was pinned or unpinned in this chat: the window's session asks
+   again what the chat's pinned message is (defined with it, further down). */
+static void tg_gui_pinned_note_update(unsigned long peer_constructor,
+                                      unsigned long id_hi,
+                                      unsigned long id_lo);
 #endif
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
@@ -4032,6 +4039,55 @@ static void tg_chat_folder_parse_update(tg_mtproto_tl_reader *reader)
     }
 }
 
+/* updatePinnedMessages#ed85eab5 flags:# pinned:flags.0?true peer:Peer
+   messages:Vector<int> pts:int pts_count:int, and
+   updatePinnedChannelMessages#5bb98608 flags:# pinned:flags.0?true
+   channel_id:long messages:Vector<int> pts:int pts_count:int, the reader
+   just past the constructor. Only the chat matters: what its pinned
+   message is now gets asked again. The envelope scan offers any aligned
+   match, so the update counts only when its vector fits the body. */
+static void tg_chat_pinned_parse_update(tg_mtproto_tl_reader *reader,
+                                        unsigned long constructor)
+{
+#if defined(TG_NO_GUI)
+    (void)reader;
+    (void)constructor;
+#else
+    unsigned long flags;
+    unsigned long peer_constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long vector_constructor;
+    unsigned long count;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: nobody shows a pinned message */
+    }
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & ~1UL) != 0UL) {
+        return;
+    }
+    if (constructor == TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR) {
+        peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    } else if (tg_mtproto_tl_read_u32(reader, &peer_constructor) !=
+                   TG_MTPROTO_TL_OK ||
+               (peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+                peer_constructor != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+                peer_constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR)) {
+        return;
+    }
+    if (tg_mtproto_tl_read_u64(reader, &id_hi, &id_lo) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &vector_constructor) !=
+            TG_MTPROTO_TL_OK ||
+        vector_constructor != TG_MTPROTO_TL_VECTOR_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u32(reader, &count) != TG_MTPROTO_TL_OK ||
+        count == 0UL || count > (reader->length - reader->offset) / 4UL) {
+        return;
+    }
+    tg_gui_pinned_note_update(peer_constructor, id_hi, id_lo);
+#endif
+}
+
 /* updateDraftMessage, the reader just past the constructor. The envelope
    scan offers any aligned match, so the update counts only when it reads
    as a draft from its flags to its text. */
@@ -4163,6 +4219,13 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_draft_parse_update(&reader);
+        } else if (constructor ==
+                       TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR ||
+                   constructor ==
+                       TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_pinned_parse_update(&reader, constructor);
         } else if (constructor ==
                    TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR) {
             /* A chat muted or unmuted on another device: the table the
@@ -4305,6 +4368,11 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR) {
         (void)tg_mtproto_read_update_notify_settings(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR ||
+        update_ctor == TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR) {
+        tg_chat_pinned_parse_update(reader, update_ctor);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
@@ -21855,6 +21923,160 @@ static void tg_gui_draft_send_end(int had, int sent)
 #define tg_gui_draft_send_end(had, sent) ((void)(had), (void)(sent))
 #endif
 
+/* --- the pinned message --------------------------------------------------
+   The open chat's pinned message, shown by the window on a bar under the
+   header; a click there shows the message. Asked with a one-message search
+   (the pinned filter) on the first tick after the chat opens, not inside
+   the opening itself, and again when a message is pinned or unpinned there
+   (updatePinnedMessages / updatePinnedChannelMessages). The newest pin
+   only, as the bar has one line. The window only. */
+#if !defined(TG_NO_GUI)
+static int tg_gui_pinned_pending = 0;
+
+static void tg_gui_pinned_note_update(unsigned long peer_constructor,
+                                      unsigned long id_hi,
+                                      unsigned long id_lo)
+{
+    if (tg_gui_draft_is_open_peer(peer_constructor, id_hi, id_lo)) {
+        tg_gui_pinned_pending = 1;
+    }
+}
+
+/* Another chat is open: its pinned message is asked on the next tick, and
+   the bar of the chat before goes at once. */
+static void tg_gui_pinned_chat_opened(int other_chat)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+    if (other_chat && gst != 0) {
+        gst->pinned_id = 0UL;
+        gst->pinned_text[0] = '\0';
+    }
+    tg_gui_pinned_pending = 1;
+}
+
+/* One line for the bar from a message's text: no style markers, the line
+   breaks as spaces, an emoji pair never cut in two. */
+static void tg_gui_pinned_line(char *dest, unsigned long size,
+                               const char *utf8)
+{
+    static char shown[TG_GUI_TEXT_MAX * 2];
+    unsigned long i;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    tg_gui_driver_text_from_utf8(shown, sizeof(shown), utf8);
+    tg_gui_strip_markers(dest, size, shown);
+    for (i = 0UL; dest[i] != '\0'; ++i) {
+        if (dest[i] == '\n' || dest[i] == '\r' || dest[i] == '\t') {
+            dest[i] = ' ';
+        }
+    }
+    /* A cut that left the first half of an emoji pair at the end. */
+    if (i > 0UL &&
+        ((unsigned char)dest[i - 1UL] == TG_GUI_EMOJI_PREFIX0 ||
+         (unsigned char)dest[i - 1UL] == TG_GUI_EMOJI_PREFIX1) &&
+        (i < 2UL || !tg_gui_emoji_pair_at(dest, i, i - 2UL, 0))) {
+        dest[i - 1UL] = '\0';
+    }
+}
+
+/* Asks Telegram the open chat's newest pinned message and hands it to the
+   window. 1 = the bar changed (shown, changed or gone), 0 = as it was, or
+   could not ask (it then stays as it is and is asked again later). */
+static int tg_gui_session_fetch_pinned(FILE *stream)
+{
+    unsigned char query[96];
+    static char line[TG_GUI_TEXT_MAX];
+    static const char label[] = "gui pinned message";
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long found_id = 0UL;
+    unsigned long i;
+    int hah;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 0;
+    }
+    if (tg_shared_message_texts_busy) {
+        tg_gui_pinned_pending = 1; /* the list is in use: next tick */
+        return 0;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "pinned peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (tg_mtproto_build_messages_search_pinned(&writer, pc, ph, pl, ahh,
+                                                  ahl, hah, 1UL) ==
+              TG_MTPROTO_TL_OK &&
+          tg_gui_session_peer_request(query, writer.length, &result, label,
+                                      0, 0UL, quiet) == 0 &&
+          tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
+             ? 0 : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("pinned: could not ask");
+        return 0;
+    }
+    line[0] = '\0';
+    tg_shared_message_texts_busy = 1;
+    if (tg_mtproto_parse_message_text_list(
+            result.result_constructor, result.result_body,
+            result.result_body_length, &tg_shared_message_texts) ==
+        TG_MTPROTO_TL_OK) {
+        for (i = 0UL; i < tg_shared_message_texts.count; ++i) {
+            const tg_mtproto_message_text *m =
+                &tg_shared_message_texts.messages[i];
+
+            if (m->id == 0UL || m->service_action != 0UL ||
+                tg_hidden_msgs_skip(pc, ph, pl, m->id)) {
+                continue;
+            }
+            found_id = m->id;
+            tg_gui_pinned_line(line, sizeof(line), m->text);
+            if (line[0] == '\0') {
+                strcpy(line, "Message");
+            }
+            break;
+        }
+    }
+    tg_shared_message_texts_busy = 0;
+    tg_gui_log(found_id != 0UL ? "pinned: shown" : "pinned: none");
+    if (gst->pinned_id == found_id && strcmp(gst->pinned_text, line) == 0) {
+        return 0;
+    }
+    gst->pinned_id = found_id;
+    for (i = 0UL; i + 1UL < sizeof(gst->pinned_text) && line[i] != '\0';
+         ++i) {
+        gst->pinned_text[i] = line[i];
+    }
+    gst->pinned_text[i] = '\0';
+    return 1;
+}
+#else
+#define tg_gui_pinned_chat_opened(other_chat) ((void)(other_chat))
+#endif
+
 /* Pinned rows first, in pin order, marked; the others after them in the
    order they had. Stable and in place. The unread marks go on here too:
    every projection of the list passes through. */
@@ -21958,6 +22180,74 @@ static int tg_gui_drafts_self_test(void)
     if (!ok) {
         puts("mtproto self-test: drafts table wrong");
         return 2;
+    }
+    /* A pin changed: the open chat's pinned message is asked again, another
+       chat's change is not this window's business, and one line of a
+       pinned message loses its line breaks and its style markers. */
+    {
+        unsigned char wire[64];
+        char one[24];
+        tg_mtproto_tl_writer w;
+        tg_mtproto_tl_reader r;
+        tg_chat_delete_sink sink;
+        tg_chat_delete_sink *saved_target = tg_chat_delete_target;
+        int saved_open = tg_gui_session_state.open;
+        unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+        unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+        unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+        int saved_pending = tg_gui_pinned_pending;
+        int pass;
+
+        memset(&sink, 0, sizeof(sink));
+        tg_chat_delete_target = &sink;
+        tg_gui_session_state.open = 1;
+        tg_gui_session_state.open_peer_constructor =
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        tg_gui_session_state.open_peer_id_hi = 0UL;
+        tg_gui_session_state.open_peer_id_lo = 500UL;
+        for (pass = 0; pass < 4 && ok; ++pass) {
+            /* 0: the open channel; 1: another channel; 2: a private chat
+               with the same number; 3: the open channel, no message ids. */
+            unsigned long ctor = pass == 2
+                ? TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR
+                : TG_MTPROTO_UPDATE_PINNED_CHANNEL_MESSAGES_CONSTRUCTOR;
+
+            tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+            ok = tg_mtproto_tl_write_u32(&w, 1UL) == TG_MTPROTO_TL_OK;
+            if (pass == 2) {
+                ok = ok && tg_mtproto_tl_write_u32(
+                               &w, TG_MTPROTO_PEER_USER_CONSTRUCTOR) ==
+                               TG_MTPROTO_TL_OK;
+            }
+            ok = ok && tg_mtproto_tl_write_u64(&w, 0UL,
+                                               pass == 1 ? 501UL : 500UL) ==
+                           TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(
+                     &w, TG_MTPROTO_TL_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&w, pass == 3 ? 0UL : 1UL) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&w, 9UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&w, 3UL) == TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&w, 1UL) == TG_MTPROTO_TL_OK;
+            tg_gui_pinned_pending = 0;
+            tg_mtproto_tl_reader_init(&r, wire, w.length);
+            tg_chat_pinned_parse_update(&r, ctor);
+            ok = ok && tg_gui_pinned_pending == (pass == 0);
+        }
+        tg_gui_pinned_line(one, sizeof(one), "prima\nriga \034grassa\034");
+        ok = ok && strcmp(one, "prima riga grassa") == 0;
+        tg_chat_delete_target = saved_target;
+        tg_gui_session_state.open = saved_open;
+        tg_gui_session_state.open_peer_constructor = saved_pc;
+        tg_gui_session_state.open_peer_id_hi = saved_hi;
+        tg_gui_session_state.open_peer_id_lo = saved_lo;
+        tg_gui_pinned_pending = saved_pending;
+        if (!ok) {
+            printf("mtproto self-test: pinned update or line wrong (\"%s\")\n",
+                   one);
+            return 2;
+        }
     }
     return 0;
 }
@@ -22450,6 +22740,7 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     if (other_chat) {
         tg_gui_draft_enter();
     }
+    tg_gui_pinned_chat_opened(other_chat);
     tg_gui_log("open_chat: done");
     return 1; /* the selection changed -> always repaint */
 }
@@ -30130,6 +30421,17 @@ int tg_gui_session_tick(FILE *stream)
                 }
             }
         }
+#if !defined(TG_NO_GUI)
+        /* The chat's pinned message: asked here, after the chat is on
+           screen, and again when a pin changes. */
+        if (tg_gui_pinned_pending) {
+            tg_gui_pinned_pending = 0;
+            if (tg_gui_session_fetch_pinned(quiet)) {
+                dirty = 1;
+                tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+            }
+        }
+#endif
     }
     /* The cadence-gated getDifference drain harvests inbound messages into the
        notify queue. As on the console: every tick on MorphOS (where pushes are

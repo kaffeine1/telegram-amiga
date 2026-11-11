@@ -896,6 +896,18 @@ tg_mtproto_tl_status tg_mtproto_build_leave_peer(
     unsigned long access_hash_lo,
     int has_access_hash);
 
+/* The chat's pinned messages, newest pin first (messages.search with no
+   words and the pinned filter); limit 1 gives the one under the header. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long limit);
+
 /* messages.search in one chat (no filter, newest first, below offset_id
    when non-zero). query_utf8 must be non-empty. */
 tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(

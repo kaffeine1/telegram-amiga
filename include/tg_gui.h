@@ -470,6 +470,13 @@ typedef struct tg_gui_state {
     int newest_dropped;
     int unread_below;
     int jb_x, jb_y, jb_w, jb_h;
+    /* The open chat's pinned message, shown on a bar under the header: its
+       id (0 = none, no bar) and how it starts, on one line. Set by the
+       session. pin_*: the bar's rect as the painter drew it, for the click
+       that jumps to the message (pin_h == 0: no bar this frame). */
+    unsigned long pinned_id;
+    char pinned_text[TG_GUI_TEXT_MAX];
+    int pin_x, pin_y, pin_w, pin_h;
 
     /* Reply compose: which message the next send threads to (0 = no reply).
        Invariant: reply_to_id==0 <=> reply_sender[0]=='\0' && reply_snippet[0]=='\0'.

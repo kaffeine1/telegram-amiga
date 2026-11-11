@@ -14570,6 +14570,31 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->drag_src = -1;
                         state->drag_active = 0;
                     }
+                } else if (msg_code == SELECTDOWN && state->pin_h > 0 &&
+                           state->pinned_id != 0UL &&
+                           hx >= state->pin_x &&
+                           hx < state->pin_x + state->pin_w &&
+                           hy >= state->pin_y &&
+                           hy < state->pin_y + state->pin_h &&
+                           tg_gui_session_is_open() &&
+                           !state->ctx_visible && !state->emoji_active) {
+                    /* The pinned bar: show the chat around that message,
+                       highlighted, as a search hit is shown. */
+                    int prc;
+
+                    tg_gui_window_copy(state->status, sizeof(state->status),
+                                       "Loading the pinned message...");
+                    tg_gui_window_paint(state, &backend);
+                    prc = tg_gui_session_jump_to_message(state->pinned_id,
+                                                         stdout);
+                    older_exhausted = 0;
+                    older_cooldown = 0;
+                    tg_gui_window_copy(
+                        state->status, sizeof(state->status),
+                        prc > 0 ? "The pinned message"
+                                : (prc == 0 ? "That message is no longer there"
+                                            : "Could not load it (network?)"));
+                    tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTDOWN && state->jb_w > 0 &&
                            hx >= state->jb_x &&
                            hx < state->jb_x + state->jb_w &&

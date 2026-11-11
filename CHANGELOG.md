@@ -36,6 +36,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   moved on another device follows here. A large Archive shows its most
   recent chats (32, or 16 on 68k). The text client leaves the archived
   chats out of /list.
+- The pinned message. A chat with a pinned message shows it on a bar
+  under the header, "Pinned:" and how it starts; a click on the bar shows
+  the chat around that message, highlighted, and the jump button goes
+  back to the newest. It is read from Telegram just after the chat opens
+  and again when someone pins or unpins a message there. When several
+  messages are pinned the bar shows the latest one.
 - Drafts. What is left unsent in the composer stays with its chat: it
   is saved on Telegram when another chat is opened or the client is
   closed, so the other devices show it, and it comes back in the
