@@ -562,10 +562,12 @@ Messages
 - To mention someone in a group, type @ in the input line: a list of
   people opens, those who wrote lately first; go on typing to narrow it
   by name or username (from three letters on Telegram is asked for the
-  members that match). Up/Down choose, Enter, Tab or a click inserts,
-  Esc closes. Someone with a username is written as @username; someone
-  without is written by first name, and the message still reaches them
-  as a mention as long as the name is left as it was inserted.
+  members that match). The list shows eight people at a time and
+  scrolls: Up/Down or the mouse wheel move through it, Enter, Tab or a
+  click inserts, Esc closes. Someone with a username is written as
+  @username; someone without is written by first name, and the message
+  still reaches them as a mention as long as the name is left as it was
+  inserted.
 - Drag across text to select it. Right-Amiga+C copies, Right-Amiga+X
   cuts from the input line, Right-Amiga+V pastes; the Edit menu has the
   same.
@@ -713,8 +715,9 @@ Messaggi
 - Per menzionare qualcuno in un gruppo scrivi @ nella riga di input: si
   apre un elenco di persone, per primo chi ha scritto da poco; continua
   a scrivere per restringerlo per nome o username (da tre lettere in su
-  Telegram cerca fra i membri quelli che corrispondono). Su/Giu'
-  scelgono, Invio, Tab o un click inserisce, Esc chiude. Chi ha uno
+  Telegram cerca fra i membri quelli che corrispondono). L'elenco
+  mostra otto persone alla volta e scorre: Su/Giu' o la rotella lo
+  percorrono, Invio, Tab o un click inserisce, Esc chiude. Chi ha uno
   username viene scritto come @username; chi non lo ha viene scritto
   col nome, e il messaggio gli arriva lo stesso come menzione finche' il
   nome resta com'e' stato inserito.

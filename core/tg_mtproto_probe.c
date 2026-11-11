@@ -26548,6 +26548,8 @@ static int tg_gui_named_count = 0;
 static char tg_gui_mention_search_empty[24];
 /* How many mentions by name the message being sent carries. */
 static int tg_gui_mentions_riding = 0;
+/* How many members a search by name asks Telegram for: a small answer. */
+#define TG_GUI_MENTION_SEARCH_MAX 12
 
 /* A copy cut to the buffer between two characters, never inside one. */
 static void tg_gui_copy_utf8(char *dst, unsigned long size, const char *src)
@@ -26841,7 +26843,7 @@ static int tg_gui_mention_search(const char *prefix, FILE *stream)
     tg_net_set_connect_timeout_seconds(10UL);
     rc = (tg_mtproto_build_channels_get_participants_search(
               &writer, ph, pl, ahh, ahl, prefix,
-              (unsigned long)TG_GUI_MENTION_MAX) == TG_MTPROTO_TL_OK &&
+              (unsigned long)TG_GUI_MENTION_SEARCH_MAX) == TG_MTPROTO_TL_OK &&
           tg_gui_session_peer_request(query, writer.length, &result, label,
                                       0, 0UL, quiet) == 0 &&
           tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
@@ -26993,6 +26995,13 @@ int tg_gui_session_mention_pick(int index, char *insert, unsigned long size)
     return 1;
 }
 
+/* Public: the composer was emptied. The names picked for it are let go
+   of: the same word typed later, in another message, is only a word. */
+void tg_gui_session_mentions_forget(void)
+{
+    tg_gui_named_count = 0;
+}
+
 /* A byte that belongs to a word: a name found inside a longer word is not
    that person's. */
 static int tg_gui_mention_word_byte(unsigned char c)
@@ -27124,7 +27133,7 @@ static int tg_gui_mentions_self_test(void)
     {
         static tg_mtproto_peer_cache_entry e;
         unsigned char wire[112];
-        char items[TG_GUI_MENTION_MAX][TG_GUI_MENTION_LEN];
+        static char items[TG_GUI_MENTION_MAX][TG_GUI_MENTION_LEN];
         char ins[TG_GUI_MENTION_LEN];
         tg_mtproto_tl_writer w;
         const char *text;
@@ -27197,6 +27206,10 @@ static int tg_gui_mentions_self_test(void)
              strcmp(ins, "\xc9lodie") == 0 && tg_gui_named_count == 1 &&
              tg_gui_session_mention_pick(1, ins, sizeof(ins)) == 1 &&
              tg_gui_named_count == 1 && /* the same person: held once */
+             /* the composer emptied: let go of, and picked again */
+             (tg_gui_session_mentions_forget(), tg_gui_named_count) == 0 &&
+             tg_gui_session_mention_pick(1, ins, sizeof(ins)) == 1 &&
+             tg_gui_named_count == 1 &&
              tg_gui_session_mention_pick(2, ins, sizeof(ins)) == 0 &&
              /* nobody begins with "zz": no popup (and no search: two
                 letters, a basic group) */

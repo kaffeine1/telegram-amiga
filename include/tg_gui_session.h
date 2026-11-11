@@ -464,6 +464,10 @@ int tg_gui_session_mention_candidates(const char *prefix, char *items,
    1 = `insert` holds it. */
 int tg_gui_session_mention_pick(int index, char *insert, unsigned long size);
 
+/* The composer was emptied: the names picked for it are let go of, so the
+   same word in a later message is not a mention. */
+void tg_gui_session_mentions_forget(void);
+
 /* Searches Telegram for `query` (contacts.search), adds the first openable
    result to the peer cache and opens it. Small reply, MorphOS-safe. Returns 0 =
    opened, 1 = no result / network issue, 2 = bad args. */

@@ -197,7 +197,14 @@ void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src);
 /* '@' mention autocomplete popup (composer). */
-#define TG_GUI_MENTION_MAX 5
+/* How many people the popup holds at a time (what is typed narrows them),
+   and how many of them it shows: the list scrolls under the highlight. */
+#if defined(__m68k__)
+#define TG_GUI_MENTION_MAX 12
+#else
+#define TG_GUI_MENTION_MAX 32
+#endif
+#define TG_GUI_MENTION_ROWS 8
 #define TG_GUI_MENTION_LEN 56
 /* Wide enough for "Name Surname @username"; narrower in a narrow window. */
 #define TG_GUI_MENTION_POPUP_W 300
@@ -601,6 +608,8 @@ typedef struct tg_gui_state {
     int mention_active;
     int mention_count;
     int mention_sel;
+    int mention_top; /* the first person in view; the painter keeps the
+                        highlighted one inside the lines it shows */
     /* Emoji picker (see tg_gui_emoji_open). Recents hold sheet indexes. */
     int emoji_active;
     int emoji_sel;        /* highlighted cell: recents first, then the sheet */
@@ -1091,6 +1100,10 @@ int tg_gui_search_click_caret(const tg_gui_state *state,
 
 /* Click over the '@' mention popup -> candidate index, or -1 if outside/absent.
    Lets the mouse pick a mention the way the cursor keys already do. */
+/* Moves the popup's highlight by `delta` people: round the ends when
+   `wrap` (the cursor keys), stopping at them when not (the wheel).
+   1 = it moved. */
+int tg_gui_mention_move(tg_gui_state *state, int delta, int wrap);
 int tg_gui_mention_click(const tg_gui_state *state, tg_gui_backend *backend,
                          int x, int y);
 

@@ -2012,10 +2012,95 @@ static int tg_gui_text_click_offset(tg_gui_backend *backend, const char *text,
     return (int)len;
 }
 
+/* Where the '@' popup stands and how many people it shows: as many lines
+   as there are people, TG_GUI_MENTION_ROWS at most, fewer when the window
+   has no room for them above the composer. One geometry for the painter
+   and the click. Returns the lines shown. */
+static int tg_gui_mention_box(const tg_gui_state *state, int width, int lh,
+                              int sidebar_w, int box_top, int *bx, int *by,
+                              int *bw, int *ih)
+{
+    int rows = state->mention_count;
+    int lift = state->reply_to_id != 0UL ? lh + 4 + TG_GUI_REPLY_LIFT : 0;
+    int room;
+
+    *ih = lh + 4;
+    *bw = TG_GUI_MENTION_POPUP_W;
+    *bx = sidebar_w + 8;
+    room = (box_top - 2 - lift - 4) / *ih; /* over the reply strip, if any */
+    if (rows > TG_GUI_MENTION_ROWS) {
+        rows = TG_GUI_MENTION_ROWS;
+    }
+    if (rows > room) {
+        rows = room;
+    }
+    if (rows < 1) {
+        rows = 1;
+    }
+    *by = box_top - ((rows * *ih) + 4) - 2 - lift;
+    if (*bx + *bw > width - 8) {
+        *bw = width - 8 - *bx;
+    }
+    if (*by < 0) {
+        *by = 0;
+    }
+    return rows;
+}
+
+/* The first person in view when `rows` are shown: where the list was,
+   moved just enough to hold the highlighted one. */
+static int tg_gui_mention_first(const tg_gui_state *state, int rows)
+{
+    int top = state->mention_top;
+
+    if (state->mention_sel < top) {
+        top = state->mention_sel;
+    }
+    if (state->mention_sel >= top + rows) {
+        top = state->mention_sel - rows + 1;
+    }
+    if (top > state->mention_count - rows) {
+        top = state->mention_count - rows;
+    }
+    if (top < 0) {
+        top = 0;
+    }
+    return top;
+}
+
+int tg_gui_mention_move(tg_gui_state *state, int delta, int wrap)
+{
+    int sel;
+
+    if (state == 0 || !state->mention_active || state->mention_count <= 0 ||
+        delta == 0) {
+        return 0;
+    }
+    sel = state->mention_sel + delta;
+    if (wrap) {
+        if (sel < 0) {
+            sel = state->mention_count - 1;
+        } else if (sel >= state->mention_count) {
+            sel = 0;
+        }
+    } else {
+        if (sel < 0) {
+            sel = 0;
+        } else if (sel >= state->mention_count) {
+            sel = state->mention_count - 1;
+        }
+    }
+    if (sel == state->mention_sel) {
+        return 0;
+    }
+    state->mention_sel = sel;
+    return 1;
+}
+
 /* Click over the '@' mention popup -> the 0-based candidate index under the
-   pointer, or -1 when the pointer is outside it. Recomputes the exact
-   geometry tg_gui_paint_input_row draws the popup with, so a click lands on
-   the same row the eye sees. Returns -1 unless the popup is actually up. */
+   pointer, or -1 when the pointer is outside it. Uses the geometry the popup
+   is drawn with, and the stretch of the list it shows, so a click lands on
+   the row the eye sees. Returns -1 unless the popup is actually up. */
 int tg_gui_mention_click(const tg_gui_state *state, tg_gui_backend *backend,
                          int x, int y)
 {
@@ -2023,15 +2108,11 @@ int tg_gui_mention_click(const tg_gui_state *state, tg_gui_backend *backend,
     int height;
     int lh;
     int sidebar_w;
-    int status_h;
     int content_h;
-    int rows;
-    int input_h;
     int box_top;
     int ih;
-    int n;
+    int rows;
     int bw;
-    int bh;
     int bx;
     int by;
     int idx;
@@ -2048,31 +2129,17 @@ int tg_gui_mention_click(const tg_gui_state *state, tg_gui_backend *backend,
         return -1;
     }
     sidebar_w = tg_gui_sidebar_w(width);
-    status_h = lh + 6;
-    content_h = height - status_h;
-    rows = tg_gui_input_rows(state, backend, width, sidebar_w);
-    input_h = (rows * lh) + 14;
-    box_top = content_h - input_h;
-    ih = lh + 4;
-    n = state->mention_count;
-    bw = TG_GUI_MENTION_POPUP_W;
-    bh = (n * ih) + 4;
-    bx = sidebar_w + 8;
-    by = box_top - bh - 2;
-    if (state->reply_to_id != 0UL) {
-        by -= (lh + 4 + TG_GUI_REPLY_LIFT);
-    }
-    if (bx + bw > width - 8) {
-        bw = width - 8 - bx;
-    }
-    if (by < 0) {
-        by = 0;
-    }
-    if (x < bx || x >= bx + bw || y < by + 2 || y >= by + 2 + (n * ih)) {
+    content_h = height - (lh + 6);
+    box_top = content_h -
+              ((tg_gui_input_rows(state, backend, width, sidebar_w) * lh) +
+               14);
+    rows = tg_gui_mention_box(state, width, lh, sidebar_w, box_top, &bx, &by,
+                              &bw, &ih);
+    if (x < bx || x >= bx + bw || y < by + 2 || y >= by + 2 + (rows * ih)) {
         return -1;
     }
-    idx = (y - (by + 2)) / ih;
-    if (idx < 0 || idx >= n) {
+    idx = tg_gui_mention_first(state, rows) + ((y - (by + 2)) / ih);
+    if (idx < 0 || idx >= state->mention_count) {
         return -1;
     }
     return idx;
@@ -4182,38 +4249,36 @@ static void tg_gui_paint_popups_at(const tg_gui_state *state,
 {
     int sidebar_w = tg_gui_sidebar_w(width);
 
-    /* '@' mention popup: the candidate usernames above the composer (over the
-       reply strip when one is shown); the highlighted row is what ENTER/TAB
-       will insert. Same accent-frame + surface look as the context menu. */
+    /* '@' mention popup: the people above the composer (over the reply
+       strip when one is shown); the highlighted row is what ENTER/TAB will
+       insert. A list longer than the popup scrolls under the highlight,
+       and a mark at the right says where in it the popup is. Same
+       accent-frame + surface look as the context menu. */
     if (state->composing && state->mention_active && state->mention_count > 0) {
-        int ih = lh + 4;
         int n = state->mention_count;
-        int bw = TG_GUI_MENTION_POPUP_W;
-        int bh = (n * ih) + 4;
-        int bx = sidebar_w + 8;
-        int by = box_top - bh - 2;
+        int ih;
+        int bw;
+        int bx;
+        int by;
+        int rows = tg_gui_mention_box(state, width, lh, sidebar_w, box_top,
+                                      &bx, &by, &bw, &ih);
+        int bh = (rows * ih) + 4;
+        int top = tg_gui_mention_first(state, rows);
+        int more = n > rows;
         int mi;
 
-        if (state->reply_to_id != 0UL) {
-            by -= (lh + 4 + TG_GUI_REPLY_LIFT); /* sit above the reply strip */
-        }
-        if (bx + bw > width - 8) {
-            bw = width - 8 - bx;
-        }
-        if (by < 0) {
-            by = 0;
-        }
+        ((tg_gui_state *)state)->mention_top = top;
         tg_gui_popup_frame(backend, TG_GUI_PEN_ACCENT,
                             tg_gui_make_rect(bx - 1, by - 1, bw + 2, bh + 2));
         backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                            tg_gui_make_rect(bx, by, bw, bh));
-        for (mi = 0; mi < n; ++mi) {
+        for (mi = 0; mi < rows && top + mi < n; ++mi) {
             int pen = TG_GUI_PEN_TEXT;
             char row[TG_GUI_MENTION_LEN + 2];
             unsigned long rl = 0UL;
-            const char *u = state->mention_items[mi];
+            const char *u = state->mention_items[top + mi];
 
-            if (mi == state->mention_sel) {
+            if (top + mi == state->mention_sel) {
                 backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
                                    tg_gui_make_rect(bx, by + 2 + (mi * ih),
                                                     bw, ih));
@@ -4225,7 +4290,25 @@ static void tg_gui_paint_popups_at(const tg_gui_state *state,
             row[rl] = '\0';
             /* "Name @username": cut to the popup, never drawn past it. */
             tg_gui_draw_clipped(backend, pen, bx + 8,
-                                by + 2 + (mi * ih) + lh, row, bw - 16);
+                                by + 2 + (mi * ih) + lh, row,
+                                bw - 16 - (more ? 6 : 0));
+        }
+        if (more) {
+            /* Where the lines in view are in the whole list. */
+            int track = bh - 4;
+            int thumb = (track * rows) / n;
+            int at;
+
+            if (thumb < 6) {
+                thumb = 6;
+            }
+            at = ((track - thumb) * top) / (n - rows);
+            backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
+                               tg_gui_make_rect(bx + bw - 5, by + 2, 3,
+                                                track));
+            backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                               tg_gui_make_rect(bx + bw - 5, by + 2 + at, 3,
+                                                thumb));
         }
     }
     tg_gui_emoji_paint(state, backend, width, height, lh, box_top);
@@ -9840,6 +9923,142 @@ int tg_gui_self_test(void)
             return 2;
         }
         tg_gui_paint(&state, &b);
+    }
+
+    /* The '@' popup with more people than it shows: eight lines, the list
+       scrolling under the highlight; the cursor keys go round the ends,
+       the wheel stops at them; a click names the person on that line; a
+       window with little room shows fewer lines, the highlighted one
+       among them. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int saved_composing = state.composing;
+        unsigned long saved_reply = state.reply_to_id;
+        int ok_pop;
+        int bx;
+        int by;
+        int bw;
+        int ih;
+        int rows;
+        int lh;
+        int box_top;
+        int i;
+
+        state.composing = 1;
+        state.reply_to_id = 0UL;
+        state.mention_active = 1;
+        state.mention_count = 20;
+        state.mention_sel = 0;
+        state.mention_top = 0;
+        for (i = 0; i < 20; ++i) {
+            sprintf(state.mention_items[i], "P%02d", i);
+        }
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "P00";
+        rec.watch_text[1] = "P07";
+        rec.watch_text[2] = "P08";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        lh = b.line_height(&b);
+        box_top = (480 - (lh + 6)) -
+                  ((tg_gui_input_rows(&state, &b, 640,
+                                      tg_gui_sidebar_w(640)) * lh) + 14);
+        rows = tg_gui_mention_box(&state, 640, lh, tg_gui_sidebar_w(640),
+                                  box_top, &bx, &by, &bw, &ih);
+        ok_pop = rows == TG_GUI_MENTION_ROWS && rec.watch_hits[0] == 1 &&
+                 rec.watch_hits[1] == 1 && rec.watch_hits[2] == 0 &&
+                 state.mention_top == 0 &&
+                 tg_gui_mention_click(&state, &b, bx + 10, by + 3) == 0 &&
+                 tg_gui_mention_click(&state, &b, bx + 10,
+                                      by + 2 + (7 * ih) + 1) == 7 &&
+                 tg_gui_mention_click(&state, &b, bx + 10,
+                                      by + 2 + (8 * ih) + 1) == -1 &&
+                 tg_gui_mention_click(&state, &b, bx - 3, by + 3) == -1;
+        /* Down to the tenth person: the list has moved two on. */
+        for (i = 0; i < 9; ++i) {
+            ok_pop = ok_pop && tg_gui_mention_move(&state, 1, 1) == 1;
+        }
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "P01";
+        rec.watch_text[1] = "P02";
+        rec.watch_text[2] = "P09";
+        rec.watch_text[3] = "P10";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_pop = ok_pop && state.mention_sel == 9 && state.mention_top == 2 &&
+                 rec.watch_hits[0] == 0 && rec.watch_hits[1] == 1 &&
+                 rec.watch_hits[2] == 1 && rec.watch_hits[3] == 0 &&
+                 tg_gui_mention_click(&state, &b, bx + 10, by + 3) == 2 &&
+                 tg_gui_mention_click(&state, &b, bx + 10,
+                                      by + 2 + (7 * ih) + 1) == 9;
+        /* Up inside what is in view: the list stays where it is. */
+        ok_pop = ok_pop && tg_gui_mention_move(&state, -3, 1) == 1;
+        tg_gui_paint(&state, &b);
+        ok_pop = ok_pop && state.mention_sel == 6 && state.mention_top == 2;
+        /* The wheel stops at the ends; the keys go round them. */
+        state.mention_sel = 0;
+        ok_pop = ok_pop && tg_gui_mention_move(&state, -1, 0) == 0 &&
+                 state.mention_sel == 0 &&
+                 tg_gui_mention_move(&state, -1, 1) == 1 &&
+                 state.mention_sel == 19 &&
+                 tg_gui_mention_move(&state, 1, 0) == 0 &&
+                 state.mention_sel == 19;
+        tg_gui_paint(&state, &b);
+        ok_pop = ok_pop && state.mention_top == 12 &&
+                 tg_gui_mention_move(&state, 1, 1) == 1 &&
+                 state.mention_sel == 0;
+        /* ...and round to the first person the list comes back up. */
+        tg_gui_paint(&state, &b);
+        ok_pop = ok_pop && state.mention_top == 0;
+        /* Little room above the composer: fewer lines, the highlighted
+           person still among them. */
+        state.mention_sel = 5;
+        state.mention_top = 0;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 120;
+        rec.watch_text[0] = "P05";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        box_top = (120 - (lh + 6)) -
+                  ((tg_gui_input_rows(&state, &b, 640,
+                                      tg_gui_sidebar_w(640)) * lh) + 14);
+        rows = tg_gui_mention_box(&state, 640, lh, tg_gui_sidebar_w(640),
+                                  box_top, &bx, &by, &bw, &ih);
+        ok_pop = ok_pop && rows >= 1 && rows < TG_GUI_MENTION_ROWS &&
+                 by >= 0 && rec.watch_hits[0] == 1 &&
+                 state.mention_top == 5 - rows + 1;
+        /* Two people: two lines, no more. */
+        state.mention_count = 2;
+        state.mention_sel = 1;
+        state.mention_top = 7; /* left over from a longer list */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "P00";
+        rec.watch_text[1] = "P01";
+        rec.watch_text[2] = "P02";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_pop = ok_pop && state.mention_top == 0 && rec.watch_hits[0] == 1 &&
+                 rec.watch_hits[1] == 1 && rec.watch_hits[2] == 0;
+        if (!ok_pop) {
+            printf("gui self-test: mention popup scrolls wrong (sel %d, top "
+                   "%d, %d lines)\n",
+                   state.mention_sel, state.mention_top, rows);
+            return 2;
+        }
+        state.composing = saved_composing;
+        state.reply_to_id = saved_reply;
+        state.mention_active = 0;
+        state.mention_count = 0;
+        state.mention_sel = 0;
+        state.mention_top = 0;
     }
 
     /* The ARexx port: what a command line asks, and the chat a name

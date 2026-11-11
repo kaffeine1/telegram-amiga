@@ -9062,6 +9062,11 @@ static void tg_gui_window_mention_refresh(tg_gui_state *state)
     state->mention_active = 0;
     state->mention_count = 0;
     state->mention_sel = 0;
+    state->mention_top = 0;
+    if (state->input[0] == '\0') {
+        /* Nothing left of what was written: nor of who was named in it. */
+        tg_gui_session_mentions_forget();
+    }
     if (!state->composing || state->mode != TG_GUI_MODE_CHAT ||
         !tg_gui_session_is_open()) {
         return;
@@ -13462,6 +13467,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 /* Chat selection is on the function keys now (IDCMP_RAWKEY). */
             } else if (msg_class == IDCMP_RAWKEY &&
                        (msg_code == 0x7A || msg_code == 0x7B) &&
+                       state->mode == TG_GUI_MODE_CHAT && state->composing &&
+                       state->mention_active) {
+                /* The wheel with the '@' popup up walks its list, a person
+                   at a time, and stops at the ends. */
+                if (tg_gui_mention_move(state, msg_code == 0x7A ? -1 : 1,
+                                        0)) {
+                    tg_gui_window_paint_caret(state, &backend);
+                }
+            } else if (msg_class == IDCMP_RAWKEY &&
+                       (msg_code == 0x7A || msg_code == 0x7B) &&
                        state->mode == TG_GUI_MODE_CHAT) {
                 /* Mouse wheel (NewMouse RAWKEY 0x7A up / 0x7B down): scroll the
                    panel under the pointer. The up-transition arrives as
@@ -13537,16 +13552,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    UP/DOWN move its highlight instead of recalling history. */
                 if ((msg_code == 0x4C || msg_code == 0x4D) &&
                     state->mention_active) {
-                    if (msg_code == 0x4C) { /* up */
-                        state->mention_sel = (state->mention_sel > 0)
-                                                 ? state->mention_sel - 1
-                                                 : state->mention_count - 1;
-                    } else {                 /* down */
-                        state->mention_sel =
-                            (state->mention_sel + 1 < state->mention_count)
-                                ? state->mention_sel + 1
-                                : 0;
-                    }
+                    /* Round the ends; a list longer than the popup scrolls
+                       under the highlight. */
+                    (void)tg_gui_mention_move(state,
+                                              msg_code == 0x4C ? -1 : 1, 1);
                     tg_gui_window_paint_caret(state, &backend);
                 } else if (state->emoji_active &&
                            (msg_code == 0x4C || msg_code == 0x4D ||
