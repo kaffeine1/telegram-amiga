@@ -2176,6 +2176,55 @@ tg_mtproto_tl_status tg_mtproto_build_channels_get_participants_recent(
     return status;
 }
 
+/* channels.getParticipants with channelParticipantsSearch#656ac4b q:string:
+   the members of a supergroup whose name or username begins with q, which
+   is how a mention finds someone in a group too large to list. */
+#define TG_CHANNEL_PARTICIPANTS_SEARCH_CONSTRUCTOR 0x0656ac4bUL
+tg_mtproto_tl_status tg_mtproto_build_channels_get_participants_search(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const char *query_utf8,
+    unsigned long limit)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || limit == 0UL || query_utf8 == 0 ||
+        query_utf8[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_CHANNELS_GET_PARTICIPANTS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_CHANNEL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, channel_id_hi, channel_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi, access_hash_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_CHANNEL_PARTICIPANTS_SEARCH_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, query_utf8);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset:int */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, limit); /* limit:int */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* hash:long = 0 */
+    }
+    return status;
+}
+
 tg_mtproto_tl_status tg_mtproto_build_messages_get_history_user(
     tg_mtproto_tl_writer *writer,
     unsigned long user_id_hi,
@@ -2201,10 +2250,85 @@ void tg_mtproto_send_set_clear_draft(int on)
     tg_send_clear_draft = on ? 1 : 0;
 }
 
+/* ...and bit 3 its entities: the mentions by name, of people who have no
+   username to write after an "@". The caller says where each name is in
+   the text about to be sent (UTF-16 units, as Telegram counts) and whose
+   it is; the next message built carries them, the ones after it do not
+   unless they are set again.
+   inputMessageEntityMentionName#208e68c9 offset:int length:int
+   user_id:InputUser, inputUser#f21158c6 user_id:long access_hash:long. */
+#define TG_INPUT_MESSAGE_ENTITY_MENTION_NAME_CONSTRUCTOR 0x208e68c9UL
+#define TG_INPUT_USER_CONSTRUCTOR 0xf21158c6UL
+static tg_mtproto_send_mention tg_send_mentions[TG_MTPROTO_SEND_MENTIONS_MAX];
+static int tg_send_mention_count = 0;
+
+void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
+                                  int count)
+{
+    int i;
+
+    tg_send_mention_count = 0;
+    for (i = 0; list != 0 && i < count &&
+                tg_send_mention_count < TG_MTPROTO_SEND_MENTIONS_MAX; ++i) {
+        if (list[i].length != 0UL) {
+            tg_send_mentions[tg_send_mention_count++] = list[i];
+        }
+    }
+}
+
 static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
 {
     return ((reply_to_msg_id != 0UL) ? 1UL : 0UL) |
+           (tg_send_mention_count > 0 ? 8UL : 0UL) |
            (tg_send_clear_draft ? 128UL : 0UL);
+}
+
+/* The end of a messages.sendMessage: random_id, then the entities when
+   there are any (no reply_markup: flags.2 is never set). */
+static tg_mtproto_tl_status tg_write_send_message_tail(
+    tg_mtproto_tl_writer *writer, unsigned long random_id_hi,
+    unsigned long random_id_lo)
+{
+    tg_mtproto_tl_status status;
+    int i;
+
+    status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
+    if (tg_send_mention_count <= 0) {
+        return status;
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(
+            writer, (unsigned long)tg_send_mention_count);
+    }
+    for (i = 0; i < tg_send_mention_count && status == TG_MTPROTO_TL_OK;
+         ++i) {
+        const tg_mtproto_send_mention *m = &tg_send_mentions[i];
+
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_INPUT_MESSAGE_ENTITY_MENTION_NAME_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, m->offset);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, m->length);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer,
+                                             TG_INPUT_USER_CONSTRUCTOR);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u64(writer, m->user_id_hi,
+                                             m->user_id_lo);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u64(writer, m->access_hash_hi,
+                                             m->access_hash_lo);
+        }
+    }
+    return status;
 }
 
 static tg_mtproto_tl_status tg_write_input_reply_to_message(
@@ -2251,7 +2375,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_self(
         status = tg_write_string(writer, message);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
+        status = tg_write_send_message_tail(writer, random_id_hi,
+                                            random_id_lo);
     }
     return status;
 }
@@ -2289,7 +2414,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_user(
         status = tg_write_string(writer, message);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
+        status = tg_write_send_message_tail(writer, random_id_hi,
+                                            random_id_lo);
     }
     return status;
 }
@@ -2330,7 +2456,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_peer(
         status = tg_write_string(writer, message);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
+        status = tg_write_send_message_tail(writer, random_id_hi,
+                                            random_id_lo);
     }
     return status;
 }
@@ -10624,6 +10751,23 @@ int tg_mtproto_login_self_test(void)
         query[28] != 0x00U || query[32] != 0x20U) {           /* offset 0, limit 32 */
         return 2;
     }
+    /* ...and with the search filter: channelParticipantsSearch and its
+       string in the filter's place, the rest as above. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_channels_get_participants_search(
+            &writer, 0x11223344UL, 0x55667788UL, 0x99AABBCCUL, 0xDDEEFF00UL,
+            "mar", 5UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 48UL ||
+        query[0] != 0xd0U || query[3] != 0x77U ||
+        query[24] != 0x4bU || query[25] != 0xacU || query[26] != 0x56U ||
+        query[27] != 0x06U ||                                 /* filter */
+        query[28] != 0x03U || query[29] != 'm' || query[31] != 'r' ||
+        query[32] != 0x00U || query[36] != 0x05U ||           /* offset, limit */
+        tg_mtproto_build_channels_get_participants_search(
+            &writer, 1UL, 2UL, 3UL, 4UL, "", 5UL) == TG_MTPROTO_TL_OK) {
+        puts("login self-test: getParticipants search built wrong");
+        return 2;
+    }
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     if (tg_mtproto_build_messages_send_self(&writer, "hi", 0UL, 0x11223344UL,
                                             0x55667788UL) !=
@@ -11136,6 +11280,51 @@ int tg_mtproto_login_self_test(void)
                 TG_MTPROTO_TL_OK ||
             pin_query[4] != 0x01U) {
             return 2;
+        }
+        /* A mention by name: flags bit 3, and after random_id a vector of
+           one inputMessageEntityMentionName with its inputUser; the
+           message after it carries none unless they are set again. */
+        {
+            unsigned char mq[80];
+            tg_mtproto_tl_writer mw;
+            tg_mtproto_send_mention one;
+
+            memset(&one, 0, sizeof(one));
+            one.offset = 5UL;
+            one.length = 4UL;
+            one.user_id_lo = 0x01020304UL;
+            one.access_hash_hi = 0x0a0b0c0dUL;
+            one.access_hash_lo = 0x11121314UL;
+            tg_mtproto_send_set_mentions(&one, 1);
+            tg_mtproto_tl_writer_init(&mw, mq, sizeof(mq));
+            if (tg_mtproto_build_messages_send_self(&mw, "ciao Anna", 0UL,
+                                                    1UL, 2UL) !=
+                    TG_MTPROTO_TL_OK ||
+                /* ctor, flags, peer, "ciao Anna" (12), random_id (8),
+                   vector + count (8), the entity (4+4+4 + 4+8+8). */
+                mw.length != 4UL + 4UL + 4UL + 12UL + 8UL + 8UL + 32UL ||
+                mq[4] != 0x08U ||
+                mq[32] != 0x15U || mq[33] != 0xc4U || mq[34] != 0xb5U ||
+                mq[35] != 0x1cU || mq[36] != 0x01U ||
+                mq[40] != 0xc9U || mq[41] != 0x68U || mq[42] != 0x8eU ||
+                mq[43] != 0x20U || mq[44] != 0x05U || mq[48] != 0x04U ||
+                mq[52] != 0xc6U || mq[53] != 0x58U || mq[54] != 0x11U ||
+                mq[55] != 0xf2U || mq[56] != 0x04U || mq[59] != 0x01U ||
+                mq[64] != 0x14U || mq[71] != 0x0aU) {
+                tg_mtproto_send_set_mentions(0, 0);
+                puts("login self-test: sendMessage with a mention by name "
+                     "built wrong");
+                return 2;
+            }
+            tg_mtproto_send_set_mentions(0, 0);
+            tg_mtproto_tl_writer_init(&mw, mq, sizeof(mq));
+            if (tg_mtproto_build_messages_send_self(&mw, "ciao Anna", 0UL,
+                                                    1UL, 2UL) !=
+                    TG_MTPROTO_TL_OK ||
+                mw.length != 32UL || mq[4] != 0x00U) {
+                puts("login self-test: a mention outlived its message");
+                return 2;
+            }
         }
         /* updateDraftMessage read back: a plain draft, one that replies
            with a quote, a deleted one, and the ones left alone. */

@@ -145,6 +145,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   chat list closes it. It follows the theme and the screen's font,
   scrolls when the window is short, and stays open across the switch to
   an own screen.
+- Mentioning someone with "@" in a group works in more places and for
+  more people. The list that opens now holds who wrote in the chat (so
+  it works in basic groups and on MorphOS, where it never opened), then
+  the group's recent members; each line shows the name and, when there
+  is one, the username, and what is typed narrows it by either. From
+  three letters on, when nobody listed matches, Telegram is asked for
+  the members that do, so someone who has not written lately can be
+  found in a large group. People without a username can be mentioned
+  too: their first name is written, and the message tells Telegram whose
+  name it is, as the official clients do. MorphOS now asks for the
+  member list like the other systems (a short one, 24 members).
 
 ### Fixed
 - A link with a preview could be impossible to open: when the message

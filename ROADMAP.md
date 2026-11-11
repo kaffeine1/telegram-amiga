@@ -1064,19 +1064,24 @@ baseline copy at up to twice that edge. Save photo as... fetches the true
 original, progressive or not, and shares the viewer's download when they
 are the same copy. Each kind of copy has its own cache file.
 
-## Planned: mentions in basic groups, and on MorphOS
+## Mentions in basic groups, and on MorphOS: done
 
-The '@' popup lists the members of the open group, and the member list
-comes from `channels.getParticipants`, which exists only for supergroups.
-A basic group (the kind a handful of friends make) has no channel id and
-would need `messages.getFullChat`, so in one of those the popup never
-appears, on any lane. On MorphOS the fetch is skipped outright, a guard
-from the bsdsocket freeze hunt, when a large participants reply was the
-documented trigger; the client has since moved photos and megabyte
-downloads through that stack without incident, so the guard deserves a
-measured retry on the machine rather than an assumption either way.
-Both were found again in the 0.0.93 field round, reported as "no popup
-after @", and the debug log now names which of the two it was.
+The '@' popup listed the members of the open group, and the member list
+comes from `channels.getParticipants`, which exists only for supergroups;
+on MorphOS the fetch was skipped outright, a guard from the bsdsocket
+freeze hunt. So the popup never opened in a basic group, on any lane, nor
+anywhere on MorphOS (reported in the 0.0.93 field round as "no popup
+after @", and again in the 0.2 cycle). Now the popup offers the people
+the client has heard of in the open group: who wrote the messages loaded
+(any kind of group, no request), the recent members where Telegram lists
+them (MorphOS included, 24 of them: the freezes of that hunt turned out
+to be repaints racing the layers and `getDialogs`, not the size of a
+reply), and, when nobody known matches three letters or more, the members
+Telegram finds (`channelParticipantsSearch`). Someone without a username
+is mentioned by first name with an `inputMessageEntityMentionName`
+entity, the first entity `messages.sendMessage` carries here. Still
+missing: the full member list of a basic group (`messages.getFullChat`),
+so in one of those only who wrote lately is offered.
 
 ## Planned: split long pastes into protocol-sized messages
 

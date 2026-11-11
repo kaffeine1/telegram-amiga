@@ -550,6 +550,8 @@ typedef struct tg_chat_folder_entry {
 } tg_chat_folder_entry;
 static tg_chat_folder_entry tg_chat_folder_queue[TG_CHAT_FOLDER_QUEUE_MAX];
 static unsigned long tg_chat_folder_count = 0UL;
+/* The last message sent came back with a mention by name in it. */
+static int tg_chat_sent_named_mention = 0;
 /* A draft written, changed or deleted on another device: the window's
    session keeps it (defined with the drafts, further down). */
 #if !defined(TG_NO_GUI)
@@ -561,6 +563,22 @@ static void tg_gui_pinned_note_update(unsigned long peer_constructor,
                                       unsigned long id_hi,
                                       unsigned long id_lo, int pinned,
                                       unsigned long message_id);
+/* Someone of the open group, as a reply named them: who an "@" in the
+   composer can mention (defined with the mentions, further down). */
+static void tg_gui_people_note(const tg_mtproto_peer_cache_entry *entry);
+static void tg_gui_people_reset(int other_chat);
+static const char *tg_gui_people_name(unsigned long id_hi,
+                                      unsigned long id_lo);
+/* The names picked from the "@" popup that the text about to be sent still
+   holds go with it as mentions; afterwards, sent or not, they are let go
+   of or kept. */
+static const char *tg_gui_mentions_for_send(const char *utf8);
+static void tg_gui_mentions_sent(int sent);
+#else
+#define tg_gui_people_reset(other_chat) ((void)(other_chat))
+#define tg_gui_people_name(id_hi, id_lo) ((const char *)0)
+#define tg_gui_mentions_for_send(utf8) (utf8)
+#define tg_gui_mentions_sent(sent) ((void)(sent))
 #endif
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
@@ -11075,7 +11093,8 @@ int tg_mtproto_auth_send_peer_file(const char *host,
        the longer of the two composers, doubled for the Latin-1 to UTF-8
        growth, plus room for the envelope. Static, not on the stack: the
        68000 profile runs on a fraction of the usual stack. */
-    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128];
+    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128 +
+                               (TG_MTPROTO_SEND_MENTIONS_MAX * 32) + 8];
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
@@ -11182,7 +11201,8 @@ static int tg_mtproto_auth_send_peer_on_context(
        the longer of the two composers, doubled for the Latin-1 to UTF-8
        growth, plus room for the envelope. Static, not on the stack: the
        68000 profile runs on a fraction of the usual stack. */
-    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128];
+    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128 +
+                               (TG_MTPROTO_SEND_MENTIONS_MAX * 32) + 8];
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
@@ -11266,6 +11286,21 @@ static int tg_mtproto_auth_send_peer_on_context(
         *sent_message_id = updates.id;
     }
     tg_chat_sent_webpage = updates.webpage;
+    /* Whether the message came back with a mention by name in it
+       (messageEntityMentionName#dc7b1140): what the log of a send that
+       carried one says. */
+    {
+        unsigned long at;
+
+        tg_chat_sent_named_mention = 0;
+        for (at = 0UL; at + 4UL <= result.result_body_length; at += 4UL) {
+            if (tg_mtproto_read_u32_le(result.result_body + at) ==
+                0xdc7b1140UL) {
+                tg_chat_sent_named_mention = 1;
+                break;
+            }
+        }
+    }
     return 0;
 }
 
@@ -11700,10 +11735,13 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
 }
 
 /* Fetch a supergroup's recent members and parse their id->name into out_members,
-   for the typing indicator. v1: peerChannel only (basic groups have no access_hash
-   and would need messages.getFullChat). MorphOS SKIPS entirely -- a large
-   participants reply is the documented bsdsocket freeze trigger. Returns 0 on a
-   parsed reply, non-zero otherwise (caller falls back to "someone"). */
+   for the typing indicator and the mentions. peerChannel only (basic groups have
+   no access_hash and would need messages.getFullChat). MorphOS skipped this
+   until 0.2, when a large reply was thought to freeze its network stack; the
+   freezes of that time turned out to be something else (repaints racing the
+   layers, getDialogs), and photos and files of megabytes have gone through the
+   same stack since. It asks for few members all the same, like the 68k. Returns
+   0 on a parsed reply, non-zero otherwise (caller falls back to "someone"). */
 static int tg_mtproto_gui_fetch_group_members(
     const char *host,
     const char *port,
@@ -11716,14 +11754,6 @@ static int tg_mtproto_gui_fetch_group_members(
     tg_mtproto_peer_cache *out_members,
     FILE *stream)
 {
-#if defined(__MORPHOS__) || defined(__MORPHOS)
-    (void)host; (void)port; (void)api_id; (void)auth_file; (void)dc_id_text;
-    (void)context; (void)peer_cache_file; (void)peer_index_text; (void)stream;
-    if (out_members != 0) {
-        memset(out_members, 0, sizeof(*out_members));
-    }
-    return 2; /* never fetch on MorphOS (freeze guard) */
-#else
     unsigned char query[64];
     unsigned long peer_constructor;
     unsigned long peer_id_hi;
@@ -11734,8 +11764,8 @@ static int tg_mtproto_gui_fetch_group_members(
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     static const char label[] = "mtproto channels.getParticipants";
-#if defined(__m68k__)
-    const unsigned long member_limit = 24UL; /* tighter box */
+#if defined(__m68k__) || defined(__MORPHOS__) || defined(__MORPHOS)
+    const unsigned long member_limit = 24UL; /* tighter box, smaller reply */
 #else
     const unsigned long member_limit = 64UL; /* == peer-cache capacity */
 #endif
@@ -11783,7 +11813,6 @@ static int tg_mtproto_gui_fetch_group_members(
     tg_mtproto_parse_message_peers(result.result_body, result.result_body_length,
                                    out_members);
     return 0;
-#endif
 }
 
 /* On the Amiga lanes tmpfile() is NOT anonymous: clib2/newlib create a real
@@ -14669,6 +14698,15 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                                        '\0') {
                                 sender = tg_chat_sender_cache.entries[k].username;
                             }
+#if !defined(TG_NO_GUI)
+                            /* Who writes in the window's open group can be
+                               mentioned there, member list or not. */
+                            if (is_group &&
+                                tg_chat_message_driver_override != 0) {
+                                tg_gui_people_note(
+                                    &tg_chat_sender_cache.entries[k]);
+                            }
+#endif
                             break;
                         }
                     }
@@ -18756,6 +18794,7 @@ static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
+static int tg_gui_mentions_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
 
@@ -20862,7 +20901,7 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
 #if !defined(TG_NO_GUI)
-    if (tg_gui_drafts_self_test() != 0) {
+    if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0) {
         return 2;
     }
 #endif
@@ -23357,6 +23396,8 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     /* Fresh group -> re-attempt the member-name fetch once for the typing names. */
     tg_gui_session_state.member_fetch_done = 0;
     tg_gui_session_state.member_cache.count = 0UL;
+    /* ...and who can be mentioned is learnt again: this open's authors. */
+    tg_gui_people_reset(other_chat);
     if (tg_gui_session_state.gui_driver.state != 0) {
         tg_gui_session_state.gui_driver.state->typing[0] = '\0';
     }
@@ -26014,6 +26055,8 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     }
 #endif
     had_draft = tg_gui_draft_send_begin();
+    /* The names picked from the "@" popup that are still in the text. */
+    send_text = tg_gui_mentions_for_send(send_text);
     rc = tg_mtproto_auth_send_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
@@ -26021,6 +26064,7 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, send_text, reply_to_msg_id,
         &sent_id, quiet);
+    tg_gui_mentions_sent(rc == 0);
     tg_gui_draft_send_end(had_draft, rc == 0);
     if (rc == 0) {
         /* Show the sent message at once, optimistically, with no extra network
@@ -26458,13 +26502,147 @@ unsigned long tg_gui_session_show_hidden(unsigned long peer_id_hi,
     return tg_hidden_msgs_forget_chat(peer_id_hi, peer_id_lo);
 }
 
+#if !defined(TG_NO_GUI)
+/* --- who can be mentioned ------------------------------------------------
+   The people of the open group this client has heard of: its recent
+   members where Telegram lists them (supergroups), whoever wrote one of
+   the messages loaded, and whoever a search by name found. An "@" in the
+   composer offers them. Someone with a username is mentioned by it, as
+   plain text; someone without is mentioned by name, and the message then
+   says who the name stands for (an entity), which is how the official
+   clients do it. The window only. */
+#if defined(__m68k__)
+#define TG_GUI_PEOPLE_MAX 40
+#elif defined(__MORPHOS__) || defined(__MORPHOS)
+#define TG_GUI_PEOPLE_MAX 48
+#else
+#define TG_GUI_PEOPLE_MAX 96
+#endif
+typedef struct tg_gui_person {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    int has_access_hash;
+    char title[64];    /* UTF-8, as Telegram gave it */
+    char username[40];
+} tg_gui_person;
+static tg_gui_person tg_gui_people[TG_GUI_PEOPLE_MAX];
+static int tg_gui_people_count = 0;
+/* What the popup offered last, in its order: a pick names one of them. */
+static tg_gui_person tg_gui_mention_offered[TG_GUI_MENTION_MAX];
+static int tg_gui_mention_offered_count = 0;
+/* The names put in the composer for people without a username, and whose
+   they are: the message sent with one still in it mentions that person. */
+typedef struct tg_gui_named_mention {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    char name[TG_GUI_MENTION_LEN]; /* as the composer holds it */
+} tg_gui_named_mention;
+static tg_gui_named_mention tg_gui_named[TG_MTPROTO_SEND_MENTIONS_MAX];
+static int tg_gui_named_count = 0;
+/* The last prefix a search found nobody for: a longer one finds nobody
+   either, and is not asked. */
+static char tg_gui_mention_search_empty[24];
+/* How many mentions by name the message being sent carries. */
+static int tg_gui_mentions_riding = 0;
+
+/* A copy cut to the buffer between two characters, never inside one. */
+static void tg_gui_copy_utf8(char *dst, unsigned long size, const char *src)
+{
+    unsigned long n = 0UL;
+
+    if (dst == 0 || size == 0UL) {
+        return;
+    }
+    while (src != 0 && src[n] != '\0' && n + 1UL < size) {
+        dst[n] = src[n];
+        ++n;
+    }
+    if (src != 0 && src[n] != '\0') {
+        while (n > 0UL && ((unsigned char)src[n] & 0xc0U) == 0x80U) {
+            --n;
+        }
+    }
+    dst[n] = '\0';
+}
+
+static void tg_gui_people_reset(int other_chat)
+{
+    tg_gui_people_count = 0;
+    tg_gui_mention_offered_count = 0;
+    tg_gui_mention_search_empty[0] = '\0';
+    if (other_chat) {
+        tg_gui_named_count = 0; /* the composer is another chat's now */
+    }
+}
+
+static void tg_gui_people_note(const tg_mtproto_peer_cache_entry *entry)
+{
+    tg_gui_person *p = 0;
+    int k;
+
+    if (entry == 0 ||
+        entry->peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
+        entry->is_self ||
+        (entry->title[0] == '\0' && entry->username[0] == '\0')) {
+        return; /* not a person, this account, or an account deleted */
+    }
+    for (k = 0; k < tg_gui_people_count; ++k) {
+        if (tg_gui_people[k].id_hi == entry->id_hi &&
+            tg_gui_people[k].id_lo == entry->id_lo) {
+            p = &tg_gui_people[k];
+            break;
+        }
+    }
+    if (p == 0) {
+        /* Full: the one just heard of takes the last place. */
+        p = tg_gui_people_count < TG_GUI_PEOPLE_MAX
+                ? &tg_gui_people[tg_gui_people_count++]
+                : &tg_gui_people[TG_GUI_PEOPLE_MAX - 1];
+        memset(p, 0, sizeof(*p));
+        p->id_hi = entry->id_hi;
+        p->id_lo = entry->id_lo;
+    }
+    if (entry->has_access_hash) {
+        p->access_hash_hi = entry->access_hash_hi;
+        p->access_hash_lo = entry->access_hash_lo;
+        p->has_access_hash = 1;
+    }
+    if (entry->title[0] != '\0') {
+        tg_gui_copy_utf8(p->title, sizeof(p->title), entry->title);
+    }
+    if (entry->username[0] != '\0') {
+        tg_gui_copy_utf8(p->username, sizeof(p->username), entry->username);
+    }
+}
+
+/* The name of someone of the open group, 0 when not heard of. */
+static const char *tg_gui_people_name(unsigned long id_hi,
+                                      unsigned long id_lo)
+{
+    int k;
+
+    for (k = 0; k < tg_gui_people_count; ++k) {
+        if (tg_gui_people[k].id_hi == id_hi &&
+            tg_gui_people[k].id_lo == id_lo &&
+            tg_gui_people[k].title[0] != '\0') {
+            return tg_gui_people[k].title;
+        }
+    }
+    return 0;
+}
+
 /* One-shot member fetch for the OPEN group (same lazily-triggered fetch the
    typing-name resolver uses; member_fetch_done is marked BEFORE the call so a
-   miss never re-fetches this open). MorphOS returns empty by design (the
-   freeze guard lives inside tg_mtproto_gui_fetch_group_members). */
+   miss never re-fetches this open). The members go among the people a
+   mention can name. */
 static void tg_gui_session_ensure_members(FILE *stream)
 {
     FILE *fq;
+    unsigned long i;
 
     if (tg_gui_session_state.member_fetch_done) {
         return;
@@ -26483,6 +26661,9 @@ static void tg_gui_session_ensure_members(FILE *stream)
         tg_gui_session_state.current_peer_index,
         &tg_gui_session_state.member_cache, fq);
     tg_mtproto_close_quiet_stream(fq, stream);
+    for (i = 0UL; i < tg_gui_session_state.member_cache.count; ++i) {
+        tg_gui_people_note(&tg_gui_session_state.member_cache.entries[i]);
+    }
 }
 
 /* Case-insensitive ASCII prefix test; a shorter `s` fails via the NUL byte. */
@@ -26508,14 +26689,205 @@ static int tg_gui_session_prefix_ci(const char *s, const char *prefix,
     return 1;
 }
 
+/* What the composer holds (Latin-1 on the Amigas) as Telegram wants it. */
+static void tg_gui_mention_to_utf8(const char *shown, char *out,
+                                   unsigned long size)
+{
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(shown, out, size)) {
+        return;
+    }
+#endif
+    tg_gui_copy_utf8(out, size, shown);
+}
+
+/* A person's name as the popup and the composer can show it: what the
+   window draws, without the emoji (the popup draws plain text) and without
+   blanks around it. */
+static void tg_gui_mention_clean_title(const tg_gui_person *p, char *out,
+                                       unsigned long size)
+{
+    char shown[sizeof(p->title) + 1];
+    unsigned long len;
+    unsigned long i;
+    unsigned long o = 0UL;
+
+    tg_gui_driver_text_from_utf8(shown, sizeof(shown), p->title);
+    len = (unsigned long)strlen(shown);
+    for (i = 0UL; i < len && o + 1UL < size;) {
+        unsigned char c = (unsigned char)shown[i];
+
+        if (tg_gui_emoji_pair_at(shown, len, i, 0)) {
+            i += 2UL;
+            continue;
+        }
+        ++i;
+        if (c < 0x20U || c == 0x7fU || c == TG_GUI_EMOJI_PREFIX0 ||
+            c == TG_GUI_EMOJI_PREFIX1) {
+            c = ' ';
+        }
+        if (c == ' ' && (o == 0UL || out[o - 1UL] == ' ')) {
+            continue; /* none at the start, one at a time */
+        }
+        out[o++] = (char)c;
+    }
+    while (o > 0UL && out[o - 1UL] == ' ') {
+        --o;
+    }
+    out[o] = '\0';
+}
+
+/* The name a mention writes for someone without a username: the first
+   name, as the official clients do. */
+static void tg_gui_mention_first_name(const tg_gui_person *p, char *out,
+                                      unsigned long size)
+{
+    unsigned long i;
+
+    tg_gui_mention_clean_title(p, out, size);
+    for (i = 0UL; out[i] != '\0'; ++i) {
+        if (out[i] == ' ') {
+            out[i] = '\0';
+            break;
+        }
+    }
+    if (out[0] == '\0' && size >= 5UL) {
+        strcpy(out, "User");
+    }
+}
+
+/* Whether what was typed after the "@" begins this person's username or a
+   word of their name. */
+static int tg_gui_mention_matches(const tg_gui_person *p, const char *prefix,
+                                  unsigned long plen)
+{
+    const char *t;
+    int at_word = 1;
+
+    if (plen == 0UL) {
+        return 1;
+    }
+    if (p->username[0] != '\0' &&
+        tg_gui_session_prefix_ci(p->username, prefix, plen)) {
+        return 1;
+    }
+    for (t = p->title; *t != '\0'; ++t) {
+        if (at_word && tg_gui_session_prefix_ci(t, prefix, plen)) {
+            return 1;
+        }
+        at_word = *t == ' ';
+    }
+    return 0;
+}
+
+static int tg_gui_mention_collect(const char *prefix, unsigned long plen,
+                                  int max)
+{
+    int k;
+
+    tg_gui_mention_offered_count = 0;
+    for (k = 0; k < tg_gui_people_count &&
+                tg_gui_mention_offered_count < max; ++k) {
+        if (tg_gui_mention_matches(&tg_gui_people[k], prefix, plen)) {
+            tg_gui_mention_offered[tg_gui_mention_offered_count++] =
+                tg_gui_people[k];
+        }
+    }
+    return tg_gui_mention_offered_count;
+}
+
+/* Nobody this client has heard of begins like that: Telegram is asked for
+   the members of the supergroup who do (a handful, a small answer). They
+   join the people. Returns how many it found. */
+static int tg_gui_mention_search(const char *prefix, FILE *stream)
+{
+    unsigned char query[112];
+    static const char label[] = "gui mention search";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long plen = (unsigned long)strlen(prefix);
+    unsigned long elen = (unsigned long)strlen(tg_gui_mention_search_empty);
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long i;
+    int hah;
+    int found = 0;
+    int rc;
+    FILE *quiet;
+
+    if (tg_gui_session_state.open_peer_constructor !=
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
+        plen >= sizeof(tg_gui_mention_search_empty) ||
+        (elen != 0UL && plen >= elen &&
+         tg_gui_session_prefix_ci(prefix, tg_gui_mention_search_empty,
+                                  elen))) {
+        return 0;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "mention peer") != 0 ||
+        pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR || !hah) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (tg_mtproto_build_channels_get_participants_search(
+              &writer, ph, pl, ahh, ahl, prefix,
+              (unsigned long)TG_GUI_MENTION_MAX) == TG_MTPROTO_TL_OK &&
+          tg_gui_session_peer_request(query, writer.length, &result, label,
+                                      0, 0UL, quiet) == 0 &&
+          tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
+             ? 0 : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        /* Remembered like an empty answer: with the link down, the next
+           letters must not each wait for it again. */
+        strcpy(tg_gui_mention_search_empty, prefix);
+        tg_gui_log("mention: search failed");
+        return 0;
+    }
+    /* The member list's own buffer takes the answer: its people are kept
+       above, where the names are looked up too. */
+    tg_mtproto_parse_message_peers(result.result_body,
+                                   result.result_body_length,
+                                   &tg_gui_session_state.member_cache);
+    for (i = 0UL; i < tg_gui_session_state.member_cache.count; ++i) {
+        const tg_mtproto_peer_cache_entry *e =
+            &tg_gui_session_state.member_cache.entries[i];
+
+        if (e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+            !e->is_self) {
+            tg_gui_people_note(e);
+            ++found;
+        }
+    }
+    if (found == 0) {
+        strcpy(tg_gui_mention_search_empty, prefix);
+    }
+    tg_gui_log(found > 0 ? "mention: search found some"
+                         : "mention: search found nobody");
+    return found;
+}
+
 int tg_gui_session_mention_candidates(const char *prefix, char *items,
                                       unsigned long item_size, int max,
                                       FILE *stream)
 {
-    unsigned long i;
+    char typed[TG_GUI_MENTION_LEN * 2 + 1];
     unsigned long plen;
     int n;
+    int k;
 
+    tg_gui_mention_offered_count = 0;
     if (items == 0 || item_size < 2UL || max <= 0 || stream == 0) {
         return 0;
     }
@@ -26523,51 +26895,369 @@ int tg_gui_session_mention_candidates(const char *prefix, char *items,
         !tg_gui_session_state.open_peer_is_chat) {
         return 0; /* mentions only make sense in an open group */
     }
+    if (max > TG_GUI_MENTION_MAX) {
+        max = TG_GUI_MENTION_MAX;
+    }
     tg_gui_session_ensure_members(stream);
-    /* Field diagnostic: "no popup after @" has three legitimate causes that
-       look identical from the keyboard. Say which one this is, once per
-       open group, when the debug log is on. */
-    if (tg_gui_log_is_enabled() &&
-        tg_gui_session_state.member_cache.count == 0) {
-#if defined(__MORPHOS__) || defined(__MORPHOS)
-        tg_gui_log("mention: no members (MorphOS skips the fetch by design)");
-#else
+    tg_gui_mention_to_utf8(prefix != 0 ? prefix : "", typed, sizeof(typed));
+    plen = (unsigned long)strlen(typed);
+    n = tg_gui_mention_collect(typed, plen, max);
+    if (n == 0 && plen >= 3UL && tg_gui_mention_search(typed, stream) > 0) {
+        n = tg_gui_mention_collect(typed, plen, max);
+    }
+    /* Field diagnostic: "no popup after @" when nobody is known at all. */
+    if (tg_gui_log_is_enabled() && tg_gui_people_count == 0) {
         tg_gui_log(tg_gui_session_state.open_peer_constructor ==
                            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR
-                       ? "mention: no members (fetch returned none)"
-                       : "mention: no members (basic group, needs getFullChat)");
-#endif
+                       ? "mention: nobody known (no members, no authors)"
+                       : "mention: nobody known (basic group, no authors)");
     }
-    plen = (prefix != 0) ? (unsigned long)strlen(prefix) : 0UL;
-    n = 0;
-    for (i = 0UL;
-         i < tg_gui_session_state.member_cache.count && n < max; ++i) {
-        const tg_mtproto_peer_cache_entry *e =
-            &tg_gui_session_state.member_cache.entries[i];
-        char *dst;
-        unsigned long k;
+    for (k = 0; k < n; ++k) {
+        const tg_gui_person *p = &tg_gui_mention_offered[k];
+        char *dst = items + ((unsigned long)k * item_size);
+        unsigned long o;
+        unsigned long u;
 
-        if (e->username[0] == '\0' || e->is_self) {
-            /* Only usernames can be inserted as a plain-text mention; the
-               sender's own name would be noise. */
-            continue;
+        /* "Name Surname @username", or the half there is. */
+        tg_gui_mention_clean_title(p, dst, item_size);
+        o = (unsigned long)strlen(dst);
+        if (p->username[0] != '\0') {
+            if (o > 0UL && o + 1UL < item_size) {
+                dst[o++] = ' ';
+            }
+            if (o + 1UL < item_size) {
+                dst[o++] = '@';
+            }
+            for (u = 0UL; p->username[u] != '\0' && o + 1UL < item_size;
+                 ++u) {
+                dst[o++] = p->username[u];
+            }
+            dst[o] = '\0';
         }
-        if (plen != 0UL &&
-            !tg_gui_session_prefix_ci(e->username, prefix, plen) &&
-            !tg_gui_session_prefix_ci(e->title, prefix, plen)) {
-            continue;
-        }
-        dst = items + ((unsigned long)n * item_size);
-        k = 0UL;
-        while (e->username[k] != '\0' && k + 1UL < item_size) {
-            dst[k] = e->username[k];
-            ++k;
-        }
-        dst[k] = '\0';
-        ++n;
     }
     return n;
 }
+
+/* Public: what the composer takes in place of the "@..." being typed when
+   the popup's entry `index` is picked: "@username", or the first name of
+   someone who has none, which the message sent will tie to them.
+   1 = `insert` holds it. */
+int tg_gui_session_mention_pick(int index, char *insert, unsigned long size)
+{
+    const tg_gui_person *p;
+    tg_gui_named_mention *slot;
+    unsigned long i;
+    int k;
+
+    if (insert == 0 || size < 8UL || index < 0 ||
+        index >= tg_gui_mention_offered_count) {
+        return 0;
+    }
+    p = &tg_gui_mention_offered[index];
+    if (p->username[0] != '\0') {
+        insert[0] = '@';
+        for (i = 0UL; p->username[i] != '\0' && i + 2UL < size; ++i) {
+            insert[i + 1UL] = p->username[i];
+        }
+        insert[i + 1UL] = '\0';
+        return 1;
+    }
+    tg_gui_mention_first_name(p, insert,
+                              size < (unsigned long)TG_GUI_MENTION_LEN
+                                  ? size : (unsigned long)TG_GUI_MENTION_LEN);
+    if (!p->has_access_hash) {
+        return 1; /* the name alone: there is no saying whose it is */
+    }
+    for (k = 0; k < tg_gui_named_count; ++k) {
+        if (tg_gui_named[k].id_hi == p->id_hi &&
+            tg_gui_named[k].id_lo == p->id_lo) {
+            return 1; /* already held */
+        }
+    }
+    if (tg_gui_named_count >= TG_MTPROTO_SEND_MENTIONS_MAX) {
+        /* The oldest goes: its name stays in the text, as plain text. */
+        for (k = 1; k < tg_gui_named_count; ++k) {
+            tg_gui_named[k - 1] = tg_gui_named[k];
+        }
+        --tg_gui_named_count;
+    }
+    slot = &tg_gui_named[tg_gui_named_count++];
+    slot->id_hi = p->id_hi;
+    slot->id_lo = p->id_lo;
+    slot->access_hash_hi = p->access_hash_hi;
+    slot->access_hash_lo = p->access_hash_lo;
+    for (i = 0UL; insert[i] != '\0' && i + 1UL < sizeof(slot->name); ++i) {
+        slot->name[i] = insert[i];
+    }
+    slot->name[i] = '\0';
+    return 1;
+}
+
+/* A byte that belongs to a word: a name found inside a longer word is not
+   that person's. */
+static int tg_gui_mention_word_byte(unsigned char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+           (c >= 'a' && c <= 'z') || c == '_' || c >= 0x80U;
+}
+
+/* How Telegram counts a text's length: UTF-16 units. */
+static unsigned long tg_gui_utf16_units(const char *utf8, unsigned long bytes)
+{
+    unsigned long units = 0UL;
+    unsigned long i;
+
+    for (i = 0UL; i < bytes; ++i) {
+        unsigned char c = (unsigned char)utf8[i];
+
+        if ((c & 0xc0U) != 0x80U) {
+            units += c >= 0xf0U ? 2UL : 1UL;
+        }
+    }
+    return units;
+}
+
+/* The text about to be sent still holds the names picked from the popup:
+   the message says whose they are. Returns the text to send: the same,
+   past its leading blanks when a mention rides on it (Telegram drops them,
+   and the places are counted from the first character it keeps). */
+static const char *tg_gui_mentions_for_send(const char *utf8)
+{
+    tg_mtproto_send_mention list[TG_MTPROTO_SEND_MENTIONS_MAX];
+    unsigned long from[TG_MTPROTO_SEND_MENTIONS_MAX];
+    unsigned long to[TG_MTPROTO_SEND_MENTIONS_MAX];
+    const char *text = utf8;
+    int n = 0;
+    int k;
+    int j;
+
+    tg_mtproto_send_set_mentions(0, 0);
+    tg_gui_mentions_riding = 0;
+    if (tg_gui_named_count <= 0 || utf8 == 0) {
+        return utf8;
+    }
+    while (*text == ' ' || *text == '\n' || *text == '\r' || *text == '\t') {
+        ++text;
+    }
+    for (k = 0; k < tg_gui_named_count; ++k) {
+        char name[(TG_GUI_MENTION_LEN * 2) + 1];
+        unsigned long nlen;
+        const char *hit;
+        const char *at;
+
+        tg_gui_mention_to_utf8(tg_gui_named[k].name, name, sizeof(name));
+        nlen = (unsigned long)strlen(name);
+        if (nlen == 0UL) {
+            continue;
+        }
+        for (at = text; (hit = strstr(at, name)) != 0; at = hit + 1) {
+            unsigned long start = (unsigned long)(hit - text);
+            int clash = 0;
+
+            if ((start > 0UL &&
+                 tg_gui_mention_word_byte((unsigned char)hit[-1])) ||
+                tg_gui_mention_word_byte((unsigned char)hit[nlen])) {
+                continue; /* inside a longer word */
+            }
+            for (j = 0; j < n; ++j) {
+                if (start < to[j] && start + nlen > from[j]) {
+                    clash = 1; /* another mention has this place */
+                }
+            }
+            if (clash) {
+                continue;
+            }
+            from[n] = start;
+            to[n] = start + nlen;
+            list[n].offset = tg_gui_utf16_units(text, start);
+            list[n].length = tg_gui_utf16_units(hit, nlen);
+            list[n].user_id_hi = tg_gui_named[k].id_hi;
+            list[n].user_id_lo = tg_gui_named[k].id_lo;
+            list[n].access_hash_hi = tg_gui_named[k].access_hash_hi;
+            list[n].access_hash_lo = tg_gui_named[k].access_hash_lo;
+            ++n;
+            break;
+        }
+    }
+    if (n == 0) {
+        return utf8;
+    }
+    /* In the order of the text. */
+    for (k = 1; k < n; ++k) {
+        for (j = k; j > 0 && list[j].offset < list[j - 1].offset; --j) {
+            tg_mtproto_send_mention swap = list[j];
+
+            list[j] = list[j - 1];
+            list[j - 1] = swap;
+        }
+    }
+    tg_mtproto_send_set_mentions(list, n);
+    tg_gui_mentions_riding = n;
+    return text;
+}
+
+static void tg_gui_mentions_sent(int sent)
+{
+    tg_mtproto_send_set_mentions(0, 0);
+    if (sent) {
+        if (tg_gui_mentions_riding > 0) {
+            tg_gui_log(tg_chat_sent_named_mention
+                           ? "mention: by name, kept by Telegram"
+                           : "mention: by name, not in Telegram's answer");
+        }
+        tg_gui_named_count = 0; /* the next message starts clean */
+    }
+    tg_gui_mentions_riding = 0;
+}
+#endif /* !TG_NO_GUI */
+
+#if !defined(TG_NO_GUI) && !defined(TG_NO_SELFTEST)
+static int tg_gui_mentions_self_test(void)
+{
+    int ok;
+
+    /* Who an "@" can mention: the people noted (not this account, not a
+       chat, nobody twice), found by the start of their username or of any
+       word of their name; shown as "Name @username"; picked as "@username"
+       or, without one, as their first name, which the message sent ties
+       to them at the place Telegram counts. */
+    {
+        static tg_mtproto_peer_cache_entry e;
+        unsigned char wire[112];
+        char items[TG_GUI_MENTION_MAX][TG_GUI_MENTION_LEN];
+        char ins[TG_GUI_MENTION_LEN];
+        tg_mtproto_tl_writer w;
+        const char *text;
+        int saved_open = tg_gui_session_state.open;
+        int saved_is_chat = tg_gui_session_state.open_peer_is_chat;
+        int saved_fetched = tg_gui_session_state.member_fetch_done;
+        unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+
+        tg_gui_people_reset(1);
+        memset(&e, 0, sizeof(e));
+        e.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        e.id_lo = 1UL;
+        e.has_access_hash = 1;
+        e.access_hash_lo = 0x51UL;
+        strcpy(e.title, "Mario Rossi");
+        strcpy(e.username, "mrossi");
+        tg_gui_people_note(&e);
+        e.id_lo = 2UL;
+        e.access_hash_lo = 0x52UL;
+        strcpy(e.title, " \xc3\x89lodie  Durand ");
+        e.username[0] = '\0';
+        tg_gui_people_note(&e);
+        e.id_lo = 3UL;
+        e.is_self = 1;
+        strcpy(e.title, "Me Myself");
+        tg_gui_people_note(&e); /* this account: not among them */
+        e.is_self = 0;
+        e.peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+        tg_gui_people_note(&e); /* a chat: not a person */
+        e.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        e.id_lo = 1UL;
+        e.has_access_hash = 0;
+        strcpy(e.title, "Mario Rossi");
+        strcpy(e.username, "mrossi");
+        tg_gui_people_note(&e); /* heard of again: once, its hash kept */
+        ok = tg_gui_people_count == 2 &&
+             tg_gui_people[0].has_access_hash &&
+             tg_gui_people[0].access_hash_lo == 0x51UL &&
+             tg_gui_mention_collect("", 0UL, TG_GUI_MENTION_MAX) == 2 &&
+             tg_gui_mention_collect("MR", 2UL, TG_GUI_MENTION_MAX) == 1 &&
+             tg_gui_mention_offered[0].id_lo == 1UL &&
+             tg_gui_mention_collect("ros", 3UL, TG_GUI_MENTION_MAX) == 1 &&
+             tg_gui_mention_offered[0].id_lo == 1UL &&
+             tg_gui_mention_collect("du", 2UL, TG_GUI_MENTION_MAX) == 1 &&
+             tg_gui_mention_offered[0].id_lo == 2UL &&
+             tg_gui_mention_collect("ssi", 3UL, TG_GUI_MENTION_MAX) == 0 &&
+             tg_gui_mention_collect("", 0UL, 1) == 1 &&
+             strcmp(tg_gui_people_name(0UL, 2UL),
+                    " \xc3\x89lodie  Durand ") == 0 &&
+             tg_gui_people_name(0UL, 9UL) == 0 &&
+             tg_gui_utf16_units("a\xf0\x9f\x98\x80" "b", 6UL) == 4UL;
+        /* The popup's lines and what a pick puts in the composer. The
+           members are taken as asked already: no network here. */
+        tg_gui_session_state.open = 1;
+        tg_gui_session_state.open_peer_is_chat = 1;
+        tg_gui_session_state.member_fetch_done = 1;
+        tg_gui_session_state.open_peer_constructor =
+            TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+        memset(items, 0, sizeof(items));
+        ok = ok &&
+             tg_gui_session_mention_candidates("", &items[0][0],
+                                               TG_GUI_MENTION_LEN,
+                                               TG_GUI_MENTION_MAX,
+                                               stdout) == 2 &&
+             strcmp(items[0], "Mario Rossi @mrossi") == 0 &&
+             strcmp(items[1], "\xc9lodie Durand") == 0 &&
+             tg_gui_session_mention_pick(0, ins, sizeof(ins)) == 1 &&
+             strcmp(ins, "@mrossi") == 0 && tg_gui_named_count == 0 &&
+             tg_gui_session_mention_pick(1, ins, sizeof(ins)) == 1 &&
+             strcmp(ins, "\xc9lodie") == 0 && tg_gui_named_count == 1 &&
+             tg_gui_session_mention_pick(1, ins, sizeof(ins)) == 1 &&
+             tg_gui_named_count == 1 && /* the same person: held once */
+             tg_gui_session_mention_pick(2, ins, sizeof(ins)) == 0 &&
+             /* nobody begins with "zz": no popup (and no search: two
+                letters, a basic group) */
+             tg_gui_session_mention_candidates("zz", &items[0][0],
+                                               TG_GUI_MENTION_LEN,
+                                               TG_GUI_MENTION_MAX,
+                                               stdout) == 0;
+#if !TG_MTPROTO_DISPLAY_LATIN1
+        /* The message: the name is at 5 of the text Telegram keeps (the
+           leading blanks go), 6 units long, and names user 2. Here the
+           composer's bytes go as they are; on the Amigas they become
+           UTF-8 first, and the count is the same. */
+        text = tg_gui_mentions_for_send("  ciao \xc9lodie, e Mario");
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        ok = ok && strcmp(text, "ciao \xc9lodie, e Mario") == 0 &&
+             tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL, 2UL) ==
+                 TG_MTPROTO_TL_OK &&
+             w.length == 12UL + 24UL + 8UL + 8UL + 32UL &&
+             wire[4] == 0x08U && wire[48] == 0x01U && wire[56] == 0x05U &&
+             wire[60] == 0x06U && wire[68] == 0x02U && wire[76] == 0x52U;
+        /* Inside a longer word it is not that person's name. */
+        text = tg_gui_mentions_for_send("  ciao \xc9lodiexx");
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        ok = ok && strcmp(text, "  ciao \xc9lodiexx") == 0 &&
+             tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL, 2UL) ==
+                 TG_MTPROTO_TL_OK &&
+             wire[4] == 0x00U;
+        /* Not sent: the name is still held; sent: it is let go of. */
+        (void)tg_gui_mentions_for_send("\xc9lodie");
+        tg_gui_mentions_sent(0);
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        ok = ok && tg_gui_named_count == 1 &&
+             tg_mtproto_build_messages_send_self(&w, "x", 0UL, 1UL, 2UL) ==
+                 TG_MTPROTO_TL_OK &&
+             wire[4] == 0x00U;
+        (void)tg_gui_mentions_for_send("\xc9lodie");
+        tg_gui_mentions_sent(1);
+        text = tg_gui_mentions_for_send(" \xc9lodie");
+        ok = ok && tg_gui_named_count == 0 &&
+             strcmp(text, " \xc9lodie") == 0;
+#else
+        (void)wire;
+        (void)w;
+        (void)text;
+#endif
+        tg_gui_mentions_sent(1);
+        tg_gui_people_reset(1);
+        tg_gui_session_state.open = saved_open;
+        tg_gui_session_state.open_peer_is_chat = saved_is_chat;
+        tg_gui_session_state.member_fetch_done = saved_fetched;
+        tg_gui_session_state.open_peer_constructor = saved_pc;
+        if (!ok) {
+            printf("mtproto self-test: mentions wrong (\"%s\", \"%s\", "
+                   "\"%s\", %d held)\n",
+                   items[0], items[1], ins, tg_gui_named_count);
+            return 2;
+        }
+    }
+    return 0;
+}
+#endif
 
 /* Avatar v2 (safe scope): ONE bounded download of the OPEN chat's small
    profile photo, at open_chat time only -- never from the live tick, and never
@@ -30542,6 +31232,14 @@ static const char *tg_gui_session_resolve_typing_member(FILE *stream)
 
     fh = tg_gui_session_state.typing.from_id_hi;
     fl = tg_gui_session_state.typing.from_id_lo;
+    {
+        /* Someone who wrote in this chat, or a member already listed. */
+        const char *known = tg_gui_people_name(fh, fl);
+
+        if (known != 0) {
+            return known;
+        }
+    }
     for (ci = 0UL; ci < tg_gui_session_state.member_cache.count; ++ci) {
         if (tg_gui_session_state.member_cache.entries[ci].id_hi == fh &&
             tg_gui_session_state.member_cache.entries[ci].id_lo == fl &&
@@ -30567,6 +31265,12 @@ static const char *tg_gui_session_resolve_typing_member(FILE *stream)
                 tg_gui_session_state.current_peer_index,
                 &tg_gui_session_state.member_cache, fq) == 0) {
             tg_mtproto_close_quiet_stream(fq, stream);
+#if !defined(TG_NO_GUI)
+            for (ci = 0UL; ci < tg_gui_session_state.member_cache.count; ++ci) {
+                tg_gui_people_note(
+                    &tg_gui_session_state.member_cache.entries[ci]);
+            }
+#endif
             for (ci = 0UL; ci < tg_gui_session_state.member_cache.count; ++ci) {
                 if (tg_gui_session_state.member_cache.entries[ci].id_hi == fh &&
                     tg_gui_session_state.member_cache.entries[ci].id_lo == fl &&

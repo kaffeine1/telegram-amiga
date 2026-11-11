@@ -9050,9 +9050,9 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
 }
 
 /* Recompute the '@' mention popup after a composer edit or caret move: token
-   under the caret (tg_gui_mention_token) -> candidate usernames from the open
-   group's member cache. Selection resets to the top match on every refresh so
-   the popup always answers "what will ENTER insert" at a glance. */
+   under the caret (tg_gui_mention_token) -> the people of the open group it
+   begins (the session knows them). Selection resets to the top match on every
+   refresh so the popup always answers "what will ENTER insert" at a glance. */
 static void tg_gui_window_mention_refresh(tg_gui_state *state)
 {
     int start = 0;
@@ -9081,25 +9081,29 @@ static void tg_gui_window_mention_refresh(tg_gui_state *state)
     }
 }
 
-/* Replace the '@'-token under the caret with "@<picked username> " and place
-   the caret after the space; closes the popup. Bounded by the input buffer. */
+/* Replace the '@'-token under the caret with what mentions the person
+   picked, "@username " or their first name when they have no username (the
+   session ties the name to them when the message goes), and place the caret
+   after the space; closes the popup. Bounded by the input buffer. */
 static void tg_gui_window_mention_complete(tg_gui_state *state)
 {
     char out[TG_GUI_MSG_TEXT_MAX];
+    char ins[TG_GUI_MENTION_LEN];
     unsigned long o = 0UL;
     unsigned long caret;
     int i;
     const char *u;
 
     if (!state->mention_active || state->mention_sel < 0 ||
-        state->mention_sel >= state->mention_count) {
+        state->mention_sel >= state->mention_count ||
+        !tg_gui_session_mention_pick(state->mention_sel, ins, sizeof(ins))) {
         return;
     }
-    /* head, up to and including the '@' */
-    for (i = 0; i <= state->mention_start && o + 1UL < sizeof(out); ++i) {
+    /* head, up to the '@' */
+    for (i = 0; i < state->mention_start && o + 1UL < sizeof(out); ++i) {
         out[o++] = state->input[i];
     }
-    u = state->mention_items[state->mention_sel];
+    u = ins;
     while (*u != '\0' && o + 1UL < sizeof(out)) {
         out[o++] = *u++;
     }

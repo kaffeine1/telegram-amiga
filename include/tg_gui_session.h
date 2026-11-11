@@ -446,15 +446,23 @@ unsigned long tg_gui_session_hidden_count(unsigned long peer_id_hi,
 unsigned long tg_gui_session_show_hidden(unsigned long peer_id_hi,
                                          unsigned long peer_id_lo);
 
-/* '@' mention autocomplete: fills up to `max` candidate usernames (no leading
-   '@', NUL-terminated, `item_size` bytes apart in `items`) for the open GROUP,
-   matching `prefix` case-insensitively against username or title (empty prefix
-   = first members). Triggers the same one-shot member fetch the group typing
-   names use (supergroups; basic groups have no fetch yet -> 0). Returns the
-   count; 0 when no group is open or nothing matches. */
+/* Fills up to `max` entries for the composer's "@" popup (`item_size`
+   bytes apart in `items`): the people of the open GROUP whose username or
+   name begins with `prefix` (empty = the first ones), each as
+   "Name @username" or the half there is. The people are who wrote the
+   messages loaded, the group's recent members (supergroups, asked once)
+   and, when nobody known matches three letters or more, who Telegram finds
+   among the members. Returns the count; 0 when no group is open or nothing
+   matches. */
 int tg_gui_session_mention_candidates(const char *prefix, char *items,
                                       unsigned long item_size, int max,
                                       FILE *stream);
+
+/* What the composer takes in place of the "@..." being typed when entry
+   `index` of the last list is picked: "@username", or the first name of
+   someone who has none (the message sent then says whose name it is).
+   1 = `insert` holds it. */
+int tg_gui_session_mention_pick(int index, char *insert, unsigned long size);
 
 /* Searches Telegram for `query` (contacts.search), adds the first openable
    result to the peer cache and opens it. Small reply, MorphOS-safe. Returns 0 =

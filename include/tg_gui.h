@@ -198,7 +198,9 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src);
 /* '@' mention autocomplete popup (composer). */
 #define TG_GUI_MENTION_MAX 5
-#define TG_GUI_MENTION_LEN 40
+#define TG_GUI_MENTION_LEN 56
+/* Wide enough for "Name Surname @username"; narrower in a narrow window. */
+#define TG_GUI_MENTION_POPUP_W 300
 /* Received-message body buffer, decoupled from the 256-byte preview/input/name
    size so long messages are not truncated at ingestion. It holds the GUI's own
    form of the text, Latin-1 with two-byte emoji pairs, about a byte a
@@ -592,8 +594,8 @@ typedef struct tg_gui_state {
     int selected_msg; /* transcript row highlighted by a click (-1 = none) */
 
     /* '@' mention autocomplete over the composer: while the caret sits in an
-       "@prefix" token, mention_items holds up to TG_GUI_MENTION_MAX candidate
-       usernames (no leading '@') from the open group's member cache.
+       "@prefix" token, mention_items holds up to TG_GUI_MENTION_MAX people
+       of the open group, each as the popup shows it ("Name @username").
        mention_active gates paint + key routing (Up/Down pick, ENTER/TAB
        complete, ESC closes); mention_start is the byte offset of the '@'. */
     int mention_active;

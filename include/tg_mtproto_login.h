@@ -870,6 +870,21 @@ tg_mtproto_tl_status tg_mtproto_peer_notify_keep(
    leaves it (off, the default). */
 void tg_mtproto_send_set_clear_draft(int on);
 
+/* The mentions by name the next messages.sendMessage built carries: where
+   each name is in its text (UTF-16 units) and whose it is. None (0, 0)
+   takes them away again. */
+#define TG_MTPROTO_SEND_MENTIONS_MAX 4
+typedef struct tg_mtproto_send_mention {
+    unsigned long offset;
+    unsigned long length;
+    unsigned long user_id_hi;
+    unsigned long user_id_lo;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+} tg_mtproto_send_mention;
+void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
+                                  int count);
+
 /* messages.deleteHistory for this account only (not for a channel), and the
    offset its messages.affectedHistory reply leaves to delete. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
@@ -978,6 +993,17 @@ tg_mtproto_tl_status tg_mtproto_build_channels_get_participants_recent(
     unsigned long channel_id_lo,
     unsigned long access_hash_hi,
     unsigned long access_hash_lo,
+    unsigned long limit);
+
+/* The same with the search filter: the members whose name or username
+   begins with query_utf8. */
+tg_mtproto_tl_status tg_mtproto_build_channels_get_participants_search(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const char *query_utf8,
     unsigned long limit);
 
 tg_mtproto_tl_status tg_mtproto_build_messages_get_peer_dialogs(

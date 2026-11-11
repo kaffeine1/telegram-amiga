@@ -2055,7 +2055,7 @@ int tg_gui_mention_click(const tg_gui_state *state, tg_gui_backend *backend,
     box_top = content_h - input_h;
     ih = lh + 4;
     n = state->mention_count;
-    bw = 220;
+    bw = TG_GUI_MENTION_POPUP_W;
     bh = (n * ih) + 4;
     bx = sidebar_w + 8;
     by = box_top - bh - 2;
@@ -4188,7 +4188,7 @@ static void tg_gui_paint_popups_at(const tg_gui_state *state,
     if (state->composing && state->mention_active && state->mention_count > 0) {
         int ih = lh + 4;
         int n = state->mention_count;
-        int bw = 220;
+        int bw = TG_GUI_MENTION_POPUP_W;
         int bh = (n * ih) + 4;
         int bx = sidebar_w + 8;
         int by = box_top - bh - 2;
@@ -4219,13 +4219,13 @@ static void tg_gui_paint_popups_at(const tg_gui_state *state,
                                                     bw, ih));
                 pen = TG_GUI_PEN_ACCENT_TEXT;
             }
-            row[rl++] = '@';
             while (*u != '\0' && rl < sizeof(row) - 1UL) {
                 row[rl++] = *u++;
             }
             row[rl] = '\0';
-            backend->draw_text(backend, pen, bx + 8, by + 2 + (mi * ih) + lh,
-                               row, rl);
+            /* "Name @username": cut to the popup, never drawn past it. */
+            tg_gui_draw_clipped(backend, pen, bx + 8,
+                                by + 2 + (mi * ih) + lh, row, bw - 16);
         }
     }
     tg_gui_emoji_paint(state, backend, width, height, lh, box_top);
