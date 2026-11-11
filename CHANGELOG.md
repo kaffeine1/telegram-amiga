@@ -47,6 +47,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Several messages at once. Select, in a message's menu, starts a
+  selection: a click on a message marks it or takes its mark away, and
+  Shift+click marks everything from the message last clicked to that
+  one. The composer gives way to a bar that says how many are selected,
+  with Forward, Delete and Cancel (Esc cancels too, and so does opening
+  another chat). Forward uses the usual chat chooser and sends them all
+  in one request, oldest first. Delete asks once for all of them and
+  does what the single entries do: your own messages are deleted for
+  everyone; other people's are hidden here in a group, and in a private
+  chat deleted for you only. The selection covers the messages that are
+  loaded.
 - Polls. A poll used to show as "[Media]"; it now shows its question,
   its answers, numbered, and what kind it is (a quiz, several answers
   allowed, closed). Vote... in the message's menu (right click) lists

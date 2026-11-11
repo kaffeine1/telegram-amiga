@@ -331,6 +331,8 @@ typedef struct tg_gui_message {
        written out, and its menu offers the vote. */
     unsigned long poll_id_hi;
     unsigned long poll_id_lo;
+    /* Chosen while several messages are being selected (pick_mode). */
+    unsigned char picked;
     /* The renderer's own: the height it worked out for this message and a
        key of everything that height depends on (0 = none yet). */
     unsigned long layout_key;
@@ -469,6 +471,7 @@ typedef struct tg_gui_state {
     int forward_pick_active;
     unsigned long forward_message_id;
     unsigned long forward_source_index;
+    int forward_many; /* the destination is for every selected message */
     /* The open chat has older history beyond what is loaded (server total > shown).
        When the loaded rows fit the window (no real scrollbar), the painter still
        draws a short scrollbar so the user has a handle to drag up / wheel up and
@@ -593,6 +596,15 @@ typedef struct tg_gui_state {
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
     int ctx_react; /* the React chooser replaces the message menu */
+    /* Several messages are being selected, to delete or forward them
+       together: a click on a message turns its mark, the composer gives
+       way to a bar with how many are chosen and Forward, Delete, Cancel
+       (their places, as the painter put them, are the pick_* fields).
+       pick_anchor_id is the message last clicked, where a Shift+click
+       starts its range. */
+    int pick_mode;
+    unsigned long pick_anchor_id;
+    int pick_fw_x, pick_fw_w, pick_del_x, pick_del_w, pick_can_x, pick_can_w;
     /* The menu's message carries a poll. ctx_poll_open: it can be voted
        ("Vote..."); ctx_poll_voted: this account's vote can be taken back.
        ctx_poll: the poll's answers replace the message menu, one a line
@@ -728,6 +740,10 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
 /* The smiley button in the composer row that toggles the emoji picker. */
 #define TG_GUI_HIT_EMOJI_BUTTON (-7)
 #define TG_GUI_HIT_ATTACH_BUTTON (-8) /* paperclip opens the attachment picker */
+/* The bar that takes the composer's place while messages are selected. */
+#define TG_GUI_HIT_PICK_FORWARD (-9)
+#define TG_GUI_HIT_PICK_DELETE (-10)
+#define TG_GUI_HIT_PICK_CANCEL (-11)
 /* Emoji picker cells: TG_GUI_HIT_EMOJI_BASE + cell. Positive on purpose: the
    message and photo ranges are negative and their dispatch tests "<=". */
 #define TG_GUI_HIT_EMOJI_BASE 1000
@@ -938,13 +954,14 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_POLL 43 /* Vote...: the poll's answers take the menu */
 #define TG_GUI_CTX_POLL_RETRACT 44 /* Take back vote */
 #define TG_GUI_CTX_POLL_SEND 45 /* several answers chosen: send them */
+#define TG_GUI_CTX_SELECT 46 /* Select: start choosing several messages */
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
-#define TG_GUI_CTX_MENU_ITEMS 13 /* the longest message menu */
+#define TG_GUI_CTX_MENU_ITEMS 14 /* the longest message menu */
 #define TG_GUI_CTX_ITEMS_MAX TG_GUI_REACT_CHOICES_MAX /* the whole chooser */
 
 /* Attachment chooser: known image extensions get the Photo/File dialog;
@@ -1058,6 +1075,24 @@ int tg_gui_photo_save_allowed(int destination_exists,
    the server clears the out flag on every message (nothing in Saved Messages
    is "outgoing"), yet everything is yours: Edit/Delete gate on this too. */
 int tg_gui_open_chat_is_self(const tg_gui_state *state);
+
+/* Selecting several messages. begin: the mode starts with message `mi`
+   chosen (a reply or an edit under way is dropped). toggle: a click on
+   message `mi` turns its mark, or with `extend` (Shift) chooses every
+   message from the one last clicked to it; the mode ends when the last
+   mark goes. count: how many are chosen, 0 outside the mode. ids: the
+   chosen ones' ids, oldest first, all of them or only this account's own
+   or only the others' (in Saved Messages every message is one's own);
+   returns how many. end: leaves the mode. */
+#define TG_GUI_PICK_ALL 0
+#define TG_GUI_PICK_OWN 1
+#define TG_GUI_PICK_OTHERS 2
+void tg_gui_pick_begin(tg_gui_state *state, int mi);
+int tg_gui_pick_toggle(tg_gui_state *state, int mi, int extend);
+int tg_gui_pick_count(const tg_gui_state *state);
+int tg_gui_pick_ids(const tg_gui_state *state, unsigned long *ids, int max,
+                    int which);
+void tg_gui_pick_end(tg_gui_state *state);
 /* Remembers chats[selected_chat] as the chat open in the transcript, for the
    header; called wherever a chat is opened and its title set. */
 void tg_gui_note_open_chat(tg_gui_state *state);

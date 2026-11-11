@@ -11448,6 +11448,94 @@ static int tg_mtproto_auth_forward_peer_on_context(
     return 0;
 }
 
+/* Several messages of one chat forwarded to another in one request, in
+   the order given (the caller gives them oldest first). 0 ok, SOFT_FAIL
+   on a timeout, 2 else. */
+static int tg_mtproto_auth_forward_list_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *from_peer_index_text, const char *to_peer_index_text,
+    const unsigned long *message_ids, unsigned long count, FILE *stream)
+{
+    static unsigned char query[96 + (TG_GUI_MAX_MESSAGES * 12)];
+    static unsigned long random_hi[TG_GUI_MAX_MESSAGES];
+    static unsigned long random_lo[TG_GUI_MAX_MESSAGES];
+    unsigned char random_id[8];
+    unsigned long from_constructor;
+    unsigned long from_id_hi;
+    unsigned long from_id_lo;
+    unsigned long from_hash_hi;
+    unsigned long from_hash_lo;
+    unsigned long to_constructor;
+    unsigned long to_id_hi;
+    unsigned long to_id_lo;
+    unsigned long to_hash_hi;
+    unsigned long to_hash_lo;
+    unsigned long i;
+    int from_has_hash;
+    int to_has_hash;
+    int qrc;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_updates_summary updates;
+    static const char label[] = "mtproto messages.forwardMessages";
+
+    if (stream == 0 || message_ids == 0 || count == 0UL ||
+        count > (unsigned long)TG_GUI_MAX_MESSAGES ||
+        from_peer_index_text == 0 || to_peer_index_text == 0) {
+        return 2;
+    }
+    if (tg_mtproto_load_peer_cache_peer(
+            peer_cache_file, from_peer_index_text, &from_constructor,
+            &from_id_hi, &from_id_lo, &from_hash_hi, &from_hash_lo,
+            &from_has_hash, stream, label) != 0 ||
+        tg_mtproto_load_peer_cache_peer(
+            peer_cache_file, to_peer_index_text, &to_constructor, &to_id_hi,
+            &to_id_lo, &to_hash_hi, &to_hash_lo, &to_has_hash, stream,
+            label) != 0) {
+        return 2;
+    }
+    for (i = 0UL; i < count; ++i) {
+        tg_mtproto_saved_session_random(random_id, sizeof(random_id));
+        random_lo[i] = tg_mtproto_read_u32_le(random_id);
+        random_hi[i] = tg_mtproto_read_u32_le(random_id + 4U);
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_forward_messages(
+            &writer, from_constructor, from_id_hi, from_id_lo, from_hash_hi,
+            from_hash_lo, from_has_hash, message_ids, random_hi, random_lo,
+            count, to_constructor, to_id_hi, to_id_lo, to_hash_hi,
+            to_hash_lo, to_has_hash) != TG_MTPROTO_TL_OK) {
+        fprintf(stream, "%s: query-build-failed\n", label);
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    qrc = tg_mtproto_send_saved_query_on_context(
+        host, port, api_id, auth_file, dc_id_text, context, query,
+        writer.length, &result, stream, label, 600U);
+    if (qrc != 0) {
+        return qrc == TG_MTPROTO_QUERY_SOFT_FAIL ?
+            TG_MTPROTO_QUERY_SOFT_FAIL : 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        if (!tg_mtproto_print_rpc_error(label, &result, stream)) {
+            fprintf(stream, "%s: rpc-error-parse-failed\n", label);
+        }
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        tg_mtproto_parse_updates_summary(result.result_constructor,
+                                         result.result_body,
+                                         result.result_body_length,
+                                         &updates) != TG_MTPROTO_TL_OK) {
+        fprintf(stream, "%s: updates-parse-failed constructor 0x%08lx\n",
+                label, result.result_constructor);
+        return 2;
+    }
+    return 0;
+}
+
 static const char *tg_mtproto_reaction_failure_text(const char *raw)
 {
     if (strcmp(raw, "REACTION_INVALID") == 0 ||
@@ -11665,6 +11753,59 @@ static int tg_mtproto_auth_delete_peer_on_context(
     } else {
         bst = tg_mtproto_build_messages_delete_messages(&writer, revoke,
                                                         message_id);
+    }
+    if (bst != TG_MTPROTO_TL_OK) {
+        fprintf(stream, "%s: query-build-failed\n", label);
+        return 2;
+    }
+    return tg_mtproto_auth_simple_query_on_context(host, port, api_id, auth_file,
+                                                   dc_id_text, context, query,
+                                                   writer.length, stream, label);
+}
+
+/* Several messages of one chat deleted in one request: for everyone
+   (revoke; a channel always is), or for this account only. */
+static int tg_mtproto_auth_delete_list_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, const unsigned long *message_ids,
+    unsigned long count, int revoke, FILE *stream)
+{
+    static unsigned char query[64 + (TG_GUI_MAX_MESSAGES * 4)];
+    unsigned long peer_constructor;
+    unsigned long peer_id_hi;
+    unsigned long peer_id_lo;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    int has_access_hash;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_status bst;
+    static const char label[] = "mtproto deleteMessages";
+
+    if (stream == 0 || message_ids == 0 || count == 0UL ||
+        count > (unsigned long)TG_GUI_MAX_MESSAGES) {
+        return 2;
+    }
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+                                        &peer_constructor, &peer_id_hi,
+                                        &peer_id_lo, &access_hash_hi,
+                                        &access_hash_lo, &has_access_hash,
+                                        stream, label) != 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        if (!has_access_hash) {
+            fprintf(stream, "%s: channel without access_hash\n", label);
+            return 2;
+        }
+        bst = tg_mtproto_build_channels_delete_messages_list(
+            &writer, peer_id_hi, peer_id_lo, access_hash_hi, access_hash_lo,
+            message_ids, count);
+    } else {
+        bst = tg_mtproto_build_messages_delete_messages_list(
+            &writer, revoke, message_ids, count);
     }
     if (bst != TG_MTPROTO_TL_OK) {
         fprintf(stream, "%s: query-build-failed\n", label);
@@ -26295,6 +26436,42 @@ int tg_gui_session_forward(unsigned long message_id,
     return rc;
 }
 
+/* Public: forwards several messages of the open chat to another chat in
+   one request, oldest first as given. Same results as the single form. */
+int tg_gui_session_forward_list(const unsigned long *message_ids, int count,
+                                unsigned long destination_peer_index,
+                                FILE *stream)
+{
+    char destination[32];
+    FILE *quiet;
+    unsigned long prev_timeout;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || message_ids == 0 ||
+        count <= 0 || destination_peer_index == 0UL ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return 2;
+    }
+    if (destination_peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        strcpy(destination, "self");
+    } else {
+        sprintf(destination, "%lu", destination_peer_index);
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_auth_forward_list_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, destination, message_ids,
+        (unsigned long)count, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    return rc;
+}
+
 unsigned long tg_gui_session_current_peer_index(void)
 {
     unsigned long index;
@@ -26549,6 +26726,42 @@ int tg_gui_session_delete(unsigned long message_id, FILE *stream)
     if (rc == 0) {
         (void)tg_gui_driver_remove_by_id(&tg_gui_session_state.gui_driver,
                                          message_id);
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    return rc;
+}
+
+/* Public: deletes several messages of the open chat in one request, for
+   everyone (revoke) or for this account only; they leave the transcript.
+   0 = done, 2 = failed (none is taken away then). */
+int tg_gui_session_delete_list(const unsigned long *message_ids, int count,
+                               int revoke, FILE *stream)
+{
+    FILE *quiet;
+    unsigned long prev_timeout;
+    int rc;
+    int i;
+
+    if (!tg_gui_session_state.open || stream == 0 || message_ids == 0 ||
+        count <= 0 || tg_gui_session_state.current_peer_index[0] == '\0') {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_auth_delete_list_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, message_ids,
+        (unsigned long)count, revoke, quiet);
+    if (rc == 0) {
+        for (i = 0; i < count; ++i) {
+            (void)tg_gui_driver_remove_by_id(&tg_gui_session_state.gui_driver,
+                                             message_ids[i]);
+        }
     }
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);

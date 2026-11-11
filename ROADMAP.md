@@ -360,8 +360,13 @@ it works today:
 Middle, more interface:
 
 - albums when sending, several photos in one message;
-- select several messages (its section), open a downloaded file or show
-  it in its drawer (its section);
+- select several messages: done (Select in the message's menu, click
+  and Shift+click, a bar in the composer's place with Forward, Delete
+  and Cancel; one `messages.forwardMessages` and one
+  `messages.deleteMessages` or `channels.deleteMessages` for the lot).
+  Still missing from its section: the click in the gutter left of a
+  bubble, and "also for the other person" in a private chat;
+- open a downloaded file or show it in its drawer (its section);
 - polls shown and voted: done (`messageMediaPoll` written out as the
   message's text, `messages.sendVote` from the message's menu, the
   answers in the menu's place, `updateMessagePoll` followed while the
@@ -1373,7 +1378,7 @@ It touches the transcript, the header, the composer and the history
 paging, so it is a feature of its own and not a fix: a slot after the
 0.1 beta, unless forum groups turn out to be where most users are.
 
-## Planned: select several messages, then delete or forward them
+## Done for 0.2: select several messages, then delete or forward them
 
 Today every action on a message starts from the right-click popup and
 touches that one message: clearing out a run of test messages, or

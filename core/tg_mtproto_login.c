@@ -2467,6 +2467,74 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_peer(
    The first implementation forwards one message with flags=0; keeping both
    peers generic lets Saved Messages and the destination picker share the same
    wire builder. */
+tg_mtproto_tl_status tg_mtproto_build_messages_forward_messages(
+    tg_mtproto_tl_writer *writer,
+    unsigned long from_peer_constructor,
+    unsigned long from_peer_id_hi,
+    unsigned long from_peer_id_lo,
+    unsigned long from_access_hash_hi,
+    unsigned long from_access_hash_lo,
+    int from_has_access_hash,
+    const unsigned long *message_ids,
+    const unsigned long *random_ids_hi,
+    const unsigned long *random_ids_lo,
+    unsigned long count,
+    unsigned long to_peer_constructor,
+    unsigned long to_peer_id_hi,
+    unsigned long to_peer_id_lo,
+    unsigned long to_access_hash_hi,
+    unsigned long to_access_hash_lo,
+    int to_has_access_hash)
+{
+    tg_mtproto_tl_status status;
+    unsigned long i;
+
+    if (writer == 0 || message_ids == 0 || random_ids_hi == 0 ||
+        random_ids_lo == 0 || count == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    for (i = 0UL; i < count; ++i) {
+        if (message_ids[i] == 0UL) {
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_MESSAGES_FORWARD_MESSAGES_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(
+            writer, from_peer_constructor, from_peer_id_hi, from_peer_id_lo,
+            from_access_hash_hi, from_access_hash_lo, from_has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, count);
+    }
+    for (i = 0UL; i < count && status == TG_MTPROTO_TL_OK; ++i) {
+        status = tg_mtproto_tl_write_u32(writer, message_ids[i]);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, count);
+    }
+    for (i = 0UL; i < count && status == TG_MTPROTO_TL_OK; ++i) {
+        status = tg_mtproto_tl_write_u64(writer, random_ids_hi[i],
+                                         random_ids_lo[i]);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(
+            writer, to_peer_constructor, to_peer_id_hi, to_peer_id_lo,
+            to_access_hash_hi, to_access_hash_lo, to_has_access_hash);
+    }
+    return status;
+}
+
 tg_mtproto_tl_status tg_mtproto_build_messages_forward_message(
     tg_mtproto_tl_writer *writer,
     unsigned long from_peer_constructor,
@@ -2485,45 +2553,12 @@ tg_mtproto_tl_status tg_mtproto_build_messages_forward_message(
     unsigned long to_access_hash_lo,
     int to_has_access_hash)
 {
-    tg_mtproto_tl_status status;
-
-    if (writer == 0 || message_id == 0UL) {
-        return TG_MTPROTO_TL_INVALID_ARGUMENT;
-    }
-    status = tg_mtproto_tl_write_u32(
-        writer, TG_MESSAGES_FORWARD_MESSAGES_CONSTRUCTOR);
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_write_input_peer(
-            writer, from_peer_constructor, from_peer_id_hi, from_peer_id_lo,
-            from_access_hash_hi, from_access_hash_lo, from_has_access_hash);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 1UL);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, message_id);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 1UL);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
-    }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_write_input_peer(
-            writer, to_peer_constructor, to_peer_id_hi, to_peer_id_lo,
-            to_access_hash_hi, to_access_hash_lo, to_has_access_hash);
-    }
-    return status;
+    return tg_mtproto_build_messages_forward_messages(
+        writer, from_peer_constructor, from_peer_id_hi, from_peer_id_lo,
+        from_access_hash_hi, from_access_hash_lo, from_has_access_hash,
+        &message_id, &random_id_hi, &random_id_lo, 1UL, to_peer_constructor,
+        to_peer_id_hi, to_peer_id_lo, to_access_hash_hi, to_access_hash_lo,
+        to_has_access_hash);
 }
 
 /* messages.editMessage#dfd14005 -- edit an OWN message's text. Minimal text
@@ -2738,16 +2773,18 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_messages_reactions(
     return status;
 }
 
-/* messages.deleteMessages#e58e95d2 -- delete ONE message. revoke = delete for
-   everyone (flags.0); 0 = delete only for me. id is a Vector<int> of one. */
-tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages(
+/* messages.deleteMessages#e58e95d2 flags:# revoke:flags.0?true
+   id:Vector<int>. revoke = delete for everyone; 0 = only for this account. */
+tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages_list(
     tg_mtproto_tl_writer *writer,
     int revoke,
-    unsigned long message_id)
+    const unsigned long *message_ids,
+    unsigned long count)
 {
     tg_mtproto_tl_status status;
+    unsigned long i;
 
-    if (writer == 0) {
+    if (writer == 0 || message_ids == 0 || count == 0UL) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     status = tg_mtproto_tl_write_u32(writer,
@@ -2759,27 +2796,39 @@ tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages(
         status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 1UL); /* one id */
+        status = tg_mtproto_tl_write_u32(writer, count);
     }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, message_id);
+    for (i = 0UL; i < count && status == TG_MTPROTO_TL_OK; ++i) {
+        status = tg_mtproto_tl_write_u32(writer, message_ids[i]);
     }
     return status;
 }
 
-/* channels.deleteMessages#84c1fd4e -- delete ONE message in a channel/supergroup
-   (always for everyone). channel:InputChannel id:Vector<int> of one. */
-tg_mtproto_tl_status tg_mtproto_build_channels_delete_messages(
+/* The same for ONE message. */
+tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages(
+    tg_mtproto_tl_writer *writer,
+    int revoke,
+    unsigned long message_id)
+{
+    return tg_mtproto_build_messages_delete_messages_list(writer, revoke,
+                                                          &message_id, 1UL);
+}
+
+/* channels.deleteMessages#84c1fd4e channel:InputChannel id:Vector<int>:
+   messages of a channel or supergroup, always for everyone. */
+tg_mtproto_tl_status tg_mtproto_build_channels_delete_messages_list(
     tg_mtproto_tl_writer *writer,
     unsigned long channel_id_hi,
     unsigned long channel_id_lo,
     unsigned long access_hash_hi,
     unsigned long access_hash_lo,
-    unsigned long message_id)
+    const unsigned long *message_ids,
+    unsigned long count)
 {
     tg_mtproto_tl_status status;
+    unsigned long i;
 
-    if (writer == 0) {
+    if (writer == 0 || message_ids == 0 || count == 0UL) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     status = tg_mtproto_tl_write_u32(writer,
@@ -2797,12 +2846,26 @@ tg_mtproto_tl_status tg_mtproto_build_channels_delete_messages(
         status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 1UL);
+        status = tg_mtproto_tl_write_u32(writer, count);
     }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, message_id);
+    for (i = 0UL; i < count && status == TG_MTPROTO_TL_OK; ++i) {
+        status = tg_mtproto_tl_write_u32(writer, message_ids[i]);
     }
     return status;
+}
+
+/* The same for ONE message. */
+tg_mtproto_tl_status tg_mtproto_build_channels_delete_messages(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long message_id)
+{
+    return tg_mtproto_build_channels_delete_messages_list(
+        writer, channel_id_hi, channel_id_lo, access_hash_hi, access_hash_lo,
+        &message_id, 1UL);
 }
 
 tg_mtproto_tl_status tg_mtproto_build_msgs_ack(
@@ -11610,6 +11673,66 @@ int tg_mtproto_login_self_test(void)
         query[28] != 0x01U ||                                /* count 1 */
         query[32] != 0x0dU || query[35] != 0x0aU) {          /* id LE */
         return 2;
+    }
+    /* Several messages in one request: the ids in the order given, and for
+       a forward a random id each, after them. */
+    {
+        static const unsigned long ids[3] = { 7UL, 9UL, 0x0102UL };
+        static const unsigned long rhi[2] = { 0x11UL, 0x22UL };
+        static const unsigned long rlo[2] = { 0x33UL, 0x44UL };
+        unsigned char many[96];
+        tg_mtproto_tl_writer mw;
+
+        tg_mtproto_tl_writer_init(&mw, many, sizeof(many));
+        if (tg_mtproto_build_messages_delete_messages_list(&mw, 0, ids,
+                                                           3UL) !=
+                TG_MTPROTO_TL_OK ||
+            mw.length != 28UL || many[0] != 0xd2U || many[4] != 0x00U ||
+            many[12] != 0x03U || many[16] != 7U || many[20] != 9U ||
+            many[24] != 0x02U || many[25] != 0x01U ||
+            tg_mtproto_build_messages_delete_messages_list(&mw, 1, ids,
+                                                           0UL) ==
+                TG_MTPROTO_TL_OK) {
+            puts("login self-test: deleteMessages with a list built wrong");
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&mw, many, sizeof(many));
+        if (tg_mtproto_build_channels_delete_messages_list(
+                &mw, 0x01020304UL, 0x05060708UL, 0x11121314UL, 0x15161718UL,
+                ids, 2UL) != TG_MTPROTO_TL_OK ||
+            mw.length != 40UL || many[0] != 0x4eU || many[28] != 0x02U ||
+            many[32] != 7U || many[36] != 9U) {
+            puts("login self-test: channels.deleteMessages with a list "
+                 "built wrong");
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&mw, many, sizeof(many));
+        if (tg_mtproto_build_messages_forward_messages(
+                &mw, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x0aUL, 0UL, 0UL, 0, ids,
+                rhi, rlo, 2UL, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x0bUL, 0UL,
+                0UL, 0) != TG_MTPROTO_TL_OK ||
+            /* ctor, flags, peer (12), ids (8 + 8), random ids (8 + 16),
+               peer (12) */
+            mw.length != 72UL || many[4] != 0x00U || many[24] != 0x02U ||
+            many[28] != 7U || many[32] != 9U || many[36] != 0x15U ||
+            many[40] != 0x02U || many[44] != 0x33U || many[48] != 0x11U ||
+            many[52] != 0x44U || many[56] != 0x22U || many[64] != 0x0bU) {
+            puts("login self-test: forwardMessages with a list built wrong");
+            return 2;
+        }
+        {
+            static const unsigned long bad[2] = { 7UL, 0UL };
+
+            tg_mtproto_tl_writer_init(&mw, many, sizeof(many));
+            if (tg_mtproto_build_messages_forward_messages(
+                    &mw, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x0aUL, 0UL, 0UL, 0,
+                    bad, rhi, rlo, 2UL, TG_PEER_CHAT_CONSTRUCTOR, 0UL,
+                    0x0bUL, 0UL, 0UL, 0) == TG_MTPROTO_TL_OK) {
+                puts("login self-test: forwardMessages took a message "
+                     "with no id");
+                return 2;
+            }
+        }
     }
     /* updateReadHistoryOutbox#2f2f21bf parser (5c): build a body (peerUser
        id=0x0102030405060708, max_id=0x0A0B0C0D) and read it back. */

@@ -432,6 +432,16 @@ int tg_gui_session_edit(const char *text, unsigned long message_id,
    type), and on success removes it from the transcript. Returns 0 ok. */
 int tg_gui_session_delete(unsigned long message_id, FILE *stream);
 
+/* Several messages of the open chat at once, in one request each way:
+   deleted for everyone (revoke) or for this account only, and gone from
+   the transcript (0 = done, 2 = failed); forwarded to the chat at that
+   cache index, in the order given (as tg_gui_session_forward). */
+int tg_gui_session_delete_list(const unsigned long *message_ids, int count,
+                               int revoke, FILE *stream);
+int tg_gui_session_forward_list(const unsigned long *message_ids, int count,
+                                unsigned long destination_peer_index,
+                                FILE *stream);
+
 /* Hides someone else's message in the open group or channel: it leaves the
    transcript and stays out on every reload (data/telegram-hidden-msgs.txt).
    In a basic group Telegram also deletes it for oneself, so it goes from

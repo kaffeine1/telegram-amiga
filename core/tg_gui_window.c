@@ -9069,9 +9069,9 @@ static void tg_gui_window_poll_vote(tg_gui_state *state,
         tg_gui_window_copy(state->status, sizeof(state->status),
                            mask != 0UL ? "Voted" : "Vote taken back");
     } else if (rc == 1) {
-        char line[96];
+        char line[96]; /* the status line is shorter: cut on the copy */
 
-        sprintf(line, "Telegram refused the vote (%.40s)",
+        sprintf(line, "Vote refused: %.32s",
                 why[0] != '\0' ? why : "no reason given");
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else {
@@ -9403,6 +9403,7 @@ static void tg_gui_window_forward_restore(tg_gui_state *state)
 
     source_index = state->forward_source_index;
     state->forward_pick_active = 0;
+    state->forward_many = 0;
     state->forward_message_id = 0UL;
     state->forward_source_index = 0UL;
     state->in_filter = 0;
@@ -9434,8 +9435,29 @@ static void tg_gui_window_forward_to_index(tg_gui_state *state,
 
     tg_gui_window_copy(name, sizeof(name), destination_name);
     message_id = state->forward_message_id;
-    rc = tg_gui_session_forward(message_id, destination_index, stdout);
-    tg_gui_window_forward_restore(state);
+    if (state->forward_many) {
+        /* The selected messages, oldest first, in one request. */
+        static unsigned long many[TG_GUI_MAX_MESSAGES];
+        int n = tg_gui_pick_ids(state, many, TG_GUI_MAX_MESSAGES,
+                                TG_GUI_PICK_ALL);
+
+        rc = n > 0 ? tg_gui_session_forward_list(many, n, destination_index,
+                                                 stdout)
+                   : 2;
+        tg_gui_window_forward_restore(state);
+        if (rc == 0) {
+            char line[96]; /* the status line is shorter: cut on the copy */
+
+            tg_gui_pick_end(state);
+            sprintf(line, "Forwarded %d to %.32s", n, name);
+            tg_gui_window_copy(state->status, sizeof(state->status), line);
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+    } else {
+        rc = tg_gui_session_forward(message_id, destination_index, stdout);
+        tg_gui_window_forward_restore(state);
+    }
     if (rc == 0) {
         sprintf(state->status, "Forwarded to %.32s", name);
     } else {
@@ -9487,6 +9509,7 @@ static void tg_gui_window_begin_forward_pick(tg_gui_state *state,
         return;
     }
     state->forward_pick_active = 1;
+    state->forward_many = 0;
     state->forward_message_id = message_id;
     state->forward_source_index = source_index;
     state->composing = 0;
@@ -9500,6 +9523,104 @@ static void tg_gui_window_begin_forward_pick(tg_gui_state *state,
     state->cursor_on = 1;
     tg_gui_session_refresh_chats();
     tg_gui_window_filter_chats(state, backend);
+}
+
+/* The selected messages are to be forwarded: the usual destination picker,
+   which then sends them all. */
+static void tg_gui_window_pick_forward(tg_gui_state *state,
+                                       tg_gui_backend *backend)
+{
+    static unsigned long many[TG_GUI_MAX_MESSAGES];
+    int n = tg_gui_pick_ids(state, many, TG_GUI_MAX_MESSAGES,
+                            TG_GUI_PICK_ALL);
+
+    if (n <= 0) {
+        return;
+    }
+    tg_gui_window_begin_forward_pick(state, backend, many[0]);
+    if (state->forward_pick_active) {
+        state->forward_many = 1;
+    }
+}
+
+/* The selected messages are to be deleted, after one confirmation for
+   them all. This account's own go for everyone, as Delete does for one.
+   Someone else's go from this account only in a private chat, and in a
+   group are hidden here, as Hide message does for one: Telegram lets
+   nobody delete them for the others. */
+static void tg_gui_window_pick_delete(tg_gui_state *state, struct Window *win,
+                                      tg_gui_backend *backend)
+{
+    static unsigned long own[TG_GUI_MAX_MESSAGES];
+    static unsigned long others[TG_GUI_MAX_MESSAGES];
+    struct EasyStruct es;
+    char body[224];
+    int n_own = tg_gui_pick_ids(state, own, TG_GUI_MAX_MESSAGES,
+                                TG_GUI_PICK_OWN);
+    int n_others = tg_gui_pick_ids(state, others, TG_GUI_MAX_MESSAGES,
+                                   TG_GUI_PICK_OTHERS);
+    int is_group =
+        tg_gui_session_chat_kind(tg_gui_session_current_peer_index()) > 0;
+    int failed = 0;
+    int k;
+
+    if (n_own + n_others <= 0) {
+        return;
+    }
+    if (n_others == 0) {
+        sprintf(body, "Delete %d message%s for everyone?", n_own,
+                n_own == 1 ? "" : "s");
+    } else if (is_group && n_own == 0) {
+        sprintf(body,
+                "Hide %d message%s of other people?\n\n"
+                "They leave this chat here only; the chat's menu\n"
+                "shows them again.",
+                n_others, n_others == 1 ? "" : "s");
+    } else if (is_group) {
+        sprintf(body,
+                "Delete %d of your messages for everyone\n"
+                "and hide %d of other people here?",
+                n_own, n_others);
+    } else {
+        sprintf(body,
+                "Delete %d message%s?\n\n"
+                "Yours go for everyone, the other person's\n"
+                "for you only.",
+                n_own + n_others, n_own + n_others == 1 ? "" : "s");
+    }
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)"Delete messages";
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)"Delete|Cancel";
+    if (tg_gui_amiga_easyreq_args(win, &es) == 0) {
+        return; /* the selection stays as it was */
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), "Deleting...");
+    tg_gui_window_paint(state, backend);
+    if (n_own > 0 && tg_gui_session_delete_list(own, n_own, 1, stdout) != 0) {
+        failed = 1;
+    }
+    if (n_others > 0 && is_group) {
+        for (k = 0; k < n_others; ++k) {
+            if (tg_gui_session_hide(others[k], stdout) != 0) {
+                failed = 1;
+            }
+        }
+    } else if (n_others > 0 &&
+               tg_gui_session_delete_list(others, n_others, 0, stdout) != 0) {
+        failed = 1;
+    }
+    tg_gui_pick_end(state);
+    if (failed) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Some messages could not be deleted");
+    } else {
+        sprintf(state->status, "%d message%s deleted", n_own + n_others,
+                n_own + n_others == 1 ? "" : "s");
+    }
+    tg_gui_window_paint(state, backend);
 }
 
 /* Run an online search for the current query and show the matches in the sidebar
@@ -13065,6 +13186,75 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     tg_gui_window_paint(state, &backend);
                 }
             }
+            /* Several messages are being selected: a click on a message
+               turns its mark (Shift takes the range), the bar's buttons
+               act on them all, ESC leaves. No typing meanwhile (and ESC
+               must not reach what closes the program), no message menu.
+               The wheel, the scrollbar and the chat list go on as usual;
+               picking another chat leaves the selection behind. */
+            if (state->pick_mode && tg_gui_pick_count(state) == 0) {
+                tg_gui_pick_end(state); /* its messages are gone */
+            }
+            if (state->pick_mode && state->mode == TG_GUI_MODE_CHAT &&
+                !state->settings_open && !state->forward_pick_active &&
+                key_menu_action == 0) {
+                if (msg_class == IDCMP_VANILLAKEY) {
+                    if (msg_code == 27) {
+                        tg_gui_pick_end(state);
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Live - F1-F10 chats, Amiga+Q quits");
+                        tg_gui_window_paint(state, &backend);
+                    }
+                    msg_class = 0;
+                } else if (msg_class == IDCMP_MOUSEBUTTONS &&
+                           msg_code == MENUDOWN) {
+                    msg_class = 0;
+                } else if (msg_class == IDCMP_MOUSEBUTTONS &&
+                           msg_code == SELECTDOWN) {
+                    int pick_hit = tg_gui_hit_test(
+                        state, ctx.inner_w, ctx.inner_h, ctx.line_h,
+                        (int)mouse_x - ctx.origin_x,
+                        (int)mouse_y - ctx.origin_y);
+
+                    if (pick_hit <= TG_GUI_HIT_MESSAGE_BASE) {
+                        int pick_mi = pick_hit <= TG_GUI_HIT_PHOTO_BASE
+                            ? TG_GUI_HIT_PHOTO_BASE - pick_hit
+                            : TG_GUI_HIT_MESSAGE_BASE - pick_hit;
+
+                        if (tg_gui_pick_toggle(
+                                state, pick_mi,
+                                (msg_qual & (IEQUALIFIER_LSHIFT |
+                                             IEQUALIFIER_RSHIFT)) != 0) ==
+                            0) {
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                "Live - F1-F10 chats, Amiga+Q quits");
+                        }
+                        tg_gui_window_paint(state, &backend);
+                        msg_class = 0;
+                    } else if (pick_hit == TG_GUI_HIT_PICK_CANCEL) {
+                        tg_gui_pick_end(state);
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Live - F1-F10 chats, Amiga+Q quits");
+                        tg_gui_window_paint(state, &backend);
+                        msg_class = 0;
+                    } else if (pick_hit == TG_GUI_HIT_PICK_DELETE) {
+                        tg_gui_window_pick_delete(state, ctx.window,
+                                                  &backend);
+                        msg_class = 0;
+                    } else if (pick_hit == TG_GUI_HIT_PICK_FORWARD) {
+                        tg_gui_window_pick_forward(state, &backend);
+                        msg_class = 0;
+                    } else if (pick_hit >= 0 ||
+                               pick_hit == TG_GUI_HIT_SEARCH) {
+                        /* Another chat, or the search box: the selection
+                           is left, and the click does what it does. */
+                        tg_gui_pick_end(state);
+                    }
+                }
+            }
 #if defined(__amigaos4__)
             /* QEMU's emulated OS4 mouse delivers the wheel only as
                IDCMP_EXTENDEDMOUSE, not the NewMouse RAWKEY 0x7A/0x7B that real
@@ -14784,6 +14974,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (changed && it == TG_GUI_CTX_CHAT_SOUND) {
                             tg_gui_notify_sound(value.sound);
                         }
+                    } else if (it == TG_GUI_CTX_SELECT && m != 0 &&
+                               !m->is_system && m->id != 0UL) {
+                        /* Select: this message is the first chosen; the
+                           clicks that follow choose the others. */
+                        tg_gui_pick_begin(state, mi);
+                        tg_gui_window_copy(state->status,
+                            sizeof(state->status),
+                            "Click to select, Shift+click a range, ESC ends");
                     } else if (it == TG_GUI_CTX_POLL && m != 0 &&
                                m->id != 0UL) {
                         /* Vote...: the poll's answers take the menu. */
@@ -14805,8 +15003,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else {
                             tg_gui_window_copy(state->status,
                                 sizeof(state->status),
-                                "This poll is no longer loaded: open the "
-                                "chat again to vote.");
+                                "Open the chat again to vote this poll");
                         }
                     } else if (was_poll && m != 0 && m->id != 0UL &&
                                it >= TG_GUI_CTX_POLL_FIRST &&

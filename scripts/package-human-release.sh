@@ -579,6 +579,15 @@ Messages
   the names and /ids shows the message numbers that /react <id> <name>,
   /forward and /forwardto take.
 - Messages edited on another device change here too.
+- To act on several messages together, choose Select in the menu of
+  one of them: it is marked, and a click on any other message marks it
+  or takes its mark away; Shift+click marks everything from the message
+  last clicked to that one. The input line gives way to a bar that says
+  how many are selected, with Forward, Delete and Cancel; Esc cancels
+  too, and so does opening another chat. Forward asks for the chat and
+  sends them in order. Delete asks once for all of them: your own
+  messages go for everyone; other people's are hidden here in a group,
+  and deleted for you only in a private chat.
 - A poll shows its question and its answers, numbered. To vote, open
   the menu of the poll's message (right mouse button) and choose
   Vote...: the answers take the menu's place, and a click votes. Where
@@ -740,6 +749,15 @@ Messaggi
   messaggio ricevuto, /reactions elenca i nomi e /ids mostra i numeri
   dei messaggi che /react <id> <nome>, /forward e /forwardto accettano.
 - I messaggi modificati da un altro dispositivo cambiano anche qui.
+- Per agire su piu' messaggi insieme scegli Select nel menu di uno di
+  loro: viene segnato, e un click su un altro messaggio lo segna o gli
+  toglie il segno; Shift+click segna tutto dal messaggio cliccato per
+  ultimo fino a quello. La riga di input lascia il posto a una barra
+  che dice quanti sono selezionati, con Forward, Delete e Cancel; anche
+  Esc annulla, e cosi' aprire un'altra chat. Forward chiede la chat e
+  li manda in ordine. Delete chiede una volta sola per tutti: i tuoi
+  messaggi spariscono per tutti; quelli degli altri in un gruppo
+  vengono nascosti qui, in una chat privata cancellati solo per te.
 - Un sondaggio mostra la domanda e le risposte, numerate. Per votare
   apri il menu del messaggio del sondaggio (tasto destro) e scegli
   Vote...: le risposte prendono il posto del menu, e un click vota. Se

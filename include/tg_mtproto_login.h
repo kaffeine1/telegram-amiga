@@ -1125,8 +1125,29 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_peer(
     unsigned long random_id_hi,
     unsigned long random_id_lo);
 
-/* messages.forwardMessages#978928ca (layer 214), one message, flags=0. Both
+/* messages.forwardMessages#978928ca (layer 214), flags=0: several messages
+   of one chat in one request, in the order given, a random id each. Both
    endpoints use the same peer-constructor convention as send/getHistory. */
+tg_mtproto_tl_status tg_mtproto_build_messages_forward_messages(
+    tg_mtproto_tl_writer *writer,
+    unsigned long from_peer_constructor,
+    unsigned long from_peer_id_hi,
+    unsigned long from_peer_id_lo,
+    unsigned long from_access_hash_hi,
+    unsigned long from_access_hash_lo,
+    int from_has_access_hash,
+    const unsigned long *message_ids,
+    const unsigned long *random_ids_hi,
+    const unsigned long *random_ids_lo,
+    unsigned long count,
+    unsigned long to_peer_constructor,
+    unsigned long to_peer_id_hi,
+    unsigned long to_peer_id_lo,
+    unsigned long to_access_hash_hi,
+    unsigned long to_access_hash_lo,
+    int to_has_access_hash);
+
+/* The same for one message. */
 tg_mtproto_tl_status tg_mtproto_build_messages_forward_message(
     tg_mtproto_tl_writer *writer,
     unsigned long from_peer_constructor,
@@ -1191,6 +1212,22 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
 
 /* messages.deleteMessages#e58e95d2: delete one message (revoke = for everyone).
    For channels/supergroups use the channels.* form below. */
+/* Several messages in one request (the single forms below are these with
+   one id). */
+tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages_list(
+    tg_mtproto_tl_writer *writer,
+    int revoke,
+    const unsigned long *message_ids,
+    unsigned long count);
+tg_mtproto_tl_status tg_mtproto_build_channels_delete_messages_list(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const unsigned long *message_ids,
+    unsigned long count);
+
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_messages(
     tg_mtproto_tl_writer *writer,
     int revoke,

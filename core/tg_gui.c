@@ -4319,6 +4319,67 @@ static void tg_gui_paint_popups_at(const tg_gui_state *state,
    idle text, and the Send button. Factored out so the caret blink can repaint
    ONLY this strip. Geometry is recomputed from the backend to match
    tg_gui_paint_main, and the box height comes from the shared helper above. */
+/* The bar that takes the composer's place while several messages are
+   selected: how many, then Forward, Delete and Cancel at the right. Their
+   places go to the state, for the click. */
+static void tg_gui_paint_pick_bar(const tg_gui_state *state,
+                                  tg_gui_backend *backend, int sidebar_w,
+                                  int width, int box_top, int content_h,
+                                  int count)
+{
+    static const char *const names[3] = { "Cancel", "Delete", "Forward" };
+    tg_gui_state *st = (tg_gui_state *)state;
+    char label[32];
+    int x0 = sidebar_w + 8;
+    int w = width - sidebar_w - 16;
+    int h = content_h - 4 - box_top;
+    int by = box_top + 3;
+    int bh = h - 6;
+    int right = x0 + w - 6;
+    int base;
+    int k;
+
+    backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
+                       tg_gui_make_rect(sidebar_w, box_top,
+                                        width - sidebar_w,
+                                        content_h - box_top));
+    if (w < 40 || h < 8) {
+        st->pick_fw_w = st->pick_del_w = st->pick_can_w = 0;
+        return;
+    }
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                       tg_gui_make_rect(x0, box_top, w, h));
+    base = tg_gui_centred_baseline(backend, by, bh);
+    for (k = 0; k < 3; ++k) {
+        unsigned long n = (unsigned long)strlen(names[k]);
+        int bw = backend->text_width(backend, names[k], n) + 16;
+        int bx = right - bw;
+
+        if (bx < x0 + 4) {
+            bw = 0; /* no room: the button is left out, ESC still cancels */
+        } else {
+            backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                               tg_gui_make_rect(bx, by, bw, bh));
+            backend->draw_text(backend, TG_GUI_PEN_ACCENT_TEXT, bx + 8, base,
+                               names[k], n);
+            right = bx - 8;
+        }
+        if (k == 0) {
+            st->pick_can_x = bx;
+            st->pick_can_w = bw;
+        } else if (k == 1) {
+            st->pick_del_x = bx;
+            st->pick_del_w = bw;
+        } else {
+            st->pick_fw_x = bx;
+            st->pick_fw_w = bw;
+        }
+    }
+    sprintf(label, "%d selected", count);
+    tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT, x0 + 8, base, label,
+                        right - (x0 + 8));
+}
+
 static void tg_gui_paint_input_row(const tg_gui_state *state,
                                    tg_gui_backend *backend)
 {
@@ -4347,6 +4408,16 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
     rows = tg_gui_input_rows(state, backend, width, sidebar_w);
     input_h = (rows * lh) + 14;
     box_top = content_h - input_h;
+    {
+        /* Several messages selected: their bar stands here instead. */
+        int picked = tg_gui_pick_count(state);
+
+        if (picked > 0) {
+            tg_gui_paint_pick_bar(state, backend, sidebar_w, width, box_top,
+                                  content_h, picked);
+            return;
+        }
+    }
     /* Centre the glyph cells, including their descenders. The first row has
        the same top padding at every wrap count; later rows add only leading.
        A baseline derived from lh alone sat low with tall MorphOS fonts. */
@@ -5005,8 +5076,11 @@ static void tg_gui_paint_main(const tg_gui_state *state,
         /* Draw only messages intersecting the viewport; each part is clipped to
            [transcript_top, transcript_bottom] inside the bubble. */
         if (y + h > transcript_top && y < transcript_bottom) {
-            if (i == state->selected_msg && !message->is_system) {
-                /* Clicked-row highlight, same language as the selected chat
+            if ((i == state->selected_msg ||
+                 (state->pick_mode && message->picked)) &&
+                !message->is_system) {
+                /* Clicked-row highlight (and, while several messages are
+                   being selected, the mark of each one chosen), same language as the selected chat
                    row in the sidebar: the darker SELECT tint across the row
                    plus the left accent bar; the bubble then paints on top. */
                 int by = (y > transcript_top) ? y : transcript_top;
@@ -5355,6 +5429,23 @@ int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
     sidebar_w = tg_gui_sidebar_w(width);
     input_h = (state->input_h > 0) ? state->input_h : (lh + 14);
     /* The input row / Send button live along the bottom of the right pane. */
+    if (y >= content_h - input_h && y < content_h - 4 && x >= sidebar_w &&
+        tg_gui_pick_count(state) > 0) {
+        /* The bar of the selected messages stands where the composer was. */
+        if (state->pick_fw_w > 0 && x >= state->pick_fw_x &&
+            x < state->pick_fw_x + state->pick_fw_w) {
+            return TG_GUI_HIT_PICK_FORWARD;
+        }
+        if (state->pick_del_w > 0 && x >= state->pick_del_x &&
+            x < state->pick_del_x + state->pick_del_w) {
+            return TG_GUI_HIT_PICK_DELETE;
+        }
+        if (state->pick_can_w > 0 && x >= state->pick_can_x &&
+            x < state->pick_can_x + state->pick_can_w) {
+            return TG_GUI_HIT_PICK_CANCEL;
+        }
+        return TG_GUI_HIT_NONE;
+    }
     if (y >= content_h - input_h && y < content_h - 4 && x >= sidebar_w) {
         /* When replying, the top line of the region is the "<sender>: <snippet>"
            header; its far-right "X" cancels the reply, the rest just focuses. */
@@ -5713,6 +5804,129 @@ static const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state)
     return state->open_chat_valid ? &state->open_chat : 0;
 }
 
+static int tg_gui_pick_can(const tg_gui_message *m)
+{
+    return !m->is_system && m->id != 0UL;
+}
+
+int tg_gui_pick_count(const tg_gui_state *state)
+{
+    int n = 0;
+    int i;
+
+    if (state == 0 || !state->pick_mode) {
+        return 0;
+    }
+    for (i = 0; i < state->message_count; ++i) {
+        if (state->messages[i].picked) {
+            ++n;
+        }
+    }
+    return n;
+}
+
+void tg_gui_pick_end(tg_gui_state *state)
+{
+    int i;
+
+    if (state == 0) {
+        return;
+    }
+    for (i = 0; i < state->message_count; ++i) {
+        state->messages[i].picked = 0;
+    }
+    state->pick_mode = 0;
+    state->pick_anchor_id = 0UL;
+}
+
+void tg_gui_pick_begin(tg_gui_state *state, int mi)
+{
+    if (state == 0 || mi < 0 || mi >= state->message_count ||
+        !tg_gui_pick_can(&state->messages[mi])) {
+        return;
+    }
+    tg_gui_pick_end(state);
+    state->pick_mode = 1;
+    state->messages[mi].picked = 1;
+    state->pick_anchor_id = state->messages[mi].id;
+    /* The bar takes the composer's place: what was going on there stops.
+       The text typed stays, for when the bar goes. */
+    state->composing = 0;
+    state->reply_to_id = 0UL;
+    state->selected_msg = -1;
+}
+
+int tg_gui_pick_toggle(tg_gui_state *state, int mi, int extend)
+{
+    int count;
+    int i;
+
+    if (state == 0 || !state->pick_mode || mi < 0 ||
+        mi >= state->message_count ||
+        !tg_gui_pick_can(&state->messages[mi])) {
+        return tg_gui_pick_count(state);
+    }
+    if (extend && state->pick_anchor_id != 0UL) {
+        int from = -1;
+
+        for (i = 0; i < state->message_count; ++i) {
+            if (state->messages[i].id == state->pick_anchor_id) {
+                from = i;
+                break;
+            }
+        }
+        if (from >= 0) {
+            int lo = from < mi ? from : mi;
+            int hi = from < mi ? mi : from;
+
+            for (i = lo; i <= hi; ++i) {
+                if (tg_gui_pick_can(&state->messages[i])) {
+                    state->messages[i].picked = 1;
+                }
+            }
+            return tg_gui_pick_count(state);
+        }
+    }
+    state->messages[mi].picked = state->messages[mi].picked ? 0 : 1;
+    state->pick_anchor_id = state->messages[mi].id;
+    count = tg_gui_pick_count(state);
+    if (count == 0) {
+        tg_gui_pick_end(state); /* nothing left chosen: the composer is back */
+    }
+    return count;
+}
+
+int tg_gui_pick_ids(const tg_gui_state *state, unsigned long *ids, int max,
+                    int which)
+{
+    int self_chat;
+    int n = 0;
+    int i;
+    int j;
+
+    if (state == 0 || ids == 0 || max <= 0 || !state->pick_mode) {
+        return 0;
+    }
+    self_chat = tg_gui_open_chat_is_self(state);
+    for (i = 0; i < state->message_count && n < max; ++i) {
+        const tg_gui_message *m = &state->messages[i];
+        int own = m->is_own || self_chat;
+
+        if (!m->picked || !tg_gui_pick_can(m) ||
+            (which == TG_GUI_PICK_OWN && !own) ||
+            (which == TG_GUI_PICK_OTHERS && own)) {
+            continue;
+        }
+        /* Oldest first, whatever order the transcript holds them in. */
+        for (j = n; j > 0 && ids[j - 1] > m->id; --j) {
+            ids[j] = ids[j - 1];
+        }
+        ids[j] = m->id;
+        ++n;
+    }
+    return n;
+}
+
 int tg_gui_open_chat_is_self(const tg_gui_state *state)
 {
     const tg_gui_chat *row = tg_gui_open_chat_row(state);
@@ -5985,6 +6199,9 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
         }
         if (!m->is_system) {
+            labels[n] = "Select";
+            ids[n] = TG_GUI_CTX_SELECT;
+            ++n;
             labels[n] = state->ctx_msg_pinned ? "Unpin" : "Pin";
             ids[n] = TG_GUI_CTX_MSG_PIN;
             ++n;
@@ -9683,6 +9900,143 @@ int tg_gui_self_test(void)
         state.messages[0].id = 0UL;
         if (!ok_poll) {
             puts("gui self-test: a poll's menu is wrong");
+            return 2;
+        }
+    }
+
+    /* Selecting several messages: Select in a message's menu starts it,
+       a click turns a mark, Shift takes the range from the message last
+       clicked (a service line is never chosen), the ids come oldest
+       first and by whose they are, the bar stands in the composer's
+       place with its three buttons, and the last mark gone ends it. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        tg_gui_message saved[4];
+        const char *labels[TG_GUI_CTX_ITEMS_MAX];
+        int ids[TG_GUI_CTX_ITEMS_MAX];
+        unsigned long got[8];
+        int saved_count = state.message_count;
+        int saved_composing = state.composing;
+        int saved_selected = state.selected_msg;
+        unsigned long saved_reply = state.reply_to_id;
+        int count;
+        int lh;
+        int bar_y;
+        int ok_pick;
+        int saw_select = 0;
+        int i;
+
+        for (i = 0; i < 4; ++i) {
+            saved[i] = state.messages[i];
+        }
+        state.message_count = 4;
+        for (i = 0; i < 4; ++i) {
+            state.messages[i].id = 104UL - (unsigned long)i; /* newest first */
+            state.messages[i].is_system = 0;
+            state.messages[i].is_own = (i == 1 || i == 3);
+            state.messages[i].picked = 0;
+        }
+        state.messages[2].is_system = 1; /* "Anna joined" */
+        state.ctx_visible = 1;
+        state.ctx_chat = 0;
+        state.ctx_react = 0;
+        state.ctx_poll = 0;
+        state.ctx_msg = 0;
+        count = tg_gui_context_items(&state, labels, ids);
+        for (i = 0; i < count; ++i) {
+            if (ids[i] == TG_GUI_CTX_SELECT &&
+                strcmp(labels[i], "Select") == 0) {
+                saw_select = 1;
+            }
+        }
+        state.ctx_visible = 0;
+        state.ctx_msg = -1;
+        state.composing = 1;
+        state.reply_to_id = 55UL;
+        ok_pick = saw_select && tg_gui_pick_count(&state) == 0;
+        tg_gui_pick_begin(&state, 2); /* a service line: not a start */
+        ok_pick = ok_pick && !state.pick_mode;
+        tg_gui_pick_begin(&state, 0);
+        ok_pick = ok_pick && state.pick_mode && !state.composing &&
+                  state.reply_to_id == 0UL && tg_gui_pick_count(&state) == 1 &&
+                  tg_gui_pick_toggle(&state, 2, 0) == 1 && /* service line */
+                  tg_gui_pick_toggle(&state, 3, 1) == 3 && /* 0..3 less it */
+                  state.messages[1].picked && !state.messages[2].picked &&
+                  tg_gui_pick_ids(&state, got, 8, TG_GUI_PICK_ALL) == 3 &&
+                  got[0] == 101UL && got[1] == 103UL && got[2] == 104UL &&
+                  tg_gui_pick_ids(&state, got, 8, TG_GUI_PICK_OWN) == 2 &&
+                  got[0] == 101UL && got[1] == 103UL &&
+                  tg_gui_pick_ids(&state, got, 8, TG_GUI_PICK_OTHERS) == 1 &&
+                  got[0] == 104UL &&
+                  tg_gui_pick_ids(&state, got, 2, TG_GUI_PICK_ALL) == 2;
+        /* The bar: how many, and the three buttons where a click finds
+           them; the composer's own text is not drawn. */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "3 selected";
+        rec.watch_text[1] = "Forward";
+        rec.watch_text[2] = "Delete";
+        rec.watch_text[3] = "Cancel";
+        rec.watch_text[4] = "Send";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        lh = b.line_height(&b);
+        bar_y = (480 - (lh + 6)) - state.input_h + 6;
+        ok_pick = ok_pick && rec.watch_hits[0] == 1 &&
+                  rec.watch_hits[1] == 1 && rec.watch_hits[2] == 1 &&
+                  rec.watch_hits[3] == 1 && rec.watch_hits[4] == 0 &&
+                  state.pick_fw_w > 0 && state.pick_del_w > 0 &&
+                  state.pick_can_w > 0 &&
+                  state.pick_fw_x < state.pick_del_x &&
+                  state.pick_del_x < state.pick_can_x &&
+                  state.pick_can_x + state.pick_can_w <= 640 &&
+                  tg_gui_hit_test(&state, 640, 480, lh, state.pick_fw_x + 2,
+                                  bar_y) == TG_GUI_HIT_PICK_FORWARD &&
+                  tg_gui_hit_test(&state, 640, 480, lh, state.pick_del_x + 2,
+                                  bar_y) == TG_GUI_HIT_PICK_DELETE &&
+                  tg_gui_hit_test(&state, 640, 480, lh, state.pick_can_x + 2,
+                                  bar_y) == TG_GUI_HIT_PICK_CANCEL &&
+                  tg_gui_hit_test(&state, 640, 480, lh,
+                                  tg_gui_sidebar_w(640) + 30, bar_y) ==
+                      TG_GUI_HIT_NONE;
+        /* A plain click on a chosen one takes its mark away; the last
+           one gone, the mode ends and the composer is back. */
+        ok_pick = ok_pick && tg_gui_pick_toggle(&state, 0, 0) == 2 &&
+                  tg_gui_pick_toggle(&state, 1, 0) == 1 &&
+                  state.pick_mode && tg_gui_pick_toggle(&state, 3, 0) == 0 &&
+                  !state.pick_mode;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "Send";
+        rec.watch_text[1] = "Cancel";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_pick = ok_pick && rec.watch_hits[0] == 1 &&
+                  rec.watch_hits[1] == 0 &&
+                  tg_gui_hit_test(&state, 640, 480, lh, 640 - 20, bar_y) ==
+                      TG_GUI_HIT_SEND;
+        /* Left by hand (ESC, Cancel): every mark goes. */
+        tg_gui_pick_begin(&state, 1);
+        (void)tg_gui_pick_toggle(&state, 3, 0);
+        tg_gui_pick_end(&state);
+        ok_pick = ok_pick && !state.pick_mode &&
+                  !state.messages[1].picked && !state.messages[3].picked &&
+                  tg_gui_pick_ids(&state, got, 8, TG_GUI_PICK_ALL) == 0;
+        for (i = 0; i < 4; ++i) {
+            state.messages[i] = saved[i];
+        }
+        state.message_count = saved_count;
+        state.composing = saved_composing;
+        state.selected_msg = saved_selected;
+        state.reply_to_id = saved_reply;
+        if (!ok_pick) {
+            printf("gui self-test: selecting several messages is wrong "
+                   "(%d chosen, bar %d %d %d)\n",
+                   tg_gui_pick_count(&state), state.pick_fw_x,
+                   state.pick_del_x, state.pick_can_x);
             return 2;
         }
     }
