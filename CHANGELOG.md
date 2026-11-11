@@ -81,7 +81,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   is saved on Telegram when another chat is opened or the client is
   closed, so the other devices show it, and it comes back in the
   composer when the chat is opened again. A chat that holds a draft
-  shows it under its name in the chat list, after "Draft:". Drafts
+  shows it under its name in the chat list, after "Draft:"; the open
+  chat's row shows none, its draft being in the composer. Drafts
   written on other devices are read when the client starts and on Reload
   chat list, and followed while it runs: the open chat's composer takes
   the change as long as nothing else was typed in it. Sending the

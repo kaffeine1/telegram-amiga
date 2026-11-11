@@ -22068,7 +22068,7 @@ static int tg_gui_draft_find(int is_user, unsigned long id_hi,
     return -1;
 }
 
-/* The chat's draft, or 0 when it has none: what the chat list asks for. */
+/* The chat's draft, or 0 when it has none. */
 static const char *tg_gui_draft_lookup(int is_user, unsigned long id_hi,
                                        unsigned long id_lo)
 {
@@ -22137,6 +22137,24 @@ static int tg_gui_draft_is_open_peer(unsigned long peer_constructor,
            tg_gui_session_state.open_peer_constructor == peer_constructor &&
            tg_gui_session_state.open_peer_id_hi == id_hi &&
            tg_gui_session_state.open_peer_id_lo == id_lo;
+}
+
+/* The draft a chat's row shows, which is what the chat list asks for: its
+   own, except for the open chat, whose draft is in the composer in front
+   of the user. So text typed there and deleted again does not stay on the
+   row, as a draft, until the chat is left. */
+static const char *tg_gui_draft_for_row(int is_user, unsigned long id_hi,
+                                        unsigned long id_lo)
+{
+    if (tg_gui_session_state.open &&
+        tg_gui_session_state.open_peer_constructor != 0UL &&
+        (tg_gui_session_state.open_peer_constructor ==
+         TG_MTPROTO_PEER_USER_CONSTRUCTOR) == (is_user != 0) &&
+        tg_gui_session_state.open_peer_id_hi == id_hi &&
+        tg_gui_session_state.open_peer_id_lo == id_lo) {
+        return 0;
+    }
+    return tg_gui_draft_lookup(is_user, id_hi, id_lo);
 }
 
 /* Whether the composer holds something a draft could be: a chat is shown
@@ -22831,6 +22849,40 @@ static int tg_gui_drafts_self_test(void)
          tg_gui_draft_lookup(0, 0UL, 7UL) == 0 &&
          tg_gui_draft_lookup(1, 0UL, 999UL) != 0 &&
          tg_gui_draft_lookup(1, 0UL, 101UL) != 0;
+    /* On the rows: every chat shows its draft but the open one, whose
+       draft is in the composer; a group with the open user's number is
+       another chat. */
+    {
+        int saved_open = tg_gui_session_state.open;
+        unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+        unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+        unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+
+        tg_gui_draft_count = 0;
+        ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao", 10UL) == 1 &&
+             tg_gui_draft_set(0, 0UL, 7UL, "gruppo", 12UL) == 1;
+        tg_gui_session_state.open = 1;
+        tg_gui_session_state.open_peer_constructor = 0UL; /* none open */
+        tg_gui_session_state.open_peer_id_hi = 0UL;
+        tg_gui_session_state.open_peer_id_lo = 7UL;
+        ok = ok && tg_gui_draft_for_row(1, 0UL, 7UL) != 0 &&
+             tg_gui_draft_for_row(0, 0UL, 7UL) != 0;
+        tg_gui_session_state.open_peer_constructor =
+            TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        ok = ok && tg_gui_draft_for_row(1, 0UL, 7UL) == 0 &&
+             tg_gui_draft_for_row(0, 0UL, 7UL) != 0 &&
+             tg_gui_draft_lookup(1, 0UL, 7UL) != 0; /* kept all the same */
+        tg_gui_session_state.open_peer_constructor =
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        ok = ok && tg_gui_draft_for_row(1, 0UL, 7UL) != 0 &&
+             tg_gui_draft_for_row(0, 0UL, 7UL) == 0;
+        tg_gui_session_state.open_peer_id_lo = 8UL;
+        ok = ok && tg_gui_draft_for_row(0, 0UL, 7UL) != 0;
+        tg_gui_session_state.open = saved_open;
+        tg_gui_session_state.open_peer_constructor = saved_pc;
+        tg_gui_session_state.open_peer_id_hi = saved_hi;
+        tg_gui_session_state.open_peer_id_lo = saved_lo;
+    }
     /* As it arrives: "perche'" with its accent in UTF-8, kept in Latin-1;
        an empty text deletes it. */
     tg_gui_draft_count = 0;
@@ -23141,7 +23193,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
     tg_gui_chat_driver_bind(&tg_gui_session_state.gui_driver, state,
                             &tg_gui_session_state.driver);
 #if !defined(TG_NO_GUI)
-    tg_gui_session_state.gui_driver.draft_text = tg_gui_draft_lookup;
+    tg_gui_session_state.gui_driver.draft_text = tg_gui_draft_for_row;
     tg_gui_draft_count = 0;
     tg_gui_drafts_changed = 0;
     tg_gui_draft_follow = 0;
@@ -23481,6 +23533,20 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     /* The composer takes this chat's draft, or starts empty. */
     if (other_chat) {
         tg_gui_draft_enter();
+#if !defined(TG_NO_GUI)
+        /* ...and the rows that show a draft are drawn again: the open
+           chat's row keeps none (its composer has it), the row of the
+           chat just left shows its own again. Not while the list is a
+           search's or a picker's: those put it back themselves. */
+        {
+            const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+            if (tg_gui_draft_count > 0 && gst != 0 && !gst->in_search &&
+                !gst->in_filter && !gst->forward_pick_active) {
+                tg_gui_session_reload_chats();
+            }
+        }
+#endif
     }
     tg_gui_pinned_chat_opened(other_chat);
     tg_gui_read_chat_opened(other_chat);
