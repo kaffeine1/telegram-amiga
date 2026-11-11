@@ -25852,6 +25852,56 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     return rc;
 }
 
+/* Public: sends a text to the chat at this 1-based cache index (or Saved
+   Messages), which need not be the open one: what a script asks through
+   the ARexx port. The open chat's own message goes the usual way, so it
+   shows in the transcript at once; another chat's is only sent. The text
+   is as the composer holds it (Latin-1). 0 = sent, 2 = failed. */
+int tg_gui_session_send_to(unsigned long peer_index, const char *text,
+                           FILE *stream)
+{
+    FILE *quiet;
+    char index_text[24];
+    unsigned long sent_id = 0UL;
+    unsigned long prev_timeout;
+    const char *send_text = text;
+    int rc;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char send_line[(TG_GUI_MSG_TEXT_MAX * 2) + 1];
+#endif
+
+    if (!tg_gui_session_state.open || stream == 0 || text == 0 ||
+        text[0] == '\0' || peer_index == 0UL) {
+        return 2;
+    }
+    if (peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        strcpy(index_text, "self");
+    } else {
+        sprintf(index_text, "%lu", peer_index % 100000000UL);
+    }
+    if (strcmp(index_text, tg_gui_session_state.current_peer_index) == 0) {
+        return tg_gui_session_send(text, 0UL, stream) == 0 ? 0 : 2;
+    }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(text, send_line, sizeof(send_line))) {
+        send_text = send_line;
+    }
+#endif
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_auth_send_peer_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file, index_text, send_text, 0UL,
+        &sent_id, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log(rc == 0 ? "arexx: message sent" : "arexx: send failed");
+    return rc == 0 ? 0 : 2;
+}
+
 const char *tg_gui_session_last_action_error(void)
 {
     return tg_mtproto_query_fail;

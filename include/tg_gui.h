@@ -557,6 +557,9 @@ typedef struct tg_gui_state {
     unsigned long ctx_msg_id;
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
+    /* ARexx: the port is open, and SEND is allowed through it. */
+    int arexx_port;
+    int arexx_send;
     int ctx_muted; /* Telegram holds the menu's chat muted: it offers Unmute */
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
@@ -902,15 +905,39 @@ int tg_gui_attachment_is_photo(const char *path);
 /* The ARexx port's commands (the port is the window's; this is the part
    that needs no Amiga): what a command line asks, and the chat a name
    means. SHOW brings the window up, HIDE parks it on its AppIcon, OPEN
-   <name> opens a chat, QUIT ends the program. The command word may be in
-   any case; OPEN's argument comes back in *arg, without the quotes around
-   it if it had any (it points into text, which is cut there). */
+   <name> opens a chat, QUIT ends the program; UNREAD, CHAT and VERSION
+   answer with a text (how many unread messages, the open chat's name,
+   the program's version); SEND <chat> <text> sends a message, when the
+   user has allowed it. The command word may be in any case. OPEN's
+   argument comes back in *arg without the quotes around it if it had any,
+   SEND's as written (tg_gui_rexx_split_send parts it); arg points into
+   text, which is cut there. */
 #define TG_GUI_REXX_UNKNOWN 0
 #define TG_GUI_REXX_SHOW 1
 #define TG_GUI_REXX_HIDE 2
 #define TG_GUI_REXX_OPEN 3
 #define TG_GUI_REXX_QUIT 4
+#define TG_GUI_REXX_SEND 5
+#define TG_GUI_REXX_UNREAD 6
+#define TG_GUI_REXX_CHAT 7
+#define TG_GUI_REXX_VERSION 8
 int tg_gui_rexx_command(char *text, const char **arg);
+/* SEND's argument in its two parts: the chat, one word or a name between
+   quotes, and the text after it. 1 = both are there. rest is cut. */
+int tg_gui_rexx_split_send(char *rest, const char **chat, const char **text);
+/* The row of the chat with exactly this name (letters in either case),
+   -1 when there is none: a message is never sent on a near match. */
+int tg_gui_chat_named(const tg_gui_state *state, const char *name);
+/* Unread messages over the whole chat list, as its badges count them. */
+unsigned long tg_gui_unread_total(const tg_gui_state *state);
+/* What ARexx may do, kept in data/telegram-arexx.txt: the port itself (on
+   unless switched off) and sending messages through it (off unless
+   switched on: any program on the machine could write as the user). */
+#define TG_GUI_AREXX_FILE "data/telegram-arexx.txt"
+void tg_gui_arexx_preferences_load(const char *path, int *port_on,
+                                   int *send_on);
+int tg_gui_arexx_preferences_save(const char *path, int port_on,
+                                  int send_on);
 /* The row of the chat a name means, -1 when none: the chat with exactly
    that name first, then the first whose name starts with it, then the
    first that contains it. Letters match in either case. */

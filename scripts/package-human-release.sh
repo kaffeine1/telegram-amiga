@@ -643,8 +643,20 @@ ARexx
       rx "address AMIGRAM 'SHOW'"
   SHOW brings the window up, from its icon too; HIDE leaves it on its
   icon; OPEN <name> opens the chat with that name, or the first whose
-  name starts with it or contains it; QUIT ends the program. The result
-  code is 0, 5 when OPEN finds no such chat, 10 for an unknown command.
+  name starts with it or contains it; QUIT ends the program.
+- UNREAD, CHAT and VERSION answer with a text in RESULT (the script
+  needs "options results"): how many unread messages there are, the
+  name of the open chat, the program's version.
+- SEND <chat> <text> sends a message: SEND "Mario Rossi" build done.
+  The chat's name must be the whole name, in quotes if it has spaces.
+  It is switched off until you allow it: any program on your machine
+  could otherwise write as you.
+- The result code is 0; 5 when no chat has that name; 10 for an unknown
+  command, a missing argument, or SEND while it is switched off; 20
+  when Telegram could not be reached.
+- The two switches are in data/telegram-arexx.txt, one per line:
+  port=on or port=off for the port itself, send=on or send=off for
+  SEND. Without the file the port is on and SEND is off.
 EOT
 }
 
@@ -773,9 +785,20 @@ ARexx
       rx "address AMIGRAM 'SHOW'"
   SHOW porta su la finestra, anche dall'icona; HIDE la lascia sulla sua
   icona; OPEN <nome> apre la chat con quel nome, o la prima il cui nome
-  comincia cosi' o lo contiene; QUIT chiude il programma. Il codice di
-  ritorno e' 0, 5 se OPEN non trova la chat, 10 per un comando
-  sconosciuto.
+  comincia cosi' o lo contiene; QUIT chiude il programma.
+- UNREAD, CHAT e VERSION rispondono con un testo in RESULT (allo script
+  serve "options results"): quanti messaggi non letti ci sono, il nome
+  della chat aperta, la versione del programma.
+- SEND <chat> <testo> manda un messaggio: SEND "Mario Rossi" build
+  finita. Il nome della chat deve essere quello intero, tra virgolette
+  se ha spazi. E' spento finche' non lo permetti tu: altrimenti
+  qualunque programma sulla macchina potrebbe scrivere a tuo nome.
+- Il codice di ritorno e' 0; 5 se nessuna chat ha quel nome; 10 per un
+  comando sconosciuto, un argomento mancante, o SEND mentre e' spento;
+  20 se Telegram non e' raggiungibile.
+- I due interruttori stanno in data/telegram-arexx.txt, uno per riga:
+  port=on o port=off per la porta, send=on o send=off per SEND. Senza
+  il file la porta e' accesa e SEND e' spento.
 EOT
 }
 

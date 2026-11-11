@@ -316,6 +316,11 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
 int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
                                FILE *stream);
 
+/* Sends a text to the chat at this 1-based cache index, open or not (the
+   ARexx port's SEND): 0 = sent, 2 = failed. */
+int tg_gui_session_send_to(unsigned long peer_index, const char *text,
+                           FILE *stream);
+
 /* Shows the open chat around the oldest unread message that mentions this
    account (state->unread_mentions says how many there are) and marks that
    mention as read: 1 = shown, 0 = none left, -1 = failed. */

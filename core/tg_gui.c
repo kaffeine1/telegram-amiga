@@ -5921,6 +5921,10 @@ int tg_gui_rexx_command(char *text, const char **arg)
         {"hide", TG_GUI_REXX_HIDE},
         {"open", TG_GUI_REXX_OPEN},
         {"quit", TG_GUI_REXX_QUIT},
+        {"send", TG_GUI_REXX_SEND},
+        {"unread", TG_GUI_REXX_UNREAD},
+        {"chat", TG_GUI_REXX_CHAT},
+        {"version", TG_GUI_REXX_VERSION},
     };
     char *s = text;
     char *rest;
@@ -5948,11 +5952,6 @@ int tg_gui_rexx_command(char *text, const char **arg)
                          rest[len - 1UL] == '\n' || rest[len - 1UL] == '\r')) {
         rest[--len] = '\0';
     }
-    if (len >= 2UL && (rest[0] == '"' || rest[0] == '\'') &&
-        rest[len - 1UL] == rest[0]) {
-        rest[len - 1UL] = '\0';
-        ++rest;
-    }
     for (k = 0; k < (int)(sizeof(words) / sizeof(words[0])); ++k) {
         unsigned long i;
 
@@ -5965,9 +5964,21 @@ int tg_gui_rexx_command(char *text, const char **arg)
             }
         }
         if (i == n) {
-            /* Only OPEN takes an argument, and must have one. */
-            if ((words[k].code == TG_GUI_REXX_OPEN) != (rest[0] != '\0')) {
+            int takes = words[k].code == TG_GUI_REXX_OPEN ||
+                        words[k].code == TG_GUI_REXX_SEND;
+
+            /* OPEN and SEND take an argument and must have one; the
+               others take none. */
+            if (takes != (rest[0] != '\0')) {
                 return TG_GUI_REXX_UNKNOWN;
+            }
+            /* OPEN's is one name: the quotes around it are not part of
+               it. SEND's has a name and a text, parted later. */
+            if (words[k].code == TG_GUI_REXX_OPEN && len >= 2UL &&
+                (rest[0] == '"' || rest[0] == '\'') &&
+                rest[len - 1UL] == rest[0]) {
+                rest[len - 1UL] = '\0';
+                ++rest;
             }
             if (arg != 0) {
                 *arg = rest;
@@ -5976,6 +5987,164 @@ int tg_gui_rexx_command(char *text, const char **arg)
         }
     }
     return TG_GUI_REXX_UNKNOWN;
+}
+
+int tg_gui_rexx_split_send(char *rest, const char **chat, const char **text)
+{
+    char *s = rest;
+    char *end;
+
+    if (rest == 0 || chat == 0 || text == 0) {
+        return 0;
+    }
+    while (*s == ' ' || *s == '\t') {
+        ++s;
+    }
+    if (*s == '"' || *s == '\'') {
+        char quote = *s++;
+
+        end = s;
+        while (*end != '\0' && *end != quote) {
+            ++end;
+        }
+        if (*end != quote) {
+            return 0; /* the name's quote never closes */
+        }
+    } else {
+        end = s;
+        while (*end != '\0' && *end != ' ' && *end != '\t') {
+            ++end;
+        }
+        if (*end == '\0') {
+            return 0; /* a name and no text */
+        }
+    }
+    if (end == s) {
+        return 0;
+    }
+    *end++ = '\0';
+    while (*end == ' ' || *end == '\t') {
+        ++end;
+    }
+    if (*end == '\0') {
+        return 0;
+    }
+    *chat = s;
+    *text = end;
+    return 1;
+}
+
+int tg_gui_chat_named(const tg_gui_state *state, const char *name)
+{
+    unsigned long want;
+    int i;
+
+    if (state == 0 || name == 0 || name[0] == '\0') {
+        return -1;
+    }
+    want = (unsigned long)strlen(name);
+    for (i = 0; i < state->chat_count; ++i) {
+        const char *row = state->chats[i].name;
+        unsigned long k;
+
+        if ((unsigned long)strlen(row) != want) {
+            continue;
+        }
+        for (k = 0UL; k < want; ++k) {
+            if (tg_gui_fold(row[k]) != tg_gui_fold(name[k])) {
+                break;
+            }
+        }
+        if (k == want) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+unsigned long tg_gui_unread_total(const tg_gui_state *state)
+{
+    unsigned long total = 0UL;
+    int i;
+
+    if (state == 0) {
+        return 0UL;
+    }
+    for (i = 0; i < state->chat_count; ++i) {
+        if (state->chats[i].unread > 0) {
+            total += (unsigned long)state->chats[i].unread;
+        }
+    }
+    return total;
+}
+
+void tg_gui_arexx_preferences_load(const char *path, int *port_on,
+                                   int *send_on)
+{
+    FILE *file;
+    char line[32];
+
+    if (port_on != 0) {
+        *port_on = 1;
+    }
+    if (send_on != 0) {
+        *send_on = 0;
+    }
+    if (path == 0 || path[0] == '\0') {
+        return;
+    }
+    file = fopen(path, "rb");
+    if (file == 0) {
+        return;
+    }
+    while (fgets(line, (int)sizeof(line), file) != 0) {
+        int on = strncmp(line + 5, "on", 2U) == 0 &&
+                 (line[7] == '\0' || line[7] == '\n' || line[7] == '\r');
+
+        if (strncmp(line, "port=", 5U) == 0 && port_on != 0) {
+            *port_on = on || strncmp(line + 5, "off", 3U) != 0;
+        } else if (strncmp(line, "send=", 5U) == 0 && send_on != 0) {
+            *send_on = on; /* anything but a plain "on" keeps it off */
+        }
+    }
+    (void)fclose(file);
+}
+
+int tg_gui_arexx_preferences_save(const char *path, int port_on, int send_on)
+{
+    FILE *file;
+    char tmp[288];
+    unsigned long length;
+    int failed;
+
+    if (path == 0 || path[0] == '\0') {
+        return 1;
+    }
+    length = (unsigned long)strlen(path);
+    if (length + 5UL >= sizeof(tmp)) {
+        return 1;
+    }
+    memcpy(tmp, path, length);
+    memcpy(tmp + length, ".tmp", 5UL);
+    file = tg_file_fopen_replace(tmp, "wb");
+    if (file == 0) {
+        return 1;
+    }
+    failed = fprintf(file, "port=%s\nsend=%s\n", port_on ? "on" : "off",
+                     send_on ? "on" : "off") < 0;
+    if (fclose(file) != 0) {
+        failed = 1;
+    }
+    if (failed) {
+        (void)remove(tmp);
+        return 1;
+    }
+    (void)remove(path);
+    if (rename(tmp, path) != 0) {
+        (void)remove(tmp);
+        return 1;
+    }
+    return 0;
 }
 
 int tg_gui_chat_by_name(const tg_gui_state *state, const char *name)
@@ -9090,6 +9259,49 @@ int tg_gui_self_test(void)
         strcpy(line, "");
         ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
 
+        /* The commands that answer, and SEND with its two parts. */
+        strcpy(line, "unread");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNREAD;
+        strcpy(line, "Chat");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_CHAT;
+        strcpy(line, "VERSION");
+        ok_rx = ok_rx &&
+                tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_VERSION;
+        strcpy(line, "unread now");
+        ok_rx = ok_rx &&
+                tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        strcpy(line, "send");
+        ok_rx = ok_rx &&
+                tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        {
+            char send[64];
+            const char *chat = 0;
+            const char *text = 0;
+
+            strcpy(send, "SEND \"Mario Rossi\" build \"ok\"");
+            ok_rx = ok_rx &&
+                    tg_gui_rexx_command(send, &arg) == TG_GUI_REXX_SEND &&
+                    tg_gui_rexx_split_send((char *)arg, &chat, &text) &&
+                    strcmp(chat, "Mario Rossi") == 0 &&
+                    strcmp(text, "build \"ok\"") == 0;
+            strcpy(send, "send Amiga   ciao a tutti ");
+            ok_rx = ok_rx &&
+                    tg_gui_rexx_command(send, &arg) == TG_GUI_REXX_SEND &&
+                    tg_gui_rexx_split_send((char *)arg, &chat, &text) &&
+                    strcmp(chat, "Amiga") == 0 &&
+                    strcmp(text, "ciao a tutti") == 0;
+            /* A name and no text, an open quote, an empty name: nothing
+               is sent. */
+            strcpy(send, "Amiga");
+            ok_rx = ok_rx && !tg_gui_rexx_split_send(send, &chat, &text);
+            strcpy(send, "\"Mario Rossi ciao");
+            ok_rx = ok_rx && !tg_gui_rexx_split_send(send, &chat, &text);
+            strcpy(send, "\"\" ciao");
+            ok_rx = ok_rx && !tg_gui_rexx_split_send(send, &chat, &text);
+            strcpy(send, "\"Mario Rossi\"   ");
+            ok_rx = ok_rx && !tg_gui_rexx_split_send(send, &chat, &text);
+        }
+
         memcpy(saved, state.chats, sizeof(saved));
         state.chat_count = 3;
         strcpy(state.chats[0].name, "Amiga Italia");
@@ -9101,6 +9313,40 @@ int tg_gui_self_test(void)
                 tg_gui_chat_by_name(&state, "italia") == 0 &&
                 tg_gui_chat_by_name(&state, "morphos") == -1 &&
                 tg_gui_chat_by_name(&state, "") == -1;
+        /* A message goes only to the chat named in full; the count is the
+           badges' sum. */
+        state.chats[0].unread = 3;
+        state.chats[1].unread = 0;
+        state.chats[2].unread = 4;
+        ok_rx = ok_rx && tg_gui_chat_named(&state, "AMIGA") == 1 &&
+                tg_gui_chat_named(&state, "amiga italia") == 0 &&
+                tg_gui_chat_named(&state, "Amiga I") == -1 &&
+                tg_gui_chat_named(&state, "italia") == -1 &&
+                tg_gui_unread_total(&state) == 7UL;
+        /* The switches: the port is on and sending off until the file
+           says otherwise, and only a plain "on" allows sending. */
+        {
+            static const char path[] = "tg-arexx-test.tmp";
+            int port = -1;
+            int send = -1;
+            FILE *f;
+
+            (void)remove(path);
+            tg_gui_arexx_preferences_load(path, &port, &send);
+            ok_rx = ok_rx && port == 1 && send == 0;
+            ok_rx = ok_rx &&
+                    tg_gui_arexx_preferences_save(path, 0, 1) == 0;
+            tg_gui_arexx_preferences_load(path, &port, &send);
+            ok_rx = ok_rx && port == 0 && send == 1;
+            f = fopen(path, "wb");
+            if (f != 0) {
+                fputs("send=only\nport=maybe\n", f);
+                fclose(f);
+            }
+            tg_gui_arexx_preferences_load(path, &port, &send);
+            ok_rx = ok_rx && port == 1 && send == 0;
+            (void)remove(path);
+        }
         memcpy(state.chats, saved, sizeof(saved));
         state.chat_count = saved_count;
         if (!ok_rx) {

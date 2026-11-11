@@ -87,7 +87,9 @@
 #include <workbench/workbench.h>
 #include <workbench/startup.h>
 #include <rexx/storage.h>
+#include <rexx/rxslib.h>
 #include <proto/wb.h>
+#include <proto/rexxsyslib.h>
 #include <proto/icon.h>
 #include <proto/asl.h>
 #include <proto/diskfont.h>
@@ -11792,6 +11794,60 @@ static void tg_gui_window_notify_open(tg_gui_state *state,
    first window to the end of the program, across the AppIcon. */
 static struct MsgPort *tg_gui_rexx_port = 0;
 static char tg_gui_rexx_port_name[16];
+/* A command line: SEND carries a chat's name and a message. */
+#define TG_GUI_REXX_ARG_MAX 1024
+/* rexxsyslib.library, only for the commands that answer with a text: the
+   answer is an argstring, and only the library can make one. Opened the
+   first time one is asked for; without it those commands fail and the
+   others are not touched. */
+#if defined(__amigaos4__) || defined(__MORPHOS__) || defined(__MORPHOS)
+struct Library *RexxSysBase = 0;
+#else
+struct RxsLib *RexxSysBase = 0;
+#endif
+#if defined(__amigaos4__)
+struct RexxSysIFace *IRexxSys = 0;
+#endif
+/* The second result of a message is a pointer-sized field on AROS and a
+   LONG everywhere else. */
+#if defined(__AROS__)
+typedef IPTR tg_gui_rexx_result2;
+#else
+typedef LONG tg_gui_rexx_result2;
+#endif
+
+static int tg_gui_rexx_lib_open(void)
+{
+    if (RexxSysBase == 0) {
+        RexxSysBase = (void *)OpenLibrary((CONST_STRPTR)"rexxsyslib.library",
+                                          0L);
+#if defined(__amigaos4__)
+        if (RexxSysBase != 0) {
+            IRexxSys = (struct RexxSysIFace *)GetInterface(
+                (struct Library *)RexxSysBase, "main", 1L, 0);
+            if (IRexxSys == 0) {
+                CloseLibrary((struct Library *)RexxSysBase);
+                RexxSysBase = 0;
+            }
+        }
+#endif
+    }
+    return RexxSysBase != 0;
+}
+
+static void tg_gui_rexx_lib_close(void)
+{
+#if defined(__amigaos4__)
+    if (IRexxSys != 0) {
+        DropInterface((struct Interface *)IRexxSys);
+        IRexxSys = 0;
+    }
+#endif
+    if (RexxSysBase != 0) {
+        CloseLibrary((struct Library *)RexxSysBase);
+        RexxSysBase = 0;
+    }
+}
 
 static void tg_gui_rexx_open(void)
 {
@@ -11831,15 +11887,93 @@ static void tg_gui_rexx_open(void)
     tg_gui_log("arexx: port open");
 }
 
-static void tg_gui_rexx_reply(struct Message *m, long rc)
+/* Answers a command: its result code and, for the ones that answer with
+   a text, the text (0 = none). The text reaches the script only when it
+   asked for results ("options results") and the library is there; a text
+   that cannot be handed over turns a success into an error. */
+static void tg_gui_rexx_reply_text(struct Message *m, long rc,
+                                   const char *text)
 {
     if (m->mn_Length >= sizeof(struct RexxMsg)) {
         struct RexxMsg *rm = (struct RexxMsg *)m;
 
-        rm->rm_Result1 = (LONG)rc;
         rm->rm_Result2 = 0;
+        if (rc == 0L && text != 0 && (rm->rm_Action & RXFF_RESULT) != 0) {
+            if (tg_gui_rexx_lib_open()) {
+                rm->rm_Result2 = (tg_gui_rexx_result2)CreateArgstring(
+                    (CONST_STRPTR)text, (ULONG)strlen(text));
+            }
+            if (rm->rm_Result2 == 0) {
+                rc = 20L;
+            }
+        }
+        rm->rm_Result1 = (LONG)rc;
     }
     ReplyMsg(m);
+}
+
+static void tg_gui_rexx_reply(struct Message *m, long rc)
+{
+    tg_gui_rexx_reply_text(m, rc, 0);
+}
+
+/* The commands that need no window: the three that answer with a text and
+   SEND. 1 = this was one of them and it is answered (*sent says a message
+   went out, so the window shows it); 0 = it is for the caller. */
+static int tg_gui_rexx_common(tg_gui_state *state, struct Message *m,
+                              int code, char *arg, int *sent)
+{
+    char text[TG_GUI_NAME_MAX + 16];
+
+    *sent = 0;
+    if (code == TG_GUI_REXX_UNREAD) {
+        sprintf(text, "%lu", tg_gui_unread_total(state));
+        tg_gui_rexx_reply_text(m, 0L, text);
+        return 1;
+    }
+    if (code == TG_GUI_REXX_CHAT) {
+        /* The open chat's name, its emoji as text; empty with none open. */
+        if (state->mode == TG_GUI_MODE_CHAT && state->open_chat_valid) {
+            tg_gui_emoji_expand_pairs(text, sizeof(text),
+                                      state->open_chat.name);
+        } else {
+            text[0] = '\0';
+        }
+        tg_gui_rexx_reply_text(m, 0L, text);
+        return 1;
+    }
+    if (code == TG_GUI_REXX_VERSION) {
+        tg_gui_rexx_reply_text(m, 0L, TG_APP_NAME " " TG_VERSION);
+        return 1;
+    }
+    if (code == TG_GUI_REXX_SEND) {
+        const char *chat = 0;
+        const char *body = 0;
+        long rc = 0L;
+        int row;
+
+        if (!state->arexx_send) {
+            /* Off unless the user switched it on: any program on the
+               machine could otherwise write as the user. */
+            tg_gui_log("arexx: send asked, but it is switched off");
+            rc = 10L;
+        } else if (!tg_gui_rexx_split_send(arg, &chat, &body)) {
+            rc = 10L;
+        } else if (state->mode != TG_GUI_MODE_CHAT || state->in_search ||
+                   state->in_filter || state->forward_pick_active ||
+                   !tg_gui_session_is_open() ||
+                   (row = tg_gui_chat_named(state, chat)) < 0) {
+            rc = 5L; /* no chat of exactly that name in the list */
+        } else if (tg_gui_session_send_to(state->chats[row].index, body,
+                                          stdout) != 0) {
+            rc = 20L;
+        } else {
+            *sent = 1;
+        }
+        tg_gui_rexx_reply(m, rc);
+        return 1;
+    }
+    return 0;
 }
 
 static void tg_gui_rexx_close(void)
@@ -11855,6 +11989,7 @@ static void tg_gui_rexx_close(void)
     }
     DeleteMsgPort(tg_gui_rexx_port);
     tg_gui_rexx_port = 0;
+    tg_gui_rexx_lib_close();
 }
 
 static ULONG tg_gui_rexx_sigmask(void)
@@ -11870,7 +12005,7 @@ static struct Message *tg_gui_rexx_get(int *code, char *arg,
                                        unsigned long arg_size)
 {
     struct Message *m;
-    char line[TG_GUI_NAME_MAX + 16];
+    static char line[TG_GUI_REXX_ARG_MAX + 16];
     const char *rest = "";
     const char *text = 0;
     unsigned long i;
@@ -12546,13 +12681,21 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         /* ARexx commands, the window open. */
         {
             struct Message *rxm;
-            char rx_arg[TG_GUI_NAME_MAX];
+            static char rx_arg[TG_GUI_REXX_ARG_MAX];
             int rx_code;
 
             while (!done && (rxm = tg_gui_rexx_get(&rx_code, rx_arg,
                                                    sizeof(rx_arg))) != 0) {
                 long rx_rc = 0L;
+                int rx_sent = 0;
 
+                if (tg_gui_rexx_common(state, rxm, rx_code, rx_arg,
+                                       &rx_sent)) {
+                    if (rx_sent) {
+                        tg_gui_window_paint(state, &backend);
+                    }
+                    continue;
+                }
                 if (rx_code == TG_GUI_REXX_SHOW) {
                     ScreenToFront(ctx.window->WScreen);
                     WindowToFront(ctx.window);
@@ -16228,14 +16371,19 @@ static int tg_gui_window_iconify_wait(tg_gui_state *state)
         /* ARexx commands, the window parked: SHOW and OPEN bring it back. */
         {
             struct Message *rxm;
-            char rx_arg[TG_GUI_NAME_MAX];
+            static char rx_arg[TG_GUI_REXX_ARG_MAX];
             int rx_code;
             int rx_quit = 0;
 
             while ((rxm = tg_gui_rexx_get(&rx_code, rx_arg,
                                           sizeof(rx_arg))) != 0) {
                 long rx_rc = 0L;
+                int rx_sent = 0;
 
+                if (state != 0 && tg_gui_rexx_common(state, rxm, rx_code,
+                                                     rx_arg, &rx_sent)) {
+                    continue;
+                }
                 if (rx_code == TG_GUI_REXX_SHOW) {
                     reopen = 1;
                     done = 1;
@@ -16432,7 +16580,11 @@ int tg_gui_run_window(tg_gui_state *state)
         state->photo_cache_limit_mb = TG_GUI_PHOTO_CACHE_DEFAULT_MB;
     }
     tg_gui_photo_cache_begin(state->photo_cache_limit_mb);
-    tg_gui_rexx_open();
+    tg_gui_arexx_preferences_load(TG_GUI_AREXX_FILE, &state->arexx_port,
+                                  &state->arexx_send);
+    if (state->arexx_port) {
+        tg_gui_rexx_open();
+    }
     for (;;) {
         int rc = tg_gui_run_window_once(state);
 

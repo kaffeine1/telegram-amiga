@@ -55,9 +55,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   window up, from its AppIcon too; HIDE parks it on the AppIcon; OPEN
   <name> opens the chat with that name, or the first whose name starts
   with it or contains it, in either case of letters; QUIT ends the
-  program. The result code is 0, 5 when OPEN finds no such chat, 10 for
-  an unknown command. It needs no ARexx library: any program that sends
-  an ARexx message can use it.
+  program. UNREAD, CHAT and VERSION answer with a text in RESULT: how
+  many unread messages there are, the open chat's name, the program's
+  version. SEND <chat> <text> sends a message to the chat with exactly
+  that name, open or not, the window up or on its AppIcon; it is
+  switched off until you allow it, because any program on the machine
+  could otherwise write as you. The result code is 0; 5 when no chat has
+  that name; 10 for an unknown command, a missing argument, or SEND
+  while it is off; 20 when Telegram could not be reached. The port and
+  SEND each have a switch, for now a line in `data/telegram-arexx.txt`
+  (`port=off`, `send=on`).
 - The time zone from the environment. On a machine whose clock is not
   set (no battery clock: it starts in 1978), message times were shown
   in the time zone of the Locale preferences, which know no summer time.
