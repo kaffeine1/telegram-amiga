@@ -7172,6 +7172,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {"Window and files", 0},
     {"Use own screen", TG_GUI_SET_OWN_SCREEN},
     {"Download drawer...", TG_GUI_SET_DOWNLOAD},
+    {"Check for updates", TG_GUI_SET_UPDATES},
     {"ARexx", 0},
     {"ARexx port", TG_GUI_SET_AREXX_PORT},
     {"Scripts may send messages", TG_GUI_SET_AREXX_SEND},
@@ -7221,7 +7222,8 @@ int tg_gui_settings_disabled(const tg_gui_state *state, int id)
         return 1;
     }
     return (id == TG_GUI_SET_EMOTICONS && !state->emoji_enabled) ||
-           (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port);
+           (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port) ||
+           (id == TG_GUI_SET_UPDATES && !state->update_can);
 }
 
 /* The last part of a path: what follows the last ':' or '/'. */
@@ -7293,6 +7295,9 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     case TG_GUI_SET_OWN_SCREEN: on = state->settings_own_screen; break;
     case TG_GUI_SET_AREXX_PORT: on = state->arexx_port; break;
     case TG_GUI_SET_AREXX_SEND: on = state->arexx_send; break;
+    case TG_GUI_SET_UPDATES:
+        on = state->update_can && state->update_check;
+        break;
     default: break;
     }
     if (on >= 0) {
@@ -10264,7 +10269,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 20 && switches == 9 &&
+        ok_set = ok_set && lines == 21 && switches == 10 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&
@@ -10316,11 +10321,30 @@ int tg_gui_self_test(void)
         tg_gui_settings_value(&state, TG_GUI_SET_SOUND_FILE, value,
                               sizeof(value));
         ok_set = ok_set && strcmp(value, "(built-in chime)") == 0;
-        /* Emoticons need emoji, SEND needs the port. */
+        /* Emoticons need emoji, SEND needs the port, and the look for
+           updates a build that has a channel to look at. */
         ok_set = ok_set &&
                  tg_gui_settings_disabled(&state, TG_GUI_SET_EMOTICONS) &&
                  !tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_SEND) &&
                  !tg_gui_settings_disabled(&state, TG_GUI_SET_BEEP);
+        state.update_can = 0;
+        state.update_check = 1;
+        tg_gui_settings_value(&state, TG_GUI_SET_UPDATES, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "[ ]") == 0 &&
+                 tg_gui_settings_disabled(&state, TG_GUI_SET_UPDATES) &&
+                 tg_gui_settings_kind(TG_GUI_SET_UPDATES) ==
+                     TG_GUI_SET_KIND_SWITCH;
+        state.update_can = 1;
+        tg_gui_settings_value(&state, TG_GUI_SET_UPDATES, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "[x]") == 0 &&
+                 !tg_gui_settings_disabled(&state, TG_GUI_SET_UPDATES);
+        state.update_check = 0;
+        tg_gui_settings_value(&state, TG_GUI_SET_UPDATES, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "[ ]") == 0;
+        state.update_can = 0;
         state.arexx_port = 0;
         ok_set = ok_set &&
                  tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_SEND);

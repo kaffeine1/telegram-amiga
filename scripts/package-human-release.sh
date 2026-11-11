@@ -35,6 +35,27 @@ VERSION=${VERSION:-0.0.0}
 # banner print (TG_VERSION_CHANNEL), so the binary and the packaging cannot
 # disagree; the dot count is only a fallback for a tree without that macro.
 CHANNEL=${CHANNEL:-$(sed -n 's/.*define TG_VERSION_CHANNEL "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)}
+# The update notice reads a public Telegram channel named in the same header.
+# While that name is empty the client never looks, its line in the settings
+# is greyed, and the manuals say nothing about it.
+UPDATE_CHANNEL=$(sed -n 's/.*define TG_UPDATE_CHANNEL "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)
+update_manual_en=""
+update_manual_it=""
+if [ -n "$UPDATE_CHANNEL" ]; then
+    update_manual_en="
+- \"Settings > Check for updates\": once a day the program reads the
+  channel @$UPDATE_CHANNEL on Telegram, where new versions are
+  announced. When one is newer than yours the status line says so,
+  once, and About keeps saying it. Nothing is downloaded and nothing is
+  installed. Switch the line off and the program never looks."
+    update_manual_it="
+- \"Settings > Check for updates\": una volta al giorno il programma
+  legge il canale @$UPDATE_CHANNEL su Telegram, dove vengono annunciate
+  le versioni nuove. Quando ce n'e' una piu' nuova della tua la riga di
+  stato lo dice, una volta sola, e About continua a dirlo. Non viene
+  scaricato ne' installato niente. Spegni la riga e il programma non
+  guarda piu'."
+fi
 if [ -z "$CHANNEL" ]; then
     case $VERSION in
         *.*.*) CHANNEL=alpha ;;
@@ -676,7 +697,7 @@ Settings
   ENTER or a click change the line, LEFT and RIGHT step a choice back
   and on. The Close button at the top right, ESC, or a click on the chat
   list closes it. Where this manual says "Settings > ...", it is a line
-  of that panel.
+  of that panel.$update_manual_en
 
 Window and screen
 - The window remembers its size and position
@@ -869,7 +890,7 @@ Impostazioni
   INVIO o un click cambiano la riga, SINISTRA e DESTRA fanno girare una
   scelta indietro e avanti. Lo chiudono il pulsante Close in alto a
   destra, ESC, o un click sull'elenco delle chat. Dove questo manuale
-  dice "Settings > ...", e' una riga di quel pannello.
+  dice "Settings > ...", e' una riga di quel pannello.$update_manual_it
 
 Finestra e schermo
 - La finestra ricorda dimensione e posizione

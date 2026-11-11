@@ -580,6 +580,10 @@ typedef struct tg_gui_state {
     /* ARexx: the port is open, and SEND is allowed through it. */
     int arexx_port;
     int arexx_send;
+    /* The update notice: this build has a channel to look at, and the user
+       lets it look. The window sets both from the session. */
+    int update_can;
+    int update_check;
     /* The settings panel, drawn over the chat while it is open: the line
        the keyboard is on, how far the lines are scrolled when they do not
        all fit, and two values only the window knows (it sets them when it
@@ -994,6 +998,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_DOWNLOAD 14    /* action: pick the download drawer */
 #define TG_GUI_SET_AREXX_PORT 15
 #define TG_GUI_SET_AREXX_SEND 16
+#define TG_GUI_SET_UPDATES 17     /* look for a newer version once a day */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2

@@ -7369,6 +7369,23 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* About, with one more line on top when the update notice knows of a
+   version newer than this one. */
+static void tg_gui_window_about(struct Window *win)
+{
+    static char text[sizeof(tg_gui_about_text) + 96];
+    const char *newer = tg_gui_session_update_newer();
+
+    if (newer[0] == '\0') {
+        tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, tg_gui_about_text);
+        return;
+    }
+    sprintf(text, TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n"
+            "Get it where you got this one.\n\n", newer);
+    strcat(text, tg_gui_about_text);
+    tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, text);
+}
+
 /* The menu's "Support development...": the chosen link (Patreon or Ko-fi)
    opens the way a link in a message does, or lands on the clipboard when no
    OpenURL/URLOpen is there. Only on request, never at start-up. */
@@ -11425,6 +11442,9 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
 }
 
 
+/* When the update notice is next offered a look (0 = at the first chance). */
+static time_t tg_gui_update_next = (time_t)0;
+
 static void tg_gui_window_poll_session(const tg_gui_state *state,
                                        time_t session_boot,
                                        unsigned long watch_seconds,
@@ -11464,6 +11484,24 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         state->mode == TG_GUI_MODE_CHAT && state->transcript_scroll == 0 &&
         !state->newest_dropped && tg_gui_session_read_step(stdout)) {
         tg_gui_window_session_changed(session_dirty, header_dirty);
+    }
+    /* The update notice: a look a minute after the start at the earliest,
+       never while the user types or a transfer runs. The session asks
+       Telegram once a day at most; here it is only offered the chance now
+       and then (sooner again when the channel could not be asked). */
+    if (state->update_can && state->update_check && !state->composing &&
+        !tg_gui_session_transfer_busy() && session_boot != (time_t)-1 &&
+        now >= session_boot && (unsigned long)(now - session_boot) >= 60UL &&
+        now >= tg_gui_update_next) {
+        char uline[TG_GUI_NAME_MAX];
+        int urc = tg_gui_session_update_look(uline, sizeof(uline), stdout);
+
+        tg_gui_update_next = now + (time_t)(urc < 0 ? 600 : 3600);
+        if (urc == 1) {
+            tg_gui_window_copy(((tg_gui_state *)state)->status,
+                               sizeof(state->status), uline);
+            *session_dirty = 1;
+        }
     }
     if ((state->composing || tg_gui_session_transfer_busy()) &&
         now >= *last_receive_drain &&
@@ -12681,6 +12719,16 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
     case TG_GUI_SET_AVATARS: return (APTR)TG_MENU_AVATARS;
     case TG_GUI_SET_OWN_SCREEN: return (APTR)TG_MENU_OWNSCREEN;
     case TG_GUI_SET_DOWNLOAD: return (APTR)TG_MENU_DLDIR;
+    case TG_GUI_SET_UPDATES:
+        /* Kept by the session, with what it knows of the channel. */
+        state->update_check = !state->update_check;
+        tg_gui_session_update_set_enabled(state->update_check);
+        tg_gui_update_next = (time_t)0;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           state->update_check
+                               ? "Updates: a look once a day"
+                               : "Updates: not looked for");
+        return 0;
     case TG_GUI_SET_AREXX_PORT:
     case TG_GUI_SET_AREXX_SEND:
         /* The two ARexx switches never had a menu item: set here. The
@@ -14430,9 +14478,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             ud = GTMENUITEM_USERDATA(item);
                         }
                         if (ud == (APTR)TG_MENU_ABOUT) {
-                            tg_gui_amiga_easyreq(ctx.window,
-                                                 "About " TG_APP_NAME,
-                                                 tg_gui_about_text);
+                            tg_gui_window_about(ctx.window);
                         } else if (ud == (APTR)TG_MENU_SUPPORT) {
                             tg_gui_window_support(state, ctx.window);
                             tg_gui_window_paint(state, &backend);
@@ -17565,6 +17611,8 @@ int tg_gui_run_window(tg_gui_state *state)
     if (state->arexx_port) {
         tg_gui_rexx_open();
     }
+    state->update_can = tg_gui_session_update_possible();
+    state->update_check = tg_gui_session_update_enabled();
     for (;;) {
         int rc = tg_gui_run_window_once(state);
 

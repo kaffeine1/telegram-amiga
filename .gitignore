@@ -32,6 +32,7 @@ telegram-peers*.txt
 /data/telegram-downloads.txt
 /data/telegram-hidden.txt
 /data/telegram-saved.txt
+/data/telegram-update.txt
 /data/telegram-arexx.txt
 /data/telegram-hidden-msgs.txt
 /data/telegram-hidden-msgs.tmp

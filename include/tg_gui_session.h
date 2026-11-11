@@ -245,6 +245,19 @@ int tg_gui_session_transfer_start_batch_file(const char *path,
 int tg_gui_session_batch_photos(void);
 int tg_gui_session_batch_send_album(const char *caption, FILE *stream);
 void tg_gui_session_batch_end(void);
+/* The update notice. Releases are announced on a public Telegram channel
+   (TG_UPDATE_CHANNEL); update_look, called now and then from the window's
+   quiet moments, asks it at most once a day and returns 1 with a line to
+   show when a version newer than this build was announced (once for each
+   version), 0 when there is nothing to say, -1 when the channel could not be
+   asked. update_newer gives that version for About ("" when none).
+   update_possible is 0 in a build without a channel; the switch is the
+   user's and is kept in data/telegram-update.txt. Nothing is downloaded. */
+int tg_gui_session_update_possible(void);
+int tg_gui_session_update_enabled(void);
+void tg_gui_session_update_set_enabled(int on);
+const char *tg_gui_session_update_newer(void);
+int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream);
 /* Describe the current/last upload choice, including a failed start. */
 int tg_gui_session_transfer_requested_photo(void);
 int tg_gui_session_transfer_photo_fallback(void);

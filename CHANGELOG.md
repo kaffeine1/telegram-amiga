@@ -47,6 +47,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- The update notice, not switched on yet. Releases will be announced on
+  a public Telegram channel, in a post that says "Amigram" and the
+  version. Once a day, at a quiet moment, the client asks that channel
+  for its newest posts with the program's name in them and takes the
+  highest version they name; when it is higher than the one running,
+  the status line says so, once for each version, and About says it for
+  as long as it holds. Nothing is downloaded and nothing is installed.
+  "Check for updates" in the settings switches it off; what it knows is
+  kept in `data/telegram-update.txt`. The channel's name
+  (`TG_UPDATE_CHANNEL`) is still empty: until it is set the client
+  never looks and that line of the settings is greyed.
 - Albums, and several files at once. The requester of "Send photo...",
   of the paperclip and of "Send file..." now takes several files: hold
   Shift and click more than one, ten at most. Photos picked together

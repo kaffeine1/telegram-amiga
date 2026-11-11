@@ -384,7 +384,13 @@ Middle, more interface:
   answers in the menu's place, `updateMessagePoll` followed while the
   chat is open). Still missing: voting in the text client, a quiz's
   explanation, who voted in a public poll, creating a poll;
-- the update notice (its section);
+- the update notice (its section): step 1 is in place and asleep. The
+  client can look a public channel up by name, search its posts for
+  "Amigram" and a version (`contacts.resolveUsername`,
+  `messages.search`), compare it with its own and say it once in the
+  status line and in About, once a day, with a switch in the settings.
+  What is missing is the channel: `TG_UPDATE_CHANNEL` is empty, so
+  nothing is asked yet;
 - stickers through a WEBP datatype where the user has one (see "let
   datatypes read what we cannot"): a fallback, never a requirement, and
   AROS keeps the emoji.
@@ -603,6 +609,15 @@ current binary, then swap. Updates carry the executable alone, not the
 costs size and licensing. On a slow link half a megabyte is minutes, so
 the transfer stays cancellable and off the event loop, like every other
 transfer since 0.0.8.
+
+Step 1 as built for 0.2: the announcement is a channel post that says
+"Amigram" and the version ("Amigram 0.3 is out"); the client searches
+the channel for the name, so posts in between do not hide it, and takes
+the highest version among the newest five hits. The channel is looked
+up by name once and its id kept in `data/telegram-update.txt`, with the
+day of the last look, the version found and the one already told. A
+look happens a minute after the start at the earliest, never while
+typing or during a transfer, and once a day at most.
 
 Timing: step 1 fits a 0.0.9x cycle. Steps 2 and 3 belong after the
 0.1 beta, whose gate asks for no known freeze and a quiet cycle, which

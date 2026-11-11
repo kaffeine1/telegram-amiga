@@ -44,6 +44,17 @@
 #define TG_APP_TAGLINE "Unofficial Telegram Amiga Client"
 #define TG_APP_FULL_TITLE TG_APP_NAME " - " TG_APP_TAGLINE
 #define TG_APP_TUI_TITLE TG_APP_TITLE " TUI"
+/* The public Telegram channel where releases are announced, without the
+   "@": a post there that says "Amigram 0.3" is what the update notice reads
+   (TG_UPDATE_WORD, a space, the version). Empty: this build never looks.
+   Both can be given on the compiler's command line, to try the notice
+   against a channel that exists. */
+#ifndef TG_UPDATE_CHANNEL
+#define TG_UPDATE_CHANNEL ""
+#endif
+#ifndef TG_UPDATE_WORD
+#define TG_UPDATE_WORD TG_APP_NAME
+#endif
 /* What the same terms (2.2) ask every client to tell its users, shown under
    the title where the program introduces itself. */
 #define TG_APP_INTRO_NOTE "A Telegram API client, part of the Telegram ecosystem"
