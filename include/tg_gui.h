@@ -482,6 +482,11 @@ typedef struct tg_gui_state {
     int pinned_index;
     int pinned_count;
     int pin_x, pin_y, pin_w, pin_h;
+    /* Unread messages of the open chat that mention this account (0 = none,
+       no button). The "@" button over the jump button shows the oldest one;
+       mb_*: its rect as painted (mb_w == 0: not drawn this frame). */
+    int unread_mentions;
+    int mb_x, mb_y, mb_w, mb_h;
 
     /* Reply compose: which message the next send threads to (0 = no reply).
        Invariant: reply_to_id==0 <=> reply_sender[0]=='\0' && reply_snippet[0]=='\0'.

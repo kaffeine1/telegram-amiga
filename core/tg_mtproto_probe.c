@@ -11307,6 +11307,11 @@ static int tg_mtproto_auth_delete_peer_on_context(
    freezes on the first tick" symptom this was disabled for was the unserialized
    first-tick repaint racing the layer build, now cured by the LockLayerRom
    bracket in tg_gui_window.c -- not the (tiny one-peer) getPeerDialogs reply. */
+/* How many unread messages mention this account in the chat whose dialog
+   was last read (the open chat's, at its opening and on the read-receipt
+   poll): the same answer carries it, so it costs no request. */
+static unsigned long tg_chat_dialog_unread_mentions = 0UL;
+
 static int tg_mtproto_chat_fetch_read_outbox_on_context(
     const char *host,
     const char *port,
@@ -11376,6 +11381,8 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
             dialogs.peers[i].id_hi == peer_id_hi &&
             dialogs.peers[i].id_lo == peer_id_lo) {
             *out_read_outbox_max = dialogs.peers[i].read_outbox_max_id;
+            tg_chat_dialog_unread_mentions =
+                dialogs.peers[i].unread_mentions_count;
             break;
         }
     }
@@ -22170,9 +22177,41 @@ static void tg_gui_read_chat_opened(int other_chat)
         tg_gui_read_failed_id = 0UL;
     }
 }
+
+/* --- unread mentions -----------------------------------------------------
+   How many unread messages of the open chat mention this account: the
+   window shows an "@" button with the count, and a click shows the oldest
+   one and marks its mention as read. The count comes with the chat's own
+   dialog, read when it opens and on the read-receipt poll. */
+static int tg_gui_mentions_show(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int n = tg_chat_dialog_unread_mentions > 999UL
+                ? 999 : (int)tg_chat_dialog_unread_mentions;
+
+    if (gst == 0 || gst->unread_mentions == n) {
+        return 0;
+    }
+    gst->unread_mentions = n;
+    return 1;
+}
+
+static void tg_gui_mentions_chat_opened(int other_chat)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+    if (other_chat) {
+        tg_chat_dialog_unread_mentions = 0UL;
+        if (gst != 0) {
+            gst->unread_mentions = 0;
+        }
+    }
+}
 #else
 #define tg_gui_pinned_chat_opened(other_chat) ((void)(other_chat))
 #define tg_gui_read_chat_opened(other_chat) ((void)(other_chat))
+#define tg_gui_mentions_chat_opened(other_chat) ((void)(other_chat))
+#define tg_gui_mentions_show() (0)
 #endif
 
 /* Pinned rows first, in pin order, marked; the others after them in the
@@ -22738,6 +22777,8 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         if (other_chat) {
             tg_gui_session_state.gui_driver.state->edit_to_id = 0UL;
         }
+        /* Nor the count of unread mentions: this chat's comes below. */
+        tg_gui_mentions_chat_opened(other_chat);
     }
     tg_gui_session_state.last_seen_message_id = 0UL;
     /* Restart the read-receipt cursor: the loaded history starts as "sent",
@@ -22827,6 +22868,7 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
                 tg_gui_session_state.current_peer_index, &read_max, quiet) == 0) {
             (void)tg_gui_driver_set_read_outbox_max(
                 &tg_gui_session_state.gui_driver, read_max);
+            (void)tg_gui_mentions_show();
         }
     }
     /* Avatar v2: one bounded photo download for THIS chat (no-op on MorphOS,
@@ -30360,6 +30402,109 @@ int tg_gui_session_read_step(FILE *stream)
 #endif
 }
 
+/* Public: shows the open chat around the oldest unread message that
+   mentions this account, highlighted, and marks that mention as read on
+   Telegram. 1 = shown, 0 = there is none (the button goes), -1 = could
+   not ask or load it. */
+int tg_gui_session_next_mention(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return -1;
+#else
+    unsigned char query[96];
+    static const char label[] = "gui unread mention";
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long found = 0UL;
+    unsigned long i;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        tg_gui_session_state.open_peer_constructor == 0UL ||
+        tg_shared_message_texts_busy) {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "mention peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    /* offset_id 1 with add_offset -1: the oldest unread mention, the way
+       the official desktop client asks for the first ones. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (tg_mtproto_build_messages_get_unread_mentions(
+              &writer, pc, ph, pl, ahh, ahl, hah, 1UL, -1L, 1UL) ==
+              TG_MTPROTO_TL_OK &&
+          tg_gui_session_peer_request(query, writer.length, &result, label,
+                                      0, 0UL, quiet) == 0 &&
+          tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
+             ? 0 : 2;
+    if (rc == 0) {
+        tg_shared_message_texts_busy = 1;
+        if (tg_mtproto_parse_message_text_list(
+                result.result_constructor, result.result_body,
+                result.result_body_length, &tg_shared_message_texts) ==
+            TG_MTPROTO_TL_OK) {
+            for (i = 0UL; i < tg_shared_message_texts.count; ++i) {
+                if (tg_shared_message_texts.messages[i].id != 0UL) {
+                    found = tg_shared_message_texts.messages[i].id;
+                    break;
+                }
+            }
+        }
+        tg_shared_message_texts_busy = 0;
+    }
+    if (rc == 0 && found != 0UL) {
+        /* Read on Telegram first: the jump below can take a while. */
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_read_message_contents(&writer, pc, ph, pl, ahh,
+                                                   ahl, found) ==
+                TG_MTPROTO_TL_OK &&
+            tg_gui_session_peer_request(query, writer.length, &result,
+                                        "mtproto readMessageContents", 0,
+                                        0UL, quiet) == 0) {
+            if (tg_chat_dialog_unread_mentions > 0UL) {
+                --tg_chat_dialog_unread_mentions;
+            }
+        } else {
+            tg_gui_log("mention: could not mark it read");
+        }
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("mention: could not ask");
+        return -1;
+    }
+    if (found == 0UL) {
+        /* Telegram has none: the count was stale. */
+        tg_chat_dialog_unread_mentions = 0UL;
+        (void)tg_gui_mentions_show();
+        tg_gui_log("mention: none left");
+        return 0;
+    }
+    (void)tg_gui_mentions_show();
+    tg_gui_log("mention: shown");
+    return tg_gui_session_jump_to_message(found, stream) > 0 ? 1 : -1;
+#endif
+}
+
 /* Public: whether this message of the open chat is among the pinned ones
    this client holds (the latest few): what its menu offers, Pin or Unpin. */
 int tg_gui_session_message_pinned(unsigned long message_id)
@@ -30705,6 +30850,10 @@ int tg_gui_session_tick(FILE *stream)
                         quiet) == 0) {
                     if (tg_gui_driver_set_read_outbox_max(
                             &tg_gui_session_state.gui_driver, read_max)) {
+                        dirty = 1;
+                        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+                    }
+                    if (tg_gui_mentions_show()) {
                         dirty = 1;
                         tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
                     }

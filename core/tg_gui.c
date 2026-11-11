@@ -4460,6 +4460,40 @@ static void tg_gui_paint_jump_button(tg_gui_backend *backend, int x, int y,
     }
 }
 
+/* The mention button: a round "@" in the jump button's column, with how
+   many unread messages mention the user. A click shows the oldest. */
+static void tg_gui_paint_mention_button(tg_gui_backend *backend, int x, int y,
+                                        int w, int h, int count)
+{
+    static const char at[] = "@";
+    int tw = backend->text_width(backend, at, 1UL);
+
+    backend->round_bg = TG_GUI_PEN_WINDOW;
+    tg_gui_fill_pill(backend, TG_GUI_PEN_ACCENT, tg_gui_make_rect(x, y, w, h));
+    backend->draw_text(backend, TG_GUI_PEN_ACCENT_TEXT, x + (w - tw) / 2,
+                       tg_gui_centred_baseline(backend, y, h), at, 1UL);
+    if (count > 0) {
+        char num[4];
+        int bw = backend->line_height(backend);
+        int bx = x + w - bw + 2;
+        int by = y - 2;
+
+        if (count > 9) {
+            num[0] = '9';
+            num[1] = '+';
+            num[2] = '\0';
+        } else {
+            num[0] = (char)('0' + count);
+            num[1] = '\0';
+        }
+        tg_gui_fill_pill(backend, TG_GUI_PEN_BADGE,
+                         tg_gui_make_rect(bx, by, bw, bw));
+        backend->draw_text(backend, TG_GUI_PEN_BADGE_TEXT, bx + 2,
+                           tg_gui_centred_baseline(backend, by, bw), num,
+                           (unsigned long)strlen(num));
+    }
+}
+
 /* The chat header's height: two text slots and their margins. */
 static int tg_gui_header_h(tg_gui_backend *backend)
 {
@@ -4825,6 +4859,31 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                     st->jb_h = jbh;
                 } else {
                     st->jb_w = 0;
+                }
+            }
+            /* Unread mentions: the "@" button, where the jump button is or
+               just over it when both show. */
+            st->mb_w = 0;
+            if (st->unread_mentions > 0) {
+                int mbw = lh + 8;
+                int mbh = lh + 8;
+                int gap = 4;
+                int mbx = width - TG_GUI_SCROLLBAR_W - mbw - gap;
+                int mby = transcript_bottom - mbh - gap;
+
+                if (st->jb_w > 0) {
+                    mby = st->jb_y - mbh - gap - 2;
+                }
+                if (mbx < area_x) {
+                    mbx = area_x;
+                }
+                if (mby > transcript_top) {
+                    tg_gui_paint_mention_button(backend, mbx, mby, mbw, mbh,
+                                                st->unread_mentions);
+                    st->mb_x = mbx;
+                    st->mb_y = mby;
+                    st->mb_w = mbw;
+                    st->mb_h = mbh;
                 }
             }
         }
@@ -8877,6 +8936,44 @@ int tg_gui_self_test(void)
             }
         }
         state.chats[0] = saved_chat;
+    }
+
+    /* Unread mentions put an "@" button in the jump button's column; none,
+       no button. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int ok_at;
+
+        state.unread_mentions = 0;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "@";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_at = rec.watch_hits[0] == 0 && state.mb_w == 0;
+        state.unread_mentions = 3;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "@";
+        rec.watch_text[1] = "3";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_at = ok_at && rec.watch_hits[0] == 1 && rec.watch_hits[1] >= 1 &&
+                state.mb_w > 0 && state.mb_h > 0 &&
+                state.mb_x > tg_gui_sidebar_w(640) &&
+                rec.watch_x[0] >= state.mb_x &&
+                rec.watch_x[0] < state.mb_x + state.mb_w;
+        state.unread_mentions = 0;
+        if (!ok_at) {
+            printf("gui self-test: mention button drew %d/%d, rect %d,%d %dx%d\n",
+                   rec.watch_hits[0], rec.watch_hits[1], state.mb_x,
+                   state.mb_y, state.mb_w, state.mb_h);
+            return 2;
+        }
+        tg_gui_paint(&state, &b);
     }
 
     /* The pinned message has a bar of its own under the header: its label

@@ -338,9 +338,11 @@ it works today:
   with the pinned filter, asked after the chat opens and on
   `updatePinnedMessages`; a click jumps to it and walks through the
   latest pins; Pin and Unpin in the message's menu,
-  `messages.updatePinnedMessage`). Still missing: a jump to the next
-  unread mention
-  (`messages.getUnreadMentions`);
+  `messages.updatePinnedMessage`), and a jump to the next unread
+  mention, the "@" button (`messages.getUnreadMentions`, the count from
+  the chat's dialog, `readMessageContents`). Still missing: a mention
+  that arrives while the chat is open is not marked as read until the
+  button is used;
 - Mute in the chat's menu sent to Telegram: done
   (`account.updateNotifySettings`, the mute alone, for good;
   `updateNotifySettings` followed live; `account.getNotifySettings` the

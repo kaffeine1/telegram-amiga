@@ -45,6 +45,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   They are read from Telegram right after the chat opens and again when
   someone pins or unpins a message there. The latest 8 pins are kept (5
   on MorphOS, 4 on 68k).
+- Unread mentions. When messages of the open chat mention you and you
+  have not seen them, a round "@" button with their number shows at the
+  bottom right, over the jump button. A click shows the chat around the
+  oldest of them, highlighted, and marks that mention as read on
+  Telegram; the next click goes to the next one.
 - Pin and Unpin in a message's menu (right click on the message). In a
   group or a channel the message is pinned for everyone, without
   notifying the members; in a private chat the pin is yours alone, the

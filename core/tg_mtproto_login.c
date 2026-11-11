@@ -51,6 +51,9 @@
 #define TG_MESSAGES_GET_DIALOG_UNREAD_MARKS_CONSTRUCTOR 0x21202222UL
 #define TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR 0x54ae308eUL
 #define TG_MESSAGES_UPDATE_PINNED_MESSAGE_CONSTRUCTOR 0xd2aaf7ecUL
+#define TG_MESSAGES_GET_UNREAD_MENTIONS_CONSTRUCTOR 0xf107e790UL
+#define TG_MESSAGES_READ_MESSAGE_CONTENTS_CONSTRUCTOR 0x36a73f77UL
+#define TG_CHANNELS_READ_MESSAGE_CONTENTS_CONSTRUCTOR 0xeab5dc38UL
 #define TG_ACCOUNT_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0x84be5b93UL
 #define TG_ACCOUNT_GET_NOTIFY_SETTINGS_CONSTRUCTOR 0x12b3ad31UL
 #define TG_INPUT_NOTIFY_PEER_CONSTRUCTOR 0xb8bc5b0cUL
@@ -1565,6 +1568,97 @@ tg_mtproto_tl_status tg_mtproto_build_messages_update_pinned_message(
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    return status;
+}
+
+/* messages.getUnreadMentions#f107e790 flags:# peer:InputPeer
+   top_msg_id:flags.0?int offset_id:int add_offset:int limit:int max_id:int
+   min_id:int = messages.Messages (layer 214 schema). */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_unread_mentions(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || limit == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_MESSAGES_GET_UNREAD_MENTIONS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, offset_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        /* a TL int: two's complement of a negative offset, 32 bits */
+        status = tg_mtproto_tl_write_u32(
+            writer, (unsigned long)add_offset & 0xffffffffUL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, limit);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* max_id */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* min_id */
+    }
+    return status;
+}
+
+/* messages.readMessageContents#36a73f77 id:Vector<int> =
+   messages.AffectedMessages, and in a channel or a supergroup
+   channels.readMessageContents#eab5dc38 channel:InputChannel
+   id:Vector<int> = Bool: the mention in this message is read. */
+tg_mtproto_tl_status tg_mtproto_build_read_message_contents(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long message_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    if (peer_constructor == TG_PEER_CHANNEL_CONSTRUCTOR) {
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_CHANNELS_READ_MESSAGE_CONTENTS_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_write_input_channel(writer, peer_id_hi, peer_id_lo,
+                                            access_hash_hi, access_hash_lo);
+        }
+    } else {
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_MESSAGES_READ_MESSAGE_CONTENTS_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, message_id);
@@ -4537,7 +4631,8 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
             TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &peer->unread_count) !=
             TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &peer->unread_mentions_count) !=
+            TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
         tg_read_peer_notify_settings(reader, notify) != TG_MTPROTO_TL_OK) {
         if (peer != 0) {
@@ -8957,7 +9052,8 @@ static int tg_peer_notify_self_test(void)
             TG_NOTIFY_W32(TG_DIALOG_CONSTRUCTOR); TG_NOTIFY_W32(0UL);
             TG_NOTIFY_W32(kind); TG_NOTIFY_W64(0x11223344UL, 0x55667788UL);
             TG_NOTIFY_W32(5UL); TG_NOTIFY_W32(0UL); TG_NOTIFY_W32(0UL);
-            TG_NOTIFY_W32(1UL); TG_NOTIFY_W32(0UL); TG_NOTIFY_W32(0UL);
+            /* unread_count, unread_mentions_count, unread_reactions_count */
+            TG_NOTIFY_W32(1UL); TG_NOTIFY_W32(i + 2UL); TG_NOTIFY_W32(9UL);
             TG_NOTIFY_W32(TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR);
             if (i == 2UL || (i == 0UL && pass == 2)) {
                 TG_NOTIFY_W32(0UL);
@@ -8977,7 +9073,11 @@ static int tg_peer_notify_self_test(void)
         } else {
             ok = ok && tg_mtproto_parse_dialog_peer_list(
                 TG_MESSAGES_DIALOGS_CONSTRUCTOR, body, writer.length, &list) ==
-                TG_MTPROTO_TL_OK && list.count == 3UL;
+                TG_MTPROTO_TL_OK && list.count == 3UL &&
+                /* the mentions are the second of the three counts */
+                list.peers[0].unread_count == 1UL &&
+                list.peers[0].unread_mentions_count == 2UL &&
+                list.peers[2].unread_mentions_count == 4UL;
         }
         for (i = 0UL; i < 3UL && ok; ++i) {
             kind = i == 0UL ? TG_PEER_USER_CONSTRUCTOR :
@@ -10397,6 +10497,44 @@ int tg_mtproto_login_self_test(void)
             &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
             0UL, 0UL, 0, "", 0UL, 20UL) == TG_MTPROTO_TL_OK) {
         return 2; /* an empty query is refused */
+    }
+    /* The oldest unread mention of that group: offset_id 1, add_offset -1
+       (ff ff ff ff), limit 1 -> 40 bytes. And its mention read: in a basic
+       group messages.readMessageContents with a vector of one id (16
+       bytes), in a channel channels.readMessageContents with the channel
+       before it (36 bytes). */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_unread_mentions(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 1UL, -1L, 1UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 40UL ||
+        query[0] != 0x90U || query[1] != 0xe7U ||
+        query[2] != 0x07U || query[3] != 0xf1U || query[4] != 0x00U ||
+        query[8] != 0xb9U || query[20] != 0x01U ||
+        query[24] != 0xffU || query[27] != 0xffU || query[28] != 0x01U ||
+        query[32] != 0x00U || query[36] != 0x00U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_read_message_contents(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 77UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 16UL ||
+        query[0] != 0x77U || query[1] != 0x3fU ||
+        query[2] != 0xa7U || query[3] != 0x36U ||
+        query[4] != 0x15U || query[7] != 0x1cU || query[8] != 0x01U ||
+        query[12] != 77U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_read_message_contents(
+            &writer, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 9UL, 0UL, 5UL,
+            77UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 36UL ||
+        query[0] != 0x38U || query[1] != 0xdcU ||
+        query[2] != 0xb5U || query[3] != 0xeaU ||
+        query[24] != 0x15U || query[28] != 0x01U || query[32] != 77U) {
+        return 2;
     }
     /* Pin message 77 in that group, silently, then unpin it: 24 bytes. */
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));

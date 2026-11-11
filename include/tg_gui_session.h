@@ -316,6 +316,11 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
 int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
                                FILE *stream);
 
+/* Shows the open chat around the oldest unread message that mentions this
+   account (state->unread_mentions says how many there are) and marks that
+   mention as read: 1 = shown, 0 = none left, -1 = failed. */
+int tg_gui_session_next_mention(FILE *stream);
+
 /* The open chat is in front of the user and shows its newest message: mark
    what it shows as read on Telegram, unless this visit already has. Call
    it from the idle path while that holds; it sends one small request per

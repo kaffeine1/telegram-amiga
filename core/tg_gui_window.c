@@ -14631,6 +14631,31 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->drag_src = -1;
                         state->drag_active = 0;
                     }
+                } else if (msg_code == SELECTDOWN && state->mb_w > 0 &&
+                           hx >= state->mb_x &&
+                           hx < state->mb_x + state->mb_w &&
+                           hy >= state->mb_y &&
+                           hy < state->mb_y + state->mb_h &&
+                           tg_gui_session_is_open() &&
+                           !state->ctx_visible && !state->emoji_active) {
+                    /* The "@" button: the oldest unread message that
+                       mentions the user, shown as a search hit is. */
+                    int mrc;
+
+                    tg_gui_window_copy(state->status, sizeof(state->status),
+                                       "Loading the mention...");
+                    tg_gui_window_paint(state, &backend);
+                    mrc = tg_gui_session_next_mention(stdout);
+                    older_exhausted = 0;
+                    older_cooldown = 0;
+                    tg_gui_window_copy(
+                        state->status, sizeof(state->status),
+                        mrc > 0 ? (state->unread_mentions > 0
+                                       ? "A mention - click @ for the next"
+                                       : "The last unread mention")
+                                : (mrc == 0 ? "No unread mentions left"
+                                            : "Could not load it (network?)"));
+                    tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTDOWN && state->pin_h > 0 &&
                            state->pinned_id != 0UL &&
                            hx >= state->pin_x &&

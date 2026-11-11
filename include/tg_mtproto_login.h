@@ -401,6 +401,7 @@ typedef struct tg_mtproto_dialog_peer {
     unsigned long top_message;
     unsigned long unread_count;
     unsigned long read_outbox_max_id; /* peer has read our msgs up to this id */
+    unsigned long unread_mentions_count; /* unread messages that mention us */
     int pinned;                       /* dialog flags.2: pinned to the top */
     unsigned long folder_id;          /* dialog flags.4: 1 = in the Archive */
 } tg_mtproto_dialog_peer;
@@ -907,6 +908,32 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
     unsigned long access_hash_lo,
     int has_access_hash,
     unsigned long limit);
+
+/* Unread mentions. messages.getUnreadMentions answers like a history
+   page with the unread messages that mention this account (offset_id 1
+   with add_offset -limit gives the oldest ones first, as the official
+   desktop client asks them); and one message's mention marked as read
+   (messages.readMessageContents, or channels.readMessageContents in a
+   channel or supergroup). */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_unread_mentions(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit);
+tg_mtproto_tl_status tg_mtproto_build_read_message_contents(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long message_id);
 
 /* messages.updatePinnedMessage: pin (silently) or unpin one message;
    one_side keeps a private chat's pin to this account alone. */
