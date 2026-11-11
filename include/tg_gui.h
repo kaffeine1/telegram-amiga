@@ -560,6 +560,17 @@ typedef struct tg_gui_state {
     /* ARexx: the port is open, and SEND is allowed through it. */
     int arexx_port;
     int arexx_send;
+    /* The settings panel, drawn over the chat while it is open: the line
+       the keyboard is on, how far the lines are scrolled when they do not
+       all fit, and two values only the window knows (it sets them when it
+       opens the panel): whether it is on its own screen, and the download
+       drawer. set_*: the panel's geometry as last painted, for the clicks. */
+    int settings_open;
+    int settings_sel;
+    int settings_scroll;
+    int settings_own_screen;
+    char settings_download[TG_GUI_NAME_MAX];
+    int set_x, set_y, set_w, set_row_h, set_rows, set_hint_y;
     int ctx_muted; /* Telegram holds the menu's chat muted: it offers Unmute */
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
@@ -901,6 +912,56 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 /* Attachment chooser: known image extensions get the Photo/File dialog;
    validation of the actual bytes still belongs to the upload gate. */
 int tg_gui_attachment_is_photo(const char *path);
+
+/* The settings panel. Every preference has one line in it: a switch, a
+   choice that a click or SPACE moves on (LEFT moves it back), or an action
+   that opens a requester. The ids name what a line sets; a line with id 0
+   is a group's heading. The window acts on the id; the labels, the values
+   shown, the selection and the drawing are here. */
+#define TG_GUI_SET_NOTIFY 1       /* choice: off, title, pop-up, pop-up + text */
+#define TG_GUI_SET_BEEP 2
+#define TG_GUI_SET_SOUND_FILE 3   /* action: pick a sound file */
+#define TG_GUI_SET_CHIME 4        /* action: back to the built-in chime */
+#define TG_GUI_SET_INLINE 5
+#define TG_GUI_SET_FULLSIZE 6
+#define TG_GUI_SET_DITHER 7       /* choice: full, light, off */
+#define TG_GUI_SET_CACHE 8        /* choice: 10, 50, 200 MB, unlimited */
+#define TG_GUI_SET_CACHE_CLEAR 9  /* action */
+#define TG_GUI_SET_EMOJI 10
+#define TG_GUI_SET_EMOTICONS 11
+#define TG_GUI_SET_AVATARS 12
+#define TG_GUI_SET_OWN_SCREEN 13
+#define TG_GUI_SET_DOWNLOAD 14    /* action: pick the download drawer */
+#define TG_GUI_SET_AREXX_PORT 15
+#define TG_GUI_SET_AREXX_SEND 16
+#define TG_GUI_SET_KIND_HEADING 0
+#define TG_GUI_SET_KIND_SWITCH 1
+#define TG_GUI_SET_KIND_CHOICE 2
+#define TG_GUI_SET_KIND_ACTION 3
+int tg_gui_settings_lines(void);
+int tg_gui_settings_line_id(int line);
+const char *tg_gui_settings_line_label(int line);
+int tg_gui_settings_kind(int id);
+/* What the line shows at its right: "[x]", "< Full >", a file's name. */
+void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
+                           unsigned long out_size);
+/* A line that cannot be changed right now (emoticons with emoji off, SEND
+   with the port off): shown dim, and a click on it does nothing. */
+int tg_gui_settings_disabled(const tg_gui_state *state, int id);
+void tg_gui_settings_show(tg_gui_state *state, int open);
+/* The id of the line the keyboard is on (0 when the panel is closed). */
+int tg_gui_settings_selected(const tg_gui_state *state);
+/* Moves the selection up (-1) or down (+1), over the headings; 1 = moved. */
+int tg_gui_settings_move(tg_gui_state *state, int delta);
+/* A page up (-1) or down (+1) when the lines do not all fit; 1 = moved. */
+int tg_gui_settings_page(tg_gui_state *state, int dir);
+/* What a press at this point of the window means, by the geometry of the
+   last paint: a line's number, or one of these. */
+#define TG_GUI_SET_HIT_NOTHING (-1) /* in the panel, on no line */
+#define TG_GUI_SET_HIT_OUTSIDE (-2) /* beside the panel: it closes */
+#define TG_GUI_SET_HIT_UP (-3)      /* the title row: a page up */
+#define TG_GUI_SET_HIT_DOWN (-4)    /* the hint row: a page down */
+int tg_gui_settings_hit(const tg_gui_state *state, int x, int y);
 
 /* The ARexx port's commands (the port is the window's; this is the part
    that needs no Amiga): what a command line asks, and the chat a name

@@ -6805,6 +6805,405 @@ int tg_gui_paint_sidebar_area(const tg_gui_state *state,
     return 1;
 }
 
+/* --- the settings panel -------------------------------------------------- */
+
+typedef struct tg_gui_settings_line {
+    const char *label;
+    int id; /* 0 = a group's heading */
+} tg_gui_settings_line;
+
+/* The labels are the ones the Settings menu had, so the manuals' "Settings >
+   Show avatars" still names a line of this panel. */
+static const tg_gui_settings_line tg_gui_settings_table[] = {
+    {"New messages", 0},
+    {"Notifications", TG_GUI_SET_NOTIFY},
+    {"Beep", TG_GUI_SET_BEEP},
+    {"Sound file...", TG_GUI_SET_SOUND_FILE},
+    {"Built-in chime", TG_GUI_SET_CHIME},
+    {"Photos and emoji", 0},
+    {"Show inline photos", TG_GUI_SET_INLINE},
+    {"Full-size photos", TG_GUI_SET_FULLSIZE},
+    {"Photo dithering", TG_GUI_SET_DITHER},
+    {"Photo cache limit", TG_GUI_SET_CACHE},
+    {"Clear cache...", TG_GUI_SET_CACHE_CLEAR},
+    {"Enable emoji", TG_GUI_SET_EMOJI},
+    {"Emoticons become emoji", TG_GUI_SET_EMOTICONS},
+    {"Show avatars", TG_GUI_SET_AVATARS},
+    {"Window and files", 0},
+    {"Use own screen", TG_GUI_SET_OWN_SCREEN},
+    {"Download drawer...", TG_GUI_SET_DOWNLOAD},
+    {"ARexx", 0},
+    {"ARexx port", TG_GUI_SET_AREXX_PORT},
+    {"Scripts may send messages", TG_GUI_SET_AREXX_SEND},
+};
+#define TG_GUI_SETTINGS_LINES \
+    ((int)(sizeof(tg_gui_settings_table) / sizeof(tg_gui_settings_table[0])))
+
+int tg_gui_settings_lines(void)
+{
+    return TG_GUI_SETTINGS_LINES;
+}
+
+int tg_gui_settings_line_id(int line)
+{
+    return line >= 0 && line < TG_GUI_SETTINGS_LINES
+               ? tg_gui_settings_table[line].id : 0;
+}
+
+const char *tg_gui_settings_line_label(int line)
+{
+    return line >= 0 && line < TG_GUI_SETTINGS_LINES
+               ? tg_gui_settings_table[line].label : "";
+}
+
+int tg_gui_settings_kind(int id)
+{
+    switch (id) {
+    case TG_GUI_SET_NOTIFY:
+    case TG_GUI_SET_DITHER:
+    case TG_GUI_SET_CACHE:
+        return TG_GUI_SET_KIND_CHOICE;
+    case TG_GUI_SET_SOUND_FILE:
+    case TG_GUI_SET_CHIME:
+    case TG_GUI_SET_CACHE_CLEAR:
+    case TG_GUI_SET_DOWNLOAD:
+        return TG_GUI_SET_KIND_ACTION;
+    case 0:
+        return TG_GUI_SET_KIND_HEADING;
+    default:
+        return TG_GUI_SET_KIND_SWITCH;
+    }
+}
+
+int tg_gui_settings_disabled(const tg_gui_state *state, int id)
+{
+    if (state == 0) {
+        return 1;
+    }
+    return (id == TG_GUI_SET_EMOTICONS && !state->emoji_enabled) ||
+           (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port);
+}
+
+/* The last part of a path: what follows the last ':' or '/'. */
+static const char *tg_gui_settings_leaf(const char *path)
+{
+    const char *leaf = path;
+    const char *p;
+
+    for (p = path; *p != '\0'; ++p) {
+        if ((*p == '/' || *p == ':') && p[1] != '\0') {
+            leaf = p + 1;
+        }
+    }
+    return leaf;
+}
+
+void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
+                           unsigned long out_size)
+{
+    const char *text = "";
+    int on = -1;
+
+    if (out == 0 || out_size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (state == 0) {
+        return;
+    }
+    switch (id) {
+    case TG_GUI_SET_NOTIFY:
+        text = state->notify_mode == TG_GUI_NOTIFY_OFF
+                   ? "< Off >"
+                   : state->notify_mode == TG_GUI_NOTIFY_TITLE
+                         ? "< Count in title >"
+                         : state->notify_mode == TG_GUI_NOTIFY_POPUP
+                               ? "< Count and pop-up >"
+                               : "< Pop-up with the text >";
+        break;
+    case TG_GUI_SET_DITHER:
+        text = state->photo_dither == TG_GUI_PHOTO_DITHER_LIGHT
+                   ? "< Light >"
+                   : state->photo_dither == TG_GUI_PHOTO_DITHER_OFF
+                         ? "< Off >" : "< Full >";
+        break;
+    case TG_GUI_SET_CACHE:
+        text = state->photo_cache_limit_mb == 10UL
+                   ? "< 10 MB >"
+                   : state->photo_cache_limit_mb == 200UL
+                         ? "< 200 MB >"
+                         : state->photo_cache_limit_mb ==
+                                   TG_GUI_PHOTO_CACHE_UNLIMITED_MB
+                               ? "< Unlimited >" : "< 50 MB >";
+        break;
+    case TG_GUI_SET_SOUND_FILE:
+        text = state->notify_sound[0] != '\0'
+                   ? tg_gui_settings_leaf(state->notify_sound)
+                   : "(built-in chime)";
+        break;
+    case TG_GUI_SET_DOWNLOAD:
+        text = state->settings_download;
+        break;
+    case TG_GUI_SET_BEEP: on = state->notify_beep; break;
+    case TG_GUI_SET_INLINE: on = state->inline_photos; break;
+    case TG_GUI_SET_FULLSIZE: on = state->photo_full_size; break;
+    case TG_GUI_SET_EMOJI: on = state->emoji_enabled; break;
+    case TG_GUI_SET_EMOTICONS: on = state->emoticon_replace; break;
+    case TG_GUI_SET_AVATARS: on = state->avatars_enabled; break;
+    case TG_GUI_SET_OWN_SCREEN: on = state->settings_own_screen; break;
+    case TG_GUI_SET_AREXX_PORT: on = state->arexx_port; break;
+    case TG_GUI_SET_AREXX_SEND: on = state->arexx_send; break;
+    default: break;
+    }
+    if (on >= 0) {
+        text = on ? "[x]" : "[ ]";
+    }
+    tg_gui_copy(out, out_size, text);
+}
+
+static int tg_gui_settings_first_line(void)
+{
+    int i;
+
+    for (i = 0; i < TG_GUI_SETTINGS_LINES; ++i) {
+        if (tg_gui_settings_table[i].id != 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+void tg_gui_settings_show(tg_gui_state *state, int open)
+{
+    if (state == 0) {
+        return;
+    }
+    state->settings_open = open ? 1 : 0;
+    state->settings_scroll = 0;
+    state->settings_sel = tg_gui_settings_first_line();
+    state->set_rows = 0;
+}
+
+int tg_gui_settings_selected(const tg_gui_state *state)
+{
+    if (state == 0 || !state->settings_open) {
+        return 0;
+    }
+    return tg_gui_settings_line_id(state->settings_sel);
+}
+
+int tg_gui_settings_move(tg_gui_state *state, int delta)
+{
+    int at;
+
+    if (state == 0 || !state->settings_open || delta == 0) {
+        return 0;
+    }
+    at = state->settings_sel;
+    for (;;) {
+        at += delta > 0 ? 1 : -1;
+        if (at < 0 || at >= TG_GUI_SETTINGS_LINES) {
+            return 0; /* nothing further that way */
+        }
+        if (tg_gui_settings_table[at].id != 0) {
+            state->settings_sel = at;
+            return 1;
+        }
+    }
+}
+
+int tg_gui_settings_page(tg_gui_state *state, int dir)
+{
+    int rows;
+    int max_scroll;
+    int scroll;
+    int at;
+
+    if (state == 0 || !state->settings_open || state->set_rows <= 0) {
+        return 0;
+    }
+    rows = state->set_rows;
+    max_scroll = TG_GUI_SETTINGS_LINES - rows;
+    if (max_scroll <= 0) {
+        return 0;
+    }
+    scroll = state->settings_scroll + (dir > 0 ? rows : -rows);
+    if (scroll < 0) {
+        scroll = 0;
+    }
+    if (scroll > max_scroll) {
+        scroll = max_scroll;
+    }
+    if (scroll == state->settings_scroll) {
+        return 0;
+    }
+    state->settings_scroll = scroll;
+    /* The selection comes along: the first line of the page that is one. */
+    for (at = scroll; at < scroll + rows && at < TG_GUI_SETTINGS_LINES;
+         ++at) {
+        if (tg_gui_settings_table[at].id != 0) {
+            state->settings_sel = at;
+            break;
+        }
+    }
+    return 1;
+}
+
+int tg_gui_settings_hit(const tg_gui_state *state, int x, int y)
+{
+    int line;
+
+    if (state == 0 || !state->settings_open || state->set_row_h <= 0) {
+        return TG_GUI_SET_HIT_OUTSIDE;
+    }
+    if (x < state->set_x || x >= state->set_x + state->set_w) {
+        return TG_GUI_SET_HIT_OUTSIDE;
+    }
+    if (y < state->set_y) {
+        return TG_GUI_SET_HIT_UP;
+    }
+    if (y >= state->set_hint_y) {
+        return TG_GUI_SET_HIT_DOWN;
+    }
+    line = state->settings_scroll + (y - state->set_y) / state->set_row_h;
+    if (line < 0 || line >= TG_GUI_SETTINGS_LINES ||
+        line >= state->settings_scroll + state->set_rows ||
+        tg_gui_settings_table[line].id == 0) {
+        return TG_GUI_SET_HIT_NOTHING;
+    }
+    return line;
+}
+
+/* The panel takes the place of the chat, from the top of the window to the
+   status bar: a title row, the lines, a hint row. When the lines do not all
+   fit they scroll with the selection; the title and hint rows then say
+   there is more, and a press on them moves a page. */
+static void tg_gui_paint_settings(const tg_gui_state *state,
+                                  tg_gui_backend *backend, int sidebar_w,
+                                  int width, int content_h)
+{
+    tg_gui_state *st = (tg_gui_state *)state;
+    static const char title[] = "Settings";
+    char value[TG_GUI_NAME_MAX];
+    int rh = tg_gui_native_line_height(backend) + 4;
+    int x0 = sidebar_w;
+    int w = width - sidebar_w;
+    int left = x0 + 12;
+    int right = x0 + w - 12;
+    int lines_y = rh + 6;
+    int hint_y = content_h - rh - 2;
+    int rows;
+    int max_scroll;
+    int i;
+    const char *hint;
+
+    if (w < 80 || hint_y - lines_y < rh) {
+        return; /* no room: the chat stays, ESC still closes the panel */
+    }
+    backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
+                       tg_gui_make_rect(x0, 0, w, content_h));
+    rows = (hint_y - lines_y) / rh;
+    if (rows > TG_GUI_SETTINGS_LINES) {
+        rows = TG_GUI_SETTINGS_LINES;
+    }
+    max_scroll = TG_GUI_SETTINGS_LINES - rows;
+    /* The selected line stays in view, with its heading when that is the
+       line just above it. */
+    if (st->settings_sel < st->settings_scroll) {
+        st->settings_scroll = st->settings_sel;
+        if (st->settings_scroll > 0 &&
+            tg_gui_settings_table[st->settings_scroll - 1].id == 0) {
+            --st->settings_scroll;
+        }
+    }
+    if (st->settings_sel >= st->settings_scroll + rows) {
+        st->settings_scroll = st->settings_sel - rows + 1;
+    }
+    if (st->settings_scroll > max_scroll) {
+        st->settings_scroll = max_scroll;
+    }
+    if (st->settings_scroll < 0) {
+        st->settings_scroll = 0;
+    }
+    st->set_x = x0;
+    st->set_w = w;
+    st->set_y = lines_y;
+    st->set_row_h = rh;
+    st->set_rows = rows;
+    st->set_hint_y = hint_y;
+
+    backend->draw_text(backend, TG_GUI_PEN_TEXT, left,
+                       tg_gui_navigation_baseline(backend, 2, rh), title,
+                       sizeof(title) - 1UL);
+    {
+        const char *top = st->settings_scroll > 0 ? "more above"
+                                                  : "ESC closes";
+        unsigned long n = (unsigned long)strlen(top);
+
+        backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM,
+                           right - backend->text_width(backend, top, n),
+                           tg_gui_navigation_baseline(backend, 2, rh), top,
+                           n);
+    }
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                       tg_gui_make_rect(x0 + 6, rh + 2, w - 12, 1));
+
+    for (i = 0; i < rows; ++i) {
+        int line = st->settings_scroll + i;
+        int y = lines_y + i * rh;
+        int id;
+        int base;
+        int pen;
+        const char *label;
+
+        if (line >= TG_GUI_SETTINGS_LINES) {
+            break;
+        }
+        id = tg_gui_settings_table[line].id;
+        label = tg_gui_settings_table[line].label;
+        base = tg_gui_navigation_baseline(backend, y, rh);
+        if (id == 0) {
+            backend->draw_text(backend, TG_GUI_PEN_LINK, left, base, label,
+                               (unsigned long)strlen(label));
+            continue;
+        }
+        pen = tg_gui_settings_disabled(state, id) ? TG_GUI_PEN_TEXT_DIM
+                                                  : TG_GUI_PEN_TEXT;
+        if (line == st->settings_sel) {
+            backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
+                               tg_gui_make_rect(x0 + 6, y, w - 12, rh));
+            pen = TG_GUI_PEN_ACCENT_TEXT;
+        }
+        tg_gui_settings_value(state, id, value, sizeof(value));
+        {
+            unsigned long vn = (unsigned long)strlen(value);
+            int vw = backend->text_width(backend, value, vn);
+            int vx = right - 4 - vw;
+            int label_x = left + 10;
+
+            /* The value keeps its place at the right; a long one (a drawer's
+               path) gives way to the label and is cut at its left. */
+            if (vx < label_x + 40) {
+                vx = label_x + 40;
+            }
+            tg_gui_draw_clipped(backend, pen, label_x, base, label,
+                                vx - 8 - label_x);
+            if (vn > 0UL) {
+                tg_gui_draw_clipped(backend, pen, vx, base, value,
+                                    right - 4 - vx);
+            }
+        }
+    }
+    hint = st->settings_scroll < max_scroll
+               ? "more below - Up/Down, SPACE changes"
+               : "Up/Down move, SPACE or a click changes";
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                       tg_gui_make_rect(x0 + 6, hint_y, w - 12, 1));
+    tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT_DIM, left,
+                        tg_gui_navigation_baseline(backend, hint_y + 2, rh),
+                        hint, w - 24);
+}
+
 void tg_gui_paint(const tg_gui_state *state, tg_gui_backend *backend)
 {
     int width;
@@ -6848,6 +7247,9 @@ void tg_gui_paint(const tg_gui_state *state, tg_gui_backend *backend)
         tg_gui_log("chat paint: main");
     }
     tg_gui_paint_main(state, backend, sidebar_w, width, content_h, lh);
+    if (state->settings_open) {
+        tg_gui_paint_settings(state, backend, sidebar_w, width, content_h);
+    }
 
     if (!tg_gui_first_paint_logged) {
         tg_gui_log("chat paint: status");
@@ -9225,6 +9627,191 @@ int tg_gui_self_test(void)
             }
         }
         state.chats[0] = saved_chat;
+    }
+
+    /* The settings panel: its lines and values, the selection that skips
+       the headings, the drawing, the clicks, and the scroll when the
+       window is too short for all the lines. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        char value[TG_GUI_NAME_MAX];
+        int saved_notify = state.notify_mode;
+        int saved_emoji = state.emoji_enabled;
+        int saved_port = state.arexx_port;
+        int saved_send = state.arexx_send;
+        int ok_set = 1;
+        int lines = tg_gui_settings_lines();
+        int switches = 0;
+        int i;
+
+        for (i = 0; i < lines; ++i) {
+            int id = tg_gui_settings_line_id(i);
+
+            if (id != 0 &&
+                tg_gui_settings_kind(id) == TG_GUI_SET_KIND_SWITCH) {
+                ++switches;
+            }
+            /* every line has a label, and every id shows up once */
+            ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
+        }
+        ok_set = ok_set && lines == 20 && switches == 9 &&
+                 tg_gui_settings_line_id(0) == 0 &&
+                 tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
+                     TG_GUI_SET_KIND_CHOICE &&
+                 tg_gui_settings_kind(TG_GUI_SET_DOWNLOAD) ==
+                     TG_GUI_SET_KIND_ACTION &&
+                 tg_gui_settings_kind(0) == TG_GUI_SET_KIND_HEADING;
+
+        /* Closed: nothing selected, nothing drawn, every press is outside. */
+        tg_gui_settings_show(&state, 0);
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "Settings";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_set = ok_set && rec.watch_hits[0] == 0 &&
+                 tg_gui_settings_selected(&state) == 0 &&
+                 tg_gui_settings_hit(&state, 400, 200) ==
+                     TG_GUI_SET_HIT_OUTSIDE;
+
+        /* Open: the first line that is not a heading is selected. */
+        tg_gui_settings_show(&state, 1);
+        state.notify_mode = TG_GUI_NOTIFY_POPUP;
+        state.emoji_enabled = 0;
+        state.arexx_port = 1;
+        state.arexx_send = 0;
+        tg_gui_copy(state.settings_download, sizeof(state.settings_download),
+                    "Work:Downloads");
+        ok_set = ok_set &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_NOTIFY;
+        tg_gui_settings_value(&state, TG_GUI_SET_NOTIFY, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "< Count and pop-up >") == 0;
+        tg_gui_settings_value(&state, TG_GUI_SET_AREXX_PORT, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "[x]") == 0;
+        tg_gui_settings_value(&state, TG_GUI_SET_AREXX_SEND, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "[ ]") == 0;
+        tg_gui_settings_value(&state, TG_GUI_SET_DOWNLOAD, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "Work:Downloads") == 0;
+        tg_gui_copy(state.notify_sound, sizeof(state.notify_sound),
+                    "Work:Sounds/ding.8svx");
+        tg_gui_settings_value(&state, TG_GUI_SET_SOUND_FILE, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "ding.8svx") == 0;
+        state.notify_sound[0] = '\0';
+        tg_gui_settings_value(&state, TG_GUI_SET_SOUND_FILE, value,
+                              sizeof(value));
+        ok_set = ok_set && strcmp(value, "(built-in chime)") == 0;
+        /* Emoticons need emoji, SEND needs the port. */
+        ok_set = ok_set &&
+                 tg_gui_settings_disabled(&state, TG_GUI_SET_EMOTICONS) &&
+                 !tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_SEND) &&
+                 !tg_gui_settings_disabled(&state, TG_GUI_SET_BEEP);
+        state.arexx_port = 0;
+        ok_set = ok_set &&
+                 tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_SEND);
+        state.arexx_port = 1;
+
+        /* Down from the last line of a group lands on the first of the
+           next, over the heading; up from the first line goes nowhere. */
+        ok_set = ok_set && tg_gui_settings_move(&state, -1) == 0 &&
+                 tg_gui_settings_move(&state, 1) == 1 &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_BEEP &&
+                 tg_gui_settings_move(&state, 1) == 1 &&
+                 tg_gui_settings_move(&state, 1) == 1 &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_CHIME &&
+                 tg_gui_settings_move(&state, 1) == 1 &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_INLINE &&
+                 tg_gui_settings_move(&state, -1) == 1 &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_CHIME;
+
+        /* Painted: title, a heading, the selected line's label and value;
+           a press on a line names it, on a heading nothing, beside the
+           panel it is outside. */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "Settings";
+        rec.watch_text[1] = "Photos and emoji";
+        rec.watch_text[2] = "Built-in chime";
+        rec.watch_text[3] = "< Count and pop-up >";
+        rec.watch_text[4] = "ESC closes";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_set = ok_set && rec.watch_hits[0] == 1 && rec.watch_hits[1] == 1 &&
+                 rec.watch_hits[2] == 1 && rec.watch_hits[3] == 1 &&
+                 rec.watch_hits[4] == 1 && state.set_rows == lines &&
+                 state.set_x == tg_gui_sidebar_w(640) &&
+                 rec.watch_x[3] > rec.watch_x[2] &&
+                 tg_gui_settings_hit(&state, state.set_x + 40,
+                                     state.set_y + 2) ==
+                     TG_GUI_SET_HIT_NOTHING && /* line 0 is a heading */
+                 tg_gui_settings_hit(&state, state.set_x + 40,
+                                     state.set_y + state.set_row_h + 2) ==
+                     1 &&
+                 tg_gui_settings_hit(&state, state.set_x + 40,
+                                     state.set_y + 4 * state.set_row_h + 2) ==
+                     4 &&
+                 tg_gui_settings_hit(&state, 20, 200) ==
+                     TG_GUI_SET_HIT_OUTSIDE &&
+                 tg_gui_settings_hit(&state, state.set_x + 40, 3) ==
+                     TG_GUI_SET_HIT_UP &&
+                 tg_gui_settings_hit(&state, state.set_x + 40,
+                                     state.set_hint_y + 3) ==
+                     TG_GUI_SET_HIT_DOWN &&
+                 tg_gui_settings_page(&state, 1) == 0; /* all in view */
+
+        /* A short window: the lines scroll with the selection, the rows
+           say there is more, and a page moves both. */
+        tg_gui_settings_show(&state, 1);
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 200;
+        rec.watch_text[0] = "ARexx port";
+        rec.watch_text[1] = "Notifications";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_set = ok_set && state.set_rows > 0 && state.set_rows < lines &&
+                 rec.watch_hits[0] == 0 && rec.watch_hits[1] == 1 &&
+                 state.settings_scroll == 0;
+        for (i = 0; i < lines; ++i) {
+            (void)tg_gui_settings_move(&state, 1);
+        }
+        ok_set = ok_set &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_AREXX_SEND;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 200;
+        rec.watch_text[0] = "Scripts may send messages";
+        rec.watch_text[1] = "Notifications";
+        rec.watch_text[2] = "more above";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        ok_set = ok_set && rec.watch_hits[0] == 1 && rec.watch_hits[1] == 0 &&
+                 rec.watch_hits[2] == 1 &&
+                 state.settings_scroll == lines - state.set_rows &&
+                 tg_gui_settings_page(&state, -1) == 1 &&
+                 state.settings_scroll < lines - state.set_rows &&
+                 tg_gui_settings_selected(&state) != 0;
+
+        tg_gui_settings_show(&state, 0);
+        state.notify_mode = saved_notify;
+        state.emoji_enabled = saved_emoji;
+        state.arexx_port = saved_port;
+        state.arexx_send = saved_send;
+        state.settings_download[0] = '\0';
+        if (!ok_set) {
+            printf("gui self-test: settings panel wrong (%d lines, %d rows "
+                   "in view, scroll %d)\n",
+                   lines, state.set_rows, state.settings_scroll);
+            return 2;
+        }
+        tg_gui_paint(&state, &b);
     }
 
     /* The ARexx port: what a command line asks, and the chat a name

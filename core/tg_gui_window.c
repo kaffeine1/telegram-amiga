@@ -564,6 +564,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_FINDCHAT 36
 #define TG_MENU_FINDALL 37
 #define TG_MENU_ARCHIVE 38
+#define TG_MENU_SETTINGS 39
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -7045,6 +7046,8 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_TITLE, (STRPTR)TG_APP_NAME, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Iconify", (STRPTR)"I", 0, 0,
       (APTR)TG_MENU_ICONIFY },
+    { NM_ITEM,  (STRPTR)"Settings...", (STRPTR)"T", 0, 0,
+      (APTR)TG_MENU_SETTINGS },
     { NM_ITEM,  (STRPTR)"About...", 0, 0, 0,
       (APTR)TG_MENU_ABOUT },
     { NM_ITEM,  (STRPTR)"Help...",  0, 0, 0,
@@ -7081,58 +7084,6 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_ITEM,  (STRPTR)"Find in all chats...", (STRPTR)"G", 0, 0,
       (APTR)TG_MENU_FINDALL },
 /* Settings */
-    { NM_TITLE, (STRPTR)"Settings", 0, 0, 0, 0 },
-    { NM_ITEM,  (STRPTR)"Use own screen", 0, CHECKIT | MENUTOGGLE, 0,
-      (APTR)TG_MENU_OWNSCREEN },
-    { NM_ITEM,  (STRPTR)"Download drawer...", 0, 0, 0,
-      (APTR)TG_MENU_DLDIR },
-    { NM_ITEM,  (STRPTR)"Notifications", 0, 0, 0, 0 },
-    { NM_SUB,   (STRPTR)"Off", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_OFF },
-    { NM_SUB,   (STRPTR)"Count in title", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_TITLE },
-    { NM_SUB,   (STRPTR)"Count and pop-up", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_POPUP },
-    { NM_SUB,   (STRPTR)"Pop-up with the text", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_TEXT },
-    { NM_SUB,   NM_BARLABEL, 0, 0, 0, 0 },
-    { NM_SUB,   (STRPTR)"Beep", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_NOTIFY_BEEP },
-    { NM_SUB,   (STRPTR)"Sound file...", 0, 0, 0,
-      (APTR)TG_MENU_NOTIFY_SOUND },
-    { NM_SUB,   (STRPTR)"Built-in chime", 0, 0, 0,
-      (APTR)TG_MENU_NOTIFY_CHIME },
-    { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
-    { NM_ITEM,  (STRPTR)"Show inline photos", 0, CHECKIT | MENUTOGGLE, 0,
-      (APTR)TG_MENU_INLINEPHOTOS },
-    { NM_ITEM,  (STRPTR)"Full-size photos", 0, CHECKIT | MENUTOGGLE, 0,
-      (APTR)TG_MENU_FULLPHOTOS },
-    { NM_ITEM,  (STRPTR)"Enable emoji", 0, CHECKIT | MENUTOGGLE, 0,
-      (APTR)TG_MENU_ENABLEEMOJI },
-    { NM_ITEM,  (STRPTR)"Emoticons become emoji", 0, CHECKIT | MENUTOGGLE, 0,
-      (APTR)TG_MENU_EMOTICONS },
-    { NM_ITEM,  (STRPTR)"Show avatars", 0, CHECKIT | MENUTOGGLE, 0,
-      (APTR)TG_MENU_AVATARS },
-    { NM_ITEM,  (STRPTR)"Photo dithering", 0, 0, 0, 0 },
-    { NM_SUB,   (STRPTR)"Full", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_DITHER_FULL },
-    { NM_SUB,   (STRPTR)"Light", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_DITHER_LIGHT },
-    { NM_SUB,   (STRPTR)"Off", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_DITHER_OFF },
-    { NM_ITEM,  (STRPTR)"Photo cache limit", 0, 0, 0, 0 },
-    { NM_SUB,   (STRPTR)"10 MB", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_CACHE_10 },
-    { NM_SUB,   (STRPTR)"50 MB", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_CACHE_50 },
-    { NM_SUB,   (STRPTR)"200 MB", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_CACHE_200 },
-    { NM_SUB,   (STRPTR)"Unlimited", 0,
-      CHECKIT | MENUTOGGLE, 0, (APTR)TG_MENU_CACHE_UNLIMITED },
-    { NM_SUB,   NM_BARLABEL, 0, 0, 0, 0 },
-    { NM_SUB,   (STRPTR)"Clear cache...", 0, 0, 0,
-      (APTR)TG_MENU_CACHE_CLEAR },
-
     { NM_END,   0, 0, 0, 0, 0 }
 };
 
@@ -7325,6 +7276,7 @@ static const char tg_gui_help_text[] =
     "A+F          send a file to the open chat\n"
     "A+P          send a JPEG as a photo\n"
     "A+I          iconify to an AppIcon (double-click it to return)\n"
+    "A+T          settings: notifications, photos, emoji, ARexx\n"
     "ESC          cancel\n"
     "Q            quit";
 
@@ -12040,6 +11992,105 @@ static struct Message *tg_gui_rexx_get(int *code, char *arg,
     return m;
 }
 
+/* What a line of the settings panel does: the menu action that sets it
+   (the handlers the Settings menu had are still the one place each
+   preference is set and saved), 0 when it was done here. dir steps a
+   choice on (+1) or back (-1). */
+static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
+                                          int dir)
+{
+    static const int notify_modes[4] = {
+        TG_GUI_NOTIFY_OFF, TG_GUI_NOTIFY_TITLE, TG_GUI_NOTIFY_POPUP,
+        TG_GUI_NOTIFY_POPUP_TEXT
+    };
+    static const long notify_ids[4] = {
+        TG_MENU_NOTIFY_OFF, TG_MENU_NOTIFY_TITLE, TG_MENU_NOTIFY_POPUP,
+        TG_MENU_NOTIFY_TEXT
+    };
+    static const int dither_modes[3] = {
+        TG_GUI_PHOTO_DITHER_FULL, TG_GUI_PHOTO_DITHER_LIGHT,
+        TG_GUI_PHOTO_DITHER_OFF
+    };
+    static const long dither_ids[3] = {
+        TG_MENU_DITHER_FULL, TG_MENU_DITHER_LIGHT, TG_MENU_DITHER_OFF
+    };
+    static const unsigned long cache_sizes[4] = {
+        10UL, 50UL, 200UL, TG_GUI_PHOTO_CACHE_UNLIMITED_MB
+    };
+    static const long cache_ids[4] = {
+        TG_MENU_CACHE_10, TG_MENU_CACHE_50, TG_MENU_CACHE_200,
+        TG_MENU_CACHE_UNLIMITED
+    };
+    int at = 0;
+    int k;
+
+    switch (id) {
+    case TG_GUI_SET_NOTIFY:
+        for (k = 0; k < 4; ++k) {
+            if (notify_modes[k] == state->notify_mode) {
+                at = k;
+            }
+        }
+        return (APTR)notify_ids[(at + (dir < 0 ? 3 : 1)) % 4];
+    case TG_GUI_SET_DITHER:
+        for (k = 0; k < 3; ++k) {
+            if (dither_modes[k] == state->photo_dither) {
+                at = k;
+            }
+        }
+        return (APTR)dither_ids[(at + (dir < 0 ? 2 : 1)) % 3];
+    case TG_GUI_SET_CACHE:
+        at = 1; /* 50 MB, the default, for a value not in the list */
+        for (k = 0; k < 4; ++k) {
+            if (cache_sizes[k] == state->photo_cache_limit_mb) {
+                at = k;
+            }
+        }
+        return (APTR)cache_ids[(at + (dir < 0 ? 3 : 1)) % 4];
+    case TG_GUI_SET_BEEP: return (APTR)TG_MENU_NOTIFY_BEEP;
+    case TG_GUI_SET_SOUND_FILE: return (APTR)TG_MENU_NOTIFY_SOUND;
+    case TG_GUI_SET_CHIME: return (APTR)TG_MENU_NOTIFY_CHIME;
+    case TG_GUI_SET_INLINE: return (APTR)TG_MENU_INLINEPHOTOS;
+    case TG_GUI_SET_FULLSIZE: return (APTR)TG_MENU_FULLPHOTOS;
+    case TG_GUI_SET_CACHE_CLEAR: return (APTR)TG_MENU_CACHE_CLEAR;
+    case TG_GUI_SET_EMOJI: return (APTR)TG_MENU_ENABLEEMOJI;
+    case TG_GUI_SET_EMOTICONS: return (APTR)TG_MENU_EMOTICONS;
+    case TG_GUI_SET_AVATARS: return (APTR)TG_MENU_AVATARS;
+    case TG_GUI_SET_OWN_SCREEN: return (APTR)TG_MENU_OWNSCREEN;
+    case TG_GUI_SET_DOWNLOAD: return (APTR)TG_MENU_DLDIR;
+    case TG_GUI_SET_AREXX_PORT:
+    case TG_GUI_SET_AREXX_SEND:
+        /* The two ARexx switches never had a menu item: set here. The
+           port opens or closes at once. */
+        if (id == TG_GUI_SET_AREXX_PORT) {
+            state->arexx_port = !state->arexx_port;
+            if (state->arexx_port) {
+                tg_gui_rexx_open();
+            } else {
+                tg_gui_rexx_close();
+            }
+        } else {
+            state->arexx_send = !state->arexx_send;
+        }
+        (void)mkdir("data", 0777);
+        tg_gui_window_copy(
+            state->status, sizeof(state->status),
+            tg_gui_arexx_preferences_save(TG_GUI_AREXX_FILE,
+                                          state->arexx_port,
+                                          state->arexx_send) != 0
+                ? "Could not save the ARexx setting"
+                : id == TG_GUI_SET_AREXX_PORT
+                      ? (state->arexx_port ? "ARexx port AMIGRAM: open"
+                                           : "ARexx port: closed")
+                      : (state->arexx_send
+                             ? "ARexx scripts may send messages"
+                             : "ARexx scripts cannot send messages"));
+        return 0;
+    default:
+        return 0;
+    }
+}
+
 static int tg_gui_run_window_once(tg_gui_state *state)
 {
     tg_gui_amiga_ctx ctx;
@@ -12361,6 +12412,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             lmtags[1].ti_Data = 0;
             menu = CreateMenusA(tg_gui_newmenu, 0);
             if (menu != 0 && LayoutMenusA(menu, vi, lmtags)) {
+                /* The settings panel shows the own-screen mode too, and it
+                   may be open across the reopen that the switch causes. */
+                state->settings_own_screen = want_own;
                 /* Reflect the current own-screen mode in the toggle's tick. */
                 if (want_own) {
                     struct MenuItem *it2 = tg_gui_menu_find_userdata(
@@ -12889,9 +12943,85 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 case 'S': key_menu_action = (APTR)TG_MENU_FINDCHAT; break;
                 case 'G': key_menu_action = (APTR)TG_MENU_FINDALL; break;
                 case 'A': key_menu_action = (APTR)TG_MENU_ARCHIVE; break;
+                case 'T': key_menu_action = (APTR)TG_MENU_SETTINGS; break;
                 default: break; /* unknown shortcut: swallowed, never typed */
                 }
                 msg_class = 0; /* consumed: keep it out of every text field */
+            }
+            /* The settings panel has the keyboard and the mouse while it is
+               open: Up/Down move, SPACE, ENTER or a click change the line
+               (LEFT and RIGHT step a choice back and on), ESC or a press
+               beside the panel closes it. What a line changes goes through
+               the same action its menu item used to send, so there is one
+               place that sets each preference. Nothing else gets the event:
+               no typing, no chat switching under the panel. */
+            if (state->settings_open && state->mode == TG_GUI_MODE_CHAT &&
+                key_menu_action == 0 &&
+                (msg_class == IDCMP_VANILLAKEY || msg_class == IDCMP_RAWKEY ||
+                 msg_class == IDCMP_MOUSEBUTTONS)) {
+                int set_id = 0;
+                int set_dir = 1;
+                int set_dirty = 0;
+
+                state->settings_own_screen = want_own;
+                if (msg_class == IDCMP_VANILLAKEY) {
+                    if (msg_code == 27) {
+                        tg_gui_settings_show(state, 0);
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Live - F1-F10 chats, Amiga+Q quits");
+                        set_dirty = 1;
+                    } else if (msg_code == 13 || msg_code == 10 ||
+                               msg_code == ' ') {
+                        set_id = tg_gui_settings_selected(state);
+                    }
+                } else if (msg_class == IDCMP_RAWKEY) {
+                    if ((msg_code & 0x80U) == 0U) { /* a key going down */
+                        if (msg_code == 0x4C || msg_code == 0x7A) {
+                            set_dirty = tg_gui_settings_move(state, -1);
+                        } else if (msg_code == 0x4D || msg_code == 0x7B) {
+                            set_dirty = tg_gui_settings_move(state, 1);
+                        } else if (msg_code == 0x4E || msg_code == 0x4F) {
+                            /* RIGHT and LEFT step a choice; a switch has
+                               no direction. */
+                            set_id = tg_gui_settings_selected(state);
+                            set_dir = msg_code == 0x4E ? 1 : -1;
+                            if (tg_gui_settings_kind(set_id) !=
+                                TG_GUI_SET_KIND_CHOICE) {
+                                set_id = 0;
+                            }
+                        }
+                    }
+                } else if (msg_code == SELECTDOWN) {
+                    int set_hit = tg_gui_settings_hit(
+                        state, (int)mouse_x - ctx.origin_x,
+                        (int)mouse_y - ctx.origin_y);
+
+                    if (set_hit == TG_GUI_SET_HIT_OUTSIDE) {
+                        tg_gui_settings_show(state, 0);
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Live - F1-F10 chats, Amiga+Q quits");
+                        set_dirty = 1;
+                    } else if (set_hit == TG_GUI_SET_HIT_UP) {
+                        set_dirty = tg_gui_settings_page(state, -1);
+                    } else if (set_hit == TG_GUI_SET_HIT_DOWN) {
+                        set_dirty = tg_gui_settings_page(state, 1);
+                    } else if (set_hit >= 0) {
+                        state->settings_sel = set_hit;
+                        set_id = tg_gui_settings_line_id(set_hit);
+                        set_dirty = 1;
+                    }
+                }
+                msg_class = 0; /* the panel's: nothing below sees it */
+                if (set_id != 0 && !tg_gui_settings_disabled(state, set_id)) {
+                    key_menu_action =
+                        tg_gui_window_settings_action(state, set_id, set_dir);
+                    set_dirty = 1;
+                }
+                if (set_dirty && key_menu_action == 0) {
+                    tg_gui_window_paint(state, &backend);
+                }
             }
 #if defined(__amigaos4__)
             /* QEMU's emulated OS4 mouse delivers the wheel only as
@@ -13887,6 +14017,25 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                    "Open a chat first");
                                 tg_gui_window_paint(state, &backend);
                             }
+                        } else if (ud == (APTR)TG_MENU_SETTINGS) {
+                            /* The panel over the chat; the same item (or
+                               Amiga+T) closes it again. */
+                            if (state->settings_open) {
+                                tg_gui_settings_show(state, 0);
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    "Live - F1-F10 chats, Amiga+Q quits");
+                            } else if (state->mode == TG_GUI_MODE_CHAT) {
+                                state->composing = 0;
+                                state->search_active = 0;
+                                state->ctx_visible = 0;
+                                tg_gui_emoji_close(state);
+                                tg_gui_settings_show(state, 1);
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    "Settings - ESC closes");
+                            }
+                            tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_ICONIFY) {
                             /* Tear down window (and own screen) via the normal
                                path; the outer loop parks on an AppIcon. */
@@ -14203,6 +14352,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             done = 3; /* reopen (no AppIcon) */
                         } else if (ud == (APTR)TG_MENU_QUIT) {
                             done = 1;
+                        }
+                        /* The panel shows what the action just changed:
+                           some actions repaint only the status line. */
+                        if (state->settings_open && !done) {
+                            state->settings_own_screen = want_own;
+                            tg_gui_window_copy(
+                                state->settings_download,
+                                sizeof(state->settings_download),
+                                tg_gui_session_download_dir());
+                            tg_gui_window_paint(state, &backend);
                         }
                     }
                     if (item == 0) {

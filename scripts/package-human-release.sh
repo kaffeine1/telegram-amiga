@@ -629,6 +629,13 @@ Notifications
   In the text client /ring on and /ring off do the same for the open
   chat.
 
+Settings
+- "Settings..." in the first menu (Amiga+T) opens the settings over the
+  chat: every preference is a line there. Up and Down move, SPACE,
+  ENTER or a click change the line, LEFT and RIGHT step a choice back
+  and on, ESC closes. Where this manual says "Settings > ...", it is a
+  line of that panel.
+
 Window and screen
 - The window remembers its size and position
   (data/telegram-gui-win.txt).
@@ -654,9 +661,9 @@ ARexx
 - The result code is 0; 5 when no chat has that name; 10 for an unknown
   command, a missing argument, or SEND while it is switched off; 20
   when Telegram could not be reached.
-- The two switches are in data/telegram-arexx.txt, one per line:
-  port=on or port=off for the port itself, send=on or send=off for
-  SEND. Without the file the port is on and SEND is off.
+- The two switches are in the settings: "ARexx port" and "Scripts may
+  send messages". The port is on and sending is off until you change
+  them.
 EOT
 }
 
@@ -771,6 +778,13 @@ Notifiche
   silenziata anche qui. Nel client testuale /ring on e /ring off fanno
   lo stesso per la chat aperta.
 
+Impostazioni
+- "Settings..." nel primo menu (Amiga+T) apre le impostazioni sopra la
+  chat: ogni preferenza e' una riga. Su e Giu' si spostano, SPAZIO,
+  INVIO o un click cambiano la riga, SINISTRA e DESTRA fanno girare una
+  scelta indietro e avanti, ESC chiude. Dove questo manuale dice
+  "Settings > ...", e' una riga di quel pannello.
+
 Finestra e schermo
 - La finestra ricorda dimensione e posizione
   (data/telegram-gui-win.txt).
@@ -796,9 +810,9 @@ ARexx
 - Il codice di ritorno e' 0; 5 se nessuna chat ha quel nome; 10 per un
   comando sconosciuto, un argomento mancante, o SEND mentre e' spento;
   20 se Telegram non e' raggiungibile.
-- I due interruttori stanno in data/telegram-arexx.txt, uno per riga:
-  port=on o port=off per la porta, send=on o send=off per SEND. Senza
-  il file la porta e' accesa e SEND e' spento.
+- I due interruttori sono nelle impostazioni: "ARexx port" e "Scripts
+  may send messages". La porta e' accesa e l'invio e' spento finche'
+  non li cambi.
 EOT
 }
 

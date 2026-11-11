@@ -351,8 +351,8 @@ it works today:
   command;
 - an ARexx port: done, AMIGRAM with SHOW, HIDE, OPEN <name>, QUIT, the
   answers UNREAD, CHAT and VERSION, and SEND <chat> <text> behind a
-  switch that is off by default; the window open or parked. Still
-  missing: the two switches in the settings window instead of a file;
+  switch that is off by default, in the settings panel; the window
+  open or parked;
 - the time zone from `ENV:TZONE` or `ENV:TZ` before the Locale
   preferences: done, for the POSIX form with its summer time, used when
   the machine's clock is not set.

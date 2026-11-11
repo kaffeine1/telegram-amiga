@@ -63,8 +63,7 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   could otherwise write as you. The result code is 0; 5 when no chat has
   that name; 10 for an unknown command, a missing argument, or SEND
   while it is off; 20 when Telegram could not be reached. The port and
-  SEND each have a switch, for now a line in `data/telegram-arexx.txt`
-  (`port=off`, `send=on`).
+  SEND each have a switch in the settings.
 - The time zone from the environment. On a machine whose clock is not
   set (no battery clock: it starts in 1978), message times were shown
   in the time zone of the Locale preferences, which know no summer time.
@@ -134,6 +133,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   while an older stretch of the chat is on screen, and not for the chat
   the program opens by itself at start, until you type or click in it:
   picking another chat leaves it unread.
+- The settings have a panel of their own, opened with "Settings..." in
+  the first menu (Amiga+T), in place of the Settings menu, which had
+  grown to three levels. Every preference is a line: a switch, a choice
+  that a click moves on, or an action that opens a requester, in four
+  groups (new messages, photos and emoji, window and files, ARexx). Up
+  and Down move, SPACE, ENTER or a click change the line, LEFT and RIGHT
+  step a choice, ESC or a click beside the panel closes it. It follows
+  the theme and the screen's font, scrolls when the window is short, and
+  stays open across the switch to an own screen.
 
 ### Fixed
 - A link with a preview could be impossible to open: when the message
