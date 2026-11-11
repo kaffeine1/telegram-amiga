@@ -8882,6 +8882,49 @@ static void tg_gui_window_remove_chat(tg_gui_state *state,
     }
 }
 
+/* Mute or Unmute from a chat's menu. The mute goes to Telegram, so the
+   other devices follow and it holds after the chat list is read again;
+   this machine's own mute (value->choice, kept in the notify file) is only
+   what is left when Telegram cannot be reached, and what an older version
+   set. Unmute clears both. Returns whether *value changed and wants
+   saving. */
+static int tg_gui_window_toggle_mute(tg_gui_state *state,
+                                     const tg_gui_chat *chat,
+                                     tg_gui_notify_override *value)
+{
+    int here = value->choice == TG_GUI_NOTIFY_MUTE;
+    int want = !(state->ctx_muted || here);
+    int sent = 0;
+
+    if (chat->index != TG_GUI_SAVED_PEER_INDEX && tg_gui_session_is_open()) {
+        sent = tg_gui_session_set_muted(chat->index, want, stdout) == 0;
+    }
+    if (want) {
+        if (sent) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Muted on every device");
+            return 0;
+        }
+        value->choice = TG_GUI_NOTIFY_MUTE;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           chat->index == TG_GUI_SAVED_PEER_INDEX
+                               ? "Muted"
+                               : "Muted on this machine only");
+        return 1;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       sent || chat->index == TG_GUI_SAVED_PEER_INDEX
+                           ? "Unmuted"
+                           : (state->ctx_muted
+                                  ? "Could not unmute on Telegram"
+                                  : "Unmuted"));
+    if (here) {
+        value->choice = TG_GUI_NOTIFY_DEFAULT;
+        return 1;
+    }
+    return 0;
+}
+
 /* "Leave..." / "Delete chat..." of a chat's menu: takes the chat off the
    account on Telegram after asking, then off the list here. When it was the
    open chat a neighbour is opened, as after Remove chat. */
@@ -13941,6 +13984,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->ctx_react = 0;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
+                        state->ctx_muted =
+                            tg_gui_session_chat_muted(chat->index,
+                                                      stdout) == 1;
                         state->ctx_hidden_count = chat->is_group
                             ? tg_gui_session_hidden_count(chat->peer_id_hi,
                                                           chat->peer_id_lo)
@@ -14133,8 +14179,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_notify_override_get(state->notify_override_path,
                             chat->peer_id_hi, chat->peer_id_lo, &value);
                         if (it == TG_GUI_CTX_CHAT_MUTE) {
-                            value.choice = value.choice == TG_GUI_NOTIFY_MUTE ?
-                                TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_MUTE;
+                            changed = tg_gui_window_toggle_mute(state, chat,
+                                                                &value);
                         } else if (it == TG_GUI_CTX_CHAT_RING && chat->is_group) {
                             value.choice = value.choice == TG_GUI_NOTIFY_RING ?
                                 TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_RING;

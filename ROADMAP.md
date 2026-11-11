@@ -335,8 +335,12 @@ it works today:
   forum topics, and the text client;
 - the pinned message under the chat header, and a jump to the next
   unread mention (`messages.getUnreadMentions`);
-- Mute in the chat's menu sent to Telegram (`account.updateNotifySettings`).
-  Half done: Telegram's own mute is read, ours stays on this machine;
+- Mute in the chat's menu sent to Telegram: done
+  (`account.updateNotifySettings`, the mute alone, for good;
+  `updateNotifySettings` followed live; `account.getNotifySettings` the
+  first time a chat's mute is needed). Still missing: a mute for a few
+  hours, a mark on muted chats in the list, the text client's own
+  command;
 - an ARexx port: open a chat, show, hide, so that notifications and
   scripts can drive the client;
 - the time zone from `ENV:TZONE` or `ENV:TZ` before the Locale

@@ -5636,7 +5636,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         }
         labels[n] = "Remove chat";
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
-        labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE ?
+        /* Muted on Telegram, or only on this machine (a mute from before
+           it was sent there, or one Telegram did not get). */
+        labels[n] = (state->ctx_muted ||
+                     state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE) ?
                     "Unmute" : "Mute";
         ids[n++] = TG_GUI_CTX_CHAT_MUTE;
         if (state->chats[state->ctx_chat - 1].is_group) {
@@ -7410,6 +7413,15 @@ static int tg_gui_notify_menu_self_test(void)
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
+    /* Muted on Telegram: Unmute, whatever this machine's own choice. */
+    state->ctx_muted = 1;
+    if (tg_gui_context_items(state, labels, ids) != 11 ||
+        strcmp(labels[4], "Unmute") != 0 ||
+        strcmp(labels[5], "Disable ring") != 0) {
+        puts("gui self-test: a chat muted on Telegram cannot be unmuted");
+        return 2;
+    }
+    state->ctx_muted = 0;
     state->ctx_hidden_count = 2UL;
     if (tg_gui_context_items(state, labels, ids) != 12 ||
         ids[8] != TG_GUI_CTX_CHAT_SHOW_HIDDEN ||

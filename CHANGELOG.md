@@ -78,8 +78,21 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   small fonts and 20 when the box is taller.
 - Clicking another chat while typing no longer throws the text away: it
   becomes the draft of the chat being left.
+- Mute and Unmute in a chat's menu now go to Telegram: the chat is muted
+  on every device, for good, until it is unmuted, here or elsewhere. A
+  chat muted or unmuted on another device follows while the client runs.
+  The menu says Unmute for a chat Telegram holds muted, wherever it was
+  muted. Without a connection the mute stays on this machine, as before,
+  and the status line says so; mutes set by older versions keep working
+  and Unmute clears them. Sound and previews of the chat are left as
+  they are.
 
 ### Fixed
+- A chat muted on Telegram could still pop up and ring here: its mute
+  was only known for the chats of the last Reload chat list, not after a
+  normal start. The client now asks Telegram about a chat the first time
+  a message arrives from it (and when its menu opens), once per run, and
+  only when pop-ups or the sound are in use.
 - Opening another chat while a message was being edited left the edit
   armed: the next ENTER tried to edit a message with that number in the
   other chat. The edit now ends with the chat.

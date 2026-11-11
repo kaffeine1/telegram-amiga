@@ -50,6 +50,11 @@
 #define TG_MESSAGES_MARK_DIALOG_UNREAD_CONSTRUCTOR 0x8c5006f8UL
 #define TG_MESSAGES_GET_DIALOG_UNREAD_MARKS_CONSTRUCTOR 0x21202222UL
 #define TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR 0x54ae308eUL
+#define TG_ACCOUNT_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0x84be5b93UL
+#define TG_ACCOUNT_GET_NOTIFY_SETTINGS_CONSTRUCTOR 0x12b3ad31UL
+#define TG_INPUT_NOTIFY_PEER_CONSTRUCTOR 0xb8bc5b0cUL
+#define TG_INPUT_PEER_NOTIFY_SETTINGS_CONSTRUCTOR 0xcacb6ae2UL
+#define TG_NOTIFY_PEER_CONSTRUCTOR 0x9fd40bd8UL
 #define TG_MESSAGES_GET_ALL_DRAFTS_CONSTRUCTOR 0x6a3f8d65UL
 #define TG_MESSAGES_DELETE_HISTORY_CONSTRUCTOR 0xb08f922aUL
 #define TG_MESSAGES_DELETE_CHAT_USER_CONSTRUCTOR 0xa2185cabUL
@@ -1479,6 +1484,82 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_all_drafts(
     }
     return tg_mtproto_tl_write_u32(writer,
                                    TG_MESSAGES_GET_ALL_DRAFTS_CONSTRUCTOR);
+}
+
+/* account.updateNotifySettings#84be5b93 peer:InputNotifyPeer
+   settings:InputPeerNotifySettings = Bool, for one chat
+   (inputNotifyPeer#b8bc5b0c peer:InputPeer) and its mute alone
+   (inputPeerNotifySettings#cacb6ae2 flags:# ... mute_until:flags.2?int
+   ...): the settings left out keep the value they have. mute_until is a
+   Unix time; 0 unmutes, 0x7fffffff is the official clients' "forever". */
+tg_mtproto_tl_status tg_mtproto_build_account_update_notify_mute(
+    tg_mtproto_tl_writer *writer,
+    unsigned long mute_until,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_ACCOUNT_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_NOTIFY_PEER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_INPUT_PEER_NOTIFY_SETTINGS_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 4UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, mute_until);
+    }
+    return status;
+}
+
+/* account.getNotifySettings#12b3ad31 peer:InputNotifyPeer =
+   PeerNotifySettings, for one chat: a small answer, where the chat list
+   that also carries it is a large one. */
+tg_mtproto_tl_status tg_mtproto_build_account_get_notify_settings(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_ACCOUNT_GET_NOTIFY_SETTINGS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_NOTIFY_PEER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    return status;
 }
 
 /* The InputReplyTo of a draft, skipped: only what a plain reply or a reply
@@ -4115,6 +4196,83 @@ static tg_mtproto_tl_status tg_read_peer_notify_settings(
         }
     }
     out->valid = 1;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* Public: this chat is muted until that time (0 = not muted) from now on,
+   as far as this run knows: what a Mute sent from here leaves behind,
+   without waiting for the chat list to be read again. Its silent setting
+   stays as it was. */
+void tg_mtproto_peer_notify_set_mute(unsigned long peer_constructor,
+                                     unsigned long id_hi, unsigned long id_lo,
+                                     unsigned long mute_until)
+{
+    tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings value;
+
+    tg_mtproto_peer_notify_get(peer_constructor, id_hi, id_lo, &value);
+    if (!value.valid) {
+        value.silent = 0; /* get() says silent for a chat it does not know */
+    }
+    value.mute_until = mute_until;
+    value.valid = 1;
+    memset(&peer, 0, sizeof(peer));
+    peer.peer_constructor = peer_constructor;
+    peer.id_hi = id_hi;
+    peer.id_lo = id_lo;
+    tg_peer_notify_store(&peer, &value);
+}
+
+/* Public: the PeerNotifySettings Telegram answered for this chat (the
+   whole object, its constructor first), kept in the table. */
+tg_mtproto_tl_status tg_mtproto_peer_notify_keep(
+    const unsigned char *settings, unsigned long length,
+    unsigned long peer_constructor, unsigned long id_hi, unsigned long id_lo)
+{
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings value;
+
+    if (settings == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    tg_mtproto_tl_reader_init(&reader, settings, length);
+    if (tg_read_peer_notify_settings(&reader, &value) != TG_MTPROTO_TL_OK ||
+        !value.valid) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    memset(&peer, 0, sizeof(peer));
+    peer.peer_constructor = peer_constructor;
+    peer.id_hi = id_hi;
+    peer.id_lo = id_lo;
+    tg_peer_notify_store(&peer, &value);
+    return TG_MTPROTO_TL_OK;
+}
+
+/* updateNotifySettings#bec268ef peer:NotifyPeer
+   notify_settings:PeerNotifySettings, the reader just past the constructor:
+   a chat muted or unmuted on another device. Only one chat's settings
+   (notifyPeer#9fd40bd8 peer:Peer) are kept: the account-wide ones (all
+   users, all groups...) have no chat to go to. OK = kept. */
+tg_mtproto_tl_status tg_mtproto_read_update_notify_settings(
+    tg_mtproto_tl_reader *reader)
+{
+    unsigned long constructor;
+    tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings value;
+
+    if (reader == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(&peer, 0, sizeof(peer));
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
+        constructor != TG_NOTIFY_PEER_CONSTRUCTOR ||
+        tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK ||
+        tg_read_peer_notify_settings(reader, &value) != TG_MTPROTO_TL_OK ||
+        !value.valid) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    tg_peer_notify_store(&peer, &value);
     return TG_MTPROTO_TL_OK;
 }
 
@@ -8634,6 +8792,101 @@ static int tg_peer_notify_self_test(void)
     memset(tg_peer_notify_slots, 0, sizeof(tg_peer_notify_slots));
     if (!ok) {
         puts("login self-test: per-chat dialog notify settings lost");
+        return 2;
+    }
+    /* Mute sent from here: the request, and what the table holds after. A
+       chat muted on another device: its update, read back. */
+    tg_peer_notify_full = 0;
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    ok = tg_mtproto_build_account_update_notify_mute(
+             &writer, 0x7fffffffUL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+             0x05060708UL, 0UL, 0UL, 0) == TG_MTPROTO_TL_OK &&
+         writer.length == 32UL && body[0] == 0x93U && body[1] == 0x5bU &&
+         body[2] == 0xbeU && body[3] == 0x84U && body[4] == 0x0cU &&
+         body[7] == 0xb8U && body[8] == 0xb9U && body[20] == 0xe2U &&
+         body[23] == 0xcaU && body[24] == 0x04U && body[28] == 0xffU &&
+         body[31] == 0x7fU;
+    if (ok) {
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        ok = tg_mtproto_build_account_get_notify_settings(
+                 &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                 0x05060708UL, 0UL, 0UL, 0) == TG_MTPROTO_TL_OK &&
+             writer.length == 20UL && body[0] == 0x31U && body[1] == 0xadU &&
+             body[2] == 0xb3U && body[3] == 0x12U && body[4] == 0x0cU &&
+             body[8] == 0xb9U;
+    }
+    if (ok) {
+        /* The answer to it, kept for the chat asked about. */
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        ok = tg_mtproto_tl_write_u32(
+                 &writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 4UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 1850000000UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_peer_notify_keep(body, writer.length,
+                                         TG_PEER_CHAT_CONSTRUCTOR, 0UL,
+                                         902UL) == TG_MTPROTO_TL_OK;
+        tg_mtproto_peer_notify_get(TG_PEER_CHAT_CONSTRUCTOR, 0UL, 902UL,
+                                   &settings);
+        ok = ok && settings.valid && settings.mute_until == 1850000000UL;
+        ok = ok && tg_mtproto_peer_notify_keep(body, 3UL,
+                                               TG_PEER_CHAT_CONSTRUCTOR, 0UL,
+                                               903UL) != TG_MTPROTO_TL_OK;
+        tg_mtproto_peer_notify_get(TG_PEER_CHAT_CONSTRUCTOR, 0UL, 903UL,
+                                   &settings);
+        ok = ok && !settings.valid;
+    }
+    if (ok) {
+        tg_mtproto_peer_notify_set_mute(TG_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                        900UL, 0x7fffffffUL);
+        tg_mtproto_peer_notify_get(TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 900UL,
+                                   &settings);
+        ok = settings.valid && !settings.silent &&
+             settings.mute_until == 0x7fffffffUL;
+        tg_mtproto_peer_notify_set_mute(TG_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                        900UL, 0UL);
+        tg_mtproto_peer_notify_get(TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 900UL,
+                                   &settings);
+        ok = ok && settings.valid && settings.mute_until == 0UL;
+        /* The same id as a user is another chat. */
+        tg_mtproto_peer_notify_get(TG_PEER_USER_CONSTRUCTOR, 0UL, 900UL,
+                                   &settings);
+        ok = ok && !settings.valid;
+    }
+    if (ok) {
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        ok = tg_mtproto_tl_write_u32(&writer, TG_NOTIFY_PEER_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u64(&writer, 0UL, 901UL) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(
+                 &writer, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 4UL) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_write_u32(&writer, 1800000000UL) ==
+                 TG_MTPROTO_TL_OK;
+        tg_mtproto_tl_reader_init(&reader, body, writer.length);
+        ok = ok && tg_mtproto_read_update_notify_settings(&reader) ==
+                       TG_MTPROTO_TL_OK;
+        tg_mtproto_peer_notify_get(TG_PEER_USER_CONSTRUCTOR, 0UL, 901UL,
+                                   &settings);
+        ok = ok && settings.valid && settings.mute_until == 1800000000UL;
+        /* notifyUsers#b4c83b4c (every private chat): no chat to keep it for. */
+        body[0] = 0x4cU;
+        body[1] = 0x3bU;
+        body[2] = 0xc8U;
+        body[3] = 0xb4U;
+        tg_mtproto_tl_reader_init(&reader, body, writer.length);
+        ok = ok && tg_mtproto_read_update_notify_settings(&reader) !=
+                       TG_MTPROTO_TL_OK;
+    }
+    memset(tg_peer_notify_slots, 0, sizeof(tg_peer_notify_slots));
+    tg_peer_notify_full = 0;
+    if (!ok) {
+        puts("login self-test: mute request or update wrong");
         return 2;
     }
 #undef TG_NOTIFY_W32

@@ -239,6 +239,7 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
    schema, checked 2026-11-10): chats moved in or out of the Archive. */
 #define TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR 0x19360dc0UL
 #define TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR 0xedfc111eUL
+#define TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0xbec268efUL
 #define TG_MTPROTO_FOLDER_PEER_CONSTRUCTOR 0xe9baa668UL
 /* https://core.telegram.org/constructor/updateWebPage and
    /constructor/updateChannelWebPage, verified 2026-09-08 (layer 214). */
@@ -4162,6 +4163,13 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_draft_parse_update(&reader);
+        } else if (constructor ==
+                   TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR) {
+            /* A chat muted or unmuted on another device: the table the
+               pop-up and the ring ask takes it (nothing to redraw). */
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            (void)tg_mtproto_read_update_notify_settings(&reader);
         } else if (constructor == TG_MTPROTO_UPDATE_MESSAGE_REACTIONS_CONSTRUCTOR) {
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
@@ -4293,6 +4301,10 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     }
     if (update_ctor == TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
         tg_chat_draft_parse_update(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR) {
+        (void)tg_mtproto_read_update_notify_settings(reader);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_NEW_MESSAGE_CONSTRUCTOR ||
@@ -24508,6 +24520,221 @@ int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
     return 0;
 }
 
+/* Asks Telegram one chat's notify settings (account.getNotifySettings, a
+   small answer) when this run does not know them yet, and keeps them. The
+   chat list carries them too, but it is not read at every start, and only
+   its first pages when it is: without this a chat muted on Telegram
+   would pop up here after a restart. A chat that cannot be asked about is
+   kept as not muted, so it is asked once. */
+static void tg_gui_session_learn_peer_notify(unsigned long pc,
+                                             unsigned long ph,
+                                             unsigned long pl,
+                                             unsigned long ahh,
+                                             unsigned long ahl, int hah,
+                                             int in_cache, FILE *quiet)
+{
+    unsigned char query[48];
+    tg_mtproto_peer_notify_settings settings;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long prev_timeout;
+    int kept = 0;
+
+    tg_mtproto_peer_notify_get(pc, ph, pl, &settings);
+    if (settings.valid) {
+        return;
+    }
+    if (in_cache && tg_gui_session_state.open) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        prev_timeout = tg_net_connect_timeout_seconds();
+        tg_net_set_connect_timeout_seconds(10UL);
+        if (tg_mtproto_build_account_get_notify_settings(
+                &writer, pc, ph, pl, ahh, ahl, hah) == TG_MTPROTO_TL_OK &&
+            tg_gui_session_peer_request(
+                query, writer.length, &result,
+                "mtproto account.getNotifySettings", 0, 0UL, quiet) == 0 &&
+            tg_mtproto_peer_notify_keep(result.result_body - 4U,
+                                        result.result_body_length + 4U, pc,
+                                        ph, pl) == TG_MTPROTO_TL_OK) {
+            kept = 1;
+        }
+        tg_net_set_connect_timeout_seconds(prev_timeout);
+    }
+    if (!kept) {
+        tg_mtproto_peer_notify_set_mute(pc, ph, pl, 0UL);
+    }
+    tg_gui_log(kept ? "mute: asked Telegram" : "mute: could not ask Telegram");
+}
+
+/* Before the queued notifications reach the window: the notify settings of
+   the chats they come from, for the ones this run does not know. The
+   window then decides the pop-up and the ring as Telegram would. */
+static void tg_gui_session_learn_notify_peers(FILE *stream)
+{
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    FILE *quiet = 0;
+    unsigned long i;
+    int loaded = 0;
+
+    if (stream == 0 || !tg_gui_session_state.open || gst == 0) {
+        return;
+    }
+    /* A mute only hides the pop-up and silences the ring: with neither in
+       use there is nothing to ask for. */
+    if (gst->notify_mode < TG_GUI_NOTIFY_POPUP && !gst->notify_beep) {
+        return;
+    }
+    for (i = 0UL; i < tg_gui_session_state.engine.notify.count; ++i) {
+        /* A copy: asking Telegram can queue more notifications. */
+        unsigned long pc =
+            tg_gui_session_state.engine.notify.queue[i].peer_constructor;
+        unsigned long ph =
+            tg_gui_session_state.engine.notify.queue[i].peer_id_hi;
+        unsigned long pl =
+            tg_gui_session_state.engine.notify.queue[i].peer_id_lo;
+        tg_mtproto_peer_notify_settings settings;
+        unsigned long k;
+        unsigned long found;
+
+        if (tg_gui_session_state.engine.notify.queue[i].is_out) {
+            continue; /* written by this account on another device */
+        }
+        tg_mtproto_peer_notify_get(pc, ph, pl, &settings);
+        if (settings.valid ||
+            (pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+             pc != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+             pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR)) {
+            continue;
+        }
+        if (!loaded) {
+            loaded = 1;
+            if (tg_mtproto_load_peer_cache_file(
+                    tg_gui_session_state.peer_cache_file,
+                    &tg_gui_probe_cache) != 0) {
+                tg_gui_probe_cache.count = 0UL;
+            }
+            quiet = tg_mtproto_open_quiet_stream(stream);
+        }
+        found = tg_gui_probe_cache.count;
+        for (k = 0UL; k < tg_gui_probe_cache.count; ++k) {
+            const tg_mtproto_peer_cache_entry *e =
+                &tg_gui_probe_cache.entries[k];
+
+            if (e->peer_constructor == pc && e->id_hi == ph &&
+                e->id_lo == pl) {
+                found = k;
+                break;
+            }
+        }
+        if (found < tg_gui_probe_cache.count) {
+            const tg_mtproto_peer_cache_entry *e =
+                &tg_gui_probe_cache.entries[found];
+
+            tg_gui_session_learn_peer_notify(pc, ph, pl, e->access_hash_hi,
+                                             e->access_hash_lo,
+                                             e->has_access_hash, 1, quiet);
+        } else {
+            tg_gui_session_learn_peer_notify(pc, ph, pl, 0UL, 0UL, 0, 0,
+                                             quiet);
+        }
+    }
+    if (quiet != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+    }
+}
+
+/* Public: whether Telegram holds the chat at this 1-based cache index
+   muted right now: 1 muted, 0 not, -1 unknown (no such chat). Asked to
+   Telegram the first time, then what a Mute from here or from another
+   device made of it. */
+int tg_gui_session_chat_muted(unsigned long peer_index, FILE *stream)
+{
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    tg_mtproto_peer_notify_settings settings;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return -1;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                         index_text, &pc, &ph, &pl, &ahh,
+                                         &ahl, &hah, quiet, "mute peer");
+    if (rc == 0) {
+        tg_gui_session_learn_peer_notify(pc, ph, pl, ahh, ahl, hah, 1, quiet);
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return -1;
+    }
+    tg_mtproto_peer_notify_get(pc, ph, pl, &settings);
+    return settings.mute_until > tg_gui_session_server_time() ? 1 : 0;
+}
+
+/* Public: mute (muted = 1, for good, as the official clients' "forever")
+   or unmute (0) the chat at this 1-based cache index on Telegram
+   (account.updateNotifySettings, its mute alone: sound and previews stay
+   as they are). Every device follows. 0 = done, 2 = failed. */
+int tg_gui_session_set_muted(unsigned long peer_index, int muted,
+                             FILE *stream)
+{
+    unsigned char query[64];
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long until = muted ? 0x7fffffffUL : 0UL;
+    unsigned long prev_timeout;
+    int hah;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, "mute") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (tg_mtproto_build_account_update_notify_mute(
+              &writer, until, pc, ph, pl, ahh, ahl, hah) ==
+              TG_MTPROTO_TL_OK &&
+          tg_gui_session_peer_request(
+              query, writer.length, &result,
+              "mtproto account.updateNotifySettings", 0, 0UL, quiet) == 0)
+             ? 0 : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("mute: request failed");
+        return rc;
+    }
+    tg_mtproto_peer_notify_set_mute(pc, ph, pl, until);
+    tg_gui_log(muted ? "mute: muted on Telegram" : "mute: unmuted on Telegram");
+    return 0;
+}
+
 /* Public: what leaving the chat at this cache index means: 0 a private chat
    (its history is deleted), 1 a basic group, 2 a channel or a supergroup,
    -1 unknown. */
@@ -29453,13 +29680,14 @@ static int tg_gui_session_apply_read_update(void)
     return dirty;
 }
 
-static int tg_gui_session_dispatch_notifications(void)
+static int tg_gui_session_dispatch_notifications(FILE *stream)
 {
     unsigned long i;
 
     if (tg_gui_session_state.engine.notify.count == 0UL) {
         return 0;
     }
+    tg_gui_session_learn_notify_peers(stream);
     for (i = 0UL; i < tg_gui_session_state.engine.notify.count; ++i) {
         if (tg_gui_session_state.driver.on_notification != 0) {
             tg_gui_session_state.driver.on_notification(
@@ -29676,7 +29904,7 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     if (tg_gui_session_apply_read_update()) {
         dirty = 1;
     }
-    if (tg_gui_session_dispatch_notifications()) {
+    if (tg_gui_session_dispatch_notifications(stream)) {
         dirty = 1;
     }
     if (dirty) {

@@ -365,6 +365,11 @@ typedef struct tg_mtproto_peer_notify_settings {
 void tg_mtproto_peer_notify_get(unsigned long peer_constructor,
                                  unsigned long id_hi, unsigned long id_lo,
                                  tg_mtproto_peer_notify_settings *out);
+/* The chat is muted until that Unix time (0 = not muted), as this run
+   knows it: what a Mute sent from here leaves behind. */
+void tg_mtproto_peer_notify_set_mute(unsigned long peer_constructor,
+                                     unsigned long id_hi, unsigned long id_lo,
+                                     unsigned long mute_until);
 
 typedef struct tg_mtproto_dialog_peer {
     unsigned long peer_constructor;
@@ -806,6 +811,36 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     unsigned long text_size,
     int *was_cut,
     unsigned long *date);
+/* account.updateNotifySettings for one chat's mute alone (mute_until: a
+   Unix time, 0 unmutes, 0x7fffffff forever), and an updateNotifySettings
+   read from the reader just past its constructor into the same table
+   tg_mtproto_peer_notify_get reads (OK = one chat's settings, kept). */
+tg_mtproto_tl_status tg_mtproto_build_account_update_notify_mute(
+    tg_mtproto_tl_writer *writer,
+    unsigned long mute_until,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+tg_mtproto_tl_status tg_mtproto_read_update_notify_settings(
+    tg_mtproto_tl_reader *reader);
+/* account.getNotifySettings for one chat, and its PeerNotifySettings
+   answer (the whole object, constructor first) kept for that chat in the
+   table tg_mtproto_peer_notify_get reads. */
+tg_mtproto_tl_status tg_mtproto_build_account_get_notify_settings(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+tg_mtproto_tl_status tg_mtproto_peer_notify_keep(
+    const unsigned char *settings, unsigned long length,
+    unsigned long peer_constructor, unsigned long id_hi, unsigned long id_lo);
+
 /* The next messages.sendMessage built clears the chat's draft too (on) or
    leaves it (off, the default). */
 void tg_mtproto_send_set_clear_draft(int on);

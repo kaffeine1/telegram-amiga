@@ -316,6 +316,14 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
 int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
                                FILE *stream);
 
+/* Whether Telegram holds the chat at this 1-based cache index muted right
+   now (1), not (0), or nobody knows (-1); and Mute (muted = 1, for good)
+   or Unmute (0) sent to Telegram for it, which every device follows:
+   0 = done, 2 = failed. */
+int tg_gui_session_chat_muted(unsigned long peer_index, FILE *stream);
+int tg_gui_session_set_muted(unsigned long peer_index, int muted,
+                             FILE *stream);
+
 /* What leaving a chat means for it: 0 a private chat, 1 a basic group, 2 a
    channel or a supergroup, -1 unknown. */
 int tg_gui_session_chat_kind(unsigned long peer_index);

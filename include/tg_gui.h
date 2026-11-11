@@ -538,6 +538,7 @@ typedef struct tg_gui_state {
     unsigned long ctx_msg_id;
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
     int ctx_notify_choice;
+    int ctx_muted; /* Telegram holds the menu's chat muted: it offers Unmute */
     unsigned long ctx_hidden_count; /* the chat's hidden messages */
     int ctx_react; /* the React chooser replaces the message menu */
     /* What the chooser offers: every reaction the open chat allows that
