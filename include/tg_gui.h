@@ -476,6 +476,11 @@ typedef struct tg_gui_state {
        that jumps to the message (pin_h == 0: no bar this frame). */
     unsigned long pinned_id;
     char pinned_text[TG_GUI_TEXT_MAX];
+    /* With several pinned messages the bar shows one at a time: which one
+       (from 1, the latest pin) of how many. A click shows it and moves the
+       bar to the one pinned before it. */
+    int pinned_index;
+    int pinned_count;
     int pin_x, pin_y, pin_w, pin_h;
 
     /* Reply compose: which message the next send threads to (0 = no reply).

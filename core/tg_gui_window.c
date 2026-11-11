@@ -10864,6 +10864,11 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         ((tg_gui_state *)state)->today = today;
         tg_gui_window_session_changed(session_dirty, header_dirty);
     }
+    /* The pinned bar of a chat just opened: asked here, a moment after the
+       chat is on screen, not at the next poll some seconds away. */
+    if (tg_gui_session_pinned_step(stdout)) {
+        tg_gui_window_session_changed(session_dirty, header_dirty);
+    }
     if ((state->composing || tg_gui_session_transfer_busy()) &&
         now >= *last_receive_drain &&
         (unsigned long)(now - *last_receive_drain) >=
@@ -14589,11 +14594,25 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                          stdout);
                     older_exhausted = 0;
                     older_cooldown = 0;
-                    tg_gui_window_copy(
-                        state->status, sizeof(state->status),
-                        prc > 0 ? "The pinned message"
-                                : (prc == 0 ? "That message is no longer there"
-                                            : "Could not load it (network?)"));
+                    if (prc > 0 && state->pinned_count > 1 &&
+                        state->pinned_count < 100) {
+                        char pline[64];
+
+                        sprintf(pline,
+                                "Pinned %d of %d - click the bar for the next",
+                                state->pinned_index, state->pinned_count);
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status), pline);
+                    } else {
+                        tg_gui_window_copy(
+                            state->status, sizeof(state->status),
+                            prc > 0 ? "The pinned message"
+                                    : (prc == 0
+                                           ? "That message is no longer there"
+                                           : "Could not load it (network?)"));
+                    }
+                    /* The bar moves on to the one pinned before it. */
+                    (void)tg_gui_session_pinned_next();
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTDOWN && state->jb_w > 0 &&
                            hx >= state->jb_x &&

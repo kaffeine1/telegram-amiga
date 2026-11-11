@@ -335,9 +335,9 @@ it works today:
   forum topics, and the text client;
 - the pinned message under the chat header: done (`messages.search`
   with the pinned filter, asked after the chat opens and on
-  `updatePinnedMessages`; a click jumps to it). Still missing: pinning
-  and unpinning a message from here, the older pins when there are
-  several, and a jump to the next unread mention
+  `updatePinnedMessages`; a click jumps to it and walks through the
+  latest pins). Still missing: pinning and unpinning a message from
+  here, and a jump to the next unread mention
   (`messages.getUnreadMentions`);
 - Mute in the chat's menu sent to Telegram: done
   (`account.updateNotifySettings`, the mute alone, for good;

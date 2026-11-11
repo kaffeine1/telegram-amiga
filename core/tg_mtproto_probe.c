@@ -21924,14 +21924,70 @@ static void tg_gui_draft_send_end(int had, int sent)
 #endif
 
 /* --- the pinned message --------------------------------------------------
-   The open chat's pinned message, shown by the window on a bar under the
-   header; a click there shows the message. Asked with a one-message search
-   (the pinned filter) on the first tick after the chat opens, not inside
-   the opening itself, and again when a message is pinned or unpinned there
-   (updatePinnedMessages / updatePinnedChannelMessages). The newest pin
-   only, as the bar has one line. The window only. */
+   The open chat's pinned messages, shown by the window one at a time on a
+   bar under the header; a click there shows the message and moves the bar
+   to the one pinned before it, round and round. Asked with a short search
+   (the pinned filter) right after the chat opens, not inside the opening
+   itself, and again when a message is pinned or unpinned there
+   (updatePinnedMessages / updatePinnedChannelMessages). The latest pins
+   only: a handful, the answer carries whole messages. The window only. */
 #if !defined(TG_NO_GUI)
+#if defined(__MORPHOS__) || defined(__MORPHOS)
+#define TG_GUI_PINNED_MAX 5 /* a large answer is what freezes its stack */
+#elif defined(__m68k__)
+#define TG_GUI_PINNED_MAX 4
+#else
+#define TG_GUI_PINNED_MAX 8
+#endif
+typedef struct tg_gui_pinned_msg {
+    unsigned long id;
+    char text[TG_GUI_TEXT_MAX];
+} tg_gui_pinned_msg;
+static tg_gui_pinned_msg tg_gui_pinned_list[TG_GUI_PINNED_MAX];
+static int tg_gui_pinned_count = 0; /* latest pin first */
+static int tg_gui_pinned_at = 0;    /* the one on the bar */
 static int tg_gui_pinned_pending = 0;
+
+/* Puts the current one on the window's bar (or takes the bar away).
+   1 = the bar changed. */
+static int tg_gui_pinned_show(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    const tg_gui_pinned_msg *m;
+    unsigned long i;
+
+    if (gst == 0) {
+        return 0;
+    }
+    if (tg_gui_pinned_count <= 0) {
+        if (gst->pinned_id == 0UL && gst->pinned_count == 0) {
+            return 0;
+        }
+        gst->pinned_id = 0UL;
+        gst->pinned_text[0] = '\0';
+        gst->pinned_index = 0;
+        gst->pinned_count = 0;
+        return 1;
+    }
+    if (tg_gui_pinned_at < 0 || tg_gui_pinned_at >= tg_gui_pinned_count) {
+        tg_gui_pinned_at = 0;
+    }
+    m = &tg_gui_pinned_list[tg_gui_pinned_at];
+    if (gst->pinned_id == m->id && strcmp(gst->pinned_text, m->text) == 0 &&
+        gst->pinned_index == tg_gui_pinned_at + 1 &&
+        gst->pinned_count == tg_gui_pinned_count) {
+        return 0;
+    }
+    gst->pinned_id = m->id;
+    for (i = 0UL; i + 1UL < sizeof(gst->pinned_text) && m->text[i] != '\0';
+         ++i) {
+        gst->pinned_text[i] = m->text[i];
+    }
+    gst->pinned_text[i] = '\0';
+    gst->pinned_index = tg_gui_pinned_at + 1;
+    gst->pinned_count = tg_gui_pinned_count;
+    return 1;
+}
 
 static void tg_gui_pinned_note_update(unsigned long peer_constructor,
                                       unsigned long id_hi,
@@ -21946,11 +22002,10 @@ static void tg_gui_pinned_note_update(unsigned long peer_constructor,
    the bar of the chat before goes at once. */
 static void tg_gui_pinned_chat_opened(int other_chat)
 {
-    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
-
-    if (other_chat && gst != 0) {
-        gst->pinned_id = 0UL;
-        gst->pinned_text[0] = '\0';
+    if (other_chat) {
+        tg_gui_pinned_count = 0;
+        tg_gui_pinned_at = 0;
+        (void)tg_gui_pinned_show();
     }
     tg_gui_pinned_pending = 1;
 }
@@ -21982,13 +22037,13 @@ static void tg_gui_pinned_line(char *dest, unsigned long size,
     }
 }
 
-/* Asks Telegram the open chat's newest pinned message and hands it to the
-   window. 1 = the bar changed (shown, changed or gone), 0 = as it was, or
-   could not ask (it then stays as it is and is asked again later). */
+/* Asks Telegram the open chat's latest pinned messages and hands the
+   window the one to show: the one it showed before if it is still pinned,
+   else the latest. 1 = the bar changed (shown, changed or gone), 0 = as it
+   was, or could not ask. */
 static int tg_gui_session_fetch_pinned(FILE *stream)
 {
     unsigned char query[96];
-    static char line[TG_GUI_TEXT_MAX];
     static const char label[] = "gui pinned message";
     tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
     tg_mtproto_rpc_result result;
@@ -21999,18 +22054,19 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
     unsigned long ahh;
     unsigned long ahl;
     unsigned long prev_timeout;
-    unsigned long found_id = 0UL;
+    unsigned long shown_id;
     unsigned long i;
     int hah;
     FILE *quiet;
     int rc;
+    int k;
 
     if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
         tg_gui_session_state.open_peer_constructor == 0UL) {
         return 0;
     }
     if (tg_shared_message_texts_busy) {
-        tg_gui_pinned_pending = 1; /* the list is in use: next tick */
+        tg_gui_pinned_pending = 1; /* the list is in use: next time */
         return 0;
     }
     quiet = tg_mtproto_open_quiet_stream(stream);
@@ -22025,9 +22081,9 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
-    rc = (tg_mtproto_build_messages_search_pinned(&writer, pc, ph, pl, ahh,
-                                                  ahl, hah, 1UL) ==
-              TG_MTPROTO_TL_OK &&
+    rc = (tg_mtproto_build_messages_search_pinned(
+              &writer, pc, ph, pl, ahh, ahl, hah,
+              (unsigned long)TG_GUI_PINNED_MAX) == TG_MTPROTO_TL_OK &&
           tg_gui_session_peer_request(query, writer.length, &result, label,
                                       0, 0UL, quiet) == 0 &&
           tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
@@ -22038,40 +22094,50 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
         tg_gui_log("pinned: could not ask");
         return 0;
     }
-    line[0] = '\0';
+    shown_id = tg_gui_pinned_count > 0 &&
+               tg_gui_pinned_at < tg_gui_pinned_count
+                   ? tg_gui_pinned_list[tg_gui_pinned_at].id : 0UL;
+    tg_gui_pinned_count = 0;
+    tg_gui_pinned_at = 0;
     tg_shared_message_texts_busy = 1;
     if (tg_mtproto_parse_message_text_list(
             result.result_constructor, result.result_body,
             result.result_body_length, &tg_shared_message_texts) ==
         TG_MTPROTO_TL_OK) {
-        for (i = 0UL; i < tg_shared_message_texts.count; ++i) {
+        /* The search gives the latest first: the order the bar walks. */
+        for (i = 0UL; i < tg_shared_message_texts.count &&
+                      tg_gui_pinned_count < TG_GUI_PINNED_MAX; ++i) {
             const tg_mtproto_message_text *m =
                 &tg_shared_message_texts.messages[i];
+            tg_gui_pinned_msg *slot =
+                &tg_gui_pinned_list[tg_gui_pinned_count];
 
             if (m->id == 0UL || m->service_action != 0UL ||
                 tg_hidden_msgs_skip(pc, ph, pl, m->id)) {
                 continue;
             }
-            found_id = m->id;
-            tg_gui_pinned_line(line, sizeof(line), m->text);
-            if (line[0] == '\0') {
-                strcpy(line, "Message");
+            slot->id = m->id;
+            tg_gui_pinned_line(slot->text, sizeof(slot->text), m->text);
+            if (slot->text[0] == '\0') {
+                strcpy(slot->text, "Message");
             }
-            break;
+            ++tg_gui_pinned_count;
         }
     }
     tg_shared_message_texts_busy = 0;
-    tg_gui_log(found_id != 0UL ? "pinned: shown" : "pinned: none");
-    if (gst->pinned_id == found_id && strcmp(gst->pinned_text, line) == 0) {
-        return 0;
+    for (k = 0; k < tg_gui_pinned_count; ++k) {
+        if (tg_gui_pinned_list[k].id == shown_id) {
+            tg_gui_pinned_at = k; /* the bar stays on the one it showed */
+            break;
+        }
     }
-    gst->pinned_id = found_id;
-    for (i = 0UL; i + 1UL < sizeof(gst->pinned_text) && line[i] != '\0';
-         ++i) {
-        gst->pinned_text[i] = line[i];
+    {
+        char line[48];
+
+        sprintf(line, "pinned: %d", tg_gui_pinned_count);
+        tg_gui_log(line);
     }
-    gst->pinned_text[i] = '\0';
-    return 1;
+    return tg_gui_pinned_show();
 }
 #else
 #define tg_gui_pinned_chat_opened(other_chat) ((void)(other_chat))
@@ -30137,6 +30203,45 @@ static int tg_gui_session_apply_folder_updates(void)
         tg_gui_session_reload_chats();
     }
     return 1;
+}
+
+/* Public: asks the open chat's pinned messages when that is due (a chat
+   just opened, a pin changed). The window calls it from its idle path, so
+   the bar is there a moment after the chat and not at the next poll.
+   1 = the bar changed. */
+int tg_gui_session_pinned_step(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return 0;
+#else
+    if (!tg_gui_pinned_pending || !tg_gui_session_state.open || stream == 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return 0;
+    }
+    tg_gui_pinned_pending = 0;
+    if (!tg_gui_session_fetch_pinned(stream)) {
+        return 0;
+    }
+    tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+    return 1;
+#endif
+}
+
+/* Public: the bar moves to the message pinned before the one it shows,
+   and from the oldest back to the latest. 1 = it changed (there is more
+   than one). */
+int tg_gui_session_pinned_next(void)
+{
+#if defined(TG_NO_GUI)
+    return 0;
+#else
+    if (tg_gui_pinned_count < 2) {
+        return 0;
+    }
+    tg_gui_pinned_at = (tg_gui_pinned_at + 1) % tg_gui_pinned_count;
+    return tg_gui_pinned_show();
+#endif
 }
 
 /* A draft changed on another device, or was sent from here: the list shows

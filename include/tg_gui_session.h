@@ -316,6 +316,14 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
 int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
                                FILE *stream);
 
+/* The open chat's pinned messages, shown one at a time on the bar under
+   the header (state->pinned_*). _step asks Telegram for them when that is
+   due, a chat just opened or a pin changed: call it from the idle path;
+   1 = the bar changed. _next moves the bar to the message pinned before
+   the one shown, round to the latest again; 1 = it changed. */
+int tg_gui_session_pinned_step(FILE *stream);
+int tg_gui_session_pinned_next(void);
+
 /* Whether Telegram holds the chat at this 1-based cache index muted right
    now (1), not (0), or nobody knows (-1); and Mute (muted = 1, for good)
    or Unmute (0) sent to Telegram for it, which every device follows:

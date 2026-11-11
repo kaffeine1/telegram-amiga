@@ -4665,12 +4665,22 @@ static void tg_gui_paint_main(const tg_gui_state *state,
        shows the message (the event loop reads the rect cached here). */
     ((tg_gui_state *)state)->pin_h = 0;
     if (state->pinned_id != 0UL && state->pinned_text[0] != '\0') {
-        static const char label[] = "Pinned: ";
-        unsigned long label_len = sizeof(label) - 1UL;
+        char label[32];
+        unsigned long label_len;
         int bar_h = tg_gui_native_line_height(backend) + 8;
         int bar_x = sidebar_w + 6;
         int bar_w = area_x + area_w - bar_x;
 
+        /* Several pins: which one this is, "Pinned 2/5: ". */
+        if (state->pinned_count > 1 && state->pinned_index >= 1 &&
+            state->pinned_index <= state->pinned_count &&
+            state->pinned_count < 1000) {
+            sprintf(label, "Pinned %d/%d: ", state->pinned_index,
+                    state->pinned_count);
+        } else {
+            strcpy(label, "Pinned: ");
+        }
+        label_len = (unsigned long)strlen(label);
         if (y + bar_h + 2 * lh < transcript_bottom && bar_w > 60) {
             int base = tg_gui_navigation_baseline(backend, y, bar_h);
             int label_w = backend->text_width(backend, label, label_len);
@@ -8927,6 +8937,27 @@ int tg_gui_self_test(void)
                 printf("gui self-test: short window, bar %d+%d, click below "
                        "%d, on it %d\n",
                        state.pin_y, state.pin_h, below, on_bar);
+                state.pinned_id = 0UL;
+                state.pinned_text[0] = '\0';
+                return 2;
+            }
+        }
+        /* Several pinned messages: the bar says which one it shows. */
+        if (ok_bar) {
+            state.pinned_index = 2;
+            state.pinned_count = 3;
+            memset(&rec, 0, sizeof(rec));
+            rec.width = 640;
+            rec.height = 480;
+            rec.watch_text[0] = "Pinned 2/3: ";
+            rec.watch_text[1] = "Pinned: ";
+            b.context = &rec;
+            tg_gui_paint(&state, &b);
+            state.pinned_index = 0;
+            state.pinned_count = 0;
+            if (rec.watch_hits[0] != 1 || rec.watch_hits[1] != 0) {
+                printf("gui self-test: bar of several pins drew %d/%d\n",
+                       rec.watch_hits[0], rec.watch_hits[1]);
                 state.pinned_id = 0UL;
                 state.pinned_text[0] = '\0';
                 return 2;
