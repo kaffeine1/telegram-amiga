@@ -7566,6 +7566,8 @@ typedef struct tg_gui_sendphoto_ui {
     int cursor_on;
     int tick_count;            /* caret cadence: toggle every 5 ticks, like
                                   the composer and the search box */
+    int many;                  /* several photos picked together: the
+                                  actions are Album / Files / Cancel */
 } tg_gui_sendphoto_ui;
 
 
@@ -7646,8 +7648,8 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     static const char *labels[3];
     int i;
 
-    labels[0] = "Photo";
-    labels[1] = "File";
+    labels[0] = ui->many ? "Album" : "Photo";
+    labels[1] = ui->many ? "Files" : "File";
     labels[2] = "Cancel";
     tg_gui_sendphoto_box(ui, TG_GUI_PEN_WINDOW, 0, 0, ui->iw, ui->ih);
     /* One info line: which file, how big. The pixel preview comes back once
@@ -7698,15 +7700,21 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     }
 }
 
-static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
-                                           tg_gui_amiga_ctx *main_ctx,
-                                           struct Window *parent,
-                                           const char *path, char *caption,
-                                           unsigned long caption_size)
+/* count > 1: several photos picked together. The info line then says how
+   many and how big in all (total_bytes), and the answers mean 1 = one album,
+   2 = separate files. */
+static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
+                                            tg_gui_amiga_ctx *main_ctx,
+                                            struct Window *parent,
+                                            const char *path, int count,
+                                            unsigned long total_bytes,
+                                            char *caption,
+                                            unsigned long caption_size)
 {
     tg_gui_sendphoto_ui ui;
     struct TagItem tags[16];
     struct Screen *screen;
+    char many_name[24];
     const char *name;
     const char *pp;
     int lh;
@@ -7740,6 +7748,12 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     ui.name = name;
     lh = main_ctx->line_h;
     screen = parent->WScreen;
+    if (count > 1) {
+        sprintf(many_name, "%d photos", count);
+        ui.name = many_name;
+        ui.many = 1;
+        ui.bytes = total_bytes;
+    } else
     /* Only the size is read from the file: the dialog shows name and KB
        while the pixel preview waits for a decode path that deserves it. */
     {
@@ -7793,7 +7807,8 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
         }
         i = 0;
         tags[i].ti_Tag = WA_Title;
-        tags[i++].ti_Data = TG_GUI_TAG("Send photo");
+        tags[i++].ti_Data = TG_GUI_TAG(count > 1 ? "Send photos"
+                                                 : "Send photo");
         tags[i].ti_Tag = WA_InnerWidth;
         tags[i++].ti_Data = (ULONG)ui.iw;
         tags[i].ti_Tag = WA_InnerHeight;
@@ -7948,6 +7963,16 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
     }
     CloseWindow(ui.win);
     return result;
+}
+
+static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
+                                           tg_gui_amiga_ctx *main_ctx,
+                                           struct Window *parent,
+                                           const char *path, char *caption,
+                                           unsigned long caption_size)
+{
+    return tg_gui_window_send_photos_dialog(state, main_ctx, parent, path, 1,
+                                            0UL, caption, caption_size);
 }
 
 /* Dynamic right-button trap: over a chat row or real transcript bubble the
@@ -8624,6 +8649,289 @@ static void tg_gui_photo_save_cancel(tg_gui_state *state,
     tg_gui_photo_save_status(state, backend, "Photo save cancelled");
 }
 
+/* --- Several files picked in the requester at once. ----------------------
+   Their paths wait here and go up one at a time through the one transfer
+   the session has: the event loop starts the next as each ends. Photos
+   picked together leave as an album, one message with the caption on its
+   first photo; anything else goes one message a file, the caption on the
+   first. All of them land in the chat that was open when they were picked
+   (the session reads it once, as the batch begins). */
+#define TG_GUI_SENDQ_MAX 10 /* what one album holds */
+#define TG_GUI_SENDQ_PATH 256
+
+typedef struct tg_gui_sendq_state {
+    int count;   /* files picked; 0 = no queue */
+    int next;    /* the next one to start */
+    int album;   /* 1: photos for one album, 0: one message a file */
+    int sent;    /* gone up so far */
+    int skipped; /* unreadable, empty, too big, or not a photo */
+    int caption_used;
+    char caption[512];
+    char path[TG_GUI_SENDQ_MAX][TG_GUI_SENDQ_PATH];
+} tg_gui_sendq_state;
+
+static tg_gui_sendq_state tg_gui_sendq;
+
+/* Drawer and name the AmigaDOS way: a '/' between them only when the drawer
+   does not already end in ':' or '/'. 0 when the path did not fit. */
+static int tg_gui_window_join_path(char *out, unsigned long size,
+                                   const char *drawer, const char *name)
+{
+    unsigned long n = 0UL;
+    const char *p;
+    int whole = 1;
+
+    for (p = drawer; p != 0 && *p != '\0'; ++p) {
+        if (n + 2UL < size) {
+            out[n++] = *p;
+        } else {
+            whole = 0;
+        }
+    }
+    if (n > 0UL && out[n - 1UL] != ':' && out[n - 1UL] != '/') {
+        out[n++] = '/';
+    }
+    for (p = name; p != 0 && *p != '\0'; ++p) {
+        if (n + 1UL < size) {
+            out[n++] = *p;
+        } else {
+            whole = 0;
+        }
+    }
+    out[n] = '\0';
+    return whole;
+}
+
+static const char *tg_gui_window_bare_name(const char *path)
+{
+    const char *name = path;
+    const char *p;
+
+    for (p = path; *p != '\0'; ++p) {
+        if (*p == '/' || *p == ':') {
+            name = p + 1;
+        }
+    }
+    return name;
+}
+
+static unsigned long tg_gui_window_file_bytes(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    unsigned long bytes = 0UL;
+    long size;
+
+    if (f != 0) {
+        if (fseek(f, 0L, SEEK_END) == 0 && (size = ftell(f)) > 0L) {
+            bytes = (unsigned long)size;
+        }
+        fclose(f);
+    }
+    return bytes;
+}
+
+static void tg_gui_window_sendq_close(void)
+{
+    tg_gui_sendq.count = 0;
+    tg_gui_sendq.next = 0;
+    tg_gui_session_batch_end();
+}
+
+/* The queue is over: what happened, in one status line. */
+static void tg_gui_window_sendq_report(tg_gui_state *state,
+                                       tg_gui_backend *backend)
+{
+    char line[96];
+
+    if (tg_gui_sendq.album) {
+        int photos = tg_gui_session_batch_photos();
+
+        if (photos > 0) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Sending the album...");
+            tg_gui_window_paint_status(state, backend);
+            if (tg_gui_session_batch_send_album(tg_gui_sendq.caption,
+                                                stdout) == 0) {
+                sprintf(line, "Album sent: %d photo%s", photos,
+                        photos == 1 ? "" : "s");
+                if (tg_gui_sendq.skipped > 0) {
+                    sprintf(line + strlen(line), ", %d skipped",
+                            tg_gui_sendq.skipped);
+                }
+            } else {
+                const char *why = tg_gui_session_last_transfer_error();
+
+                sprintf(line, "Album not sent: %.30s",
+                        (why != 0 && why[0] != '\0') ? why : "no reply");
+            }
+        } else {
+            const char *why = tg_gui_session_last_transfer_error();
+
+            sprintf(line, "No photo sent: %.30s",
+                    (why != 0 && why[0] != '\0') ? why : "none was readable");
+        }
+    } else if (tg_gui_sendq.sent > 0) {
+        sprintf(line, "%d file%s sent", tg_gui_sendq.sent,
+                tg_gui_sendq.sent == 1 ? "" : "s");
+        if (tg_gui_sendq.skipped > 0) {
+            sprintf(line + strlen(line), ", %d skipped",
+                    tg_gui_sendq.skipped);
+        }
+    } else {
+        strcpy(line, "No file could be sent");
+    }
+    tg_gui_window_sendq_close();
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+    tg_gui_window_paint(state, backend);
+}
+
+/* Starts the next file that can start: 1 = a transfer is running again,
+   0 = the queue is over and its closing line is in the status. A file that
+   cannot start (unreadable, empty, too big, not a photo) is left out and
+   the others still go. */
+static int tg_gui_window_sendq_next(tg_gui_state *state,
+                                    tg_gui_backend *backend)
+{
+    while (tg_gui_sendq.next < tg_gui_sendq.count) {
+        int item = tg_gui_sendq.next++;
+        const char *path = tg_gui_sendq.path[item];
+        char name[48]; /* the progress line shows its first 20 */
+        int rc;
+
+        if (tg_gui_sendq.album) {
+            rc = tg_gui_session_transfer_start_batch_photo(path, stdout);
+        } else {
+            rc = tg_gui_session_transfer_start_batch_file(
+                path, tg_gui_sendq.caption_used ? 0 : tg_gui_sendq.caption,
+                stdout);
+        }
+        if (rc == 0) {
+            tg_gui_sendq.caption_used = 1;
+            /* "2/5 name" in the progress line, for the whole transfer */
+            sprintf(name, "%d/%d %.16s", item + 1, tg_gui_sendq.count,
+                    tg_gui_window_bare_name(path));
+            tg_gui_window_set_transfer_name(name);
+            return 1;
+        }
+        ++tg_gui_sendq.skipped;
+        {
+            char sl[96];
+
+            sprintf(sl, "sendq: file %d of %d left out, rc=%d (%.40s)",
+                    item + 1, tg_gui_sendq.count, rc,
+                    tg_gui_session_last_transfer_error());
+            tg_gui_log(sl);
+        }
+    }
+    tg_gui_window_sendq_report(state, backend);
+    return 0;
+}
+
+/* One file of the queue ended with trc (tg_gui_session_transfer_end): on to
+   the next, or the whole queue stops. A cancel stops everything; so does a
+   file that failed on its way up, since what broke it (the network) would
+   break the others, one long wait each. */
+static void tg_gui_window_sendq_ended(tg_gui_state *state,
+                                      tg_gui_backend *backend, int trc)
+{
+    char line[96];
+
+    if (trc == 0) {
+        ++tg_gui_sendq.sent;
+        (void)tg_gui_window_sendq_next(state, backend);
+        return;
+    }
+    if (trc == 6) {
+        if (tg_gui_sendq.album) {
+            strcpy(line, "Album cancelled");
+        } else if (tg_gui_sendq.sent > 0) {
+            sprintf(line, "Cancelled: %d of %d files sent",
+                    tg_gui_sendq.sent, tg_gui_sendq.count);
+        } else {
+            strcpy(line, "Upload cancelled");
+        }
+    } else {
+        const char *why = tg_gui_session_last_transfer_error();
+
+        if (why == 0 || why[0] == '\0') {
+            why = "upload failed";
+        }
+        if (tg_gui_sendq.album) {
+            sprintf(line, "Album not sent: %.30s", why);
+        } else {
+            sprintf(line, "Stopped at file %d of %d: %.20s",
+                    tg_gui_sendq.next, tg_gui_sendq.count, why);
+        }
+    }
+    tg_gui_window_sendq_close();
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+    tg_gui_window_paint(state, backend);
+}
+
+/* Several files came back from the requester (their paths are in the queue
+   already): photos as an album after the caption dialog, the rest as files.
+   mode as in tg_gui_window_send_file_mode. */
+static void tg_gui_window_sendq_begin(tg_gui_state *state, struct Window *win,
+                                      tg_gui_backend *backend, int mode)
+{
+    int album = mode == 1;
+    int i;
+
+    if (mode == 2) {
+        album = 1;
+        for (i = 0; i < tg_gui_sendq.count; ++i) {
+            if (!tg_gui_attachment_is_photo(tg_gui_sendq.path[i])) {
+                album = 0;
+            }
+        }
+    }
+    tg_gui_sendq.album = album;
+    tg_gui_sendq.next = 0;
+    tg_gui_sendq.sent = 0;
+    tg_gui_sendq.skipped = 0;
+    tg_gui_sendq.caption_used = 0;
+    tg_gui_sendq.caption[0] = '\0';
+    if (album) {
+        unsigned long total = 0UL;
+        int drc;
+
+        for (i = 0; i < tg_gui_sendq.count; ++i) {
+            total += tg_gui_window_file_bytes(tg_gui_sendq.path[i]);
+        }
+        drc = tg_gui_window_send_photos_dialog(
+            state, (tg_gui_amiga_ctx *)backend->context, win,
+            tg_gui_sendq.path[0], tg_gui_sendq.count, total,
+            tg_gui_sendq.caption, sizeof(tg_gui_sendq.caption));
+        if (drc == 0) {
+            tg_gui_sendq.count = 0;
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Send cancelled");
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        tg_gui_sendq.album = drc == 1;
+    }
+    if (tg_gui_session_batch_begin(stdout) != 0) {
+        tg_gui_sendq.count = 0;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not start the upload");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (album) {
+        /* The draft moved into the dialog and leaves with the send. */
+        state->input[0] = '\0';
+        state->input_caret = 0;
+    }
+    if (tg_gui_window_sendq_next(state, backend)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           tg_gui_sendq.album
+                               ? "Sending photos... (ESC cancels)"
+                               : "Sending files... (ESC cancels)");
+        tg_gui_window_paint(state, backend);
+    }
+}
+
 /* ASL file requester -> non-blocking upload on the open chat.
    The requester is synchronous and system-rendered (safe while we are the
    caller); the upload is only ARMED here -- the event loop pumps it one part
@@ -8637,6 +8945,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     char path[256];
     int rc;
     int as_photo = mode == 1;
+    int picked = 0; /* files picked together, when more than one */
 
     if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
         state->chat_count <= 0) {
@@ -8671,33 +8980,43 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
                javierdlr): the pattern then SHOWS in the requester's gadget,
                so the user can see what is being filtered and widen it. */
             ASLFR_DoPatterns, TRUE, ASLFR_InitialPattern,
-            TG_GUI_TAG("#?.(jpg|jpeg|png)"), TAG_DONE);
+            TG_GUI_TAG("#?.(jpg|jpeg|png)"),
+            /* several photos picked together leave as one album */
+            ASLFR_DoMultiSelect, TRUE, TAG_DONE);
     } else {
         req = (struct FileRequester *)AllocAslRequestTags(
             ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
             ASLFR_TitleText, TG_GUI_TAG(mode == 2 ? "Attach to this chat"
                                                    : "Send file to this chat"),
-            TAG_DONE);
+            ASLFR_DoMultiSelect, TRUE, TAG_DONE);
     }
     path[0] = '\0';
     if (req != 0 && AslRequestTags(req, TAG_DONE)) {
-        unsigned long n = 0UL;
-        const char *p;
+        const char *drawer = (const char *)req->fr_Drawer;
 
-        for (p = (const char *)req->fr_Drawer; p != 0 && *p != '\0' &&
-             n + 2UL < sizeof(path); ++p) {
-            path[n++] = *p;
+        if (req->fr_NumArgs > 1L && req->fr_ArgList != 0) {
+            /* Several picked: every name is relative to the drawer. */
+            long k;
+
+            picked = (int)req->fr_NumArgs;
+            for (k = 0L; k < req->fr_NumArgs && k < TG_GUI_SENDQ_MAX; ++k) {
+                if (!tg_gui_window_join_path(
+                        tg_gui_sendq.path[k], TG_GUI_SENDQ_PATH, drawer,
+                        (const char *)req->fr_ArgList[k].wa_Name)) {
+                    /* a cut path could name another file: never sent */
+                    tg_gui_sendq.path[k][0] = '\0';
+                }
+            }
+        } else if (req->fr_NumArgs == 1L && req->fr_ArgList != 0 &&
+                   req->fr_ArgList[0].wa_Name != 0 &&
+                   req->fr_ArgList[0].wa_Name[0] != '\0') {
+            (void)tg_gui_window_join_path(
+                path, sizeof(path), drawer,
+                (const char *)req->fr_ArgList[0].wa_Name);
+        } else {
+            (void)tg_gui_window_join_path(path, sizeof(path), drawer,
+                                          (const char *)req->fr_File);
         }
-        /* Join drawer and name the AmigaDOS way: add '/' only when the drawer
-           does not already end in ':' or '/'. */
-        if (n > 0UL && path[n - 1UL] != ':' && path[n - 1UL] != '/') {
-            path[n++] = '/';
-        }
-        for (p = (const char *)req->fr_File; p != 0 && *p != '\0' &&
-             n + 1UL < sizeof(path); ++p) {
-            path[n++] = *p;
-        }
-        path[n] = '\0';
     }
     if (req != 0) {
         FreeAslRequest(req);
@@ -8708,6 +9027,17 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
 #endif
     CloseLibrary(AslBase);
     AslBase = 0;
+    if (picked > TG_GUI_SENDQ_MAX) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Pick at most 10 files at a time");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (picked > 1) {
+        tg_gui_sendq.count = picked;
+        tg_gui_window_sendq_begin(state, win, backend, mode);
+        return;
+    }
     if (path[0] == '\0') {
         return; /* cancelled */
     }
@@ -16396,10 +16726,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 xfer_kbs = 0UL;
                 tg_gui_xfer_name[0] = '\0';
 
-                tg_gui_window_transfer_finished(state, &backend, tdir, trc,
-                                                saved);
-                if (tdir == 2 && trc == 0) {
-                    session_dirty = 1; /* the poll shows the sent file row */
+                if (tdir == 2 && tg_gui_sendq.count > 0) {
+                    /* one of several picked together: the next one starts,
+                       or the queue says how it went */
+                    tg_gui_window_sendq_ended(state, &backend, trc);
+                    session_dirty = 1; /* the poll shows what was sent */
+                } else {
+                    tg_gui_window_transfer_finished(state, &backend, tdir,
+                                                    trc, saved);
+                    if (tdir == 2 && trc == 0) {
+                        session_dirty = 1; /* the poll shows the sent file */
+                    }
                 }
             }
         }
@@ -16774,6 +17111,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         tg_gui_session_transfer_cancel();
         (void)tg_gui_session_transfer_end(0, 0UL);
     }
+    tg_gui_window_sendq_close(); /* and the files still waiting their turn */
     /* Detach + free the menu strip before the window goes away. */
     if (menu != 0) {
         ClearMenuStrip(ctx.window);

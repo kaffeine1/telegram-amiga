@@ -47,6 +47,23 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Albums, and several files at once. The requester of "Send photo...",
+  of the paperclip and of "Send file..." now takes several files: hold
+  Shift and click more than one, ten at most. Photos picked together
+  leave as an album, one message: a small window says how many they are
+  and how big, takes the caption, which goes on the first photo, and
+  offers Album, Files or Cancel. Other files, photos sent as Files, and
+  photos picked together with other files go one message each, one
+  after the other, the caption on the first.
+  The status line says which one is going up ("2/5 name 40%"), and Esc
+  stops them all; a file that cannot be read, or that is not a JPEG or
+  PNG when it is meant for an album, is left out and the others still
+  go, and the closing line says how many went and how many were left
+  out. They all go to the chat that was open when they were picked,
+  even if another one is opened meanwhile. Each photo is uploaded as a
+  single photo is, then kept with `messages.uploadMedia`, and one
+  `messages.sendMultiMedia` makes the album. A drop on the window still
+  sends one file.
 - Open a downloaded file, or show it in its drawer. Once a download
   from this client has saved a message's file, the message's menu offers
   Open and Show in drawer in place of Download. Open hands the file to

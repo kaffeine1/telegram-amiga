@@ -646,6 +646,16 @@ Files
   photo, and a dropped picture asks Photo, File or Cancel. Telegram may
   re-encode photos as JPEG: send a PNG as File to keep it as it is. A
   photo over 10 MiB goes as a file.
+- Several files at once: in the file requester hold Shift and click
+  more than one, ten at most. Photos picked together with "Send
+  photo..." or the paperclip leave as an album, one message: a small
+  window asks for the caption, which goes on the first photo, and
+  offers Album, Files or Cancel. Other files, or photos and other
+  files picked together, go one message each, one after the other.
+  They all go to the chat that was open when you
+  picked them, even if you open another one meanwhile. The status line
+  says which one is going up (2/5), and Esc stops them all; a file
+  that cannot be sent is left out and the others still go.
 - The status line shows progress and speed, and Esc cancels. You can
   keep chatting during a transfer.
 
@@ -828,6 +838,17 @@ File
   un JPEG o un PNG come foto, e un'immagine trascinata chiede Photo, File
   o Cancel. Telegram puo' ricodificare le foto in JPEG: manda un PNG come
   File per tenerlo com'e'. Una foto oltre 10 MiB parte come file.
+- Piu' file insieme: nel requester tieni premuto Shift e fai click su
+  piu' di uno, dieci al massimo. Le foto scelte insieme con "Send
+  photo..." o con la graffetta partono come album, un solo messaggio:
+  una finestrella chiede la didascalia, che va sulla prima foto, e
+  offre Album, Files o Cancel. Gli altri file, o foto e altri file
+  scelti insieme, partono un messaggio ciascuno, uno dopo l'altro.
+  Vanno tutti nella chat che era aperta
+  quando li hai scelti, anche se nel frattempo ne apri un'altra. La
+  riga di stato dice quale sta salendo (2/5), ed Esc li ferma tutti;
+  un file che non si puo' mandare viene lasciato fuori e gli altri
+  partono lo stesso.
 - La riga di stato mostra avanzamento e velocita', ed Esc annulla.
   Durante un trasferimento puoi continuare a scrivere.
 

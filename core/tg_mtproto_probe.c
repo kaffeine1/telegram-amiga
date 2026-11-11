@@ -18970,6 +18970,7 @@ static int tg_gui_pins_self_test(void);
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
 static int tg_gui_saved_self_test(void);
+static int tg_gui_batch_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
 
@@ -21077,7 +21078,7 @@ int tg_mtproto_probe_self_test(void)
     }
 #if !defined(TG_NO_GUI)
     if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0 ||
-        tg_gui_saved_self_test() != 0) {
+        tg_gui_saved_self_test() != 0 || tg_gui_batch_self_test() != 0) {
         return 2;
     }
 #endif
@@ -28395,6 +28396,8 @@ typedef struct tg_gui_ul_state {
     int requested_photo;
     int as_photo;
     int photo_fallback;
+    int album; /* the photo is kept for an album: uploadMedia, no sendMedia */
+    int batch; /* one of several picked together: the batch's chat */
     int part_retry;
     unsigned long got;  /* bytes of the CURRENT part held in part_buf */
     int part_loaded;    /* part_buf holds the current (unacknowledged) part */
@@ -28426,6 +28429,25 @@ typedef struct tg_gui_ul_state {
      256U)
 
 static tg_gui_ul_state tg_gui_ul;
+
+#if !defined(TG_NO_GUI)
+/* Several files picked together. The chat is read ONCE, as the batch
+   begins: uploads are long, the list can change order and the user can open
+   another chat meanwhile, and every file must still land where the first
+   one was meant to. Photos picked together leave as an album, one message:
+   each goes up through the engine above, which ends it with an uploadMedia
+   (the photo is ours, in no chat) and adds it here; once the last is in,
+   one sendMultiMedia names them all. Other files go one message each. */
+typedef struct tg_gui_batch_state {
+    int open;
+    unsigned int count; /* photos held for the album */
+    unsigned long pc, ph, pl, ahh, ahl;
+    int hah;
+    tg_mtproto_album_photo photos[TG_MTPROTO_ALBUM_MAX];
+} tg_gui_batch_state;
+
+static tg_gui_batch_state tg_gui_batch;
+#endif
 
 static int tg_mtproto_jpeg_sof_marker(int marker)
 {
@@ -29023,37 +29045,11 @@ static int tg_mtproto_photo_gate_self_test(void)
 }
 #endif
 
-/* Open the file, size/limit checks, peer resolution, file_id. 0 = armed;
-   != 0 = failed fast with the usual rc codes (1 generic, 2 too big, 3 file,
-   5 empty). */
-static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
-                                   const char *caption,
-                                   const char *path, FILE *stream,
-                                   int as_photo)
+/* The caption as the wire wants it, into the engine's own buffer (also the
+   album's, which is sent while the engine is idle). */
+static void tg_mtproto_upload_caption(const char *caption)
 {
-    const char *why = 0;
-    unsigned char rnd[8];
-    long file_size;
-    const char *name;
-    const char *p;
-    unsigned long n;
-
-    TG_XFER_RESET();
-
-    if (fc == 0 || stream == 0 || path == 0 || path[0] == '\0' ||
-        fc->peer_index == 0 || fc->peer_index[0] == '\0' ||
-        tg_gui_ul.active) {
-        return 1;
-    }
-    memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
-    tg_gui_ul.requested_photo = as_photo != 0;
-    tg_gui_ul.fc = *fc;
-    for (n = 0UL; fc->peer_index[n] != '\0' &&
-                  n + 1UL < sizeof(tg_gui_ul.peer_index_copy); ++n) {
-        tg_gui_ul.peer_index_copy[n] = fc->peer_index[n];
-    }
-    tg_gui_ul.peer_index_copy[n] = '\0';
-    tg_gui_ul.fc.peer_index = tg_gui_ul.peer_index_copy;
+    tg_gui_ul.caption[0] = '\0';
     if (caption != 0 && caption[0] != '\0') {
 #if TG_MTPROTO_DISPLAY_LATIN1
         /* The composer/console text is ISO-8859-1 (Amiga keymap): encode it
@@ -29081,6 +29077,50 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
         }
 #endif
     }
+}
+
+/* Open the file, size/limit checks, peer resolution, file_id. 0 = armed;
+   != 0 = failed fast with the usual rc codes (1 generic, 2 too big, 3 file,
+   5 empty). */
+static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
+                                   const char *caption,
+                                   const char *path, FILE *stream,
+                                   int as_photo)
+{
+    const char *why = 0;
+    unsigned char rnd[8];
+    long file_size;
+    const char *name;
+    const char *p;
+    unsigned long n;
+
+    TG_XFER_RESET();
+
+    if (fc == 0 || stream == 0 || path == 0 || path[0] == '\0' ||
+        fc->peer_index == 0 || fc->peer_index[0] == '\0' ||
+        tg_gui_ul.active) {
+        return 1;
+    }
+#if !defined(TG_NO_GUI)
+    /* 2 = a photo for the batch's album, 3 = a file of the batch */
+    if (as_photo >= 2 && (!tg_gui_batch.open ||
+                          (as_photo == 2 &&
+                           tg_gui_batch.count >= TG_MTPROTO_ALBUM_MAX))) {
+        return 1;
+    }
+#endif
+    memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+    tg_gui_ul.requested_photo = as_photo == 1 || as_photo == 2;
+    tg_gui_ul.album = as_photo == 2;
+    tg_gui_ul.batch = as_photo >= 2;
+    tg_gui_ul.fc = *fc;
+    for (n = 0UL; fc->peer_index[n] != '\0' &&
+                  n + 1UL < sizeof(tg_gui_ul.peer_index_copy); ++n) {
+        tg_gui_ul.peer_index_copy[n] = fc->peer_index[n];
+    }
+    tg_gui_ul.peer_index_copy[n] = '\0';
+    tg_gui_ul.fc.peer_index = tg_gui_ul.peer_index_copy;
+    tg_mtproto_upload_caption(caption);
     tg_gui_ul.stream = stream;
     tg_mtproto_query_fail[0] = '\0'; /* fresh reason for this upload */
     tg_gui_ul.f = fopen(path, "rb");
@@ -29106,7 +29146,13 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
     }
     tg_gui_ul.big_file = (unsigned long)file_size > TG_GUI_UL_BIG_THRESHOLD;
     if (tg_gui_ul.requested_photo) {
-        if (tg_gui_ul.big_file) {
+        if (tg_gui_ul.big_file && tg_gui_ul.album) {
+            /* alone it would go as a file; an album holds photos only */
+            sprintf(tg_mtproto_query_fail, "over 10 MiB");
+            fclose(tg_gui_ul.f);
+            tg_gui_ul.f = 0;
+            return 7;
+        } else if (tg_gui_ul.big_file) {
             tg_gui_ul.photo_fallback = 1;
         } else if (!tg_mtproto_photo_file_valid(tg_gui_ul.f, &why)) {
             sprintf(tg_mtproto_query_fail, "%.63s", why); /* 64 byte buffer */
@@ -29136,6 +29182,16 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
     }
     tg_gui_ul.name[n] = '\0';
     tg_gui_ul.quiet = tg_mtproto_open_quiet_stream(stream);
+#if !defined(TG_NO_GUI)
+    if (tg_gui_ul.batch) { /* the chat the batch began in */
+        tg_gui_ul.pc = tg_gui_batch.pc;
+        tg_gui_ul.ph = tg_gui_batch.ph;
+        tg_gui_ul.pl = tg_gui_batch.pl;
+        tg_gui_ul.ahh = tg_gui_batch.ahh;
+        tg_gui_ul.ahl = tg_gui_batch.ahl;
+        tg_gui_ul.hah = tg_gui_batch.hah;
+    } else
+#endif
     if (tg_mtproto_load_peer_cache_peer(
             tg_gui_ul.fc.peer_cache_file,
             tg_gui_ul.fc.peer_index, &tg_gui_ul.pc, &tg_gui_ul.ph,
@@ -29345,6 +29401,47 @@ static int tg_mtproto_upload_step(void)
         rand_lo = tg_mtproto_read_u32_le(rnd);
         rand_hi = tg_mtproto_read_u32_le(rnd + 4U);
         tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+#if !defined(TG_NO_GUI)
+        if (tg_gui_ul.album) {
+            /* Kept for the album: the parts become a photo of ours that is
+               in no chat, and the album names it when it leaves. */
+            if (tg_gui_batch.count >= TG_MTPROTO_ALBUM_MAX ||
+                tg_mtproto_build_messages_upload_media_photo(
+                    &writer, tg_gui_ul.pc, tg_gui_ul.ph, tg_gui_ul.pl,
+                    tg_gui_ul.ahh, tg_gui_ul.ahl, tg_gui_ul.hah,
+                    tg_gui_ul.file_id_hi, tg_gui_ul.file_id_lo,
+                    tg_gui_ul.parts, tg_gui_ul.name) != TG_MTPROTO_TL_OK) {
+                return 0; /* rc 1 */
+            }
+            memset(&result, 0, sizeof(result));
+            if (tg_mtproto_send_saved_query_on_context(
+                    tg_gui_ul.fc.host, tg_gui_ul.fc.port,
+                    tg_gui_ul.fc.api_id, tg_gui_ul.fc.auth_file,
+                    tg_gui_ul.fc.dc_id_text, tg_gui_ul.fc.context,
+                    query, writer.length, &result, tg_gui_ul.quiet,
+                    "mtproto uploadMedia(photo)", 600U) != 0 ||
+                result.result_constructor ==
+                    TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+                return 0; /* rc 1 */
+            }
+            /* a photo's answer carries its small preview and can come
+               packed; unpacked, its constructor still sits right before
+               the body */
+            if (tg_mtproto_unpack_gzip_result(
+                    &result, tg_gui_ul.quiet,
+                    "mtproto uploadMedia(photo)") != 0 ||
+                tg_mtproto_read_uploaded_photo(
+                    result.result_body - 4U, result.result_body_length + 4U,
+                    &tg_gui_batch.photos[tg_gui_batch.count]) !=
+                TG_MTPROTO_TL_OK) {
+                sprintf(tg_mtproto_query_fail, "no photo came back");
+                return 0; /* rc 1 */
+            }
+            ++tg_gui_batch.count;
+            tg_gui_ul.rc = 0;
+            return 0;
+        }
+#endif
         if (tg_gui_ul.as_photo) {
             build_status = tg_mtproto_build_messages_send_media_photo(
                 &writer, tg_gui_ul.pc, tg_gui_ul.ph, tg_gui_ul.pl,
@@ -31680,6 +31777,249 @@ int tg_gui_session_transfer_start_photo(const char *path,
     tg_gui_transfer_dir = 2;
     return 0;
 }
+
+#if !defined(TG_NO_GUI)
+/* Several files picked together. batch_begin() reads the open chat, which
+   is where all of them go whatever is open by then. Each file then starts
+   with transfer_start_batch_photo (kept for the album; 7 when it cannot be
+   a photo) or transfer_start_batch_file (sent alone), and is pumped and
+   ended like any other transfer. batch_send_album() makes one message out
+   of the photos that arrived, the caption on the first; batch_end() closes
+   the batch and drops what it still holds. */
+int tg_gui_session_batch_begin(FILE *stream)
+{
+    tg_mtproto_file_ctx fc;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || tg_gui_transfer_dir != 0 ||
+        stream == 0) {
+        return 1;
+    }
+    tg_gui_session_file_ctx(&fc);
+    memset(&tg_gui_batch, 0, sizeof(tg_gui_batch));
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_load_peer_cache_peer(
+        fc.peer_cache_file, fc.peer_index, &tg_gui_batch.pc,
+        &tg_gui_batch.ph, &tg_gui_batch.pl, &tg_gui_batch.ahh,
+        &tg_gui_batch.ahl, &tg_gui_batch.hah, quiet, "mtproto batch");
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return 1;
+    }
+    tg_gui_batch.open = 1;
+    return 0;
+}
+
+static int tg_gui_session_transfer_start_batch(const char *path,
+                                               const char *caption,
+                                               FILE *stream, int mode)
+{
+    tg_mtproto_file_ctx fc;
+    int rc;
+
+    if (!tg_gui_session_state.open || tg_gui_transfer_dir != 0 ||
+        !tg_gui_batch.open) {
+        return 1;
+    }
+    tg_gui_session_file_ctx(&fc);
+    rc = tg_mtproto_upload_begin(&fc, caption, path, stream, mode);
+    if (rc != 0) {
+        return rc;
+    }
+    tg_gui_transfer_dir = 2;
+    return 0;
+}
+
+int tg_gui_session_transfer_start_batch_photo(const char *path, FILE *stream)
+{
+    return tg_gui_session_transfer_start_batch(path, 0, stream, 2);
+}
+
+int tg_gui_session_transfer_start_batch_file(const char *path,
+                                             const char *caption,
+                                             FILE *stream)
+{
+    return tg_gui_session_transfer_start_batch(path, caption, stream, 3);
+}
+
+int tg_gui_session_batch_photos(void)
+{
+    return tg_gui_batch.open ? (int)tg_gui_batch.count : 0;
+}
+
+void tg_gui_session_batch_end(void)
+{
+    /* photos already up and not sent are left for Telegram to expire */
+    memset(&tg_gui_batch, 0, sizeof(tg_gui_batch));
+}
+
+/* The sendMultiMedia: ten photos with the longest file references, the
+   longest caption and the fixed fields. */
+#define TG_GUI_ALBUM_QUERY_MAX \
+    ((TG_MTPROTO_ALBUM_MAX * (TG_MTPROTO_FILE_REF_MAX + 56U)) + \
+     ((TG_MTPROTO_CAPTION_MAX * 2U) + 1U) + 64U)
+
+int tg_gui_session_batch_send_album(const char *caption, FILE *stream)
+{
+    static unsigned char query[TG_GUI_ALBUM_QUERY_MAX];
+    unsigned long random_ids[2U * TG_MTPROTO_ALBUM_MAX];
+    unsigned char rnd[8];
+    tg_mtproto_file_ctx fc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    FILE *quiet;
+    unsigned int i;
+    int rc = 1;
+
+    if (!tg_gui_session_state.open || tg_gui_transfer_dir != 0 ||
+        !tg_gui_batch.open || tg_gui_batch.count == 0U || stream == 0) {
+        return 1;
+    }
+    tg_gui_session_file_ctx(&fc);
+    tg_mtproto_upload_caption(caption); /* the engine is idle: its buffer */
+    for (i = 0U; i < tg_gui_batch.count; ++i) {
+        tg_mtproto_saved_session_random(rnd, sizeof(rnd));
+        random_ids[2U * i] = tg_mtproto_read_u32_le(rnd + 4U);
+        random_ids[(2U * i) + 1U] = tg_mtproto_read_u32_le(rnd);
+    }
+    tg_mtproto_query_fail[0] = '\0';
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_send_multi_media(
+            &writer, tg_gui_batch.pc, tg_gui_batch.ph, tg_gui_batch.pl,
+            tg_gui_batch.ahh, tg_gui_batch.ahl, tg_gui_batch.hah,
+            tg_gui_batch.photos, tg_gui_batch.count, tg_gui_ul.caption,
+            random_ids) == TG_MTPROTO_TL_OK) {
+        quiet = tg_mtproto_open_quiet_stream(stream);
+        memset(&result, 0, sizeof(result));
+        if (tg_mtproto_send_saved_query_on_context(
+                fc.host, fc.port, fc.api_id, fc.auth_file, fc.dc_id_text,
+                fc.context, query, writer.length, &result, quiet,
+                "mtproto sendMultiMedia", 600U) == 0 &&
+            result.result_constructor != TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+            rc = 0;
+        }
+        tg_mtproto_close_quiet_stream(quiet, stream);
+    }
+    {
+        char al[96];
+
+        sprintf(al, "album: send rc=%d, photos %u (%.40s)", rc,
+                tg_gui_batch.count, tg_mtproto_query_fail);
+        tg_gui_log(al);
+    }
+    tg_gui_batch.count = 0U; /* sent, or lost: either way not sent twice */
+    return rc;
+}
+#endif /* !TG_NO_GUI: files picked together */
+
+#if !defined(TG_NO_GUI) && !defined(TG_NO_SELFTEST)
+/* Files picked together, without a network: nothing starts outside a batch,
+   a file of the batch takes the batch's chat and not the open one, a file
+   that is no photo is refused for the album, a full album takes no more,
+   and the fullest album there can be still fits its query. */
+static int tg_gui_batch_self_test(void)
+{
+    static const char path[] = "telegram-batch-self-test.tmp";
+    static const unsigned char jpeg_ok[] = {
+        0xff,0xd8, 0xff,0xc0,0x00,0x0b,0x08,0x00,0x08,0x00,0x08,0x01,0x01,
+        0x11,0x00, 0xff,0xda,0x00,0x08,0x01,0x01,0x00,0x00,0x3f,0x00,
+        0x12,0x34, 0xff,0xd9 };
+    static tg_mtproto_auth_context ctx;
+    static unsigned char query[TG_GUI_ALBUM_QUERY_MAX];
+    static char cap[sizeof(tg_gui_ul.caption)];
+    unsigned long random_ids[2U * TG_MTPROTO_ALBUM_MAX];
+    tg_mtproto_file_ctx fc;
+    tg_mtproto_tl_writer w;
+    unsigned int i;
+    FILE *f;
+    int ok;
+
+    memset(&ctx, 0, sizeof(ctx));
+    memset(&fc, 0, sizeof(fc));
+    fc.context = &ctx;         /* never opened: closing it is a no-op */
+    fc.peer_index = "3";       /* the chat open NOW, which must not count */
+    fc.peer_cache_file = "telegram-batch-self-test.none";
+    f = tg_file_fopen_replace(path, "wb");
+    if (f == 0) {
+        return 2;
+    }
+    fwrite("not a photo\n", 1, 12U, f);
+    fclose(f);
+    memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+    memset(&tg_gui_batch, 0, sizeof(tg_gui_batch));
+    ok = tg_mtproto_upload_begin(&fc, 0, path, stdout, 2) == 1 &&
+         tg_mtproto_upload_begin(&fc, 0, path, stdout, 3) == 1 &&
+         !tg_gui_ul.active;
+    tg_gui_batch.open = 1;
+    tg_gui_batch.pc = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    tg_gui_batch.ph = 11UL;
+    tg_gui_batch.pl = 22UL;
+    tg_gui_batch.ahh = 33UL;
+    tg_gui_batch.ahl = 44UL;
+    tg_gui_batch.hah = 1;
+    /* a file of the batch: goes alone, to the batch's chat */
+    ok = ok && tg_mtproto_upload_begin(&fc, "c", path, stdout, 3) == 0 &&
+         tg_gui_ul.active && tg_gui_ul.batch && !tg_gui_ul.album &&
+         !tg_gui_ul.requested_photo && !tg_gui_ul.as_photo &&
+         tg_gui_ul.pc == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
+         tg_gui_ul.ph == 11UL && tg_gui_ul.pl == 22UL &&
+         tg_gui_ul.ahh == 33UL && tg_gui_ul.ahl == 44UL && tg_gui_ul.hah &&
+         strcmp(tg_gui_ul.caption, "c") == 0;
+    tg_mtproto_upload_cancel();
+    ok = ok && tg_mtproto_upload_end() == 6 && !tg_gui_ul.active;
+    /* the same file for the album: no photo, refused and said */
+    ok = ok && tg_mtproto_upload_begin(&fc, 0, path, stdout, 2) == 7 &&
+         !tg_gui_ul.active && strstr(tg_mtproto_query_fail, "JPEG") != 0;
+    f = tg_file_fopen_replace(path, "wb");
+    if (f == 0) {
+        return 2;
+    }
+    fwrite(jpeg_ok, 1, sizeof(jpeg_ok), f);
+    fclose(f);
+    /* a photo for the album: kept, not sent, the batch's chat again */
+    ok = ok && tg_mtproto_upload_begin(&fc, 0, path, stdout, 2) == 0 &&
+         tg_gui_ul.active && tg_gui_ul.batch && tg_gui_ul.album &&
+         tg_gui_ul.as_photo && tg_gui_ul.pl == 22UL;
+    tg_mtproto_upload_cancel();
+    ok = ok && tg_mtproto_upload_end() == 6;
+    /* a full album takes no more photos; a file still goes */
+    tg_gui_batch.count = TG_MTPROTO_ALBUM_MAX;
+    ok = ok && tg_mtproto_upload_begin(&fc, 0, path, stdout, 2) == 1 &&
+         !tg_gui_ul.active &&
+         tg_mtproto_upload_begin(&fc, 0, path, stdout, 3) == 0;
+    tg_mtproto_upload_cancel();
+    ok = ok && tg_mtproto_upload_end() == 6;
+    (void)remove(path);
+    /* the fullest album: ten photos, the longest references and caption */
+    for (i = 0U; i < TG_MTPROTO_ALBUM_MAX; ++i) {
+        tg_gui_batch.photos[i].id_lo = i + 1UL;
+        tg_gui_batch.photos[i].file_reference_len = TG_MTPROTO_FILE_REF_MAX;
+        memset(tg_gui_batch.photos[i].file_reference, (int)i,
+               TG_MTPROTO_FILE_REF_MAX);
+        random_ids[2U * i] = i;
+        random_ids[(2U * i) + 1U] = i;
+    }
+    memset(cap, 'c', sizeof(cap) - 1U);
+    cap[sizeof(cap) - 1U] = '\0';
+    tg_mtproto_tl_writer_init(&w, query, sizeof(query));
+    ok = ok && tg_mtproto_build_messages_send_multi_media(
+                   &w, tg_gui_batch.pc, tg_gui_batch.ph, tg_gui_batch.pl,
+                   tg_gui_batch.ahh, tg_gui_batch.ahl, tg_gui_batch.hah,
+                   tg_gui_batch.photos, TG_MTPROTO_ALBUM_MAX, cap,
+                   random_ids) == TG_MTPROTO_TL_OK;
+    /* closing the batch drops what it held */
+    tg_gui_session_batch_end();
+    ok = ok && !tg_gui_batch.open && tg_gui_session_batch_photos() == 0;
+    memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
+    tg_mtproto_query_fail[0] = '\0';
+    if (!ok) {
+        puts("probe self-test: files picked together failed");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 int tg_gui_session_transfer_requested_photo(void)
 {

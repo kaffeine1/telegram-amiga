@@ -359,7 +359,14 @@ it works today:
 
 Middle, more interface:
 
-- albums when sending, several photos in one message;
+- albums when sending, several photos in one message: done (several
+  files picked in the requester with Shift, ten at most; photos leave
+  as one album through `messages.uploadMedia` and one
+  `messages.sendMultiMedia`, the caption on the first; other files go
+  one message each; all to the chat open when they were picked). Still
+  missing from its section: several icons dropped on the window at
+  once, albums of documents or videos, more than ten photos split into
+  several albums, and showing a received album as one block;
 - select several messages: done (Select in the message's menu, click
   and Shift+click, a bar in the composer's place with Forward, Delete
   and Cancel; one `messages.forwardMessages` and one

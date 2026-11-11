@@ -310,6 +310,56 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_photo(
     unsigned long random_id_hi,
     unsigned long random_id_lo);
 
+/* Albums: several photos in one message. A photo goes up in parts as usual,
+   messages.uploadMedia#14967978 turns the parts into a photo of ours that is
+   in no chat yet, and one messages.sendMultiMedia#1bf89d74 names up to
+   TG_MTPROTO_ALBUM_MAX of them. Layer 214. */
+#define TG_MTPROTO_ALBUM_MAX 10U
+
+typedef struct tg_mtproto_album_photo {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    unsigned long file_reference_len;
+    unsigned char file_reference[TG_MTPROTO_FILE_REF_MAX];
+} tg_mtproto_album_photo;
+
+tg_mtproto_tl_status tg_mtproto_build_messages_upload_media_photo(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long file_id_hi,
+    unsigned long file_id_lo,
+    unsigned long file_parts,
+    const char *file_name);
+
+/* The messageMediaPhoto#695150d7 that uploadMedia answers; `body` starts at
+   the constructor. Fails on anything that cannot be named in an album. */
+tg_mtproto_tl_status tg_mtproto_read_uploaded_photo(
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_album_photo *out);
+
+/* caption is UTF-8 and goes on the first photo; random_ids holds a (hi, lo)
+   pair for each photo. */
+tg_mtproto_tl_status tg_mtproto_build_messages_send_multi_media(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const tg_mtproto_album_photo *photos,
+    unsigned int count,
+    const char *caption,
+    const unsigned long *random_ids);
+
 /* Same sendMedia envelope, but the uploaded file is referenced as inputFileBig
    after upload.saveBigFilePart. */
 tg_mtproto_tl_status tg_mtproto_build_messages_send_media_big_document(

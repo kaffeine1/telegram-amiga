@@ -4041,6 +4041,192 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_photo(
     return status;
 }
 
+/* --- Albums: several photos in one message. --------------------------------
+   Every photo goes up in parts like a single one. messages.uploadMedia then
+   turns the parts into a photo that is ours but in no chat, and one
+   messages.sendMultiMedia names those photos and makes the album. The
+   window only: the text client sends one file at a time. */
+#if !defined(TG_NO_GUI)
+
+/* messages.uploadMedia#14967978 flags:# peer:InputPeer media:InputMedia, with
+   inputMediaUploadedPhoto#1e287d04 and a small inputFile. Layer 214. */
+tg_mtproto_tl_status tg_mtproto_build_messages_upload_media_photo(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long file_id_hi,
+    unsigned long file_id_lo,
+    unsigned long file_parts,
+    const char *file_name)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || file_name == 0 || file_name[0] == '\0' ||
+        file_parts == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x14967978UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) { /* inputMediaUploadedPhoto */
+        status = tg_mtproto_tl_write_u32(writer, 0x1e287d04UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* media flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0xf52ff27fUL); /* inputFile */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, file_id_hi, file_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, file_parts);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, file_name);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, ""); /* md5: server-side optional */
+    }
+    return status;
+}
+
+/* What messages.uploadMedia answers for a photo:
+   messageMediaPhoto#695150d7 flags:# photo:flags.0?Photo. `body` starts at
+   the constructor. A photo without id or file reference cannot be named in
+   the album, so it counts as a failure here. */
+tg_mtproto_tl_status tg_mtproto_read_uploaded_photo(
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_album_photo *out)
+{
+    /* off the stack: the meta carries the variant list of a photo */
+    static tg_mtproto_photo_meta meta;
+    tg_mtproto_tl_reader reader;
+    unsigned long ctor;
+    unsigned long flags;
+
+    if (body == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(out, 0, sizeof(*out));
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &ctor) != TG_MTPROTO_TL_OK ||
+        ctor != 0x695150d7UL ||
+        tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & 1UL) == 0UL ||
+        tg_mtproto_read_photo(&reader, &meta) != TG_MTPROTO_TL_OK ||
+        (meta.id_hi == 0UL && meta.id_lo == 0UL) ||
+        meta.file_reference_len == 0UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    out->id_hi = meta.id_hi;
+    out->id_lo = meta.id_lo;
+    out->access_hash_hi = meta.access_hash_hi;
+    out->access_hash_lo = meta.access_hash_lo;
+    out->file_reference_len = meta.file_reference_len;
+    memcpy(out->file_reference, meta.file_reference, meta.file_reference_len);
+    return TG_MTPROTO_TL_OK;
+}
+
+/* messages.sendMultiMedia#1bf89d74 flags:# peer:InputPeer
+   multi_media:Vector<InputSingleMedia>, every item an
+   inputSingleMedia#1cc6e91f flags:# media:InputMedia random_id:long
+   message:string holding inputMediaPhoto#b3ba0635 flags:# id:InputPhoto
+   with inputPhoto#3bb3b94a id access_hash file_reference. Layer 214.
+   The caption (UTF-8, NULL/empty for none) goes on the first photo: an album
+   shows one caption when one item alone carries it. random_ids holds a
+   (hi, lo) pair for each photo. */
+tg_mtproto_tl_status tg_mtproto_build_messages_send_multi_media(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const tg_mtproto_album_photo *photos,
+    unsigned int count,
+    const char *caption,
+    const unsigned long *random_ids)
+{
+    tg_mtproto_tl_status status;
+    unsigned int i;
+
+    if (writer == 0 || photos == 0 || random_ids == 0 || count == 0U ||
+        count > TG_MTPROTO_ALBUM_MAX) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x1bf89d74UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0x1cb5c415UL); /* Vector */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, (unsigned long)count);
+    }
+    for (i = 0U; i < count && status == TG_MTPROTO_TL_OK; ++i) {
+        const tg_mtproto_album_photo *ph = &photos[i];
+
+        if (ph->file_reference_len == 0UL ||
+            ph->file_reference_len > TG_MTPROTO_FILE_REF_MAX) {
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
+        status = tg_mtproto_tl_write_u32(writer, 0x1cc6e91fUL);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, 0UL); /* item flags */
+        }
+        if (status == TG_MTPROTO_TL_OK) { /* inputMediaPhoto */
+            status = tg_mtproto_tl_write_u32(writer, 0xb3ba0635UL);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, 0UL); /* media flags */
+        }
+        if (status == TG_MTPROTO_TL_OK) { /* inputPhoto */
+            status = tg_mtproto_tl_write_u32(writer, 0x3bb3b94aUL);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u64(writer, ph->id_hi, ph->id_lo);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u64(writer, ph->access_hash_hi,
+                                             ph->access_hash_lo);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_bytes(writer, ph->file_reference,
+                                               ph->file_reference_len);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u64(writer, random_ids[2U * i],
+                                             random_ids[(2U * i) + 1U]);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_write_string(
+                writer, (i == 0U && caption != 0) ? caption : "");
+        }
+    }
+    return status;
+}
+#endif /* !TG_NO_GUI: albums */
+
 tg_mtproto_tl_status tg_mtproto_build_messages_send_media_big_document(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -10057,6 +10243,176 @@ static int tg_peer_notify_self_test(void)
     return 0;
 }
 
+#if !defined(TG_NO_GUI)
+/* Albums: the uploadMedia that keeps a photo out of the chat, its answer,
+   and the sendMultiMedia that names two photos, caption on the first. */
+static int tg_album_self_test(void)
+{
+    static unsigned char wire[768];
+    static tg_mtproto_album_photo photos[TG_MTPROTO_ALBUM_MAX + 1U];
+    static const unsigned char ref_a[] = { 1U, 2U, 3U, 4U, 5U };
+    static const unsigned char ref_b[] = { 9U, 8U, 7U };
+    static const unsigned long rnd[4] = { 0x11UL, 0x12UL, 0x21UL, 0x22UL };
+    tg_mtproto_tl_writer w;
+    tg_mtproto_tl_reader r;
+    tg_mtproto_album_photo got;
+    const unsigned char *bytes;
+    unsigned long length;
+    unsigned long a;
+    unsigned long b;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long c;
+    int ok;
+
+    /* uploadMedia: Saved Messages as the peer, two parts, the name */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = tg_mtproto_build_messages_upload_media_photo(
+             &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+             0x77UL, 0x66UL, 2UL, "a.jpg") == TG_MTPROTO_TL_OK;
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x14967978UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 0UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x7da07ec9UL && /* inputPeerSelf */
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x1e287d04UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 0UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0xf52ff27fUL &&
+         tg_mtproto_tl_read_u64(&r, &hi, &lo) == TG_MTPROTO_TL_OK &&
+         hi == 0x77UL && lo == 0x66UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 2UL &&
+         tg_mtproto_tl_read_bytes(&r, &bytes, &length) == TG_MTPROTO_TL_OK &&
+         length == 5UL && memcmp(bytes, "a.jpg", 5U) == 0 &&
+         tg_mtproto_tl_read_bytes(&r, &bytes, &length) == TG_MTPROTO_TL_OK &&
+         length == 0UL && r.offset == w.length;
+    ok = ok && tg_mtproto_build_messages_upload_media_photo(
+                   &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+                   1UL, 1UL, 0UL, "a.jpg") != TG_MTPROTO_TL_OK;
+    if (!ok) {
+        puts("login self-test: album uploadMedia failed");
+        return 1;
+    }
+    /* its answer: a photo with id, hash and file reference */
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    (void)tg_mtproto_tl_write_u32(&w, 0x695150d7UL);
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);          /* photo present */
+    (void)tg_mtproto_tl_write_u32(&w, 0xfb197a65UL); /* photo */
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u64(&w, 0x0aUL, 0x0bUL);
+    (void)tg_mtproto_tl_write_u64(&w, 0x0cUL, 0x0dUL);
+    (void)tg_mtproto_tl_write_bytes(&w, ref_a, sizeof(ref_a));
+    (void)tg_mtproto_tl_write_u32(&w, 1700000000UL); /* date */
+    (void)tg_mtproto_tl_write_u32(&w, 0x1cb5c415UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);          /* no sizes */
+    (void)tg_mtproto_tl_write_u32(&w, 4UL);          /* dc */
+    ok = tg_mtproto_read_uploaded_photo(wire, w.length, &got) ==
+             TG_MTPROTO_TL_OK &&
+         got.id_hi == 0x0aUL && got.id_lo == 0x0bUL &&
+         got.access_hash_hi == 0x0cUL && got.access_hash_lo == 0x0dUL &&
+         got.file_reference_len == sizeof(ref_a) &&
+         memcmp(got.file_reference, ref_a, sizeof(ref_a)) == 0;
+    /* no photo inside, an empty photo, another media: all refused */
+    wire[4] = 0U;
+    ok = ok && tg_mtproto_read_uploaded_photo(wire, w.length, &got) !=
+                   TG_MTPROTO_TL_OK;
+    wire[4] = 1U;
+    wire[0] = 0xd8U;
+    ok = ok && tg_mtproto_read_uploaded_photo(wire, w.length, &got) !=
+                   TG_MTPROTO_TL_OK;
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    (void)tg_mtproto_tl_write_u32(&w, 0x695150d7UL);
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0x2331b22dUL); /* photoEmpty */
+    (void)tg_mtproto_tl_write_u64(&w, 0x0aUL, 0x0bUL);
+    ok = ok && tg_mtproto_read_uploaded_photo(wire, w.length, &got) !=
+                   TG_MTPROTO_TL_OK;
+    if (!ok) {
+        puts("login self-test: album uploaded photo failed");
+        return 1;
+    }
+    /* the album: two photos, the caption on the first one only */
+    memset(photos, 0, sizeof(photos));
+    photos[0].id_hi = 0x0aUL;
+    photos[0].id_lo = 0x0bUL;
+    photos[0].access_hash_hi = 0x0cUL;
+    photos[0].access_hash_lo = 0x0dUL;
+    photos[0].file_reference_len = sizeof(ref_a);
+    memcpy(photos[0].file_reference, ref_a, sizeof(ref_a));
+    photos[1].id_hi = 0x1aUL;
+    photos[1].id_lo = 0x1bUL;
+    photos[1].access_hash_hi = 0x1cUL;
+    photos[1].access_hash_lo = 0x1dUL;
+    photos[1].file_reference_len = sizeof(ref_b);
+    memcpy(photos[1].file_reference, ref_b, sizeof(ref_b));
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = tg_mtproto_build_messages_send_multi_media(
+             &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+             photos, 2U, "two", rnd) == TG_MTPROTO_TL_OK;
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    ok = ok && tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x1bf89d74UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 0UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x7da07ec9UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x1cb5c415UL &&
+         tg_mtproto_tl_read_u32(&r, &c) == TG_MTPROTO_TL_OK && c == 2UL;
+    for (c = 0UL; ok && c < 2UL; ++c) {
+        ok = tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0x1cc6e91fUL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0UL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0xb3ba0635UL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0UL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0x3bb3b94aUL &&
+             tg_mtproto_tl_read_u64(&r, &hi, &lo) == TG_MTPROTO_TL_OK &&
+             hi == photos[c].id_hi && lo == photos[c].id_lo &&
+             tg_mtproto_tl_read_u64(&r, &a, &b) == TG_MTPROTO_TL_OK &&
+             a == photos[c].access_hash_hi &&
+             b == photos[c].access_hash_lo &&
+             tg_mtproto_tl_read_bytes(&r, &bytes, &length) ==
+                 TG_MTPROTO_TL_OK &&
+             length == photos[c].file_reference_len &&
+             memcmp(bytes, photos[c].file_reference, length) == 0 &&
+             tg_mtproto_tl_read_u64(&r, &hi, &lo) == TG_MTPROTO_TL_OK &&
+             hi == rnd[2UL * c] && lo == rnd[(2UL * c) + 1UL] &&
+             tg_mtproto_tl_read_bytes(&r, &bytes, &length) ==
+                 TG_MTPROTO_TL_OK &&
+             length == (c == 0UL ? 3UL : 0UL) &&
+             (c != 0UL || memcmp(bytes, "two", 3U) == 0);
+    }
+    ok = ok && r.offset == w.length;
+    /* none, too many, or a photo without its reference: not built (the
+       eleven are all good photos, so that only their number is wrong) */
+    for (c = 2UL; c <= TG_MTPROTO_ALBUM_MAX; ++c) {
+        photos[c] = photos[0];
+    }
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && tg_mtproto_build_messages_send_multi_media(
+                   &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+                   photos, 0U, "", rnd) != TG_MTPROTO_TL_OK &&
+         tg_mtproto_build_messages_send_multi_media(
+             &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+             photos, TG_MTPROTO_ALBUM_MAX + 1U, "", rnd) != TG_MTPROTO_TL_OK;
+    photos[1].file_reference_len = 0UL;
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && tg_mtproto_build_messages_send_multi_media(
+                   &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, 0,
+                   photos, 2U, "", rnd) != TG_MTPROTO_TL_OK;
+    if (!ok) {
+        puts("login self-test: album sendMultiMedia failed");
+        return 1;
+    }
+    return 0;
+}
+#endif /* !TG_NO_GUI */
+
 int tg_mtproto_login_self_test(void)
 {
     static const unsigned char expected_send_code[] = {
@@ -10107,7 +10463,7 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #if !defined(TG_NO_GUI)
-    if (tg_avatar_self_test() != 0) {
+    if (tg_avatar_self_test() != 0 || tg_album_self_test() != 0) {
         return 2;
     }
 #endif
