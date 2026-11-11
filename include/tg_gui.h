@@ -285,7 +285,19 @@ typedef struct tg_gui_chat {
     int pinned;               /* pinned on Telegram: first in the list, pin mark */
     int unread_mark;          /* marked as unread: an empty badge when unread is 0 */
     int draft;                /* preview is this chat's draft: "Draft:" before it */
+    int muted;                /* muted on Telegram: a dim badge, or the mute mark */
 } tg_gui_chat;
+
+/* A muted chat in the list, as the official clients show it: its unread
+   badge is dim instead of the badge colour, and with nothing unread a small
+   crossed loudspeaker sits where the badge would be (left of the pin mark
+   when the chat is pinned too). The pens of a row's badge and of its
+   number (on the dim fill the number takes the window's own colour, the
+   one the dim pen is made to be read against), and the mark's width for
+   this line height. */
+int tg_gui_chat_badge_pen(const tg_gui_chat *chat);
+int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat);
+int tg_gui_mute_mark_width(int lh);
 
 /* Window mode: the normal chat UI, or one of the first-login screens shown when
    there is no saved session yet. The login screens reuse the input buffer +

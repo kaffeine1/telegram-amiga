@@ -2328,6 +2328,64 @@ static void tg_gui_draw_pin_mark(tg_gui_backend *backend, int pen, int x,
                                         nw, needle_h));
 }
 
+/* The mute mark of a muted chat: a small loudspeaker with a cross after
+   it, from rectangles only like the pin. Eight units wide and seven tall;
+   the unit is two pixels from a 14-pixel line up, one below. */
+static int tg_gui_mute_mark_unit(int lh)
+{
+    return (lh >= 14) ? 2 : 1;
+}
+
+int tg_gui_mute_mark_width(int lh)
+{
+    return 8 * tg_gui_mute_mark_unit(lh);
+}
+
+static void tg_gui_draw_mute_mark(tg_gui_backend *backend, int pen, int x,
+                                  int centre_y, int lh)
+{
+    static const signed char cross[5][2] = {
+        { 5, 2 }, { 7, 2 }, { 6, 3 }, { 5, 4 }, { 7, 4 }
+    };
+    int u = tg_gui_mute_mark_unit(lh);
+    int y = centre_y - (7 * u) / 2;
+    int k;
+
+    /* the loudspeaker: its box, then the cone in two steps */
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x, y + 2 * u, 2 * u, 3 * u));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + 2 * u, y + u, u, 5 * u));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + 3 * u, y, u, 7 * u));
+    for (k = 0; k < 5; ++k) {
+        backend->fill_rect(backend, pen,
+                           tg_gui_make_rect(x + cross[k][0] * u,
+                                            y + cross[k][1] * u, u, u));
+    }
+}
+
+int tg_gui_chat_badge_pen(const tg_gui_chat *chat)
+{
+    if (chat == 0) {
+        return TG_GUI_PEN_BADGE;
+    }
+    /* A chat that just got a notification draws its badge in the accent
+       pen to stand out (the live event loop toggles chat->flash for a true
+       blink); a muted one keeps its count but not the colour. */
+    return chat->flash ? TG_GUI_PEN_ACCENT
+                       : chat->muted ? TG_GUI_PEN_TEXT_DIM
+                                     : TG_GUI_PEN_BADGE;
+}
+
+int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat)
+{
+    /* White on the dim grey is hard to read; the window's colour, which
+       the dim pen is chosen to stand out from, reads well on it. */
+    return (chat != 0 && chat->muted && !chat->flash) ? TG_GUI_PEN_WINDOW
+                                                      : TG_GUI_PEN_BADGE_TEXT;
+}
+
 static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                  tg_gui_backend *backend, int sidebar_w,
                                  int content_h, int lh)
@@ -2485,6 +2543,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             int name_limit;
             int badge_on;
             int time_x = 0;
+            int right_x; /* where what sits at the row's right begins */
 
             /* The peer cache carries no last-message preview, so a row is a
                single line: the name and the unread badge sit on the avatar's
@@ -2531,6 +2590,18 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                                  : y + row_h / 2,
                                      lh);
             }
+            right_x = (badge_on || (chat->pinned && badge_w > 0))
+                          ? badge_x : list_w - 6;
+            /* A muted chat with nothing unread shows the mute mark there,
+               left of the pin when it has one; with something unread its
+               dim badge says it. */
+            if (chat->muted && !badge_on) {
+                right_x -= 4 + tg_gui_mute_mark_width(lh);
+                tg_gui_draw_mute_mark(backend, preview_pen, right_x,
+                                      has_preview ? y + slot_h + slot_h / 2
+                                                  : y + row_h / 2,
+                                      lh);
+            }
             /* Name clips before the time column (two-line) or before the badge
                / row edge (single-line). */
             if (has_preview) {
@@ -2543,10 +2614,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                 }
                 name_limit = time_x - 6;
             } else {
-                name_limit = (badge_on ||
-                              (chat->pinned && badge_w > 0))
-                                 ? (badge_x - 6)
-                                 : (list_w - 10);
+                name_limit = right_x - (right_x < list_w - 6 ? 6 : 4);
             }
             tg_gui_draw_clipped(backend, name_pen, text_x, name_baseline,
                                 chat->name, name_limit - text_x);
@@ -2559,8 +2627,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                 backend->draw_text(backend, preview_pen, time_x,
                                    name_baseline, chat->time,
                                    (unsigned long)strlen(chat->time));
-                preview_limit = badge_on ? (badge_x - 4)
-                                         : (list_w - 10);
+                preview_limit = right_x - 4;
                 /* A draft says so before its text, in the link pen so it
                    stands apart from a message (the official clients use
                    red, which the palette does not have). */
@@ -2592,12 +2659,7 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                    stays inside the fill either way. */
                 badge_top = has_preview ? y + slot_h + (slot_h - badge_h) / 2
                                         : y + (row_h - badge_h) / 2;
-                /* A chat that just got a notification draws its badge in the
-                   accent pen to stand out; the live event loop toggles
-                   chat->flash for a true blink. */
-                tg_gui_fill_pill(backend,
-                                 chat->flash ? TG_GUI_PEN_ACCENT
-                                             : TG_GUI_PEN_BADGE,
+                tg_gui_fill_pill(backend, tg_gui_chat_badge_pen(chat),
                                  tg_gui_make_rect(badge_x, badge_top, badge_w,
                                                   badge_h));
                 num_x = badge_x +
@@ -2607,7 +2669,8 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                             2;
                 /* Centred in the pill both ways: horizontally above, and
                    vertically from the font's own ascent. */
-                backend->draw_text(backend, TG_GUI_PEN_BADGE_TEXT, num_x,
+                backend->draw_text(backend, tg_gui_chat_badge_text_pen(chat),
+                                   num_x,
                                    tg_gui_navigation_baseline(backend, badge_top,
                                                            badge_h),
                                    badge, (unsigned long)strlen(badge));
@@ -8533,6 +8596,92 @@ static int tg_gui_notify_queue_self_test(void)
     return 0;
 }
 
+/* A muted chat in the list: the dim badge when it has something unread,
+   the small crossed loudspeaker when it has not, beside the pin when it is
+   pinned too. The mark is eight rectangles. */
+static int tg_gui_mute_mark_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_backend backend;
+    tg_gui_record record;
+    tg_gui_chat *chat = &state->chats[1];
+    int plain;
+    int muted;
+    int pinned;
+    int both;
+    int unread;
+    int unread_muted;
+
+    memset(&backend, 0, sizeof(backend));
+    backend.context = &record;
+    backend.width = tg_gui_rec_width;
+    backend.height = tg_gui_rec_height;
+    backend.line_height = tg_gui_rec_line_height;
+    backend.text_width = tg_gui_rec_text_width;
+    backend.draw_text = tg_gui_rec_text;
+    backend.fill_rect = tg_gui_rec_fill;
+    backend.avatar_fill = tg_gui_rec_avatar;
+    state->selected_msg = -1;
+    state->chat_count = 2;
+    tg_gui_copy(state->chats[0].name, sizeof(state->chats[0].name), "One");
+    state->chats[0].index = 1UL;
+    tg_gui_copy(chat->name, sizeof(chat->name), "Two");
+    chat->index = 2UL;
+#define TG_MUTE_PAINT(out) \
+    do { \
+        memset(&record, 0, sizeof(record)); \
+        record.width = 480; \
+        record.height = 320; \
+        record.line_h = 18; \
+        tg_gui_paint(state, &backend); \
+        (out) = record.fills; \
+    } while (0)
+    TG_MUTE_PAINT(plain);
+    chat->muted = 1;
+    TG_MUTE_PAINT(muted);
+    chat->pinned = 1;
+    TG_MUTE_PAINT(both);
+    chat->muted = 0;
+    TG_MUTE_PAINT(pinned);
+    chat->pinned = 0;
+    chat->unread = 3;
+    TG_MUTE_PAINT(unread);
+    chat->muted = 1;
+    TG_MUTE_PAINT(unread_muted);
+#undef TG_MUTE_PAINT
+    if (muted != plain + 8 || both != pinned + 8 || pinned <= plain ||
+        unread_muted != unread) {
+        printf("gui self-test: mute mark wrong (fills %d/%d plain, %d/%d "
+               "pinned, %d/%d unread)\n", plain, muted, pinned, both,
+               unread, unread_muted);
+        return 2;
+    }
+    /* the badge: dim when muted, with its number in the window's colour;
+       the accent and the usual number while it blinks either way */
+    if (tg_gui_chat_badge_pen(chat) != TG_GUI_PEN_TEXT_DIM ||
+        tg_gui_chat_badge_text_pen(chat) != TG_GUI_PEN_WINDOW) {
+        puts("gui self-test: a muted chat's badge is not dim");
+        return 2;
+    }
+    chat->flash = 1;
+    if (tg_gui_chat_badge_pen(chat) != TG_GUI_PEN_ACCENT ||
+        tg_gui_chat_badge_text_pen(chat) != TG_GUI_PEN_BADGE_TEXT) {
+        puts("gui self-test: a muted chat's badge does not blink");
+        return 2;
+    }
+    chat->flash = 0;
+    chat->muted = 0;
+    if (tg_gui_chat_badge_pen(chat) != TG_GUI_PEN_BADGE ||
+        tg_gui_chat_badge_text_pen(chat) != TG_GUI_PEN_BADGE_TEXT ||
+        tg_gui_chat_badge_text_pen(0) != TG_GUI_PEN_BADGE_TEXT ||
+        tg_gui_chat_badge_pen(0) != TG_GUI_PEN_BADGE ||
+        tg_gui_mute_mark_width(8) != 8 || tg_gui_mute_mark_width(18) != 16) {
+        puts("gui self-test: badge pen or mute mark width wrong");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_gui_notify_menu_self_test(void)
 {
     tg_gui_state *state = tg_gui_test_scratch_state();
@@ -9311,6 +9460,7 @@ int tg_gui_self_test(void)
         tg_gui_notify_override_self_test() != 0 ||
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||
+        tg_gui_mute_mark_self_test() != 0 ||
         tg_gui_notify_sound_preferences_self_test() != 0 ||
         tg_gui_notify_sound_override_self_test() != 0 ||
         tg_gui_notify_sound_choice_self_test() != 0 ||

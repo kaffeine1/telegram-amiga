@@ -346,9 +346,12 @@ it works today:
 - Mute in the chat's menu sent to Telegram: done
   (`account.updateNotifySettings`, the mute alone, for good;
   `updateNotifySettings` followed live; `account.getNotifySettings` the
-  first time a chat's mute is needed). Still missing: a mute for a few
-  hours, a mark on muted chats in the list, the text client's own
-  command;
+  first time a chat's mute is needed), and muted chats are marked in
+  the list: a grey unread badge, or a small crossed loudspeaker when
+  nothing is unread; the mutes are learnt in the background after the
+  start, one `account.getNotifySettings` a chat, and follow every
+  change after it. Still missing: a mute for a few hours, the text
+  client's own command;
 - an ARexx port: done, AMIGRAM with SHOW, HIDE, OPEN <name>, QUIT, the
   answers UNREAD, CHAT and VERSION, and SEND <chat> <text> behind a
   switch that is off by default, in the settings panel; the window

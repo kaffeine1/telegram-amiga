@@ -22947,21 +22947,55 @@ static void tg_gui_mentions_chat_opened(int other_chat)
 #define tg_gui_mentions_show() (0)
 #endif
 
+/* Whether Telegram holds this row's chat muted right now, as far as the
+   dialog list, a change on another device or a Mute from here said. A row
+   knows a user from the rest, not a basic group from a channel: both are
+   asked, the group first. */
+static int tg_gui_row_muted(const tg_chat_list_row *row, unsigned long now)
+{
+    tg_mtproto_peer_notify_settings settings;
+
+    if (row->index == TG_GUI_SAVED_PEER_INDEX) {
+        return 0;
+    }
+    if (row->is_user) {
+        tg_mtproto_peer_notify_get(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                   row->peer_id_hi, row->peer_id_lo,
+                                   &settings);
+        return settings.valid && settings.mute_until > now;
+    }
+    tg_mtproto_peer_notify_get(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR,
+                               row->peer_id_hi, row->peer_id_lo, &settings);
+    if (!settings.valid) {
+        tg_mtproto_peer_notify_get(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                   row->peer_id_hi, row->peer_id_lo,
+                                   &settings);
+    }
+    return settings.valid && settings.mute_until > now;
+}
+
+/* The count of mute changes the list was last drawn with. */
+static unsigned long tg_gui_mutes_seen = 0UL;
+static int tg_gui_session_apply_mute_updates(void);
+
 /* Pinned rows first, in pin order, marked; the others after them in the
-   order they had. Stable and in place. The unread marks go on here too:
-   every projection of the list passes through. */
+   order they had. Stable and in place. The unread marks and the mutes go
+   on here too: every projection of the list passes through. */
 static void tg_gui_pins_apply(tg_chat_list_row *rows, int count)
 {
+    unsigned long now = tg_gui_session_server_time();
     int out = 0;
     int p;
     int j;
 
+    tg_gui_mutes_seen = tg_mtproto_peer_notify_mute_changes();
     for (j = 0; j < count; ++j) {
         rows[j].pinned = 0;
         rows[j].unread_mark =
             rows[j].index != TG_GUI_SAVED_PEER_INDEX &&
             tg_gui_mark_find(rows[j].is_user, rows[j].peer_id_hi,
                              rows[j].peer_id_lo) >= 0;
+        rows[j].muted = tg_gui_row_muted(&rows[j], now);
     }
     for (p = 0; p < tg_gui_pin_count && out < count; ++p) {
         for (j = out; j < count; ++j) {
@@ -23257,6 +23291,52 @@ static int tg_gui_pins_self_test(void)
     if (!ok) {
         puts("probe self-test: pinned chats not first in pin order");
         return 2;
+    }
+    /* The mutes go on in the same pass. Rows now: user 103, group 102,
+       user 100, user 101, Saved Messages. A mute that is over, one that
+       holds, a group known as a channel, and Saved Messages, which is
+       never muted; each change is counted, the same value again is not. */
+    {
+        unsigned long now = tg_gui_session_server_time();
+        unsigned long before = tg_mtproto_peer_notify_mute_changes();
+        unsigned long after;
+
+        rows[4].peer_id_lo = 100UL; /* the id of a muted user: still not */
+        rows[4].is_user = 1;
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                        0UL, 100UL, 0x7fffffffUL);
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                        0UL, 101UL, now - 10UL);
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                        0UL, 102UL, now + 3600UL);
+        after = tg_mtproto_peer_notify_mute_changes();
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                        0UL, 100UL, 0x7fffffffUL);
+        ok = after == before + 3UL &&
+             tg_mtproto_peer_notify_mute_changes() == after &&
+             tg_gui_mutes_seen != after;
+        tg_gui_pins_apply(rows, 5);
+        ok = ok && tg_gui_mutes_seen == after && !rows[0].muted &&
+             rows[1].muted && rows[2].muted && !rows[3].muted &&
+             !rows[4].muted;
+        /* unmuted again: the next pass takes the mark away */
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                        0UL, 100UL, 0UL);
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                        0UL, 102UL, 0UL);
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                        0UL, 101UL, 0UL);
+        ok = ok && tg_mtproto_peer_notify_mute_changes() == after + 3UL;
+        tg_gui_pins_apply(rows, 5);
+        ok = ok && !rows[1].muted && !rows[2].muted;
+        /* a chat learnt for the first time and not muted is no change */
+        tg_mtproto_peer_notify_set_mute(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR,
+                                        0UL, 777UL, 0UL);
+        ok = ok && tg_mtproto_peer_notify_mute_changes() == after + 3UL;
+        if (!ok) {
+            puts("probe self-test: muted chats not marked in the list");
+            return 2;
+        }
     }
     return 0;
 }
@@ -25811,6 +25891,11 @@ int tg_gui_session_mark_unread(unsigned long peer_index, int unread,
    its first pages when it is: without this a chat muted on Telegram
    would pop up here after a restart. A chat that cannot be asked about is
    kept as not muted, so it is asked once. */
+/* Set when the last question to Telegram about a chat's mute got no usable
+   answer: the background learning of the list's mutes stops there for the
+   run, rather than ask on through a flood wait or a dead link. */
+static int tg_gui_mute_ask_failed = 0;
+
 static void tg_gui_session_learn_peer_notify(unsigned long pc,
                                              unsigned long ph,
                                              unsigned long pl,
@@ -25848,6 +25933,7 @@ static void tg_gui_session_learn_peer_notify(unsigned long pc,
     if (!kept) {
         tg_mtproto_peer_notify_set_mute(pc, ph, pl, 0UL);
     }
+    tg_gui_mute_ask_failed = !kept;
     tg_gui_log(kept ? "mute: asked Telegram" : "mute: could not ask Telegram");
 }
 
@@ -26017,6 +26103,7 @@ int tg_gui_session_set_muted(unsigned long peer_index, int muted,
     }
     tg_mtproto_peer_notify_set_mute(pc, ph, pl, until);
     tg_gui_log(muted ? "mute: muted on Telegram" : "mute: unmuted on Telegram");
+    (void)tg_gui_session_apply_mute_updates(); /* the row's mark, at once */
     return 0;
 }
 
@@ -33374,6 +33461,108 @@ static int tg_gui_session_apply_folder_updates(void)
     return 1;
 }
 
+#if !defined(TG_NO_GUI)
+/* The mutes of the chats in the list. The chat list is not read from
+   Telegram at every start (an existing cache is used as it is), so a run
+   begins knowing the mute of the open chat and little else. The rest is
+   learnt in the background: one chat a step, one small
+   account.getNotifySettings, top of the list first, a few seconds apart,
+   and never again in the same run for a chat already asked about. */
+#if defined(__m68k__)
+#define TG_GUI_MUTES_PACE 10UL
+#else
+#define TG_GUI_MUTES_PACE 3UL
+#endif
+
+/* 1 when this run already knows whether the row's chat is muted. */
+static int tg_gui_chat_mute_known(const tg_gui_chat *chat)
+{
+    tg_mtproto_peer_notify_settings settings;
+
+    if (!chat->is_group) {
+        tg_mtproto_peer_notify_get(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                   chat->peer_id_hi, chat->peer_id_lo,
+                                   &settings);
+        return settings.valid;
+    }
+    tg_mtproto_peer_notify_get(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR,
+                               chat->peer_id_hi, chat->peer_id_lo, &settings);
+    if (!settings.valid) {
+        tg_mtproto_peer_notify_get(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
+                                   chat->peer_id_hi, chat->peer_id_lo,
+                                   &settings);
+    }
+    return settings.valid;
+}
+
+/* The first row of the list whose mute is not known, or -1. */
+static int tg_gui_mutes_next(const tg_gui_state *gst)
+{
+    int i;
+
+    for (i = 0; i < gst->chat_count; ++i) {
+        if (gst->chats[i].index != TG_GUI_SAVED_PEER_INDEX &&
+            gst->chats[i].index != 0UL &&
+            !tg_gui_chat_mute_known(&gst->chats[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+#endif
+
+/* Public: learns the mute of one chat of the list when one is still
+   unknown and the last question is a few seconds old. The window calls it
+   from its idle path. 1 = a row's mark changed. */
+int tg_gui_session_mutes_step(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return 0;
+#else
+    static time_t last = (time_t)0;
+    static unsigned long asked_index = 0UL;
+    static int stopped = 0;
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    time_t now;
+    int row;
+
+    if (stopped || !tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        gst->in_search || gst->in_filter || gst->forward_pick_active ||
+        tg_gui_transfer_dir != 0 || tg_gui_session_link_failures() != 0UL) {
+        return 0;
+    }
+    now = time(0);
+    if (now == (time_t)-1 ||
+        (last != (time_t)0 && now >= last &&
+         (unsigned long)(now - last) < TG_GUI_MUTES_PACE)) {
+        return 0;
+    }
+    last = now;
+    row = tg_gui_mutes_next(gst);
+    if (row < 0) {
+        return 0; /* all known: looked at again in a few seconds */
+    }
+    if (gst->chats[row].index == asked_index) {
+        /* asked a moment ago and still not known (its peer could not be
+           read): no point in asking for ever */
+        stopped = 1;
+        tg_gui_log("mutes: a chat cannot be asked about, learning stops");
+        return 0;
+    }
+    asked_index = gst->chats[row].index;
+    tg_gui_mute_ask_failed = 0;
+    (void)tg_gui_session_chat_muted(asked_index, stream);
+    if (tg_gui_mute_ask_failed) {
+        /* Telegram refused or was out of reach: the chats not asked about
+           yet keep no mark until their menu is opened or they write */
+        stopped = 1;
+        tg_gui_log("mutes: Telegram did not answer, learning stops");
+    }
+    return tg_gui_session_apply_mute_updates();
+#endif
+}
+
 /* Public: asks the open chat's pinned messages when that is due (a chat
    just opened, a pin changed). The window calls it from its idle path, so
    the bar is there a moment after the chat and not at the next poll.
@@ -33770,6 +33959,27 @@ static int tg_gui_session_apply_draft_updates(void)
 #endif
 }
 
+/* A chat muted or unmuted, here or on another device: the list draws its
+   mutes again (not while it shows something else in the list's place, and
+   not under an open menu, which a list drawn again would take away: the
+   menu of a chat asks about its mute as it opens). */
+static int tg_gui_session_apply_mute_updates(void)
+{
+#if defined(TG_NO_GUI)
+    return 0;
+#else
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+    if (tg_gui_mutes_seen == tg_mtproto_peer_notify_mute_changes() ||
+        gst == 0 || gst->in_search || gst->in_filter ||
+        gst->forward_pick_active || gst->ctx_visible) {
+        return 0;
+    }
+    tg_gui_session_reload_chats();
+    return 1;
+#endif
+}
+
 static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
 {
     int dirty;
@@ -33779,6 +33989,9 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
         dirty = 1;
     }
     if (tg_gui_session_apply_draft_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_mute_updates()) {
         dirty = 1;
     }
     if (tg_gui_session_apply_folder_updates()) {

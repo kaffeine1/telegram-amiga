@@ -11475,6 +11475,12 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
     if (tg_gui_session_pinned_step(stdout)) {
         tg_gui_window_session_changed(session_dirty, header_dirty);
     }
+    /* Which chats are muted, for their marks in the list: learnt a chat at
+       a time while nothing else is going on, and not under an open menu. */
+    if (!state->composing && !state->ctx_visible && !state->settings_open &&
+        tg_gui_session_mutes_step(stdout)) {
+        *session_dirty = 1;
+    }
     /* A chat in front of the user is read, on Telegram too: the window is
        the active one, the chat shows its newest messages, and the user has
        opened a chat or touched the open one since the program started (the

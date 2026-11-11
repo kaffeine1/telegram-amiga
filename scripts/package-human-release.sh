@@ -561,6 +561,10 @@ Chats
 - The right mouse button on a chat in the list opens its menu: Remove
   chat, Mute or Unmute, Enable ring (groups and channels), Sound... and
   Show hidden messages.
+- A chat muted on Telegram shows it in the list: its unread count is
+  grey instead of blue, and with nothing unread a small crossed
+  loudspeaker sits at the right of its row. The marks fill in during
+  the first moments after the start.
 - Saved Messages, the last chat, is your own cloud: send files or notes
   to it from a phone or PC and pick them up on the Amiga, or the other
   way round. It cannot be removed.
@@ -747,6 +751,10 @@ Chat
 - Il tasto destro su una chat della lista apre il suo menu: Remove chat,
   Mute o Unmute, Enable ring (gruppi e canali), Sound... e Show hidden
   messages.
+- Una chat silenziata su Telegram lo mostra nell'elenco: il numero dei
+  non letti e' grigio invece che azzurro, e se non c'e' niente da
+  leggere un piccolo altoparlante barrato sta a destra della sua riga.
+  I segni compaiono nei primi momenti dopo l'avvio.
 - I Messaggi salvati, l'ultima chat, sono il tuo cloud: mandaci file o
   appunti dal telefono o dal PC e riprendili sull'Amiga, o al contrario.
   Non si possono togliere.

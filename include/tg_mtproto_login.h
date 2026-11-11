@@ -438,6 +438,10 @@ typedef struct tg_mtproto_peer_notify_settings {
 void tg_mtproto_peer_notify_get(unsigned long peer_constructor,
                                  unsigned long id_hi, unsigned long id_lo,
                                  tg_mtproto_peer_notify_settings *out);
+/* A count that goes up whenever a chat's mute time is stored different from
+   what it was (the dialog list, a change on another device, a Mute sent
+   from here): whoever draws the mutes compares it with the one it saw. */
+unsigned long tg_mtproto_peer_notify_mute_changes(void);
 /* The chat is muted until that Unix time (0 = not muted), as this run
    knows it: what a Mute sent from here leaves behind. */
 void tg_mtproto_peer_notify_set_mute(unsigned long peer_constructor,

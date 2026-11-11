@@ -47,6 +47,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Muted chats are marked in the chat list, as in the official clients:
+  the unread badge of a muted chat is grey instead of blue, and with
+  nothing unread a small crossed loudspeaker sits at the right of its
+  row, left of the pin when the chat is pinned too. The chat list is
+  not read from Telegram at every start, so the mutes are learnt in the
+  background: one chat every few seconds, from the top of the list
+  (every ten seconds on 68k), never while typing, during a transfer or
+  under an open menu. The marks then follow a Mute or Unmute from here,
+  at once, or from another device.
 - The update notice, not switched on yet. Releases will be announced on
   a public Telegram channel, in a post that says "Amigram" and the
   version. Once a day, at a quiet moment, the client asks that channel

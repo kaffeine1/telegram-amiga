@@ -4632,6 +4632,15 @@ typedef struct tg_peer_notify_slot {
 
 static tg_peer_notify_slot tg_peer_notify_slots[TG_MTPROTO_PEER_CACHE_MAX];
 static int tg_peer_notify_full;
+/* Goes up each time a chat's mute time is stored different from what it
+   was (none, for a chat not known before): the chat list shows who is
+   muted, and looks here to know when to draw itself again. */
+static unsigned long tg_peer_notify_mute_changes;
+
+unsigned long tg_mtproto_peer_notify_mute_changes(void)
+{
+    return tg_peer_notify_mute_changes;
+}
 
 static unsigned char tg_peer_notify_kind(unsigned long constructor)
 {
@@ -4696,6 +4705,10 @@ static void tg_peer_notify_store(const tg_mtproto_dialog_peer *peer,
         return;
     }
     slot = &tg_peer_notify_slots[i];
+    /* a chat just learnt and not muted changes nothing to look at */
+    if ((slot->kind == kind ? slot->mute_until : 0UL) != value->mute_until) {
+        ++tg_peer_notify_mute_changes;
+    }
     slot->kind = kind;
     slot->id_hi = peer->id_hi;
     slot->id_lo = peer->id_lo;

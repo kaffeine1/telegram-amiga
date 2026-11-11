@@ -981,6 +981,7 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         chat->flash = 0;
         chat->pinned = rows[i].pinned ? 1 : 0;
         chat->unread_mark = rows[i].unread_mark ? 1 : 0;
+        chat->muted = rows[i].muted ? 1 : 0;
         if (gui->draft_text != 0 && rows[i].index != TG_GUI_SAVED_PEER_INDEX) {
             const char *draft = gui->draft_text(rows[i].is_user ? 1 : 0,
                                                 rows[i].peer_id_hi,

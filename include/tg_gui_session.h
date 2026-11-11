@@ -376,6 +376,11 @@ int tg_gui_session_read_step(FILE *stream);
    1 = the bar changed. _next moves the bar to the message pinned before
    the one shown, round to the latest again; 1 = it changed. */
 int tg_gui_session_pinned_step(FILE *stream);
+/* The mutes of the chats in the list are learnt in the background, since
+   the list is not read from Telegram at every start: one chat a call when
+   one is still unknown, a few seconds apart (account.getNotifySettings).
+   The window calls it from its idle path; 1 = a row's mark changed. */
+int tg_gui_session_mutes_step(FILE *stream);
 int tg_gui_session_pinned_next(void);
 /* Whether a message of the open chat is among the pinned ones held, and
    Pin (1) / Unpin (0) sent to Telegram for it: 0 = done, 1 = Telegram
