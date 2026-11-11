@@ -50,6 +50,7 @@
 #define TG_MESSAGES_MARK_DIALOG_UNREAD_CONSTRUCTOR 0x8c5006f8UL
 #define TG_MESSAGES_GET_DIALOG_UNREAD_MARKS_CONSTRUCTOR 0x21202222UL
 #define TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR 0x54ae308eUL
+#define TG_MESSAGES_UPDATE_PINNED_MESSAGE_CONSTRUCTOR 0xd2aaf7ecUL
 #define TG_ACCOUNT_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0x84be5b93UL
 #define TG_ACCOUNT_GET_NOTIFY_SETTINGS_CONSTRUCTOR 0x12b3ad31UL
 #define TG_INPUT_NOTIFY_PEER_CONSTRUCTOR 0xb8bc5b0cUL
@@ -1528,6 +1529,45 @@ tg_mtproto_tl_status tg_mtproto_build_account_update_notify_mute(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, mute_until);
+    }
+    return status;
+}
+
+/* messages.updatePinnedMessage#d2aaf7ec flags:# silent:flags.0?true
+   unpin:flags.1?true pm_oneside:flags.2?true peer:InputPeer id:int =
+   Updates. Pins the message (silently: the members are not notified, the
+   service line still shows) or unpins it. one_side is for a private chat:
+   the pin is this account's alone, the other person sees nothing. */
+tg_mtproto_tl_status tg_mtproto_build_messages_update_pinned_message(
+    tg_mtproto_tl_writer *writer,
+    int pin,
+    int one_side,
+    unsigned long message_id,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_MESSAGES_UPDATE_PINNED_MESSAGE_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(
+            writer, (pin ? 1UL : 2UL) | (one_side ? 4UL : 0UL));
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
     }
     return status;
 }
@@ -10357,6 +10397,35 @@ int tg_mtproto_login_self_test(void)
             &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
             0UL, 0UL, 0, "", 0UL, 20UL) == TG_MTPROTO_TL_OK) {
         return 2; /* an empty query is refused */
+    }
+    /* Pin message 77 in that group, silently, then unpin it: 24 bytes. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_update_pinned_message(
+            &writer, 1, 0, 77UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+            0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+        writer.length != 24UL ||
+        query[0] != 0xecU || query[1] != 0xf7U ||
+        query[2] != 0xaaU || query[3] != 0xd2U || query[4] != 0x01U ||
+        query[8] != 0xb9U || query[20] != 77U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_update_pinned_message(
+            &writer, 0, 0, 77UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+            0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+        query[4] != 0x02U ||
+        tg_mtproto_build_messages_update_pinned_message(
+            &writer, 1, 0, 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+            0x05060708UL, 0UL, 0UL, 0) == TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    /* In a private chat the pin is for this account alone (pm_oneside). */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_update_pinned_message(
+            &writer, 1, 1, 77UL, TG_PEER_USER_CONSTRUCTOR, 0UL, 9UL, 0UL,
+            1UL, 1) != TG_MTPROTO_TL_OK ||
+        query[4] != 0x05U) {
+        return 2;
     }
     /* The pinned messages of the same group: no words (an empty TL string,
        4 bytes), inputMessagesFilterPinned#1bb00451, limit 1 -> 64 bytes. */

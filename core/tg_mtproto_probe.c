@@ -30360,6 +30360,101 @@ int tg_gui_session_read_step(FILE *stream)
 #endif
 }
 
+/* Public: whether this message of the open chat is among the pinned ones
+   this client holds (the latest few): what its menu offers, Pin or Unpin. */
+int tg_gui_session_message_pinned(unsigned long message_id)
+{
+#if defined(TG_NO_GUI)
+    (void)message_id;
+    return 0;
+#else
+    int k;
+
+    for (k = 0; k < tg_gui_pinned_count; ++k) {
+        if (tg_gui_pinned_list[k].id == message_id) {
+            return 1;
+        }
+    }
+    return 0;
+#endif
+}
+
+/* Public: pin (1) or unpin (0) a message of the open chat on Telegram:
+   for everyone in a group or a channel, for this account alone in a
+   private chat. The pin is silent: the members get no notification, the
+   service line still shows. The bar follows. 0 = done,
+   1 = Telegram refused (emsg says why: no right to pin here, usually),
+   2 = failed. */
+int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
+                               unsigned long emsg_size, FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)message_id;
+    (void)pin;
+    (void)stream;
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    return 2;
+#else
+    unsigned char query[64];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "pin peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    /* In a private chat the pin stays with this account: the other person
+       is not shown a pin they did not ask for. */
+    rc = tg_mtproto_build_messages_update_pinned_message(
+             &writer, pin, pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+             message_id, pc, ph, pl, ahh, ahl, hah) ==
+             TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(
+                   query, writer.length, &result,
+                   "mtproto messages.updatePinnedMessage", emsg, emsg_size,
+                   quiet)
+             : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "pin: Telegram refused" : "pin: failed");
+        return rc;
+    }
+    tg_gui_log(pin ? "pin: pinned" : "pin: unpinned");
+    /* The bar is asked again now, whether or not the update comes. */
+    tg_gui_pinned_pending = 1;
+    tg_gui_pinned_retries = TG_GUI_PINNED_RETRIES;
+    tg_gui_pinned_step_failed = 0;
+    return 0;
+#endif
+}
+
 /* Public: the bar moves to the message pinned before the one it shows,
    and from the oldest back to the latest. 1 = it changed (there is more
    than one). */

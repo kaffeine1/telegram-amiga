@@ -908,6 +908,20 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
     int has_access_hash,
     unsigned long limit);
 
+/* messages.updatePinnedMessage: pin (silently) or unpin one message;
+   one_side keeps a private chat's pin to this account alone. */
+tg_mtproto_tl_status tg_mtproto_build_messages_update_pinned_message(
+    tg_mtproto_tl_writer *writer,
+    int pin,
+    int one_side,
+    unsigned long message_id,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+
 /* messages.search in one chat (no filter, newest first, below offset_id
    when non-zero). query_utf8 must be non-empty. */
 tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(

@@ -45,6 +45,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   They are read from Telegram right after the chat opens and again when
   someone pins or unpins a message there. The latest 8 pins are kept (5
   on MorphOS, 4 on 68k).
+- Pin and Unpin in a message's menu (right click on the message). In a
+  group or a channel the message is pinned for everyone, without
+  notifying the members; in a private chat the pin is yours alone, the
+  other person is shown nothing. Telegram decides who may pin: where you
+  may not, the status line says it refused.
 - Drafts. What is left unsent in the composer stays with its chat: it
   is saved on Telegram when another chat is opened or the client is
   closed, so the other devices show it, and it comes back in the

@@ -5812,6 +5812,9 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
         }
         if (!m->is_system) {
+            labels[n] = state->ctx_msg_pinned ? "Unpin" : "Pin";
+            ids[n] = TG_GUI_CTX_MSG_PIN;
+            ++n;
             labels[n] = "Forward to Saved";
             ids[n] = TG_GUI_CTX_FORWARD_SAVED;
             ++n;
@@ -8688,6 +8691,8 @@ int tg_gui_self_test(void)
         int saw_saved;
         int saw_picker;
         int saw_photo_save;
+        int saw_pin = 0;
+        int saw_unpin = 0;
 
         state.ctx_msg = 0;
         state.messages[0].id = 123UL;
@@ -8705,14 +8710,26 @@ int tg_gui_self_test(void)
                 saw_picker = 1;
             } else if (ids[i] == TG_GUI_CTX_SAVE_PHOTO) {
                 saw_photo_save = 1;
+            } else if (ids[i] == TG_GUI_CTX_MSG_PIN) {
+                saw_pin = strcmp(labels[i], "Pin") == 0;
             }
         }
+        /* A message that is pinned offers Unpin in the same place. */
+        state.ctx_msg_pinned = 1;
+        if (tg_gui_context_items(&state, labels, ids) == count) {
+            for (i = 0; i < count; ++i) {
+                if (ids[i] == TG_GUI_CTX_MSG_PIN) {
+                    saw_unpin = strcmp(labels[i], "Unpin") == 0;
+                }
+            }
+        }
+        state.ctx_msg_pinned = 0;
         state.messages[0].id = 0UL;
         state.messages[0].is_own = 0;
         state.messages[0].has_document = 0;
         state.messages[0].has_photo = 0;
         if (count != TG_GUI_CTX_MENU_ITEMS || !saw_saved || !saw_picker ||
-            !saw_photo_save) {
+            !saw_photo_save || !saw_pin || !saw_unpin) {
             puts("gui self-test: forwarding context items missing");
             return 2;
         }

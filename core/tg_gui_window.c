@@ -14039,6 +14039,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_chat = 0;
                             state->ctx_msg = mi;
                             state->ctx_msg_id = state->messages[mi].id;
+                            state->ctx_msg_pinned =
+                                tg_gui_session_message_pinned(
+                                    state->messages[mi].id);
                             state->ctx_x = hx;
                             state->ctx_y = hy;
                             state->ctx_hover = -1;
@@ -14356,6 +14359,42 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_photo_save_begin(
                             state, ctx.window, &backend, &photo_save,
                             m->photo_id_hi, m->photo_id_lo);
+                    } else if (it == TG_GUI_CTX_MSG_PIN && m != 0 &&
+                               !m->is_system && m->id != 0UL) {
+                        char why[48];
+                        int want = !state->ctx_msg_pinned;
+                        int prc;
+
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           want ? "Pinning..."
+                                                : "Unpinning...");
+                        tg_gui_window_paint(state, &backend);
+                        prc = tg_gui_session_pin_message(m->id, want, why,
+                                                         sizeof(why), stdout);
+                        if (prc == 0) {
+                            int private_chat =
+                                tg_gui_session_chat_kind(
+                                    tg_gui_session_current_peer_index()) == 0;
+
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                !want ? "Unpinned"
+                                      : (private_chat
+                                             ? "Pinned, for you only"
+                                             : "Pinned for everyone"));
+                        } else if (prc == 1) {
+                            /* CHAT_ADMIN_REQUIRED and its kin: only who
+                               may pin here can. */
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                want ? "Telegram refused: you cannot pin here"
+                                     : "Telegram refused: you cannot unpin here");
+                        } else {
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status),
+                                               "Could not reach Telegram");
+                        }
                     } else if (it == TG_GUI_CTX_COPY && m != 0 &&
                                m->text[0] != '\0') {
                         static char ctxsel[TG_GUI_MSG_TEXT_MAX];

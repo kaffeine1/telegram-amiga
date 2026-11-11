@@ -329,6 +329,14 @@ int tg_gui_session_read_step(FILE *stream);
    the one shown, round to the latest again; 1 = it changed. */
 int tg_gui_session_pinned_step(FILE *stream);
 int tg_gui_session_pinned_next(void);
+/* Whether a message of the open chat is among the pinned ones held, and
+   Pin (1) / Unpin (0) sent to Telegram for it: 0 = done, 1 = Telegram
+   refused (emsg, when given, takes its reason), 2 = failed. In a group
+   or a channel the pin is for everyone and notifies nobody; in a private
+   chat it is this account's alone. */
+int tg_gui_session_message_pinned(unsigned long message_id);
+int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
+                               unsigned long emsg_size, FILE *stream);
 
 /* Whether Telegram holds the chat at this 1-based cache index muted right
    now (1), not (0), or nobody knows (-1); and Mute (muted = 1, for good)
