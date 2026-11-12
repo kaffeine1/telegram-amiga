@@ -34930,6 +34930,8 @@ static int tg_gui_install_copy(const char *from, const char *to,
         (void)remove(to);
         return TG_GUI_INSTALL_WRITE;
     }
+    /* a library gets the run bit its own archive gives it */
+    tg_mtproto_mark_downloaded_file(to);
     return 0;
 }
 

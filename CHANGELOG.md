@@ -178,7 +178,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   @amigram1, each is kept only if its SHA-256 is the one this program
   carries (`include/tg_version.h`), they are copied into place, the
   system is told (`AddDataTypes REFRESH`) and stickers are pictures
-  from the next chat opened. It is all or none: no file already there
+  from the next chat opened (the library with its run bit, as its own
+  archive installs it). It is all or none: no file already there
   is ever replaced or removed, a file that is not the one expected is
   deleted, and if the second file cannot be written the first comes out
   again. The offer is not made on AROS, which has its datatype, nor
