@@ -57,8 +57,8 @@
 #ifndef PDTM_READPIXELARRAY
 #define PDTM_READPIXELARRAY (DTM_Dummy + 0x61)
 #endif
-#ifndef PBPAFMT_RGBA
-#define PBPAFMT_RGBA 1
+#ifndef PBPAFMT_ARGB
+#define PBPAFMT_ARGB 2
 #endif
 #ifndef mskHasAlpha
 #define mskHasAlpha 4
@@ -130,39 +130,64 @@ static ULONG tg_image_dt_method(Object *object, Msg message)
 #endif
 }
 
-/* One row of the picture as RGBA into `row`. What the method answers
-   differs between the systems (1, the number of pixels, and on some
-   nothing that can be trusted), so a row counts as read when the answer
-   is not zero or when the bytes put there beforehand are gone. */
-static int tg_image_dt_read_row(Object *object, unsigned char *row, int w,
-                                int y)
+/* The bytes put at the head of every row before the picture is asked
+   for: a row that still has them was not written. */
+#define TG_IMAGE_DT_MARK 8UL
+
+static unsigned char tg_image_dt_mark(unsigned long k)
+{
+    return (unsigned char)((k * 7UL) + 13UL);
+}
+
+/* The whole picture as ARGB into `argb`, in one request. That is the one
+   way of asking that every picture.datatype from V43 on answers alike:
+   the one of AfA OS (46.9), found on a real machine, answers 1 to a
+   request for RGBA and writes nothing, and hands back scrambled rows when
+   asked for a part of the picture. So the answer is not looked at either
+   (it is 1 on some systems, the number of pixels on others): the picture
+   counts as read when every row has lost the bytes put at its head. */
+static int tg_image_dt_read_all(Object *object, unsigned char *argb, int w,
+                                int h)
 {
     /* the system's own message: on 64-bit AROS its members are wider */
     struct pdtBlitPixelArray read;
-    int bytes = w * 4;
-    int k;
+    unsigned long row_bytes = (unsigned long)w * 4UL;
+    unsigned long mark = row_bytes < TG_IMAGE_DT_MARK ? row_bytes
+                                                      : TG_IMAGE_DT_MARK;
+    unsigned long k;
+    int y;
 
-    for (k = 0; k < bytes; ++k) {
-        row[k] = (unsigned char)((k * 7) + 13);
+    for (y = 0; y < h; ++y) {
+        unsigned char *row = argb + ((unsigned long)y * row_bytes);
+
+        for (k = 0UL; k < mark; ++k) {
+            row[k] = tg_image_dt_mark(((unsigned long)y * 3UL) + k);
+        }
     }
     memset(&read, 0, sizeof(read));
     read.MethodID = PDTM_READPIXELARRAY;
-    read.pbpa_PixelData = row;
-    read.pbpa_PixelFormat = PBPAFMT_RGBA;
-    read.pbpa_PixelArrayMod = (ULONG)bytes;
+    read.pbpa_PixelData = argb;
+    read.pbpa_PixelFormat = PBPAFMT_ARGB;
+    read.pbpa_PixelArrayMod = (ULONG)row_bytes;
     read.pbpa_Left = 0UL;
-    read.pbpa_Top = (ULONG)y;
+    read.pbpa_Top = 0UL;
     read.pbpa_Width = (ULONG)w;
-    read.pbpa_Height = 1UL;
-    if (tg_image_dt_method(object, (Msg)&read) != 0UL) {
-        return 1;
-    }
-    for (k = 0; k < bytes; ++k) {
-        if (row[k] != (unsigned char)((k * 7) + 13)) {
-            return 1;
+    read.pbpa_Height = (ULONG)h;
+    (void)tg_image_dt_method(object, (Msg)&read);
+    for (y = 0; y < h; ++y) {
+        const unsigned char *row = argb + ((unsigned long)y * row_bytes);
+
+        for (k = 0UL; k < mark; ++k) {
+            if (row[k] != tg_image_dt_mark(((unsigned long)y * 3UL) + k)) {
+                break;
+            }
+        }
+        if (k == mark) {
+            return 0; /* this row was not written: a picture.datatype
+                         older than V43 keeps no such pixels */
         }
     }
-    return 0; /* a picture.datatype older than V43 keeps no such pixels */
+    return 1;
 }
 
 int tg_image_dt_decode_rgb(const char *path, unsigned long background,
@@ -174,17 +199,14 @@ int tg_image_dt_decode_rgb(const char *path, unsigned long background,
     struct TagItem get[2];
     struct BitMapHeader *header = 0;
     Object *object;
-    unsigned char *rgb = 0;
-    unsigned char *row = 0;
+    unsigned char *pixels = 0;
     unsigned char bg[3];
-    unsigned long any_alpha = 0UL;
+    unsigned long count;
+    unsigned long i;
     int opened;
     int use_alpha;
-    int pass;
     int w;
     int h;
-    int x;
-    int y;
     int rc = TG_IMAGE_DT_NO_DATATYPE;
 
     if (rgb_out != 0) {
@@ -226,62 +248,61 @@ int tg_image_dt_decode_rgb(const char *path, unsigned long background,
         h = header != 0 ? (int)header->bmh_Height : 0;
         if (w > 0 && h > 0 && w <= TG_IMAGE_DT_EDGE_MAX &&
             h <= TG_IMAGE_DT_EDGE_MAX) {
+            count = (unsigned long)w * (unsigned long)h;
             use_alpha = header->bmh_Masking == mskHasAlpha;
-            rgb = (unsigned char *)malloc((size_t)w * (size_t)h * 3U);
-            row = (unsigned char *)malloc((size_t)w * 4U);
-            if (rgb == 0 || row == 0) {
+            /* one block: the four bytes of a pixel as they come, the
+               three that are kept written over them from the front */
+            pixels = (unsigned char *)malloc((size_t)count * 4U);
+            if (pixels == 0) {
                 rc = TG_IMAGE_DT_NO_MEMORY;
-            } else {
+            } else if (tg_image_dt_read_all(object, pixels, w, h)) {
                 rc = 0;
             }
-            /* Alpha promised and not delivered makes every pixel the
-               background: the colours are there, so the picture is then
-               read a second time as an opaque one. */
-            for (pass = 0; pass < 2 && rc == 0; ++pass) {
-                any_alpha = 0UL;
-                for (y = 0; y < h; ++y) {
-                    unsigned char *dst = rgb + ((size_t)y * (size_t)w * 3U);
-
-                    if (!tg_image_dt_read_row(object, row, w, y)) {
-                        rc = TG_IMAGE_DT_FAILED;
-                        break;
-                    }
-                    for (x = 0; x < w; ++x) {
-                        const unsigned char *p = row + ((size_t)x * 4U);
-                        unsigned int a = use_alpha ? p[3] : 255U;
-                        int c;
-
-                        any_alpha |= a;
-                        for (c = 0; c < 3; ++c) {
-                            dst[(x * 3) + c] = (unsigned char)(
-                                ((p[c] * a) + (bg[c] * (255U - a)) + 127U) /
-                                255U);
-                        }
-                    }
+            if (rc == 0 && use_alpha) {
+                /* Alpha promised and not delivered would make every
+                   pixel the background: the colours are there, so the
+                   picture is then taken as an opaque one. */
+                for (i = 0UL; i < count && pixels[i * 4UL] == 0U; ++i) {
                 }
-                if (any_alpha != 0UL) {
-                    break;
+                if (i == count) {
+                    use_alpha = 0;
                 }
-                use_alpha = 0;
+            }
+            for (i = 0UL; rc == 0 && i < count; ++i) {
+                /* alpha, red, green, blue */
+                const unsigned char *p = pixels + (i * 4UL);
+                unsigned int a = use_alpha ? p[0] : 255U;
+                unsigned int red = p[1];
+                unsigned int green = p[2];
+                unsigned int blue = p[3];
+                unsigned char *dst = pixels + (i * 3UL);
+
+                dst[0] = (unsigned char)(
+                    ((red * a) + (bg[0] * (255U - a)) + 127U) / 255U);
+                dst[1] = (unsigned char)(
+                    ((green * a) + (bg[1] * (255U - a)) + 127U) / 255U);
+                dst[2] = (unsigned char)(
+                    ((blue * a) + (bg[2] * (255U - a)) + 127U) / 255U);
             }
         }
         DisposeDTObject(object);
         if (rc == 0) {
-            *rgb_out = rgb;
+            *rgb_out = pixels;
             *w_out = w;
             *h_out = h;
-            rgb = 0;
+            pixels = 0;
         }
     }
     self->pr_WindowPtr = window;
-    free(row);
-    free(rgb);
+    free(pixels);
     tg_image_dt_close(opened);
     return rc;
 }
 
-/* The smallest WEBP there is, two by two pixels: what a machine is asked
-   to open, once, to learn whether it has a datatype for the format. */
+/* The smallest WEBP there is, two by two pixels, all of one red (200, 30,
+   30): what a machine is asked to open, once, to learn whether it has a
+   datatype for the format and whether the pixels that come back are the
+   picture's. */
 static const unsigned char tg_image_dt_webp_probe[] = {
     0x52, 0x49, 0x46, 0x46, 0x1e, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
     0x56, 0x50, 0x38, 0x4c, 0x11, 0x00, 0x00, 0x00, 0x2f, 0x01, 0x40, 0x00,
@@ -291,6 +312,24 @@ static const unsigned char tg_image_dt_webp_probe[] = {
 
 /* -1 = not asked yet */
 static int tg_image_dt_webp_known = -1;
+
+/* The four pixels of the probe as they must come back: a size alone says
+   nothing about what is in the buffer. A little room is left for a system
+   that keeps its pictures in fewer bits. */
+static int tg_image_dt_is_probe_red(const unsigned char *rgb)
+{
+    static const int want[3] = { 200, 30, 30 };
+    int k;
+
+    for (k = 0; k < 12; ++k) {
+        int d = (int)rgb[k] - want[k % 3];
+
+        if (d < -24 || d > 24) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 int tg_image_dt_reads_webp(void)
 {
@@ -313,7 +352,7 @@ int tg_image_dt_reads_webp(void)
     if (fclose(f) == 0 && w) {
         tg_image_dt_webp_known =
             tg_image_dt_decode_rgb(probe, 0UL, &rgb, &w, &h) == 0 &&
-            w == 2 && h == 2;
+            w == 2 && h == 2 && tg_image_dt_is_probe_red(rgb);
         free(rgb);
     }
     (void)remove(probe);

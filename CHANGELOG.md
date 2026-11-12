@@ -157,7 +157,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   a WEBP picture, which Amigram does not decode: it is fetched like a
   photo's and handed to `datatypes.library`, once, and what comes back
   is kept in the photo cache. The picture stands on the chat's
-  background, without a bubble, 160 pixels wide at most. Where no
+  background, without a bubble, 160 pixels wide at most. The pixels are
+  asked for in one request, the whole picture as ARGB, which is what
+  every picture.datatype from V43 on answers alike: on a real PiStorm
+  with AfA OS (its picture.datatype is 46.9) a request for RGBA was
+  answered with nothing and a request for a part of the picture with
+  scrambled rows, and a sticker came out as stripes. The check that
+  decides whether stickers can be pictures now looks at the colour of
+  what comes back, not only at its size. Where the picture.datatype
+  knows no alpha (AfA OS, AmigaOS 3.5 to 3.2 before 47.9) the datatype
+  hands the sticker over on a white ground. Where no
   datatype reads WEBP, or reading fails, a sticker stays the emoji it
   stands for, as before, and nothing is fetched. "Sticker pictures" in
   the settings switches it (`data/telegram-stickers.txt`): on by

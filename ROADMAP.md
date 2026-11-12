@@ -785,8 +785,8 @@ rule working as written, not a gap to fill.
 
 DECIDED, and done for stickers in the 0.2 cycle, in the shape described
 below. `core/tg_image_dt.c` asks `datatypes.library` for the pixels of a
-file (`PDTA_DestMode` V43, `PDTM_READPIXELARRAY` a row at a time, alpha
-blended over the chat's background), a sticker's WEBP still is offered
+file (`PDTA_DestMode` V43, one `PDTM_READPIXELARRAY` for the whole
+picture as ARGB, alpha blended over the chat's background), a sticker's WEBP still is offered
 to the photo pipeline only after a tiny WEBP has been opened that way
 once (`tg_image_dt_reads_webp`), and what the datatype gives is written
 as the photo's canonical cache, so each sticker is read once. It sits
