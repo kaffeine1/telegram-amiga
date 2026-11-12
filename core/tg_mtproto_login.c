@@ -7753,6 +7753,96 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
     }
     return status;
 }
+
+tg_mtproto_tl_status tg_mtproto_build_messages_edit_message_close_poll(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    unsigned long poll_id_hi,
+    unsigned long poll_id_lo)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL ||
+        (poll_id_hi == 0UL && poll_id_lo == 0UL)) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0xdfd14005UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL << 14); /* media */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_MEDIA_POLL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* media flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_POLL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, poll_id_hi, poll_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL); /* closed */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_text_with_entities(writer, "");
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* no answers */
+    }
+    return status;
+}
+
+int tg_mtproto_read_message_media_poll(tg_mtproto_tl_reader *reader,
+                                       unsigned long *id_hi,
+                                       unsigned long *id_lo)
+{
+    if (reader == 0 ||
+        tg_read_poll(reader, &tg_poll_scratch) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_poll_find(tg_poll_scratch.id_hi,
+                             tg_poll_scratch.id_lo) == 0) {
+        return 0; /* not a poll, or one this client does not hold */
+    }
+    (void)tg_read_poll_results(reader, &tg_poll_scratch);
+    (void)tg_poll_store(&tg_poll_scratch);
+    if (id_hi != 0) {
+        *id_hi = tg_poll_scratch.id_hi;
+    }
+    if (id_lo != 0) {
+        *id_lo = tg_poll_scratch.id_lo;
+    }
+    return 1;
+}
+
+int tg_mtproto_poll_mark_closed(unsigned long id_hi, unsigned long id_lo)
+{
+    int at = tg_poll_slot(id_hi, id_lo);
+
+    if (at < 0 || tg_poll_table[at].closed) {
+        return 0;
+    }
+    tg_poll_table[at].closed = 1;
+    return 1;
+}
 #endif /* !TG_NO_GUI: a poll made here */
 
 /* A short bracketed placeholder for a media-only message (no caption), so the
@@ -10163,6 +10253,104 @@ static int tg_poll_self_test(void)
             memset(tg_poll_table, 0, sizeof(tg_poll_table));
             memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
             puts("login self-test: a poll made here is built wrong");
+            return 2;
+        }
+    }
+    /* Stopping a poll: the edit carries the media alone, the poll by its
+       id with the closed flag and no texts, and not a byte more. Then
+       the answer: the message's poll as it is now replaces the one kept,
+       a poll not kept is left alone, and a kept poll can be marked closed
+       once. */
+    {
+        unsigned long a;
+        unsigned long b;
+        int stop;
+
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        stop = tg_mtproto_build_messages_edit_message_close_poll(
+                   &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                   0, 77UL, 0x31UL, 0x32UL) == TG_MTPROTO_TL_OK;
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        stop = stop &&
+               tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+               a == 0xdfd14005UL &&
+               tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+               a == 0x4000UL && /* media, and nothing else */
+               tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+               a == 0x7da07ec9UL && /* inputPeerSelf */
+               tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+               a == 77UL &&
+               tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+               a == 0x0f94e5f1UL &&
+               tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+               a == 0UL &&
+               tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+               tg_poll_scratch.id_hi == 0x31UL &&
+               tg_poll_scratch.id_lo == 0x32UL && tg_poll_scratch.closed &&
+               !tg_poll_scratch.multiple && !tg_poll_scratch.quiz &&
+               !tg_poll_scratch.public_voters &&
+               tg_poll_scratch.question[0] == '\0' &&
+               tg_poll_scratch.answer_count == 0 && r.offset == w.length;
+        /* no message, or no poll: not built */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        stop = stop &&
+               tg_mtproto_build_messages_edit_message_close_poll(
+                   &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                   0, 0UL, 0x31UL, 0x32UL) != TG_MTPROTO_TL_OK &&
+               tg_mtproto_build_messages_edit_message_close_poll(
+                   &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                   0, 77UL, 0UL, 0UL) != TG_MTPROTO_TL_OK;
+        /* an open poll is kept... */
+        memset(tg_poll_table, 0, sizeof(tg_poll_table));
+        memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x61UL, 0UL);
+        tg_poll_test_results(&w, 0, 0xffffffffUL, 0UL, 0, 0);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        stop = stop &&
+               tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+               tg_read_poll_results(&r, &tg_poll_scratch) ==
+                   TG_MTPROTO_TL_OK;
+        p = tg_poll_store(&tg_poll_scratch);
+        stop = stop && p != 0 && !p->closed;
+        /* ...the message comes back with it closed and its votes... */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x61UL, 1UL);
+        tg_poll_test_results(&w, 0, 4UL, 2UL, 0, 0);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        a = 9UL;
+        b = 9UL;
+        stop = stop && tg_mtproto_read_message_media_poll(&r, &a, &b) == 1 &&
+               a == 0UL && b == 0x61UL && r.offset == w.length;
+        p = tg_mtproto_poll_find(0UL, 0x61UL);
+        stop = stop && p != 0 && p->closed && p->has_results &&
+               p->total_voters == 6UL;
+        /* ...a poll that is not kept is not taken in this way... */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x62UL, 1UL);
+        tg_poll_test_results(&w, 0, 4UL, 2UL, 0, 0);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        stop = stop && tg_mtproto_read_message_media_poll(&r, &a, &b) == 0 &&
+               tg_mtproto_poll_find(0UL, 0x62UL) == 0;
+        /* ...and the mark: once on an open poll, never on one not kept. */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x63UL, 0UL);
+        tg_poll_test_results(&w, 0, 0xffffffffUL, 0UL, 0, 0);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        stop = stop &&
+               tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+               tg_read_poll_results(&r, &tg_poll_scratch) ==
+                   TG_MTPROTO_TL_OK;
+        (void)tg_poll_store(&tg_poll_scratch);
+        stop = stop && tg_mtproto_poll_mark_closed(0UL, 0x63UL) == 1 &&
+               tg_mtproto_poll_find(0UL, 0x63UL) != 0 &&
+               tg_mtproto_poll_find(0UL, 0x63UL)->closed &&
+               tg_mtproto_poll_mark_closed(0UL, 0x63UL) == 0 &&
+               tg_mtproto_poll_mark_closed(0UL, 0x64UL) == 0;
+        if (!stop) {
+            memset(tg_poll_table, 0, sizeof(tg_poll_table));
+            memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
+            puts("login self-test: stopping a poll is wrong");
             return 2;
         }
     }

@@ -28115,6 +28115,91 @@ int tg_gui_session_poll_vote(unsigned long message_id,
     return 0;
 }
 
+/* Public: stops the poll of a message of the open chat. A stopped poll
+   stays stopped: the caller asks first. Telegram's answer carries the
+   message as it is now, with the final results.
+   0 = done, 1 = Telegram refused (emsg says why), 2 = failed. */
+int tg_gui_session_poll_stop(unsigned long message_id,
+                             unsigned long poll_id_hi,
+                             unsigned long poll_id_lo, char *emsg,
+                             unsigned long emsg_size, FILE *stream)
+{
+    static unsigned char query[128];
+    static const char label[] = "mtproto messages.editMessage (stop poll)";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long at;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        (poll_id_hi == 0UL && poll_id_lo == 0UL) ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "poll peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_edit_message_close_poll(
+             &writer, pc, ph, pl, ahh, ahl, hah, message_id, poll_id_hi,
+             poll_id_lo) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "poll: Telegram refused to stop it"
+                           : "poll: stop failed");
+        return rc;
+    }
+    /* Telegram agreed: the poll is closed, whatever the answer carries.
+       The edited message comes along, its poll with the final votes. */
+    (void)tg_mtproto_poll_mark_closed(poll_id_hi, poll_id_lo);
+    for (at = 0UL; at + 8UL <= result.result_body_length; at += 4UL) {
+        if (tg_mtproto_read_u32_le(result.result_body + at) == 0x4bd6e798UL) {
+            tg_mtproto_tl_reader reader;
+            unsigned long got_hi = 0UL;
+            unsigned long got_lo = 0UL;
+
+            tg_mtproto_tl_reader_init(&reader, result.result_body,
+                                      result.result_body_length);
+            reader.offset = at + 4UL;
+            if (tg_mtproto_read_message_media_poll(&reader, &got_hi,
+                                                   &got_lo) &&
+                got_hi == poll_id_hi && got_lo == poll_id_lo) {
+                break;
+            }
+        }
+    }
+    tg_gui_poll_note_changed(poll_id_hi, poll_id_lo);
+    tg_gui_log("poll: stopped");
+    (void)tg_gui_session_apply_poll_updates(); /* the caller repaints */
+    return 0;
+}
+
 /* One text of a new poll as the wire wants it: UTF-8, from the keyboard's
    Latin-1 where that is what the composer holds. 0 when it does not fit. */
 static int tg_gui_poll_wire_text(const char *text, char *out,

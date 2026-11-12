@@ -10119,6 +10119,51 @@ static void tg_gui_window_poll_vote(tg_gui_state *state,
     tg_gui_window_paint(state, backend);
 }
 
+/* Stop poll: asked first, since a stopped poll stays stopped. */
+static void tg_gui_window_poll_stop(tg_gui_state *state, struct Window *win,
+                                    tg_gui_backend *backend,
+                                    const tg_gui_message *m)
+{
+    struct EasyStruct es;
+    unsigned long message_id = m->id;
+    unsigned long poll_hi = m->poll_id_hi;
+    unsigned long poll_lo = m->poll_id_lo;
+    char why[48];
+    int rc;
+
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)"Stop poll";
+    es.es_TextFormat = (APTR)"Stop this poll?\n\n"
+                             "Nobody can vote after that, and a stopped\n"
+                             "poll cannot be opened again.";
+    es.es_GadgetFormat = (APTR)"Stop poll|Cancel";
+    if (tg_gui_amiga_easyreq_args(win, &es) != 1) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Stopping the poll...");
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_poll_stop(message_id, poll_hi, poll_lo, why,
+                                  sizeof(why), stdout);
+    if (rc == 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Poll stopped");
+    } else if (rc == 1) {
+        char line[96]; /* the status line is shorter: cut on the copy */
+
+        sprintf(line, "Not stopped: %.32s",
+                why[0] != '\0' ? why : "no reason given");
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not reach Telegram");
+    }
+    tg_gui_window_paint(state, backend);
+}
+
 /* Recompute the '@' mention popup after a composer edit or caret move: token
    under the caret (tg_gui_mention_token) -> the people of the open group it
    begins (the session knows them). Selection resets to the top match on every
@@ -15888,6 +15933,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                answer stays). */
                             state->ctx_poll_open = 0;
                             state->ctx_poll_voted = 0;
+                            state->ctx_poll_live = 0;
                             if (state->messages[mi].poll_id_hi != 0UL ||
                                 state->messages[mi].poll_id_lo != 0UL) {
                                 int p_closed = 0;
@@ -15902,6 +15948,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         !p_closed && !p_voted;
                                     state->ctx_poll_voted =
                                         !p_closed && p_voted && !p_quiz;
+                                    state->ctx_poll_live = !p_closed;
                                 }
                             }
                             state->ctx_x = hx;
@@ -16171,6 +16218,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (it == TG_GUI_CTX_POLL_RETRACT && m != 0 &&
                                m->id != 0UL) {
                         tg_gui_window_poll_vote(state, &backend, m, 0UL);
+                    } else if (it == TG_GUI_CTX_POLL_STOP && m != 0 &&
+                               m->id != 0UL &&
+                               (m->poll_id_hi != 0UL ||
+                                m->poll_id_lo != 0UL)) {
+                        tg_gui_window_poll_stop(state, ctx.window, &backend,
+                                                m);
                     } else if (it == TG_GUI_CTX_REACT && m != 0 &&
                                !m->is_system && m->id != 0UL) {
                         /* A group or a channel may allow only some

@@ -546,6 +546,13 @@ int tg_gui_session_poll_vote(unsigned long message_id,
                              unsigned long poll_id_lo, unsigned long mask,
                              char *emsg, unsigned long emsg_size,
                              FILE *stream);
+/* Stops the poll of a message of the open chat, for good: nobody votes
+   after that, and the message shows the final results. 0 = done,
+   1 = Telegram refused (emsg says why), 2 = failed. */
+int tg_gui_session_poll_stop(unsigned long message_id,
+                             unsigned long poll_id_hi,
+                             unsigned long poll_id_lo, char *emsg,
+                             unsigned long emsg_size, FILE *stream);
 /* Makes a poll in the open chat: anonymous, with one answer or several
    allowed. question and answers come as the composer holds text; `count`
    answers, 2 to 10, none empty. 0 = sent (it shows with the chat's next

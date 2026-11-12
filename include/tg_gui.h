@@ -657,6 +657,8 @@ typedef struct tg_gui_state {
        the vote. */
     int ctx_poll_open;
     int ctx_poll_voted;
+    /* The poll is held and not closed: who made it may stop it. */
+    int ctx_poll_live;
     int ctx_poll;
     int poll_multiple;
     unsigned long poll_mask;
@@ -1001,6 +1003,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_SELECT 46 /* Select: start choosing several messages */
 #define TG_GUI_CTX_FILE_OPEN 47 /* Open the file a download saved */
 #define TG_GUI_CTX_FILE_SHOW 60 /* Show that file's drawer */
+#define TG_GUI_CTX_POLL_STOP 61 /* Stop poll: one's own, for good */
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */

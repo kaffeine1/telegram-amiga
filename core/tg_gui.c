@@ -6307,6 +6307,14 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                 labels[n] = "Take back vote";
                 ids[n++] = TG_GUI_CTX_POLL_RETRACT;
             }
+            /* Who made the poll may stop it while it is open. In Saved
+               Messages every message is the user's own. */
+            if (state->ctx_poll_live &&
+                (state->messages[state->ctx_msg].is_own ||
+                 tg_gui_open_chat_is_self(state))) {
+                labels[n] = "Stop poll";
+                ids[n++] = TG_GUI_CTX_POLL_STOP;
+            }
         }
     }
     labels[n] = "Reply";
@@ -10260,16 +10268,21 @@ int tg_gui_self_test(void)
     {
         const char *labels[TG_GUI_CTX_ITEMS_MAX];
         int ids[TG_GUI_CTX_ITEMS_MAX];
+        int was_own = state.messages[0].is_own;
         int plain;
         int count;
         int ok_poll;
+        int k;
+        int stops;
 
         state.ctx_visible = 1;
         state.ctx_chat = 0;
         state.ctx_react = 0;
         state.ctx_poll = 0;
+        state.ctx_poll_live = 0;
         state.ctx_msg = 0;
         state.messages[0].id = 123UL;
+        state.messages[0].is_own = 0;
         plain = tg_gui_context_items(&state, labels, ids);
         state.messages[0].poll_id_lo = 7UL;
         state.ctx_poll_open = 0;
@@ -10286,6 +10299,32 @@ int tg_gui_self_test(void)
         ok_poll = ok_poll && count == plain + 1 &&
                   ids[1] == TG_GUI_CTX_POLL_RETRACT &&
                   strcmp(labels[1], "Take back vote") == 0;
+        /* Stop poll: on one's own poll while it is open, voted or not,
+           right under the vote; never on someone else's, never on a
+           poll that is closed or no longer held. */
+        state.ctx_poll_live = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        for (k = 0, stops = 0; k < count; ++k) {
+            stops += ids[k] == TG_GUI_CTX_POLL_STOP;
+        }
+        ok_poll = ok_poll && count == plain + 1 && stops == 0;
+        state.messages[0].is_own = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count <= TG_GUI_CTX_MENU_ITEMS &&
+                  ids[1] == TG_GUI_CTX_POLL_RETRACT &&
+                  ids[2] == TG_GUI_CTX_POLL_STOP &&
+                  strcmp(labels[2], "Stop poll") == 0;
+        state.ctx_poll_voted = 0;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && ids[1] == TG_GUI_CTX_POLL_STOP;
+        state.ctx_poll_live = 0;
+        count = tg_gui_context_items(&state, labels, ids);
+        for (k = 0, stops = 0; k < count; ++k) {
+            stops += ids[k] == TG_GUI_CTX_POLL_STOP;
+        }
+        ok_poll = ok_poll && stops == 0;
+        state.messages[0].is_own = 0;
+        state.ctx_poll_voted = 1;
         /* The answers: one of two, then several with their marks. */
         strcpy(state.poll_items[0], "Pizza");
         strcpy(state.poll_items[1], "Pasta");
@@ -10315,6 +10354,7 @@ int tg_gui_self_test(void)
         state.ctx_visible = 0;
         state.ctx_msg = -1;
         state.messages[0].id = 0UL;
+        state.messages[0].is_own = was_own;
         if (!ok_poll) {
             puts("gui self-test: a poll's menu is wrong");
             return 2;

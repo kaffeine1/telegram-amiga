@@ -635,6 +635,9 @@ Messages
   TAB or the cursor keys move between the lines, ENTER goes to the next
   one and, on Create, sends. Votes are anonymous. Telegram takes polls
   in groups and channels, not in a chat with one person.
+- Stop poll, in the menu of a poll you made, closes it after a
+  confirmation: nobody can vote any more, the message shows the final
+  results, and a stopped poll cannot be opened again.
 
 Emoji
 - The smiley next to Send, or "Insert emoji..." (Amiga+E), opens the
@@ -841,6 +844,9 @@ Messaggi
   all'altra, INVIO va alla successiva e, su Create, lo manda. I voti
   sono anonimi. Telegram accetta i sondaggi nei gruppi e nei canali,
   non nella chat con una persona sola.
+- Stop poll, nel menu di un sondaggio fatto da te, lo chiude dopo una
+  conferma: nessuno puo' piu' votare, il messaggio mostra i risultati
+  finali, e un sondaggio fermato non si riapre.
 
 Emoji
 - La faccina accanto a Send, o "Insert emoji..." (Amiga+E), apre il

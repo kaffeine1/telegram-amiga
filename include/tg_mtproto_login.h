@@ -697,6 +697,32 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
     unsigned long random_id_hi,
     unsigned long random_id_lo);
 
+/* Stopping a poll: messages.editMessage#dfd14005 with nothing but the
+   media, the message's poll with its closed flag set. The question and
+   the answers are not sent again: Telegram keeps the poll's own. */
+tg_mtproto_tl_status tg_mtproto_build_messages_edit_message_close_poll(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    unsigned long poll_id_hi,
+    unsigned long poll_id_lo);
+
+/* messageMediaPoll#4bd6e798 poll:Poll results:PollResults, the reader
+   just past the constructor: a poll already kept takes what the message
+   says of it now. 1 = it did, and *id_hi / *id_lo say which. */
+int tg_mtproto_read_message_media_poll(tg_mtproto_tl_reader *reader,
+                                       unsigned long *id_hi,
+                                       unsigned long *id_lo);
+
+/* The kept poll is closed from now on: Telegram has just agreed to stop
+   it. 1 = it was kept and open. */
+int tg_mtproto_poll_mark_closed(unsigned long id_hi, unsigned long id_lo);
+
 tg_mtproto_tl_status tg_mtproto_read_message_reactions(
     tg_mtproto_tl_reader *reader, tg_reactions *out);
 tg_mtproto_tl_status tg_mtproto_read_update_message_reactions(

@@ -393,7 +393,9 @@ Middle, more interface:
   answers in the menu's place, `updateMessagePoll` followed while the
   chat is open), and made (Create poll... in the first menu:
   `messages.sendMedia` with `inputMediaPoll`, anonymous, one answer or
-  several). Still missing: voting in the text client, a quiz's
+  several), and stopped (Stop poll in the menu of one's own poll:
+  `messages.editMessage` with the poll's media alone and its closed
+  flag). Still missing: voting in the text client, a quiz's
   explanation, who voted in a public poll, making a quiz or a poll with
   public votes;
 - the update notice (its section): step 1 is in place and asleep. The

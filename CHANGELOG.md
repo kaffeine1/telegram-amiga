@@ -67,6 +67,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   not in a chat with one person, where the menu item says so. If
   Telegram refuses the poll, or cannot be reached, what was typed is
   kept and the menu item opens on it again.
+- Stop poll, in the menu of a poll's message, on one's own polls while
+  they are open: after a confirmation the poll is closed for good and
+  the message shows the final results.
 - A chat pinned or unpinned, or marked as unread or read, on another
   device is followed while the client runs: the pins and the marks are
   read again from Telegram at the next poll and the chat list is drawn
