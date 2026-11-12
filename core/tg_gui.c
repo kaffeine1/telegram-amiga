@@ -1567,6 +1567,58 @@ void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
     dest[o] = '\0';
 }
 
+void tg_gui_requester_text(char *dest, unsigned long size, const char *src,
+                           int max_lines)
+{
+    unsigned long len;
+    unsigned long i = 0UL;
+    unsigned long o = 0UL;
+    unsigned long index;
+    int lines = 1;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    len = (src != 0) ? (unsigned long)strlen(src) : 0UL;
+    while (i < len) {
+        const char *t = 0;
+        unsigned long n = 1UL;
+
+        if (TG_TEXT_IS_MARKER(src[i])) {
+            ++i;
+            continue;
+        }
+        if (src[i] == '\n' && lines >= max_lines) {
+            /* the lines the screen has no room for */
+            if (o + 5UL <= size) {
+                memcpy(dest + o, "\n...", 4U);
+                o += 4UL;
+            }
+            break;
+        }
+        if (tg_gui_emoji_pair_at(src, len, i, &index)) {
+            t = tg_gui_session_emoji_text(index);
+            n = (unsigned long)strlen(t);
+        } else if (src[i] == '%') {
+            t = "%%"; /* the requester reads its text as a format */
+            n = 2UL;
+        }
+        /* room is kept for the "..." line that may still have to come */
+        if (o + n + 5UL > size) {
+            break;
+        }
+        if (t != 0) {
+            memcpy(dest + o, t, (size_t)n);
+            i += src[i] == '%' ? 1UL : 2UL;
+        } else {
+            lines += src[i] == '\n';
+            dest[o] = src[i++];
+        }
+        o += n;
+    }
+    dest[o] = '\0';
+}
+
 /* Typed emoticons and the emoji they become. Each emoji is one the sheet
    draws, checked again at use, so a smaller sheet only loses entries. */
 static const struct {
@@ -2399,6 +2451,7 @@ static void tg_gui_poll_trim(char *text)
 int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft)
 {
     int kept = 0;
+    int right = -1;
     int k;
 
     if (draft == 0) {
@@ -2412,17 +2465,33 @@ int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft)
         if (draft->answers[k][0] == '\0') {
             continue;
         }
+        if (k == draft->correct) {
+            right = kept; /* the right answer moves up with its text */
+        }
         if (k != kept) {
             strcpy(draft->answers[kept], draft->answers[k]);
             draft->answers[k][0] = '\0';
         }
         ++kept;
     }
-    draft->multiple = draft->multiple ? 1 : 0;
+    draft->public_votes = draft->public_votes ? 1 : 0;
+    draft->quiz = draft->quiz ? 1 : 0;
+    draft->multiple = (draft->multiple && !draft->quiz) ? 1 : 0;
+    draft->why[sizeof(draft->why) - 1U] = '\0';
+    tg_gui_poll_trim(draft->why);
+    if (!draft->quiz) {
+        draft->why[0] = '\0';
+        draft->correct = 0;
+    } else if (right >= 0) {
+        draft->correct = right;
+    }
     if (draft->question[0] == '\0') {
         return -1;
     }
-    return kept >= 2 ? kept : -2;
+    if (kept < 2) {
+        return -2;
+    }
+    return (draft->quiz && right < 0) ? -3 : kept;
 }
 
 /* --- Formatting typed in the composer ------------------------------------ */
@@ -7248,6 +7317,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                 labels[n] = "Take back vote";
                 ids[n++] = TG_GUI_CTX_POLL_RETRACT;
             }
+            if (state->ctx_poll_names) {
+                labels[n] = "Who voted...";
+                ids[n++] = TG_GUI_CTX_POLL_VOTERS;
+            }
             /* Who made the poll may stop it while it is open. In Saved
                Messages every message is the user's own. */
             if (state->ctx_poll_live &&
@@ -9894,6 +9967,41 @@ static int tg_gui_poll_draft_self_test(void)
         puts("gui self-test: a good poll draft was refused");
         return 2;
     }
+    /* A quiz: its right answer moves up with its text when the empty
+       lines above it go; it allows one answer; it keeps its explanation,
+       which a plain poll loses; and it needs its right answer to be one
+       of the answers typed. */
+    memset(&draft, 0, sizeof(draft));
+    strcpy(draft.question, "Capitale?");
+    strcpy(draft.answers[1], "Milano");
+    strcpy(draft.answers[4], "Roma");
+    strcpy(draft.answers[6], "Torino");
+    strcpy(draft.why, "  dal 1871 ");
+    draft.quiz = 5;
+    draft.multiple = 1;
+    draft.public_votes = 3;
+    draft.correct = 4;
+    n = tg_gui_poll_draft_tidy(&draft);
+    if (n != 3 || draft.correct != 1 || draft.quiz != 1 ||
+        draft.multiple != 0 || draft.public_votes != 1 ||
+        strcmp(draft.answers[1], "Roma") != 0 ||
+        strcmp(draft.why, "dal 1871") != 0) {
+        printf("gui self-test: quiz draft not tidied (%d, right %d)\n", n,
+               draft.correct);
+        return 2;
+    }
+    draft.correct = 7; /* an empty line */
+    if (tg_gui_poll_draft_tidy(&draft) != -3 || draft.correct != 7) {
+        puts("gui self-test: a quiz without its right answer passed");
+        return 2;
+    }
+    draft.quiz = 0;
+    draft.multiple = 1;
+    if (tg_gui_poll_draft_tidy(&draft) != 3 || draft.why[0] != '\0' ||
+        draft.correct != 0 || draft.multiple != 1) {
+        puts("gui self-test: a plain poll kept what only a quiz has");
+        return 2;
+    }
     return 0;
 }
 
@@ -11823,6 +11931,28 @@ int tg_gui_self_test(void)
         }
         ok_poll = ok_poll && stops == 0;
         state.messages[0].is_own = 0;
+        state.ctx_poll_voted = 1;
+        /* Who voted...: only where the session says the names can be
+           asked, under the vote and above Stop poll. */
+        state.ctx_poll_names = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count == plain + 2 &&
+                  ids[1] == TG_GUI_CTX_POLL_RETRACT &&
+                  ids[2] == TG_GUI_CTX_POLL_VOTERS &&
+                  strcmp(labels[2], "Who voted...") == 0;
+        state.messages[0].is_own = 1;
+        state.ctx_poll_live = 1;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count <= TG_GUI_CTX_MENU_ITEMS &&
+                  ids[2] == TG_GUI_CTX_POLL_VOTERS &&
+                  ids[3] == TG_GUI_CTX_POLL_STOP;
+        state.messages[0].is_own = 0;
+        state.ctx_poll_live = 0;
+        state.ctx_poll_voted = 0; /* a closed poll: no vote to take back */
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_poll = ok_poll && count == plain + 1 &&
+                  ids[1] == TG_GUI_CTX_POLL_VOTERS;
+        state.ctx_poll_names = 0;
         state.ctx_poll_voted = 1;
         /* The answers: one of two, then several with their marks. */
         strcpy(state.poll_items[0], "Pizza");
@@ -14222,6 +14352,38 @@ int tg_gui_self_test(void)
                     strcmp(want + 2, face) != 0) {
                     printf("gui self-test: emoji expand fit \"%s\"\n", want);
                     return 2;
+                }
+                /* A requester's text: the emoticon for the pair, a '%'
+                   doubled, a style mark dropped, and only the lines that
+                   fit, with "..." for the rest. */
+                {
+                    char req[64];
+
+                    sprintf(body, "50%% %.2s\034ok\nb\nc\nd", pair);
+                    tg_gui_requester_text(req, sizeof(req), body, 9);
+                    sprintf(want, "50%%%% %.8sok\nb\nc\nd", face);
+                    if (strcmp(req, want) != 0) {
+                        printf("gui self-test: requester text \"%s\"\n", req);
+                        return 2;
+                    }
+                    tg_gui_requester_text(req, sizeof(req), body, 2);
+                    sprintf(want, "50%%%% %.8sok\nb\n...", face);
+                    if (strcmp(req, want) != 0) {
+                        printf("gui self-test: requester lines \"%s\"\n",
+                               req);
+                        return 2;
+                    }
+                    /* a short buffer: whole pieces only, "..." has room */
+                    tg_gui_requester_text(req, 9UL, "ab%cd\ne\nf", 2);
+                    if (strcmp(req, "ab%%") != 0) {
+                        printf("gui self-test: requester cut \"%s\"\n", req);
+                        return 2;
+                    }
+                    tg_gui_requester_text(req, 12UL, "ab\ne\nf", 2);
+                    if (strcmp(req, "ab\ne\n...") != 0) {
+                        printf("gui self-test: requester end \"%s\"\n", req);
+                        return 2;
+                    }
                 }
                 strcpy(ns->notify_last_name, "Mario Rossi");
                 strcpy(ns->notify_last_text, "ciao, ci sei?");

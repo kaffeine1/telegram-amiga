@@ -690,11 +690,56 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_vote(
     const tg_mtproto_poll *poll,
     unsigned long mask);
 
+/* messages.getPollVotes#b86e380e: who voted, in a poll whose votes are
+   public; the first `limit` votes of the whole poll. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_poll_votes(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    unsigned long limit);
+
+/* 1 when the poll's votes are public and there are some to name. */
+int tg_mtproto_poll_has_names(const tg_mtproto_poll *poll);
+
+/* The votes one question brings, and the room for the text they make. */
+#if defined(__m68k__) || defined(TG_LOWMEM)
+#define TG_MTPROTO_POLL_VOTES_MAX 30
+#else
+#define TG_MTPROTO_POLL_VOTES_MAX 50
+#endif
+#define TG_MTPROTO_POLL_VOTER_NAME_MAX 40
+#define TG_MTPROTO_VOTES_LIST_CONSTRUCTOR 0x4899484eUL /* messages.votesList */
+#define TG_MTPROTO_POLL_VOTERS_TEXT_MAX 1536
+
+/* Who voted what, from the answer to that question (a
+   messages.votesList, `body` after its constructor): a line for each
+   answer of `poll`, "1. Pizza: Anna, Bruno", UTF-8. A line longer than
+   `width` characters goes on in the next, between two names (0 = lines
+   as long as they come). When Telegram holds more votes than it sent,
+   a last line says so. Returns how many votes are in the text, -1 when
+   the answer does not read; *total = the votes Telegram counts. */
+int tg_mtproto_poll_voters_text(const tg_mtproto_poll *poll,
+                                const unsigned char *body,
+                                unsigned long body_length,
+                                unsigned long width, char *out,
+                                unsigned long size, unsigned long *total);
+
 /* A poll made here: messages.sendMedia#ac55d9c1 with
-   inputMediaPoll#f94e5f1 and a new poll#58747131, anonymous, with one
-   answer or several allowed. question and answers are UTF-8; two to
+   inputMediaPoll#f94e5f1 and a new poll#58747131. `kind` says what it
+   is: several answers allowed, votes that show who cast them, a quiz. A
+   quiz has one right answer, `correct` (0 = the first), cannot allow
+   several, and may carry `solution`, why that answer is the right one.
+   question, answers and solution are UTF-8; two to
    TG_MTPROTO_POLL_CREATE_MAX answers, none empty. */
 #define TG_MTPROTO_POLL_CREATE_MAX 10U
+#define TG_MTPROTO_POLL_NEW_MULTIPLE 1U
+#define TG_MTPROTO_POLL_NEW_PUBLIC 2U
+#define TG_MTPROTO_POLL_NEW_QUIZ 4U
 tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -706,7 +751,9 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
     const char *question,
     const char *const *answers,
     unsigned int count,
-    int multiple,
+    unsigned int kind,
+    int correct,
+    const char *solution,
     unsigned long random_id_hi,
     unsigned long random_id_lo);
 

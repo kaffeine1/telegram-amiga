@@ -198,6 +198,12 @@ void tg_gui_rgb_emoji_pixel(const unsigned char *glyph, int w, int h, int x,
                             int y, unsigned char *px);
 void tg_gui_emoji_expand_pairs(char *dest, unsigned long size,
                                const char *src);
+/* A text for a system requester, from one in the display's characters:
+   the emoji as the emoticons the system font can draw, the style marks
+   dropped, every '%' doubled (a requester reads its text as a format),
+   and at most `max_lines` lines, a last "..." standing for the rest. */
+void tg_gui_requester_text(char *dest, unsigned long size, const char *src,
+                           int max_lines);
 /* '@' mention autocomplete popup (composer). */
 /* A poll's answers as its menu lists them: what the protocol keeps, a mark
    and the text each. */
@@ -297,17 +303,25 @@ typedef struct tg_gui_chat {
 #define TG_GUI_POLL_NEW_ANSWERS 10
 #define TG_GUI_POLL_NEW_QUESTION 256
 #define TG_GUI_POLL_NEW_ANSWER 101
+#define TG_GUI_POLL_NEW_WHY 201 /* a quiz's explanation: 200 characters */
 
 typedef struct tg_gui_poll_draft {
     char question[TG_GUI_POLL_NEW_QUESTION];
     char answers[TG_GUI_POLL_NEW_ANSWERS][TG_GUI_POLL_NEW_ANSWER];
     int multiple;
+    int public_votes; /* who voted what can be seen */
+    int quiz;         /* one answer is the right one: `correct` */
+    int correct;      /* which answer line, 0 = the first */
+    char why[TG_GUI_POLL_NEW_WHY]; /* a quiz may explain its answer */
 } tg_gui_poll_draft;
 
 /* Tidies a poll before it is sent: blanks at the ends of each text go, the
-   answers left empty are dropped and the others move up in their order.
-   Returns how many answers are left; -1 when there is no question, -2 with
-   fewer than two answers. The draft is tidied in every case. */
+   answers left empty are dropped and the others move up in their order,
+   the right answer of a quiz with them. A quiz allows one answer, and
+   only a quiz keeps an explanation. Returns how many answers are left; -1
+   when there is no question, -2 with fewer than two answers, -3 when a
+   quiz's right answer is not one of them. The draft is tidied in every
+   case. */
 int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft);
 
 /* --- Formatting typed in the composer (0.2) -----------------------------
@@ -715,6 +729,8 @@ typedef struct tg_gui_state {
     int ctx_poll_voted;
     /* The poll is held and not closed: who made it may stop it. */
     int ctx_poll_live;
+    /* Its votes are public and this account may ask who voted. */
+    int ctx_poll_names;
     /* The menu is the paperclip's: what can be attached to the open chat
        (tg_gui_attach_menu_open). */
     int ctx_attach;
@@ -1048,6 +1064,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_REACT 13
 #define TG_GUI_CTX_HIDE 14 /* someone else's message in a group */
 #define TG_GUI_CTX_CHAT_SHOW_HIDDEN 15
+#define TG_GUI_CTX_POLL_VOTERS 16 /* Who voted...: a poll with public votes */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */

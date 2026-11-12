@@ -400,13 +400,15 @@ Middle, more interface:
   message's text, `messages.sendVote` from the message's menu, the
   answers in the menu's place, `updateMessagePoll` followed while the
   chat is open), and made (Create poll... in the first menu:
-  `messages.sendMedia` with `inputMediaPoll`, anonymous, one answer or
-  several), and stopped (Stop poll in the menu of one's own poll:
+  `messages.sendMedia` with `inputMediaPoll`: one answer or several,
+  anonymous or public votes, or a quiz with its right answer and its
+  explanation), and stopped (Stop poll in the menu of one's own poll:
   `messages.editMessage` with the poll's media alone and its closed
   flag), and voted in the text client (/vote on the last poll shown).
   A quiz's explanation shows once it is answered (`pollResults`
-  solution), and a poll with public votes says so. Still missing: who
-  voted in a public poll, making a quiz or a poll with public votes;
+  solution), a poll with public votes says so, and Who voted... (or
+  /voters) lists who chose what (`messages.getPollVotes`, the latest
+  votes; no further pages yet);
 - formatting typed in the composer: done (`**bold**`, `__italic__`,
   `~~strike~~`, `||spoiler||`, one backtick for code and three for a
   block become the message's entities when it is sent, counted in

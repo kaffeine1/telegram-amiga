@@ -11796,6 +11796,9 @@ static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
 #define TG_CHAT_CMD_READ 2
 #define TG_CHAT_CMD_UNREAD 3
 #define TG_CHAT_CMD_VOTE 4
+#define TG_CHAT_CMD_VOTERS 5
+/* What /voters prints: who voted in the last poll shown, by answer. */
+static char tg_chat_voters_text[TG_MTPROTO_POLL_VOTERS_TEXT_MAX];
 static int tg_mtproto_auth_chat_command_on_context(
     const char *host, const char *port, const char *api_id,
     const char *auth_file, const char *dc_id_text,
@@ -11837,6 +11840,10 @@ static int tg_mtproto_auth_chat_command_on_context(
         built = tg_mtproto_build_messages_send_vote(
             &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash, value,
             poll, mask);
+    } else if (what == TG_CHAT_CMD_VOTERS && poll != 0) {
+        built = tg_mtproto_build_messages_get_poll_votes(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash, value,
+            (unsigned long)TG_MTPROTO_POLL_VOTES_MAX);
     }
     if (built != TG_MTPROTO_TL_OK) {
         return 2;
@@ -11882,6 +11889,15 @@ static int tg_mtproto_auth_chat_command_on_context(
                 reader.offset = at + 4UL;
                 tg_chat_poll_parse_update(&reader);
             }
+        }
+    } else if (what == TG_CHAT_CMD_VOTERS) {
+        /* `poll` is the kept one, which no answer of this kind moves */
+        if (result.result_constructor != TG_MTPROTO_VOTES_LIST_CONSTRUCTOR ||
+            tg_mtproto_poll_voters_text(poll, result.result_body,
+                                        result.result_body_length, 0UL,
+                                        tg_chat_voters_text,
+                                        sizeof(tg_chat_voters_text), 0) < 0) {
+            return 2;
         }
     }
     return 0;
@@ -12749,7 +12765,7 @@ static void tg_chat_history_add(const char *text)
     "          /history /forward /forwardto /react /reactions /ids\n" \
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
-    "          /markread /markunread /help /quit\n"
+    "          /voters /markread /markunread /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -16681,6 +16697,7 @@ static const char *const tg_chat_help_lines[] = {
     "  /markread       mark this chat as read on every device",
     "  /markunread     mark this chat as unread",
     "  /vote n [n..]   vote the last poll shown here; /vote none takes it back",
+    "  /voters         who voted in that poll, when its votes are public",
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
     "Support my work on Patreon: www.patreon.com/c/kaffeine1",
@@ -18636,6 +18653,55 @@ int tg_mtproto_auth_chat_file(const char *host,
                                     : "Telegram did not take it. Try again.");
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
                     tg_mtproto_close_auth_context(&chat_context);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/voters", &cmd_arg)) {
+            const tg_mtproto_poll *poll =
+                tg_chat_last_poll_message_id != 0UL
+                    ? tg_mtproto_poll_find(tg_chat_last_poll_id_hi,
+                                           tg_chat_last_poll_id_lo)
+                    : 0;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Choose a chat first with /list or /add name.");
+            } else if (poll == 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "No poll shown here yet: /history shows the "
+                            "recent messages again.");
+            } else if (!poll->public_voters) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "The votes of that poll are anonymous.");
+            } else {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_auth_chat_command_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, TG_CHAT_CMD_VOTERS,
+                    tg_chat_last_poll_message_id, poll, 0UL, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (rc == 0) {
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                    fputs("Who voted:\n", tui_cap);
+                    tg_mtproto_print_message_text(tui_cap,
+                                                  tg_chat_voters_text);
+                    fputc('\n', tui_cap);
+                    tg_console_tui_capture_end(tui_cap, stream);
+                } else {
+                    tg_mtproto_chat_print_system_line(
+                        stream,
+                        strcmp(tg_mtproto_query_fail, "POLL_VOTE_REQUIRED") == 0
+                            ? "Vote first (/vote): then Telegram says who "
+                              "voted."
+                            : "Telegram did not say who voted. Try again.");
+                    if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                        tg_mtproto_close_auth_context(&chat_context);
+                    }
                 }
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -29282,13 +29348,23 @@ static int tg_gui_session_apply_poll_updates(void)
    is held (one read too long ago is not: it shows, it cannot be voted). */
 int tg_gui_session_poll_state(unsigned long poll_id_hi,
                               unsigned long poll_id_lo, int *closed,
-                              int *voted, int *multiple, int *quiz)
+                              int *voted, int *multiple, int *quiz,
+                              int *names)
 {
     const tg_mtproto_poll *poll = tg_mtproto_poll_find(poll_id_hi,
                                                        poll_id_lo);
 
+    if (names != 0) {
+        *names = 0;
+    }
     if (poll == 0) {
         return 0;
+    }
+    if (names != 0) {
+        /* Telegram names the voters to who can see the results: who
+           voted, who made the poll, and everyone once it is closed. The
+           caller knows whose message it is. */
+        *names = tg_mtproto_poll_has_names(poll);
     }
     if (closed != 0) {
         *closed = poll->closed;
@@ -29637,6 +29713,97 @@ int tg_gui_session_poll_stop(unsigned long message_id,
     return 0;
 }
 
+/* Public: who voted in the poll of this message of the open chat, a
+   poll whose votes are public: the question, then a line for each answer
+   with the names under it, in the display's characters, lines no longer
+   than `width`. 0 = `out` holds it, 1 = Telegram refused (emsg says
+   why), 2 = failed. */
+int tg_gui_session_poll_voters(unsigned long message_id,
+                               unsigned long poll_id_hi,
+                               unsigned long poll_id_lo, unsigned long width,
+                               char *out, unsigned long size, char *emsg,
+                               unsigned long emsg_size, FILE *stream)
+{
+    static unsigned char query[64];
+    static char utf8[TG_MTPROTO_POLL_QUESTION_MAX + 2 +
+                     TG_MTPROTO_POLL_VOTERS_TEXT_MAX];
+    static const char label[] = "mtproto messages.getPollVotes";
+    const tg_mtproto_poll *poll = tg_mtproto_poll_find(poll_id_hi,
+                                                       poll_id_lo);
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long n;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (out == 0 || size == 0UL) {
+        return 2;
+    }
+    out[0] = '\0';
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        poll == 0 || tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "poll peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_get_poll_votes(
+             &writer, pc, ph, pl, ahh, ahl, hah, message_id,
+             (unsigned long)TG_MTPROTO_POLL_VOTES_MAX) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    /* the answer may have moved the polls about: look again */
+    poll = tg_mtproto_poll_find(poll_id_hi, poll_id_lo);
+    if (rc == 0 &&
+        (poll == 0 ||
+         result.result_constructor != TG_MTPROTO_VOTES_LIST_CONSTRUCTOR)) {
+        rc = 2;
+    }
+    if (rc == 0) {
+        strcpy(utf8, poll->question);
+        strcat(utf8, "\n\n");
+        n = (unsigned long)strlen(utf8);
+        if (tg_mtproto_poll_voters_text(poll, result.result_body,
+                                        result.result_body_length, width,
+                                        utf8 + n, sizeof(utf8) - n, 0) < 0) {
+            rc = 2;
+        }
+    }
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "poll: Telegram did not name the voters"
+                           : "poll: asking who voted failed");
+        return rc;
+    }
+    tg_gui_driver_text_from_utf8(out, size, utf8);
+    tg_gui_log("poll: who voted read");
+    return 0;
+}
+
 /* One text of a new poll as the wire wants it: UTF-8, from the keyboard's
    Latin-1 where that is what the composer holds. 0 when it does not fit. */
 static int tg_gui_poll_wire_text(const char *text, char *out,
@@ -29664,15 +29831,18 @@ static int tg_gui_poll_wire_text(const char *text, char *out,
    why), 2 = failed, 3 = the texts are missing or do not fit. */
 int tg_gui_session_poll_create(const char *question,
                                const char *const *answers, int count,
-                               int multiple, char *emsg,
+                               unsigned int kind, int correct,
+                               const char *solution, char *emsg,
                                unsigned long emsg_size, FILE *stream)
 {
     /* twice the bytes: a Latin-1 letter can take two in UTF-8 */
     static char wire_question[(TG_GUI_POLL_NEW_QUESTION * 2) + 1];
     static char wire_answers[TG_MTPROTO_POLL_CREATE_MAX]
                             [(TG_GUI_POLL_NEW_ANSWER * 2) + 1];
+    static char wire_solution[(TG_GUI_POLL_NEW_WHY * 2) + 1];
     static unsigned char query[sizeof(wire_question) + sizeof(wire_answers) +
-                               (TG_MTPROTO_POLL_CREATE_MAX * 32U) + 96U];
+                               sizeof(wire_solution) +
+                               (TG_MTPROTO_POLL_CREATE_MAX * 32U) + 128U];
     static const char label[] = "mtproto messages.sendMedia(poll)";
     const char *list[TG_MTPROTO_POLL_CREATE_MAX];
     unsigned char rnd[8];
@@ -29710,6 +29880,20 @@ int tg_gui_session_poll_create(const char *question,
         }
         list[k] = wire_answers[k];
     }
+    wire_solution[0] = '\0';
+    if (solution != 0 && solution[0] != '\0' &&
+        !tg_gui_poll_wire_text(solution, wire_solution,
+                               sizeof(wire_solution))) {
+        return 3;
+    }
+    /* a quiz has one right answer among those given, and only a quiz
+       explains anything */
+    if ((kind & TG_MTPROTO_POLL_NEW_QUIZ) != 0U
+            ? ((kind & TG_MTPROTO_POLL_NEW_MULTIPLE) != 0U || correct < 0 ||
+               correct >= count)
+            : wire_solution[0] != '\0') {
+        return 3;
+    }
     quiet = tg_mtproto_open_quiet_stream(stream);
     if (tg_mtproto_load_peer_cache_peer(
             tg_gui_session_state.peer_cache_file,
@@ -29724,7 +29908,8 @@ int tg_gui_session_poll_create(const char *question,
     tg_net_set_connect_timeout_seconds(10UL);
     rc = tg_mtproto_build_messages_send_media_poll(
              &writer, pc, ph, pl, ahh, ahl, hah, wire_question, list,
-             (unsigned int)count, multiple, tg_mtproto_read_u32_le(rnd + 4U),
+             (unsigned int)count, kind, correct, wire_solution,
+             tg_mtproto_read_u32_le(rnd + 4U),
              tg_mtproto_read_u32_le(rnd)) == TG_MTPROTO_TL_OK
              ? tg_gui_session_peer_request(query, writer.length, &result,
                                            label, emsg, emsg_size, quiet)

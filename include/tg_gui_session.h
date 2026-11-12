@@ -558,10 +558,14 @@ void tg_gui_session_mentions_forget(void);
    apart), with a mark each where several may be chosen (`mask` says which
    are); returns how many. poll_vote: votes the answers in `mask` (none
    takes the vote back) on that message of the open chat; 0 = done and
-   shown, 1 = Telegram refused (emsg says why), 2 = failed. */
+   shown, 1 = Telegram refused (emsg says why), 2 = failed. `names` of
+   poll_state: the votes are public and there are some to name; Telegram
+   names them to who voted, to who made the poll, and to everyone once
+   it is closed. */
 int tg_gui_session_poll_state(unsigned long poll_id_hi,
                               unsigned long poll_id_lo, int *closed,
-                              int *voted, int *multiple, int *quiz);
+                              int *voted, int *multiple, int *quiz,
+                              int *names);
 int tg_gui_session_poll_choices(unsigned long poll_id_hi,
                                 unsigned long poll_id_lo, unsigned long mask,
                                 int *multiple, char *items,
@@ -577,6 +581,16 @@ int tg_gui_session_poll_vote(unsigned long message_id,
    to write to (an account deleted, a sender that is not a person). */
 int tg_gui_session_message_sender(unsigned long message_id, char *emsg,
                                   unsigned long emsg_size, FILE *stream);
+/* Who voted in the poll of a message of the open chat, where the votes
+   are public: the question, then each answer with the names of who chose
+   it, as text in the display's characters with lines no longer than
+   `width`. 0 = `out` holds it, 1 = Telegram refused (emsg says why),
+   2 = failed. */
+int tg_gui_session_poll_voters(unsigned long message_id,
+                               unsigned long poll_id_hi,
+                               unsigned long poll_id_lo, unsigned long width,
+                               char *out, unsigned long size, char *emsg,
+                               unsigned long emsg_size, FILE *stream);
 /* Stops the poll of a message of the open chat, for good: nobody votes
    after that, and the message shows the final results. 0 = done,
    1 = Telegram refused (emsg says why), 2 = failed. */
@@ -584,14 +598,18 @@ int tg_gui_session_poll_stop(unsigned long message_id,
                              unsigned long poll_id_hi,
                              unsigned long poll_id_lo, char *emsg,
                              unsigned long emsg_size, FILE *stream);
-/* Makes a poll in the open chat: anonymous, with one answer or several
-   allowed. question and answers come as the composer holds text; `count`
-   answers, 2 to 10, none empty. 0 = sent (it shows with the chat's next
-   poll), 1 = Telegram refused (emsg says why), 2 = failed, 3 = the texts
-   are missing or too long. */
+/* Makes a poll in the open chat. `kind` is made of the
+   TG_MTPROTO_POLL_NEW_ bits: several answers allowed, public votes, a
+   quiz; a quiz has `correct`, its right answer (0 = the first), and may
+   have `solution`, the explanation shown after an answer. question,
+   answers and solution come as the composer holds text; `count` answers,
+   2 to 10, none empty. 0 = sent (it shows with the chat's next poll),
+   1 = Telegram refused (emsg says why), 2 = failed, 3 = the texts are
+   missing or too long, or the kind makes no sense. */
 int tg_gui_session_poll_create(const char *question,
                                const char *const *answers, int count,
-                               int multiple, char *emsg,
+                               unsigned int kind, int correct,
+                               const char *solution, char *emsg,
                                unsigned long emsg_size, FILE *stream);
 
 /* Searches Telegram for `query` (contacts.search), adds the first openable

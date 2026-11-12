@@ -111,15 +111,21 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   always for this account alone, and there only one's own messages
   could be deleted from the menu.
 - Create poll... in the first menu makes a poll in the open chat. A
-  small window takes the question, two to ten answers and a switch for
-  several answers; TAB or the cursor keys move between the lines, ENTER
-  goes to the next and, on Create, sends, and a click picks a line.
-  Answers left empty are dropped, and the window says what is missing
-  when the question or the second answer is. Votes are anonymous.
-  Telegram takes polls in groups and channels (and in Saved Messages),
-  not in a chat with one person, where the menu item says so. If
-  Telegram refuses the poll, or cannot be reached, what was typed is
-  kept and the menu item opens on it again.
+  small window takes the question, two to ten answers and three
+  switches: Several answers, Public votes (who voted what can be seen;
+  votes are anonymous otherwise) and Quiz. A quiz has one right answer,
+  picked with the two arrows beside the switch, by typing its number on
+  the switch, or with a click on the answer's label, which then reads
+  "Right"; it cannot allow several answers, and where the screen has the
+  room it has a line, Why, for the explanation shown to who has
+  answered. TAB or the cursor keys move between the lines, ENTER goes to
+  the next and, on Create, sends, and a click picks a line. Answers left
+  empty are dropped, and the window says what is missing when the
+  question, the second answer or the quiz's right answer is. Telegram
+  takes polls in groups and channels (and in Saved Messages), not in a
+  chat with one person, where the menu item says so. If Telegram refuses
+  the poll, or cannot be reached, what was typed is kept and the menu
+  item opens on it again.
 - Formatting typed in the message box is sent as formatting:
   `**bold**`, `__italic__`, `~~strike~~`, `||spoiler||`, a backtick
   before and after for code, three of them for a block of code. The
@@ -141,6 +147,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - A quiz shows its explanation once it is answered, on a line that
   starts with "Why:", under the votes; a poll whose votes are public
   says so next to the number of votes. Both were read past until now.
+- Who voted..., in the menu of a poll whose votes are public, once you
+  have voted (or the poll is yours, or closed): Telegram is asked for
+  the voters and a requester lists them under each answer, the latest
+  50 votes (30 on 68k), with a last line when there are more. In the
+  text client /voters does the same for the last poll shown.
 - A chat pinned or unpinned, or marked as unread or read, on another
   device is followed while the client runs: the pins and the marks are
   read again from Telegram at the next poll and the chat list is drawn

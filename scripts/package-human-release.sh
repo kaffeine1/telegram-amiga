@@ -682,13 +682,21 @@ Messages
   menu, undoes it; the answer given to a quiz stays, and the quiz then
   shows its explanation, when it has one, on a line that starts with
   "Why:". A poll whose votes are public says so next to the number of
-  votes. In the text client
+  votes, and once you have voted its menu has "Who voted...", which
+  lists the voters under each answer. In the text client
   /vote 2 votes the second answer of the last poll shown (/vote 1 3
-  where several are allowed) and /vote none takes the vote back.
+  where several are allowed), /vote none takes the vote back and
+  /voters lists who voted, where the votes are public.
 - "Create poll..." in the first menu makes a poll in the open chat: a
-  question, two to ten answers, and a switch to allow several answers.
+  question, two to ten answers, and three switches. "Several answers"
+  lets people choose more than one; "Public votes" lets everybody see
+  who voted what (votes are anonymous otherwise); "Quiz" makes one
+  answer the right one: pick it with the arrows beside the switch, by
+  typing its number while the switch is selected, or with a click on
+  the answer's label. On a screen with enough room a quiz also has a
+  "Why" line, for the explanation shown to who has answered.
   TAB or the cursor keys move between the lines, ENTER goes to the next
-  one and, on Create, sends. Votes are anonymous. Telegram takes polls
+  one and, on Create, sends. Telegram takes polls
   in groups and channels, not in a chat with one person.
 - Stop poll, in the menu of a poll you made, closes it after a
   confirmation: nobody can vote any more, the message shows the final
@@ -943,16 +951,24 @@ Messaggi
   menu, lo ritira; la risposta data a un quiz resta, e il quiz mostra
   allora la sua spiegazione, se ne ha una, su una riga che comincia con
   "Why:". Un sondaggio con i voti pubblici lo dice accanto al numero
-  dei voti. Nel client testuale
+  dei voti e, dopo che hai votato, il suo menu ha "Who voted...", che
+  elenca chi ha votato sotto ogni risposta. Nel client testuale
   /vote 2 vota la seconda risposta dell'ultimo sondaggio mostrato
-  (/vote 1 3 dove se ne possono scegliere piu' d'una) e /vote none
-  ritira il voto.
+  (/vote 1 3 dove se ne possono scegliere piu' d'una), /vote none
+  ritira il voto e /voters elenca chi ha votato, dove i voti sono
+  pubblici.
 - "Create poll..." nel primo menu crea un sondaggio nella chat aperta:
-  una domanda, da due a dieci risposte, e un interruttore per
-  permettere piu' risposte. TAB o i tasti cursore passano da una riga
-  all'altra, INVIO va alla successiva e, su Create, lo manda. I voti
-  sono anonimi. Telegram accetta i sondaggi nei gruppi e nei canali,
-  non nella chat con una persona sola.
+  una domanda, da due a dieci risposte, e tre interruttori. "Several
+  answers" permette di scegliere piu' risposte; "Public votes" fa
+  vedere a tutti chi ha votato cosa (altrimenti i voti sono anonimi);
+  "Quiz" rende giusta una sola risposta: si sceglie con le frecce
+  accanto all'interruttore, scrivendo il suo numero mentre
+  l'interruttore e' selezionato, o con un click sull'etichetta della
+  risposta. Su uno schermo con abbastanza spazio il quiz ha anche la
+  riga "Why", per la spiegazione mostrata a chi ha risposto. TAB o i
+  tasti cursore passano da una riga all'altra, INVIO va alla successiva
+  e, su Create, lo manda. Telegram accetta i sondaggi nei gruppi e nei
+  canali, non nella chat con una persona sola.
 - Stop poll, nel menu di un sondaggio fatto da te, lo chiude dopo una
   conferma: nessuno puo' piu' votare, il messaggio mostra i risultati
   finali, e un sondaggio fermato non si riapre.

@@ -9187,26 +9187,55 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
 
 /* --- Create poll (0.2). ---------------------------------------------------
    A small window like the send-photo one, drawn the same way: a question,
-   up to ten answers, a switch for several answers, Create and Cancel. TAB
-   or the cursor keys move between the lines (Shift+TAB back), ENTER goes
-   to the next line and, on Create, sends; a click picks a line. The texts
-   are plain, as typed: no emoji picker in here. On a low screen fewer
-   answer lines are shown. */
+   up to ten answers, three switches (several answers, public votes,
+   quiz), Create and Cancel. A quiz has one right answer, picked with the
+   arrows beside the switch, with its number typed on the switch, or with
+   a click on the answer's label; where the screen has the room it also
+   has a line for the explanation. TAB or the cursor keys move between
+   the lines (Shift+TAB back), ENTER goes to the next line and, on Create,
+   sends; a click picks a line. The texts are plain, as typed: no emoji
+   picker in here. On a low screen fewer answer lines are shown. */
 typedef struct tg_gui_pollnew_ui {
     tg_gui_sendphoto_ui base; /* the window, the font, the drawing helpers */
     tg_gui_poll_draft *draft;
     int rows;      /* answer lines shown */
-    int focus;     /* 0 the question, 1..rows an answer, then the switch,
-                      then Create */
+    int why;       /* there is room for the explanation line */
+    int focus;     /* 0 the question, 1..rows an answer, then the three
+                      switches, the explanation, Create: the F_ ids below */
     int field_x;
     int field_w;
     int row_h;
-    int sw_y;
+    int sw_y;      /* several answers | public votes */
+    int sw_x;      /* where the first of the two starts */
+    int sw_x2;     /* and the second */
+    int quiz_y;    /* the quiz switch and its right answer */
+    int ra_x[2];   /* the arrows that move the right answer */
+    int ra_w[2];
+    int why_y;
     int btn_y;
     int btn_x[2];
     int btn_w[2];  /* Create, Cancel */
     const char *note; /* what is missing, said beside the buttons */
 } tg_gui_pollnew_ui;
+
+#define TG_POLLNEW_F_MULTI(ui) ((ui)->rows + 1)
+#define TG_POLLNEW_F_PUBLIC(ui) ((ui)->rows + 2)
+#define TG_POLLNEW_F_QUIZ(ui) ((ui)->rows + 3)
+#define TG_POLLNEW_F_WHY(ui) ((ui)->rows + 4)
+#define TG_POLLNEW_F_GO(ui) ((ui)->rows + 5)
+
+/* The explanation is typed only in a quiz, and only where it has a line. */
+static int tg_gui_pollnew_has_why(const tg_gui_pollnew_ui *ui)
+{
+    return ui->why && ui->draft->quiz;
+}
+
+/* A line where text is typed: the question, an answer, the explanation. */
+static int tg_gui_pollnew_is_text(const tg_gui_pollnew_ui *ui, int line)
+{
+    return (line >= 0 && line <= ui->rows) ||
+           (line == TG_POLLNEW_F_WHY(ui) && tg_gui_pollnew_has_why(ui));
+}
 
 static char *tg_gui_pollnew_text(tg_gui_pollnew_ui *ui, int line,
                                  unsigned long *limit)
@@ -9214,6 +9243,10 @@ static char *tg_gui_pollnew_text(tg_gui_pollnew_ui *ui, int line,
     if (line == 0) {
         *limit = TG_GUI_POLL_NEW_QUESTION - 1UL;
         return ui->draft->question;
+    }
+    if (line == TG_POLLNEW_F_WHY(ui)) {
+        *limit = TG_GUI_POLL_NEW_WHY - 1UL;
+        return ui->draft->why;
     }
     *limit = TG_GUI_POLL_NEW_ANSWER - 1UL;
     return ui->draft->answers[line - 1];
@@ -9226,8 +9259,10 @@ static void tg_gui_pollnew_line(tg_gui_pollnew_ui *ui, int line)
     tg_gui_sendphoto_ui *b = &ui->base;
     struct RastPort *rp = b->win->RPort;
     int lh = b->main_ctx->line_h;
-    int y = 8 + line * ui->row_h;
+    int y = line == TG_POLLNEW_F_WHY(ui) ? ui->why_y : 8 + line * ui->row_h;
     int ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline : lh - 2;
+    int right = ui->draft->quiz && line >= 1 && line <= ui->rows &&
+                line - 1 == ui->draft->correct;
     unsigned long limit;
     char *text = tg_gui_pollnew_text(ui, line, &limit);
     unsigned long len = (unsigned long)strlen(text);
@@ -9236,11 +9271,14 @@ static void tg_gui_pollnew_line(tg_gui_pollnew_ui *ui, int line)
 
     if (line == 0) {
         strcpy(label, "Question");
+    } else if (line == TG_POLLNEW_F_WHY(ui)) {
+        strcpy(label, "Why");
     } else {
-        sprintf(label, "Answer %d", line);
+        sprintf(label, right ? "Right %d" : "Answer %d", line);
     }
     tg_gui_sendphoto_box(b, TG_GUI_PEN_WINDOW, 0, y, ui->field_x, lh + 6);
-    tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT_DIM, 8, y + 3 + ascent, label,
+    tg_gui_sendphoto_text(b, right ? TG_GUI_PEN_TEXT : TG_GUI_PEN_TEXT_DIM, 8,
+                          y + 3 + ascent, label,
                           (unsigned long)strlen(label));
     tg_gui_sendphoto_box(b, TG_GUI_PEN_SURFACE, ui->field_x, y, ui->field_w,
                          lh + 6);
@@ -9266,35 +9304,97 @@ static void tg_gui_pollnew_line(tg_gui_pollnew_ui *ui, int line)
     }
 }
 
-/* The switch, the note and the two buttons. */
-static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
+/* One switch: a square, filled when on, its text beside it. Returns the
+   x where what follows it may start. */
+static int tg_gui_pollnew_switch(tg_gui_pollnew_ui *ui, int x, int y, int on,
+                                 int focused, const char *text)
 {
-    static const char *labels[2] = { "Create", "Cancel" };
-    static const char sw_text[] = "Several answers may be chosen";
     tg_gui_sendphoto_ui *b = &ui->base;
     struct RastPort *rp = b->win->RPort;
     int lh = b->main_ctx->line_h;
     int ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline : lh - 2;
-    int sw_focus = ui->focus == ui->rows + 1;
-    int go_focus = ui->focus == ui->rows + 2;
     int box = lh - 2;
+    unsigned long len = (unsigned long)strlen(text);
+
+    tg_gui_sendphoto_box(b, focused ? TG_GUI_PEN_ACCENT : TG_GUI_PEN_TEXT_DIM,
+                         x, y + 3, box, box);
+    tg_gui_sendphoto_box(b, TG_GUI_PEN_SURFACE, x + 2, y + 5, box - 4,
+                         box - 4);
+    if (on) {
+        tg_gui_sendphoto_box(b, TG_GUI_PEN_TEXT, x + 4, y + 7, box - 8,
+                             box - 8);
+    }
+    tg_gui_sendphoto_text(b, focused ? TG_GUI_PEN_TEXT : TG_GUI_PEN_TEXT_DIM,
+                          x + box + 8, y + 3 + ascent, text, len);
+    return x + box + 8 + tg_gui_sendphoto_text_width(b, text, len);
+}
+
+/* The switches, the quiz's right answer and explanation, the note and
+   the two buttons. */
+static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
+{
+    static const char *labels[2] = { "Create", "Cancel" };
+    static const char multi_text[] = "Several answers";
+    static const char public_text[] = "Public votes";
+    static const char *arrows[2] = { "<", ">" };
+    tg_gui_sendphoto_ui *b = &ui->base;
+    struct RastPort *rp = b->win->RPort;
+    int lh = b->main_ctx->line_h;
+    int ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline : lh - 2;
+    int go_focus = ui->focus == TG_POLLNEW_F_GO(ui);
+    const char *note = ui->note;
     int x;
     int i;
 
     tg_gui_sendphoto_box(b, TG_GUI_PEN_WINDOW, 0, ui->sw_y, b->iw,
                          b->ih - ui->sw_y);
-    /* the switch: a square, filled when on, its text beside it */
-    tg_gui_sendphoto_box(b, sw_focus ? TG_GUI_PEN_ACCENT : TG_GUI_PEN_TEXT_DIM,
-                         ui->field_x, ui->sw_y + 3, box, box);
-    tg_gui_sendphoto_box(b, TG_GUI_PEN_SURFACE, ui->field_x + 2,
-                         ui->sw_y + 5, box - 4, box - 4);
-    if (ui->draft->multiple) {
-        tg_gui_sendphoto_box(b, TG_GUI_PEN_TEXT, ui->field_x + 4,
-                             ui->sw_y + 7, box - 8, box - 8);
+    x = tg_gui_pollnew_switch(ui, ui->sw_x, ui->sw_y, ui->draft->multiple,
+                              ui->focus == TG_POLLNEW_F_MULTI(ui),
+                              multi_text);
+    ui->sw_x2 = x + 16;
+    (void)tg_gui_pollnew_switch(ui, ui->sw_x2, ui->sw_y,
+                                ui->draft->public_votes,
+                                ui->focus == TG_POLLNEW_F_PUBLIC(ui),
+                                public_text);
+    x = tg_gui_pollnew_switch(ui, ui->sw_x, ui->quiz_y, ui->draft->quiz,
+                              ui->focus == TG_POLLNEW_F_QUIZ(ui), "Quiz");
+    ui->ra_w[0] = 0;
+    ui->ra_w[1] = 0;
+    if (ui->draft->quiz) {
+        /* the right answer: its number between two arrows */
+        static const char ra_text[] = "Right answer:";
+        char number[8];
+        int aw = tg_gui_sendphoto_text_width(b, "<", 1UL) + 10;
+
+        x += 16;
+        tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT_DIM, x,
+                              ui->quiz_y + 3 + ascent, ra_text,
+                              (unsigned long)(sizeof(ra_text) - 1U));
+        x += tg_gui_sendphoto_text_width(
+                 b, ra_text, (unsigned long)(sizeof(ra_text) - 1U)) + 8;
+        sprintf(number, "%d", ui->draft->correct + 1);
+        for (i = 0; i < 2; ++i) {
+            ui->ra_x[i] = x;
+            ui->ra_w[i] = aw;
+            tg_gui_sendphoto_box(b, TG_GUI_PEN_SURFACE, x, ui->quiz_y + 1,
+                                 aw, lh + 4);
+            tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT, x + 5,
+                                  ui->quiz_y + 3 + ascent, arrows[i], 1UL);
+            x += aw + 6;
+            if (i == 0) {
+                tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT, x,
+                                      ui->quiz_y + 3 + ascent, number,
+                                      (unsigned long)strlen(number));
+                x += tg_gui_sendphoto_text_width(b, "10", 2UL) + 6;
+            }
+        }
+        if (ui->why) {
+            tg_gui_pollnew_line(ui, TG_POLLNEW_F_WHY(ui));
+        }
+        if (note == 0 && ui->focus == TG_POLLNEW_F_QUIZ(ui)) {
+            note = "Type the right answer's number";
+        }
     }
-    tg_gui_sendphoto_text(b, sw_focus ? TG_GUI_PEN_TEXT : TG_GUI_PEN_TEXT_DIM,
-                          ui->field_x + box + 8, ui->sw_y + 3 + ascent,
-                          sw_text, (unsigned long)(sizeof(sw_text) - 1U));
     /* buttons, right-aligned: [Create] [Cancel] */
     x = b->iw - 8;
     for (i = 1; i >= 0; --i) {
@@ -9320,9 +9420,9 @@ static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
         tg_gui_sendphoto_box(b, TG_GUI_PEN_TEXT, ui->btn_x[0],
                              ui->btn_y + lh + 8, ui->btn_w[0], 2);
     }
-    if (ui->note != 0) {
+    if (note != 0) {
         tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT, 8, ui->btn_y + 4 + ascent,
-                              ui->note, (unsigned long)strlen(ui->note));
+                              note, (unsigned long)strlen(note));
     }
 }
 
@@ -9338,23 +9438,45 @@ static void tg_gui_pollnew_paint(tg_gui_pollnew_ui *ui)
     tg_gui_pollnew_foot(ui);
 }
 
-/* Redraws what a change of line touches, under the layer lock like every
-   draw outside a refresh in this file. */
-static void tg_gui_pollnew_redraw(tg_gui_pollnew_ui *ui, int line_a,
-                                  int line_b)
+/* The whole window again, under the layer lock like every draw outside a
+   refresh in this file: after a change that touches several lines. */
+static void tg_gui_pollnew_repaint(tg_gui_pollnew_ui *ui)
 {
     struct Window *win = ui->base.win;
 
     if (win->RPort != 0 && win->RPort->Layer != 0) {
         LockLayerRom(win->RPort->Layer);
     }
-    if (line_a >= 0 && line_a <= ui->rows) {
-        tg_gui_pollnew_line(ui, line_a);
+    tg_gui_pollnew_paint(ui);
+    if (win->RPort != 0 && win->RPort->Layer != 0) {
+        UnlockLayerRom(win->RPort->Layer);
     }
-    if (line_b >= 0 && line_b <= ui->rows && line_b != line_a) {
-        tg_gui_pollnew_line(ui, line_b);
+}
+
+/* Redraws what a change of line touches, under the layer lock too. */
+static void tg_gui_pollnew_redraw(tg_gui_pollnew_ui *ui, int line_a,
+                                  int line_b)
+{
+    struct Window *win = ui->base.win;
+    int foot = 0;
+    int k;
+
+    if (win->RPort != 0 && win->RPort->Layer != 0) {
+        LockLayerRom(win->RPort->Layer);
     }
-    if (line_a > ui->rows || line_b > ui->rows || line_a < 0) {
+    for (k = 0; k < 2; ++k) {
+        int line = k == 0 ? line_a : line_b;
+
+        if (k == 1 && line_b == line_a) {
+            break;
+        }
+        if (tg_gui_pollnew_is_text(ui, line)) {
+            tg_gui_pollnew_line(ui, line);
+        } else {
+            foot = 1; /* a switch, a button, or the note */
+        }
+    }
+    if (foot) {
         tg_gui_pollnew_foot(ui);
     }
     if (win->RPort != 0 && win->RPort->Layer != 0) {
@@ -9364,9 +9486,12 @@ static void tg_gui_pollnew_redraw(tg_gui_pollnew_ui *ui, int line_a,
 
 static void tg_gui_pollnew_focus(tg_gui_pollnew_ui *ui, int to)
 {
-    int last = ui->rows + 2;
+    int last = TG_POLLNEW_F_GO(ui);
     int from = ui->focus;
 
+    if (to == TG_POLLNEW_F_WHY(ui) && !tg_gui_pollnew_has_why(ui)) {
+        to += to > from ? 1 : -1; /* no explanation to type: past it */
+    }
     if (to < 0) {
         to = last;
     } else if (to > last) {
@@ -9375,6 +9500,47 @@ static void tg_gui_pollnew_focus(tg_gui_pollnew_ui *ui, int to)
     ui->focus = to;
     ui->base.cursor_on = 1;
     tg_gui_pollnew_redraw(ui, from, to);
+}
+
+/* The three switches. A quiz has one right answer, so it and "several
+   answers" turn each other off. */
+static void tg_gui_pollnew_toggle(tg_gui_pollnew_ui *ui, int which)
+{
+    tg_gui_poll_draft *d = ui->draft;
+
+    if (which == TG_POLLNEW_F_MULTI(ui)) {
+        d->multiple = !d->multiple;
+        if (d->multiple) {
+            d->quiz = 0;
+        }
+    } else if (which == TG_POLLNEW_F_PUBLIC(ui)) {
+        d->public_votes = !d->public_votes;
+    } else if (which == TG_POLLNEW_F_QUIZ(ui)) {
+        d->quiz = !d->quiz;
+        if (d->quiz) {
+            d->multiple = 0;
+        }
+    }
+    if (d->correct < 0 || d->correct >= ui->rows) {
+        d->correct = 0;
+    }
+    ui->note = 0;
+    ui->focus = which;
+    tg_gui_pollnew_repaint(ui); /* the answers' labels follow the quiz */
+}
+
+/* The quiz's right answer: line `to` of the answers shown (0 = the
+   first), going round at the ends. */
+static void tg_gui_pollnew_right(tg_gui_pollnew_ui *ui, int to)
+{
+    if (to < 0) {
+        to = ui->rows - 1;
+    } else if (to >= ui->rows) {
+        to = 0;
+    }
+    ui->draft->correct = to;
+    ui->note = 0;
+    tg_gui_pollnew_repaint(ui);
 }
 
 /* 1 = Create (the draft is tidy and good to send), 0 = cancelled. */
@@ -9414,22 +9580,32 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
         ? (int)screen->WBorTop + (int)screen->WBorBottom +
           ((screen->Font != 0) ? (int)screen->Font->ta_YSize + 1 : 11)
         : (int)parent->BorderTop + (int)parent->BorderBottom;
-    /* as many answer lines as the screen has room for, ten at most */
+    /* As many answer lines as the screen has room for, ten at most. The
+       explanation's line comes only where six answers still fit with it:
+       on a low screen the answers matter more. */
     ui.rows = TG_GUI_POLL_NEW_ANSWERS;
+    ui.why = 1;
     if (screen != 0) {
         int room = (int)screen->Height - bor_h - 8 /* top */ -
-                   (2 * ui.row_h) /* question, switch */ -
+                   (3 * ui.row_h) /* question, two rows of switches */ -
                    (lh + 8 + 14) /* buttons */;
+        int lines = room / ui.row_h;
 
-        if (room / ui.row_h < ui.rows) {
-            ui.rows = room / ui.row_h;
+        ui.why = lines >= 7;
+        if (lines - ui.why < ui.rows) {
+            ui.rows = lines - ui.why;
         }
     }
     if (ui.rows < 2) {
         return 0; /* no room for a poll's two answers */
     }
+    if (draft->correct < 0 || draft->correct >= ui.rows) {
+        draft->correct = 0;
+    }
     ui.sw_y = 8 + (ui.rows + 1) * ui.row_h;
-    ui.btn_y = ui.sw_y + ui.row_h + 4;
+    ui.quiz_y = ui.sw_y + ui.row_h;
+    ui.why_y = ui.quiz_y + ui.row_h;
+    ui.btn_y = (ui.why ? ui.why_y : ui.quiz_y) + ui.row_h + 4;
     ui.base.ih = ui.btn_y + lh + 8 + 10;
     {
         int est_w = ui.base.iw + bor_w;
@@ -9494,13 +9670,16 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
     ui.field_x = 8 + tg_gui_sendphoto_text_width(&ui.base, "Answer 10", 9UL) +
                  8;
     ui.field_w = ui.base.iw - ui.field_x - 8;
-    if (ui.base.win->RPort != 0 && ui.base.win->RPort->Layer != 0) {
-        LockLayerRom(ui.base.win->RPort->Layer);
+    /* The switches start under the fields; in a font too wide for the two
+       of the first row side by side, at the window's left edge. */
+    ui.sw_x = ui.field_x;
+    if (ui.sw_x + (2 * (lh + 6)) + 16 +
+            tg_gui_sendphoto_text_width(&ui.base, "Several answers", 15UL) +
+            tg_gui_sendphoto_text_width(&ui.base, "Public votes", 12UL) >
+        ui.base.iw - 8) {
+        ui.sw_x = 8;
     }
-    tg_gui_pollnew_paint(&ui);
-    if (ui.base.win->RPort != 0 && ui.base.win->RPort->Layer != 0) {
-        UnlockLayerRom(ui.base.win->RPort->Layer);
-    }
+    tg_gui_pollnew_repaint(&ui);
     ActivateWindow(ui.base.win);
     while (!done) {
         struct IntuiMessage *msg;
@@ -9513,6 +9692,10 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
             UWORD qual = msg->Qualifier;
             WORD mx = msg->MouseX;
             WORD my = msg->MouseY;
+            int on_switch = ui.focus == TG_POLLNEW_F_MULTI(&ui) ||
+                            ui.focus == TG_POLLNEW_F_PUBLIC(&ui) ||
+                            ui.focus == TG_POLLNEW_F_QUIZ(&ui);
+            int on_quiz = ui.focus == TG_POLLNEW_F_QUIZ(&ui) && draft->quiz;
             int create = 0;
 
             ReplyMsg((struct Message *)msg);
@@ -9524,7 +9707,8 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                 EndRefresh(ui.base.win, TRUE);
             } else if (cls == IDCMP_INTUITICKS) {
                 /* the caret, at the cadence of the composer's */
-                if (++ui.base.tick_count >= 5 && ui.focus <= ui.rows) {
+                if (++ui.base.tick_count >= 5 &&
+                    tg_gui_pollnew_is_text(&ui, ui.focus)) {
                     ui.base.tick_count = 0;
                     ui.base.cursor_on = !ui.base.cursor_on;
                     tg_gui_pollnew_redraw(&ui, ui.focus, ui.focus);
@@ -9534,6 +9718,10 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                     tg_gui_pollnew_focus(&ui, ui.focus - 1);
                 } else if (code == 0x4dU) { /* cursor down */
                     tg_gui_pollnew_focus(&ui, ui.focus + 1);
+                } else if (on_quiz && code == 0x4fU) { /* cursor left */
+                    tg_gui_pollnew_right(&ui, draft->correct - 1);
+                } else if (on_quiz && code == 0x4eU) { /* cursor right */
+                    tg_gui_pollnew_right(&ui, draft->correct + 1);
                 }
             } else if (cls == IDCMP_VANILLAKEY) {
                 if (code == 27U) {
@@ -9543,16 +9731,22 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                         &ui, ui.focus +
                              ((qual & (IEQUALIFIER_LSHIFT |
                                        IEQUALIFIER_RSHIFT)) != 0 ? -1 : 1));
-                } else if (ui.focus == ui.rows + 2) {
+                } else if (ui.focus == TG_POLLNEW_F_GO(&ui)) {
                     if (code == 13U || code == 32U) {
                         create = 1;
                     }
-                } else if (ui.focus == ui.rows + 1) {
+                } else if (on_switch) {
                     if (code == 32U) {
-                        draft->multiple = !draft->multiple;
-                        tg_gui_pollnew_redraw(&ui, ui.focus, ui.focus);
+                        tg_gui_pollnew_toggle(&ui, ui.focus);
                     } else if (code == 13U) {
                         tg_gui_pollnew_focus(&ui, ui.focus + 1);
+                    } else if (on_quiz && code >= '0' && code <= '9') {
+                        /* the right answer by its number, 0 for the tenth */
+                        int to = code == '0' ? 9 : (int)code - '1';
+
+                        if (to < ui.rows) {
+                            tg_gui_pollnew_right(&ui, to);
+                        }
                     }
                 } else if (code == 13U) {
                     tg_gui_pollnew_focus(&ui, ui.focus + 1);
@@ -9572,7 +9766,8 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                     ui.base.cursor_on = 1;
                     if (ui.note != 0) {
                         ui.note = 0; /* being put right */
-                        tg_gui_pollnew_redraw(&ui, ui.focus, ui.rows + 1);
+                        tg_gui_pollnew_redraw(&ui, ui.focus,
+                                              TG_POLLNEW_F_GO(&ui));
                     } else {
                         tg_gui_pollnew_redraw(&ui, ui.focus, ui.focus);
                     }
@@ -9589,10 +9784,35 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                         done = 1;
                     }
                 } else if (iy >= ui.sw_y && iy < ui.sw_y + ui.row_h) {
-                    draft->multiple = !draft->multiple;
-                    tg_gui_pollnew_focus(&ui, ui.rows + 1);
+                    tg_gui_pollnew_toggle(&ui,
+                                          ix < ui.sw_x2 - 8
+                                              ? TG_POLLNEW_F_MULTI(&ui)
+                                              : TG_POLLNEW_F_PUBLIC(&ui));
+                } else if (iy >= ui.quiz_y && iy < ui.quiz_y + ui.row_h) {
+                    if (draft->quiz && ix >= ui.ra_x[0] &&
+                        ix < ui.ra_x[0] + ui.ra_w[0]) {
+                        ui.focus = TG_POLLNEW_F_QUIZ(&ui);
+                        tg_gui_pollnew_right(&ui, draft->correct - 1);
+                    } else if (draft->quiz && ix >= ui.ra_x[1] &&
+                               ix < ui.ra_x[1] + ui.ra_w[1]) {
+                        ui.focus = TG_POLLNEW_F_QUIZ(&ui);
+                        tg_gui_pollnew_right(&ui, draft->correct + 1);
+                    } else {
+                        tg_gui_pollnew_toggle(&ui, TG_POLLNEW_F_QUIZ(&ui));
+                    }
+                } else if (tg_gui_pollnew_has_why(&ui) && iy >= ui.why_y &&
+                           iy < ui.why_y + ui.row_h) {
+                    tg_gui_pollnew_focus(&ui, TG_POLLNEW_F_WHY(&ui));
                 } else if (iy >= 8 && iy < 8 + (ui.rows + 1) * ui.row_h) {
-                    tg_gui_pollnew_focus(&ui, (iy - 8) / ui.row_h);
+                    int line = (iy - 8) / ui.row_h;
+
+                    if (draft->quiz && line >= 1 && ix < ui.field_x) {
+                        /* a click on an answer's label: the right one */
+                        ui.focus = line;
+                        tg_gui_pollnew_right(&ui, line - 1);
+                    } else {
+                        tg_gui_pollnew_focus(&ui, line);
+                    }
                 }
             }
             if (create) {
@@ -9602,24 +9822,21 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                     result = 1;
                     done = 1;
                 } else {
-                    /* say what is missing, go to where it is typed */
+                    /* say what is missing, go to where it is put right */
                     ui.note = n == -1 ? "A poll needs a question"
-                                      : "A poll needs two answers";
-                    ui.focus = n == -1 ? 0 : (n == -2 && draft->answers[0][0]
-                                                  != '\0' ? 2 : 1);
-                    if (ui.focus > ui.rows) {
+                              : n == -2 ? "A poll needs two answers"
+                                        : "Pick the quiz's right answer";
+                    ui.focus = n == -1 ? 0
+                               : n == -3 ? TG_POLLNEW_F_QUIZ(&ui)
+                               : (draft->answers[0][0] != '\0' ? 2 : 1);
+                    if (n == -2 && ui.focus > ui.rows) {
                         ui.focus = ui.rows;
                     }
+                    if (draft->correct < 0 || draft->correct >= ui.rows) {
+                        draft->correct = 0; /* its line is not shown */
+                    }
                     ui.base.cursor_on = 1;
-                    if (ui.base.win->RPort != 0 &&
-                        ui.base.win->RPort->Layer != 0) {
-                        LockLayerRom(ui.base.win->RPort->Layer);
-                    }
-                    tg_gui_pollnew_paint(&ui);
-                    if (ui.base.win->RPort != 0 &&
-                        ui.base.win->RPort->Layer != 0) {
-                        UnlockLayerRom(ui.base.win->RPort->Layer);
-                    }
+                    tg_gui_pollnew_repaint(&ui);
                 }
             }
         }
@@ -9683,8 +9900,12 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
                        "Sending the poll...");
     tg_gui_window_paint_status(state, backend);
     why[0] = '\0';
-    rc = tg_gui_session_poll_create(draft.question, answers, count,
-                                    draft.multiple, why, sizeof(why), stdout);
+    rc = tg_gui_session_poll_create(
+        draft.question, answers, count,
+        (draft.multiple ? TG_MTPROTO_POLL_NEW_MULTIPLE : 0U) |
+            (draft.public_votes ? TG_MTPROTO_POLL_NEW_PUBLIC : 0U) |
+            (draft.quiz ? TG_MTPROTO_POLL_NEW_QUIZ : 0U),
+        draft.quiz ? draft.correct : -1, draft.why, why, sizeof(why), stdout);
     if (rc == 0) {
         strcpy(line, "Poll sent");
     } else {
@@ -10205,6 +10426,63 @@ static int tg_gui_window_save_edit(tg_gui_state *state)
 }
 
 /* Stop poll: asked first, since a stopped poll stays stopped. */
+/* "Who voted..." on a poll with public votes: Telegram is asked for the
+   voters, and a requester lists them under each answer. */
+static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
+                                      tg_gui_backend *backend,
+                                      const tg_gui_message *m)
+{
+    static char got[TG_MTPROTO_POLL_QUESTION_MAX + 2 +
+                    TG_MTPROTO_POLL_VOTERS_TEXT_MAX];
+    static char body[sizeof(got) + 320]; /* an emoticon outgrows its pair */
+    struct EasyStruct es;
+    char why[48];
+    int max_lines;
+    int rc;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Asking who voted...");
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    rc = tg_gui_session_poll_voters(m->id, m->poll_id_hi, m->poll_id_lo,
+                                    56UL, got, sizeof(got), why, sizeof(why),
+                                    stdout);
+    if (rc != 0) {
+        char line[96]; /* the status line is shorter: cut on the copy */
+
+        if (rc == 1 && strcmp(why, "POLL_VOTE_REQUIRED") == 0) {
+            strcpy(line, "Vote first: then Telegram says who voted");
+        } else if (rc == 1) {
+            sprintf(line, "Telegram refused: %.28s",
+                    why[0] != '\0' ? why : "no reason given");
+        } else {
+            strcpy(line, "Could not reach Telegram");
+        }
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    /* As many lines as the screen can hold under a title and over a
+       button, with room to spare. */
+    max_lines = 12;
+    if (win->WScreen != 0 && win->WScreen->RastPort.TxHeight > 0) {
+        max_lines = ((int)win->WScreen->Height /
+                     (int)win->WScreen->RastPort.TxHeight) - 8;
+    }
+    if (max_lines < 6) {
+        max_lines = 6;
+    }
+    tg_gui_requester_text(body, sizeof(body), got, max_lines);
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)"Who voted";
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)"OK";
+    (void)tg_gui_amiga_easyreq_args(win, &es);
+}
+
 static void tg_gui_window_poll_stop(tg_gui_state *state, struct Window *win,
                                     tg_gui_backend *backend,
                                     const tg_gui_message *m)
@@ -16092,16 +16370,26 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_poll_open = 0;
                             state->ctx_poll_voted = 0;
                             state->ctx_poll_live = 0;
+                            state->ctx_poll_names = 0;
                             if (state->messages[mi].poll_id_hi != 0UL ||
                                 state->messages[mi].poll_id_lo != 0UL) {
                                 int p_closed = 0;
                                 int p_voted = 0;
                                 int p_quiz = 0;
+                                int p_names = 0;
 
                                 if (tg_gui_session_poll_state(
                                         state->messages[mi].poll_id_hi,
                                         state->messages[mi].poll_id_lo,
-                                        &p_closed, &p_voted, 0, &p_quiz)) {
+                                        &p_closed, &p_voted, 0, &p_quiz,
+                                        &p_names)) {
+                                    /* who voted is told to who can
+                                       see the results */
+                                    state->ctx_poll_names =
+                                        p_names &&
+                                        (p_voted || p_closed ||
+                                         state->messages[mi].is_own ||
+                                         tg_gui_open_chat_is_self(state));
                                     state->ctx_poll_open =
                                         !p_closed && !p_voted;
                                     state->ctx_poll_voted =
@@ -16414,6 +16702,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 m->poll_id_lo != 0UL)) {
                         tg_gui_window_poll_stop(state, ctx.window, &backend,
                                                 m);
+                    } else if (it == TG_GUI_CTX_POLL_VOTERS && m != 0 &&
+                               m->id != 0UL &&
+                               (m->poll_id_hi != 0UL ||
+                                m->poll_id_lo != 0UL)) {
+                        tg_gui_window_poll_voters(state, ctx.window,
+                                                  &backend, m);
                     } else if (it == TG_GUI_CTX_REACT && m != 0 &&
                                !m->is_system && m->id != 0UL) {
                         /* A group or a channel may allow only some
