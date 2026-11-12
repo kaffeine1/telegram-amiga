@@ -47,6 +47,21 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Links with words of their own. A link hidden behind words showed
+  only the words: its address was read and dropped, and without a
+  preview there was no way to open it. The words are now underlined in
+  the link's colour and followed by a number, and the address stands
+  on a line of its own under the text, `[1] https://...`; a click on
+  the words, on the number or on the address opens it. An address the
+  text or its preview already shows gets no second line. In the
+  composer `[words](https://address)` sends such a link, and an edit
+  brings it back written that way. The text client prints the words,
+  the number and the lines with the addresses.
+- A block of code can name its language: three backticks, the
+  language, and the code from the next line. It is sent with the block
+  and shown as the block's first line, here and in a message received;
+  an edit keeps it, and never turns the first line of a plain block
+  into a language.
 - Spoilers. Hidden text, in a message received or in one sent with
   `||spoiler||`, is covered by a bar in the text's colour until its
   message is clicked; the click opens every spoiler of that message and
@@ -317,6 +332,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- A message with a photo, a file, a link preview or a bot's keyboard
+  lost its formatting: the caption of a photo was never bold, and a
+  post with a link preview, the usual place for a link with words of
+  its own, showed as plain text. On the wire the styles come after the
+  media, which is not read whole, so the reader never reached them.
+  They are now looked for further on in the answer (a list in which
+  every item reads as a style and lies inside the caption, before the
+  next message starts) and put on the caption alone, with the file's
+  label or the preview's lines left after it.
 - The unread badges of the chat list were those of the last time the
   list was saved: a chat read meanwhile on the phone still showed its
   old count after a start, until Reload chat list. The background step

@@ -2367,6 +2367,7 @@ static unsigned long tg_send_style_constructor(unsigned long kind)
     case TG_MTPROTO_STYLE_PRE: return 0x73924be0UL;
     case TG_MTPROTO_STYLE_STRIKE: return 0xbf0693d4UL;
     case TG_MTPROTO_STYLE_SPOILER: return 0x32ca960fUL;
+    case TG_MTPROTO_STYLE_LINK: return 0x76a6d327UL;
     default: return 0UL;
     }
 }
@@ -2379,7 +2380,9 @@ void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list, int count)
     for (i = 0; list != 0 && i < count &&
                 tg_send_style_count < TG_MTPROTO_SEND_STYLES_MAX; ++i) {
         if (list[i].length != 0UL &&
-            tg_send_style_constructor(list[i].kind) != 0UL) {
+            tg_send_style_constructor(list[i].kind) != 0UL &&
+            (list[i].kind != TG_MTPROTO_STYLE_LINK ||
+             (list[i].arg != 0 && list[i].arg_len != 0UL))) {
             tg_send_styles[tg_send_style_count++] = list[i];
         }
     }
@@ -2432,8 +2435,13 @@ static tg_mtproto_tl_status tg_write_send_style(
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, s->length);
     }
-    if (status == TG_MTPROTO_TL_OK && s->kind == TG_MTPROTO_STYLE_PRE) {
-        status = tg_write_string(writer, ""); /* language: none named */
+    if (status == TG_MTPROTO_TL_OK &&
+        (s->kind == TG_MTPROTO_STYLE_PRE ||
+         s->kind == TG_MTPROTO_STYLE_LINK)) {
+        /* a block's language ("" when none was named), a link's address */
+        status = tg_mtproto_tl_write_bytes(
+            writer, (const unsigned char *)(s->arg != 0 ? s->arg : ""),
+            s->arg != 0 ? s->arg_len : 0UL);
     }
     return status;
 }
@@ -6300,13 +6308,40 @@ static tg_mtproto_tl_status tg_read_peer_cache_chat(
 #define TG_MSG_ENT_CODE   3UL /* inline code + pre block */
 #define TG_MSG_ENT_STRIKE 4UL
 #define TG_MSG_ENT_SPOILER 5UL
+#define TG_MSG_ENT_LINK 6UL /* words that are a link: the address is in url */
+#define TG_MSG_LINK_NOTES_MAX 9 /* the addresses written out under a text */
+#define TG_MSG_LINK_URL_MAX 255UL
 #define TG_MSG_ENTITY_MAX 24
 
 typedef struct tg_msg_entity {
     unsigned long type; /* TG_MSG_ENT_* */
     unsigned long off;  /* UTF-16 code units from the start of the body */
     unsigned long len;  /* UTF-16 code units */
+    const unsigned char *url; /* TG_MSG_ENT_LINK: the address, as it came; */
+    unsigned long url_len;    /* TG_MSG_ENT_CODE: a block's language */
 } tg_msg_entity;
+
+/* 1 when a block's language can stand as its first line: a short word of
+   letters, digits and + # . - _ (what the composer reads back as one). */
+static int tg_msg_lang_ok(const tg_msg_entity *ent)
+{
+    unsigned long k;
+
+    if (ent->type != TG_MSG_ENT_CODE || ent->url == 0 ||
+        ent->url_len == 0UL || ent->url_len > 20UL) {
+        return 0;
+    }
+    for (k = 0UL; k < ent->url_len; ++k) {
+        unsigned char c = ent->url[k];
+
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+              (c >= 'a' && c <= 'z') || c == '+' || c == '#' || c == '.' ||
+              c == '-' || c == '_')) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 /* The 1-char marker for a styled entity, or 0 for entities we leave as plain
    text (mentions, links, hashtags ... already readable as their own text). */
@@ -6323,6 +6358,8 @@ static char tg_msg_entity_marker(unsigned long type)
         return TG_TEXT_MARKER_STRIKE;
     case TG_MSG_ENT_SPOILER:
         return TG_TEXT_MARKER_SPOILER;
+    case TG_MSG_ENT_LINK:
+        return TG_TEXT_MARKER_LINK;
     default:
         return 0;
     }
@@ -6423,14 +6460,80 @@ static void tg_clamp_entities(tg_msg_entity *ents, int count,
     }
 }
 
+/* 1 when the bytes of `url` stand in `text` as they are: a link whose
+   address the reader already sees needs no line of its own. */
+static int tg_msg_text_shows(const char *text, const unsigned char *url,
+                             unsigned long url_len)
+{
+    unsigned long n = (unsigned long)strlen(text);
+    unsigned long i;
+
+    if (url_len == 0UL || url_len > n) {
+        return 0;
+    }
+    for (i = 0UL; i + url_len <= n; ++i) {
+        if (memcmp(text + i, url, (size_t)url_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* What stands after the text being marked (a link preview's lines, a
+   file's label), while a caption is marked apart from it: an address shown
+   there needs no line of its own either. */
+static const char *tg_msg_also_shown = 0;
+
+/* Numbers the links with a text of their own, 1 to 9 in the order they
+   come: note[e] is the number, 0 for a link left as plain words (its
+   address already stands in the text, it is too long, or there are too
+   many). None is numbered when the words' marks and the addresses would
+   not fit the buffer with the text: a reference without its address
+   would point at nothing. */
+static void tg_msg_number_links(const char *text, unsigned long size,
+                                const tg_msg_entity *ents, int count,
+                                char *note)
+{
+    unsigned long need = (unsigned long)strlen(text) + 1UL;
+    int next = 1;
+    int e;
+
+    for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
+        need += tg_msg_entity_marker(ents[e].type) != 0 ? 2UL : 0UL;
+        need += tg_msg_lang_ok(&ents[e]) ? ents[e].url_len + 2UL : 0UL;
+    }
+    for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
+        if (ents[e].type != TG_MSG_ENT_LINK || ents[e].len == 0UL ||
+            ents[e].url == 0 || ents[e].url_len == 0UL ||
+            ents[e].url_len > TG_MSG_LINK_URL_MAX ||
+            next > TG_MSG_LINK_NOTES_MAX ||
+            tg_msg_text_shows(text, ents[e].url, ents[e].url_len) ||
+            (tg_msg_also_shown != 0 &&
+             tg_msg_text_shows(tg_msg_also_shown, ents[e].url,
+                               ents[e].url_len))) {
+            continue;
+        }
+        note[e] = (char)next++;
+        need += 3UL + 6UL + ents[e].url_len; /* "[n]", "\n" mark "[n] " */
+    }
+    if (need > size || need > TG_MTPROTO_MESSAGE_TEXT_MAX) {
+        for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
+            note[e] = 0;
+        }
+    }
+}
+
 /* Rewrite text in place, inserting open/close markers around styled spans. The
    "opened" bookkeeping guarantees balanced markers even if a malformed entity
-   reaches past the end of the body. */
+   reaches past the end of the body. A link with a text of its own gets its
+   marks around the words, "[n]" after them, and its address on a line
+   after the text. */
 static void tg_apply_entity_markers(char *text, unsigned long size,
                                     const tg_msg_entity *ents, int count)
 {
     static char buf[TG_MTPROTO_MESSAGE_TEXT_MAX];
     char opened[TG_MSG_ENTITY_MAX];
+    char note[TG_MSG_ENTITY_MAX]; /* a link's number, 0 = not written out */
     unsigned long bi = 0UL; /* output byte index */
     unsigned long ti = 0UL; /* input byte index */
     unsigned long u16 = 0UL; /* UTF-16 position in the body */
@@ -6439,7 +6542,9 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
     tg_msg_sanitize_markers(text);
     for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
         opened[e] = 0;
+        note[e] = 0;
     }
+    tg_msg_number_links(text, size, ents, count, note);
     for (;;) {
         /* Closes before opens at the same position so adjacent spans abut. */
         for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
@@ -6449,15 +6554,30 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
                 if (bi + 1UL < sizeof(buf)) {
                     buf[bi++] = m;
                 }
+                if (note[e] != 0 && bi + 4UL < sizeof(buf)) {
+                    buf[bi++] = '[';
+                    buf[bi++] = (char)('0' + note[e]);
+                    buf[bi++] = ']';
+                }
                 opened[e] = 0;
             }
         }
         for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
             char m;
             if (!opened[e] && ents[e].off == u16 && ents[e].len > 0UL &&
+                (ents[e].type != TG_MSG_ENT_LINK || note[e] != 0) &&
                 (m = tg_msg_entity_marker(ents[e].type)) != 0) {
                 if (bi + 1UL < sizeof(buf)) {
                     buf[bi++] = m;
+                }
+                if (tg_msg_lang_ok(&ents[e]) &&
+                    bi + ents[e].url_len + 3UL < sizeof(buf)) {
+                    /* a block's language: its first line, with the mark
+                       that tells it from a line of the code */
+                    memcpy(buf + bi, ents[e].url, (size_t)ents[e].url_len);
+                    bi += ents[e].url_len;
+                    buf[bi++] = TG_TEXT_MARKER_NOTE;
+                    buf[bi++] = '\n';
                 }
                 opened[e] = 1;
             }
@@ -6488,6 +6608,41 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
         if (opened[e] && (m = tg_msg_entity_marker(ents[e].type)) != 0) {
             if (bi + 1UL < sizeof(buf)) {
                 buf[bi++] = m;
+            }
+            if (note[e] != 0 && bi + 4UL < sizeof(buf)) {
+                buf[bi++] = '[';
+                buf[bi++] = (char)('0' + note[e]);
+                buf[bi++] = ']';
+            }
+        }
+    }
+    /* The addresses of the links with a text of their own, a line each,
+       after a mark that tells them from the body. */
+    {
+        int first = 1;
+
+        for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
+            unsigned long k;
+
+            if (note[e] == 0 ||
+                bi + ents[e].url_len + 8UL >= sizeof(buf)) {
+                continue;
+            }
+            buf[bi++] = '\n';
+            if (first) {
+                buf[bi++] = TG_TEXT_MARKER_NOTE;
+                first = 0;
+            }
+            buf[bi++] = '[';
+            buf[bi++] = (char)('0' + note[e]);
+            buf[bi++] = ']';
+            buf[bi++] = ' ';
+            for (k = 0UL; k < ents[e].url_len; ++k) {
+                unsigned char c = ents[e].url[k];
+
+                if (c > 0x20U && c != 0x7fU) {
+                    buf[bi++] = (char)c;
+                }
             }
         }
     }
@@ -6520,6 +6675,8 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
     }
     for (i = 0UL; i < n; ++i) {
         unsigned long type = TG_MSG_ENT_NONE;
+        const unsigned char *url = 0;
+        unsigned long url_len = 0UL;
 
         if (tg_mtproto_tl_read_u32(reader, &constructor) !=
                 TG_MTPROTO_TL_OK) {
@@ -6541,14 +6698,17 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
         switch (constructor) {
         case 0x73924be0UL: /* messageEntityPre (offset,length,language) */
             type = TG_MSG_ENT_CODE;
-            if (tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+            if (tg_mtproto_tl_read_bytes(reader, &url, &url_len) !=
+                TG_MTPROTO_TL_OK) {
                 return TG_MTPROTO_TL_INVALID_DATA;
             }
             break;
         case 0x76a6d327UL: /* messageEntityTextUrl (offset,length,url) */
-            if (tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+            if (tg_mtproto_tl_read_bytes(reader, &url, &url_len) !=
+                TG_MTPROTO_TL_OK) {
                 return TG_MTPROTO_TL_INVALID_DATA;
             }
+            type = TG_MSG_ENT_LINK;
             break;
         case 0xdc7b1140UL: /* messageEntityMentionName */
         case 0xc8cf05f8UL: /* messageEntityCustomEmoji */
@@ -6593,6 +6753,8 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
             ents[*count].type = type;
             ents[*count].off = off;
             ents[*count].len = len;
+            ents[*count].url = url;
+            ents[*count].url_len = url_len;
             ++(*count);
         }
     }
@@ -8505,6 +8667,106 @@ static void tg_mtproto_append_document_label(
     text[n] = '\0';
 }
 
+/* The styles of a message whose media or keyboard stands before them on
+   the wire. That tail is not read whole, so the reader never arrives at
+   the entities: a caption lost its bold, a post with a link preview its
+   links with a text of their own. They are looked for further on instead:
+   a vector whose every element reads as a MessageEntity and lies inside
+   the caption, before the next message starts. The caption is the first
+   `caption_bytes` of `text`; what the media added after it (a label, the
+   preview's lines) is set aside while the caption takes its marks. A
+   caption that was trimmed to make room, or no such vector, leaves the
+   text as it is. */
+static void tg_read_late_entities(const tg_mtproto_tl_reader *reader,
+                                  char *text, unsigned long size,
+                                  unsigned long caption_bytes, int text_cut,
+                                  unsigned long kept_units)
+{
+    tg_msg_entity ents[TG_MSG_ENTITY_MAX];
+    tg_mtproto_tl_reader trial;
+    unsigned long n;
+    unsigned long units = 0UL;
+    unsigned long pos;
+    unsigned long end;
+    unsigned long tail;
+    unsigned long dst;
+    unsigned long i;
+    int count = 0;
+    int found = 0;
+    int e;
+
+    if (reader == 0 || text == 0 || caption_bytes == 0UL) {
+        return;
+    }
+    n = (unsigned long)strlen(text);
+    if (n < caption_bytes || n + 1UL >= size ||
+        (text[caption_bytes] != '\0' && text[caption_bytes] != '\n')) {
+        return;
+    }
+    for (i = 0UL; i < caption_bytes;) {
+        unsigned long u;
+
+        i += tg_utf8_step((const unsigned char *)text + i, &u);
+        units += u;
+    }
+    end = reader->length;
+    if (end - reader->offset > 65536UL) {
+        end = reader->offset + 65536UL;
+    }
+    for (pos = (reader->offset + 3UL) & ~3UL; pos + 12UL <= end;
+         pos += 4UL) {
+        unsigned long c = tg_read_u32_le(reader->buffer + pos);
+        unsigned long listed;
+        int inside = 1;
+
+        if (c == TG_MESSAGE_CONSTRUCTOR ||
+            c == TG_MESSAGE_SERVICE_CONSTRUCTOR) {
+            break; /* the next message: this one's styles are not there */
+        }
+        if (c != TG_VECTOR_CONSTRUCTOR) {
+            continue;
+        }
+        listed = tg_read_u32_le(reader->buffer + pos + 4UL);
+        if (listed == 0UL || listed > 100UL) {
+            continue;
+        }
+        trial = *reader;
+        trial.offset = pos;
+        if (tg_read_message_entity_vector(&trial, ents, TG_MSG_ENTITY_MAX,
+                                          &count) != TG_MTPROTO_TL_OK) {
+            continue;
+        }
+        for (e = 0; e < count && !text_cut; ++e) {
+            if (ents[e].off > units || ents[e].len > units - ents[e].off) {
+                inside = 0;
+            }
+        }
+        if (inside) {
+            found = 1;
+            break;
+        }
+    }
+    if (!found || count <= 0) {
+        return;
+    }
+    /* what follows the caption waits at the buffer's end */
+    tail = n - caption_bytes;
+    dst = size - 1UL - tail;
+    if (dst <= caption_bytes + 1UL) {
+        return;
+    }
+    memmove(text + dst, text + caption_bytes, (size_t)(tail + 1UL));
+    text[caption_bytes] = '\0';
+    if (text_cut) {
+        tg_clamp_entities(ents, count, kept_units);
+    }
+    tg_msg_also_shown = text + dst;
+    tg_apply_entity_markers(text, dst, ents, count);
+    tg_msg_also_shown = 0;
+    n = (unsigned long)strlen(text);
+    memmove(text + n, text + dst, (size_t)(tail + 1UL));
+}
+
 static tg_mtproto_tl_status tg_read_common_message_text(
     tg_mtproto_tl_reader *reader,
     tg_mtproto_message_text *out,
@@ -8628,6 +8890,11 @@ static tg_mtproto_tl_status tg_read_common_message_text(
            "[Photo]"/"[File]"/... placeholder, then bail on the rest of the tail
            (we do not walk the full MessageMedia). Reading one u32 here cannot
            corrupt the parse -- we return immediately after, exactly as before. */
+        /* the caption as it came, when styles belong to it */
+        unsigned long caption_bytes =
+            (flags & 128UL) != 0UL && out->has_text
+                ? (unsigned long)strlen(out->text) : 0UL;
+
         if ((flags & 512UL) != 0UL) {
             unsigned long media_ctor;
 
@@ -8714,6 +8981,10 @@ static tg_mtproto_tl_status tg_read_common_message_text(
             }
         }
         tg_msg_sanitize_markers(out->text);
+        if (out->poll_id_hi == 0UL && out->poll_id_lo == 0UL) {
+            tg_read_late_entities(reader, out->text, sizeof(out->text),
+                                  caption_bytes, text_cut, kept_units);
+        }
         return TG_MTPROTO_TL_OK;
     }
 
@@ -10590,6 +10861,150 @@ static int tg_poll_self_test(void)
     return 0;
 }
 
+/* A message as it comes, for the test below: text, an optional media or
+   keyboard of `junk_words` words that are no vector, then one entity of
+   `ent_ctor` at off/len when ent_ctor is not 0. */
+static void tg_late_test_message(tg_mtproto_tl_writer *w, unsigned long id,
+                                 unsigned long flags, const char *body,
+                                 unsigned long media_ctor, int junk_words,
+                                 unsigned long ent_ctor, unsigned long off,
+                                 unsigned long len)
+{
+    int k;
+
+    (void)tg_mtproto_tl_write_u32(w, TG_MESSAGE_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, flags);
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+    (void)tg_mtproto_tl_write_u32(w, id);
+    (void)tg_mtproto_tl_write_u32(w, TG_PEER_USER_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(w, 0UL, 0x12345678UL);
+    (void)tg_mtproto_tl_write_u32(w, 2225UL);
+    (void)tg_write_string(w, body);
+    if (media_ctor != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, media_ctor);
+        (void)tg_mtproto_tl_write_u32(w, 0UL); /* its flags: nothing in it */
+    }
+    for (k = 0; k < junk_words; ++k) {
+        (void)tg_mtproto_tl_write_u32(w, 0x01010101UL * (unsigned long)(k + 1));
+    }
+    if (ent_ctor != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, ent_ctor);
+        (void)tg_mtproto_tl_write_u32(w, off);
+        (void)tg_mtproto_tl_write_u32(w, len);
+    }
+}
+
+/* Styles that stand after a media or a keyboard: found and put on the
+   caption, never on what the media added after it, never taken from the
+   message that follows, never when they do not fit the caption. */
+static int tg_late_entities_self_test(void)
+{
+    static unsigned char rpc[1024];
+    static tg_mtproto_message_text_list list;
+    tg_mtproto_tl_writer w;
+
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 6UL);
+    /* a photo's caption, bold on "this" */
+    tg_late_test_message(&w, 1006UL, 512UL | 128UL, "see this now",
+                         0x695150d7UL, 0, 0xbd610bc9UL, 4UL, 4UL);
+    /* a media not read at all, some of its bytes in between */
+    tg_late_test_message(&w, 1005UL, 512UL | 128UL, "geo here", 0x56e0d474UL,
+                         5, 0x826f8b60UL, 0UL, 3UL);
+    /* a keyboard (flags.6) before the styles, no media */
+    tg_late_test_message(&w, 1004UL, 64UL | 128UL, "pick one", 0UL, 3,
+                         0xbf0693d4UL, 5UL, 3UL);
+    /* styles announced and not there: the next message's are not taken */
+    tg_late_test_message(&w, 1003UL, 512UL | 128UL, "mine is plain",
+                         0x56e0d474UL, 2, 0UL, 0UL, 0UL);
+    tg_late_test_message(&w, 1002UL, 128UL, "next is bold", 0UL, 0,
+                         0xbd610bc9UL, 0UL, 4UL);
+    /* a vector that reads as styles and does not fit the caption */
+    tg_late_test_message(&w, 1001UL, 512UL | 128UL, "short", 0x56e0d474UL, 1,
+                         0xbd610bc9UL, 3UL, 40UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    if (tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           rpc, w.length, &list) !=
+            TG_MTPROTO_TL_OK ||
+        list.count != 6UL) {
+        printf("login self-test: messages with late styles do not parse "
+               "(%lu)\n", list.count);
+        return 2;
+    }
+    if (strcmp(list.messages[0].text, "see \034this\034 now") != 0) {
+        puts("login self-test: a photo's caption lost its bold");
+        return 2;
+    }
+    if (strcmp(list.messages[1].text, "\035geo\035 here") != 0) {
+        puts("login self-test: styles after an unread media are not found");
+        return 2;
+    }
+    if (strcmp(list.messages[2].text, "pick \037one\037") != 0) {
+        puts("login self-test: styles after a keyboard are not found");
+        return 2;
+    }
+    if (strcmp(list.messages[3].text, "mine is plain") != 0 ||
+        strcmp(list.messages[4].text, "\034next\034 is bold") != 0) {
+        puts("login self-test: a message took the styles of the next one");
+        return 2;
+    }
+    if (strcmp(list.messages[5].text, "short") != 0) {
+        puts("login self-test: styles past the caption's end were used");
+        return 2;
+    }
+    {
+        /* The caption alone takes the marks: what the media put after it
+           stays after, and an address that stands there gets no line. */
+        static const char url[] = "https://example.org/a";
+        static char text[160];
+        static unsigned char vec[96];
+        tg_mtproto_tl_reader r;
+        tg_mtproto_tl_writer vw;
+
+        tg_mtproto_tl_writer_init(&vw, vec, sizeof(vec));
+        (void)tg_mtproto_tl_write_u32(&vw, 0x0badf00dUL);
+        (void)tg_mtproto_tl_write_u32(&vw, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&vw, 2UL);
+        (void)tg_mtproto_tl_write_u32(&vw, 0xbd610bc9UL);
+        (void)tg_mtproto_tl_write_u32(&vw, 0UL);
+        (void)tg_mtproto_tl_write_u32(&vw, 4UL);
+        (void)tg_mtproto_tl_write_u32(&vw, 0x76a6d327UL);
+        (void)tg_mtproto_tl_write_u32(&vw, 5UL);
+        (void)tg_mtproto_tl_write_u32(&vw, 4UL);
+        (void)tg_write_string(&vw, url);
+        tg_mtproto_tl_reader_init(&r, vec, vw.length);
+        strcpy(text, "read here\n[File: a.lha, 1 KB]");
+        tg_read_late_entities(&r, text, sizeof(text), 9UL, 0, 0UL);
+        if (strcmp(text, "\034read\034 \030here\030[1]\n\031[1] "
+                         "https://example.org/a\n[File: a.lha, 1 KB]") != 0) {
+            puts("login self-test: a caption's styles moved its label");
+            return 2;
+        }
+        strcpy(text, "read here\nhttps://example.org/a\n[Link: A page]");
+        tg_read_late_entities(&r, text, sizeof(text), 9UL, 0, 0UL);
+        if (strcmp(text, "\034read\034 here\nhttps://example.org/a\n"
+                         "[Link: A page]") != 0) {
+            puts("login self-test: an address under the caption got a "
+                 "second line");
+            return 2;
+        }
+        /* a caption that was trimmed for its label is left alone */
+        strcpy(text, "read he\n[File: a.lha, 1 KB]");
+        tg_read_late_entities(&r, text, sizeof(text), 9UL, 0, 0UL);
+        if (strcmp(text, "read he\n[File: a.lha, 1 KB]") != 0) {
+            puts("login self-test: a trimmed caption was marked");
+            return 2;
+        }
+    }
+    return 0;
+}
+
 static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
@@ -10646,7 +11061,175 @@ static int tg_entity_marker_self_test(void)
                                "\xF0\x9F\x98\x80" "\034X\034")) {
         return 2;
     }
-    if (tg_message_cut_self_test() != 0) {
+    /* A spoiler, and the bytes of the newer marks typed as text. */
+    e[0].type = TG_MSG_ENT_SPOILER;
+    e[0].off = 2UL;
+    e[0].len = 3UL;
+    if (!tg_entity_marker_case("a hid b", e, 1, "a \032hid\032 b") ||
+        !tg_entity_marker_case("x\030y\031z\032w", e, 0, "x y z w")) {
+        puts("login self-test: a spoiler's mark, or a typed one");
+        return 2;
+    }
+    /* Links with a text of their own: marks around the words, a number
+       after them, the addresses on lines after the text. A link whose
+       address the text already shows stays plain words; a style inside
+       or around the words keeps its place. */
+    {
+        static const char u1[] = "https://example.org/a";
+        static const char u2[] = "http://b.example/x?y=1";
+        static const char ctl[] = "https://ex\001ample.org/\034z";
+        static char long_url[300];
+        static char near_full[TG_MTPROTO_MESSAGE_TEXT_MAX];
+        static char near_copy[TG_MTPROTO_MESSAGE_TEXT_MAX];
+        unsigned long k;
+
+        memset(e, 0, sizeof(e));
+        e[0].type = TG_MSG_ENT_LINK;
+        e[0].off = 4UL;
+        e[0].len = 9UL;
+        e[0].url = (const unsigned char *)u1;
+        e[0].url_len = sizeof(u1) - 1UL;
+        if (!tg_entity_marker_case(
+                "see this page now", e, 1,
+                "see \030this page\030[1] now\n\031[1] "
+                "https://example.org/a")) {
+            puts("login self-test: a link with its own text");
+            return 2;
+        }
+        e[1].type = TG_MSG_ENT_LINK;
+        e[1].off = 14UL;
+        e[1].len = 3UL;
+        e[1].url = (const unsigned char *)u2;
+        e[1].url_len = sizeof(u2) - 1UL;
+        if (!tg_entity_marker_case(
+                "see this page now", e, 2,
+                "see \030this page\030[1] \030now\030[2]\n\031[1] "
+                "https://example.org/a\n[2] http://b.example/x?y=1")) {
+            puts("login self-test: two links with their own text");
+            return 2;
+        }
+        /* the address already stands in the text: no mark, no line */
+        e[0].off = 0UL;
+        e[0].len = 4UL;
+        if (!tg_entity_marker_case("here https://example.org/a ok", e, 1,
+                                   "here https://example.org/a ok")) {
+            puts("login self-test: a link already shown got a note");
+            return 2;
+        }
+        /* bold over the linked words: both marks, each closed in turn */
+        e[0].off = 0UL;
+        e[0].len = 4UL;
+        e[1].type = TG_MSG_ENT_BOLD;
+        e[1].off = 0UL;
+        e[1].len = 4UL;
+        e[1].url = 0;
+        e[1].url_len = 0UL;
+        if (!tg_entity_marker_case(
+                "word and", e, 2,
+                "\030\034word\030[1]\034 and\n\031[1] "
+                "https://example.org/a")) {
+            puts("login self-test: a bold link with its own text");
+            return 2;
+        }
+        /* control bytes and marks inside an address are left out of it */
+        e[0].url = (const unsigned char *)ctl;
+        e[0].url_len = sizeof(ctl) - 1UL;
+        if (!tg_entity_marker_case(
+                "word", e, 1,
+                "\030word\030[1]\n\031[1] https://example.org/z")) {
+            puts("login self-test: an address with control bytes");
+            return 2;
+        }
+        /* an address too long to be one is not written out */
+        for (k = 0UL; k + 1UL < sizeof(long_url); ++k) {
+            long_url[k] = k < 8UL ? "https://"[k] : 'a';
+        }
+        long_url[k] = '\0';
+        e[0].url = (const unsigned char *)long_url;
+        e[0].url_len = (unsigned long)strlen(long_url);
+        if (!tg_entity_marker_case("word", e, 1, "word")) {
+            puts("login self-test: an overlong address got a note");
+            return 2;
+        }
+        /* a block that names its language shows it as its first line,
+           marked; a language that is no plain word is left out */
+        memset(e, 0, sizeof(e));
+        e[0].type = TG_MSG_ENT_CODE;
+        e[0].off = 4UL;
+        e[0].len = 8UL;
+        e[0].url = (const unsigned char *)"python";
+        e[0].url_len = 6UL;
+        if (!tg_entity_marker_case(
+                "see print(1) ok", e, 1,
+                "see \036python\031\nprint(1)\036 ok")) {
+            puts("login self-test: a block's language is not shown");
+            return 2;
+        }
+        e[0].url = (const unsigned char *)"two words";
+        e[0].url_len = 9UL;
+        if (!tg_entity_marker_case("see print(1) ok", e, 1,
+                                   "see \036print(1)\036 ok")) {
+            puts("login self-test: an odd language was written out");
+            return 2;
+        }
+        e[0].url = (const unsigned char *)"";
+        e[0].url_len = 0UL;
+        if (!tg_entity_marker_case("see print(1) ok", e, 1,
+                                   "see \036print(1)\036 ok")) {
+            puts("login self-test: a block without a language changed");
+            return 2;
+        }
+        memset(e, 0, sizeof(e));
+        e[0].type = TG_MSG_ENT_LINK;
+        e[0].off = 0UL;
+        e[0].len = 4UL;
+        /* a text that leaves no room for the address keeps plain words:
+           never a number that points at nothing */
+        for (k = 0UL; k + 12UL < sizeof(near_full); ++k) {
+            near_full[k] = 'w';
+        }
+        near_full[k] = '\0';
+        memcpy(near_copy, near_full, sizeof(near_copy));
+        e[0].url = (const unsigned char *)u1;
+        e[0].url_len = sizeof(u1) - 1UL;
+        if (!tg_entity_marker_case(near_full, e, 1, near_copy)) {
+            puts("login self-test: a link without room for its address");
+            return 2;
+        }
+        memset(e, 0, sizeof(e));
+    }
+    {
+        /* messageEntityTextUrl#76a6d327 read with its address, between a
+           bold and a spoiler. */
+        static const unsigned char vec[] = {
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x03U, 0x00U, 0x00U, 0x00U,
+            0xc9U, 0x0bU, 0x61U, 0xbdU, 0x00U, 0x00U, 0x00U, 0x00U,
+            0x01U, 0x00U, 0x00U, 0x00U,
+            0x27U, 0xd3U, 0xa6U, 0x76U, 0x02U, 0x00U, 0x00U, 0x00U,
+            0x03U, 0x00U, 0x00U, 0x00U,
+            0x07U, 'h', 't', 't', 'p', ':', '/', '/',
+            0x0fU, 0x96U, 0xcaU, 0x32U, 0x06U, 0x00U, 0x00U, 0x00U,
+            0x01U, 0x00U, 0x00U, 0x00U
+        };
+        tg_msg_entity got[4];
+        tg_mtproto_tl_reader reader;
+        int n = 0;
+
+        tg_mtproto_tl_reader_init(&reader, vec, sizeof(vec));
+        if (tg_read_message_entity_vector(&reader, got, 4, &n) !=
+                TG_MTPROTO_TL_OK ||
+            n != 3 || reader.offset != sizeof(vec) ||
+            got[0].type != TG_MSG_ENT_BOLD || got[0].url_len != 0UL ||
+            got[1].type != TG_MSG_ENT_LINK || got[1].off != 2UL ||
+            got[1].len != 3UL || got[1].url_len != 7UL ||
+            memcmp(got[1].url, "http://", 7U) != 0 ||
+            got[2].type != TG_MSG_ENT_SPOILER || got[2].off != 6UL) {
+            puts("login self-test: a text link entity read wrong");
+            return 2;
+        }
+    }
+    if (tg_message_cut_self_test() != 0 ||
+        tg_late_entities_self_test() != 0) {
         return 2;
     }
     return tg_service_message_self_test();
@@ -12741,6 +13324,7 @@ int tg_mtproto_login_self_test(void)
     {
         tg_mtproto_send_style italic;
 
+        memset(&italic, 0, sizeof(italic));
         italic.kind = TG_MTPROTO_STYLE_ITALIC;
         italic.offset = 0UL;
         italic.length = 2UL;
@@ -13254,11 +13838,11 @@ int tg_mtproto_login_self_test(void)
            left out; the message after carries nothing. */
         {
             static const tg_mtproto_send_style styles[5] = {
-                { TG_MTPROTO_STYLE_BOLD, 0UL, 4UL },
-                { TG_MTPROTO_STYLE_ITALIC, 6UL, 0UL }, /* no length */
-                { 99UL, 7UL, 2UL },                    /* no such kind */
-                { TG_MTPROTO_STYLE_PRE, 10UL, 3UL },
-                { TG_MTPROTO_STYLE_SPOILER, 14UL, 2UL },
+                { TG_MTPROTO_STYLE_BOLD, 0UL, 4UL, 0, 0UL },
+                { TG_MTPROTO_STYLE_ITALIC, 6UL, 0UL, 0, 0UL }, /* no length */
+                { 99UL, 7UL, 2UL, 0, 0UL },            /* no such kind */
+                { TG_MTPROTO_STYLE_PRE, 10UL, 3UL, 0, 0UL },
+                { TG_MTPROTO_STYLE_SPOILER, 14UL, 2UL, 0, 0UL },
             };
             static const unsigned long kinds[6] = {
                 TG_MTPROTO_STYLE_BOLD, TG_MTPROTO_STYLE_ITALIC,
@@ -13339,6 +13923,7 @@ int tg_mtproto_login_self_test(void)
             for (k = 0; k < 6; ++k) {
                 tg_mtproto_send_style one_style;
 
+                memset(&one_style, 0, sizeof(one_style));
                 one_style.kind = kinds[k];
                 one_style.offset = 0UL;
                 one_style.length = 1UL;
@@ -13355,6 +13940,63 @@ int tg_mtproto_login_self_test(void)
                     ((unsigned long)sq[32] | ((unsigned long)sq[33] << 8) |
                      ((unsigned long)sq[34] << 16) |
                      ((unsigned long)sq[35] << 24)) == ctors[k];
+            }
+            {
+                /* A link with its address and a block with its language:
+                   messageEntityTextUrl#76a6d327 offset 0 length 4 and the
+                   address as a string, then messageEntityPre#73924be0
+                   offset 5 length 3 and "c". A link without an address is
+                   left out. */
+                static const char addr[] = "https://x.org/a";
+                tg_mtproto_send_style two[3];
+
+                memset(two, 0, sizeof(two));
+                two[0].kind = TG_MTPROTO_STYLE_LINK;
+                two[0].length = 4UL;
+                two[0].arg = addr;
+                two[0].arg_len = sizeof(addr) - 1UL;
+                two[1].kind = TG_MTPROTO_STYLE_LINK; /* no address */
+                two[1].offset = 4UL;
+                two[1].length = 1UL;
+                two[2].kind = TG_MTPROTO_STYLE_PRE;
+                two[2].offset = 5UL;
+                two[2].length = 3UL;
+                two[2].arg = "c++"; /* two bytes of it are the language */
+                two[2].arg_len = 1UL;
+                tg_mtproto_send_set_mentions(0, 0);
+                tg_mtproto_send_set_styles(two, 3);
+                tg_mtproto_tl_writer_init(&sw, sq, sizeof(sq));
+                ok_style = ok_style &&
+                    tg_mtproto_build_messages_send_self(
+                        &sw, "site int", 0UL, 1UL, 2UL) ==
+                        TG_MTPROTO_TL_OK;
+                /* ctor, flags, peer, "site int" (12), random_id (8),
+                   vector (4): the count is at 36 */
+                tg_mtproto_tl_reader_init(&sr, sq, sw.length);
+                sr.offset = 36UL;
+                ok_style = ok_style &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 2UL &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 0x76a6d327UL &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 0UL &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 4UL &&
+                    tg_mtproto_tl_read_bytes(&sr, &bytes, &length) ==
+                        TG_MTPROTO_TL_OK &&
+                    length == sizeof(addr) - 1UL &&
+                    memcmp(bytes, addr, (size_t)length) == 0 &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 0x73924be0UL &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 5UL &&
+                    tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                    a == 3UL &&
+                    tg_mtproto_tl_read_bytes(&sr, &bytes, &length) ==
+                        TG_MTPROTO_TL_OK &&
+                    length == 1UL && bytes[0] == 'c' &&
+                    sr.offset == sw.length;
             }
             tg_mtproto_send_set_styles(0, 0);
             tg_mtproto_send_set_mentions(0, 0);

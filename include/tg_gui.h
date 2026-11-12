@@ -74,6 +74,7 @@ typedef struct tg_gui_rect {
 #define TG_GUI_STYLE_STRIKE 8
 #define TG_GUI_STYLE_UNDERLINE 16 /* clickable URLs (0.0.8) */
 #define TG_GUI_STYLE_SPOILER 32 /* hidden text: a bar until it is clicked */
+#define TG_GUI_STYLE_NOTE 64 /* the addresses after the text: drawn as text */
 
 /* Per-platform drawing shim. The portable renderer owns all layout and only
    calls these. The host build supplies a recording backend for the self-test. */
@@ -326,11 +327,16 @@ int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft);
 #define TG_GUI_MD_PRE 4
 #define TG_GUI_MD_STRIKE 5
 #define TG_GUI_MD_SPOILER 6
+#define TG_GUI_MD_LINK 7 /* [words](http://address): the words are a link */
 #define TG_GUI_MD_SPANS_MAX 16
+#define TG_GUI_MD_LANG_MAX 20
+#define TG_GUI_MD_URL_MAX 255
 typedef struct tg_gui_md_span {
     int kind;           /* TG_GUI_MD_* */
     unsigned long from; /* bytes into the text written out */
     unsigned long to;   /* one past its last byte */
+    const char *arg;    /* a link's address, a block's language: bytes of */
+    unsigned long arg_len; /* the text read, not ended by a NUL; 0 = none */
 } tg_gui_md_span;
 
 /* Reads the markers of `in` and writes the text without the ones it
@@ -1303,6 +1309,10 @@ int tg_gui_first_url(const tg_gui_message *m, char *out,
                      unsigned long out_size);
 int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
                   unsigned long out_size);
+/* The address of the link with a text of its own under the character at
+   `ch` of a message's text (its words, or the number after them). */
+int tg_gui_link_note_at(const char *text, long ch, char *out,
+                        unsigned long out_size);
 int tg_gui_selection_get(const tg_gui_state *state, char *out,
                          unsigned long out_size);
 

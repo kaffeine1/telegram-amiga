@@ -410,10 +410,13 @@ Middle, more interface:
   UTF-16 units; conservative rules, a switch in the settings), and
   kept by an edit (the message comes back into the composer with its
   styles as markers; `messages.editMessage` with the entities). A spoiler shows as one: a bar until its message is
-  clicked, and an edit keeps it. Still missing: the language of a
-  block, links with a text of their own, and an edit keeping what the
-  transcript does not hold (a link with its own text, a mention by
-  name, underline);
+  clicked, and an edit keeps it. A block names its language
+  (`messageEntityPre` with its language, shown as the block's first
+  line) and words can be a link (`[words](https://address)`,
+  `messageEntityTextUrl`; received, the words are underlined and
+  numbered and the address stands under the text), both kept by an
+  edit. Still missing: an edit keeping a mention by name and an
+  underline, which the transcript does not hold;
 - the update notice (its section): step 1 is in place and asleep. The
   client can look public channels and groups up by name, search their
   posts for "Amigram" and a version (`contacts.resolveUsername`,

@@ -7297,7 +7297,9 @@ static void tg_mtproto_write_cache_text(FILE *stream, const char *text)
         if (text[i] == '\r' || text[i] == '\n' || text[i] == '\t') {
             fputc(' ', stream);
         } else if (TG_TEXT_IS_MARKER(text[i])) {
-            fputc(TG_TEXT_MARKER_ASCII(text[i]), stream);
+            if (!TG_TEXT_MARKER_SILENT(text[i])) {
+                fputc(TG_TEXT_MARKER_ASCII(text[i]), stream);
+            }
         } else {
             fputc((unsigned char)text[i], stream);
         }
@@ -8023,6 +8025,9 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
     while (text[i] != '\0') {
         cp = tg_mtproto_utf8_read_codepoint(text, &i);
         if (TG_TEXT_IS_MARKER(cp)) {
+            if (TG_TEXT_MARKER_SILENT(cp)) {
+                continue;
+            }
             cp = (unsigned long)TG_TEXT_MARKER_ASCII(cp);
         }
         if (cp == '\r') {
@@ -8329,6 +8334,9 @@ static void tg_mtproto_print_message_text(FILE *stream, const char *text)
         cp = (unsigned long)(unsigned char)text[i];
         ++i;
         if (TG_TEXT_IS_MARKER(cp)) {
+            if (TG_TEXT_MARKER_SILENT(cp)) {
+                continue;
+            }
             cp = (unsigned long)TG_TEXT_MARKER_ASCII(cp);
         }
         if (cp == '\r') {
@@ -28819,6 +28827,7 @@ static const char *tg_gui_markdown_for_send(const char *utf8)
         case TG_GUI_MD_PRE: kind = TG_MTPROTO_STYLE_PRE; break;
         case TG_GUI_MD_STRIKE: kind = TG_MTPROTO_STYLE_STRIKE; break;
         case TG_GUI_MD_SPOILER: kind = TG_MTPROTO_STYLE_SPOILER; break;
+        case TG_GUI_MD_LINK: kind = TG_MTPROTO_STYLE_LINK; break;
         default: break;
         }
         if (kind == 0UL || spans[k].to <= spans[k].from) {
@@ -28828,6 +28837,10 @@ static const char *tg_gui_markdown_for_send(const char *utf8)
         list[n].offset = tg_gui_utf16_units(plain, spans[k].from);
         list[n].length = tg_gui_utf16_units(plain + spans[k].from,
                                             spans[k].to - spans[k].from);
+        /* a link's address, a block's language: bytes of the text being
+           sent, which stays where it is until the message is built */
+        list[n].arg = spans[k].arg;
+        list[n].arg_len = spans[k].arg_len;
         ++n;
     }
     tg_mtproto_send_set_styles(list, n);
@@ -29053,6 +29066,50 @@ static int tg_gui_markdown_send_self_test(void)
          tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL, 2UL) ==
              TG_MTPROTO_TL_OK &&
          wire[4] == 0x00U;
+    {
+        /* A link with a text of its own and a block that names its
+           language: the brackets, the address and the language leave the
+           text; the link is on "sit\xc3\xa8" (4 units) with its address, the
+           block on "int a;" with "c". */
+        static const char linked[] =
+            "caff\xc3\xa8 [sit\xc3\xa8](https://x.org/a?b=1) ```c\nint a;```";
+
+        text = tg_gui_markdown_for_send(linked);
+        ok = ok && strcmp(text, "caff\xc3\xa8 sit\xc3\xa8 int a;") == 0;
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        ok = ok &&
+             tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL, 2UL) ==
+                 TG_MTPROTO_TL_OK &&
+             wire[4] == 0x08U;
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        r.offset = 12UL;
+        ok = ok &&
+             tg_mtproto_tl_read_bytes(&r, &bytes, &length) ==
+                 TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_read_u64(&r, &a, &b) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 2UL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0x76a6d327UL && /* messageEntityTextUrl */
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 6UL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 4UL &&
+             tg_mtproto_tl_read_bytes(&r, &bytes, &length) ==
+                 TG_MTPROTO_TL_OK &&
+             length == 19UL &&
+             memcmp(bytes, "https://x.org/a?b=1", 19U) == 0 &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 0x73924be0UL && /* messageEntityPre */
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 11UL &&
+             tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+             a == 6UL &&
+             tg_mtproto_tl_read_bytes(&r, &bytes, &length) ==
+                 TG_MTPROTO_TL_OK &&
+             length == 1UL && bytes[0] == 'c' && r.offset == w.length;
+    }
     /* the setting off */
     tg_gui_markdown_override = 0;
     text = tg_gui_markdown_for_send(typed);

@@ -2538,10 +2538,90 @@ static unsigned long tg_gui_md_find_close(const char *in, unsigned long len,
     return TG_GUI_MD_NONE;
 }
 
+/* [words](address) at in[i], the '[': 1 with where the ']' and the ')'
+   are. The words are a line's, not blank at either end and without a
+   bracket of their own; the address starts with http:// or https://, has
+   no blank and no control byte, and is short enough to be one. All of it
+   ends by `limit`. */
+static int tg_gui_md_link_at(const char *in, unsigned long len,
+                             unsigned long i, unsigned long limit, int pairs,
+                             unsigned long *text_end, unsigned long *url_end)
+{
+    unsigned long j = i + 1UL;
+    unsigned long u;
+    unsigned long k;
+
+    if (j >= len || tg_gui_md_blank((unsigned char)in[j])) {
+        return 0;
+    }
+    while (j < len && in[j] != ']') {
+        if (in[j] == '\n' || in[j] == '[' || (unsigned char)in[j] < 32U) {
+            return 0;
+        }
+        j += (pairs && tg_gui_emoji_pair_at(in, len, j, 0)) ? 2UL : 1UL;
+    }
+    if (j >= len || j == i + 1UL || in[j + 1UL] != '(' ||
+        tg_gui_md_blank((unsigned char)in[j - 1UL])) {
+        return 0;
+    }
+    u = j + 2UL;
+    if (strncmp(in + u, "http://", 7U) == 0) {
+        k = u + 7UL;
+    } else if (strncmp(in + u, "https://", 8U) == 0) {
+        k = u + 8UL;
+    } else {
+        return 0;
+    }
+    if (k >= len || in[k] == ')') {
+        return 0; /* a scheme alone is no address */
+    }
+    while (k < len && in[k] != ')') {
+        if ((unsigned char)in[k] <= 32U || (unsigned char)in[k] == 127U ||
+            (pairs && tg_gui_emoji_pair_at(in, len, k, 0))) {
+            return 0;
+        }
+        ++k;
+    }
+    if (k >= len || k >= limit || k - u > (unsigned long)TG_GUI_MD_URL_MAX) {
+        return 0;
+    }
+    *text_end = j;
+    *url_end = k;
+    return 1;
+}
+
+/* The language named right after a block's opening marker at in[i]: a
+   word of letters, digits and + # . - _ alone on that line, with the
+   block's code on the lines after it. Its length, 0 = none. */
+static unsigned long tg_gui_md_lang_at(const char *in, unsigned long i,
+                                       unsigned long close)
+{
+    unsigned long n = 0UL;
+
+    while (n <= (unsigned long)TG_GUI_MD_LANG_MAX) {
+        unsigned char c = (unsigned char)in[i + n];
+
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+              (c >= 'a' && c <= 'z') || c == '+' || c == '#' || c == '.' ||
+              c == '-' || c == '_')) {
+            break;
+        }
+        ++n;
+    }
+    if (n == 0UL || n > (unsigned long)TG_GUI_MD_LANG_MAX ||
+        in[i + n] != '\n' || i + n + 1UL >= close ||
+        (in[i + n + 1UL] == '\n' && i + n + 2UL >= close)) {
+        return 0UL;
+    }
+    return n;
+}
+
 /* pairs: the text is the composer's, where an emoji is a pair of bytes
    whose second can be any printable character: such a pair is copied as
    it is and counts as a letter, never as a marker or as what may stand
-   next to one. */
+   next to one. With pairs the text written out is the one to show: a
+   block keeps the line that names its language, as its first line;
+   without, it is the one to send, and the language is only in the span. */
 static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
                            tg_gui_md_span *spans, int max, int pairs)
 {
@@ -2608,6 +2688,31 @@ static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
             after_pair = 1;
             continue;
         }
+        if (raw == 0 && count < max && !after_pair && in[i] == '[' &&
+            tg_gui_md_opens_after(in, i)) {
+            unsigned long text_end = 0UL;
+            unsigned long url_end = 0UL;
+
+            if (tg_gui_md_link_at(in, len, i, limit, pairs, &text_end,
+                                  &url_end)) {
+                unsigned long c;
+
+                if (n + (text_end - i) >= size) {
+                    return 0;
+                }
+                spans[count].kind = TG_GUI_MD_LINK;
+                spans[count].from = n;
+                for (c = i + 1UL; c < text_end; ++c) {
+                    out[n++] = in[c];
+                }
+                spans[count].to = n;
+                spans[count].arg = in + text_end + 2UL;
+                spans[count].arg_len = url_end - (text_end + 2UL);
+                ++count;
+                i = url_end + 1UL;
+                continue;
+            }
+        }
         for (m = 0UL; raw == 0 && count < max && !done && !after_pair &&
                       m < sizeof(marks) / sizeof(marks[0]); ++m) {
             unsigned long j;
@@ -2626,6 +2731,8 @@ static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
             spans[count].kind = marks[m].kind;
             spans[count].from = n;
             spans[count].to = n;
+            spans[count].arg = 0;
+            spans[count].arg_len = 0UL;
             span_of[marks[m].kind] = count++;
             close_at[marks[m].kind] = j;
             close_len[marks[m].kind] = marks[m].len;
@@ -2634,8 +2741,18 @@ static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
                 marks[m].kind == TG_GUI_MD_PRE) {
                 raw = marks[m].kind;
             }
-            if (marks[m].kind == TG_GUI_MD_PRE && in[i] == '\n') {
-                ++i; /* the block starts on the next line */
+            if (marks[m].kind == TG_GUI_MD_PRE) {
+                unsigned long lang = tg_gui_md_lang_at(in, i, j);
+
+                if (lang > 0UL) {
+                    spans[count - 1].arg = in + i;
+                    spans[count - 1].arg_len = lang;
+                    if (!pairs) {
+                        i += lang + 1UL; /* sent in the entity, not as text */
+                    }
+                } else if (in[i] == '\n') {
+                    ++i; /* the block starts on the next line */
+                }
             }
             done = 1;
         }
@@ -2673,17 +2790,40 @@ static char tg_gui_md_marker(int kind)
     case TG_GUI_MD_PRE: return TG_TEXT_MARKER_CODE;
     case TG_GUI_MD_STRIKE: return TG_TEXT_MARKER_STRIKE;
     case TG_GUI_MD_SPOILER: return TG_TEXT_MARKER_SPOILER;
+    case TG_GUI_MD_LINK: return TG_TEXT_MARKER_LINK;
     default: return 0;
     }
+}
+
+/* 1 when the bytes of the address stand in the text as they are: such a
+   link needs no line of its own (the rule of the reader of messages, so
+   that what is shown at once is what is read back later). */
+static int tg_gui_md_text_shows(const char *text, unsigned long n,
+                                const char *url, unsigned long url_len)
+{
+    unsigned long i;
+
+    if (url_len == 0UL || url_len > n) {
+        return 0;
+    }
+    for (i = 0UL; i + url_len <= n; ++i) {
+        if (memcmp(text + i, url, (size_t)url_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int tg_gui_markdown_display(const char *in, char *out, unsigned long size)
 {
     tg_gui_md_span spans[TG_GUI_MD_SPANS_MAX];
+    char note[TG_GUI_MD_SPANS_MAX]; /* a link's number, 0 = none */
     unsigned long n;
     unsigned long extra = 0UL;
+    unsigned long notes_len = 0UL;
     unsigned long w;
     unsigned long pos;
+    int next = 1;
     int count;
     int k;
 
@@ -2693,25 +2833,65 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size)
     }
     n = (unsigned long)strlen(out);
     for (k = 0; k < count; ++k) {
+        note[k] = 0;
         if (tg_gui_md_marker(spans[k].kind) == 0 ||
             spans[k].to <= spans[k].from) {
             spans[k].kind = 0; /* nothing to mark */
-        } else {
-            extra += 2UL;
+            continue;
         }
+        if (spans[k].kind == TG_GUI_MD_LINK) {
+            /* the words between the link's marks, their number, and the
+               address on a line after the text: as a message read from
+               Telegram shows it */
+            if (spans[k].arg == 0 || spans[k].arg_len == 0UL || next > 9 ||
+                tg_gui_md_text_shows(out, n, spans[k].arg,
+                                     spans[k].arg_len)) {
+                spans[k].kind = 0; /* sent as a link, shown as its words */
+                continue;
+            }
+            note[k] = (char)next++;
+            extra += 3UL;
+            notes_len += (notes_len == 0UL ? 2UL : 1UL) + 4UL +
+                         spans[k].arg_len;
+        } else if (spans[k].kind == TG_GUI_MD_PRE &&
+                   spans[k].arg_len > 0UL) {
+            extra += 1UL; /* the mark after the line of its language */
+        }
+        extra += 2UL;
     }
-    if (n + extra + 1UL > size) {
+    if (n + extra + notes_len + 1UL > size) {
         return 0;
+    }
+    out[n + extra + notes_len] = '\0';
+    w = n + extra;
+    for (k = 0; k < count; ++k) {
+        if (note[k] != 0) {
+            out[w++] = '\n';
+            if (w == n + extra + 1UL) {
+                out[w++] = TG_TEXT_MARKER_NOTE;
+            }
+            out[w++] = '[';
+            out[w++] = (char)('0' + note[k]);
+            out[w++] = ']';
+            out[w++] = ' ';
+            memcpy(out + w, spans[k].arg, (size_t)spans[k].arg_len);
+            w += spans[k].arg_len;
+        }
     }
     /* The marks go in from the end backwards, so the text moves over
        itself without a second buffer. At each place, reading forwards:
        what closes there (the last opened first), what opens there (the
        first opened first), then the character. */
     w = n + extra;
-    out[w] = '\0';
     for (pos = n;; --pos) {
         if (pos < n) {
             out[--w] = out[pos];
+        }
+        for (k = 0; k < count; ++k) {
+            if (spans[k].kind == TG_GUI_MD_PRE && spans[k].arg_len > 0UL &&
+                spans[k].from + spans[k].arg_len == pos) {
+                out[--w] = TG_TEXT_MARKER_NOTE; /* before the line's end */
+            }
         }
         for (k = count - 1; k >= 0; --k) {
             if (spans[k].kind != 0 && spans[k].from == pos) {
@@ -2720,6 +2900,11 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size)
         }
         for (k = 0; k < count; ++k) {
             if (spans[k].kind != 0 && spans[k].to == pos) {
+                if (note[k] != 0) {
+                    out[--w] = ']';
+                    out[--w] = (char)('0' + note[k]);
+                    out[--w] = '[';
+                }
                 out[--w] = tg_gui_md_marker(spans[k].kind);
             }
         }
@@ -2734,12 +2919,14 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
                      unsigned long size)
 {
     static char back[TG_GUI_MSG_TEXT_MAX]; /* what the markers give again */
+    static char link_url[TG_GUI_MD_URL_MAX + 1];
     unsigned long len;
     unsigned long i = 0UL;
     unsigned long o = 0UL;
     int marks = 0;
     int block = 0; /* the code being written is a block */
     int code_open = 0;
+    int link_open = 0; /* 1 = with its address, 2 = the address is gone */
     int fits = 1;
 
     if (out == 0 || size == 0UL) {
@@ -2754,20 +2941,78 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
         const char *mark = 0;
         unsigned long n;
 
+        if (shown[i] == TG_TEXT_MARKER_NOTE && code_open) {
+            ++i; /* after a block's language: the line says it by itself */
+            continue;
+        }
+        if (shown[i] == TG_TEXT_MARKER_NOTE) {
+            /* the addresses after the text: each went back into its link */
+            if (o > 0UL && out[o - 1UL] == '\n') {
+                --o;
+            }
+            ++marks;
+            break;
+        }
+        if (shown[i] == TG_TEXT_MARKER_LINK) {
+            ++marks;
+            if (!link_open) {
+                /* [words](address), when the address is there */
+                link_open = tg_gui_link_note_at(shown, (long)i + 1L,
+                                                link_url, sizeof(link_url))
+                                ? 1 : 2;
+                ++i;
+                if (link_open == 1) {
+                    if (o + 1UL >= size) {
+                        fits = 0;
+                    } else {
+                        out[o++] = '[';
+                    }
+                }
+                continue;
+            }
+            ++i;
+            if (link_open == 1) {
+                unsigned long ul = (unsigned long)strlen(link_url);
+
+                if (o + ul + 3UL >= size) {
+                    fits = 0;
+                } else {
+                    out[o++] = ']';
+                    out[o++] = '(';
+                    memcpy(out + o, link_url, (size_t)ul);
+                    o += ul;
+                    out[o++] = ')';
+                }
+            }
+            link_open = 0;
+            if (shown[i] == '[' && shown[i + 1UL] >= '1' &&
+                shown[i + 1UL] <= '9' && shown[i + 2UL] == ']') {
+                i += 3UL; /* the number that named the address */
+            }
+            continue;
+        }
         if (TG_TEXT_IS_MARKER(shown[i])) {
             if (shown[i] == TG_TEXT_MARKER_CODE) {
+                int lang = 0;
+
                 if (!code_open) {
-                    /* code that runs over a line break is a block */
+                    /* code that runs over a line break is a block; its
+                       first line is its language when the mark says so */
                     unsigned long j = i + 1UL;
 
                     block = 0;
                     while (j < len && shown[j] != TG_TEXT_MARKER_CODE) {
+                        if (shown[j] == TG_TEXT_MARKER_NOTE && !block) {
+                            lang = 1;
+                        }
                         block = block || shown[j] == '\n';
                         ++j;
                     }
                 }
                 code_open = !code_open;
-                mark = block ? "```" : "`";
+                /* a block without a language starts on a line of its
+                   own, so that its first line is never read as one */
+                mark = !block ? "`" : (code_open && !lang) ? "```\n" : "```";
             } else if (shown[i] == TG_TEXT_MARKER_BOLD) {
                 mark = "**";
             } else if (shown[i] == TG_TEXT_MARKER_ITALIC) {
@@ -2801,8 +3046,55 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
             return 1;
         }
     }
-    /* The plain text: what an edit sent before there were markers. */
+    /* The plain text: what an edit sent before there were markers. The
+       numbers and the addresses of links with a text of their own are not
+       part of it. */
     tg_gui_strip_markers(out, size, shown);
+    for (i = 0UL; i < len; ++i) {
+        if (shown[i] == TG_TEXT_MARKER_LINK ||
+            shown[i] == TG_TEXT_MARKER_NOTE) {
+            break;
+        }
+    }
+    if (i < len) {
+        int after_close = 0;
+        int in_link = 0;
+
+        o = 0UL;
+        for (i = 0UL; i < len; ++i) {
+            unsigned long n;
+
+            if (shown[i] == TG_TEXT_MARKER_NOTE && shown[i + 1UL] == '[') {
+                if (o > 0UL && out[o - 1UL] == '\n') {
+                    --o;
+                }
+                break;
+            }
+            if (shown[i] == TG_TEXT_MARKER_LINK) {
+                after_close = in_link;
+                in_link = !in_link;
+                continue;
+            }
+            if (after_close && shown[i] == '[' && shown[i + 1UL] >= '1' &&
+                shown[i + 1UL] <= '9' && shown[i + 2UL] == ']') {
+                i += 2UL;
+                after_close = 0;
+                continue;
+            }
+            after_close = 0;
+            if (TG_TEXT_IS_MARKER(shown[i])) {
+                continue;
+            }
+            n = tg_gui_text_unit_len(shown, len, i);
+            if (o + n >= size) {
+                break; /* an emoji pair is never cut in two */
+            }
+            memcpy(out + o, shown + i, (size_t)n);
+            o += n;
+            i += n - 1UL;
+        }
+        out[o] = '\0';
+    }
     for (i = 0UL; i < len; ++i) {
         if (TG_TEXT_IS_MARKER(shown[i])) {
             return 0; /* its styles go when it is saved */
@@ -3294,6 +3586,13 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
             case TG_TEXT_MARKER_SPOILER:
                 toggle = TG_GUI_STYLE_SPOILER;
                 break;
+            case TG_TEXT_MARKER_LINK:
+                /* words that are a link: underlined, in the link's pen */
+                toggle = TG_GUI_STYLE_UNDERLINE;
+                break;
+            case TG_TEXT_MARKER_NOTE:
+                toggle = TG_GUI_STYLE_NOTE;
+                break;
             default:
                 break;
             }
@@ -3319,8 +3618,9 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
                                                 : *style));
                 }
                 backend->draw_text(backend,
-                                   (link_left > 0UL && !boundary) ? link_pen
-                                                                  : pen,
+                                   ((link_left > 0UL && !boundary) ||
+                                    (*style & TG_GUI_STYLE_UNDERLINE) != 0)
+                                       ? link_pen : pen,
                                    x, baseline, text + run_start,
                                    i - run_start);
                 x += backend->text_width(backend, text + run_start,
@@ -5860,6 +6160,84 @@ int tg_gui_first_url(const tg_gui_message *m, char *out,
     return 0;
 }
 
+/* The address of the link with a text of its own that the character at
+   `ch` belongs to: its words stand between two link marks, the number
+   after them names a line after the note mark. 1 and the address in out;
+   0 when ch is not on such words (or on their number), or the address is
+   not there (a text cut short). */
+int tg_gui_link_note_at(const char *text, long ch, char *out,
+                        unsigned long out_size)
+{
+    long open = -1;
+    long close = -1;
+    long i;
+    long notes = -1;
+    char digit;
+
+    if (text == 0 || out == 0 || out_size == 0UL || ch < 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    for (i = 0L; text[i] != '\0'; ++i) {
+        /* the mark before the addresses; the one after a block's
+           language is followed by the end of its line */
+        if (text[i] == TG_TEXT_MARKER_NOTE && text[i + 1L] == '[') {
+            notes = i;
+            break;
+        }
+        if (text[i] != TG_TEXT_MARKER_LINK) {
+            continue;
+        }
+        if (open < 0) {
+            open = i;
+        } else {
+            close = i;
+            /* the words, their marks, or the "[n]" right after them */
+            if (ch >= open && ch <= close + 3L) {
+                break;
+            }
+            open = -1;
+            close = -1;
+        }
+    }
+    if (open < 0 || close < 0 || ch < open || ch > close + 3L ||
+        text[close + 1L] != '[' || text[close + 2L] < '1' ||
+        text[close + 2L] > '9' || text[close + 3L] != ']') {
+        return 0;
+    }
+    digit = text[close + 2L];
+    if (notes < 0) {
+        for (i = close; text[i] != '\0'; ++i) {
+            if (text[i] == TG_TEXT_MARKER_NOTE && text[i + 1L] == '[') {
+                notes = i;
+                break;
+            }
+        }
+    }
+    if (notes < 0) {
+        return 0;
+    }
+    /* the line "[n] address" among those after the mark */
+    for (i = notes + 1L; text[i] != '\0'; ++i) {
+        if ((i == notes + 1L || text[i - 1L] == '\n') && text[i] == '[' &&
+            text[i + 1L] == digit && text[i + 2L] == ']' &&
+            text[i + 3L] == ' ') {
+            unsigned long n = 0UL;
+
+            for (i += 4L; text[i] != '\0' && text[i] != '\n'; ++i) {
+                if (n + 1UL >= out_size) {
+                    out[0] = '\0';
+                    return 0; /* never half an address */
+                }
+                out[n++] = text[i];
+            }
+            out[n] = '\0';
+            return n > 0UL;
+        }
+    }
+    return 0;
+}
+
 int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
                   unsigned long out_size)
 {
@@ -5880,6 +6258,9 @@ int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
     len = (long)strlen(m->text);
     if (ch >= len) {
         ch = len - 1;
+    }
+    if (tg_gui_link_note_at(m->text, ch, out, out_size)) {
+        return 1; /* words that are a link: their own address */
     }
     if (m->text[ch] == ' ' || m->text[ch] == '\n' || m->text[ch] == '\t') {
         return 0; /* clicked the gap between words */
@@ -8963,12 +9344,72 @@ static int tg_gui_markup_self_test(void)
             puts("gui self-test: a message without a spoiler opened one");
             return 2;
         }
+        {
+            /* A click on the words of a link with a text of its own gives
+               the address its number names; next to them, nothing. */
+            static const char linked[] =
+                "see \030this page\030[1] \030now\030[2]\n\031[1] "
+                "https://example.org/a\n[2] http://b.example/x";
+            char url[64];
+            char tiny[8];
+
+            if (!tg_gui_link_note_at(linked, 6L, url, sizeof(url)) ||
+                strcmp(url, "https://example.org/a") != 0 ||
+                !tg_gui_link_note_at(linked, 4L, url, sizeof(url)) ||
+                !tg_gui_link_note_at(linked, 15L, url, sizeof(url)) ||
+                strcmp(url, "https://example.org/a") != 0 || /* its "[1]" */
+                !tg_gui_link_note_at(linked, 20L, url, sizeof(url)) ||
+                strcmp(url, "http://b.example/x") != 0 ||
+                tg_gui_link_note_at(linked, 1L, url, sizeof(url)) ||
+                tg_gui_link_note_at(linked, 18L, url, sizeof(url)) ||
+                tg_gui_link_note_at(linked, 30L, url, sizeof(url)) ||
+                tg_gui_link_note_at(linked, 6L, tiny, sizeof(tiny)) ||
+                tiny[0] != '\0' ||
+                tg_gui_link_note_at("plain words", 3L, url, sizeof(url)) ||
+                tg_gui_link_note_at("a \030cut\030[1] off", 3L, url,
+                                    sizeof(url)) ||
+                tg_gui_link_note_at(0, 3L, url, sizeof(url))) {
+                puts("gui self-test: the address of linked words is wrong");
+                return 2;
+            }
+            memset(&sm, 0, sizeof(sm));
+            tg_gui_copy(sm.text, sizeof(sm.text), linked);
+            if (!tg_gui_url_at(&sm, 6L, url, sizeof(url)) ||
+                strcmp(url, "https://example.org/a") != 0 ||
+                !tg_gui_url_at(&sm, 40L, url, sizeof(url)) ||
+                strcmp(url, "https://example.org/a") != 0) {
+                puts("gui self-test: a click on linked words opens nothing");
+                return 2;
+            }
+            /* the words are drawn underlined, the rest is not */
+            memset(&record, 0, sizeof(record));
+            style = 0;
+            tg_gui_draw_markup(&backend, 0, 0, 0, 0, linked, 0UL,
+                               (unsigned long)strlen(linked), &style);
+            if (strncmp(record.text, "see this page[1] now[2]\n[1] ", 28U) !=
+                    0 ||
+                record.styles[0] != 0 ||
+                record.styles[4] != TG_GUI_STYLE_UNDERLINE ||
+                record.styles[12] != TG_GUI_STYLE_UNDERLINE ||
+                record.styles[13] != 0 ||
+                record.styles[17] != TG_GUI_STYLE_UNDERLINE ||
+                (record.styles[24] & TG_GUI_STYLE_NOTE) == 0) {
+                puts("gui self-test: linked words are not drawn as a link");
+                return 2;
+            }
+        }
         /* The text client and the plain copies print it between bars. */
         if (TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_SPOILER) != '|' ||
             TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_STRIKE) != '~' ||
             TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_BOLD) != '*' ||
             !TG_TEXT_IS_MARKER(TG_TEXT_MARKER_SPOILER) ||
-            TG_TEXT_IS_MARKER('\033') || TG_TEXT_IS_MARKER('\031') ||
+            !TG_TEXT_IS_MARKER(TG_TEXT_MARKER_LINK) ||
+            !TG_TEXT_IS_MARKER(TG_TEXT_MARKER_NOTE) ||
+            !TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_LINK) ||
+            !TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_NOTE) ||
+            TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_SPOILER) ||
+            TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_BOLD) ||
+            TG_TEXT_IS_MARKER('\033') || TG_TEXT_IS_MARKER('\027') ||
             TG_TEXT_IS_MARKER(' ')) {
             puts("gui self-test: the spoiler's marker is not one");
             return 2;
@@ -9841,6 +10282,21 @@ static int tg_gui_notify_menu_self_test(void)
             { "__it__ and ~~no~~", "\035it\035 and \037no\037" },
             { "`code` here", "\036code\036 here" },
             { "||secret|| x", "\032secret\032 x" },
+            { "[site](https://example.org/a) now",
+              "\030site\030[1] now\n\031[1] https://example.org/a" },
+            { "see [a b](http://x.org) and [c](https://y.org/z)",
+              "see \030a b\030[1] and \030c\030[2]\n\031[1] http://x.org"
+              "\n[2] https://y.org/z" },
+            { "**[bold](https://b.org)**",
+              "\034\030bold\030[1]\034\n\031[1] https://b.org" },
+            /* the address already shown: plain words, no line for it */
+            { "[https://x.org](https://x.org) ok", "https://x.org ok" },
+            { "```python\nprint(1)\n```", "\036python\031\nprint(1)\036" },
+            { "```c\nint a;\nint b;```", "\036c\031\nint a;\nint b;\036" },
+            /* a word alone after the marker with nothing under it, or a
+               line that is no single word, is code */
+            { "```make```", "\036make\036" },
+            { "```x = 1\ny = 2```", "\036x = 1\ny = 2\036" },
             { "**a ||b||**", "\034a \032b\032\034" },
             { "**bold __both__**", "\034bold \035both\035\034" },
             { "(**b**), \"__i__\".", "(\034b\034), \"\035i\035\"." },
@@ -9860,6 +10316,17 @@ static int tg_gui_notify_menu_self_test(void)
             { "\x80(**b**", 0 },
             { "**b**\x80*", 0 },
             { "2 ** 3 ** 4", 0 },
+            { "[1](2)", 0 },
+            { "[text](ftp://x.org)", 0 },
+            { "[ text](http://x.org)", 0 },
+            { "[text ](http://x.org)", 0 },
+            { "[text] (http://x.org)", 0 },
+            { "array[i](http://x.org)", 0 },
+            { "[a](http://)", 0 },
+            { "[a](http://x .org)", 0 },
+            { "[a\nb](http://x.org)", 0 },
+            { "[](http://x.org)", 0 },
+            { "[a](http://x.org", 0 },
             { "a**b**c", 0 },
             { "**a**b", 0 },
             { "**open only", 0 },
@@ -9960,7 +10427,19 @@ static int tg_gui_notify_menu_self_test(void)
         } ed[] = {
             { 1, "\034bold\034 e \035it\035", "**bold** e __it__", 1 },
             { 1, "x \037no\037, \036code\036.", "x ~~no~~, `code`.", 1 },
-            { 1, "\036a = 1;\nb = 2;\036", "```a = 1;\nb = 2;```", 1 },
+            { 1, "\036a = 1;\nb = 2;\036", "```\na = 1;\nb = 2;```", 1 },
+            /* a block whose first line is one word is not given a
+               language by the edit; one that has a language keeps it */
+            { 1, "\036make\nall\036", "```\nmake\nall```", 1 },
+            { 1, "\036python\031\nprint(1)\036", "```python\nprint(1)```",
+              1 },
+            { 1, "\030site\030[1] now\n\031[1] https://example.org/a",
+              "[site](https://example.org/a) now", 1 },
+            { 1, "a \030b c\030[1] d \030e\030[2]\n\031[1] http://x.org"
+                 "\n[2] https://y.org/z",
+              "a [b c](http://x.org) d [e](https://y.org/z)", 1 },
+            /* its address cut away: the words stay, the link goes */
+            { 1, "a \030b c\030[1] d", "a b c d", 0 },
             { 1, "\034bold \035both\035\034", "**bold __both__**", 1 },
             { 1, "\034a\x80*\034 fine", "**a\x80*** fine", 1 },
             { 1, "x \032secret\032 y", "x ||secret|| y", 1 },
@@ -9975,6 +10454,9 @@ static int tg_gui_notify_menu_self_test(void)
             /* the setting off: plain, and the styles go */
             { 0, "\034bold\034", "bold", 0 },
             { 0, "\032secret\032", "secret", 0 },
+            { 0, "\030site\030[1] now\n\031[1] https://example.org/a",
+              "site now", 0 },
+            { 0, "\036python\031\nprint(1)\036", "python\nprint(1)", 0 },
             { 0, "**x** was typed", "**x** was typed", 1 },
             { 0, "plain text", "plain text", 1 },
         };

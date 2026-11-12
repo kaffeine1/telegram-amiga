@@ -1068,7 +1068,9 @@ void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
 
 /* The formatting the next messages.sendMessage built carries: where each
    styled stretch is in its text (UTF-16 units), in the order of the text.
-   None (0, 0) takes it away again. A block (PRE) names no language. */
+   None (0, 0) takes it away again. A block (PRE) may name its language
+   and a link (LINK) carries its address: `arg`, `arg_len` bytes that must
+   stay where they are until the message is built. */
 #define TG_MTPROTO_SEND_STYLES_MAX 16
 #define TG_MTPROTO_STYLE_BOLD 1UL    /* messageEntityBold#bd610bc9 */
 #define TG_MTPROTO_STYLE_ITALIC 2UL  /* messageEntityItalic#826f8b60 */
@@ -1076,10 +1078,13 @@ void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
 #define TG_MTPROTO_STYLE_PRE 4UL     /* messageEntityPre#73924be0 */
 #define TG_MTPROTO_STYLE_STRIKE 5UL  /* messageEntityStrike#bf0693d4 */
 #define TG_MTPROTO_STYLE_SPOILER 6UL /* messageEntitySpoiler#32ca960f */
+#define TG_MTPROTO_STYLE_LINK 7UL    /* messageEntityTextUrl#76a6d327 */
 typedef struct tg_mtproto_send_style {
     unsigned long kind; /* TG_MTPROTO_STYLE_* */
     unsigned long offset;
     unsigned long length;
+    const char *arg;       /* PRE: the language; LINK: the address */
+    unsigned long arg_len; /* 0 = none */
 } tg_mtproto_send_style;
 void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list,
                                 int count);

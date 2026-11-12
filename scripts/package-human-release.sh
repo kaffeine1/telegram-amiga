@@ -628,7 +628,12 @@ Messages
   ~~strike~~, ||spoiler||, and three backticks before and after a block
   of code. When the message is sent the markers leave the text and the
   other clients show the styles. A spoiler, sent or received, is
-  covered by a bar until its message is clicked. A
+  covered by a bar until its message is clicked. Words become a link
+  with [words](https://address), and a block of code names its
+  language right after its opening marker (\`\`\`c, the code from the
+  next line). A link with words of its own, sent or received, shows
+  them underlined with a number, and its address on a line under the
+  text: a click on the words or on the address opens it. A
   marker counts only at the start and at the end of a word, and a style
   of one line ends on that line, so that 2 ** 3, a || b or __init__.py
   go as they are. "Settings > Markdown formatting" switches it off, and
@@ -879,7 +884,13 @@ Messaggi
   dopo un blocco di codice. Quando il messaggio parte i marcatori
   escono dal testo e gli altri client mostrano gli stili. Uno spoiler,
   mandato o ricevuto, e' coperto da una barra finche' non si fa click
-  sul suo messaggio. Un marcatore vale solo
+  sul suo messaggio. Delle parole diventano un link con
+  [parole](https://indirizzo), e un blocco di codice dice il suo
+  linguaggio subito dopo il marcatore di apertura (\`\`\`c, il codice
+  dalla riga dopo). Un link con parole proprie, mandato o ricevuto, le
+  mostra sottolineate con un numero, e l'indirizzo su una riga sotto il
+  testo: un click sulle parole o sull'indirizzo lo apre. Un marcatore
+  vale solo
   all'inizio e alla fine di una parola, e uno stile di una riga finisce
   su quella riga: cosi' 2 ** 3, a || b o __init__.py partono come sono.
   "Settings > Markdown formatting" lo spegne, e allora tutto parte
