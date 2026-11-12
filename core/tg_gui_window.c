@@ -15996,6 +15996,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_chat = 0;
                             state->ctx_msg = mi;
                             state->ctx_msg_id = state->messages[mi].id;
+                            /* "Message <name>", where there is someone. */
+                            tg_gui_context_sender_label(state);
                             state->ctx_msg_pinned =
                                 tg_gui_session_message_pinned(
                                     state->messages[mi].id);
@@ -16297,6 +16299,37 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (it == TG_GUI_CTX_POLL_RETRACT && m != 0 &&
                                m->id != 0UL) {
                         tg_gui_window_poll_vote(state, &backend, m, 0UL);
+                    } else if (it == TG_GUI_CTX_MSG_SENDER && m != 0 &&
+                               m->id != 0UL) {
+                        /* A private chat with who wrote this message. */
+                        char why[48];
+                        int src;
+
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           "Opening the chat...");
+                        tg_gui_window_paint(state, &backend);
+                        tg_gui_chat_touched = 1;
+                        src = tg_gui_session_message_sender(m->id, why,
+                                                            sizeof(why),
+                                                            stdout);
+                        if (src == 0) {
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                "Live - F1-F10 chats, Amiga+Q quits");
+                        } else if (src == 1) {
+                            char line[96]; /* cut on the copy */
+
+                            sprintf(line, "Telegram refused: %.28s",
+                                    why[0] != '\0' ? why : "no reason given");
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status), line);
+                        } else {
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                src == 3 ? "There is nobody to write to here"
+                                         : "Could not reach Telegram");
+                        }
                     } else if (it == TG_GUI_CTX_POLL_STOP && m != 0 &&
                                m->id != 0UL &&
                                (m->poll_id_hi != 0UL ||

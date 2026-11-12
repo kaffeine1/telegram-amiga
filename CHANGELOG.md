@@ -47,6 +47,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Message <name>, in the menu of someone else's message in a group,
+  opens a private chat with who wrote it. The chat joins the chat list
+  when it was not there and stays after a restart; nothing reaches the
+  other person until a message is written. It is left out where there
+  is nobody to write to: one's own messages, service lines, a channel
+  writing as itself.
 - Mute... in a chat's menu asks for how long: an hour, eight hours, or
   until it is taken back. A timed mute ends by itself on Telegram's
   clock, on every device. Until now a mute was always for good.

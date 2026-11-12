@@ -398,6 +398,7 @@ typedef struct tg_gui_message {
     int read_state;                    /* TG_GUI_READ_* (own messages only) */
     unsigned long from_id_hi;          /* sender user id, to name a live typing peer */
     unsigned long from_id_lo;
+    int from_user;                     /* the sender is a person: can be written to */
     int has_document;                  /* F9: a document is attached (Download) */
     int has_photo;                     /* 0.0.9: inline photo metadata present */
     int photo_ready;                   /* cached JPEG is ready for the backend */
@@ -709,6 +710,9 @@ typedef struct tg_gui_state {
     /* The menu is the paperclip's: what can be attached to the open chat
        (tg_gui_attach_menu_open). */
     int ctx_attach;
+    /* "Message <name>" of the message menu, "" when there is nobody to
+       write to (tg_gui_context_sender_label). */
+    char ctx_sender[40];
     int ctx_poll;
     int poll_multiple;
     unsigned long poll_mask;
@@ -1055,6 +1059,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_FILE_SHOW 60 /* Show that file's drawer */
 #define TG_GUI_CTX_POLL_STOP 61 /* Stop poll: one's own, for good */
 #define TG_GUI_CTX_POLL_NEW 62 /* the paperclip's menu: Poll... */
+#define TG_GUI_CTX_MSG_SENDER 63 /* Message <name>: a chat with the sender */
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
@@ -1188,6 +1193,13 @@ const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state);
    is always filled. */
 int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
                      unsigned long size);
+
+/* Writes the label of "Message <name>" for the message the menu is on
+   (ctx_msg), or "" when there is nobody to write to in private: not a
+   group, one's own message, a service line, a sender that is not a
+   person (a channel writing as itself, an anonymous admin). The window
+   calls it when the message menu opens. */
+void tg_gui_context_sender_label(tg_gui_state *state);
 
 /* Opens the paperclip's menu: Photo..., File... and, where Telegram takes
    polls (a group, a channel, Saved Messages), Poll... It sits above the

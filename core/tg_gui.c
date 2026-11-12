@@ -6586,6 +6586,32 @@ unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i)
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids);
 
+void tg_gui_context_sender_label(tg_gui_state *state)
+{
+    const tg_gui_chat *row;
+    const tg_gui_message *m;
+    char who[28];
+
+    if (state == 0) {
+        return;
+    }
+    state->ctx_sender[0] = '\0';
+    row = tg_gui_open_chat_row(state);
+    if (row == 0 || !row->is_group || state->ctx_msg < 0 ||
+        state->ctx_msg >= state->message_count) {
+        return;
+    }
+    m = &state->messages[state->ctx_msg];
+    if (m->id == 0UL || m->is_own || m->is_system || !m->from_user ||
+        (m->from_id_hi == 0UL && m->from_id_lo == 0UL) ||
+        m->sender[0] == '\0') {
+        return;
+    }
+    /* The name as a requester's button takes it: cut to fit, no emoji. */
+    tg_gui_requester_name(who, sizeof(who), m->sender);
+    sprintf(state->ctx_sender, "Message %s", who);
+}
+
 void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh)
 {
     const char *labels[TG_GUI_CTX_ITEMS_MAX];
@@ -6599,6 +6625,7 @@ void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh)
     state->ctx_react = 0;
     state->ctx_poll = 0;
     state->ctx_chat = 0;
+    state->ctx_sender[0] = '\0';
     state->ctx_msg = -1;
     state->ctx_msg_id = 0UL;
     state->ctx_hover = -1;
@@ -6760,6 +6787,11 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
     labels[n] = "Reply";
     ids[n] = TG_GUI_CTX_REPLY;
     ++n;
+    if (state->ctx_sender[0] != '\0') {
+        /* A group message of someone else: a private chat with them. */
+        labels[n] = state->ctx_sender;
+        ids[n++] = TG_GUI_CTX_MSG_SENDER;
+    }
     if (state->ctx_msg >= 0 && state->ctx_msg < state->message_count &&
         state->messages[state->ctx_msg].id != 0UL) {
         const tg_gui_message *m = &state->messages[state->ctx_msg];
@@ -9440,6 +9472,81 @@ static int tg_gui_notify_menu_self_test(void)
     }
     /* A name on a requester's button: nothing that parts the buttons or
        starts an argument, cut with two dots when it is long. */
+    /* "Message <name>": on someone else's message in a group, when the
+       sender is a person; right under Reply. Nowhere else. */
+    {
+        static const struct {
+            int group;
+            int own;
+            int system;
+            int person;
+            unsigned long from;
+            int offered;
+        } who[] = {
+            { 1, 0, 0, 1, 77UL, 1 },
+            { 1, 1, 0, 1, 77UL, 0 }, /* one's own */
+            { 1, 0, 1, 1, 77UL, 0 }, /* a service line */
+            { 1, 0, 0, 0, 77UL, 0 }, /* a channel writing as itself */
+            { 1, 0, 0, 1, 0UL, 0 },  /* nobody named */
+            { 0, 0, 0, 1, 77UL, 0 }, /* a chat with one person */
+        };
+        unsigned long c;
+        int n;
+        int i;
+        int at;
+
+        state->ctx_chat = 0;
+        state->ctx_attach = 0;
+        state->selected_chat = 0;
+        state->message_count = 1;
+        state->ctx_msg = 0;
+        state->messages[0].id = 7UL;
+        strcpy(state->messages[0].sender, "Anna|Bo");
+        for (c = 0UL; c < sizeof(who) / sizeof(who[0]); ++c) {
+            state->chats[0].is_group = who[c].group;
+            state->messages[0].is_own = who[c].own;
+            state->messages[0].is_system = who[c].system;
+            state->messages[0].from_user = who[c].person;
+            state->messages[0].from_id_lo = who[c].from;
+            tg_gui_context_sender_label(state);
+            n = tg_gui_context_items(state, labels, ids);
+            at = -1;
+            for (i = 0; i < n; ++i) {
+                if (ids[i] == TG_GUI_CTX_MSG_SENDER) {
+                    at = i;
+                }
+            }
+            if ((at >= 0) != who[c].offered ||
+                (at >= 0 && (strcmp(labels[at], "Message Anna/Bo") != 0 ||
+                             at < 1 || ids[at - 1] != TG_GUI_CTX_REPLY)) ||
+                n > TG_GUI_CTX_MENU_ITEMS) {
+                printf("gui self-test: Message <name> case %lu wrong\n", c);
+                return 2;
+            }
+        }
+        /* a long name is cut, the label still fits its buffer */
+        state->chats[0].is_group = 1;
+        state->messages[0].is_own = 0;
+        state->messages[0].is_system = 0;
+        state->messages[0].from_user = 1;
+        state->messages[0].from_id_lo = 77UL;
+        strcpy(state->messages[0].sender,
+               "A name far too long for one line of a menu");
+        tg_gui_context_sender_label(state);
+        if (strlen(state->ctx_sender) != 8U + 27U ||
+            strcmp(state->ctx_sender + 8U + 25U, "..") != 0) {
+            printf("gui self-test: Message <name> is not cut (%s)\n",
+                   state->ctx_sender);
+            return 2;
+        }
+        state->ctx_sender[0] = '\0';
+        state->messages[0].from_user = 0;
+        state->messages[0].from_id_lo = 0UL;
+        state->messages[0].sender[0] = '\0';
+        state->messages[0].id = 0UL;
+        state->message_count = 0;
+        state->ctx_msg = -1;
+    }
     /* The paperclip's menu: Photo and File anywhere, Poll where Telegram
        takes polls (a group, a channel, Saved Messages). It opens above
        the click, never over it, and the message menu is itself again

@@ -89,6 +89,7 @@ typedef struct tg_chat_message_row {
     unsigned long reply_to_id; /* id of the replied-to message, 0 if not a reply */
     unsigned long from_id_hi;  /* sender user id, to match a live typing update */
     unsigned long from_id_lo;
+    int from_user;             /* the sender is a person, not a channel as itself */
     int has_document;          /* F9: message carries a downloadable document */
     int has_photo;             /* 0.0.9: message carries an inline photo */
     int photo_ready;           /* its selected JPEG is present in photos/ */

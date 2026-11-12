@@ -468,6 +468,7 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                                      ? 1U : 0U;
     message->from_id_hi = row->from_id_hi;
     message->from_id_lo = row->from_id_lo;
+    message->from_user = row->from_user;
     if (message->is_own) {
         message->read_state =
             (message->id != 0UL &&

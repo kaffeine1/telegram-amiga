@@ -532,7 +532,10 @@ the target page's metadata, so pages without usable metadata show none
 This moves link previews out of the Tier 4 "degrade to a link line"
 non-goal on the strength of the field reports.
 
-## Planned: GitHub link in About
+## Done: GitHub link in About
+
+About names the repository since the 0.1 beta. The plan as it was
+written:
 
 The About requester credits the author, the contributors and the
 testers, but never says where the project lives. Add the repository URL
@@ -1492,7 +1495,15 @@ Only the GUI gets it: the text client already prints the path it saved
 to. It fits the 0.0.9x line in a slot after the 0.0.95 speed release,
 next to the multiple selection, which works on the same popup.
 
-## Planned: write to a group member in private
+## Done for 0.2: write to a group member in private
+
+Done on `main` for the window: Message <name> in the menu of a group
+message from a person, `users.getUsers` with `inputUserFromMessage` for
+the full user every time (a supergroup's senders come as "min" ones),
+the chat added to the list like one found by the search. Still missing:
+the same from the row with the sender's name, the text client's
+command, and words instead of a code when Telegram refuses the first
+message. What follows is the plan as it was written.
 
 In a group, the desktop client takes you from someone's message to a
 private chat with them in one step. Here that means leaving the group,

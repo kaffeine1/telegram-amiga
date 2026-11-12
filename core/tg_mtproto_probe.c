@@ -15059,6 +15059,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.id = texts.messages[i].id;
                 row.from_id_hi = texts.messages[i].from_id_hi;
                 row.from_id_lo = texts.messages[i].from_id_lo;
+                row.from_user = texts.messages[i].from_constructor ==
+                                TG_MTPROTO_PEER_USER_CONSTRUCTOR;
                 row.has_document = texts.messages[i].document.has_document;
                 row.has_photo = texts.messages[i].photo.has_photo;
                 row.photo_only = texts.messages[i].photo_only;
@@ -28312,6 +28314,115 @@ int tg_gui_session_poll_vote(unsigned long message_id,
     tg_gui_log(mask != 0UL ? "poll: voted" : "poll: vote taken back");
     (void)tg_gui_session_apply_poll_updates(); /* the caller repaints */
     return 0;
+}
+
+/* Public: a private chat with who wrote a message of the open group. A
+   group's history brings its senders as "min" users, whose access hash
+   opens no chat, so the full user is asked from Telegram by the message
+   it was seen in (users.getUsers with inputUserFromMessage). The chat
+   then joins the list like one found by the search, and opens.
+   0 = opened, 1 = Telegram refused (emsg says why), 2 = failed,
+   3 = nobody to write to. */
+int tg_gui_session_message_sender(unsigned long message_id, char *emsg,
+                                  unsigned long emsg_size, FILE *stream)
+{
+    static unsigned char query[96];
+    static const char label[] = "mtproto users.getUsers (message sender)";
+    static tg_mtproto_user_summary user;
+    static tg_mtproto_peer_cache_entry entry;
+    const tg_gui_state *gs = tg_gui_session_state.gui_driver.state;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long from_hi = 0UL;
+    unsigned long from_lo = 0UL;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int rc;
+    int k;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        gs == 0 || tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 2;
+    }
+    for (k = 0; k < gs->message_count; ++k) {
+        if (gs->messages[k].id == message_id && gs->messages[k].from_user) {
+            from_hi = gs->messages[k].from_id_hi;
+            from_lo = gs->messages[k].from_id_lo;
+        }
+    }
+    if (from_hi == 0UL && from_lo == 0UL) {
+        return 3;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "sender peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl) ||
+        pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_users_get_user_from_message(
+             &writer, pc, ph, pl, ahh, ahl, hah, message_id, from_hi,
+             from_lo) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    if (rc == 0 &&
+        tg_mtproto_parse_user_vector_first(
+            tg_mtproto_read_u32_le(result.result_body - 4U),
+            result.result_body, result.result_body_length, &user) !=
+            TG_MTPROTO_TL_OK) {
+        rc = 3; /* an empty answer: not someone Telegram will name */
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "sender: Telegram refused"
+                           : "sender: no user to open");
+        return rc;
+    }
+    if (user.id_hi != from_hi || user.id_lo != from_lo ||
+        !user.has_access_hash || user.is_self ||
+        (user.flags & (1UL << 13)) != 0UL ||  /* deleted */
+        (user.flags & (1UL << 20)) != 0UL) {  /* still "min": no use */
+        tg_gui_log("sender: not a user that can be written to");
+        return 3;
+    }
+    memset(&entry, 0, sizeof(entry));
+    entry.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    entry.id_hi = user.id_hi;
+    entry.id_lo = user.id_lo;
+    entry.access_hash_hi = user.access_hash_hi;
+    entry.access_hash_lo = user.access_hash_lo;
+    entry.has_access_hash = 1;
+    entry.is_bot = user.is_bot;
+    sprintf(entry.title, "%.60s%s%.60s", user.first_name,
+            user.first_name[0] != '\0' && user.last_name[0] != '\0' ? " "
+                                                                     : "",
+            user.last_name);
+    sprintf(entry.username, "%.90s", user.username);
+    if (entry.title[0] == '\0' && entry.username[0] == '\0') {
+        return 3;
+    }
+    tg_gui_log("sender: full user known, opening the chat");
+    return tg_gui_search_open_entry(&entry, stream) == 0 ? 0 : 2;
 }
 
 /* Public: stops the poll of a message of the open chat. A stopped poll

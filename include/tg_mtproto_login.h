@@ -1411,6 +1411,23 @@ tg_mtproto_tl_status tg_mtproto_parse_user_vector_first(
     unsigned long body_length,
     tg_mtproto_user_summary *out);
 
+/* users.getUsers#d91a548 id:Vector<InputUser> with one
+   inputUserFromMessage#1da448e2 peer:InputPeer msg_id:int user_id:long:
+   the full user of someone, named by a message of theirs in a chat. A
+   group's history brings its senders as "min" users, whose access hash
+   opens no chat; this is how the usable one is asked for. */
+tg_mtproto_tl_status tg_mtproto_build_users_get_user_from_message(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    unsigned long user_id_hi,
+    unsigned long user_id_lo);
+
 tg_mtproto_tl_status tg_mtproto_parse_dialogs_summary(
     unsigned long constructor,
     const unsigned char *body,

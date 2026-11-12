@@ -552,6 +552,12 @@ int tg_gui_session_poll_vote(unsigned long message_id,
                              unsigned long poll_id_lo, unsigned long mask,
                              char *emsg, unsigned long emsg_size,
                              FILE *stream);
+/* Opens a private chat with who wrote a message of the open group: the
+   chat joins the list when it was not there, and opens. 0 = opened,
+   1 = Telegram refused (emsg says why), 2 = failed, 3 = there is nobody
+   to write to (an account deleted, a sender that is not a person). */
+int tg_gui_session_message_sender(unsigned long message_id, char *emsg,
+                                  unsigned long emsg_size, FILE *stream);
 /* Stops the poll of a message of the open chat, for good: nobody votes
    after that, and the message shows the final results. 0 = done,
    1 = Telegram refused (emsg says why), 2 = failed. */

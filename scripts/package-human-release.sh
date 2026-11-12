@@ -597,6 +597,9 @@ Messages
   menu brings it back. In a basic group Telegram also deletes it for
   you on every device, and that cannot be undone. The text client has
   /hide (the last message received, or /hide <id>) and /unhide.
+- In a group, the menu of someone else's message has Message <name>:
+  it opens a private chat with them. The chat joins the list if it was
+  not there, and nothing is sent until you write.
 - One tick means sent, two blue ticks read.
 - In groups, "<name> is typing..." shows who is writing.
 - To mention someone in a group, type @ in the input line: a list of
@@ -829,6 +832,9 @@ Messaggi
   anche per te su tutti i dispositivi, e non si torna indietro. Nel
   client testuale ci sono /hide (l'ultimo messaggio ricevuto, o
   /hide <id>) e /unhide.
+- In un gruppo il menu del messaggio di un altro ha Message <nome>:
+  apre una chat privata con quella persona. La chat entra nell'elenco
+  se non c'era, e non parte niente finche' non scrivi.
 - Una spunta vuol dire inviato, due spunte azzurre letto.
 - Nei gruppi "<nome> is typing..." dice chi sta scrivendo.
 - Per menzionare qualcuno in un gruppo scrivi @ nella riga di input: si

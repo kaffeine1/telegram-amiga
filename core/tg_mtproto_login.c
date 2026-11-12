@@ -780,6 +780,48 @@ tg_mtproto_tl_status tg_mtproto_build_users_get_self(
     return status;
 }
 
+tg_mtproto_tl_status tg_mtproto_build_users_get_user_from_message(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    unsigned long user_id_hi,
+    unsigned long user_id_lo)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL ||
+        (user_id_hi == 0UL && user_id_lo == 0UL)) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, TG_USERS_GET_USERS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0x1da448e2UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, user_id_hi, user_id_lo);
+    }
+    return status;
+}
+
 tg_mtproto_tl_status tg_mtproto_build_updates_get_state(
     tg_mtproto_tl_writer *writer)
 {
@@ -12565,6 +12607,37 @@ int tg_mtproto_login_self_test(void)
         query[8] != 0xb9U || query[11] != 0x35U ||           /* inputPeerChat */
         query[20] != 0x0dU || query[23] != 0x0aU ||          /* id LE */
         query[24] != 0x02U || query[25] != 'h' || query[26] != 'i') {
+        return 2;
+    }
+    /* The full user of a message's sender: users.getUsers with one
+       inputUserFromMessage, the chat, the message, then the user's id;
+       no message or nobody named is not built. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_users_get_user_from_message(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 0x0A0B0C0DUL, 0x11UL, 0x22334455UL) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 40UL ||
+        query[0] != 0x48U || query[1] != 0xa5U ||
+        query[2] != 0x91U || query[3] != 0x0dU ||            /* getUsers */
+        query[4] != 0x15U || query[7] != 0x1cU ||            /* vector */
+        query[8] != 0x01U ||                                 /* one */
+        query[12] != 0xe2U || query[13] != 0x48U ||
+        query[14] != 0xa4U || query[15] != 0x1dU ||          /* fromMessage */
+        query[16] != 0xb9U || query[19] != 0x35U ||          /* inputPeerChat */
+        query[28] != 0x0dU || query[31] != 0x0aU ||          /* msg id */
+        query[32] != 0x55U || query[35] != 0x22U ||          /* user id lo */
+        query[36] != 0x11U) {                                /* user id hi */
+        puts("login self-test: the user of a message is asked wrong");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_users_get_user_from_message(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 0UL, 0x11UL, 0x22334455UL) == TG_MTPROTO_TL_OK ||
+        tg_mtproto_build_users_get_user_from_message(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 0x0A0B0C0DUL, 0UL, 0UL) == TG_MTPROTO_TL_OK) {
         return 2;
     }
     /* An edit with formatting: flags 0x808, and after the text a vector
