@@ -671,6 +671,7 @@ typedef struct tg_gui_amiga_ctx {
     int photo_direct_logged;
     int photo_direct_report; /* 1 pass / -1 fallback; log only outside layer lock */
     unsigned int afa_profile_paints; /* bounded --gui-live-debug paint samples */
+    int strike; /* the style in force strikes its text through */
 } tg_gui_amiga_ctx;
 
 static int tg_gui_amiga_width(tg_gui_backend *backend)
@@ -5593,6 +5594,7 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
     unsigned long run_start = 0UL;
     unsigned long index;
     int cell = 0;
+    int x0 = x;
 
     ++tg_gui_paint_text_calls;
     tg_gui_paint_text_chars += length;
@@ -5628,11 +5630,25 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
     }
     tg_gui_amiga_draw_run(ctx, pen, x, baseline, text + run_start,
                           i - run_start);
+    if (ctx->strike) {
+        /* Struck through: a line one pixel thick across the small letters,
+           a third of the ascent above the baseline, in the text's pen. */
+        x += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
+        if (x > x0) {
+            int y = baseline - (tg_gui_amiga_font_ascent(backend) + 1) / 3;
+
+            SetAPen(ctx->rport, tg_gui_amiga_resolve_pen(ctx, pen));
+            SetDrMd(ctx->rport, JAM1);
+            RectFill(ctx->rport, ctx->origin_x + x0, ctx->origin_y + y,
+                     ctx->origin_x + x - 1, ctx->origin_y + y);
+        }
+    }
 }
 
 /* Map the renderer's style bitmask to graphics.library soft styles. Bold and
-   italic are the algorithmic font styles; code and strike reuse underline
-   (no soft strikethrough exists). The OS clamps to what the font supports. */
+   italic are the algorithmic font styles; code reuses underline. No soft
+   strikethrough exists: draw_text rules a line through such text itself.
+   The OS clamps to what the font supports. */
 static void tg_gui_amiga_set_style(tg_gui_backend *backend, int style)
 {
     tg_gui_amiga_ctx *ctx;
@@ -5646,10 +5662,10 @@ static void tg_gui_amiga_set_style(tg_gui_backend *backend, int style)
     if ((style & TG_GUI_STYLE_ITALIC) != 0) {
         soft |= FSF_ITALIC;
     }
-    if ((style & (TG_GUI_STYLE_CODE | TG_GUI_STYLE_STRIKE |
-                  TG_GUI_STYLE_UNDERLINE)) != 0) {
+    if ((style & (TG_GUI_STYLE_CODE | TG_GUI_STYLE_UNDERLINE)) != 0) {
         soft |= FSF_UNDERLINED;
     }
+    ctx->strike = (style & TG_GUI_STYLE_STRIKE) != 0;
     SetSoftStyle(ctx->rport, soft, FSF_BOLD | FSF_ITALIC | FSF_UNDERLINED);
 }
 
