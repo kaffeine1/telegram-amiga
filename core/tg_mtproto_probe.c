@@ -22934,9 +22934,10 @@ static void tg_gui_mark_set(int is_user, unsigned long id_hi,
    when the chat is left or the program closes, and cleared by the message
    that sends it. Kept as the composer holds it (Latin-1 with the emoji
    pairs), so opening the chat is a plain copy. In memory only: Telegram
-   keeps them. Plain text: a draft's formatting and its reply are not
-   shown, and stay on Telegram for as long as the text is not changed here.
-   The window only: the text client has no composer to fill. */
+   keeps them. A draft's formatting comes and goes as the composer's
+   markers (its entities on Telegram); its reply is not shown, and stays on
+   Telegram for as long as the text is not changed here. The window only:
+   the text client has no composer to fill. */
 static int tg_gui_session_peer_request(const unsigned char *query,
                                        unsigned long length,
                                        tg_mtproto_rpc_result *result,
@@ -23092,7 +23093,22 @@ static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
     is_user = peer->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
     shown[0] = '\0';
     if (utf8 != 0 && utf8[0] != '\0') {
-        tg_gui_driver_text_from_utf8(shown, sizeof(shown), utf8);
+        static char marked[TG_GUI_MSG_TEXT_MAX];
+        unsigned long k;
+
+        tg_gui_driver_text_from_utf8(marked, sizeof(marked), utf8);
+        for (k = 0UL; marked[k] != '\0'; ++k) {
+            if (TG_TEXT_IS_MARKER(marked[k])) {
+                break;
+            }
+        }
+        if (marked[k] != '\0') {
+            /* a draft with styles: into the composer as the markers that
+               give them again, or as plain text where they cannot */
+            (void)tg_gui_edit_text(gst, marked, shown, sizeof(shown));
+        } else {
+            memcpy(shown, marked, sizeof(shown));
+        }
     }
     /* The open chat's composer follows the draft only while it still holds
        the draft as it was: text typed here is never replaced. It is only
@@ -23205,6 +23221,10 @@ static void tg_gui_draft_leave(FILE *stream)
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
+    /* The formatting typed goes with the draft as it would with the
+       message: the other devices show the styles, and the draft comes
+       back here as its markers. */
+    text = tg_gui_markdown_for_send(text);
     if (tg_mtproto_build_messages_save_draft(&writer, text, pc, ph, pl, ahh,
                                              ahl, hah) != TG_MTPROTO_TL_OK ||
         tg_gui_session_peer_request(query, writer.length, &result,
@@ -23221,6 +23241,7 @@ static void tg_gui_draft_leave(FILE *stream)
         tg_gui_log(gst->input[0] != '\0' ? "draft: saved"
                                          : "draft: deleted");
     }
+    tg_mtproto_send_set_styles(0, 0);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (tg_gui_draft_set(is_user, ph, pl, gst->input,
@@ -23847,6 +23868,34 @@ static int tg_gui_drafts_self_test(void)
     tg_gui_draft_ingest(&peer, "", 22UL);
     ok = ok && tg_gui_draft_lookup(1, 0UL, 42UL) == 0 &&
          tg_gui_drafts_changed == 1;
+    {
+        /* A draft with styles, as the reader marks it: into the composer
+           as the markers that give them again; with the setting off, or
+           with no window to ask, as plain text. */
+        tg_gui_state *keep_state = tg_gui_session_state.gui_driver.state;
+        tg_gui_state *scratch = tg_gui_test_scratch_state();
+
+        memset(scratch, 0, sizeof(*scratch));
+        scratch->markdown = 1;
+        tg_gui_session_state.gui_driver.state = scratch;
+        tg_gui_draft_ingest(&peer,
+                            "ciao \034bold\034 e \032via\032 perch\xc3\xa9",
+                            23UL);
+        got = tg_gui_draft_lookup(1, 0UL, 42UL);
+        ok = ok && got != 0 &&
+             strcmp(got, "ciao **bold** e ||via|| perch\xe9") == 0;
+        scratch->markdown = 0;
+        tg_gui_draft_ingest(&peer, "ciao \034bold\034", 24UL);
+        got = tg_gui_draft_lookup(1, 0UL, 42UL);
+        ok = ok && got != 0 && strcmp(got, "ciao bold") == 0;
+        tg_gui_session_state.gui_driver.state = 0;
+        tg_gui_draft_ingest(&peer, "\035corsivo\035 qui", 25UL);
+        got = tg_gui_draft_lookup(1, 0UL, 42UL);
+        ok = ok && got != 0 && strcmp(got, "corsivo qui") == 0;
+        tg_gui_draft_ingest(&peer, "", 26UL);
+        memset(scratch, 0, sizeof(*scratch));
+        tg_gui_session_state.gui_driver.state = keep_state;
+    }
     tg_gui_draft_count = saved_count;
     tg_gui_drafts_changed = saved_changed;
     if (!ok) {

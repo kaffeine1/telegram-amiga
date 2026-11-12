@@ -1489,7 +1489,16 @@ static tg_mtproto_tl_status tg_read_peer_ref(tg_mtproto_tl_reader *reader,
    message:string entities:flags.3?Vector<MessageEntity>
    media:flags.5?InputMedia effect:flags.7?long
    suggested_post:flags.8?SuggestedPost = Bool;
-   Plain text only; an empty message deletes the draft. */
+   An empty message deletes the draft. The styles set for the text
+   (tg_mtproto_send_set_styles) go along as its entities, flags.3. */
+static int tg_send_styles_pending(void);
+static tg_mtproto_tl_status tg_write_send_styles_vector(
+    tg_mtproto_tl_writer *writer);
+static tg_mtproto_tl_status tg_read_draft_styles(tg_mtproto_tl_reader *reader,
+                                                 char *text,
+                                                 unsigned long text_size,
+                                                 int cut);
+
 tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     tg_mtproto_tl_writer *writer,
     const char *message,
@@ -1508,7 +1517,9 @@ tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL);
+        status = tg_mtproto_tl_write_u32(
+            writer, message[0] != '\0' && tg_send_styles_pending() ? 8UL
+                                                                   : 0UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -1517,6 +1528,10 @@ tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_string(writer, message);
+    }
+    if (status == TG_MTPROTO_TL_OK && message[0] != '\0' &&
+        tg_send_styles_pending()) {
+        status = tg_write_send_styles_vector(writer);
     }
     return status;
 }
@@ -1797,6 +1812,7 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     unsigned long flags;
     unsigned long constructor;
     unsigned long scratch;
+    int cut = 0;
 
     if (reader == 0 || peer == 0 || has_text == 0 || text == 0 ||
         text_size == 0UL || date == 0) {
@@ -1834,16 +1850,24 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
         tg_skip_draft_reply_to(reader) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-    if (tg_read_string_copy_cut(reader, text, text_size, was_cut) !=
+    if (tg_read_string_copy_cut(reader, text, text_size, &cut) !=
         TG_MTPROTO_TL_OK) {
         text[0] = '\0';
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-    if ((flags & (8UL | 32UL)) == 0UL &&
+    if (was_cut != 0) {
+        *was_cut = cut;
+    }
+    *has_text = text[0] != '\0';
+    if ((flags & 8UL) != 0UL &&
+        tg_read_draft_styles(reader, text, text_size, cut) !=
+            TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_OK; /* the text alone, no date */
+    }
+    if ((flags & 32UL) == 0UL &&
         tg_mtproto_tl_read_u32(reader, &scratch) == TG_MTPROTO_TL_OK) {
         *date = scratch;
     }
-    *has_text = text[0] != '\0';
     return TG_MTPROTO_TL_OK;
 }
 
@@ -2442,6 +2466,29 @@ static tg_mtproto_tl_status tg_write_send_style(
         status = tg_mtproto_tl_write_bytes(
             writer, (const unsigned char *)(s->arg != 0 ? s->arg : ""),
             s->arg != 0 ? s->arg_len : 0UL);
+    }
+    return status;
+}
+
+static int tg_send_styles_pending(void)
+{
+    return tg_send_style_count > 0;
+}
+
+/* The styles set for the next text, as a Vector<MessageEntity>. */
+static tg_mtproto_tl_status tg_write_send_styles_vector(
+    tg_mtproto_tl_writer *writer)
+{
+    tg_mtproto_tl_status status;
+    int s;
+
+    status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(
+            writer, (unsigned long)tg_send_style_count);
+    }
+    for (s = 0; s < tg_send_style_count && status == TG_MTPROTO_TL_OK; ++s) {
+        status = tg_write_send_style(writer, &tg_send_styles[s]);
     }
     return status;
 }
@@ -6765,6 +6812,27 @@ static tg_mtproto_tl_status tg_skip_message_entity_vector(
     tg_mtproto_tl_reader *reader)
 {
     return tg_read_message_entity_vector(reader, 0, 0, 0);
+}
+
+/* A draft's styles, the reader at their vector: the text takes the same
+   marks a message's does. A draft cut short stays plain: its styles would
+   be half there. */
+static tg_mtproto_tl_status tg_read_draft_styles(tg_mtproto_tl_reader *reader,
+                                                 char *text,
+                                                 unsigned long text_size,
+                                                 int cut)
+{
+    tg_msg_entity ents[TG_MSG_ENTITY_MAX];
+    int ent_count = 0;
+
+    if (tg_read_message_entity_vector(reader, ents, TG_MSG_ENTITY_MAX,
+                                      &ent_count) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (ent_count > 0 && !cut && text[0] != '\0') {
+        tg_apply_entity_markers(text, text_size, ents, ent_count);
+    }
+    return TG_MTPROTO_TL_OK;
 }
 
 /* messageReplyHeader#6917560b (layer 214). Field order on the wire:
@@ -13763,6 +13831,48 @@ int tg_mtproto_login_self_test(void)
             pw.length != 24UL || pin_query[20] != 0x00U) {
             return 2;
         }
+        {
+            /* A draft with styles set for it: flags.3 and, after the text,
+               the vector with them (bold at 0, 4 long). The draft deleted
+               while styles are set carries none, and neither does the
+               draft after the styles were taken away. */
+            tg_mtproto_send_style bold;
+
+            memset(&bold, 0, sizeof(bold));
+            bold.kind = TG_MTPROTO_STYLE_BOLD;
+            bold.length = 4UL;
+            tg_mtproto_send_set_styles(&bold, 1);
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "ciao", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                pw.length != 48UL || pin_query[4] != 0x08U ||
+                pin_query[28] != 0x15U || pin_query[29] != 0xc4U ||
+                pin_query[32] != 0x01U || pin_query[36] != 0xc9U ||
+                pin_query[37] != 0x0bU || pin_query[40] != 0x00U ||
+                pin_query[44] != 0x04U) {
+                tg_mtproto_send_set_styles(0, 0);
+                puts("login self-test: a draft is saved without its styles");
+                return 2;
+            }
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                pw.length != 24UL || pin_query[4] != 0x00U) {
+                tg_mtproto_send_set_styles(0, 0);
+                puts("login self-test: a deleted draft carries styles");
+                return 2;
+            }
+            tg_mtproto_send_set_styles(0, 0);
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "ciao", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                pw.length != 28UL || pin_query[4] != 0x00U) {
+                return 2;
+            }
+        }
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_get_all_drafts(&pw) !=
                 TG_MTPROTO_TL_OK ||
@@ -14072,6 +14182,54 @@ int tg_mtproto_login_self_test(void)
                 !has || cut || strcmp(ut, "si") != 0 || when != 0UL ||
                 up.id_lo != 78UL) {
                 return 2;
+            }
+            {
+                /* A draft with styles (flags.3): bold on "bold", and the
+                   date after the vector is read too. Cut short, the same
+                   draft stays plain. */
+                char styled[32];
+
+                tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
+                if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, TG_PEER_USER_CONSTRUCTOR) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u64(&uw, 0UL, 79UL) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(
+                        &uw, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, 8UL) != TG_MTPROTO_TL_OK ||
+                    tg_write_string(&uw, "ciao bold") != TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, TG_VECTOR_CONSTRUCTOR) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, 1UL) != TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, 0xbd610bc9UL) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, 5UL) != TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, 4UL) != TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&uw, 1700000001UL) !=
+                        TG_MTPROTO_TL_OK) {
+                    return 2;
+                }
+                tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+                if (tg_mtproto_read_update_draft(&ur, &up, &has, styled,
+                                                 sizeof(styled), &cut,
+                                                 &when) != TG_MTPROTO_TL_OK ||
+                    !has || cut ||
+                    strcmp(styled, "ciao \034bold\034") != 0 ||
+                    when != 1700000001UL || up.id_lo != 79UL) {
+                    puts("login self-test: a draft's styles are not read");
+                    return 2;
+                }
+                tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+                if (tg_mtproto_read_update_draft(&ur, &up, &has, ut,
+                                                 sizeof(ut), &cut, &when) !=
+                        TG_MTPROTO_TL_OK ||
+                    !has || !cut || strcmp(ut, "ciao bo") != 0 ||
+                    when != 1700000001UL) {
+                    puts("login self-test: a cut draft took its styles");
+                    return 2;
+                }
             }
             tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
             if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||

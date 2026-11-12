@@ -57,6 +57,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   composer `[words](https://address)` sends such a link, and an edit
   brings it back written that way. The text client prints the words,
   the number and the lines with the addresses.
+- Drafts keep their formatting. A draft left here with markers
+  (`**bold**`, a spoiler, a link, a block) is saved on Telegram with
+  its styles, so the other devices show them; a draft with styles
+  written elsewhere comes into the message box as the markers that give
+  them again, and as plain text when "Markdown formatting" is off. It
+  used to be saved, and shown, as plain text with the markers in it.
 - A block of code can name its language: three backticks, the
   language, and the code from the next line. It is sent with the block
   and shown as the block's first line, here and in a message received;
