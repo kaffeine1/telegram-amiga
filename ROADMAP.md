@@ -295,10 +295,11 @@ it works today:
   in the sidebar, a click shows the chat around the message), Find in
   all chats (Amiga+G: the same list, each hit with its chat's name, a
   click opens that chat on the message), and /find in the text client
-  for the open chat. Find in chat pages on: a last row, More
+  for the open chat. Both page on: a last row, More
   results..., asks for the hits older than the last one listed
-  (`offset_id`). Find in all chats shows its first page only (20, 12
-  on MorphOS): its later pages are still to do. The search box also
+  (`offset_id` in a chat; across chats the `next_rate` of the page
+  before with the chat and id of its last message, `offset_rate`,
+  `offset_peer`, `offset_id`). The search box also
   finds chat names and, on the server, people and public channels
   (`contacts.search`);
 - pinned chats at the top of the list and the Archive (`folder_id` 1).

@@ -334,6 +334,11 @@ int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream);
    wrote it and how the message starts, its date; a row's index is the hit's
    number, from 1. Returns the number of hits, or -1 when it could not run. */
 int tg_gui_session_search_global(const char *query, FILE *stream);
+/* The next page of that search: older hits under the ones listed, in the
+   place of the row that offered them (index TG_GUI_MORE_HITS_INDEX).
+   Returns how many were added, 0 = no more, -1 = Telegram could not be
+   asked (the row stays), -2 = nothing to go on from (search again). */
+int tg_gui_session_search_global_more(FILE *stream);
 
 /* Opens the chat of hit number `hit` around its message and puts the hits
    back in the sidebar. 1 = shown, 0 = the message is gone, -1 = failed,

@@ -754,6 +754,8 @@ typedef struct tg_mtproto_message_text_list {
     unsigned long page_count;     /* messages in the fetched vector (page size) -- diag */
     unsigned long resync_attempts;/* times the walk had to resync past a bad item -- diag */
     unsigned long resync_ok;      /* of those, how many re-landed on a message -- diag */
+    unsigned long next_rate;      /* messagesSlice: the next page of a search across chats */
+    int has_next_rate;
     tg_mtproto_message_text messages[TG_MTPROTO_MESSAGE_TEXT_LIST_MAX];
 } tg_mtproto_message_text_list;
 
@@ -1185,6 +1187,21 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_global(
     tg_mtproto_tl_writer *writer,
     const char *query_utf8,
     unsigned long limit);
+/* A later page of it: the next_rate of the page before (the list's
+   next_rate) and the chat and id of that page's last message. A
+   peer_constructor of 0 asks from the top, as the function above. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_global_at(
+    tg_mtproto_tl_writer *writer,
+    const char *query_utf8,
+    unsigned long limit,
+    unsigned long offset_rate,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id);
 
 /* channels.getParticipants(channelParticipantsRecent) for a supergroup -- resolves
    member id->name for the typing indicator. The reply carries users:Vector<User>. */

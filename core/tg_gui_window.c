@@ -11059,16 +11059,18 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
         state->chats[row].index == 0UL) {
         return;
     }
-    if (!state->msg_search_global &&
-        state->chats[row].index == TG_GUI_MORE_HITS_INDEX) {
-        /* "More results...": the older hits take this row's place. */
+    if (state->chats[row].index == TG_GUI_MORE_HITS_INDEX) {
+        /* "More results...": the older hits take this row's place, in the
+           open chat's search and in the one across chats alike. */
         char line[64];
         int more;
 
         tg_gui_window_copy(state->status, sizeof(state->status),
                            "Searching further back...");
         tg_gui_window_paint(state, backend);
-        more = tg_gui_session_search_messages_more(stdout);
+        more = state->msg_search_global
+                   ? tg_gui_session_search_global_more(stdout)
+                   : tg_gui_session_search_messages_more(stdout);
         if (more > 0) {
             sprintf(line, "%d more found - click one or ENTER", more % 1000);
         } else {

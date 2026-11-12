@@ -2132,12 +2132,22 @@ static tg_mtproto_tl_status tg_build_messages_search(
    q:string filter:MessagesFilter min_date:int max_date:int offset_rate:int
    offset_peer:InputPeer offset_id:int limit:int = messages.Messages
    (layer 214 schema, checked 2026-11-10). Text search across every chat of
-   the account, newest first: no flags, no filter, the first page
-   (offset_rate 0, inputPeerEmpty, offset_id 0). */
-tg_mtproto_tl_status tg_mtproto_build_messages_search_global(
+   the account, newest first: no flags, no filter. The first page asks with
+   offset_rate 0, inputPeerEmpty and offset_id 0 (peer_constructor 0 here);
+   a later page with the next_rate of the page before and the chat and id
+   of its last message. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_global_at(
     tg_mtproto_tl_writer *writer,
     const char *query_utf8,
-    unsigned long limit)
+    unsigned long limit,
+    unsigned long offset_rate,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id)
 {
     tg_mtproto_tl_status status;
     int k;
@@ -2160,21 +2170,38 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_global(
         status = tg_mtproto_tl_write_u32(writer,
                                          TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR);
     }
-    /* min_date, max_date, offset_rate. */
-    for (k = 0; k < 3 && status == TG_MTPROTO_TL_OK; ++k) {
+    /* min_date, max_date. */
+    for (k = 0; k < 2 && status == TG_MTPROTO_TL_OK; ++k) {
         status = tg_mtproto_tl_write_u32(writer, 0UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer,
-                                         TG_INPUT_PEER_EMPTY_CONSTRUCTOR);
+        status = tg_mtproto_tl_write_u32(writer, offset_rate);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset_id */
+        status = peer_constructor == 0UL
+                     ? tg_mtproto_tl_write_u32(writer,
+                                               TG_INPUT_PEER_EMPTY_CONSTRUCTOR)
+                     : tg_write_input_peer(writer, peer_constructor,
+                                           peer_id_hi, peer_id_lo,
+                                           access_hash_hi, access_hash_lo,
+                                           has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, offset_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, limit);
     }
     return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_search_global(
+    tg_mtproto_tl_writer *writer,
+    const char *query_utf8,
+    unsigned long limit)
+{
+    return tg_mtproto_build_messages_search_global_at(
+        writer, query_utf8, limit, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0, 0UL);
 }
 
 /* channels.getParticipants#77ced9d0 channel:InputChannel
@@ -9170,9 +9197,14 @@ tg_mtproto_tl_status tg_mtproto_parse_message_text_list_dests(
                 TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
-        if ((flags & 1UL) != 0UL &&
-            tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK) {
-            return TG_MTPROTO_TL_INVALID_DATA;
+        if ((flags & 1UL) != 0UL) {
+            /* next_rate: what a search across chats asks its next page
+               with */
+            if (tg_mtproto_tl_read_u32(&reader, &out->next_rate) !=
+                TG_MTPROTO_TL_OK) {
+                return TG_MTPROTO_TL_INVALID_DATA;
+            }
+            out->has_next_rate = 1;
         }
         if ((flags & 4UL) != 0UL &&
             tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK) {
@@ -12428,6 +12460,64 @@ int tg_mtproto_login_self_test(void)
     if (tg_mtproto_build_messages_search_global(&writer, "", 20UL) ==
         TG_MTPROTO_TL_OK) {
         return 2;
+    }
+    /* Its next page: offset_rate 0x01020304, the last hit's chat as
+       inputPeerChannel#27bcbbfc (id 0x1122334455667788, access hash
+       0x99aabbccddeeff00), offset_id 77, limit 12 -> 60 bytes. A chat
+       without the hash it needs cannot be an offset. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_global_at(
+            &writer, "ciao", 12UL, 0x01020304UL, TG_PEER_CHANNEL_CONSTRUCTOR,
+            0x11223344UL, 0x55667788UL, 0x99aabbccUL, 0xddeeff00UL, 1,
+            77UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 60UL ||
+        query[0] != 0x9aU || query[3] != 0x4bU ||
+        query[28] != 0x04U || query[29] != 0x03U ||
+        query[30] != 0x02U || query[31] != 0x01U ||
+        query[32] != 0xfcU || query[33] != 0xbbU ||
+        query[34] != 0xbcU || query[35] != 0x27U ||
+        query[36] != 0x88U || query[43] != 0x11U ||
+        query[44] != 0x00U || query[51] != 0x99U ||
+        query[52] != 77U || query[56] != 12U || query[59] != 0x00U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_global_at(
+            &writer, "ciao", 12UL, 5UL, TG_PEER_CHANNEL_CONSTRUCTOR, 1UL,
+            2UL, 0UL, 0UL, 0, 77UL) == TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    {
+        /* messages.messagesSlice#762b263d with a next_rate (flags.0): the
+           list keeps it; without the flag there is none. */
+        static tg_mtproto_message_text_list slice_list;
+        static const unsigned char slice_rate[36] = {
+            0x01U, 0x00U, 0x00U, 0x00U, /* flags: next_rate */
+            0x05U, 0x00U, 0x00U, 0x00U, /* count */
+            0x09U, 0x03U, 0x00U, 0x00U, /* next_rate 777 */
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x00U, 0x00U, 0x00U, 0x00U,
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x00U, 0x00U, 0x00U, 0x00U,
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x00U, 0x00U, 0x00U, 0x00U
+        };
+        static const unsigned char slice_plain[32] = {
+            0x00U, 0x00U, 0x00U, 0x00U, /* flags */
+            0x05U, 0x00U, 0x00U, 0x00U, /* count */
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x00U, 0x00U, 0x00U, 0x00U,
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x00U, 0x00U, 0x00U, 0x00U,
+            0x15U, 0xc4U, 0xb5U, 0x1cU, 0x00U, 0x00U, 0x00U, 0x00U
+        };
+
+        if (tg_mtproto_parse_message_text_list(
+                TG_MESSAGES_MESSAGES_SLICE_CONSTRUCTOR, slice_rate,
+                sizeof(slice_rate), &slice_list) != TG_MTPROTO_TL_OK ||
+            !slice_list.has_next_rate || slice_list.next_rate != 777UL ||
+            slice_list.total_message_count != 5UL ||
+            tg_mtproto_parse_message_text_list(
+                TG_MESSAGES_MESSAGES_SLICE_CONSTRUCTOR, slice_plain,
+                sizeof(slice_plain), &slice_list) != TG_MTPROTO_TL_OK ||
+            slice_list.has_next_rate || slice_list.next_rate != 0UL) {
+            return 2;
+        }
     }
     /* channels.getParticipants(recent): lock the verified layer-214 hashes + the
        LE int64 (lo-then-hi) layout. channel_id=0x1122334455667788,

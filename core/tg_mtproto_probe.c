@@ -25474,10 +25474,16 @@ static int tg_gui_search_open_entry(const tg_mtproto_peer_cache_entry *selected,
 
 /* --- Find in all chats (messages.searchGlobal) -------------------------- */
 
+/* A page of hits, and how many hits the list keeps over its pages. */
 #if defined(__MORPHOS__) || defined(__MORPHOS)
-#define TG_GUI_GLOBAL_HITS_MAX 12 /* small replies: the bsdsocket guard */
+#define TG_GUI_GLOBAL_PAGE 12 /* small replies: the bsdsocket guard */
+#define TG_GUI_GLOBAL_HITS_MAX 36
+#elif defined(__m68k__)
+#define TG_GUI_GLOBAL_PAGE 20
+#define TG_GUI_GLOBAL_HITS_MAX 40
 #else
-#define TG_GUI_GLOBAL_HITS_MAX 20
+#define TG_GUI_GLOBAL_PAGE 20
+#define TG_GUI_GLOBAL_HITS_MAX 60
 #endif
 
 #if !defined(TG_NO_GUI)
@@ -25497,6 +25503,50 @@ static tg_gui_chat tg_gui_global_rows[TG_GUI_GLOBAL_HITS_MAX];
 static int tg_gui_global_hit_count = 0;
 static tg_mtproto_dialog_peer
     tg_gui_global_dests[TG_MTPROTO_MESSAGE_TEXT_LIST_MAX];
+/* Where the next page starts: the words as they went out, the rate the
+   last page gave, and the chat and id of its last message. more = 0 when
+   that page was not full, or when the list has no room left. */
+static char tg_gui_global_wire[TG_GUI_SEARCH_MAX * 2 + 4];
+static unsigned long tg_gui_global_next_rate = 0UL;
+static tg_gui_global_hit tg_gui_global_last;
+static int tg_gui_global_more = 0;
+
+/* 1 when a page that brought `got` messages may be followed by another:
+   it was full, the list has room for more hits, and the last message's
+   chat can be named as the place to go on from. */
+static int tg_gui_global_page_goes_on(unsigned long got, int hits,
+                                      int last_usable)
+{
+    return got >= (unsigned long)TG_GUI_GLOBAL_PAGE &&
+           hits < TG_GUI_GLOBAL_HITS_MAX && last_usable;
+}
+
+/* The chats and users of a later page, added to those of the pages before:
+   a hit of any page must still find its chat when it is opened. */
+static void tg_gui_global_merge_peers(const tg_mtproto_peer_cache *page)
+{
+    unsigned long k;
+    unsigned long j;
+
+    for (k = 0UL; k < page->count; ++k) {
+        const tg_mtproto_peer_cache_entry *e = &page->entries[k];
+
+        for (j = 0UL; j < tg_gui_search_results.count; ++j) {
+            const tg_mtproto_peer_cache_entry *have =
+                &tg_gui_search_results.entries[j];
+
+            if (have->peer_constructor == e->peer_constructor &&
+                have->id_hi == e->id_hi && have->id_lo == e->id_lo) {
+                break;
+            }
+        }
+        if (j == tg_gui_search_results.count &&
+            tg_gui_search_results.count < TG_MTPROTO_PEER_CACHE_MAX) {
+            tg_gui_search_results.entries[tg_gui_search_results.count++] =
+                *e;
+        }
+    }
+}
 
 static const tg_mtproto_peer_cache_entry *tg_gui_global_entry(
     unsigned long peer_constructor, unsigned long id_hi, unsigned long id_lo)
@@ -25565,65 +25615,122 @@ static int tg_gui_global_line_self_test(void)
         puts("mtproto self-test: a hit's line cuts a character in half");
         return 2;
     }
+    /* A further page is offered after a full one only, while the list has
+       room, and when the last message's chat can be named. */
+    if (!tg_gui_global_page_goes_on((unsigned long)TG_GUI_GLOBAL_PAGE, 5,
+                                    1) ||
+        tg_gui_global_page_goes_on((unsigned long)TG_GUI_GLOBAL_PAGE - 1UL, 5,
+                                   1) ||
+        tg_gui_global_page_goes_on((unsigned long)TG_GUI_GLOBAL_PAGE,
+                                   TG_GUI_GLOBAL_HITS_MAX, 1) ||
+        tg_gui_global_page_goes_on((unsigned long)TG_GUI_GLOBAL_PAGE, 5, 0) ||
+        !tg_gui_global_page_goes_on((unsigned long)TG_GUI_GLOBAL_PAGE,
+                                    TG_GUI_GLOBAL_HITS_MAX - 1, 1)) {
+        puts("mtproto self-test: when a search across chats goes on");
+        return 2;
+    }
+    {
+        /* The chats of a later page join those of the pages before: a new
+           one is added, one already there is not added twice, and the
+           first page's stay where they were. */
+        static tg_mtproto_peer_cache page;
+        unsigned long keep_n = tg_gui_search_results.count;
+        tg_mtproto_peer_cache_entry keep0 = tg_gui_search_results.entries[0];
+        tg_mtproto_peer_cache_entry keep1 = tg_gui_search_results.entries[1];
+        int ok;
+
+        memset(&page, 0, sizeof(page));
+        tg_gui_search_results.count = 1UL;
+        memset(&tg_gui_search_results.entries[0], 0,
+               sizeof(tg_gui_search_results.entries[0]));
+        tg_gui_search_results.entries[0].peer_constructor =
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        tg_gui_search_results.entries[0].id_lo = 7UL;
+        tg_gui_search_results.entries[0].access_hash_lo = 70UL;
+        page.count = 3UL;
+        page.entries[0].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        page.entries[0].id_lo = 7UL;  /* already known */
+        page.entries[0].access_hash_lo = 99UL;
+        page.entries[1].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        page.entries[1].id_lo = 7UL;  /* same number, another kind: new */
+        page.entries[2].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        page.entries[2].id_lo = 8UL;  /* new */
+        tg_gui_global_merge_peers(&page);
+        ok = tg_gui_search_results.count == 3UL &&
+             tg_gui_search_results.entries[0].access_hash_lo == 70UL &&
+             tg_gui_search_results.entries[1].peer_constructor ==
+                 TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+             tg_gui_search_results.entries[2].id_lo == 8UL;
+        tg_gui_global_merge_peers(&page); /* again: nothing is added */
+        ok = ok && tg_gui_search_results.count == 3UL;
+        tg_gui_search_results.entries[0] = keep0;
+        tg_gui_search_results.entries[1] = keep1;
+        memset(&tg_gui_search_results.entries[2], 0,
+               sizeof(tg_gui_search_results.entries[2]));
+        tg_gui_search_results.count = keep_n;
+        if (!ok) {
+            puts("mtproto self-test: chats of a later page of hits");
+            return 2;
+        }
+    }
     return 0;
 }
 #endif
 #endif /* !TG_NO_GUI */
 
-/* Public: search every chat of the account for `query` (Latin-1, as typed)
-   with messages.searchGlobal. The hits replace the sidebar rows, newest
-   first: the chat's name, who wrote it and how the message starts, its
-   date; the row's index is the hit's number, from 1, for
-   tg_gui_session_search_global_open. Returns the number of hits, or -1 when
-   the search could not run. */
-int tg_gui_session_search_global(const char *query, FILE *stream)
+#if !defined(TG_NO_GUI)
+/* One page of the search across chats into the sidebar rows: a new list
+   (more = 0), or the next page under the hits already there (more = 1,
+   from where the page before ended). The row's index is the hit's number,
+   from 1. Returns how many hits the page added, or -1 when it could not
+   be asked or read. */
+static int tg_gui_search_global_page(int more, FILE *stream)
 {
-#if defined(TG_NO_GUI)
-    (void)query;
-    (void)stream;
-    return -1;
-#else
-    unsigned char qbuf[320];
+    unsigned char qbuf[352];
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     tg_gui_chat_driver collector;
     tg_chat_driver collect_driver;
-    tg_gui_state *gst;
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
     FILE *quiet;
-    const char *wire;
     unsigned long prev_timeout;
     unsigned long i;
+    unsigned long got;
     long display_delta;
-    int src[TG_GUI_GLOBAL_HITS_MAX];
+    static int src[TG_GUI_GLOBAL_HITS_MAX];
+    int base = more ? tg_gui_global_hit_count : 0;
+    int last_usable = 0;
     int rc;
     int k;
     static char line[TG_GUI_TEXT_MAX * 2];
     static const char label[] = "gui messages.searchGlobal";
-#if TG_MTPROTO_DISPLAY_LATIN1
-    static char query_utf8[TG_GUI_SEARCH_MAX * 2 + 4];
-#endif
 
-    gst = tg_gui_session_state.gui_driver.state;
-    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
-        query == 0 || query[0] == '\0') {
-        return -1;
-    }
-    wire = query;
-#if TG_MTPROTO_DISPLAY_LATIN1
-    if (tg_mtproto_latin1_to_utf8(query, query_utf8, sizeof(query_utf8))) {
-        wire = query_utf8;
-    }
-#endif
     tg_mtproto_tl_writer_init(&writer, qbuf, sizeof(qbuf));
-    if (tg_mtproto_build_messages_search_global(
-            &writer, wire, (unsigned long)TG_GUI_GLOBAL_HITS_MAX) !=
-        TG_MTPROTO_TL_OK) {
+    if (more) {
+        const tg_mtproto_peer_cache_entry *e = tg_gui_global_entry(
+            tg_gui_global_last.peer_constructor,
+            tg_gui_global_last.peer_id_hi, tg_gui_global_last.peer_id_lo);
+
+        if (e == 0 ||
+            tg_mtproto_build_messages_search_global_at(
+                &writer, tg_gui_global_wire,
+                (unsigned long)TG_GUI_GLOBAL_PAGE, tg_gui_global_next_rate,
+                e->is_self ? TG_MTPROTO_PEER_SELF_CONSTRUCTOR
+                           : e->peer_constructor,
+                e->id_hi, e->id_lo, e->access_hash_hi, e->access_hash_lo,
+                e->has_access_hash, tg_gui_global_last.message_id) !=
+                TG_MTPROTO_TL_OK) {
+            return -1;
+        }
+    } else if (tg_mtproto_build_messages_search_global(
+                   &writer, tg_gui_global_wire,
+                   (unsigned long)TG_GUI_GLOBAL_PAGE) != TG_MTPROTO_TL_OK) {
         return -1;
     }
     if (tg_shared_message_texts_busy) {
         return -1;
     }
-    tg_gui_log("search_global: start");
+    tg_gui_log(more ? "search_global: next page" : "search_global: start");
     quiet = tg_mtproto_open_quiet_stream(stream);
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
@@ -25657,14 +25764,23 @@ int tg_gui_session_search_global(const char *query, FILE *stream)
         return -1;
     }
     /* The reply's own chats and users name the hits and open them later;
-       the online picker's list is replaced, so its rows are void. */
-    tg_mtproto_parse_message_peers(result.result_body,
-                                   result.result_body_length,
-                                   &tg_gui_search_results);
-    tg_gui_search_openable_n = 0;
-    tg_gui_global_hit_count = 0;
-    for (i = 0UL; i < tg_shared_message_texts.count &&
-                  tg_gui_global_hit_count < TG_GUI_GLOBAL_HITS_MAX; ++i) {
+       the online picker's list is replaced by the first page (its rows are
+       void) and grown by the pages after. */
+    if (more) {
+        tg_mtproto_parse_message_peers(result.result_body,
+                                       result.result_body_length,
+                                       &tg_peer_cache_scratch);
+        tg_gui_global_merge_peers(&tg_peer_cache_scratch);
+    } else {
+        tg_mtproto_parse_message_peers(result.result_body,
+                                       result.result_body_length,
+                                       &tg_gui_search_results);
+        tg_gui_search_openable_n = 0;
+        tg_gui_global_hit_count = 0;
+    }
+    got = tg_shared_message_texts.count;
+    for (i = 0UL; i < got && tg_gui_global_hit_count < TG_GUI_GLOBAL_HITS_MAX;
+         ++i) {
         const tg_mtproto_message_text *m = &tg_shared_message_texts.messages[i];
         const tg_mtproto_dialog_peer *d = &tg_gui_global_dests[i];
         const tg_mtproto_peer_cache_entry *e;
@@ -25688,13 +25804,41 @@ int tg_gui_session_search_global(const char *query, FILE *stream)
         src[tg_gui_global_hit_count] = (int)i;
         ++tg_gui_global_hit_count;
     }
-    /* The search driver puts each row on top: hand it the oldest first. */
+    /* Where a next page would go on from: the last message of this one,
+       shown or not, when its chat is one the reply names. */
+    if (got > 0UL) {
+        const tg_mtproto_message_text *m =
+            &tg_shared_message_texts.messages[got - 1UL];
+        const tg_mtproto_dialog_peer *d = &tg_gui_global_dests[got - 1UL];
+        const tg_mtproto_peer_cache_entry *e = tg_gui_global_entry(
+            d->peer_constructor, d->id_hi, d->id_lo);
+
+        if (m->id != 0UL && e != 0 &&
+            (e->is_self || e->has_access_hash ||
+             e->peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR)) {
+            tg_gui_global_last.peer_constructor = d->peer_constructor;
+            tg_gui_global_last.peer_id_hi = d->id_hi;
+            tg_gui_global_last.peer_id_lo = d->id_lo;
+            tg_gui_global_last.message_id = m->id;
+            last_usable = 1;
+        }
+    }
+    tg_gui_global_next_rate = tg_shared_message_texts.has_next_rate
+                                  ? tg_shared_message_texts.next_rate : 0UL;
+    tg_gui_global_more = tg_gui_global_page_goes_on(
+        got, tg_gui_global_hit_count, last_usable);
+    /* The search driver puts each row on top of its page: hand it the
+       oldest first. A later page goes under the rows already there. */
     display_delta = tg_mtproto_display_delta(
         tg_gui_session_state.context.server_time_delta_seconds,
         tg_mtproto_local_clock_skew());
-    gst->chat_count = 0;
+    gst->chat_count = base;
+    for (k = 0; k < base; ++k) {
+        gst->chats[k] = tg_gui_global_rows[k];
+    }
     tg_gui_search_driver_bind(&collector, gst, &collect_driver);
-    for (k = tg_gui_global_hit_count; k > 0; --k) {
+    collector.prepend_at = base > 0 ? base : -1;
+    for (k = tg_gui_global_hit_count; k > base; --k) {
         const tg_mtproto_message_text *m =
             &tg_shared_message_texts.messages[src[k - 1]];
         const tg_gui_global_hit *hit = &tg_gui_global_hits[k - 1];
@@ -25724,11 +25868,88 @@ int tg_gui_session_search_global(const char *query, FILE *stream)
         collect_driver.on_message(collect_driver.ctx, &row);
     }
     tg_shared_message_texts_busy = 0;
-    for (k = 0; k < tg_gui_global_hit_count && k < gst->chat_count; ++k) {
+    for (k = base; k < tg_gui_global_hit_count && k < gst->chat_count; ++k) {
         tg_gui_global_rows[k] = gst->chats[k];
     }
+    if (tg_gui_global_more) {
+        tg_gui_search_more_row(gst);
+    }
     tg_gui_log("search_global: done");
-    return tg_gui_global_hit_count;
+    return tg_gui_global_hit_count - base;
+}
+#endif
+
+/* Public: search every chat of the account for `query` (Latin-1, as typed)
+   with messages.searchGlobal. The hits replace the sidebar rows, newest
+   first: the chat's name, who wrote it and how the message starts, its
+   date; the row's index is the hit's number, from 1, for
+   tg_gui_session_search_global_open. A full page ends with the row that
+   offers more (index TG_GUI_MORE_HITS_INDEX). Returns the number of hits,
+   or -1 when the search could not run. */
+int tg_gui_session_search_global(const char *query, FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)query;
+    (void)stream;
+    return -1;
+#else
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    const char *wire;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char query_utf8[TG_GUI_SEARCH_MAX * 2 + 4];
+#endif
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        query == 0 || query[0] == '\0') {
+        return -1;
+    }
+    wire = query;
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(query, query_utf8, sizeof(query_utf8))) {
+        wire = query_utf8;
+    }
+#endif
+    if (strlen(wire) >= sizeof(tg_gui_global_wire)) {
+        return -1;
+    }
+    strcpy(tg_gui_global_wire, wire);
+    tg_gui_global_more = 0;
+    return tg_gui_search_global_page(0, stream);
+#endif
+}
+
+/* Public: the next page of that search, under the hits already listed, in
+   the place of the row that offered it. Returns the number of hits added,
+   0 when there were no more, -1 when Telegram could not be asked (the row
+   stays, to try again), -2 when there is nothing to go on from (search
+   again). */
+int tg_gui_session_search_global_more(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return -2;
+#else
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int got;
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        !tg_gui_global_more || tg_gui_global_hit_count <= 0 ||
+        tg_gui_global_wire[0] == '\0') {
+        return -2;
+    }
+    got = tg_gui_search_global_page(1, stream);
+    if (got < 0) {
+        /* the hits and the row that offers more stay as they were */
+        int k;
+
+        for (k = 0; k < tg_gui_global_hit_count; ++k) {
+            gst->chats[k] = tg_gui_global_rows[k];
+        }
+        gst->chat_count = tg_gui_global_hit_count;
+        tg_gui_search_more_row(gst);
+        return -1;
+    }
+    return got;
 #endif
 }
 
@@ -25806,6 +26027,9 @@ int tg_gui_session_search_global_open(unsigned long hit, FILE *stream)
         gst->chats[k] = tg_gui_global_rows[k];
     }
     gst->chat_count = tg_gui_global_hit_count;
+    if (tg_gui_global_more) {
+        tg_gui_search_more_row(gst);
+    }
     gst->selected_chat = (int)(hit - 1UL);
     return rc;
 #endif
