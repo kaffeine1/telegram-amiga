@@ -378,10 +378,13 @@ Middle, more interface:
   files picked in the requester with Shift, ten at most; photos leave
   as one album through `messages.uploadMedia` and one
   `messages.sendMultiMedia`, the caption on the first; other files go
-  one message each; all to the chat open when they were picked). Still
-  missing from its section: several icons dropped on the window at
-  once, albums of documents or videos, more than ten photos split into
-  several albums, and showing a received album as one block;
+  one message each; all to the chat open when they were picked). An
+  album, received or one's own, shows as one block: its parts close
+  together under one name and over one time (`grouped_id` read behind
+  a photo or a file; a column, not a mosaic). Still missing from its
+  section: several icons dropped on the window at once, albums of
+  documents or videos, and more than ten photos split into several
+  albums;
 - select several messages: done (Select in the message's menu, click
   and Shift+click, a bar in the composer's place with Forward, Delete
   and Cancel; one `messages.forwardMessages` and one

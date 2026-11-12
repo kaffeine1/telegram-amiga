@@ -614,6 +614,11 @@ typedef struct tg_mtproto_message_text {
        written out, and tg_mtproto_poll_find gives the poll itself. */
     unsigned long poll_id_hi;
     unsigned long poll_id_lo;
+    /* The album this message is part of (grouped_id; 0, 0 = none): the
+       photos or files sent together carry the same one. Known only where
+       the media before it reads whole: a photo, a file. */
+    unsigned long grouped_id_hi;
+    unsigned long grouped_id_lo;
 } tg_mtproto_message_text;
 
 /* --- polls ---------------------------------------------------------------

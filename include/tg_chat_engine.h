@@ -105,6 +105,8 @@ typedef struct tg_chat_message_row {
     unsigned long webpage_channel_lo;
     unsigned long poll_id_hi;  /* the poll the message carries, 0 0 = none */
     unsigned long poll_id_lo;
+    unsigned long album_hi;    /* the album it is part of, 0 0 = none */
+    unsigned long album_lo;
     int is_service;            /* a service line ("X joined"): text says it all */
     const tg_reactions *reactions;
     /* The reader stopped short of the reactions field (a media, a keyboard):

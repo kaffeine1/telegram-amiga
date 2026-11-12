@@ -424,6 +424,8 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     message->pending_webpage_lo = row->pending_webpage_lo;
     message->poll_id_hi = row->poll_id_hi;
     message->poll_id_lo = row->poll_id_lo;
+    message->album_hi = row->album_hi;
+    message->album_lo = row->album_lo;
 
     /* Sender label: own name when outgoing; the resolved sender otherwise; the
        1:1 peer name as the fallback; empty for an unresolved group author (the

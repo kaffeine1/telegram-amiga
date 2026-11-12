@@ -723,6 +723,9 @@ Photos and previews
 - Click a photo for a larger view. "Settings > Full-size photos" opens
   the largest copy the screen can show. "Save photo as..." (right mouse
   button, or S in the viewer) saves it in its own format.
+- An album, the photos or files sent together, shows as one block:
+  its parts close together, the sender's name above the first and the
+  time under the last.
 - With "Settings > Show inline photos" off, photos stay [Photo] labels
   and nothing loads in the background; click a label to see that photo.
 - With "Settings > Show avatars" off, chats keep their coloured initials
@@ -1000,6 +1003,9 @@ Foto e anteprime
   photos" apre la copia piu' grande che lo schermo puo' mostrare. "Save
   photo as..." (tasto destro, o S nel visualizzatore) la salva nel suo
   formato.
+- Un album, cioe' le foto o i file mandati insieme, si vede come un
+  blocco unico: le parti vicine, il nome di chi scrive sopra la prima e
+  l'ora sotto l'ultima.
 - Con "Settings > Show inline photos" spento, le foto restano etichette
   [Photo] e non si carica niente in sottofondo; clicca un'etichetta per
   vedere quella foto.

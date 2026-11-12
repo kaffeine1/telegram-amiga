@@ -438,6 +438,10 @@ typedef struct tg_gui_message {
        written out, and its menu offers the vote. */
     unsigned long poll_id_hi;
     unsigned long poll_id_lo;
+    /* The album the message is part of (0, 0 = none): the photos or files
+       sent together carry the same id, and are drawn as one block. */
+    unsigned long album_hi;
+    unsigned long album_lo;
     /* Chosen while several messages are being selected (pick_mode). */
     unsigned char picked;
     unsigned char spoiler_open; /* its hidden text was clicked open */

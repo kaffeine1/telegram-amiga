@@ -15425,6 +15425,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.photo_is_link = texts.messages[i].photo_is_link;
                 row.poll_id_hi = texts.messages[i].poll_id_hi;
                 row.poll_id_lo = texts.messages[i].poll_id_lo;
+                row.album_hi = texts.messages[i].grouped_id_hi;
+                row.album_lo = texts.messages[i].grouped_id_lo;
                 row.photo_id_hi = texts.messages[i].photo.id_hi;
                 row.photo_id_lo = texts.messages[i].photo.id_lo;
                 row.photo_width = texts.messages[i].photo.width;

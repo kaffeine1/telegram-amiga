@@ -147,6 +147,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - A quiz shows its explanation once it is answered, on a line that
   starts with "Why:", under the votes; a poll whose votes are public
   says so next to the number of votes. Both were read past until now.
+- An album shows as one block. The photos or files sent together are
+  one message each: they used to stand apart, each with its name and
+  its time. Now the parts of an album are drawn a pixel apart, with the
+  sender's name above the first and the time under the last, on either
+  side of the chat. The album is known behind photos and files
+  (`grouped_id`, read behind the media), not behind other media.
 - Stickers show their picture where the system has a datatype for
   WEBP. A sticker's still (animated and video stickers have one too) is
   a WEBP picture, which Amigram does not decode: it is fetched like a

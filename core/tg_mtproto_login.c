@@ -9094,6 +9094,98 @@ static void tg_mtproto_append_document_label(
     text[n] = '\0';
 }
 
+/* The album a message belongs to: grouped_id:flags.17?long, which stands
+   after the media, behind reply_markup:flags.6?ReplyMarkup
+   entities:flags.7?Vector<MessageEntity> views:flags.10?int
+   forwards:flags.10?int replies:flags.23?MessageReplies
+   edit_date:flags.15?int post_author:flags.16?string. `reader` stands
+   right after a media that was read to its last byte. The fields before
+   the id are read on a copy, exactly; one that does not read, or a
+   keyboard, leaves the message without an album. Layer 214. */
+static void tg_read_album_id(const tg_mtproto_tl_reader *reader,
+                             unsigned long flags, unsigned long *id_hi,
+                             unsigned long *id_lo)
+{
+    tg_msg_entity ents[TG_MSG_ENTITY_MAX];
+    tg_mtproto_tl_reader trial;
+    unsigned long scratch;
+    unsigned long hi;
+    unsigned long lo;
+    int ent_count = 0;
+
+    *id_hi = 0UL;
+    *id_lo = 0UL;
+    if ((flags & (1UL << 17)) == 0UL || (flags & 64UL) != 0UL) {
+        return;
+    }
+    trial = *reader;
+    if ((flags & 128UL) != 0UL &&
+        tg_read_message_entity_vector(&trial, ents, TG_MSG_ENTITY_MAX,
+                                      &ent_count) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if ((flags & (1UL << 10)) != 0UL &&
+        (tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK ||
+         tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK)) {
+        return;
+    }
+    if ((flags & (1UL << 23)) != 0UL) {
+        /* messageReplies#83d60fc2 flags:# comments:flags.0?true
+           replies:int replies_pts:int
+           recent_repliers:flags.1?Vector<Peer> channel_id:flags.0?long
+           max_id:flags.2?int read_max_id:flags.3?int */
+        unsigned long rflags;
+        unsigned long count;
+        unsigned long i;
+
+        if (tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK ||
+            scratch != 0x83d60fc2UL ||
+            tg_mtproto_tl_read_u32(&trial, &rflags) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK) {
+            return;
+        }
+        if ((rflags & 2UL) != 0UL) {
+            tg_mtproto_dialog_peer peer;
+
+            if (tg_read_vector_count(&trial, &count) != TG_MTPROTO_TL_OK ||
+                count > 16UL) {
+                return;
+            }
+            for (i = 0UL; i < count; ++i) {
+                if (tg_read_peer_ref(&trial, &peer) != TG_MTPROTO_TL_OK) {
+                    return;
+                }
+            }
+        }
+        if ((rflags & 1UL) != 0UL &&
+            tg_mtproto_tl_read_u64(&trial, &hi, &lo) != TG_MTPROTO_TL_OK) {
+            return;
+        }
+        if ((rflags & 4UL) != 0UL &&
+            tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK) {
+            return;
+        }
+        if ((rflags & 8UL) != 0UL &&
+            tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK) {
+            return;
+        }
+    }
+    if ((flags & (1UL << 15)) != 0UL &&
+        tg_mtproto_tl_read_u32(&trial, &scratch) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if ((flags & (1UL << 16)) != 0UL &&
+        tg_skip_string(&trial) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if (tg_mtproto_tl_read_u64(&trial, &hi, &lo) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    *id_hi = hi;
+    *id_lo = lo;
+}
+
 /* The styles of a message whose media or keyboard stands before them on
    the wire. That tail is not read whole, so the reader never arrives at
    the entities: a caption lost its bold, a post with a link preview its
@@ -9321,6 +9413,9 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         unsigned long caption_bytes =
             (flags & 128UL) != 0UL && out->has_text
                 ? (unsigned long)strlen(out->text) : 0UL;
+        /* a photo or a file read to its last byte: the album's id can be
+           read behind it */
+        int media_whole = 0;
 
         if ((flags & 512UL) != 0UL) {
             unsigned long media_ctor;
@@ -9354,6 +9449,20 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                             !had_caption && out->photo.has_photo &&
                             out->document.kind ==
                                 (unsigned char)TG_MTPROTO_DOC_KIND_STICKER;
+                        /* alt_documents:flags.5 and video_cover:flags.9
+                           are not walked; video_timestamp:flags.10?int
+                           and ttl_seconds:flags.2?int are */
+                        if ((mflags & (32UL | 512UL)) == 0UL) {
+                            unsigned long skipped;
+
+                            media_whole =
+                                ((mflags & 1024UL) == 0UL ||
+                                 tg_mtproto_tl_read_u32(reader, &skipped) ==
+                                     TG_MTPROTO_TL_OK) &&
+                                ((mflags & 4UL) == 0UL ||
+                                 tg_mtproto_tl_read_u32(reader, &skipped) ==
+                                     TG_MTPROTO_TL_OK);
+                        }
                     }
                 } else if (media_ctor == 0x695150d7UL) {
                     unsigned long mflags;
@@ -9361,8 +9470,15 @@ static tg_mtproto_tl_status tg_read_common_message_text(
                     out->photo_only = !out->has_text;
                     if (tg_mtproto_tl_read_u32(reader, &mflags) ==
                             TG_MTPROTO_TL_OK &&
-                        (mflags & 1UL) != 0UL) {
-                        (void)tg_mtproto_read_photo(reader, &out->photo);
+                        ((mflags & 1UL) == 0UL ||
+                         tg_mtproto_read_photo(reader, &out->photo) ==
+                             TG_MTPROTO_TL_OK)) {
+                        unsigned long ttl; /* ttl_seconds:flags.2?int */
+
+                        media_whole =
+                            (mflags & 4UL) == 0UL ||
+                            tg_mtproto_tl_read_u32(reader, &ttl) ==
+                                TG_MTPROTO_TL_OK;
                     }
                 } else if (media_ctor == 0xddf10c3bUL) {
                     /* messageMediaWebPage: flags then a non-optional WebPage.
@@ -9411,6 +9527,10 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         if (out->poll_id_hi == 0UL && out->poll_id_lo == 0UL) {
             tg_read_late_entities(reader, out->text, sizeof(out->text),
                                   caption_bytes, text_cut, kept_units);
+        }
+        if (media_whole) {
+            tg_read_album_id(reader, flags, &out->grouped_id_hi,
+                             &out->grouped_id_lo);
         }
         return TG_MTPROTO_TL_OK;
     }
@@ -11797,6 +11917,165 @@ static int tg_late_entities_self_test(void)
     return 0;
 }
 
+/* A message of an album as the wire has it: a photo's media with nothing
+   in it (flags 0) or with ttl_seconds (flags 4), then what the message's
+   flags announce, down to the album's id. */
+static void tg_album_test_message(tg_mtproto_tl_writer *w, unsigned long id,
+                                  unsigned long flags,
+                                  unsigned long media_ctor,
+                                  unsigned long media_flags,
+                                  unsigned long album_lo)
+{
+    (void)tg_mtproto_tl_write_u32(w, TG_MESSAGE_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, flags);
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+    (void)tg_mtproto_tl_write_u32(w, id);
+    (void)tg_mtproto_tl_write_u32(w, TG_PEER_USER_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(w, 0UL, 0x12345678UL);
+    (void)tg_mtproto_tl_write_u32(w, 2225UL);
+    (void)tg_write_string(w, (flags & 128UL) != 0UL ? "see this" : "");
+    (void)tg_mtproto_tl_write_u32(w, media_ctor);
+    (void)tg_mtproto_tl_write_u32(w, media_flags);
+    if (media_ctor == 0x52d8ccd9UL) {
+        /* document#8fd4c4d8: a file "a.lha" of 1024 bytes, no thumbs */
+        (void)tg_mtproto_tl_write_u32(w, 0x8fd4c4d8UL);
+        (void)tg_mtproto_tl_write_u32(w, 0UL);
+        (void)tg_mtproto_tl_write_u64(w, 0UL, 0x4444UL);
+        (void)tg_mtproto_tl_write_u64(w, 0UL, 0x5555UL);
+        (void)tg_mtproto_tl_write_bytes(w, (const unsigned char *)"ref", 3UL);
+        (void)tg_mtproto_tl_write_u32(w, 2225UL);
+        (void)tg_write_string(w, "application/x-lha");
+        (void)tg_mtproto_tl_write_u64(w, 0UL, 1024UL);
+        (void)tg_mtproto_tl_write_u32(w, 4UL); /* dc_id */
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, 0x15590068UL); /* the file's name */
+        (void)tg_write_string(w, "a.lha");
+        if ((media_flags & 1024UL) != 0UL) {
+            (void)tg_mtproto_tl_write_u32(w, 7UL); /* video_timestamp */
+        }
+    }
+    if ((media_flags & 4UL) != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, 60UL); /* ttl_seconds */
+    }
+    if ((flags & 64UL) != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, 0x48a30254UL); /* a keyboard */
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 0UL);
+    }
+    if ((flags & 128UL) != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, 0xbd610bc9UL); /* bold "this" */
+        (void)tg_mtproto_tl_write_u32(w, 4UL);
+        (void)tg_mtproto_tl_write_u32(w, 4UL);
+    }
+    if ((flags & (1UL << 10)) != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, 30UL); /* views */
+        (void)tg_mtproto_tl_write_u32(w, 2UL);  /* forwards */
+    }
+    if ((flags & (1UL << 23)) != 0UL) {
+        /* messageReplies: comments of a channel, one recent replier */
+        (void)tg_mtproto_tl_write_u32(w, 0x83d60fc2UL);
+        (void)tg_mtproto_tl_write_u32(w, 1UL | 2UL | 4UL | 8UL);
+        (void)tg_mtproto_tl_write_u32(w, 5UL);
+        (void)tg_mtproto_tl_write_u32(w, 77UL);
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, TG_PEER_USER_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u64(w, 0UL, 0x99UL);
+        (void)tg_mtproto_tl_write_u64(w, 0UL, 0x1234UL); /* channel_id */
+        (void)tg_mtproto_tl_write_u32(w, 9UL);            /* max_id */
+        (void)tg_mtproto_tl_write_u32(w, 8UL);            /* read_max_id */
+    }
+    if ((flags & (1UL << 15)) != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, 2300UL); /* edit_date */
+    }
+    if ((flags & (1UL << 16)) != 0UL) {
+        (void)tg_write_string(w, "the author");
+    }
+    if ((flags & (1UL << 17)) != 0UL) {
+        (void)tg_mtproto_tl_write_u64(w, 0xabcdUL, album_lo);
+    }
+}
+
+/* The album a message belongs to stands behind its media and whatever
+   else the message carries before it: it is read behind a photo and a
+   file, through every field that can stand in between, and never from a
+   message with a keyboard, from one whose media is not read whole, or
+   from one that announces none. */
+static int tg_album_id_self_test(void)
+{
+    static unsigned char rpc[1536];
+    static tg_mtproto_message_text_list list;
+    tg_mtproto_tl_writer w;
+    const unsigned long all = 512UL | 128UL | (1UL << 10) | (1UL << 23) |
+                              (1UL << 15) | (1UL << 16) | (1UL << 17);
+
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 7UL);
+    /* a bare photo, part of album 0x71 */
+    tg_album_test_message(&w, 2007UL, 512UL | (1UL << 17), 0x695150d7UL, 0UL,
+                          0x71UL);
+    /* everything that can stand before the id, and a ttl in the media */
+    tg_album_test_message(&w, 2006UL, all, 0x695150d7UL, 4UL, 0x72UL);
+    /* a file, with its timestamp and its ttl */
+    tg_album_test_message(&w, 2005UL, 512UL | (1UL << 17), 0x52d8ccd9UL,
+                          1UL | 4UL | 1024UL, 0x73UL);
+    /* a keyboard: left alone */
+    tg_album_test_message(&w, 2004UL, 512UL | 64UL | (1UL << 17),
+                          0x695150d7UL, 0UL, 0x74UL);
+    /* a media that is not read (a geo point): no id is looked for */
+    tg_album_test_message(&w, 2003UL, 512UL | (1UL << 17), 0x56e0d474UL, 0UL,
+                          0x75UL);
+    /* a photo that announces no album */
+    tg_album_test_message(&w, 2002UL, 512UL | (1UL << 10), 0x695150d7UL, 0UL,
+                          0x76UL);
+    /* a file with other versions of itself: not walked, so no id */
+    tg_album_test_message(&w, 2001UL, 512UL | (1UL << 17), 0x52d8ccd9UL,
+                          1UL | 32UL, 0x77UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    if (tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           rpc, w.length, &list) !=
+            TG_MTPROTO_TL_OK ||
+        list.count != 7UL) {
+        printf("login self-test: the album messages do not parse (%lu)\n",
+               list.count);
+        return 2;
+    }
+    if (list.messages[0].grouped_id_hi != 0xabcdUL ||
+        list.messages[0].grouped_id_lo != 0x71UL) {
+        puts("login self-test: a photo's album is not read");
+        return 2;
+    }
+    if (list.messages[1].grouped_id_hi != 0xabcdUL ||
+        list.messages[1].grouped_id_lo != 0x72UL ||
+        strcmp(list.messages[1].text, "see \034this\034") != 0) {
+        puts("login self-test: the album behind every other field is lost");
+        return 2;
+    }
+    if (list.messages[2].grouped_id_hi != 0xabcdUL ||
+        list.messages[2].grouped_id_lo != 0x73UL ||
+        !list.messages[2].document.has_document) {
+        puts("login self-test: a file's album is not read");
+        return 2;
+    }
+    if (list.messages[3].grouped_id_lo != 0UL ||
+        list.messages[3].grouped_id_hi != 0UL ||
+        list.messages[4].grouped_id_lo != 0UL ||
+        list.messages[5].grouped_id_lo != 0UL ||
+        list.messages[5].grouped_id_hi != 0UL ||
+        list.messages[6].grouped_id_lo != 0UL) {
+        puts("login self-test: an album was read where none can be told");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
@@ -12021,7 +12300,7 @@ static int tg_entity_marker_self_test(void)
         }
     }
     if (tg_message_cut_self_test() != 0 ||
-        tg_late_entities_self_test() != 0) {
+        tg_late_entities_self_test() != 0 || tg_album_id_self_test() != 0) {
         return 2;
     }
     return tg_service_message_self_test();

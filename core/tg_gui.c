@@ -3984,24 +3984,64 @@ int tg_gui_message_is_sticker_still(const tg_gui_message *message)
            message->photo_only;
 }
 
+/* The air between two parts of an album, in place of the usual six. */
+#define TG_GUI_ALBUM_GAP 1
+/* What a message's place in a run changes of its bubble. */
+#define TG_GUI_RUN_SENDER 1     /* the sender's name stands above already */
+#define TG_GUI_RUN_ALBUM_PREV 2 /* it goes on the album part above it */
+#define TG_GUI_RUN_ALBUM_NEXT 4 /* the album goes on in the part below */
+/* The bubble needs no name of its own. */
+#define TG_GUI_RUN_NAMELESS (TG_GUI_RUN_SENDER | TG_GUI_RUN_ALBUM_PREV)
+
+/* Messages `index` and `index + 1` are two parts of one album: the same
+   id, the same side of the chat, the same day. */
+static int tg_gui_album_joined(const tg_gui_state *state, int index)
+{
+    const tg_gui_message *a;
+    const tg_gui_message *b;
+
+    if (index < 0 || index + 1 >= state->message_count) {
+        return 0;
+    }
+    a = &state->messages[index];
+    b = &state->messages[index + 1];
+    return (a->album_hi != 0UL || a->album_lo != 0UL) &&
+           a->album_hi == b->album_hi && a->album_lo == b->album_lo &&
+           !a->is_system && !b->is_system && a->is_own == b->is_own &&
+           !tg_gui_message_day_break(state, index + 1);
+}
+
+/* The TG_GUI_RUN_ bits of a message. An album, the photos or files sent
+   together, arrives as one message each: its parts are drawn as one
+   block, close together, with one name above and one time below. */
 static int tg_gui_message_grouped(const tg_gui_state *state, int index)
 {
     const tg_gui_message *m;
     const tg_gui_message *prev;
+    int run = 0;
 
-    if (state == 0 || index <= 0 || index >= state->message_count) {
+    if (state == 0 || index < 0 || index >= state->message_count) {
         return 0;
+    }
+    if (tg_gui_album_joined(state, index - 1)) {
+        run |= TG_GUI_RUN_ALBUM_PREV;
+    }
+    if (tg_gui_album_joined(state, index)) {
+        run |= TG_GUI_RUN_ALBUM_NEXT;
+    }
+    if (index == 0) {
+        return run;
     }
     m = &state->messages[index];
     prev = &state->messages[index - 1];
     if (m->is_own || m->is_system || prev->is_own || prev->is_system ||
         tg_gui_message_day_break(state, index)) {
-        return 0;
+        return run;
     }
     if (m->sender[0] == '\0' || strcmp(m->sender, prev->sender) != 0) {
-        return 0;
+        return run;
     }
-    return 1;
+    return run | TG_GUI_RUN_SENDER;
 }
 
 /* What stands in for an image that is not being drawn: the marker with the
@@ -4168,7 +4208,8 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
     /* lh + lh/2: gap below the sender-name baseline wider than the font
        descent (see the painter). A grouped message drops the name entirely
        and keeps a hair of air so the run still reads as separate bubbles. */
-    geo->header_h = (message->is_own || grouped) ? 0 : (lh + (lh / 2));
+    geo->header_h = (message->is_own || (grouped & TG_GUI_RUN_NAMELESS))
+                        ? 0 : (lh + (lh / 2));
     geo->reply_h = (message->reply_text[0] != '\0') ? lh : 0;
     /* Vertical air is measured from the letters. With emoji on, a line is
        an emoji tall and small letters already float in its middle: the
@@ -4293,7 +4334,9 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
     has_mark = (check_count > 0);
     read_mark_w = has_mark ? tg_gui_check_width(check_count, lh)
                            : 0;
-    has_status = has_time || has_mark;
+    /* an album's time and receipt stand under its last part only */
+    has_status = (has_time || has_mark) &&
+                 !(grouped & TG_GUI_RUN_ALBUM_NEXT);
     status_w = time_w + read_mark_w + ((has_time && has_mark) ? 4 : 0);
     (void)status_w;
     has_reply = (message->reply_text[0] != '\0');
@@ -4321,7 +4364,8 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             if (sender_pen < 0 || sender_pen >= TG_GUI_AVATAR_COLORS) {
                 sender_pen = 0;
             }
-            if (!grouped && (y + lh) <= bottom && y >= top) {
+            if (!(grouped & TG_GUI_RUN_NAMELESS) && (y + lh) <= bottom &&
+                y >= top) {
                 backend->draw_text(backend, sender_pen + TG_GUI_PEN_NAME_BASE,
                                    bubble_x + 2,
                                    tg_gui_centred_baseline(backend, y, lh),
@@ -4353,10 +4397,13 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             fill_bottom = bottom;
         }
         if (fill_bottom > fill_top) {
+            /* the parts of an album meet with square corners */
             tg_gui_fill_bubble(backend, fill_pen, bubble_x, fill_top,
                                bubble_w, fill_bottom - fill_top,
-                               fill_top == y + header_h,
-                               fill_bottom == y + bubble_h);
+                               fill_top == y + header_h &&
+                                   !(grouped & TG_GUI_RUN_ALBUM_PREV),
+                               fill_bottom == y + bubble_h &&
+                                   !(grouped & TG_GUI_RUN_ALBUM_NEXT));
         }
     }
     if (has_reply) {
@@ -4500,7 +4547,8 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             bubble_w - 2 * pad, lh, bubble_x + pad, y + bubble_h + 2,
             top, bottom, 1, &reaction_w);
 
-        return bubble_h + reaction_h + 6;
+        return bubble_h + reaction_h +
+               ((grouped & TG_GUI_RUN_ALBUM_NEXT) ? TG_GUI_ALBUM_GAP : 6);
     }
 }
 
@@ -4523,12 +4571,15 @@ static int tg_gui_message_height(tg_gui_backend *backend,
     has_time = (message->time[0] != '\0');
     /* The status line also shows for an own message's read-receipt mark even
        when it has no timestamp (the optimistic echo). */
-    has_status = has_time || (tg_gui_check_count(message) > 0);
-    /* bubble_h + 6, mirroring tg_gui_paint_bubble's return (incl. reply line). */
+    has_status = (has_time || (tg_gui_check_count(message) > 0)) &&
+                 !(grouped & TG_GUI_RUN_ALBUM_NEXT);
+    /* bubble_h + the gap, mirroring tg_gui_paint_bubble's return (incl.
+       reply line). */
     return geo.header_h + geo.top_pad + geo.reply_h + geo.photo_h +
            geo.photo_gap + (geo.line_count * lh) +
            (has_status ? geo.status_gap + geo.status_h : 0) + geo.bottom_pad +
-           geo.reaction_h + 6;
+           geo.reaction_h +
+           ((grouped & TG_GUI_RUN_ALBUM_NEXT) ? TG_GUI_ALBUM_GAP : 6);
 }
 
 /* Each message keeps the height worked out for it, with a key of everything
@@ -4590,7 +4641,14 @@ static int tg_gui_message_height_kept(const tg_gui_state *state,
     }
     key = tg_gui_layout_mix(metrics,
                             (unsigned long)((message->is_own ? 1 : 0) |
-                                            (grouped ? 2 : 0) |
+                                            ((grouped & TG_GUI_RUN_SENDER)
+                                                 ? 2 : 0) |
+                                            ((grouped &
+                                              TG_GUI_RUN_ALBUM_PREV)
+                                                 ? 128 : 0) |
+                                            ((grouped &
+                                              TG_GUI_RUN_ALBUM_NEXT)
+                                                 ? 256 : 0) |
                                             (message->reply_text[0] ? 4 : 0) |
                                             (message->has_photo ? 8 : 0) |
                                             (message->photo_only ? 16 : 0) |
@@ -12185,6 +12243,111 @@ int tg_gui_self_test(void)
         }
         state.messages[0] = saved0;
         state.messages[1] = saved1;
+    }
+
+    /* An album: the photos sent together are parts of one block. An
+       incoming one has the name above its first part and none above the
+       others; the time stands under the last part only; the parts are a
+       pixel apart where two messages are six. Another album, the other
+       side of the chat, a new day or no album at all ends the block. */
+    {
+        static tg_gui_message saved[3]; /* too big for the stack */
+        tg_gui_bubble_geom geo;
+        int r0;
+        int r1;
+        int r2;
+        int alone;
+        int inside;
+        int k;
+        int ok_album = 1;
+
+        for (k = 0; k < 3; ++k) {
+            saved[k] = state.messages[k];
+            tg_gui_copy(state.messages[k].sender,
+                        sizeof(state.messages[k].sender), "Mario");
+            tg_gui_copy(state.messages[k].time,
+                        sizeof(state.messages[k].time), "12:00");
+            state.messages[k].is_own = 0;
+            state.messages[k].is_system = 0;
+            state.messages[k].day = 0UL;
+            state.messages[k].album_hi = 0UL;
+            state.messages[k].album_lo = 0x77UL;
+        }
+        r0 = tg_gui_message_grouped(&state, 0);
+        r1 = tg_gui_message_grouped(&state, 1);
+        r2 = tg_gui_message_grouped(&state, 2);
+        ok_album = ok_album && r0 == TG_GUI_RUN_ALBUM_NEXT &&
+                   r1 == (TG_GUI_RUN_SENDER | TG_GUI_RUN_ALBUM_PREV |
+                          TG_GUI_RUN_ALBUM_NEXT) &&
+                   (r2 & (TG_GUI_RUN_ALBUM_PREV | TG_GUI_RUN_ALBUM_NEXT)) ==
+                       TG_GUI_RUN_ALBUM_PREV;
+        /* the name above the first part, none above a part that follows,
+           whoever wrote the message before it */
+        tg_gui_bubble_geometry(&backend, &state.messages[0], 0, 300, 18, 0,
+                               r0, &geo);
+        ok_album = ok_album && geo.header_h > 0;
+        tg_gui_bubble_geometry(&backend, &state.messages[1], 0, 300, 18, 0,
+                               TG_GUI_RUN_ALBUM_PREV, &geo);
+        ok_album = ok_album && geo.header_h == 0;
+        /* a part with another below it: no time row, and the small gap */
+        alone = tg_gui_message_height(&backend, &state.messages[1], 300, 18,
+                                      0, TG_GUI_RUN_SENDER);
+        inside = tg_gui_message_height(&backend, &state.messages[1], 300, 18,
+                                       0, r1);
+        ok_album = ok_album &&
+                   alone - inside == geo.status_gap + geo.status_h + 6 -
+                                         TG_GUI_ALBUM_GAP &&
+                   tg_gui_message_height(&backend, &state.messages[1], 300,
+                                         18, 0,
+                                         TG_GUI_RUN_SENDER |
+                                             TG_GUI_RUN_ALBUM_PREV) == alone;
+        /* another album below */
+        state.messages[2].album_lo = 0x78UL;
+        ok_album = ok_album &&
+                   tg_gui_message_grouped(&state, 1) ==
+                       (TG_GUI_RUN_SENDER | TG_GUI_RUN_ALBUM_PREV) &&
+                   tg_gui_message_grouped(&state, 2) == TG_GUI_RUN_SENDER;
+        state.messages[2].album_lo = 0x77UL;
+        state.messages[2].album_hi = 1UL; /* the id is all of its 64 bits */
+        ok_album = ok_album &&
+                   tg_gui_message_grouped(&state, 2) == TG_GUI_RUN_SENDER;
+        state.messages[2].album_hi = 0UL;
+        /* the other side of the chat */
+        state.messages[2].is_own = 1;
+        ok_album = ok_album &&
+                   tg_gui_message_grouped(&state, 1) ==
+                       (TG_GUI_RUN_SENDER | TG_GUI_RUN_ALBUM_PREV) &&
+                   tg_gui_message_grouped(&state, 2) == 0;
+        state.messages[2].is_own = 0;
+        /* a new day */
+        state.messages[1].day = 20751UL;
+        state.messages[2].day = 20752UL;
+        ok_album = ok_album &&
+                   (tg_gui_message_grouped(&state, 1) &
+                    TG_GUI_RUN_ALBUM_NEXT) == 0 &&
+                   tg_gui_message_grouped(&state, 2) == 0;
+        state.messages[1].day = 0UL;
+        state.messages[2].day = 0UL;
+        /* a service line is part of nothing */
+        state.messages[1].is_system = 1;
+        ok_album = ok_album && tg_gui_message_grouped(&state, 0) == 0 &&
+                   (tg_gui_message_grouped(&state, 2) &
+                    TG_GUI_RUN_ALBUM_PREV) == 0;
+        state.messages[1].is_system = 0;
+        /* messages that are no album's, id 0 0, stay apart */
+        for (k = 0; k < 3; ++k) {
+            state.messages[k].album_lo = 0UL;
+        }
+        ok_album = ok_album && tg_gui_message_grouped(&state, 0) == 0 &&
+                   tg_gui_message_grouped(&state, 1) == TG_GUI_RUN_SENDER;
+        for (k = 0; k < 3; ++k) {
+            state.messages[k] = saved[k];
+        }
+        if (!ok_album) {
+            printf("gui self-test: an album is not one block (%d %d %d, "
+                   "%d %d)\n", r0, r1, r2, alone, inside);
+            return 2;
+        }
     }
 
     /* Day lines: a line with the date opens each day (Today, Yesterday,
