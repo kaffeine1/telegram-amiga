@@ -329,8 +329,9 @@ it works today:
   (`messages.deleteHistory`, for this account only), both after a
   confirmation. A chat on screen is marked as read on Telegram
   (`readHistory` from the window's idle path). Delete chat... asks
-  whether a private chat goes for both sides (`revoke`). Still missing:
-  the same in the text client. A mark
+  whether a private chat goes for both sides (`revoke`). The text
+  client has /markread and /markunread; leaving and deleting a chat
+  stay with the window. A mark
   changed on another device while running is followed
   (`updateDialogUnreadMark`);
 - drafts shown and kept in step with the other devices: done in the
@@ -359,8 +360,8 @@ it works today:
   nothing is unread; the mutes are learnt in the background after the
   start, one `account.getNotifySettings` a chat, and follow every
   change after it. Mute... asks for how long: an hour, eight hours or
-  for good (`mute_until` on Telegram's clock). Still missing: the text
-  client's own command;
+  for good (`mute_until` on Telegram's clock); the text client has
+  /mute, with a time or without, and /unmute;
 - an ARexx port: done, AMIGRAM with SHOW, HIDE, OPEN <name>, QUIT, the
   answers UNREAD, CHAT and VERSION, and SEND <chat> <text> behind a
   switch that is off by default, in the settings panel; the window
@@ -400,9 +401,9 @@ Middle, more interface:
   `messages.sendMedia` with `inputMediaPoll`, anonymous, one answer or
   several), and stopped (Stop poll in the menu of one's own poll:
   `messages.editMessage` with the poll's media alone and its closed
-  flag). Still missing: voting in the text client, a quiz's
-  explanation, who voted in a public poll, making a quiz or a poll with
-  public votes;
+  flag), and voted in the text client (/vote on the last poll shown).
+  Still missing: a quiz's explanation, who voted in a public poll,
+  making a quiz or a poll with public votes;
 - formatting typed in the composer: done (`**bold**`, `__italic__`,
   `~~strike~~`, `||spoiler||`, one backtick for code and three for a
   block become the message's entities when it is sent, counted in

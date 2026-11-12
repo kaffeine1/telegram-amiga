@@ -47,6 +47,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- The text client has the chat menu's commands for the open chat:
+  /mute (for good, or with a time: /mute 30m, 1h, 8h, 2d) and /unmute
+  send the mute to Telegram; /markread marks the chat as read on every
+  device, which the text client never did by itself, and /markunread
+  marks it as unread; /vote votes the last poll shown (/vote 2, or
+  /vote 1 3 where several answers are allowed, /vote none to take the
+  vote back) and prints the poll with the votes as they stand.
 - Find in chat and Find in all chats go past their first page. When a
   page of hits comes back full (20, 12 on MorphOS) the list ends with a
   row, More results...; a click or ENTER on it brings the next, older

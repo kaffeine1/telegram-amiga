@@ -658,6 +658,11 @@ static int tg_chat_ids_shown = 0;
    current chat: what /react takes without an id. One's own messages and
    service lines are not counted. */
 static unsigned long tg_chat_last_incoming_id = 0UL;
+/* The newest message with a poll the text client printed in the open chat,
+   and its poll: what /vote votes. */
+static unsigned long tg_chat_last_poll_message_id = 0UL;
+static unsigned long tg_chat_last_poll_id_hi = 0UL;
+static unsigned long tg_chat_last_poll_id_lo = 0UL;
 /* Kind, two 32-bit id halves and a 32-bit local ring time, in bytes so the
    68000-like host profile grows by 156 bytes, not an LP64 struct array. */
 static unsigned char tg_chat_ring_history[TG_GUI_MAX_CHATS][13];
@@ -11679,6 +11684,183 @@ static int tg_mtproto_auth_poll_reactions_on_context(
     const char *peer_index_text, const unsigned long *message_ids,
     unsigned int count, FILE *stream);
 
+/* What /mute was given: 0 = for good, a number of seconds for "1h", "8h",
+   "2d" or minutes with "m" (a minute to a year), -1 = not understood. */
+static long tg_mtproto_chat_mute_span(const char *arg)
+{
+    unsigned long n = 0UL;
+    int digits = 0;
+
+    if (arg == 0 || arg[0] == '\0') {
+        return 0L;
+    }
+    while (*arg >= '0' && *arg <= '9' && digits < 4) {
+        n = n * 10UL + (unsigned long)(*arg - '0');
+        ++arg;
+        ++digits;
+    }
+    if (digits == 0 || n == 0UL || (*arg >= '0' && *arg <= '9')) {
+        return -1L;
+    }
+    if ((*arg == 'm' || *arg == 'M') && arg[1] == '\0') {
+        n *= 60UL;
+    } else if ((*arg == 'h' || *arg == 'H') && arg[1] == '\0') {
+        n *= 3600UL;
+    } else if ((*arg == 'd' || *arg == 'D') && arg[1] == '\0') {
+        n *= 86400UL;
+    } else {
+        return -1L;
+    }
+    return n <= 31536000UL ? (long)n : -1L;
+}
+
+/* What /vote was given, for a poll of `answers` answers: the bit of each
+   number chosen (1 = the first answer), 0 for "none" (the vote taken
+   back). -1 = not understood, a number out of range, or several numbers
+   for a poll that takes one. */
+static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
+                                      int multiple)
+{
+    unsigned long mask = 0UL;
+    int picked = 0;
+
+    if (arg == 0 || answers <= 0 || answers > 30) {
+        return -1L;
+    }
+    if (strcmp(arg, "none") == 0) {
+        return 0L;
+    }
+    for (;;) {
+        unsigned long n = 0UL;
+        int digits = 0;
+
+        while (*arg == ' ' || *arg == ',') {
+            ++arg;
+        }
+        if (*arg == '\0') {
+            break;
+        }
+        while (*arg >= '0' && *arg <= '9' && digits < 3) {
+            n = n * 10UL + (unsigned long)(*arg - '0');
+            ++arg;
+            ++digits;
+        }
+        if (digits == 0 || n == 0UL || n > (unsigned long)answers ||
+            (*arg != '\0' && *arg != ' ' && *arg != ',')) {
+            return -1L;
+        }
+        if ((mask & (1UL << (n - 1UL))) == 0UL) {
+            mask |= 1UL << (n - 1UL);
+            ++picked;
+        }
+    }
+    if (picked == 0 || (picked > 1 && !multiple)) {
+        return -1L;
+    }
+    return (long)mask;
+}
+
+/* The text client's commands that are one request about the open chat:
+   its mute (value = until when on Telegram's clock, 0 = not muted), the
+   read mark (everything read), the unread mark, and a vote (value = the
+   message, poll and mask its answers). 0 = done, 2 = failed or refused
+   (tg_mtproto_query_fail holds Telegram's word when it gave one), or the
+   link's own soft failure. */
+#define TG_CHAT_CMD_MUTE 1
+#define TG_CHAT_CMD_READ 2
+#define TG_CHAT_CMD_UNREAD 3
+#define TG_CHAT_CMD_VOTE 4
+static int tg_mtproto_auth_chat_command_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, int what, unsigned long value,
+    const tg_mtproto_poll *poll, unsigned long mask, FILE *stream)
+{
+    static unsigned char query[32 + (TG_MTPROTO_POLL_ANSWERS_MAX *
+                                     (TG_MTPROTO_POLL_OPTION_MAX + 4))];
+    static const char label[] = "mtproto chat command";
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    unsigned long at;
+    int has_hash;
+    int rc;
+    tg_mtproto_tl_status built = TG_MTPROTO_TL_INVALID_ARGUMENT;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+
+    tg_mtproto_query_fail[0] = '\0';
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (what == TG_CHAT_CMD_MUTE) {
+        built = tg_mtproto_build_account_update_notify_mute(
+            &writer, value, constructor, hi, lo, hash_hi, hash_lo, has_hash);
+    } else if (what == TG_CHAT_CMD_READ) {
+        /* an id above any message's reads up to the newest */
+        built = tg_mtproto_build_read_history_peer(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash,
+            0x7fffffffUL);
+    } else if (what == TG_CHAT_CMD_UNREAD) {
+        built = tg_mtproto_build_messages_mark_dialog_unread(
+            &writer, 1, constructor, hi, lo, hash_hi, hash_lo, has_hash);
+    } else if (what == TG_CHAT_CMD_VOTE && poll != 0) {
+        built = tg_mtproto_build_messages_send_vote(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash, value,
+            poll, mask);
+    }
+    if (built != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        return rc;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
+        return 2;
+    }
+    if (what == TG_CHAT_CMD_MUTE) {
+        tg_mtproto_peer_notify_set_mute(constructor, hi, lo, value);
+    } else if (what == TG_CHAT_CMD_READ) {
+        /* the unread mark, when there was one, goes with the reading; a
+           mark that was not there is no failure */
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_mark_dialog_unread(
+                &writer, 0, constructor, hi, lo, hash_hi, hash_lo,
+                has_hash) == TG_MTPROTO_TL_OK) {
+            memset(&result, 0, sizeof(result));
+            (void)tg_mtproto_send_saved_query_on_context(
+                host, port, api_id, auth_file, dc_id_text, context, query,
+                writer.length, &result, stream, label, 600U);
+            tg_mtproto_query_fail[0] = '\0';
+        }
+    } else if (what == TG_CHAT_CMD_VOTE) {
+        /* The answer is the update with the poll's votes as they are now. */
+        for (at = 0UL; at + 8UL <= result.result_body_length; at += 4UL) {
+            if (tg_mtproto_read_u32_le(result.result_body + at) ==
+                TG_MTPROTO_UPDATE_MESSAGE_POLL_CONSTRUCTOR) {
+                tg_mtproto_tl_reader reader;
+
+                tg_mtproto_tl_reader_init(&reader, result.result_body,
+                                          result.result_body_length);
+                reader.offset = at + 4UL;
+                tg_chat_poll_parse_update(&reader);
+            }
+        }
+    }
+    return 0;
+}
+
 static int tg_mtproto_auth_react_peer_on_context(
     const char *host, const char *port, const char *api_id,
     const char *auth_file, const char *dc_id_text,
@@ -12540,7 +12722,8 @@ static void tg_chat_history_add(const char *text)
     "Commands: /list /search /add /move /remove /swap /saved /peers\n" \
     "          /history /forward /forwardto /react /reactions /ids\n" \
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
-    "          /diff /color /bell /ring /find /help /quit\n"
+    "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
+    "          /markread /markunread /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -13306,12 +13489,20 @@ typedef struct tg_chat_console_driver {
     unsigned long *day_shown;
 } tg_chat_console_driver;
 
-/* Keeps tg_chat_last_incoming_id on the newest message from someone else. */
+/* Keeps tg_chat_last_incoming_id on the newest message from someone else,
+   and the last poll on the newest message that carries one, whoever made
+   it. */
 static void tg_mtproto_chat_note_incoming(const tg_chat_message_row *row)
 {
     if (row != 0 && !row->is_out && !row->is_service &&
         row->id > tg_chat_last_incoming_id) {
         tg_chat_last_incoming_id = row->id;
+    }
+    if (row != 0 && (row->poll_id_hi != 0UL || row->poll_id_lo != 0UL) &&
+        row->id >= tg_chat_last_poll_message_id) {
+        tg_chat_last_poll_message_id = row->id;
+        tg_chat_last_poll_id_hi = row->poll_id_hi;
+        tg_chat_last_poll_id_lo = row->poll_id_lo;
     }
 }
 
@@ -14982,6 +15173,9 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     if (last_seen_message_id != 0 && *last_seen_message_id == 0UL &&
         tg_chat_message_driver_override == 0) {
         tg_chat_last_incoming_id = 0UL; /* a chat read from the start */
+        tg_chat_last_poll_message_id = 0UL;
+        tg_chat_last_poll_id_hi = 0UL;
+        tg_chat_last_poll_id_lo = 0UL;
     }
     printed = 0UL;
     if (texts.count == 0UL) {
@@ -16456,6 +16650,11 @@ static const char *const tg_chat_help_lines[] = {
     "  /color          colours, on or off",
     "  /bell           flash on new messages, on or off",
     "  /ring           does this chat ring? /ring on or off changes it",
+    "  /mute [1h|8h|2d]  mute this chat on Telegram, for good or for a while",
+    "  /unmute         take the mute back",
+    "  /markread       mark this chat as read on every device",
+    "  /markunread     mark this chat as unread",
+    "  /vote n [n..]   vote the last poll shown here; /vote none takes it back",
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
     "Support my work on Patreon: www.patreon.com/c/kaffeine1",
@@ -16519,6 +16718,80 @@ static int tg_mtproto_chat_slash_hint_self_test(void)
     if (checked < 20UL || strstr(hint, " /help ") == 0) {
         puts("probe self-test: slash hint check read too few commands");
         ok = 0;
+    }
+    /* What /mute and /vote read from their arguments. */
+    if (tg_mtproto_chat_mute_span("") != 0L ||
+        tg_mtproto_chat_mute_span(0) != 0L ||
+        tg_mtproto_chat_mute_span("1h") != 3600L ||
+        tg_mtproto_chat_mute_span("8H") != 28800L ||
+        tg_mtproto_chat_mute_span("30m") != 1800L ||
+        tg_mtproto_chat_mute_span("2d") != 172800L ||
+        tg_mtproto_chat_mute_span("365d") != 31536000L ||
+        tg_mtproto_chat_mute_span("366d") != -1L ||
+        tg_mtproto_chat_mute_span("0h") != -1L ||
+        tg_mtproto_chat_mute_span("h") != -1L ||
+        tg_mtproto_chat_mute_span("1") != -1L ||
+        tg_mtproto_chat_mute_span("1w") != -1L ||
+        tg_mtproto_chat_mute_span("1hh") != -1L ||
+        tg_mtproto_chat_mute_span("12345h") != -1L) {
+        puts("probe self-test: /mute reads its time wrong");
+        ok = 0;
+    }
+    if (tg_mtproto_chat_vote_mask("2", 4, 0) != 2L ||
+        tg_mtproto_chat_vote_mask("1 3", 4, 1) != 5L ||
+        tg_mtproto_chat_vote_mask("1,3 4", 4, 1) != 13L ||
+        tg_mtproto_chat_vote_mask("3 3", 4, 0) != 4L || /* the same twice */
+        tg_mtproto_chat_vote_mask("1 3", 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("none", 4, 0) != 0L ||
+        tg_mtproto_chat_vote_mask("", 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("0", 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("5", 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("2x", 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("x", 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("1", 0, 0) != -1L ||
+        tg_mtproto_chat_vote_mask(0, 4, 0) != -1L ||
+        tg_mtproto_chat_vote_mask("4", 4, 0) != 8L) {
+        puts("probe self-test: /vote reads its answers wrong");
+        ok = 0;
+    }
+    {
+        /* The last poll shown is the newest message that carries one. */
+        tg_chat_message_row row;
+        unsigned long keep_m = tg_chat_last_poll_message_id;
+        unsigned long keep_h = tg_chat_last_poll_id_hi;
+        unsigned long keep_l = tg_chat_last_poll_id_lo;
+        unsigned long keep_i = tg_chat_last_incoming_id;
+
+        tg_chat_last_poll_message_id = 0UL;
+        memset(&row, 0, sizeof(row));
+        row.id = 50UL;
+        row.is_out = 1; /* one's own poll counts too */
+        row.poll_id_lo = 7UL;
+        tg_mtproto_chat_note_incoming(&row);
+        row.id = 60UL;
+        row.poll_id_lo = 0UL; /* a plain message after it changes nothing */
+        tg_mtproto_chat_note_incoming(&row);
+        row.id = 40UL;
+        row.poll_id_lo = 9UL; /* an older poll, printed later, neither */
+        tg_mtproto_chat_note_incoming(&row);
+        if (tg_chat_last_poll_message_id != 50UL ||
+            tg_chat_last_poll_id_lo != 7UL) {
+            puts("probe self-test: the poll /vote votes is not the newest");
+            ok = 0;
+        }
+        row.id = 70UL;
+        row.poll_id_hi = 1UL;
+        row.poll_id_lo = 0UL;
+        tg_mtproto_chat_note_incoming(&row);
+        if (tg_chat_last_poll_message_id != 70UL ||
+            tg_chat_last_poll_id_hi != 1UL) {
+            puts("probe self-test: a newer poll did not take /vote over");
+            ok = 0;
+        }
+        tg_chat_last_poll_message_id = keep_m;
+        tg_chat_last_poll_id_hi = keep_h;
+        tg_chat_last_poll_id_lo = keep_l;
+        tg_chat_last_incoming_id = keep_i;
     }
     return ok ? 0 : 2;
 }
@@ -18282,6 +18555,131 @@ int tg_mtproto_auth_chat_file(const char *host,
                         tg_mtproto_query_fail[0] != '\0'
                             ? tg_mtproto_query_fail : "no reply");
                 tg_mtproto_chat_print_system_line(stream, forward_note);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/mute", &cmd_arg) ||
+            strcmp(line, "/unmute") == 0 || strcmp(line, "/markread") == 0 ||
+            strcmp(line, "/markunread") == 0) {
+            /* One request each about the open chat: the same things its
+               menu does in the window. */
+            int what = strcmp(line, "/unmute") == 0 ? 0
+                       : strcmp(line, "/markread") == 0 ? TG_CHAT_CMD_READ
+                       : strcmp(line, "/markunread") == 0 ? TG_CHAT_CMD_UNREAD
+                       : TG_CHAT_CMD_MUTE;
+            long span = what == TG_CHAT_CMD_MUTE
+                            ? tg_mtproto_chat_mute_span(cmd_arg) : 0L;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Choose a chat first with /list or /add name.");
+            } else if (strcmp(peer_index, "self") == 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Saved Messages has no mute and no read mark.");
+            } else if (span < 0L) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Use /mute, or /mute with a time: 30m, 1h, 8h, "
+                            "2d. /unmute takes it back.");
+            } else {
+                unsigned long until = 0UL;
+                const char *done = "Marked as unread.";
+
+                if (what == TG_CHAT_CMD_MUTE) {
+                    until = span == 0L
+                                ? 0x7fffffffUL
+                                : tg_mtproto_context_time(&chat_context) +
+                                      (unsigned long)span;
+                    done = span == 0L ? "Muted on Telegram, until /unmute."
+                                      : "Muted on Telegram for that long.";
+                } else if (what == 0) {
+                    what = TG_CHAT_CMD_MUTE;
+                    done = "Not muted any more.";
+                } else if (what == TG_CHAT_CMD_READ) {
+                    done = "Marked as read.";
+                }
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_auth_chat_command_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, what, until, 0, 0UL, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                tg_mtproto_chat_print_system_line(
+                    stream, rc == 0 ? done
+                                    : "Telegram did not take it. Try again.");
+                if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                    tg_mtproto_close_auth_context(&chat_context);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/vote", &cmd_arg)) {
+            const tg_mtproto_poll *poll =
+                tg_chat_last_poll_message_id != 0UL
+                    ? tg_mtproto_poll_find(tg_chat_last_poll_id_hi,
+                                           tg_chat_last_poll_id_lo)
+                    : 0;
+            long mask = poll != 0
+                            ? tg_mtproto_chat_vote_mask(
+                                  cmd_arg, (int)poll->answer_count,
+                                  poll->multiple)
+                            : -1L;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Choose a chat first with /list or /add name.");
+            } else if (poll == 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "No poll shown here yet: /history shows the "
+                            "recent messages again.");
+            } else if (poll->closed) {
+                tg_mtproto_chat_print_system_line(stream,
+                                                  "That poll is closed.");
+            } else if (mask < 0L) {
+                tg_mtproto_chat_print_system_line(
+                    stream, poll->multiple
+                                ? "Use /vote with the numbers of your "
+                                  "answers (/vote 1 3), or /vote none."
+                                : "Use /vote with the number of one "
+                                  "answer, or /vote none.");
+            } else {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_auth_chat_command_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, TG_CHAT_CMD_VOTE,
+                    tg_chat_last_poll_message_id, poll, (unsigned long)mask,
+                    quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (rc == 0) {
+                    static char poll_text[TG_MTPROTO_MESSAGE_TEXT_MAX];
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                    /* the poll as it stands now, with the votes */
+                    poll = tg_mtproto_poll_find(tg_chat_last_poll_id_hi,
+                                                tg_chat_last_poll_id_lo);
+                    fprintf(tui_cap, "%s\n", mask != 0L ? "Voted."
+                                                        : "Vote taken back.");
+                    if (poll != 0) {
+                        tg_mtproto_poll_text(poll, poll_text,
+                                             sizeof(poll_text));
+                        tg_mtproto_print_message_text(tui_cap, poll_text);
+                        fputc('\n', tui_cap);
+                    }
+                    tg_console_tui_capture_end(tui_cap, stream);
+                } else {
+                    tg_mtproto_chat_print_system_line(
+                        stream,
+                        strcmp(tg_mtproto_query_fail, "REVOTE_NOT_ALLOWED") == 0
+                            ? "This poll does not let a vote be changed."
+                            : "Telegram did not take the vote. Try again.");
+                    if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                        tg_mtproto_close_auth_context(&chat_context);
+                    }
+                }
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);

@@ -573,6 +573,9 @@ Chats
   and Leave... or Delete chat...
 - Mute... asks for how long: an hour, eight hours, or until you unmute.
   The mute goes to Telegram, so your other devices follow it.
+- The text client does the same for the open chat with /mute (for
+  good, or /mute 1h, /mute 8h, /mute 2d), /unmute, /markread and
+  /markunread.
 - Leave... and Delete chat... take the chat off your account on
   Telegram, after a question. For a chat with one person the question
   is whether its messages go for both of you or for you only. Neither
@@ -670,7 +673,9 @@ Messages
   and Send vote sends them. Once you have voted the message shows the
   share of each answer and the number of votes, and follows the votes
   of the others while the chat is open. Take back vote, in the same
-  menu, undoes it; the answer given to a quiz stays.
+  menu, undoes it; the answer given to a quiz stays. In the text client
+  /vote 2 votes the second answer of the last poll shown (/vote 1 3
+  where several are allowed) and /vote none takes the vote back.
 - "Create poll..." in the first menu makes a poll in the open chat: a
   question, two to ten answers, and a switch to allow several answers.
   TAB or the cursor keys move between the lines, ENTER goes to the next
@@ -815,6 +820,9 @@ Chat
 - Mute... chiede per quanto: un'ora, otto ore, o finche' non togli il
   silenzioso. Il silenzioso va a Telegram, quindi lo seguono anche gli
   altri tuoi dispositivi.
+- Il client testuale fa lo stesso per la chat aperta con /mute (per
+  sempre, oppure /mute 1h, /mute 8h, /mute 2d), /unmute, /markread e
+  /markunread.
 - Leave... e Delete chat... tolgono la chat dal tuo account su
   Telegram, dopo una domanda. Per una chat con una persona la domanda
   e' se i messaggi spariscono per tutti e due o solo per te. Nessuna
@@ -916,7 +924,10 @@ Messaggi
   cambia, e Send vote le manda. Dopo il voto il messaggio mostra la
   percentuale di ogni risposta e il numero dei voti, e segue i voti
   degli altri finche' la chat e' aperta. Take back vote, nello stesso
-  menu, lo ritira; la risposta data a un quiz resta.
+  menu, lo ritira; la risposta data a un quiz resta. Nel client testuale
+  /vote 2 vota la seconda risposta dell'ultimo sondaggio mostrato
+  (/vote 1 3 dove se ne possono scegliere piu' d'una) e /vote none
+  ritira il voto.
 - "Create poll..." nel primo menu crea un sondaggio nella chat aperta:
   una domanda, da due a dieci risposte, e un interruttore per
   permettere piu' risposte. TAB o i tasti cursore passano da una riga
