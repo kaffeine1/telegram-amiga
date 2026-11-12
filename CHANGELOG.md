@@ -268,6 +268,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- A message with a quote block lost its bold, italic, code and strike,
+  and its reactions were not shown: the quote entity of the current
+  layer carries its flags before its place and was read as an unknown
+  one, which ended the reading of that message.
 - A link with a preview could be impossible to open: when the message
   hid its address behind a word, nothing in the bubble could be clicked
   but the picture, and that opened the picture. The address of the page

@@ -6359,8 +6359,19 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
         unsigned long type = TG_MSG_ENT_NONE;
 
         if (tg_mtproto_tl_read_u32(reader, &constructor) !=
-                TG_MTPROTO_TL_OK ||
-            tg_mtproto_tl_read_u32(reader, &off) != TG_MTPROTO_TL_OK ||
+                TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        /* messageEntityBlockquote#f1ccaaac flags:# collapsed:flags.0?true
+           offset:int length:int: the one entity whose flags come before
+           its place. Read as the others it was an unknown constructor, and
+           a message with a quote lost every entity and what follows them
+           (its reactions among the rest). */
+        if (constructor == 0xf1ccaaacUL &&
+            tg_mtproto_tl_read_u32(reader, &scratch_lo) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if (tg_mtproto_tl_read_u32(reader, &off) != TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &len) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
@@ -6404,7 +6415,8 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
         case 0x9b69e34bUL: /* messageEntityPhone */
         case 0x4c4e743fUL: /* messageEntityCashtag */
         case 0x9c4e7e8bUL: /* messageEntityUnderline */
-        case 0x20df5d0UL:  /* messageEntityBlockquote */
+        case 0x20df5d0UL:  /* messageEntityBlockquote, before its flags */
+        case 0xf1ccaaacUL: /* messageEntityBlockquote */
         case 0x32ca960fUL: /* messageEntitySpoiler */
         case 0x761e6af4UL: /* messageEntityBankCard */
             break;
@@ -9670,6 +9682,50 @@ static int tg_message_cut_self_test(void)
             puts("login self-test: a cut message keeps half a character");
             return 2;
         }
+    }
+
+    /* A quote block around a text with a bold word: the quote's flags
+       come before its place, and the bold after it is still read. */
+    tg_mtproto_tl_writer_init(&writer, rpc, sizeof(rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 128UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1005UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2226UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "quoted bold") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0xf1ccaaacUL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 11UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0xbd610bc9UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 7UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 4UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           rpc, writer.length, &list) !=
+            TG_MTPROTO_TL_OK ||
+        list.count != 1UL ||
+        strcmp(list.messages[0].text, "quoted \034bold\034") != 0) {
+        puts("login self-test: a quote block hides the entities after it");
+        return 2;
     }
 
     /* A search across chats: two hits, one in a private chat and one in a
