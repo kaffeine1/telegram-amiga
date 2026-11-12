@@ -421,17 +421,19 @@ vecchio cassetto si puo' togliere.
   bsdsocket.library (Roadshow, AmiTCP, Miami/MiamiDx) and an internet
   connection.
 - A 68020 or better. A plain 68000 has its own package.
-- About 4 MB of free RAM, 2 MB of it in one block: 8 MB of fast RAM is the
-  comfortable size. With less, the package for the plain 68000 (the text
-  client only, about 2 MB) runs on these machines too.
+- About 4 MB of free RAM, 1.5 MB of it in one block: an A1200 with 4 MB
+  of fast RAM is enough, 8 MB is the comfortable size. With less, the
+  package for the plain 68000 (the text client only, about 2 MB) runs
+  on these machines too.
 - No ixemul.library, no AmiSSL."
         req_it="- AmigaOS 3.1, 3.1.4 o 3.2 con uno stack TCP/IP che fornisca
   bsdsocket.library (Roadshow, AmiTCP, Miami/MiamiDx) e una connessione
   internet.
 - Un 68020 o superiore. Il 68000 liscio ha un pacchetto suo.
-- Circa 4 MB di RAM libera, di cui 2 MB in un blocco solo: 8 MB di fast
-  RAM sono la misura comoda. Con meno, il pacchetto per il 68000 liscio
-  (solo il client testuale, circa 2 MB) gira anche su queste macchine.
+- Circa 4 MB di RAM libera, di cui 1,5 MB in un blocco solo: basta un
+  A1200 con 4 MB di fast RAM, 8 MB sono la misura comoda. Con meno, il
+  pacchetto per il 68000 liscio (solo il client testuale, circa 2 MB)
+  gira anche su queste macchine.
 - Non servono ixemul.library ne' AmiSSL."
         notes_en="- The first login (a Diffie-Hellman key exchange) takes a while on a
   68k. It happens once.
