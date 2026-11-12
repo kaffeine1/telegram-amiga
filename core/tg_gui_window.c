@@ -8939,14 +8939,6 @@ static void tg_gui_window_sendq_begin(tg_gui_state *state, struct Window *win,
     int album = mode == 1;
     int i;
 
-    if (mode == 2) {
-        album = 1;
-        for (i = 0; i < tg_gui_sendq.count; ++i) {
-            if (!tg_gui_attachment_is_photo(tg_gui_sendq.path[i])) {
-                album = 0;
-            }
-        }
-    }
     tg_gui_sendq.album = album;
     tg_gui_sendq.next = 0;
     tg_gui_sendq.sent = 0;
@@ -9001,7 +8993,7 @@ static void tg_gui_window_sendq_begin(tg_gui_state *state, struct Window *win,
 static void tg_gui_window_send_file_mode(tg_gui_state *state,
                                          struct Window *win,
                                          tg_gui_backend *backend,
-                                         int mode) /* 0 file, 1 photo, 2 paperclip */
+                                         int mode) /* 0 file, 1 photo */
 {
     struct FileRequester *req;
     char path[256];
@@ -9048,8 +9040,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     } else {
         req = (struct FileRequester *)AllocAslRequestTags(
             ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
-            ASLFR_TitleText, TG_GUI_TAG(mode == 2 ? "Attach to this chat"
-                                                   : "Send file to this chat"),
+            ASLFR_TitleText, TG_GUI_TAG("Send file to this chat"),
             ASLFR_DoMultiSelect, TRUE, TAG_DONE);
     }
     path[0] = '\0';
@@ -9102,9 +9093,6 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     }
     if (path[0] == '\0') {
         return; /* cancelled */
-    }
-    if (mode == 2) {
-        as_photo = tg_gui_attachment_is_photo(path);
     }
     if (as_photo) {
         char dcaption[512];
@@ -14427,6 +14415,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             if (state->ctx_visible &&
                 (msg_class == IDCMP_VANILLAKEY || msg_class == IDCMP_RAWKEY)) {
                 state->ctx_visible = 0;
+                state->ctx_attach = 0;
                 tg_gui_window_paint(state, &backend);
                 continue;
             }
@@ -15421,6 +15410,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->composing = 0;
                                 state->search_active = 0;
                                 state->ctx_visible = 0;
+                                state->ctx_attach = 0;
                                 tg_gui_emoji_close(state);
                                 tg_gui_settings_show(state, 1);
                                 tg_gui_window_copy(
@@ -15882,6 +15872,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             chat->peer_id_hi, chat->peer_id_lo, &value);
                         state->ctx_react = 0;
                         state->ctx_poll = 0;
+                        state->ctx_attach = 0;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
                         state->ctx_muted =
@@ -15915,6 +15906,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_visible = 1;
                             state->ctx_react = 0;
                             state->ctx_poll = 0;
+                            state->ctx_attach = 0;
                             state->ctx_chat = 0;
                             state->ctx_msg = mi;
                             state->ctx_msg_id = state->messages[mi].id;
@@ -16008,6 +16000,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                     state->ctx_visible = 0;
                     state->ctx_poll = 0;
+                    state->ctx_attach = 0;
                     if (ci >= 0 && ci < state->chat_count &&
                         it == TG_GUI_CTX_CHAT_REMOVE) {
                         tg_gui_window_remove_chat(state, ctx.window, ci,
@@ -16505,12 +16498,22 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (it == TG_GUI_CTX_SENDFILE) {
                         /* Chat-level action (not tied to the clicked message):
                            send a file to the open chat, same as the menubar
-                           "Send file..." item. */
+                           "Send file..." item. The menu leaves the screen
+                           before the requester opens. */
+                        tg_gui_window_paint(state, &backend);
                         tg_gui_window_send_file(state, ctx.window, &backend);
                     } else if (it == TG_GUI_CTX_SENDPHOTO) {
                         /* Its photo twin, so both ways of sending sit where
                            the conversation is instead of only in the menus. */
+                        tg_gui_window_paint(state, &backend);
                         tg_gui_window_send_photo(state, ctx.window, &backend);
+                    } else if (it == TG_GUI_CTX_POLL_NEW) {
+                        /* The paperclip's third item. */
+                        tg_gui_window_paint(state, &backend);
+                        if (tg_gui_window_create_poll(state, ctx.window,
+                                                      &backend)) {
+                            session_dirty = 1; /* the poll shows it */
+                        }
                     }
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTUP) {
@@ -16864,10 +16867,18 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_paint(state, &backend);
                         continue;
                     } else if (hit == TG_GUI_HIT_ATTACH_BUTTON) {
+                        /* The paperclip opens its menu: Photo, File and,
+                           where Telegram takes one, Poll. */
                         tg_gui_emoji_close(state);
                         state->mention_active = 0;
-                        tg_gui_window_send_file_mode(state, ctx.window,
-                                                      &backend, 2);
+                        if (state->mode == TG_GUI_MODE_CHAT &&
+                            tg_gui_session_is_open() &&
+                            state->chat_count > 0) {
+                            tg_gui_attach_menu_open(state, hx, hy,
+                                                    ctx.line_h);
+                            state->ctx_w = tg_gui_context_menu_measure(
+                                state, &backend);
+                        }
                         tg_gui_window_paint(state, &backend);
                         continue;
                     } else if (state->emoji_active &&

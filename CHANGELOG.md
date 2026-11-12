@@ -94,8 +94,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   kept in `data/telegram-update.txt`. The channel's name
   (`TG_UPDATE_CHANNEL`) is still empty: until it is set the client
   never looks and that line of the settings is greyed.
-- Albums, and several files at once. The requester of "Send photo...",
-  of the paperclip and of "Send file..." now takes several files: hold
+- Albums, and several files at once. The requester of "Send photo..."
+  and of "Send file...", from the menus or from the paperclip, now
+  takes several files: hold
   Shift and click more than one, ten at most. Photos picked together
   leave as an album, one message: a small window says how many they are
   and how big, takes the caption, which goes on the first photo, and
@@ -217,6 +218,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   desktop client's: a thin clip tilted on its side, outer and inner
   loop, in crisp one-pixel lines. It comes in two sizes, 16 pixels for
   small fonts and 20 when the box is taller.
+- The paperclip now opens a small menu instead of a file requester:
+  Photo..., File... and, in a group, a channel or Saved Messages,
+  Poll... The menu sits just above the paperclip; any key or a click
+  elsewhere closes it. Photo... and File... are the menu's "Send
+  photo..." and "Send file...". Before, the paperclip opened one
+  requester for any file and asked Photo or File when a picture was
+  picked.
 - Clicking another chat while typing no longer throws the text away: it
   becomes the draft of the chat being left.
 - Mute and Unmute in a chat's menu now go to Telegram: the chat is muted

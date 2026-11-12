@@ -1035,9 +1035,11 @@ leaving text emoticons and any already-entered emoji intact. Its saved choice
 is independent of photos. Both features default off on native AGA/ECS/OCS
 screens (including classic OS4) or 68k CPUs below 68040, with explicit choices taking
 precedence. The screen's bitmap determines RTG, not an installed library.
-A monochrome paperclip at the composer's left opens an unfiltered attachment
-requester. JPEG/PNG names lead to the Photo/File/Cancel dialog; other files
-use the normal upload path. The paperclip stays usable with graphics off.
+A monochrome paperclip at the composer's left opened an unfiltered attachment
+requester, where JPEG/PNG names led to the Photo/File/Cancel dialog and other
+files used the normal upload path. In the 0.2 cycle it opens a small menu
+instead: Photo..., File... and, where Telegram takes polls, Poll... The
+paperclip stays usable with graphics off.
 Still owed: a hardware pass on every lane, the AfA_OS one in particular, before
 anyone calls the transcript rendering done.
 

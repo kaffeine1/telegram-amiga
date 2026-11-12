@@ -6107,6 +6107,7 @@ int tg_gui_context_follow(tg_gui_state *state)
     state->ctx_visible = 0;
     state->ctx_react = 0;
     state->ctx_poll = 0;
+    state->ctx_attach = 0;
     state->ctx_msg = -1;
     state->ctx_msg_id = 0UL;
     return 0;
@@ -6195,10 +6196,56 @@ unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i)
 }
 
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
+                                int *ids);
+
+void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh)
+{
+    const char *labels[TG_GUI_CTX_ITEMS_MAX];
+    int ids[TG_GUI_CTX_ITEMS_MAX];
+    int n;
+
+    if (state == 0) {
+        return;
+    }
+    state->ctx_attach = 1;
+    state->ctx_react = 0;
+    state->ctx_poll = 0;
+    state->ctx_chat = 0;
+    state->ctx_msg = -1;
+    state->ctx_msg_id = 0UL;
+    state->ctx_hover = -1;
+    state->ctx_w = 0;
+    n = tg_gui_context_items(state, labels, ids);
+    /* Its lower edge two pixels over the click: the menu grows upwards,
+       clear of the input line and of the pointer. */
+    state->ctx_x = x;
+    state->ctx_y = y - (n * (lh + 4) + 4) - 2;
+    if (state->ctx_y < 0) {
+        state->ctx_y = 0;
+    }
+    state->ctx_visible = 1;
+}
+
+static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids)
 {
     int n = 0;
 
+    if (state->ctx_attach) {
+        /* The paperclip's menu. A poll only where Telegram takes one. */
+        const tg_gui_chat *row = tg_gui_open_chat_row(state);
+
+        labels[n] = "Photo...";
+        ids[n++] = TG_GUI_CTX_SENDPHOTO;
+        labels[n] = "File...";
+        ids[n++] = TG_GUI_CTX_SENDFILE;
+        if (row != 0 &&
+            (row->is_group || row->index == TG_GUI_SAVED_PEER_INDEX)) {
+            labels[n] = "Poll...";
+            ids[n++] = TG_GUI_CTX_POLL_NEW;
+        }
+        return n;
+    }
     if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
         if (state->chats[state->ctx_chat - 1].index !=
             TG_GUI_SAVED_PEER_INDEX) {
@@ -8990,6 +9037,70 @@ static int tg_gui_notify_menu_self_test(void)
     }
     /* A name on a requester's button: nothing that parts the buttons or
        starts an argument, cut with two dots when it is long. */
+    /* The paperclip's menu: Photo and File anywhere, Poll where Telegram
+       takes polls (a group, a channel, Saved Messages). It opens above
+       the click, never over it, and the message menu is itself again
+       once it is closed. */
+    {
+        int kept_index = state->chats[0].index;
+        int n;
+
+        state->selected_chat = 0;
+        state->chats[0].is_group = 1;
+        tg_gui_attach_menu_open(state, 200, 300, 18);
+        n = tg_gui_context_items(state, labels, ids);
+        if (!state->ctx_visible || !state->ctx_attach || n != 3 ||
+            ids[0] != TG_GUI_CTX_SENDPHOTO ||
+            strcmp(labels[0], "Photo...") != 0 ||
+            ids[1] != TG_GUI_CTX_SENDFILE ||
+            strcmp(labels[1], "File...") != 0 ||
+            ids[2] != TG_GUI_CTX_POLL_NEW ||
+            strcmp(labels[2], "Poll...") != 0 ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 200, 300) != -1 ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 298) != -1 ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 296) !=
+                TG_GUI_CTX_POLL_NEW ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 229) !=
+                TG_GUI_CTX_SENDPHOTO ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 227) != -1) {
+            puts("gui self-test: the paperclip's menu is wrong");
+            return 2;
+        }
+        state->chats[0].is_group = 0; /* a chat with one person: no poll */
+        tg_gui_attach_menu_open(state, 200, 300, 18);
+        n = tg_gui_context_items(state, labels, ids);
+        if (n != 2 || ids[0] != TG_GUI_CTX_SENDPHOTO ||
+            ids[1] != TG_GUI_CTX_SENDFILE ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 296) !=
+                TG_GUI_CTX_SENDFILE ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 250) !=
+                TG_GUI_CTX_SENDPHOTO ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 249) != -1) {
+            puts("gui self-test: the paperclip offers a poll to one person");
+            return 2;
+        }
+        state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
+        tg_gui_attach_menu_open(state, 200, 300, 18);
+        n = tg_gui_context_items(state, labels, ids);
+        state->chats[0].index = kept_index;
+        if (n != 3 || ids[2] != TG_GUI_CTX_POLL_NEW) {
+            puts("gui self-test: the paperclip has no poll in Saved Messages");
+            return 2;
+        }
+        /* near the top of the window the menu stays inside it */
+        tg_gui_attach_menu_open(state, 200, 10, 18);
+        if (state->ctx_y != 0) {
+            puts("gui self-test: the paperclip's menu leaves the window");
+            return 2;
+        }
+        state->ctx_visible = 0;
+        state->ctx_attach = 0;
+        n = tg_gui_context_items(state, labels, ids);
+        if (n < 1 || ids[0] == TG_GUI_CTX_SENDPHOTO) {
+            puts("gui self-test: the paperclip's menu does not go away");
+            return 2;
+        }
+    }
     {
         char name[16];
 

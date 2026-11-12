@@ -659,6 +659,9 @@ typedef struct tg_gui_state {
     int ctx_poll_voted;
     /* The poll is held and not closed: who made it may stop it. */
     int ctx_poll_live;
+    /* The menu is the paperclip's: what can be attached to the open chat
+       (tg_gui_attach_menu_open). */
+    int ctx_attach;
     int ctx_poll;
     int poll_multiple;
     unsigned long poll_mask;
@@ -1004,6 +1007,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_FILE_OPEN 47 /* Open the file a download saved */
 #define TG_GUI_CTX_FILE_SHOW 60 /* Show that file's drawer */
 #define TG_GUI_CTX_POLL_STOP 61 /* Stop poll: one's own, for good */
+#define TG_GUI_CTX_POLL_NEW 62 /* the paperclip's menu: Poll... */
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
@@ -1123,6 +1127,12 @@ int tg_gui_photo_save_allowed(int destination_exists,
 /* The chat list row of the open chat, 0 when no chat is open or its row
    is not in the list shown. */
 const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state);
+
+/* Opens the paperclip's menu: Photo..., File... and, where Telegram takes
+   polls (a group, a channel, Saved Messages), Poll... It sits above the
+   click at (x, y), so that it never covers the input line; lh is the
+   line height. The caller measures its width and paints. */
+void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh);
 /* 1 when the currently selected sidebar row is the pinned Saved Messages
    (self) chat -- the row whose index carries TG_GUI_SAVED_PEER_INDEX. There
    the server clears the out flag on every message (nothing in Saved Messages

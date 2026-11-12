@@ -682,15 +682,17 @@ Files
   you trust who sent it. On a Workbench that cannot open files for a
   program (3.0, 3.1) the status line says where the file is. If you
   move or delete the file, the menu offers Download again.
-- Send a file with "Send file..." (Amiga+F), the paperclip left of the
-  input line, or by dropping its icon on the window: up to $upload_limit
-  on this build. "Send photo..." (Amiga+P) sends a JPEG or PNG as a
-  photo, and a dropped picture asks Photo, File or Cancel. Telegram may
-  re-encode photos as JPEG: send a PNG as File to keep it as it is. A
-  photo over 10 MiB goes as a file.
+- Send a file with "Send file..." (Amiga+F), or by dropping its icon
+  on the window: up to $upload_limit on this build. "Send photo..."
+  (Amiga+P) sends a JPEG or PNG as a photo, and a dropped picture asks
+  Photo, File or Cancel. The paperclip left of the input line opens a
+  small menu with the same two, Photo... and File..., and Poll... where
+  Telegram takes polls; any key or a click elsewhere closes it.
+  Telegram may re-encode photos as JPEG: send a PNG as File to keep it
+  as it is. A photo over 10 MiB goes as a file.
 - Several files at once: in the file requester hold Shift and click
   more than one, ten at most. Photos picked together with "Send
-  photo..." or the paperclip leave as an album, one message: a small
+  photo..." leave as an album, one message: a small
   window asks for the caption, which goes on the first photo, and
   offers Album, Files or Cancel. Other files, or photos and other
   files picked together, go one message each, one after the other.
@@ -896,15 +898,18 @@ File
   Workbench che non sa aprire i file per conto di un programma (3.0,
   3.1) la riga di stato dice dov'e' il file. Se sposti o cancelli il
   file, il menu torna a offrire Download.
-- Manda un file con "Send file..." (Amiga+F), con la graffetta a
-  sinistra della riga di input o trascinandone l'icona sulla finestra:
-  fino a $upload_limit su questa build. "Send photo..." (Amiga+P) manda
-  un JPEG o un PNG come foto, e un'immagine trascinata chiede Photo, File
-  o Cancel. Telegram puo' ricodificare le foto in JPEG: manda un PNG come
-  File per tenerlo com'e'. Una foto oltre 10 MiB parte come file.
+- Manda un file con "Send file..." (Amiga+F) o trascinandone l'icona
+  sulla finestra: fino a $upload_limit su questa build. "Send photo..."
+  (Amiga+P) manda un JPEG o un PNG come foto, e un'immagine trascinata
+  chiede Photo, File o Cancel. La graffetta a sinistra della riga di
+  input apre un piccolo menu con le stesse due, Photo... e File..., e
+  Poll... dove Telegram accetta i sondaggi; un tasto qualsiasi o un
+  click altrove lo chiude. Telegram puo' ricodificare le foto in JPEG:
+  manda un PNG come File per tenerlo com'e'. Una foto oltre 10 MiB
+  parte come file.
 - Piu' file insieme: nel requester tieni premuto Shift e fai click su
   piu' di uno, dieci al massimo. Le foto scelte insieme con "Send
-  photo..." o con la graffetta partono come album, un solo messaggio:
+  photo..." partono come album, un solo messaggio:
   una finestrella chiede la didascalia, che va sulla prima foto, e
   offre Album, Files o Cancel. Gli altri file, o foto e altri file
   scelti insieme, partono un messaggio ciascuno, uno dopo l'altro.
