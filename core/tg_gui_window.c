@@ -13361,6 +13361,18 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                                ? "Updates: a look once a day"
                                : "Updates: not looked for");
         return 0;
+    case TG_GUI_SET_MARKDOWN:
+        /* Read by the session when a message leaves. */
+        state->markdown = !state->markdown;
+        (void)mkdir("data", 0777);
+        tg_gui_window_copy(
+            state->status, sizeof(state->status),
+            tg_gui_emoji_preferences_save(TG_GUI_MARKDOWN_FILE,
+                                          state->markdown) != 0
+                ? "Could not save the Markdown setting"
+                : state->markdown ? "Markdown: **bold** is sent as bold"
+                                  : "Markdown: sent as typed");
+        return 0;
     case TG_GUI_SET_AREXX_PORT:
     case TG_GUI_SET_AREXX_SEND:
         /* The two ARexx switches never had a menu item: set here. The
@@ -18316,6 +18328,13 @@ int tg_gui_run_window(tg_gui_state *state)
                                       &state->emoticon_replace,
                                       &emoticons_explicit);
         state->emoticon_undo_at = -1;
+    }
+    {
+        int markdown_explicit = 0;
+
+        state->markdown = 1;
+        tg_gui_emoji_preferences_load(TG_GUI_MARKDOWN_FILE, &state->markdown,
+                                      &markdown_explicit);
     }
     state->emoji_default_resolved = 0;
     tg_gui_avatar_preferences_load("data/telegram-avatars.txt",

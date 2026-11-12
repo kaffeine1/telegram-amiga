@@ -593,11 +593,16 @@ static const char *tg_gui_people_name(unsigned long id_hi,
    of or kept. */
 static const char *tg_gui_mentions_for_send(const char *utf8);
 static void tg_gui_mentions_sent(int sent);
+/* The formatting markers of the text about to be sent become the styles
+   of the message (when the settings say so); what is returned is the text
+   to send. */
+static const char *tg_gui_markdown_for_send(const char *utf8);
 #else
 #define tg_gui_people_reset(other_chat) ((void)(other_chat))
 #define tg_gui_people_name(id_hi, id_lo) ((const char *)0)
 #define tg_gui_mentions_for_send(utf8) (utf8)
 #define tg_gui_mentions_sent(sent) ((void)(sent))
+#define tg_gui_markdown_for_send(utf8) (utf8)
 #endif
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
@@ -19043,6 +19048,7 @@ static int tg_gui_pins_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
+static int tg_gui_markdown_send_self_test(void);
 static int tg_gui_saved_self_test(void);
 static int tg_gui_batch_self_test(void);
 static int tg_gui_update_self_test(void);
@@ -21272,6 +21278,7 @@ int tg_mtproto_probe_self_test(void)
     }
 #if !defined(TG_NO_GUI)
     if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0 ||
+        tg_gui_markdown_send_self_test() != 0 ||
         tg_gui_saved_self_test() != 0 || tg_gui_batch_self_test() != 0 ||
         tg_gui_update_self_test() != 0) {
         return 2;
@@ -26548,7 +26555,9 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     unsigned long prev_timeout;
     int rc;
     int had_draft;
+    int styled;
     const char *send_text;
+    const char *styled_text;
 #if TG_MTPROTO_DISPLAY_LATIN1
     /* Worst case 2x the composer buffer (every byte a high Latin-1 char),
        and static so a 4 KB composer does not land on the stack. It used to
@@ -26580,6 +26589,12 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     }
 #endif
     had_draft = tg_gui_draft_send_begin();
+    /* **bold** and its kin: the markers leave the text and the message
+       carries the styles. Before the mentions, whose places are counted
+       in the text that is sent. */
+    styled_text = tg_gui_markdown_for_send(send_text);
+    styled = styled_text != send_text;
+    send_text = styled_text;
     /* The names picked from the "@" popup that are still in the text. */
     send_text = tg_gui_mentions_for_send(send_text);
     rc = tg_mtproto_auth_send_peer_on_context(
@@ -26590,7 +26605,20 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.current_peer_index, send_text, reply_to_msg_id,
         &sent_id, quiet);
     tg_gui_mentions_sent(rc == 0);
+    tg_mtproto_send_set_styles(0, 0);
     tg_gui_draft_send_end(had_draft, rc == 0);
+#if !defined(TG_NO_GUI)
+    if (rc == 0 && styled) {
+        /* The echo shows what was sent: the styles, not the markers. */
+        static char shown[TG_GUI_MSG_TEXT_MAX];
+
+        if (tg_gui_markdown_display(text, shown, sizeof(shown))) {
+            text = shown;
+        }
+    }
+#else
+    (void)styled;
+#endif
     if (rc == 0) {
         /* Show the sent message at once, optimistically, with no extra network
            round-trip -- a confirm-poll is slow and unreliable on MorphOS (it
@@ -27700,6 +27728,60 @@ static const char *tg_gui_mentions_for_send(const char *utf8)
     return text;
 }
 
+/* The text about to be sent, in UTF-8, read for its formatting markers.
+   With none understood, or with the setting off, the text comes back as
+   it is; otherwise what comes back is the text without those markers, and
+   the next message built carries the styles, each where Telegram counts
+   it (UTF-16 units). */
+static int tg_gui_markdown_override = -1; /* tests: 1 on, 0 off */
+
+static const char *tg_gui_markdown_for_send(const char *utf8)
+{
+    static char plain[(TG_GUI_MSG_TEXT_MAX * 2) + 1];
+    tg_gui_md_span spans[TG_GUI_MD_SPANS_MAX];
+    tg_mtproto_send_style list[TG_MTPROTO_SEND_STYLES_MAX];
+    const tg_gui_state *gs = tg_gui_session_state.gui_driver.state;
+    int wanted = tg_gui_markdown_override >= 0 ? tg_gui_markdown_override
+                                               : (gs != 0 && gs->markdown);
+    int count;
+    int n = 0;
+    int k;
+
+    tg_mtproto_send_set_styles(0, 0);
+    if (utf8 == 0 || !wanted) {
+        return utf8;
+    }
+    count = tg_gui_markdown_parse(utf8, plain, sizeof(plain), spans,
+                                  TG_GUI_MD_SPANS_MAX);
+    if (count <= 0) {
+        return utf8;
+    }
+    for (k = 0; k < count && n < TG_MTPROTO_SEND_STYLES_MAX; ++k) {
+        unsigned long kind = 0UL;
+
+        switch (spans[k].kind) {
+        case TG_GUI_MD_BOLD: kind = TG_MTPROTO_STYLE_BOLD; break;
+        case TG_GUI_MD_ITALIC: kind = TG_MTPROTO_STYLE_ITALIC; break;
+        case TG_GUI_MD_CODE: kind = TG_MTPROTO_STYLE_CODE; break;
+        case TG_GUI_MD_PRE: kind = TG_MTPROTO_STYLE_PRE; break;
+        case TG_GUI_MD_STRIKE: kind = TG_MTPROTO_STYLE_STRIKE; break;
+        case TG_GUI_MD_SPOILER: kind = TG_MTPROTO_STYLE_SPOILER; break;
+        default: break;
+        }
+        if (kind == 0UL || spans[k].to <= spans[k].from) {
+            continue;
+        }
+        list[n].kind = kind;
+        list[n].offset = tg_gui_utf16_units(plain, spans[k].from);
+        list[n].length = tg_gui_utf16_units(plain + spans[k].from,
+                                            spans[k].to - spans[k].from);
+        ++n;
+    }
+    tg_mtproto_send_set_styles(list, n);
+    tg_gui_log("send: formatting markers became styles");
+    return plain;
+}
+
 static void tg_gui_mentions_sent(int sent)
 {
     tg_mtproto_send_set_mentions(0, 0);
@@ -27862,6 +27944,75 @@ static int tg_gui_mentions_self_test(void)
                    items[0], items[1], ins, tg_gui_named_count);
             return 2;
         }
+    }
+    return 0;
+}
+
+/* The formatting markers on the way out: the text loses them and the
+   message built next carries each style where Telegram counts it, in
+   UTF-16 units (an accented letter is one, an emoji two). With the
+   setting off the text is the same pointer and the message carries
+   nothing. */
+static int tg_gui_markdown_send_self_test(void)
+{
+    static const char typed[] =
+        "caff\xc3\xa8 **s\xc3\xac** \xf0\x9f\x98\x80 __x__";
+    unsigned char wire[160];
+    tg_mtproto_tl_writer w;
+    tg_mtproto_tl_reader r;
+    const unsigned char *bytes;
+    const char *text;
+    unsigned long length;
+    unsigned long a;
+    unsigned long b;
+    int ok;
+
+    tg_gui_markdown_override = 1;
+    text = tg_gui_markdown_for_send(typed);
+    ok = text != typed &&
+         strcmp(text, "caff\xc3\xa8 s\xc3\xac \xf0\x9f\x98\x80 x") == 0;
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL,
+                                                   2UL) == TG_MTPROTO_TL_OK &&
+         wire[4] == 0x08U;
+    tg_mtproto_tl_reader_init(&r, wire, w.length);
+    r.offset = 12UL; /* past sendMessage, its flags and the peer */
+    ok = ok &&
+         tg_mtproto_tl_read_bytes(&r, &bytes, &length) == TG_MTPROTO_TL_OK &&
+         length == (unsigned long)strlen(text) &&
+         tg_mtproto_tl_read_u64(&r, &a, &b) == TG_MTPROTO_TL_OK &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && /* vector */
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 2UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0xbd610bc9UL && /* bold, on the two units of "si'" */
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 6UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 2UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+         a == 0x826f8b60UL && /* italic, past the emoji's two units */
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 12UL &&
+         tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK && a == 1UL &&
+         r.offset == w.length;
+    /* nothing to format: the same text, and the styles of the message
+       before are gone */
+    text = tg_gui_markdown_for_send("2 ** 3");
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && strcmp(text, "2 ** 3") == 0 &&
+         tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL, 2UL) ==
+             TG_MTPROTO_TL_OK &&
+         wire[4] == 0x00U;
+    /* the setting off */
+    tg_gui_markdown_override = 0;
+    text = tg_gui_markdown_for_send(typed);
+    tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+    ok = ok && text == typed &&
+         tg_mtproto_build_messages_send_self(&w, text, 0UL, 1UL, 2UL) ==
+             TG_MTPROTO_TL_OK &&
+         wire[4] == 0x00U;
+    tg_gui_markdown_override = -1;
+    tg_mtproto_send_set_styles(0, 0);
+    if (!ok) {
+        puts("mtproto self-test: formatting markers are sent wrong");
+        return 2;
     }
     return 0;
 }

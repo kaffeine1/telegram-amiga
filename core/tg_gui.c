@@ -1152,6 +1152,7 @@ void tg_gui_demo_state(tg_gui_state *state)
     state->emoji_enabled = 1;
     state->emoticon_replace = 1;
     state->emoticon_undo_at = -1;
+    state->markdown = 1;
     state->avatars_enabled = 1;
     state->photo_dither = TG_GUI_PHOTO_DITHER_FULL;
     state->photo_cache_limit_mb = TG_GUI_PHOTO_CACHE_DEFAULT_MB;
@@ -2422,6 +2423,310 @@ int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft)
         return -1;
     }
     return kept >= 2 ? kept : -2;
+}
+
+/* --- Formatting typed in the composer ------------------------------------ */
+
+#define TG_GUI_MD_NONE (~0UL)
+
+static int tg_gui_md_blank(unsigned char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static int tg_gui_md_word(unsigned char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+           (c >= 'a' && c <= 'z') || c == '_' || c >= 0x80U;
+}
+
+static int tg_gui_md_mark_char(unsigned char c)
+{
+    return c == '*' || c == '_' || c == '~' || c == '|';
+}
+
+/* What may stand before an opening marker at in[i]. */
+static int tg_gui_md_opens_after(const char *in, unsigned long i)
+{
+    unsigned char c;
+
+    if (i == 0UL) {
+        return 1;
+    }
+    c = (unsigned char)in[i - 1UL];
+    return tg_gui_md_blank(c) || c == '(' || c == '[' || c == '{' ||
+           c == '"' || c == '\'' || tg_gui_md_mark_char(c);
+}
+
+/* What may stand after a closing marker; in[j] is the first byte past it. */
+static int tg_gui_md_closes_before(const char *in, unsigned long j)
+{
+    unsigned char c = (unsigned char)in[j];
+
+    if (c == '\0' || tg_gui_md_blank(c)) {
+        return 1;
+    }
+    if (c == '.') {
+        /* the end of a phrase, not the dot of a file name */
+        return !tg_gui_md_word((unsigned char)in[j + 1UL]);
+    }
+    return c == ',' || c == ';' || c == ':' || c == '!' || c == '?' ||
+           c == ')' || c == ']' || c == '}' || c == '"' || c == '\'' ||
+           tg_gui_md_mark_char(c);
+}
+
+/* Where the marker is that closes what a marker just before in[start]
+   opened; it has to end by `limit`, where a style still open closes.
+   TG_GUI_MD_NONE when there is none: the opening marker is only text. */
+static unsigned long tg_gui_md_find_close(const char *in, unsigned long len,
+                                          unsigned long start, int kind,
+                                          const char *mark,
+                                          unsigned long mlen,
+                                          unsigned long limit, int pairs)
+{
+    unsigned long j;
+    int prev_blank = 0;
+
+    if (start >= len || in[start] == mark[0]) {
+        return TG_GUI_MD_NONE; /* nothing after it, or a longer run */
+    }
+    if (kind == TG_GUI_MD_PRE) {
+        unsigned long first = start;
+
+        if (in[first] == '\n') {
+            ++first; /* the block starts on the next line */
+        }
+        j = first;
+        while (j + mlen <= len && j + mlen <= limit) {
+            if (pairs && tg_gui_emoji_pair_at(in, len, j, 0)) {
+                j += 2UL; /* an emoji of the composer: one character */
+                continue;
+            }
+            if (j > first && strncmp(in + j, mark, (size_t)mlen) == 0 &&
+                (in[j - 1UL] != '\n' || j - 1UL > first) &&
+                tg_gui_md_closes_before(in, j + mlen)) {
+                return j;
+            }
+            ++j;
+        }
+        return TG_GUI_MD_NONE;
+    }
+    if (tg_gui_md_blank((unsigned char)in[start])) {
+        return TG_GUI_MD_NONE;
+    }
+    j = start;
+    while (j + mlen <= len && j + mlen <= limit) {
+        if (pairs && tg_gui_emoji_pair_at(in, len, j, 0)) {
+            j += 2UL;
+            prev_blank = 0;
+            continue;
+        }
+        if (in[j] == '\n') {
+            break; /* a style of one line ends on that line */
+        }
+        if (j > start && strncmp(in + j, mark, (size_t)mlen) == 0) {
+            if (!prev_blank && tg_gui_md_closes_before(in, j + mlen)) {
+                return j;
+            }
+            if (kind == TG_GUI_MD_CODE) {
+                break; /* the first backtick after it decides */
+            }
+        }
+        prev_blank = tg_gui_md_blank((unsigned char)in[j]);
+        ++j;
+    }
+    return TG_GUI_MD_NONE;
+}
+
+/* pairs: the text is the composer's, where an emoji is a pair of bytes
+   whose second can be any printable character: such a pair is copied as
+   it is and counts as a letter, never as a marker or as what may stand
+   next to one. */
+static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
+                           tg_gui_md_span *spans, int max, int pairs)
+{
+    static const struct {
+        int kind;
+        const char *mark;
+        unsigned long len;
+    } marks[] = {
+        { TG_GUI_MD_PRE, "```", 3UL }, { TG_GUI_MD_CODE, "`", 1UL },
+        { TG_GUI_MD_BOLD, "**", 2UL }, { TG_GUI_MD_ITALIC, "__", 2UL },
+        { TG_GUI_MD_STRIKE, "~~", 2UL }, { TG_GUI_MD_SPOILER, "||", 2UL },
+    };
+    unsigned long close_at[TG_GUI_MD_SPOILER + 1];
+    unsigned long close_len[TG_GUI_MD_SPOILER + 1];
+    int span_of[TG_GUI_MD_SPOILER + 1];
+    unsigned long len;
+    unsigned long i = 0UL;
+    unsigned long n = 0UL;
+    int count = 0;
+    int raw = 0; /* the code or the block being copied as it is */
+    int after_pair = 0; /* the character just copied was an emoji pair */
+    int k;
+
+    if (in == 0 || out == 0 || size == 0UL || spans == 0 || max <= 0) {
+        return 0;
+    }
+    while (tg_gui_md_blank((unsigned char)*in)) {
+        ++in;
+    }
+    len = (unsigned long)strlen(in);
+    for (k = 0; k <= TG_GUI_MD_SPOILER; ++k) {
+        close_at[k] = TG_GUI_MD_NONE;
+        close_len[k] = 0UL;
+        span_of[k] = -1;
+    }
+    while (i < len) {
+        unsigned long limit = len;
+        unsigned long m;
+        int done = 0;
+
+        for (k = 1; k <= TG_GUI_MD_SPOILER && !done; ++k) {
+            if (close_at[k] == i) { /* a style ends here */
+                spans[span_of[k]].to = n;
+                i += close_len[k];
+                close_at[k] = TG_GUI_MD_NONE;
+                if (raw == k) {
+                    raw = 0;
+                }
+                done = 1;
+            } else if (close_at[k] < limit) {
+                limit = close_at[k];
+            }
+        }
+        if (done) {
+            after_pair = 0;
+            continue;
+        }
+        if (pairs && tg_gui_emoji_pair_at(in, len, i, 0)) {
+            if (n + 2UL >= size) {
+                return 0;
+            }
+            out[n++] = in[i++];
+            out[n++] = in[i++];
+            after_pair = 1;
+            continue;
+        }
+        for (m = 0UL; raw == 0 && count < max && !done && !after_pair &&
+                      m < sizeof(marks) / sizeof(marks[0]); ++m) {
+            unsigned long j;
+
+            if (close_at[marks[m].kind] != TG_GUI_MD_NONE ||
+                strncmp(in + i, marks[m].mark, (size_t)marks[m].len) != 0 ||
+                !tg_gui_md_opens_after(in, i)) {
+                continue;
+            }
+            j = tg_gui_md_find_close(in, len, i + marks[m].len,
+                                     marks[m].kind, marks[m].mark,
+                                     marks[m].len, limit, pairs);
+            if (j == TG_GUI_MD_NONE) {
+                continue;
+            }
+            spans[count].kind = marks[m].kind;
+            spans[count].from = n;
+            spans[count].to = n;
+            span_of[marks[m].kind] = count++;
+            close_at[marks[m].kind] = j;
+            close_len[marks[m].kind] = marks[m].len;
+            i += marks[m].len;
+            if (marks[m].kind == TG_GUI_MD_CODE ||
+                marks[m].kind == TG_GUI_MD_PRE) {
+                raw = marks[m].kind;
+            }
+            if (marks[m].kind == TG_GUI_MD_PRE && in[i] == '\n') {
+                ++i; /* the block starts on the next line */
+            }
+            done = 1;
+        }
+        if (done) {
+            continue;
+        }
+        after_pair = 0;
+        if (raw == TG_GUI_MD_PRE && in[i] == '\n' &&
+            close_at[TG_GUI_MD_PRE] == i + 1UL) {
+            ++i; /* the line break before the block's closing marker */
+            continue;
+        }
+        if (n + 1UL >= size) {
+            return 0;
+        }
+        out[n++] = in[i++];
+    }
+    out[n] = '\0';
+    return count;
+}
+
+int tg_gui_markdown_parse(const char *in, char *out, unsigned long size,
+                          tg_gui_md_span *spans, int max)
+{
+    return tg_gui_md_parse(in, out, size, spans, max, 0);
+}
+
+/* The internal mark of a style, 0 when the transcript has none for it. */
+static char tg_gui_md_marker(int kind)
+{
+    switch (kind) {
+    case TG_GUI_MD_BOLD: return TG_TEXT_MARKER_BOLD;
+    case TG_GUI_MD_ITALIC: return TG_TEXT_MARKER_ITALIC;
+    case TG_GUI_MD_CODE:
+    case TG_GUI_MD_PRE: return TG_TEXT_MARKER_CODE;
+    case TG_GUI_MD_STRIKE: return TG_TEXT_MARKER_STRIKE;
+    default: return 0; /* a spoiler shows as plain text here */
+    }
+}
+
+int tg_gui_markdown_display(const char *in, char *out, unsigned long size)
+{
+    tg_gui_md_span spans[TG_GUI_MD_SPANS_MAX];
+    unsigned long n;
+    unsigned long extra = 0UL;
+    unsigned long w;
+    unsigned long pos;
+    int count;
+    int k;
+
+    count = tg_gui_md_parse(in, out, size, spans, TG_GUI_MD_SPANS_MAX, 1);
+    if (count <= 0) {
+        return 0;
+    }
+    n = (unsigned long)strlen(out);
+    for (k = 0; k < count; ++k) {
+        if (tg_gui_md_marker(spans[k].kind) == 0 ||
+            spans[k].to <= spans[k].from) {
+            spans[k].kind = 0; /* nothing to mark */
+        } else {
+            extra += 2UL;
+        }
+    }
+    if (n + extra + 1UL > size) {
+        return 0;
+    }
+    /* The marks go in from the end backwards, so the text moves over
+       itself without a second buffer. At each place, reading forwards:
+       what closes there (the last opened first), what opens there (the
+       first opened first), then the character. */
+    w = n + extra;
+    out[w] = '\0';
+    for (pos = n;; --pos) {
+        if (pos < n) {
+            out[--w] = out[pos];
+        }
+        for (k = count - 1; k >= 0; --k) {
+            if (spans[k].kind != 0 && spans[k].from == pos) {
+                out[--w] = tg_gui_md_marker(spans[k].kind);
+            }
+        }
+        for (k = 0; k < count; ++k) {
+            if (spans[k].kind != 0 && spans[k].to == pos) {
+                out[--w] = tg_gui_md_marker(spans[k].kind);
+            }
+        }
+        if (pos == 0UL) {
+            break;
+        }
+    }
+    return 1;
 }
 
 void tg_gui_requester_name(char *out, unsigned long size, const char *name)
@@ -7381,6 +7686,8 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {"Enable emoji", TG_GUI_SET_EMOJI},
     {"Emoticons become emoji", TG_GUI_SET_EMOTICONS},
     {"Show avatars", TG_GUI_SET_AVATARS},
+    {"Writing", 0},
+    {"Markdown formatting", TG_GUI_SET_MARKDOWN},
     {"Window and files", 0},
     {"Use own screen", TG_GUI_SET_OWN_SCREEN},
     {"Download drawer...", TG_GUI_SET_DOWNLOAD},
@@ -7503,6 +7810,7 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     case TG_GUI_SET_FULLSIZE: on = state->photo_full_size; break;
     case TG_GUI_SET_EMOJI: on = state->emoji_enabled; break;
     case TG_GUI_SET_EMOTICONS: on = state->emoticon_replace; break;
+    case TG_GUI_SET_MARKDOWN: on = state->markdown; break;
     case TG_GUI_SET_AVATARS: on = state->avatars_enabled; break;
     case TG_GUI_SET_OWN_SCREEN: on = state->settings_own_screen; break;
     case TG_GUI_SET_AREXX_PORT: on = state->arexx_port; break;
@@ -9098,6 +9406,125 @@ static int tg_gui_notify_menu_self_test(void)
         n = tg_gui_context_items(state, labels, ids);
         if (n < 1 || ids[0] == TG_GUI_CTX_SENDPHOTO) {
             puts("gui self-test: the paperclip's menu does not go away");
+            return 2;
+        }
+    }
+    /* Formatting typed in the composer: what the transcript shows for
+       each text (the internal marks in the markers' place), and the texts
+       that are left exactly as typed. */
+    {
+        static const struct {
+            const char *typed;
+            const char *shown; /* 0 = not formatting */
+        } md[] = {
+            { "**bold**", "\034bold\034" },
+            { "a **b** c", "a \034b\034 c" },
+            { "__it__ and ~~no~~", "\035it\035 and \037no\037" },
+            { "`code` here", "\036code\036 here" },
+            { "||secret|| x", "secret x" }, /* a spoiler shows plain */
+            { "**bold __both__**", "\034bold \035both\035\034" },
+            { "(**b**), \"__i__\".", "(\034b\034), \"\035i\035\"." },
+            { "```\nint a;\nint b;\n```", "\036int a;\nint b;\036" },
+            { "see ```x = 1``` now", "see \036x = 1\036 now" },
+            { "`**not bold**`", "\036**not bold**\036" },
+            { "`a **b** c`", "\036a **b** c\036" },
+            { "`a `b`", "`a \036b\036" }, /* the first backtick decides */
+            { "  **lead**", "\034lead\034" },
+            { "**a __b** c__", "\034a __b\034 c__" }, /* no crossing */
+            { "**a**__b__", "\034a\034\035b\035" },
+            { "caff\xe8 **s\xec**!", "caff\xe8 \034s\xec\034!" },
+            /* an emoji of the composer is a pair of bytes whose second
+               can look like a marker or a bracket: it is one letter */
+            { "`a\x80` b`", "\036a\x80` b\036" },
+            { "**a\x81***", "\034a\x81*\034" },
+            { "\x80(**b**", 0 },
+            { "**b**\x80*", 0 },
+            { "2 ** 3 ** 4", 0 },
+            { "a**b**c", 0 },
+            { "**a**b", 0 },
+            { "**open only", 0 },
+            { "** spaced **", 0 },
+            { "** a**", 0 },
+            { "**a **", 0 },
+            { "```\n\n```", 0 },
+            { "__init__.py", 0 },
+            { "snake__case__name", 0 },
+            { "a || b || c", 0 },
+            { "http://x.org/__a__", 0 },
+            { "**two\nlines**", 0 },
+            { "****", 0 },
+            { "``", 0 },
+            { "`a\nb`", 0 },
+            { "```\n```", 0 },
+            { "plain text", 0 },
+            { "", 0 },
+        };
+        tg_gui_md_span spans[TG_GUI_MD_SPANS_MAX + 2];
+        char shown[160];
+        char many[160];
+        unsigned long c;
+        int n;
+
+        for (c = 0UL; c < sizeof(md) / sizeof(md[0]); ++c) {
+            int did = tg_gui_markdown_display(md[c].typed, shown,
+                                              sizeof(shown));
+
+            if (did != (md[c].shown != 0) ||
+                (did && strcmp(shown, md[c].shown) != 0)) {
+                printf("gui self-test: markdown case %lu wrong (%s)\n", c,
+                       md[c].typed);
+                return 2;
+            }
+        }
+        /* Where the stretches are, in bytes of the text without markers:
+           what the message carries. A character of two bytes counts two
+           here; the session turns the places into UTF-16 units. */
+        n = tg_gui_markdown_parse("a **b** `c` ||d||", shown, sizeof(shown),
+                                  spans, TG_GUI_MD_SPANS_MAX);
+        if (n != 3 || strcmp(shown, "a b c d") != 0 ||
+            spans[0].kind != TG_GUI_MD_BOLD || spans[0].from != 2UL ||
+            spans[0].to != 3UL || spans[1].kind != TG_GUI_MD_CODE ||
+            spans[1].from != 4UL || spans[1].to != 5UL ||
+            spans[2].kind != TG_GUI_MD_SPOILER || spans[2].from != 6UL ||
+            spans[2].to != 7UL) {
+            puts("gui self-test: markdown stretches are in the wrong place");
+            return 2;
+        }
+        n = tg_gui_markdown_parse("**\xc3\xa8** ```\nx\n```", shown,
+                                  sizeof(shown), spans, TG_GUI_MD_SPANS_MAX);
+        if (n != 2 || strcmp(shown, "\xc3\xa8 x") != 0 ||
+            spans[0].from != 0UL || spans[0].to != 2UL ||
+            spans[1].kind != TG_GUI_MD_PRE || spans[1].from != 3UL ||
+            spans[1].to != 4UL) {
+            puts("gui self-test: markdown counts a two-byte character wrong");
+            return 2;
+        }
+        /* The text that is sent is UTF-8 and holds no emoji pairs: a
+           capital A with a grave accent ends in the byte a pair starts
+           with, and is a letter all the same. */
+        n = tg_gui_markdown_parse("**\xc3\x80**", shown, sizeof(shown), spans,
+                                  TG_GUI_MD_SPANS_MAX);
+        if (n != 1 || strcmp(shown, "\xc3\x80") != 0 ||
+            spans[0].from != 0UL || spans[0].to != 2UL) {
+            puts("gui self-test: markdown takes UTF-8 for an emoji pair");
+            return 2;
+        }
+        /* More stretches than a message carries: the ones past the limit
+           stay as typed. A text that does not fit is left alone. */
+        many[0] = '\0';
+        for (c = 0UL; c < (unsigned long)TG_GUI_MD_SPANS_MAX + 1UL; ++c) {
+            strcat(many, "**a** ");
+        }
+        n = tg_gui_markdown_parse(many, shown, sizeof(shown), spans,
+                                  TG_GUI_MD_SPANS_MAX);
+        if (n != TG_GUI_MD_SPANS_MAX || strstr(shown, "**a**") == 0 ||
+            strlen(shown) != (2UL * TG_GUI_MD_SPANS_MAX) + 6UL ||
+            tg_gui_markdown_parse("**bold**", shown, 4UL, spans,
+                                  TG_GUI_MD_SPANS_MAX) != 0 ||
+            tg_gui_markdown_display("**bold**", shown, 6UL) != 0 ||
+            tg_gui_markdown_display("**bold**", shown, 7UL) != 1 ||
+            strcmp(shown, "\034bold\034") != 0) {
+            puts("gui self-test: markdown limits are wrong");
             return 2;
         }
     }
@@ -10779,7 +11206,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 21 && switches == 10 &&
+        ok_set = ok_set && lines == 23 && switches == 11 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&

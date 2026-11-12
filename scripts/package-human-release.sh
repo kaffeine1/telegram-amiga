@@ -601,6 +601,14 @@ Messages
   @username; someone without is written by first name, and the message
   still reaches them as a mention as long as the name is left as it was
   inserted.
+- Formatting can be typed: **bold**, __italic__, \`code\`,
+  ~~strike~~, ||spoiler||, and three backticks before and after a block
+  of code. When the message is sent the markers leave the text and the
+  other clients show the styles; here a spoiler shows as plain text. A
+  marker counts only at the start and at the end of a word, and a style
+  of one line ends on that line, so that 2 ** 3, a || b or __init__.py
+  go as they are. "Settings > Markdown formatting" switches it off, and
+  then everything goes as typed.
 - Drag across text to select it. Right-Amiga+C copies, Right-Amiga+X
   cuts from the input line, Right-Amiga+V pastes; the Edit menu has the
   same.
@@ -811,6 +819,15 @@ Messaggi
   username viene scritto come @username; chi non lo ha viene scritto
   col nome, e il messaggio gli arriva lo stesso come menzione finche' il
   nome resta com'e' stato inserito.
+- La formattazione si puo' scrivere: **grassetto**, __corsivo__,
+  \`codice\`, ~~barrato~~, ||spoiler||, e tre accenti gravi prima e
+  dopo un blocco di codice. Quando il messaggio parte i marcatori
+  escono dal testo e gli altri client mostrano gli stili; qui uno
+  spoiler si vede come testo normale. Un marcatore vale solo
+  all'inizio e alla fine di una parola, e uno stile di una riga finisce
+  su quella riga: cosi' 2 ** 3, a || b o __init__.py partono come sono.
+  "Settings > Markdown formatting" lo spegne, e allora tutto parte
+  com'e' scritto.
 - Trascina sul testo per selezionarlo. Amiga-destro+C copia,
   Amiga-destro+X taglia dalla riga di input, Amiga-destro+V incolla; il
   menu Edit fa lo stesso.

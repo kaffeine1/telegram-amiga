@@ -1064,6 +1064,24 @@ typedef struct tg_mtproto_send_mention {
 void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
                                   int count);
 
+/* The formatting the next messages.sendMessage built carries: where each
+   styled stretch is in its text (UTF-16 units), in the order of the text.
+   None (0, 0) takes it away again. A block (PRE) names no language. */
+#define TG_MTPROTO_SEND_STYLES_MAX 16
+#define TG_MTPROTO_STYLE_BOLD 1UL    /* messageEntityBold#bd610bc9 */
+#define TG_MTPROTO_STYLE_ITALIC 2UL  /* messageEntityItalic#826f8b60 */
+#define TG_MTPROTO_STYLE_CODE 3UL    /* messageEntityCode#28a20571 */
+#define TG_MTPROTO_STYLE_PRE 4UL     /* messageEntityPre#73924be0 */
+#define TG_MTPROTO_STYLE_STRIKE 5UL  /* messageEntityStrike#bf0693d4 */
+#define TG_MTPROTO_STYLE_SPOILER 6UL /* messageEntitySpoiler#32ca960f */
+typedef struct tg_mtproto_send_style {
+    unsigned long kind; /* TG_MTPROTO_STYLE_* */
+    unsigned long offset;
+    unsigned long length;
+} tg_mtproto_send_style;
+void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list,
+                                int count);
+
 /* messages.deleteHistory for this account only (not for a channel), and the
    offset its messages.affectedHistory reply leaves to delete. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(

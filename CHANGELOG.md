@@ -67,6 +67,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   not in a chat with one person, where the menu item says so. If
   Telegram refuses the poll, or cannot be reached, what was typed is
   kept and the menu item opens on it again.
+- Formatting typed in the message box is sent as formatting:
+  `**bold**`, `__italic__`, `~~strike~~`, `||spoiler||`, a backtick
+  before and after for code, three of them for a block of code. The
+  markers leave the text and the message carries the styles, so the
+  other clients show them; the message just sent shows them here too
+  (a spoiler as plain text). A marker counts only at the start and at
+  the end of a word, a style of one line ends on that line, and nothing
+  inside code is a marker, so that `2 ** 3`, `a || b` or `__init__.py`
+  go as they are. "Markdown formatting" in the settings switches it
+  off (`data/telegram-markdown.txt`); the text client sends as typed.
 - Stop poll, in the menu of a poll's message, on one's own polls while
   they are open: after a confirmation the poll is closed for good and
   the message shows the final results.

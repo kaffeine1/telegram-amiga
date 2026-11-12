@@ -308,6 +308,52 @@ typedef struct tg_gui_poll_draft {
    fewer than two answers. The draft is tidied in every case. */
 int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft);
 
+/* --- Formatting typed in the composer (0.2) -----------------------------
+   **bold**, __italic__, `code`, ```block```, ~~strike~~ and ||spoiler||,
+   in the manner of the other clients. A marker counts only where it can
+   hardly be anything else. It opens at the start of the text or after a
+   blank, an opening bracket or quote, or another marker, and right before
+   a character that is not a blank. It closes right after such a
+   character, and before the end, a blank, closing punctuation or another
+   marker; a dot counts only when no word goes on after it ("__init__.py"
+   is a file name). A style of one line ends on that line; a block may
+   span several, and loses the line break after its opening and the one
+   before its closing. Nothing inside code or a block is a marker. */
+#define TG_GUI_MD_BOLD 1
+#define TG_GUI_MD_ITALIC 2
+#define TG_GUI_MD_CODE 3
+#define TG_GUI_MD_PRE 4
+#define TG_GUI_MD_STRIKE 5
+#define TG_GUI_MD_SPOILER 6
+#define TG_GUI_MD_SPANS_MAX 16
+typedef struct tg_gui_md_span {
+    int kind;           /* TG_GUI_MD_* */
+    unsigned long from; /* bytes into the text written out */
+    unsigned long to;   /* one past its last byte */
+} tg_gui_md_span;
+
+/* Reads the markers of `in` and writes the text without the ones it
+   understood to `out` (`size` bytes, not overlapping `in`), with where
+   each styled stretch is, in the order they open. Blanks at the start
+   are left out, as Telegram drops them. Returns how many stretches;
+   0 = none (or the text does not fit), and then `out` is not to be used:
+   the text goes as typed. The rules read ASCII only, so they give the
+   same answer on Latin-1 and on UTF-8. */
+int tg_gui_markdown_parse(const char *in, char *out, unsigned long size,
+                          tg_gui_md_span *spans, int max);
+
+/* The same text as the transcript shows it: the stretches between the
+   internal style marks (a spoiler shows as plain text). `in` is text as
+   the composer holds it, where an emoji is a pair of bytes: a pair is
+   one character here, whatever its second byte looks like, as the emoji
+   is one in the text that is sent. 1 = `out` holds it; 0 = nothing to
+   format, or it does not fit: show the text as typed. */
+int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
+
+/* "Markdown formatting" of the settings, one on/off line like the emoji
+   files. */
+#define TG_GUI_MARKDOWN_FILE "data/telegram-markdown.txt"
+
 /* A chat's name for a requester's button ("For me and Anna"): '|' and '%'
    would break the requester apart and are replaced, a name longer than
    the buffer ends in two dots, an empty one reads "them". */
@@ -405,6 +451,7 @@ typedef struct tg_gui_state {
     int inline_photos_default_resolved; /* hardware default sampled this run */
     int emoji_enabled;    /* picker and graphical emoji; off keeps text emoticons */
     int emoticon_replace; /* a typed :) becomes its emoji (on by default) */
+    int markdown; /* **bold** and its kin are formatting when sent (on) */
     int emoticon_undo_at; /* where the last one went in, for Backspace; -1 */
     char emoticon_undo[8]; /* the characters typed for it */
     int emoji_explicit;   /* user saved an on/off choice */
@@ -1043,6 +1090,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_AREXX_PORT 15
 #define TG_GUI_SET_AREXX_SEND 16
 #define TG_GUI_SET_UPDATES 17     /* look for a newer version once a day */
+#define TG_GUI_SET_MARKDOWN 18    /* **bold** and its kin when sending */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2

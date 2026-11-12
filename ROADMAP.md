@@ -398,6 +398,12 @@ Middle, more interface:
   flag). Still missing: voting in the text client, a quiz's
   explanation, who voted in a public poll, making a quiz or a poll with
   public votes;
+- formatting typed in the composer: done (`**bold**`, `__italic__`,
+  `~~strike~~`, `||spoiler||`, one backtick for code and three for a
+  block become the message's entities when it is sent, counted in
+  UTF-16 units; conservative rules, a switch in the settings). Still
+  missing: the same when a message is edited, the language of a block,
+  links with a text of their own, and showing a spoiler as one;
 - the update notice (its section): step 1 is in place and asleep. The
   client can look a public channel up by name, search its posts for
   "Amigram" and a version (`contacts.resolveUsername`,

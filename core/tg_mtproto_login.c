@@ -2279,24 +2279,108 @@ void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
     }
 }
 
+/* ...and its formatting: bold, italic, code, a block, strike, spoiler, as
+   the composer's markers said (messageEntityBold#bd610bc9 offset:int
+   length:int and its kin; messageEntityPre#73924be0 has a language:string
+   too, sent empty). Like the mentions they ride on the next message built
+   and on no other. */
+static tg_mtproto_send_style tg_send_styles[TG_MTPROTO_SEND_STYLES_MAX];
+static int tg_send_style_count = 0;
+
+static unsigned long tg_send_style_constructor(unsigned long kind)
+{
+    switch (kind) {
+    case TG_MTPROTO_STYLE_BOLD: return 0xbd610bc9UL;
+    case TG_MTPROTO_STYLE_ITALIC: return 0x826f8b60UL;
+    case TG_MTPROTO_STYLE_CODE: return 0x28a20571UL;
+    case TG_MTPROTO_STYLE_PRE: return 0x73924be0UL;
+    case TG_MTPROTO_STYLE_STRIKE: return 0xbf0693d4UL;
+    case TG_MTPROTO_STYLE_SPOILER: return 0x32ca960fUL;
+    default: return 0UL;
+    }
+}
+
+void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list, int count)
+{
+    int i;
+
+    tg_send_style_count = 0;
+    for (i = 0; list != 0 && i < count &&
+                tg_send_style_count < TG_MTPROTO_SEND_STYLES_MAX; ++i) {
+        if (list[i].length != 0UL &&
+            tg_send_style_constructor(list[i].kind) != 0UL) {
+            tg_send_styles[tg_send_style_count++] = list[i];
+        }
+    }
+}
+
 static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
 {
     return ((reply_to_msg_id != 0UL) ? 1UL : 0UL) |
-           (tg_send_mention_count > 0 ? 8UL : 0UL) |
+           (tg_send_mention_count + tg_send_style_count > 0 ? 8UL : 0UL) |
            (tg_send_clear_draft ? 128UL : 0UL);
 }
 
+static tg_mtproto_tl_status tg_write_send_mention(
+    tg_mtproto_tl_writer *writer, const tg_mtproto_send_mention *m)
+{
+    tg_mtproto_tl_status status;
+
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_INPUT_MESSAGE_ENTITY_MENTION_NAME_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, m->offset);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, m->length);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_USER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, m->user_id_hi,
+                                         m->user_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, m->access_hash_hi,
+                                         m->access_hash_lo);
+    }
+    return status;
+}
+
+static tg_mtproto_tl_status tg_write_send_style(
+    tg_mtproto_tl_writer *writer, const tg_mtproto_send_style *s)
+{
+    tg_mtproto_tl_status status;
+
+    status = tg_mtproto_tl_write_u32(writer,
+                                     tg_send_style_constructor(s->kind));
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, s->offset);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, s->length);
+    }
+    if (status == TG_MTPROTO_TL_OK && s->kind == TG_MTPROTO_STYLE_PRE) {
+        status = tg_write_string(writer, ""); /* language: none named */
+    }
+    return status;
+}
+
 /* The end of a messages.sendMessage: random_id, then the entities when
-   there are any (no reply_markup: flags.2 is never set). */
+   there are any (no reply_markup: flags.2 is never set). The styles and
+   the mentions, each list in the order of the text, go out merged in
+   that order. */
 static tg_mtproto_tl_status tg_write_send_message_tail(
     tg_mtproto_tl_writer *writer, unsigned long random_id_hi,
     unsigned long random_id_lo)
 {
     tg_mtproto_tl_status status;
-    int i;
+    int s = 0;
+    int m = 0;
 
     status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
-    if (tg_send_mention_count <= 0) {
+    if (tg_send_mention_count + tg_send_style_count <= 0) {
         return status;
     }
     if (status == TG_MTPROTO_TL_OK) {
@@ -2304,31 +2388,17 @@ static tg_mtproto_tl_status tg_write_send_message_tail(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(
-            writer, (unsigned long)tg_send_mention_count);
+            writer,
+            (unsigned long)(tg_send_mention_count + tg_send_style_count));
     }
-    for (i = 0; i < tg_send_mention_count && status == TG_MTPROTO_TL_OK;
-         ++i) {
-        const tg_mtproto_send_mention *m = &tg_send_mentions[i];
-
-        status = tg_mtproto_tl_write_u32(
-            writer, TG_INPUT_MESSAGE_ENTITY_MENTION_NAME_CONSTRUCTOR);
-        if (status == TG_MTPROTO_TL_OK) {
-            status = tg_mtproto_tl_write_u32(writer, m->offset);
-        }
-        if (status == TG_MTPROTO_TL_OK) {
-            status = tg_mtproto_tl_write_u32(writer, m->length);
-        }
-        if (status == TG_MTPROTO_TL_OK) {
-            status = tg_mtproto_tl_write_u32(writer,
-                                             TG_INPUT_USER_CONSTRUCTOR);
-        }
-        if (status == TG_MTPROTO_TL_OK) {
-            status = tg_mtproto_tl_write_u64(writer, m->user_id_hi,
-                                             m->user_id_lo);
-        }
-        if (status == TG_MTPROTO_TL_OK) {
-            status = tg_mtproto_tl_write_u64(writer, m->access_hash_hi,
-                                             m->access_hash_lo);
+    while ((s < tg_send_style_count || m < tg_send_mention_count) &&
+           status == TG_MTPROTO_TL_OK) {
+        if (m >= tg_send_mention_count ||
+            (s < tg_send_style_count &&
+             tg_send_styles[s].offset <= tg_send_mentions[m].offset)) {
+            status = tg_write_send_style(writer, &tg_send_styles[s++]);
+        } else {
+            status = tg_write_send_mention(writer, &tg_send_mentions[m++]);
         }
     }
     return status;
@@ -12949,6 +13019,129 @@ int tg_mtproto_login_self_test(void)
                     TG_MTPROTO_TL_OK ||
                 mw.length != 32UL || mq[4] != 0x00U) {
                 puts("login self-test: a mention outlived its message");
+                return 2;
+            }
+        }
+        /* Formatting: flags bit 3 again, and the entities in the order of
+           the text, the styles and a mention by name merged: bold at 0,
+           the mention at 5, a block at 10 with its empty language, a
+           spoiler at 14. A stretch of no length, or of no known kind, is
+           left out; the message after carries nothing. */
+        {
+            static const tg_mtproto_send_style styles[5] = {
+                { TG_MTPROTO_STYLE_BOLD, 0UL, 4UL },
+                { TG_MTPROTO_STYLE_ITALIC, 6UL, 0UL }, /* no length */
+                { 99UL, 7UL, 2UL },                    /* no such kind */
+                { TG_MTPROTO_STYLE_PRE, 10UL, 3UL },
+                { TG_MTPROTO_STYLE_SPOILER, 14UL, 2UL },
+            };
+            static const unsigned long kinds[6] = {
+                TG_MTPROTO_STYLE_BOLD, TG_MTPROTO_STYLE_ITALIC,
+                TG_MTPROTO_STYLE_CODE, TG_MTPROTO_STYLE_PRE,
+                TG_MTPROTO_STYLE_STRIKE, TG_MTPROTO_STYLE_SPOILER
+            };
+            static const unsigned long ctors[6] = {
+                0xbd610bc9UL, 0x826f8b60UL, 0x28a20571UL, 0x73924be0UL,
+                0xbf0693d4UL, 0x32ca960fUL
+            };
+            unsigned char sq[160];
+            tg_mtproto_tl_writer sw;
+            tg_mtproto_tl_reader sr;
+            tg_mtproto_send_mention who;
+            const unsigned char *bytes;
+            unsigned long length;
+            unsigned long a;
+            unsigned long b;
+            int ok_style;
+            int k;
+
+            memset(&who, 0, sizeof(who));
+            who.offset = 5UL;
+            who.length = 4UL;
+            who.user_id_lo = 0x01020304UL;
+            tg_mtproto_send_set_mentions(&who, 1);
+            tg_mtproto_send_set_styles(styles, 5);
+            tg_mtproto_tl_writer_init(&sw, sq, sizeof(sq));
+            ok_style = tg_mtproto_build_messages_send_self(
+                           &sw, "ciao Anna, x = 1 ok", 0UL, 1UL, 2UL) ==
+                       TG_MTPROTO_TL_OK && sq[4] == 0x08U;
+            tg_mtproto_tl_reader_init(&sr, sq, sw.length);
+            sr.offset = 12UL; /* past sendMessage, its flags and the peer */
+            ok_style = ok_style &&
+                tg_mtproto_tl_read_bytes(&sr, &bytes, &length) ==
+                    TG_MTPROTO_TL_OK && length == 19UL &&
+                tg_mtproto_tl_read_u64(&sr, &a, &b) == TG_MTPROTO_TL_OK &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == TG_VECTOR_CONSTRUCTOR &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 4UL &&
+                /* bold 0..4 */
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 0xbd610bc9UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 0UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 4UL &&
+                /* the mention at 5 */
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 0x208e68c9UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 5UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 4UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 0xf21158c6UL &&
+                tg_mtproto_tl_read_u64(&sr, &a, &b) == TG_MTPROTO_TL_OK &&
+                b == 0x01020304UL &&
+                tg_mtproto_tl_read_u64(&sr, &a, &b) == TG_MTPROTO_TL_OK &&
+                /* the block at 10, no language */
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 0x73924be0UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 10UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 3UL &&
+                tg_mtproto_tl_read_bytes(&sr, &bytes, &length) ==
+                    TG_MTPROTO_TL_OK && length == 0UL &&
+                /* the spoiler at 14 */
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 0x32ca960fUL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 14UL &&
+                tg_mtproto_tl_read_u32(&sr, &a) == TG_MTPROTO_TL_OK &&
+                a == 2UL && sr.offset == sw.length;
+            /* every kind has the constructor of the schema */
+            for (k = 0; k < 6; ++k) {
+                tg_mtproto_send_style one_style;
+
+                one_style.kind = kinds[k];
+                one_style.offset = 0UL;
+                one_style.length = 1UL;
+                tg_mtproto_send_set_mentions(0, 0);
+                tg_mtproto_send_set_styles(&one_style, 1);
+                tg_mtproto_tl_writer_init(&sw, sq, sizeof(sq));
+                ok_style = ok_style &&
+                    tg_mtproto_build_messages_send_self(&sw, "x", 0UL, 1UL,
+                                                        2UL) ==
+                        TG_MTPROTO_TL_OK &&
+                    sq[4] == 0x08U &&
+                    /* ctor, flags, peer, "x" (4), random_id (8), vector +
+                       count (8): the entity starts at 32 */
+                    ((unsigned long)sq[32] | ((unsigned long)sq[33] << 8) |
+                     ((unsigned long)sq[34] << 16) |
+                     ((unsigned long)sq[35] << 24)) == ctors[k];
+            }
+            tg_mtproto_send_set_styles(0, 0);
+            tg_mtproto_send_set_mentions(0, 0);
+            tg_mtproto_tl_writer_init(&sw, sq, sizeof(sq));
+            ok_style = ok_style &&
+                tg_mtproto_build_messages_send_self(&sw, "x", 0UL, 1UL,
+                                                    2UL) ==
+                    TG_MTPROTO_TL_OK &&
+                sw.length == 24UL && sq[4] == 0x00U;
+            if (!ok_style) {
+                puts("login self-test: sendMessage with formatting built "
+                     "wrong");
                 return 2;
             }
         }
