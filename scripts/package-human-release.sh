@@ -35,23 +35,26 @@ VERSION=${VERSION:-0.0.0}
 # banner print (TG_VERSION_CHANNEL), so the binary and the packaging cannot
 # disagree; the dot count is only a fallback for a tree without that macro.
 CHANNEL=${CHANNEL:-$(sed -n 's/.*define TG_VERSION_CHANNEL "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)}
-# The update notice reads a public Telegram channel named in the same header.
-# While that name is empty the client never looks, its line in the settings
-# is greyed, and the manuals say nothing about it.
-UPDATE_CHANNEL=$(sed -n 's/.*define TG_UPDATE_CHANNEL "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)
+# The update notice reads the public Telegram channels named in the same
+# header (usernames with commas between them). While that list is empty the
+# client never looks, its line in the settings is greyed, and the manuals
+# say nothing about it.
+UPDATE_CHANNELS=$(sed -n 's/.*define TG_UPDATE_CHANNELS "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)
+# "first, @second" -> "@first, @second", as the manuals show them
+UPDATE_SHOWN=$(printf '%s' "$UPDATE_CHANNELS" | tr ',;' '  ' | tr -s ' ' '\n' | sed -e 's/^@//' -e '/^$/d' -e 's/^/@/' | tr '\n' ' ' | sed -e 's/ $//' -e 's/ /, /g')
 update_manual_en=""
 update_manual_it=""
-if [ -n "$UPDATE_CHANNEL" ]; then
+if [ -n "$UPDATE_SHOWN" ]; then
     update_manual_en="
-- \"Settings > Check for updates\": once a day the program reads the
-  channel @$UPDATE_CHANNEL on Telegram, where new versions are
-  announced. When one is newer than yours the status line says so,
-  once, and About keeps saying it. Nothing is downloaded and nothing is
-  installed. Switch the line off and the program never looks."
+- \"Settings > Check for updates\": once a day the program reads, on
+  Telegram, where new versions are announced: $UPDATE_SHOWN.
+  When one is newer than yours the status line says so, once, and About
+  keeps saying it. Nothing is downloaded and nothing is installed.
+  Switch the line off and the program never looks."
     update_manual_it="
 - \"Settings > Check for updates\": una volta al giorno il programma
-  legge il canale @$UPDATE_CHANNEL su Telegram, dove vengono annunciate
-  le versioni nuove. Quando ce n'e' una piu' nuova della tua la riga di
+  legge, su Telegram, dove vengono annunciate le versioni nuove:
+  $UPDATE_SHOWN. Quando ce n'e' una piu' nuova della tua la riga di
   stato lo dice, una volta sola, e About continua a dirlo. Non viene
   scaricato ne' installato niente. Spegni la riga e il programma non
   guarda piu'."

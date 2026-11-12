@@ -33173,36 +33173,48 @@ static int tg_gui_batch_self_test(void)
 
 #if !defined(TG_NO_GUI)
 /* --- The update notice (0.2). ---------------------------------------------
-   Releases are announced on a public Telegram channel, TG_UPDATE_CHANNEL,
-   in a post that names the program and the version: "Amigram 0.2". At most
-   once a day the client asks that channel for its newest posts with the
-   program's name in them (messages.search, so that other posts in between
-   do not hide an announcement), takes the highest version they name and,
-   when it is higher than this build's, says so: once in the status line,
-   and in About for as long as it holds. Nothing is downloaded and nothing
-   is run. The channel is looked up by name once and remembered; a build
-   without a channel, or with the switch off, never asks anything. */
+   Releases are announced on public Telegram channels or groups, the names
+   in TG_UPDATE_CHANNELS, in a post that names the program and the version:
+   "Amigram 0.2". Once a day the client goes round them, one at each quiet
+   moment: it asks a channel for its newest posts with the program's name in
+   them (messages.search, so that other posts in between do not hide an
+   announcement) and keeps the highest version they name. When the round is
+   over and that version is higher than this build's, it says so: once in
+   the status line, and in About for as long as it holds. Nothing is
+   downloaded and nothing is run. A channel is looked up by name once and
+   remembered; a build without channels, or with the switch off, never asks
+   anything. */
 #define TG_GUI_UPDATE_FILE "data/telegram-update.txt"
-#define TG_GUI_UPDATE_EVERY 86400UL /* seconds: one look a day */
+#define TG_GUI_UPDATE_EVERY 86400UL /* seconds: one round a day */
 #define TG_GUI_UPDATE_POSTS 5UL
+#define TG_GUI_UPDATE_CHANNELS_MAX 8 /* names read from the list */
+#define TG_GUI_UPDATE_NAME_MAX 48
+
+typedef struct tg_gui_update_peer {
+    char channel[TG_GUI_UPDATE_NAME_MAX]; /* whose id and hash these are */
+    unsigned long id_hi, id_lo, hash_hi, hash_lo;
+} tg_gui_update_peer;
 
 typedef struct tg_gui_update_state {
     int loaded;
     int off;              /* the user's switch */
-    char channel[48];     /* whose id and hash these are */
-    unsigned long id_hi, id_lo, hash_hi, hash_lo;
-    int has_peer;
-    unsigned long checked; /* time() of the last look that got an answer */
+    tg_gui_update_peer peers[TG_GUI_UPDATE_CHANNELS_MAX];
+    int peer_count;        /* the channels looked up so far */
+    unsigned long checked; /* time() of the last round that ended */
     unsigned long found[3];
-    int has_found;         /* the highest version the channel named */
+    int has_found;         /* the highest version the last round read */
     unsigned long told[3];
     int has_told;          /* the one the status line has already said */
+    /* the round under way: not kept between two runs */
+    int next;              /* 1-based channel to ask next, 0 = no round */
+    unsigned long best[3];
+    int has_best;          /* the highest version of this round so far */
 } tg_gui_update_state;
 
 static tg_gui_update_state tg_gui_update;
 /* variables, so that the self-test and a live check can aim elsewhere */
 static const char *tg_gui_update_file = TG_GUI_UPDATE_FILE;
-static const char *tg_gui_update_channel = TG_UPDATE_CHANNEL;
+static const char *tg_gui_update_channels = TG_UPDATE_CHANNELS;
 static const char *tg_gui_update_name = TG_UPDATE_WORD;
 static const char *tg_gui_update_own = TG_VERSION;
 
@@ -33311,6 +33323,131 @@ static int tg_update_scan(const char *text, const char *name,
     return had;
 }
 
+static int tg_update_list_gap(char c)
+{
+    return c == ',' || c == ' ' || c == ';';
+}
+
+/* The index-th name of a list of channels ("one, @two;three": commas,
+   spaces or semicolons between them, an "@" in front or not) into out: 1
+   when there is one. A name too long to be a username is passed over, and
+   the list ends at TG_GUI_UPDATE_CHANNELS_MAX names. */
+static int tg_update_channel_at(const char *list, int index, char *out,
+                                unsigned long size)
+{
+    const char *p = list;
+    int k = 0;
+
+    if (index < 0 || index >= TG_GUI_UPDATE_CHANNELS_MAX || size == 0UL) {
+        return 0;
+    }
+    for (;;) {
+        unsigned long n = 0UL;
+
+        while (tg_update_list_gap(*p) || *p == '@') {
+            ++p;
+        }
+        if (*p == '\0') {
+            return 0;
+        }
+        while (p[n] != '\0' && !tg_update_list_gap(p[n])) {
+            ++n;
+        }
+        if (n < size && n < (unsigned long)TG_GUI_UPDATE_NAME_MAX) {
+            if (k == index) {
+                memcpy(out, p, (size_t)n);
+                out[n] = '\0';
+                return 1;
+            }
+            ++k;
+        }
+        p += n;
+    }
+}
+
+/* Usernames do not tell capitals from small letters. */
+static int tg_update_same_name(const char *a, const char *b)
+{
+    for (;; ++a, ++b) {
+        char x = *a;
+        char y = *b;
+
+        if (x >= 'A' && x <= 'Z') {
+            x = (char)(x - 'A' + 'a');
+        }
+        if (y >= 'A' && y <= 'Z') {
+            y = (char)(y - 'A' + 'a');
+        }
+        if (x != y) {
+            return 0;
+        }
+        if (x == '\0') {
+            return 1;
+        }
+    }
+}
+
+static int tg_update_listed(const char *name)
+{
+    char one[TG_GUI_UPDATE_NAME_MAX];
+    int k;
+
+    for (k = 0; tg_update_channel_at(tg_gui_update_channels, k, one,
+                                     sizeof(one)); ++k) {
+        if (tg_update_same_name(one, name)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* The channel already looked up under that name, or -1. */
+static int tg_update_peer_find(const char *name)
+{
+    int k;
+
+    for (k = 0; k < tg_gui_update.peer_count; ++k) {
+        if (tg_update_same_name(tg_gui_update.peers[k].channel, name)) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+static void tg_update_peer_drop(int k)
+{
+    if (k < 0 || k >= tg_gui_update.peer_count) {
+        return;
+    }
+    for (; k + 1 < tg_gui_update.peer_count; ++k) {
+        tg_gui_update.peers[k] = tg_gui_update.peers[k + 1];
+    }
+    --tg_gui_update.peer_count;
+}
+
+/* Keeps a channel just looked up; one that left the list makes room. */
+static void tg_update_peer_keep(const tg_gui_update_peer *peer)
+{
+    int k = tg_update_peer_find(peer->channel);
+
+    if (k < 0 && tg_gui_update.peer_count >= TG_GUI_UPDATE_CHANNELS_MAX) {
+        for (k = 0; k < tg_gui_update.peer_count; ++k) {
+            if (!tg_update_listed(tg_gui_update.peers[k].channel)) {
+                break;
+            }
+        }
+        if (k >= tg_gui_update.peer_count) {
+            return; /* full of listed channels: cannot be */
+        }
+        tg_update_peer_drop(k);
+        k = -1;
+    }
+    if (k < 0) {
+        k = tg_gui_update.peer_count++;
+    }
+    tg_gui_update.peers[k] = *peer;
+}
+
 static void tg_gui_update_load(void)
 {
     char line[160];
@@ -33326,22 +33463,19 @@ static void tg_gui_update_load(void)
         return;
     }
     while (fgets(line, (int)sizeof(line), f) != 0) {
-        char name[48];
+        tg_gui_update_peer peer;
         unsigned long a = 0UL;
-        unsigned long b = 0UL;
-        unsigned long c = 0UL;
-        unsigned long d = 0UL;
 
+        memset(&peer, 0, sizeof(peer));
         if (strncmp(line, "check ", 6) == 0) {
             tg_gui_update.off = line[6] == '0';
-        } else if (sscanf(line, "peer %47s %lx %lx %lx %lx", name, &a, &b,
-                          &c, &d) == 5) {
-            strcpy(tg_gui_update.channel, name);
-            tg_gui_update.id_hi = a;
-            tg_gui_update.id_lo = b;
-            tg_gui_update.hash_hi = c;
-            tg_gui_update.hash_lo = d;
-            tg_gui_update.has_peer = 1;
+        } else if (sscanf(line, "peer %47s %lx %lx %lx %lx", peer.channel,
+                          &peer.id_hi, &peer.id_lo, &peer.hash_hi,
+                          &peer.hash_lo) == 5) {
+            if (tg_update_peer_find(peer.channel) < 0 &&
+                tg_gui_update.peer_count < TG_GUI_UPDATE_CHANNELS_MAX) {
+                tg_gui_update.peers[tg_gui_update.peer_count++] = peer;
+            }
         } else if (sscanf(line, "checked %lu", &a) == 1) {
             tg_gui_update.checked = a;
         } else if (strncmp(line, "found ", 6) == 0) {
@@ -33359,6 +33493,7 @@ static void tg_gui_update_store(void)
 {
     char v[24];
     FILE *f;
+    int k;
 
     (void)mkdir("data", 0777);
     f = tg_file_fopen_replace(tg_gui_update_file, "w");
@@ -33366,10 +33501,13 @@ static void tg_gui_update_store(void)
         return;
     }
     fprintf(f, "check %d\n", tg_gui_update.off ? 0 : 1);
-    if (tg_gui_update.has_peer) {
-        fprintf(f, "peer %s %lx %lx %lx %lx\n", tg_gui_update.channel,
-                tg_gui_update.id_hi, tg_gui_update.id_lo,
-                tg_gui_update.hash_hi, tg_gui_update.hash_lo);
+    for (k = 0; k < tg_gui_update.peer_count; ++k) {
+        const tg_gui_update_peer *p = &tg_gui_update.peers[k];
+
+        if (tg_update_listed(p->channel)) { /* one off the list is let go */
+            fprintf(f, "peer %s %lx %lx %lx %lx\n", p->channel, p->id_hi,
+                    p->id_lo, p->hash_hi, p->hash_lo);
+        }
     }
     if (tg_gui_update.checked != 0UL) {
         fprintf(f, "checked %lu\n", tg_gui_update.checked);
@@ -33385,10 +33523,12 @@ static void tg_gui_update_store(void)
     fclose(f);
 }
 
-/* Public: 1 when this build has a channel to look at. */
+/* Public: 1 when this build has at least one channel to look at. */
 int tg_gui_session_update_possible(void)
 {
-    return tg_gui_update_channel[0] != '\0';
+    char one[TG_GUI_UPDATE_NAME_MAX];
+
+    return tg_update_channel_at(tg_gui_update_channels, 0, one, sizeof(one));
 }
 
 int tg_gui_session_update_enabled(void)
@@ -33404,8 +33544,8 @@ void tg_gui_session_update_set_enabled(int on)
     tg_gui_update_store();
 }
 
-/* Public: the newer version the channel named, "0.3", for About; "" when
-   there is none, when the switch is off, or in a build without a channel. */
+/* Public: the newer version the channels named, "0.3", for About; "" when
+   there is none, when the switch is off, or in a build without channels. */
 const char *tg_gui_session_update_newer(void)
 {
     static char text[24];
@@ -33413,7 +33553,7 @@ const char *tg_gui_session_update_newer(void)
 
     text[0] = '\0';
     tg_gui_update_load();
-    if (tg_gui_update_channel[0] != '\0' && !tg_gui_update.off &&
+    if (tg_gui_session_update_possible() && !tg_gui_update.off &&
         tg_gui_update.has_found &&
         tg_update_parse(tg_gui_update_own, own, 0) &&
         tg_update_cmp(tg_gui_update.found, own) > 0) {
@@ -33422,32 +33562,45 @@ const char *tg_gui_session_update_newer(void)
     return text;
 }
 
-/* Asks the channel: 0 = it answered (found raised when it named a version),
-   -1 = it could not be asked, to try again soon. */
-static int tg_gui_update_ask(FILE *quiet)
+/* A version one channel named, into the round's best when it is higher. */
+static void tg_gui_update_raise(const unsigned long v[3])
+{
+    if (!tg_gui_update.has_best || tg_update_cmp(v, tg_gui_update.best) > 0) {
+        tg_gui_update.best[0] = v[0];
+        tg_gui_update.best[1] = v[1];
+        tg_gui_update.best[2] = v[2];
+        tg_gui_update.has_best = 1;
+    }
+}
+
+/* Asks one channel: 0 = it was asked, or has nothing to read today (the
+   round's best raised when it named a version), -1 = it could not be asked,
+   to try again soon. */
+static int tg_gui_update_ask(const char *channel, FILE *quiet)
 {
     static unsigned char query[192];
     static const char label[] = "update notice";
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
+    tg_gui_update_peer peer;
     unsigned long best[3];
     unsigned long i;
     char emsg[48];
     int had = 0;
+    int at;
     int rc;
 
     if (tg_shared_message_texts_busy) {
         return -1;
     }
-    if (!tg_gui_update.has_peer ||
-        strcmp(tg_gui_update.channel, tg_gui_update_channel) != 0) {
+    at = tg_update_peer_find(channel);
+    if (at < 0) {
         const tg_mtproto_peer_cache_entry *e;
 
-        tg_gui_update.has_peer = 0;
         tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-        if (strlen(tg_gui_update_channel) >= sizeof(tg_gui_update.channel) ||
+        if (strlen(channel) >= sizeof(peer.channel) ||
             tg_mtproto_build_contacts_resolve_username_flags(
-                &writer, tg_gui_update_channel) != TG_MTPROTO_TL_OK) {
+                &writer, channel) != TG_MTPROTO_TL_OK) {
             return 0;
         }
         rc = tg_gui_session_peer_request(query, writer.length, &result,
@@ -33462,28 +33615,33 @@ static int tg_gui_update_ask(FILE *quiet)
                 result.result_body_length, &tg_peer_cache_scratch) !=
                 TG_MTPROTO_TL_OK ||
             tg_peer_cache_scratch.count == 0UL) {
-            tg_gui_log("update: the channel's name was not resolved");
-            return 0; /* asked: nothing to read today */
+            tg_gui_log("update: a channel's name was not resolved");
+            return 0; /* asked: nothing to read there today */
         }
         e = &tg_peer_cache_scratch.entries[0];
         if (e->peer_constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
             !e->has_access_hash) {
-            tg_gui_log("update: that name is not a public channel");
+            tg_gui_log("update: a name is not a public channel or group");
             return 0;
         }
-        strcpy(tg_gui_update.channel, tg_gui_update_channel);
-        tg_gui_update.id_hi = e->id_hi;
-        tg_gui_update.id_lo = e->id_lo;
-        tg_gui_update.hash_hi = e->access_hash_hi;
-        tg_gui_update.hash_lo = e->access_hash_lo;
-        tg_gui_update.has_peer = 1;
+        memset(&peer, 0, sizeof(peer));
+        strcpy(peer.channel, channel);
+        peer.id_hi = e->id_hi;
+        peer.id_lo = e->id_lo;
+        peer.hash_hi = e->access_hash_hi;
+        peer.hash_lo = e->access_hash_lo;
+        tg_update_peer_keep(&peer);
+        at = tg_update_peer_find(channel);
+        if (at < 0) {
+            return 0;
+        }
     }
+    peer = tg_gui_update.peers[at];
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     if (tg_mtproto_build_messages_search_peer(
-            &writer, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR,
-            tg_gui_update.id_hi, tg_gui_update.id_lo, tg_gui_update.hash_hi,
-            tg_gui_update.hash_lo, 1, tg_gui_update_name, 0UL,
-            TG_GUI_UPDATE_POSTS) != TG_MTPROTO_TL_OK) {
+            &writer, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, peer.id_hi,
+            peer.id_lo, peer.hash_hi, peer.hash_lo, 1, tg_gui_update_name,
+            0UL, TG_GUI_UPDATE_POSTS) != TG_MTPROTO_TL_OK) {
         return 0;
     }
     rc = tg_gui_session_peer_request(query, writer.length, &result, label,
@@ -33492,10 +33650,10 @@ static int tg_gui_update_ask(FILE *quiet)
         return -1;
     }
     if (rc != 0) {
-        /* the channel went away or changed hands: look its name up again
-           at the next look */
-        tg_gui_update.has_peer = 0;
-        tg_gui_log("update: the channel refused the search");
+        /* the channel went away or changed hands: its name is looked up
+           again at the next round */
+        tg_update_peer_drop(at);
+        tg_gui_log("update: a channel refused the search");
         return 0;
     }
     if (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
@@ -33516,18 +33674,66 @@ static int tg_gui_update_ask(FILE *quiet)
     }
     tg_shared_message_texts_busy = 0;
     if (had) {
-        tg_gui_update.found[0] = best[0];
-        tg_gui_update.found[1] = best[1];
-        tg_gui_update.found[2] = best[2];
-        tg_gui_update.has_found = 1;
+        tg_gui_update_raise(best);
     }
     return 0;
 }
 
+/* a variable, so that the self-test can go round without a network */
+static int (*tg_gui_update_ask_fn)(const char *channel, FILE *quiet) =
+    tg_gui_update_ask;
+
+/* 1 when the look has something to ask now: a day gone since the last
+   round ended (a round under way has not ended, so it stays due; a clock
+   that went back makes the unsigned difference huge, due as well). */
+static int tg_gui_update_due(unsigned long now)
+{
+    return tg_gui_update.checked == 0UL ||
+           now - tg_gui_update.checked >= TG_GUI_UPDATE_EVERY;
+}
+
+/* One step of the day's round: at most one channel is asked. 0 = the round
+   is over (what it read is in found), 2 = a channel was asked and others
+   wait their turn, -1 = that channel could not be asked: the same one is
+   tried at the next step. */
+static int tg_gui_update_round(unsigned long now, FILE *quiet)
+{
+    char name[TG_GUI_UPDATE_NAME_MAX];
+
+    if (tg_gui_update.next == 0) {
+        tg_gui_update.next = 1;
+        tg_gui_update.has_best = 0;
+    }
+    if (tg_update_channel_at(tg_gui_update_channels, tg_gui_update.next - 1,
+                             name, sizeof(name))) {
+        if (tg_gui_update_ask_fn(name, quiet) != 0) {
+            return -1;
+        }
+        ++tg_gui_update.next;
+        if (tg_update_channel_at(tg_gui_update_channels,
+                                 tg_gui_update.next - 1, name,
+                                 sizeof(name))) {
+            tg_gui_update_store(); /* a channel just looked up is kept */
+            return 2;
+        }
+    }
+    tg_gui_update.next = 0;
+    if (tg_gui_update.has_best) {
+        tg_gui_update.found[0] = tg_gui_update.best[0];
+        tg_gui_update.found[1] = tg_gui_update.best[1];
+        tg_gui_update.found[2] = tg_gui_update.best[2];
+        tg_gui_update.has_found = 1;
+    }
+    tg_gui_update.checked = now;
+    tg_gui_update_store();
+    return 0;
+}
+
 /* Public: the look, to call now and then from the window's quiet moments;
-   it asks Telegram at most once a day. 1 = `line` holds a notice to show
-   (once for each new version), 0 = nothing to say, -1 = the channel could
-   not be asked this time. */
+   it goes round the channels once a day at most, one channel at each call.
+   1 = `line` holds a notice to show (once for each new version), 0 =
+   nothing to say, 2 = more channels to ask: call again soon, -1 = a channel
+   could not be asked this time. */
 int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream)
 {
     char text[96];
@@ -33541,7 +33747,7 @@ int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream)
         line[0] = '\0';
     }
     if (!tg_gui_session_state.open || stream == 0 || line == 0 ||
-        size == 0UL || tg_gui_update_channel[0] == '\0') {
+        size == 0UL || !tg_gui_session_update_possible()) {
         return 0;
     }
     tg_gui_update_load();
@@ -33549,21 +33755,18 @@ int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream)
         return 0;
     }
     now = (unsigned long)time(0);
-    if (tg_gui_update.checked == 0UL || now < tg_gui_update.checked ||
-        now - tg_gui_update.checked >= TG_GUI_UPDATE_EVERY) {
+    if (tg_gui_update_due(now)) {
         FILE *quiet = tg_mtproto_open_quiet_stream(stream);
         unsigned long prev_timeout = tg_net_connect_timeout_seconds();
         int rc;
 
         tg_net_set_connect_timeout_seconds(10UL);
-        rc = tg_gui_update_ask(quiet);
+        rc = tg_gui_update_round(now, quiet);
         tg_net_set_connect_timeout_seconds(prev_timeout);
         tg_mtproto_close_quiet_stream(quiet, stream);
         if (rc != 0) {
-            return -1;
+            return rc;
         }
-        tg_gui_update.checked = now;
-        tg_gui_update_store();
     }
     newer = tg_gui_session_update_newer();
     if (newer[0] == '\0' ||
@@ -33591,9 +33794,43 @@ int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream)
 #endif /* !TG_NO_GUI: the update notice */
 
 #if !defined(TG_NO_GUI) && !defined(TG_NO_SELFTEST)
+/* What the channels of the self-test's round answer: the version each one
+   names ("" = none), and the one that cannot be asked the first time. */
+static const char *tg_update_fake_says[3];
+static int tg_update_fake_fails; /* 1-based, 0 = none; cleared once it failed */
+static char tg_update_fake_asked[8][TG_GUI_UPDATE_NAME_MAX];
+static int tg_update_fake_calls;
+
+static int tg_update_fake_ask(const char *channel, FILE *quiet)
+{
+    static const char *const names[3] = { "one", "two", "three" };
+    unsigned long v[3];
+    int k;
+
+    (void)quiet;
+    if (tg_update_fake_calls < 8) {
+        strcpy(tg_update_fake_asked[tg_update_fake_calls], channel);
+    }
+    ++tg_update_fake_calls;
+    for (k = 0; k < 3; ++k) {
+        if (strcmp(channel, names[k]) == 0) {
+            if (tg_update_fake_fails == k + 1) {
+                tg_update_fake_fails = 0;
+                return -1;
+            }
+            if (tg_update_parse(tg_update_fake_says[k], v, 0)) {
+                tg_gui_update_raise(v);
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+
 /* The update notice without a network: what counts as an announcement,
-   which version is the higher, the state kept between two runs, and that
-   nothing is said twice or with the switch off. */
+   which version is the higher, the list of channels, the round that asks
+   them one at a time, the state kept between two runs, and that nothing is
+   said twice or with the switch off. */
 static int tg_gui_update_self_test(void)
 {
     static const char path[] = "telegram-update-self-test.tmp";
@@ -33613,11 +33850,18 @@ static int tg_gui_update_self_test(void)
         { "amigram 0.9", 0, 0UL, 0UL, 0UL },
         { "Amigram0.9", 0, 0UL, 0UL, 0UL }
     };
+    static const char long_list[] =
+        "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10";
+    static const char odd_list[] =
+        " one, @Two;three "
+        "aNameThatIsFarTooLongToBeTheUsernameOfAnyTelegramChannel,four";
     const char *keep_file = tg_gui_update_file;
-    const char *keep_channel = tg_gui_update_channel;
+    const char *keep_channels = tg_gui_update_channels;
     const char *keep_own = tg_gui_update_own;
+    tg_gui_update_peer peer;
     unsigned long v[3];
     unsigned long w[3];
+    char name[TG_GUI_UPDATE_NAME_MAX];
     char line[64];
     unsigned int i;
     int ok = 1;
@@ -33641,36 +33885,94 @@ static int tg_gui_update_self_test(void)
          tg_update_cmp(v, v) == 0 && tg_update_parse("1.0", w, 0) &&
          tg_update_cmp(w, v) > 0 && !tg_update_parse("x", v, 0) &&
          !tg_update_parse("", v, 0);
+    /* the list of channels */
+    ok = ok && tg_update_channel_at(odd_list, 0, name, sizeof(name)) &&
+         strcmp(name, "one") == 0 &&
+         tg_update_channel_at(odd_list, 1, name, sizeof(name)) &&
+         strcmp(name, "Two") == 0 &&
+         tg_update_channel_at(odd_list, 2, name, sizeof(name)) &&
+         strcmp(name, "three") == 0 &&
+         tg_update_channel_at(odd_list, 3, name, sizeof(name)) &&
+         strcmp(name, "four") == 0 && /* the overlong one is passed over */
+         !tg_update_channel_at(odd_list, 4, name, sizeof(name)) &&
+         !tg_update_channel_at(odd_list, -1, name, sizeof(name)) &&
+         !tg_update_channel_at("", 0, name, sizeof(name)) &&
+         !tg_update_channel_at(" ,;@ ", 0, name, sizeof(name)) &&
+         tg_update_channel_at("solo", 0, name, sizeof(name)) &&
+         strcmp(name, "solo") == 0 &&
+         !tg_update_channel_at("solo", 1, name, sizeof(name)) &&
+         tg_update_channel_at(long_list, TG_GUI_UPDATE_CHANNELS_MAX - 1,
+                              name, sizeof(name)) &&
+         strcmp(name, "c8") == 0 &&
+         !tg_update_channel_at(long_list, TG_GUI_UPDATE_CHANNELS_MAX, name,
+                               sizeof(name)) &&
+         tg_update_same_name("AmigaNews", "amiganews") &&
+         !tg_update_same_name("amiganews", "amiganew") &&
+         !tg_update_same_name("amiga", "amigo");
+    if (!ok) {
+        puts("probe self-test: update notice: list of channels read wrong");
+        return 2;
+    }
     /* the state between two runs */
     (void)remove(path);
     tg_gui_update_file = path;
-    tg_gui_update_channel = "amigram_test";
+    tg_gui_update_channels = "amigram_test,second_test";
     tg_gui_update_own = "0.2";
     memset(&tg_gui_update, 0, sizeof(tg_gui_update));
     tg_gui_update_load();
-    ok = ok && !tg_gui_update.off && !tg_gui_update.has_peer &&
+    ok = ok && !tg_gui_update.off && tg_gui_update.peer_count == 0 &&
+         tg_gui_session_update_possible() &&
          tg_gui_session_update_enabled() &&
          tg_gui_session_update_newer()[0] == '\0';
-    strcpy(tg_gui_update.channel, "amigram_test");
-    tg_gui_update.id_hi = 0x1UL;
-    tg_gui_update.id_lo = 0x2345678UL;
-    tg_gui_update.hash_hi = 0xabcdef01UL;
-    tg_gui_update.hash_lo = 0x9UL;
-    tg_gui_update.has_peer = 1;
+    memset(&peer, 0, sizeof(peer));
+    strcpy(peer.channel, "amigram_test");
+    peer.id_hi = 0x1UL;
+    peer.id_lo = 0x2345678UL;
+    peer.hash_hi = 0xabcdef01UL;
+    peer.hash_lo = 0x9UL;
+    tg_update_peer_keep(&peer);
+    strcpy(peer.channel, "Second_Test"); /* as Telegram spells it */
+    peer.id_lo = 0x777UL;
+    tg_update_peer_keep(&peer);
+    strcpy(peer.channel, "gone_test"); /* a channel no longer in the list */
+    peer.id_lo = 0x888UL;
+    tg_update_peer_keep(&peer);
+    peer.id_lo = 0x999UL;              /* looked up again: no second slot */
+    tg_update_peer_keep(&peer);
+    ok = ok && tg_gui_update.peer_count == 3 &&
+         tg_update_peer_find("GONE_TEST") == 2 &&
+         tg_gui_update.peers[2].id_lo == 0x999UL;
     tg_gui_update.checked = 1700000000UL;
     tg_gui_update.has_found = tg_update_parse("0.3", tg_gui_update.found, 0);
     tg_gui_update_store();
+    {
+        /* a file with a channel written twice: the first line counts */
+        FILE *twice = fopen(path, "a");
+
+        if (twice != 0) {
+            fputs("peer AMIGRAM_TEST 5 5 5 5\n", twice);
+            fclose(twice);
+        }
+    }
     memset(&tg_gui_update, 0, sizeof(tg_gui_update));
     tg_gui_update_load();
-    ok = ok && tg_gui_update.has_peer &&
-         strcmp(tg_gui_update.channel, "amigram_test") == 0 &&
-         tg_gui_update.id_hi == 0x1UL &&
-         tg_gui_update.id_lo == 0x2345678UL &&
-         tg_gui_update.hash_hi == 0xabcdef01UL &&
-         tg_gui_update.hash_lo == 0x9UL &&
+    ok = ok && tg_gui_update.peer_count == 2 &&
+         tg_update_peer_find("amigram_test") == 0 &&
+         tg_update_peer_find("second_test") == 1 &&
+         tg_update_peer_find("gone_test") < 0 &&
+         tg_gui_update.peers[0].id_hi == 0x1UL &&
+         tg_gui_update.peers[0].id_lo == 0x2345678UL &&
+         tg_gui_update.peers[0].hash_hi == 0xabcdef01UL &&
+         tg_gui_update.peers[0].hash_lo == 0x9UL &&
+         tg_gui_update.peers[1].id_lo == 0x777UL &&
          tg_gui_update.checked == 1700000000UL && tg_gui_update.has_found &&
          tg_gui_update.found[1] == 3UL && !tg_gui_update.has_told &&
+         tg_gui_update.next == 0 &&
          strcmp(tg_gui_session_update_newer(), "0.3") == 0;
+    tg_update_peer_drop(0);
+    ok = ok && tg_gui_update.peer_count == 1 &&
+         tg_update_peer_find("second_test") == 0 &&
+         tg_update_peer_find("amigram_test") < 0;
     /* the same version, or an older one, is nothing new */
     tg_gui_update_own = "0.3";
     ok = ok && tg_gui_session_update_newer()[0] == '\0';
@@ -33690,17 +33992,98 @@ static int tg_gui_update_self_test(void)
     line[0] = 'x';
     ok = ok && tg_gui_session_update_look(line, sizeof(line), stdout) == 0 &&
          line[0] == '\0';
-    /* a build without a channel has nothing to look at */
-    tg_gui_update_channel = "";
+    if (!ok) {
+        puts("probe self-test: update notice: kept state failed");
+        return 2;
+    }
+    /* the round: three channels, one asked at each step, the highest
+       version of the round kept when it ends */
+    tg_gui_update_channels = "one,two,three";
+    tg_gui_update_ask_fn = tg_update_fake_ask;
+    memset(&tg_gui_update, 0, sizeof(tg_gui_update));
+    tg_gui_update.loaded = 1;
+    tg_update_fake_calls = 0;
+    tg_update_fake_fails = 0;
+    tg_update_fake_says[0] = "0.3";
+    tg_update_fake_says[1] = "0.5";
+    tg_update_fake_says[2] = "0.4";
+    ok = tg_gui_update_due(1000000UL) &&
+         tg_gui_update_round(1000000UL, stdout) == 2 &&
+         tg_update_fake_calls == 1 &&
+         strcmp(tg_update_fake_asked[0], "one") == 0 &&
+         !tg_gui_update.has_found && tg_gui_update.checked == 0UL &&
+         tg_gui_update_due(1000001UL) &&
+         tg_gui_update_round(1000001UL, stdout) == 2 &&
+         tg_update_fake_calls == 2 &&
+         strcmp(tg_update_fake_asked[1], "two") == 0 &&
+         !tg_gui_update.has_found &&
+         tg_gui_update_round(1000002UL, stdout) == 0 &&
+         tg_update_fake_calls == 3 &&
+         strcmp(tg_update_fake_asked[2], "three") == 0 &&
+         tg_gui_update.has_found && tg_gui_update.found[0] == 0UL &&
+         tg_gui_update.found[1] == 5UL && tg_gui_update.next == 0 &&
+         tg_gui_update.checked == 1000002UL &&
+         /* the same day: nothing is due */
+         !tg_gui_update_due(1000002UL + 3600UL) &&
+         !tg_gui_update_due(1000002UL + TG_GUI_UPDATE_EVERY - 1UL) &&
+         tg_gui_update_due(1000002UL + TG_GUI_UPDATE_EVERY) &&
+         tg_gui_update_due(999UL); /* a clock gone back */
+    if (!ok) {
+        puts("probe self-test: update notice: first round failed");
+        return 2;
+    }
+    /* the next day: the second channel cannot be asked at first and is
+       tried again; what the round reads replaces what the last one read,
+       also when it is lower (an announcement taken back) */
+    tg_update_fake_calls = 0;
+    tg_update_fake_fails = 2;
+    tg_update_fake_says[0] = "0.3";
+    tg_update_fake_says[1] = "";
+    tg_update_fake_says[2] = "0.4";
+    ok = tg_gui_update_round(2000000UL, stdout) == 2 &&
+         tg_gui_update_round(2000001UL, stdout) == -1 &&
+         tg_update_fake_calls == 2 && tg_gui_update.next == 2 &&
+         tg_gui_update.found[1] == 5UL &&
+         tg_gui_update.checked == 1000002UL &&
+         tg_gui_update_due(2000002UL) &&
+         tg_gui_update_round(2000002UL, stdout) == 2 &&
+         tg_update_fake_calls == 3 &&
+         strcmp(tg_update_fake_asked[2], "two") == 0 &&
+         tg_gui_update_round(2000003UL, stdout) == 0 &&
+         tg_update_fake_calls == 4 &&
+         strcmp(tg_update_fake_asked[3], "three") == 0 &&
+         tg_gui_update.found[1] == 4UL &&
+         tg_gui_update.checked == 2000003UL;
+    /* a round in which no channel names a version keeps the last one,
+       and nothing of the round before leaks into it */
+    tg_update_fake_calls = 0;
+    tg_update_fake_says[0] = "";
+    tg_update_fake_says[2] = "";
+    tg_gui_update.found[1] = 9UL;
+    ok = ok && tg_gui_update_round(3000000UL, stdout) == 2 &&
+         tg_gui_update_round(3000000UL, stdout) == 2 &&
+         tg_gui_update_round(3000000UL, stdout) == 0 &&
+         tg_update_fake_calls == 3 && tg_gui_update.has_found &&
+         tg_gui_update.found[1] == 9UL &&
+         tg_gui_update.checked == 3000000UL;
+    /* one channel alone: the round is one step */
+    tg_gui_update_channels = "three";
+    tg_update_fake_calls = 0;
+    tg_update_fake_says[2] = "0.6";
+    ok = ok && tg_gui_update_round(4000000UL, stdout) == 0 &&
+         tg_update_fake_calls == 1 && tg_gui_update.found[1] == 6UL;
+    tg_gui_update_ask_fn = tg_gui_update_ask;
+    /* a build without channels has nothing to look at */
+    tg_gui_update_channels = "";
     ok = ok && !tg_gui_session_update_possible() &&
          tg_gui_session_update_newer()[0] == '\0';
     (void)remove(path);
     tg_gui_update_file = keep_file;
-    tg_gui_update_channel = keep_channel;
+    tg_gui_update_channels = keep_channels;
     tg_gui_update_own = keep_own;
     memset(&tg_gui_update, 0, sizeof(tg_gui_update));
     if (!ok) {
-        puts("probe self-test: update notice failed");
+        puts("probe self-test: update notice: the round failed");
         return 2;
     }
     return 0;

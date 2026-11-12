@@ -413,12 +413,13 @@ Middle, more interface:
   does not hold (a spoiler, a link with its own text, a mention by
   name, underline);
 - the update notice (its section): step 1 is in place and asleep. The
-  client can look a public channel up by name, search its posts for
-  "Amigram" and a version (`contacts.resolveUsername`,
-  `messages.search`), compare it with its own and say it once in the
-  status line and in About, once a day, with a switch in the settings.
-  What is missing is the channel: `TG_UPDATE_CHANNEL` is empty, so
-  nothing is asked yet;
+  client can look public channels and groups up by name, search their
+  posts for "Amigram" and a version (`contacts.resolveUsername`,
+  `messages.search`), take the highest of the day's round, compare it
+  with its own and say it once in the status line and in About, with a
+  switch in the settings. It reads a list of up to eight names, one
+  channel at each quiet moment. What is missing is the list:
+  `TG_UPDATE_CHANNELS` is empty, so nothing is asked yet;
 - stickers through a WEBP datatype where the user has one (see "let
   datatypes read what we cannot"): a fallback, never a requirement, and
   AROS keeps the emoji.
@@ -612,9 +613,15 @@ not through HTTPS: the TLS path is compiled out on every lane
 new attack surface on the slowest machines.
 
 The natural channel is the one the client already speaks. Releases get
-announced on a Telegram channel; resolving a public channel by username
-and reading its history is existing code, and fetching the attachment is
-the same bounded, cancellable, multi-DC download used for any file.
+announced on Telegram, on one channel or on several (the notice reads a
+list, so the same announcement can live where each community already
+is); resolving a public channel by username and reading its history is
+existing code, and fetching the attachment is the same bounded,
+cancellable, multi-DC download used for any file. A group can be in the
+list as well, with one difference to keep in mind: in a channel only its
+administrators post, in a group any member can write the words that
+raise the notice. The notice only says that a version exists, so the
+worst a false one does is send somebody to look.
 
 1. Notice only: read the latest published version, compare it with
    `TG_VERSION`, and say that a newer one exists and where to get it.

@@ -12217,9 +12217,10 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         tg_gui_window_session_changed(session_dirty, header_dirty);
     }
     /* The update notice: a look a minute after the start at the earliest,
-       never while the user types or a transfer runs. The session asks
-       Telegram once a day at most; here it is only offered the chance now
-       and then (sooner again when the channel could not be asked). */
+       never while the user types or a transfer runs. The session goes
+       round its channels once a day at most, one at each look; here it is
+       only offered the chance now and then (soon again while channels wait
+       their turn, sooner than usual when one could not be asked). */
     if (state->update_can && state->update_check && !state->composing &&
         !tg_gui_session_transfer_busy() && session_boot != (time_t)-1 &&
         now >= session_boot && (unsigned long)(now - session_boot) >= 60UL &&
@@ -12227,7 +12228,8 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         char uline[TG_GUI_NAME_MAX];
         int urc = tg_gui_session_update_look(uline, sizeof(uline), stdout);
 
-        tg_gui_update_next = now + (time_t)(urc < 0 ? 600 : 3600);
+        tg_gui_update_next =
+            now + (time_t)(urc < 0 ? 600 : urc == 2 ? 20 : 3600);
         if (urc == 1) {
             tg_gui_window_copy(((tg_gui_state *)state)->status,
                                sizeof(state->status), uline);

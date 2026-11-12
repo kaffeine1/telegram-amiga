@@ -116,16 +116,18 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   under an open menu. The marks then follow a Mute or Unmute from here,
   at once, or from another device.
 - The update notice, not switched on yet. Releases will be announced on
-  a public Telegram channel, in a post that says "Amigram" and the
-  version. Once a day, at a quiet moment, the client asks that channel
-  for its newest posts with the program's name in them and takes the
-  highest version they name; when it is higher than the one running,
-  the status line says so, once for each version, and About says it for
-  as long as it holds. Nothing is downloaded and nothing is installed.
+  public Telegram channels or groups, one or several, in a post that
+  says "Amigram" and the version. Once a day the client goes round
+  them, one at each quiet moment: it asks a channel for its newest
+  posts with the program's name in them, and the highest version the
+  round reads counts; when it is higher than the one running, the
+  status line says so, once for each version, and About says it for as
+  long as it holds. Nothing is downloaded and nothing is installed.
   "Check for updates" in the settings switches it off; what it knows is
-  kept in `data/telegram-update.txt`. The channel's name
-  (`TG_UPDATE_CHANNEL`) is still empty: until it is set the client
-  never looks and that line of the settings is greyed.
+  kept in `data/telegram-update.txt`. The list of channels
+  (`TG_UPDATE_CHANNELS`, eight names at most) is still empty: until it
+  is set the client never looks and that line of the settings is
+  greyed.
 - Albums, and several files at once. The requester of "Send photo..."
   and of "Send file...", from the menus or from the paperclip, now
   takes several files: hold
