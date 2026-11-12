@@ -404,8 +404,9 @@ Middle, more interface:
   several), and stopped (Stop poll in the menu of one's own poll:
   `messages.editMessage` with the poll's media alone and its closed
   flag), and voted in the text client (/vote on the last poll shown).
-  Still missing: a quiz's explanation, who voted in a public poll,
-  making a quiz or a poll with public votes;
+  A quiz's explanation shows once it is answered (`pollResults`
+  solution), and a poll with public votes says so. Still missing: who
+  voted in a public poll, making a quiz or a poll with public votes;
 - formatting typed in the composer: done (`**bold**`, `__italic__`,
   `~~strike~~`, `||spoiler||`, one backtick for code and three for a
   block become the message's entities when it is sent, counted in

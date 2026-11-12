@@ -7811,6 +7811,34 @@ static tg_mtproto_tl_status tg_read_poll_results(tg_mtproto_tl_reader *reader,
             TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    /* recent_voters:flags.3?Vector<Peer>, then a quiz's explanation,
+       solution:flags.4?string with its entities (left unread: nothing of
+       the results comes after them). What follows the votes is a bonus:
+       when it does not read, the votes above still stand. */
+    if ((flags & 8UL) != 0UL) {
+        tg_mtproto_dialog_peer voter;
+
+        if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+            count > 64UL) {
+            return TG_MTPROTO_TL_OK;
+        }
+        for (i = 0UL; i < count; ++i) {
+            if (tg_read_peer_ref(reader, &voter) != TG_MTPROTO_TL_OK) {
+                return TG_MTPROTO_TL_OK;
+            }
+        }
+    }
+    if ((flags & 16UL) != 0UL) {
+        int cut = 0;
+
+        if (tg_read_string_copy_cut(reader, poll->solution,
+                                    sizeof(poll->solution), &cut) !=
+            TG_MTPROTO_TL_OK) {
+            poll->solution[0] = '\0';
+            return TG_MTPROTO_TL_OK;
+        }
+        tg_msg_sanitize_markers(poll->solution);
+    }
     return TG_MTPROTO_TL_OK;
 }
 
@@ -7854,6 +7882,10 @@ static const tg_mtproto_poll *tg_poll_store(const tg_mtproto_poll *in)
                 slot->has_results = old.has_results;
                 slot->total_voters = old.total_voters;
             }
+        }
+        if (in->solution[0] == '\0') {
+            /* the explanation comes once, with the answer given */
+            memcpy(slot->solution, old.solution, sizeof(slot->solution));
         }
     }
     tg_poll_stamp[at] = ++tg_poll_clock;
@@ -7927,6 +7959,13 @@ void tg_mtproto_poll_text(const tg_mtproto_poll *poll, char *out,
         tg_poll_text_add(out, size, &n, ", closed");
     } else if (poll->multiple && !poll->voted) {
         tg_poll_text_add(out, size, &n, ", several answers allowed");
+    }
+    if (poll->public_voters) {
+        tg_poll_text_add(out, size, &n, ", votes are public");
+    }
+    if (poll->solution[0] != '\0') {
+        tg_poll_text_add(out, size, &n, "\nWhy: ");
+        tg_poll_text_add(out, size, &n, poll->solution);
     }
     /* Cut inside a character: back to its start. A character that is
        whole at the very end stays. */
@@ -10701,6 +10740,81 @@ static int tg_poll_self_test(void)
     ok = ok && p != 0 && p->quiz && p->multiple &&
          strcmp(text, "[Quiz] Pizza o pasta?\n1. 50% Pizza (your answer)\n"
                       "2. 50% Pasta (right)\n2 votes") == 0;
+    {
+        /* A quiz answered, with who voted last and why the answer is the
+           right one: the explanation is kept and shown, and stays when
+           the votes of the others come without it. A poll with public
+           votes says so. */
+        const tg_mtproto_poll *q;
+
+        /* first seen before the answer: no explanation yet */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x5aUL, 8UL | 2UL);
+        tg_poll_test_results(&w, 1, 1UL, 1UL, 0, 0);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        ok = ok && tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+             tg_read_poll_results(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK;
+        q = tg_poll_store(&tg_poll_scratch);
+        ok = ok && q != 0 && q->solution[0] == '\0';
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x5aUL, 8UL | 2UL);
+        (void)tg_mtproto_tl_write_u32(&w, TG_POLL_RESULTS_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 2UL | 4UL | 8UL | 16UL);
+        (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 2UL);
+        (void)tg_mtproto_tl_write_u32(&w, TG_POLL_ANSWER_VOTERS_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 1UL);
+        (void)tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"0", 1UL);
+        (void)tg_mtproto_tl_write_u32(&w, 1UL);
+        (void)tg_mtproto_tl_write_u32(&w, TG_POLL_ANSWER_VOTERS_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 2UL);
+        (void)tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"1", 1UL);
+        (void)tg_mtproto_tl_write_u32(&w, 2UL);
+        (void)tg_mtproto_tl_write_u32(&w, 3UL); /* total_voters */
+        (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 1UL); /* one recent voter */
+        (void)tg_mtproto_tl_write_u32(&w, TG_PEER_USER_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x1234UL);
+        (void)tg_write_string(&w, "La pasta \xc3\xa8 pi\xc3\xb9 \034antica");
+        (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        ok = ok && tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+             tg_read_poll_results(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK;
+        q = tg_poll_store(&tg_poll_scratch);
+        tg_mtproto_poll_text(q, text, sizeof(text));
+        ok = ok && q != 0 && q->quiz && q->public_voters &&
+             q->total_voters == 3UL &&
+             strcmp(q->solution, "La pasta \xc3\xa8 pi\xc3\xb9  antica") == 0 &&
+             strcmp(text, "[Quiz] Pizza o pasta?\n1. 33% Pizza (your answer)\n"
+                          "2. 67% Pasta (right)\n3 votes, votes are public\n"
+                          "Why: La pasta \xc3\xa8 pi\xc3\xb9  antica") == 0;
+        /* someone else answers: the poll again and min results, with no
+           explanation in them */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        (void)tg_mtproto_tl_write_u32(&w, 1UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x5aUL);
+        tg_poll_test_poll(&w, 0x5aUL, 8UL | 2UL);
+        tg_poll_test_results(&w, 1, 2UL, 2UL, 0, 0);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        ok = ok && tg_mtproto_read_update_message_poll(&r, &hi, &lo) == 1;
+        q = tg_mtproto_poll_find(0UL, 0x5aUL);
+        ok = ok && q != 0 && q->total_voters == 4UL &&
+             strncmp(q->solution, "La pasta", 8U) == 0;
+        /* the poll after it starts without one */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        tg_poll_test_poll(&w, 0x5bUL, 8UL);
+        tg_poll_test_results(&w, 0, 1UL, 1UL, 1, 1);
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        ok = ok && tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+             tg_read_poll_results(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK;
+        q = tg_poll_store(&tg_poll_scratch);
+        ok = ok && q != 0 && q->solution[0] == '\0' && !q->public_voters;
+        if (!ok) {
+            puts("login self-test: a quiz's explanation or public votes");
+            return 2;
+        }
+    }
     /* A short buffer cuts the text; a poll with no vote yet says what
        kind it is. */
     tg_mtproto_poll_text(p, text, 12UL);

@@ -679,7 +679,10 @@ Messages
   and Send vote sends them. Once you have voted the message shows the
   share of each answer and the number of votes, and follows the votes
   of the others while the chat is open. Take back vote, in the same
-  menu, undoes it; the answer given to a quiz stays. In the text client
+  menu, undoes it; the answer given to a quiz stays, and the quiz then
+  shows its explanation, when it has one, on a line that starts with
+  "Why:". A poll whose votes are public says so next to the number of
+  votes. In the text client
   /vote 2 votes the second answer of the last poll shown (/vote 1 3
   where several are allowed) and /vote none takes the vote back.
 - "Create poll..." in the first menu makes a poll in the open chat: a
@@ -937,7 +940,10 @@ Messaggi
   cambia, e Send vote le manda. Dopo il voto il messaggio mostra la
   percentuale di ogni risposta e il numero dei voti, e segue i voti
   degli altri finche' la chat e' aperta. Take back vote, nello stesso
-  menu, lo ritira; la risposta data a un quiz resta. Nel client testuale
+  menu, lo ritira; la risposta data a un quiz resta, e il quiz mostra
+  allora la sua spiegazione, se ne ha una, su una riga che comincia con
+  "Why:". Un sondaggio con i voti pubblici lo dice accanto al numero
+  dei voti. Nel client testuale
   /vote 2 vota la seconda risposta dell'ultimo sondaggio mostrato
   (/vote 1 3 dove se ne possono scegliere piu' d'una) e /vote none
   ritira il voto.

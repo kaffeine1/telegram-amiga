@@ -627,6 +627,7 @@ typedef struct tg_mtproto_message_text {
 #define TG_MTPROTO_POLL_QUESTION_MAX 160
 #define TG_MTPROTO_POLL_ANSWER_MAX 64
 #define TG_MTPROTO_POLL_OPTION_MAX 8
+#define TG_MTPROTO_POLL_SOLUTION_MAX 240 /* a quiz's explanation */
 typedef struct tg_mtproto_poll_answer {
     char text[TG_MTPROTO_POLL_ANSWER_MAX];
     unsigned char option[TG_MTPROTO_POLL_OPTION_MAX]; /* what a vote sends */
@@ -648,6 +649,9 @@ typedef struct tg_mtproto_poll {
     unsigned char answer_count;
     unsigned long total_voters;
     char question[TG_MTPROTO_POLL_QUESTION_MAX];
+    /* What a quiz says once it is answered: why the right answer is the
+       right one. "" when there is none or it is not known yet. */
+    char solution[TG_MTPROTO_POLL_SOLUTION_MAX];
     tg_mtproto_poll_answer answers[TG_MTPROTO_POLL_ANSWERS_MAX];
 } tg_mtproto_poll;
 
