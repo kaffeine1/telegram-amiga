@@ -12267,6 +12267,47 @@ int tg_gui_self_test(void)
         state.messages[1] = saved1;
     }
 
+    /* A sticker whose picture is shown is a document that is nothing but
+       its picture: not a photo, not a file with a frame and a label, not
+       a sticker whose picture is not there. It is drawn small, where a
+       photo of the same size takes the room a photo may. */
+    {
+        static tg_gui_message saved; /* too big for the stack */
+        tg_gui_message *m = &state.messages[0];
+        tg_gui_bubble_geom geo;
+        int sticker_w;
+        int ok_sticker = 1;
+
+        saved = *m;
+        m->has_document = 1;
+        m->has_photo = 1;
+        m->photo_only = 1;
+        m->photo_width = 320UL;
+        m->photo_height = 320UL;
+        ok_sticker = ok_sticker && tg_gui_message_is_sticker_still(m) &&
+                     !tg_gui_message_is_sticker_still(0);
+        tg_gui_bubble_geometry(&backend, m, 0, 600, 18, 1, 0, &geo);
+        sticker_w = geo.photo_w;
+        ok_sticker = ok_sticker && sticker_w == TG_GUI_STICKER_MAX_W &&
+                     geo.photo_h == TG_GUI_STICKER_MAX_W;
+        m->has_document = 0; /* a photo */
+        tg_gui_bubble_geometry(&backend, m, 0, 600, 18, 1, 0, &geo);
+        ok_sticker = ok_sticker && !tg_gui_message_is_sticker_still(m) &&
+                     geo.photo_w > sticker_w;
+        m->has_document = 1;
+        m->photo_only = 0; /* a clip: its frame and its label */
+        ok_sticker = ok_sticker && !tg_gui_message_is_sticker_still(m);
+        m->photo_only = 1;
+        m->has_photo = 0; /* no picture to show */
+        ok_sticker = ok_sticker && !tg_gui_message_is_sticker_still(m);
+        *m = saved;
+        if (!ok_sticker) {
+            printf("gui self-test: a sticker's picture is told or sized "
+                   "wrong (%d wide)\n", sticker_w);
+            return 2;
+        }
+    }
+
     /* An album: the photos sent together are parts of one block. An
        incoming one has the name above its first part and none above the
        others; the time stands under the last part only; the parts are a
@@ -12581,6 +12622,36 @@ int tg_gui_self_test(void)
                               sizeof(value));
         ok_set = ok_set && strcmp(value, "[ ]") == 0;
         state.update_can = 0;
+        /* Sticker pictures: marked only where the user wants them and the
+           system can read them, and out of reach without inline photos,
+           which they are a kind of. */
+        {
+            int saved_inline = state.inline_photos;
+            int saved_stickers = state.stickers;
+            int saved_can = state.sticker_can;
+
+            state.inline_photos = 1;
+            state.stickers = 1;
+            state.sticker_can = 0;
+            tg_gui_settings_value(&state, TG_GUI_SET_STICKERS, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "[ ]") == 0 &&
+                     !tg_gui_settings_disabled(&state, TG_GUI_SET_STICKERS);
+            state.sticker_can = 1;
+            tg_gui_settings_value(&state, TG_GUI_SET_STICKERS, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "[x]") == 0;
+            state.stickers = 0;
+            tg_gui_settings_value(&state, TG_GUI_SET_STICKERS, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "[ ]") == 0;
+            state.inline_photos = 0;
+            ok_set = ok_set &&
+                     tg_gui_settings_disabled(&state, TG_GUI_SET_STICKERS);
+            state.inline_photos = saved_inline;
+            state.stickers = saved_stickers;
+            state.sticker_can = saved_can;
+        }
         state.arexx_port = 0;
         ok_set = ok_set &&
                  tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_SEND);
