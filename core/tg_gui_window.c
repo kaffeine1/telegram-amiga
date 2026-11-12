@@ -360,7 +360,8 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
     if (state == 0 || window == 0 ||
         (state->inline_photos_default_resolved &&
          state->emoji_default_resolved && state->avatars_default_resolved &&
-         state->notify_default_resolved)) {
+         state->notify_default_resolved &&
+         state->stickers_default_resolved)) {
         return;
     }
 #if defined(__amigaos3__) || defined(__amigaos4__)
@@ -384,6 +385,17 @@ static void tg_gui_window_resolve_graphics_defaults(tg_gui_state *state,
     tg_gui_graphics_preferences_resolve(state, classic_amiga,
                                        cpu_at_least_040, has_rtg);
     tg_gui_session_set_inline_photos(state->inline_photos);
+    /* Sticker pictures, now that their default is known: the datatype is
+       looked for only where they are wanted, and a sticker's still is
+       offered to the photo pipeline only where one reads it. */
+    state->sticker_can = state->stickers ? tg_image_dt_reads_webp() : 0;
+    tg_mtproto_set_sticker_stills(state->stickers && state->sticker_can);
+    if (!state->stickers_explicit && !state->stickers) {
+        tg_gui_log("stickers: default off (cpu < 040)");
+    } else if (state->stickers) {
+        tg_gui_log(state->sticker_can ? "stickers: a datatype reads WEBP"
+                                      : "stickers: no WEBP datatype");
+    }
     if (!state->inline_photos_explicit && !state->inline_photos) {
         if (!has_rtg && !cpu_at_least_040) {
             tg_gui_log("photo: inline default off (no RTG / cpu < 040)");
@@ -13847,7 +13859,7 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
     case TG_GUI_SET_STICKERS:
         /* Read when a chat's messages are: the stickers already on screen
            stay as they are until their chat is opened again. */
-        state->stickers = !state->stickers;
+        tg_gui_set_stickers(state, !state->stickers);
         if (state->stickers) {
             state->sticker_can = tg_image_dt_reads_webp();
         }
@@ -13855,8 +13867,9 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
         (void)mkdir("data", 0777);
         tg_gui_window_copy(
             state->status, sizeof(state->status),
-            tg_gui_emoji_preferences_save(TG_GUI_STICKERS_FILE,
-                                          state->stickers) != 0
+            tg_gui_emoji_preferences_save_choice(
+                    TG_GUI_STICKERS_FILE, state->stickers,
+                    state->stickers_explicit) != 0
                 ? "Could not save the sticker setting"
                 : !state->stickers ? "Stickers: shown as their emoji"
                 : !state->sticker_can
@@ -18946,23 +18959,15 @@ int tg_gui_run_window(tg_gui_state *state)
         tg_gui_emoji_preferences_load(TG_GUI_MARKDOWN_FILE, &state->markdown,
                                       &markdown_explicit);
     }
-    {
-        /* Sticker pictures: on, where the system has a WEBP datatype to
-           read them; off on the 68k, where reading one takes seconds,
-           until the user asks for them. The datatype is looked for only
-           when they are wanted. */
-        int stickers_explicit = 0;
-
-#if defined(__m68k__)
-        state->stickers = 0;
-#else
-        state->stickers = 1;
-#endif
-        tg_gui_emoji_preferences_load(TG_GUI_STICKERS_FILE, &state->stickers,
-                                      &stickers_explicit);
-        state->sticker_can = state->stickers ? tg_image_dt_reads_webp() : 0;
-        tg_mtproto_set_sticker_stills(state->stickers && state->sticker_can);
-    }
+    /* Sticker pictures: the choice saved, when there is one. The
+       machine's own default (off below the 68040) and the look for a WEBP
+       datatype wait for the window, with the other adaptive defaults. */
+    state->stickers = 1;
+    tg_gui_emoji_preferences_load(TG_GUI_STICKERS_FILE, &state->stickers,
+                                  &state->stickers_explicit);
+    state->stickers_default_resolved = 0;
+    state->sticker_can = 0;
+    tg_mtproto_set_sticker_stills(0);
     state->emoji_default_resolved = 0;
     tg_gui_avatar_preferences_load("data/telegram-avatars.txt",
                                    &state->avatars_enabled,

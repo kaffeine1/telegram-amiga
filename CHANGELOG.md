@@ -161,8 +161,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   datatype reads WEBP, or reading fails, a sticker stays the emoji it
   stands for, as before, and nothing is fetched. "Sticker pictures" in
   the settings switches it (`data/telegram-stickers.txt`): on by
-  default, off by default on 68k, where a datatype takes seconds for
-  each sticker, and it needs "Show inline photos". AROS has a WEBP
+  default, off by default on a 68k below the 68040, where a datatype
+  takes seconds for each sticker, and it needs "Show inline photos".
+  Like the photos' switch, a choice equal to the machine's own is kept
+  as "auto" and follows the machine the drawer is on. AROS has a WEBP
   datatype in the system; AmigaOS 3 (with picture.datatype V43 or
   later), AmigaOS 4 and MorphOS need one installed.
 - Who voted..., in the menu of a poll whose votes are public, once you

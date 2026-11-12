@@ -341,6 +341,18 @@ void tg_gui_graphics_preferences_resolve(tg_gui_state *state, int classic_amiga,
         }
         state->notify_default_resolved = 1;
     }
+    /* Sticker pictures need the processor, not the screen: a datatype
+       reads each one, in seconds on a classic Amiga below the 68040,
+       where they stay off until asked for. */
+    if (state->stickers_auto == 0) {
+        state->stickers_auto = (classic_amiga && !cpu_at_least_040) ? 1 : 2;
+    }
+    if (!state->stickers_default_resolved) {
+        if (!state->stickers_explicit) {
+            state->stickers = state->stickers_auto == 2;
+        }
+        state->stickers_default_resolved = 1;
+    }
     if (!state->emoji_enabled) {
         tg_gui_emoji_close(state);
     }
@@ -783,6 +795,19 @@ void tg_gui_set_avatars_enabled(tg_gui_state *state, int enabled)
     state->avatars_explicit =
         tg_gui_graphics_choice_explicit(state, state->avatars_enabled);
     state->avatars_default_resolved = 1;
+}
+
+void tg_gui_set_stickers(tg_gui_state *state, int enabled)
+{
+    if (state == 0) {
+        return;
+    }
+    state->stickers = enabled ? 1 : 0;
+    /* Equal to what the machine picks on its own, it is "auto"; before
+       the machine is sampled (0) every choice is explicit. */
+    state->stickers_explicit =
+        (state->stickers ? 2 : 1) != state->stickers_auto;
+    state->stickers_default_resolved = 1;
 }
 
 int tg_gui_emoji_inline_size(const tg_gui_state *state, int font_height)
@@ -14283,9 +14308,31 @@ int tg_gui_self_test(void)
                 printf("gui self-test: avatar hardware case %lu failed\n", i);
                 return 2;
             }
+            /* Sticker pictures follow the processor alone: off on a
+               classic Amiga below the 68040, on everywhere else, with or
+               without a graphics card. */
+            if (prefs->stickers != !(c[0] && !c[1]) ||
+                prefs->stickers_explicit ||
+                !prefs->stickers_default_resolved ||
+                prefs->stickers_auto != (prefs->stickers ? 2 : 1)) {
+                printf("gui self-test: sticker hardware case %lu failed\n",
+                       i);
+                return 2;
+            }
             tg_gui_graphics_preferences_resolve(prefs, 0, 1, 1);
-            if (prefs->inline_photos != c[7] || prefs->emoji_enabled != c[8]) {
+            if (prefs->inline_photos != c[7] || prefs->emoji_enabled != c[8] ||
+                prefs->stickers != !(c[0] && !c[1])) {
                 puts("gui self-test: graphics choice changed during window reopen");
+                return 2;
+            }
+            /* a saved choice wins over the machine's, either way */
+            memset(prefs, 0, sizeof(*prefs));
+            prefs->stickers_explicit = 1;
+            prefs->stickers = (c[0] && !c[1]) ? 1 : 0;
+            tg_gui_graphics_preferences_resolve(prefs, c[0], c[1], c[2]);
+            if (prefs->stickers != ((c[0] && !c[1]) ? 1 : 0) ||
+                !prefs->stickers_explicit) {
+                printf("gui self-test: saved sticker choice %lu lost\n", i);
                 return 2;
             }
         }
@@ -14318,7 +14365,24 @@ int tg_gui_self_test(void)
                 int explicit_choice;
 
                 memset(prefs, 0, sizeof(*prefs));
+                /* before the machine is sampled a choice is explicit */
+                tg_gui_set_stickers(prefs, value);
+                if (prefs->stickers != value || !prefs->stickers_explicit) {
+                    puts("gui self-test: early sticker choice not explicit");
+                    return 2;
+                }
+                memset(prefs, 0, sizeof(*prefs));
                 tg_gui_graphics_preferences_resolve(prefs, c[0], c[1], c[2]);
+                /* the stickers' own default: the processor alone */
+                tg_gui_set_stickers(prefs, value);
+                if (prefs->stickers != value ||
+                    prefs->stickers_explicit !=
+                        (value != !(c[0] && !c[1])) ||
+                    !prefs->stickers_default_resolved) {
+                    printf("gui self-test: sticker auto choice %lu/%d "
+                           "failed\n", i, value);
+                    return 2;
+                }
                 tg_gui_set_inline_photos(prefs, value);
                 tg_gui_set_emoji_enabled(prefs, value);
                 tg_gui_set_avatars_enabled(prefs, value);

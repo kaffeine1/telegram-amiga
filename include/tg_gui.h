@@ -374,7 +374,11 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
 /* "Markdown formatting" of the settings, one on/off line like the emoji
    files. */
 #define TG_GUI_MARKDOWN_FILE "data/telegram-markdown.txt"
-/* "Sticker pictures" of the settings, the same kind of line. */
+/* "Sticker pictures" of the settings, the same kind of line. On by
+   default except on a classic Amiga below the 68040, where a datatype
+   takes seconds for each sticker: the processor decides, not the screen
+   (tg_gui_graphics_preferences_resolve). A choice equal to the machine's
+   own is saved as "auto", like the photos'. */
 #define TG_GUI_STICKERS_FILE "data/telegram-stickers.txt"
 
 /* A chat's name for a requester's button ("For me and Anna"): '|' and '%'
@@ -483,6 +487,10 @@ typedef struct tg_gui_state {
     int markdown; /* **bold** and its kin are formatting when sent (on) */
     int stickers;    /* a sticker shows its picture, not its emoji */
     int sticker_can; /* this machine has a datatype that reads WEBP */
+    int stickers_explicit; /* user saved an on/off choice */
+    int stickers_default_resolved;
+    int stickers_auto;     /* what this machine picks on its own: 0 not
+                              sampled yet, 1 off, 2 on */
     int emoticon_undo_at; /* where the last one went in, for Backspace; -1 */
     char emoticon_undo[8]; /* the characters typed for it */
     int emoji_explicit;   /* user saved an on/off choice */
@@ -1000,6 +1008,8 @@ int tg_gui_composer_emoticon(tg_gui_state *state, unsigned long end);
    Returns 1 when it undid one; it never undoes twice. */
 int tg_gui_composer_emoticon_undo(tg_gui_state *state);
 void tg_gui_set_avatars_enabled(tg_gui_state *state, int enabled);
+/* The same for "Sticker pictures", whose default is the processor's alone. */
+void tg_gui_set_stickers(tg_gui_state *state, int enabled);
 /* Zero means emoji disabled; otherwise a square of at least 16px. Line
    height and ascent reserve that cell while keeping the actual font intact. */
 int tg_gui_emoji_inline_size(const tg_gui_state *state, int font_height);

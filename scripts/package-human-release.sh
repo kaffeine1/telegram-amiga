@@ -716,8 +716,8 @@ Emoji
   (AROS has one; on AmigaOS and MorphOS one must be installed), on the
   chat's background and without a bubble. Without a datatype, or with
   "Settings > Sticker pictures" off, a sticker shows the emoji it
-  stands for. On 68k the switch is off until you turn it on: a WEBP
-  takes seconds to read there.
+  stands for. Below a 68040 the switch is off until you turn it on: a
+  WEBP takes seconds to read there.
 
 Photos and previews
 - Photos appear in the message, blurred first, then sharp. Videos show
@@ -994,9 +994,9 @@ Emoji
 - Gli sticker mostrano la loro immagine dove il sistema ha un datatype
   WEBP (AROS ce l'ha; su AmigaOS e MorphOS va installato), sullo sfondo
   della chat e senza fumetto. Senza datatype, o con "Settings > Sticker
-  pictures" spento, uno sticker mostra l'emoji che rappresenta. Sul 68k
-  l'interruttore e' spento finche' non lo accendi: li' un WEBP si legge
-  in qualche secondo.
+  pictures" spento, uno sticker mostra l'emoji che rappresenta. Sotto
+  il 68040 l'interruttore e' spento finche' non lo accendi: li' un WEBP
+  si legge in qualche secondo.
 
 Foto e anteprime
 - Le foto compaiono nel messaggio, prima sfocate, poi nitide. I video

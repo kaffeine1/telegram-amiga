@@ -786,7 +786,8 @@ to the photo pipeline only after a tiny WEBP has been opened that way
 once (`tg_image_dt_reads_webp`), and what the datatype gives is written
 as the photo's canonical cache, so each sticker is read once. It sits
 behind "Show inline photos" and its own "Sticker pictures" switch, off
-by default on 68k. One thing below turned out differently: AROS ships a
+by default on a 68k below the 68040 (the processor decides, not the
+screen). One thing below turned out differently: AROS ships a
 WEBP datatype of its own, so the AROS lanes show stickers with nothing
 installed. What follows is the reasoning as it was written.
 
