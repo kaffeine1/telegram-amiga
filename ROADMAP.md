@@ -295,9 +295,11 @@ it works today:
   in the sidebar, a click shows the chat around the message), Find in
   all chats (Amiga+G: the same list, each hit with its chat's name, a
   click opens that chat on the message), and /find in the text client
-  for the open chat. Only the first page of hits is shown (20, 12 on
-  MorphOS): more pages are still to do. The search box also finds chat
-  names and, on the server, people and public channels
+  for the open chat. Find in chat pages on: a last row, More
+  results..., asks for the hits older than the last one listed
+  (`offset_id`). Find in all chats shows its first page only (20, 12
+  on MorphOS): its later pages are still to do. The search box also
+  finds chat names and, on the server, people and public channels
   (`contacts.search`);
 - pinned chats at the top of the list and the Archive (`folder_id` 1).
   Pins done on `main`: read with `messages.getPinnedDialogs` at start

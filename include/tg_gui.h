@@ -1060,6 +1060,9 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_POLL_STOP 61 /* Stop poll: one's own, for good */
 #define TG_GUI_CTX_POLL_NEW 62 /* the paperclip's menu: Poll... */
 #define TG_GUI_CTX_MSG_SENDER 63 /* Message <name>: a chat with the sender */
+/* The index of the sidebar row "More results...", under the hits of a
+   search inside a chat: no message has this id. */
+#define TG_GUI_MORE_HITS_INDEX 0xfffffffeUL
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */

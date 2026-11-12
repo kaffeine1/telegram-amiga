@@ -11012,6 +11012,10 @@ static void tg_gui_window_run_msg_search(tg_gui_state *state,
         state->chat_scroll = 0;
         sprintf(line, "%d found - click one or ENTER (ESC ends)",
                 n % 1000);
+        if (state->chat_count > n) {
+            /* a full page: the last row offers the older ones */
+            sprintf(line, "%d found, more below - click or ENTER", n % 1000);
+        }
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else {
         /* The fetch emptied the list: put the chats back. */
@@ -11037,6 +11041,32 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
 
     if (row < 0 || row >= state->chat_count ||
         state->chats[row].index == 0UL) {
+        return;
+    }
+    if (!state->msg_search_global &&
+        state->chats[row].index == TG_GUI_MORE_HITS_INDEX) {
+        /* "More results...": the older hits take this row's place. */
+        char line[64];
+        int more;
+
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Searching further back...");
+        tg_gui_window_paint(state, backend);
+        more = tg_gui_session_search_messages_more(stdout);
+        if (more > 0) {
+            sprintf(line, "%d more found - click one or ENTER", more % 1000);
+        } else {
+            strcpy(line, more == 0 ? "No older message matches"
+                                   : (more == -1 ? "Search failed (network?)"
+                                                 : "Search again (ENTER)"));
+        }
+        if (state->chat_count > 0 && row >= state->chat_count) {
+            row = state->chat_count - 1;
+        }
+        state->selected_chat = row; /* the first of the new ones */
+        state->nav_chat = -1;
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+        tg_gui_window_paint(state, backend);
         return;
     }
     tg_gui_chat_touched = 1;

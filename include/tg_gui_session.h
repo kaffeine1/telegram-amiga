@@ -314,6 +314,13 @@ int tg_gui_session_load_older(FILE *stream, int allow_drop_newest);
    the number of hits, or -1 when the search could not run. */
 int tg_gui_session_search_messages(const char *query, FILE *stream);
 
+/* The next page of that search: older hits, put under the ones listed in
+   place of the row "More results..." (the last row, whose index is
+   TG_GUI_MORE_HITS_INDEX; it is there when a page came back full). Returns
+   how many came (0 = there are no more), -1 when the search could not run
+   (the row stays), -2 when there is no search to go on with. */
+int tg_gui_session_search_messages_more(FILE *stream);
+
 /* Shows the open chat around message_id (a search hit): reloads the
    transcript centred on it, highlights it and asks the next paint to scroll
    it into view; a page that misses the newest marks the ring bottom stale

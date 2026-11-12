@@ -1140,7 +1140,8 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
 
 /* One search hit per row, newest first in the sidebar: the fetch hands rows
    oldest first, so each lands on top and pushes the rest down (the oldest
-   falls off a full list). */
+   falls off a full list). A later page of hits (prepend_at >= 0) goes under
+   the rows already listed, from that row on, and stops at a full list. */
 static void tg_gui_search_driver_on_message(void *ctx,
                                             const tg_chat_message_row *row)
 {
@@ -1150,6 +1151,7 @@ static void tg_gui_search_driver_on_message(void *ctx,
     const char *who;
     char line[TG_GUI_TEXT_MAX];
     unsigned long i;
+    int base;
     int k;
 
     gui = (tg_gui_chat_driver *)ctx;
@@ -1161,14 +1163,19 @@ static void tg_gui_search_driver_on_message(void *ctx,
     if (state->chat_count < 0) {
         state->chat_count = 0;
     }
+    base = (gui->prepend_at > 0 && gui->prepend_at <= state->chat_count)
+               ? gui->prepend_at : 0;
     if (state->chat_count >= TG_GUI_MAX_CHATS) {
+        if (base > 0) {
+            return; /* no room under the hits already listed */
+        }
         state->chat_count = TG_GUI_MAX_CHATS - 1;
     }
-    for (k = state->chat_count; k > 0; --k) {
+    for (k = state->chat_count; k > base; --k) {
         state->chats[k] = state->chats[k - 1];
     }
     state->chat_count += 1;
-    hit = &state->chats[0];
+    hit = &state->chats[base];
     memset(hit, 0, sizeof(*hit));
     if (row->is_out) {
         who = (row->own_label != 0) ? row->own_label : "";
@@ -2535,6 +2542,34 @@ int tg_gui_driver_self_test(void)
             puts("gui driver self-test: hits are not transcript messages");
             return 2;
         }
+        /* A later page of hits goes under the ones listed, its newest
+           first; a full list takes no more and loses none. */
+        sg.prepend_at = 2;
+        row.is_out = 0;
+        row.sender = "bea";
+        row.id = 200UL;
+        row.text = "vecchio";
+        sd.on_message(sd.ctx, &row);
+        row.id = 250UL;
+        row.text = "meno vecchio";
+        sd.on_message(sd.ctx, &row);
+        if (ss->chat_count != 4 || ss->chats[0].index != 310UL ||
+            ss->chats[1].index != 300UL || ss->chats[2].index != 250UL ||
+            ss->chats[3].index != 200UL ||
+            strcmp(ss->chats[3].preview, "vecchio") != 0) {
+            puts("gui driver self-test: a later page of hits is misplaced");
+            return 2;
+        }
+        ss->chat_count = TG_GUI_MAX_CHATS;
+        row.id = 100UL;
+        sd.on_message(sd.ctx, &row);
+        if (ss->chat_count != TG_GUI_MAX_CHATS ||
+            ss->chats[2].index != 250UL || ss->chats[0].index != 310UL) {
+            puts("gui driver self-test: a full hit list took another page");
+            return 2;
+        }
+        ss->chat_count = 4;
+        sg.prepend_at = -1;
     }
 
     /* A live message while the ring holds an older stretch (after a jump to

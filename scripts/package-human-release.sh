@@ -637,6 +637,13 @@ Messages
   the names and /ids shows the message numbers that /react <id> <name>,
   /forward and /forwardto take.
 - Messages edited on another device change here too.
+- Find in chat (Edit menu, Amiga+S) searches the messages of the open
+  chat on Telegram: type the words in the search box and press Enter.
+  The messages found take the chat list's place, newest first; a click
+  or Enter on one shows the chat around it. When there are more than a
+  page holds, the last row, More results..., brings the older ones.
+  Find in all chats (Amiga+G) searches every chat the same way. Esc
+  ends the search.
 - To act on several messages together, choose Select in the menu of
   one of them: it is marked, and a click on any other message marks it
   or takes its mark away; Shift+click marks everything from the message
@@ -876,6 +883,13 @@ Messaggi
   messaggio ricevuto, /reactions elenca i nomi e /ids mostra i numeri
   dei messaggi che /react <id> <nome>, /forward e /forwardto accettano.
 - I messaggi modificati da un altro dispositivo cambiano anche qui.
+- Find in chat (menu Edit, Amiga+S) cerca nei messaggi della chat
+  aperta su Telegram: scrivi le parole nella casella di ricerca e premi
+  Invio. I messaggi trovati prendono il posto dell'elenco delle chat,
+  dal piu' recente; un click o Invio su uno mostra la chat attorno a
+  quel messaggio. Se sono piu' di una pagina, l'ultima riga, More
+  results..., porta i piu' vecchi. Find in all chats (Amiga+G) cerca
+  allo stesso modo in tutte le chat. Esc chiude la ricerca.
 - Per agire su piu' messaggi insieme scegli Select nel menu di uno di
   loro: viene segnato, e un click su un altro messaggio lo segna o gli
   toglie il segno; Shift+click segna tutto dal messaggio cliccato per

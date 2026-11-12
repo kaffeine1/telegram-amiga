@@ -47,6 +47,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Find in chat goes past its first page. When a page of hits comes back
+  full (20, 12 on MorphOS) the list ends with a row, More results...; a
+  click or ENTER on it brings the next, older hits under the ones
+  listed, and so on until the list is full. Find in all chats still
+  shows its first page.
 - Message <name>, in the menu of someone else's message in a group,
   opens a private chat with who wrote it. The chat joins the chat list
   when it was not there and stays after a restart; nothing reaches the
