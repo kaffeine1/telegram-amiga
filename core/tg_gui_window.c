@@ -7464,14 +7464,17 @@ static int tg_gui_amiga_confirm_remove(struct Window *win, const char *name)
 }
 
 /* Asks before a chat leaves the account on Telegram, which no other device
-   brings back. kind: 0 a private chat (its history is deleted for this
-   account), 1 a basic group, 2 a channel or a supergroup. 1 = go ahead. */
+   brings back. kind: 0 a private chat (its history is deleted), 1 a basic
+   group, 2 a channel or a supergroup. 0 = cancelled, 1 = go ahead; for a
+   private chat 1 = for the other person too, 2 = for this account only. */
 static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
                                       int kind)
 {
     struct EasyStruct es;
     char shown[3 * TG_GUI_NAME_MAX]; /* an emoticon outgrows its pair */
     char body[sizeof(shown) + 240];
+    char who[24];
+    char gadgets[64];
     const char *pre;
     const char *post;
     const char *p;
@@ -7479,8 +7482,8 @@ static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
 
     if (kind == 0) {
         pre = "Delete this chat on Telegram?\n\n";
-        post = "\n\nIts messages are deleted for you, on all your\n"
-               "devices. The other person keeps theirs.\n"
+        post = "\n\nIts messages are deleted on all your devices,\n"
+               "and for the other person too if you choose so.\n"
                "This cannot be undone.";
     } else if (kind == 1) {
         pre = "Leave this group?\n\n";
@@ -7514,8 +7517,14 @@ static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
     es.es_Flags = 0UL;
     es.es_Title = (STRPTR)(kind == 0 ? "Delete chat" : "Leave");
     es.es_TextFormat = (STRPTR)body;
-    es.es_GadgetFormat = (STRPTR)(kind == 0 ? "Delete|Cancel"
-                                            : "Leave|Cancel");
+    if (kind == 0) {
+        /* The first button deletes for both, the second here only. */
+        tg_gui_requester_name(who, sizeof(who), name);
+        sprintf(gadgets, "For me and %s|For me only|Cancel", who);
+        es.es_GadgetFormat = (APTR)gadgets;
+    } else {
+        es.es_GadgetFormat = (STRPTR)"Leave|Cancel";
+    }
     return (int)tg_gui_amiga_easyreq_args(win, &es);
 }
 
@@ -9742,23 +9751,54 @@ static void tg_gui_window_remove_chat(tg_gui_state *state,
    other devices follow and it holds after the chat list is read again;
    this machine's own mute (value->choice, kept in the notify file) is only
    what is left when Telegram cannot be reached, and what an older version
-   set. Unmute clears both. Returns whether *value changed and wants
-   saving. */
-static int tg_gui_window_toggle_mute(tg_gui_state *state,
+   set. A mute sent to Telegram asks for how long first: an hour, eight,
+   or until it is taken back. Unmute clears both and asks nothing. Returns
+   whether *value changed and wants saving. */
+static int tg_gui_window_toggle_mute(tg_gui_state *state, struct Window *win,
+                                     tg_gui_backend *backend,
                                      const tg_gui_chat *chat,
                                      tg_gui_notify_override *value)
 {
     int here = value->choice == TG_GUI_NOTIFY_MUTE;
     int want = !(state->ctx_muted || here);
     int sent = 0;
+    LONG how = 3L; /* 1 an hour, 2 eight hours, 3 for good */
 
     if (chat->index != TG_GUI_SAVED_PEER_INDEX && tg_gui_session_is_open()) {
-        sent = tg_gui_session_set_muted(chat->index, want, stdout) == 0;
+        if (want) {
+            struct EasyStruct es;
+
+            /* The menu leaves the screen before the question. */
+            tg_gui_window_paint(state, backend);
+            es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+            es.es_Flags = 0UL;
+            /* APTR: STRPTR on some systems, UBYTE * on others. */
+            es.es_Title = (APTR)"Mute";
+            es.es_TextFormat = (APTR)"Mute this chat on every device?";
+            es.es_GadgetFormat =
+                (APTR)"For 1 hour|For 8 hours|Until I unmute|Cancel";
+            how = tg_gui_amiga_easyreq_args(win, &es);
+            if (how == 0L) {
+                tg_gui_window_copy(state->status, sizeof(state->status),
+                                   "Not muted");
+                return 0;
+            }
+            sent = (how == 3L
+                        ? tg_gui_session_set_muted(chat->index, 1, stdout)
+                        : tg_gui_session_mute_for(
+                              chat->index, how == 1L ? 3600UL : 28800UL,
+                              stdout)) == 0;
+        } else {
+            sent = tg_gui_session_set_muted(chat->index, 0, stdout) == 0;
+        }
     }
     if (want) {
         if (sent) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Muted on every device");
+                               how == 1L ? "Muted for 1 hour, on every device"
+                               : how == 2L
+                                     ? "Muted for 8 hours, on every device"
+                                     : "Muted on every device");
             return 0;
         }
         value->choice = TG_GUI_NOTIFY_MUTE;
@@ -9791,6 +9831,8 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     unsigned long idx;
     int was_open;
     int kind;
+    int choice;
+    int both;
 
     if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
         state->in_search || sel < 0 || sel >= state->chat_count) {
@@ -9812,13 +9854,15 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     /* The menu this came from is closed: draw the window without it
        before the requester holds everything. */
     tg_gui_window_paint(state, backend);
-    if (tg_gui_amiga_confirm_leave(win, name, kind) != 1) {
+    choice = tg_gui_amiga_confirm_leave(win, name, kind);
+    if (choice == 0) {
         return; /* cancelled */
     }
+    both = kind == 0 && choice == 1;
     tg_gui_window_copy(state->status, sizeof(state->status),
                        kind == 0 ? "Deleting the chat..." : "Leaving...");
     tg_gui_window_paint(state, backend);
-    if (tg_gui_session_leave_chat(idx, stdout) != 0) {
+    if (tg_gui_session_leave_chat(idx, both, stdout) != 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            kind == 0 ? "Could not delete it (network?)"
                                      : "Could not leave (network?)");
@@ -9827,7 +9871,9 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     }
     state->nav_chat = -1;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       kind == 0 ? "Chat deleted" : "Left");
+                       kind == 0 ? (both ? "Chat deleted for both"
+                                         : "Chat deleted, for you only")
+                                 : "Left");
     if (!was_open) {
         tg_gui_window_paint(state, backend);
         return;
@@ -16150,8 +16196,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_notify_override_get(state->notify_override_path,
                             chat->peer_id_hi, chat->peer_id_lo, &value);
                         if (it == TG_GUI_CTX_CHAT_MUTE) {
-                            changed = tg_gui_window_toggle_mute(state, chat,
-                                                                &value);
+                            changed = tg_gui_window_toggle_mute(
+                                state, ctx.window, &backend, chat, &value);
                         } else if (it == TG_GUI_CTX_CHAT_RING && chat->is_group) {
                             value.choice = value.choice == TG_GUI_NOTIFY_RING ?
                                 TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_RING;

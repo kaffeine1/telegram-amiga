@@ -558,9 +558,16 @@ Chats
 - Del, Right-Amiga+R or "Remove chat from list" removes a chat. Search
   still finds it, marked (hidden), and opening it puts it back. Drag
   chats to reorder them.
-- The right mouse button on a chat in the list opens its menu: Remove
-  chat, Mute or Unmute, Enable ring (groups and channels), Sound... and
-  Show hidden messages.
+- The right mouse button on a chat in the list opens its menu: Pin,
+  Archive, Mark as read or unread, Remove chat, Mute... or Unmute,
+  Enable ring (groups and channels), Sound..., Show hidden messages,
+  and Leave... or Delete chat...
+- Mute... asks for how long: an hour, eight hours, or until you unmute.
+  The mute goes to Telegram, so your other devices follow it.
+- Leave... and Delete chat... take the chat off your account on
+  Telegram, after a question. For a chat with one person the question
+  is whether its messages go for both of you or for you only. Neither
+  can be undone.
 - A chat muted on Telegram shows it in the list: its unread count is
   grey instead of blue, and with nothing unread a small crossed
   loudspeaker sits at the right of its row. The marks fill in during
@@ -781,9 +788,17 @@ Chat
 - Del, Amiga-destro+R o "Remove chat from list" toglie una chat. La
   ricerca la trova ancora, segnata (hidden), e aprirla la rimette in
   lista. Trascina le chat per cambiarne l'ordine.
-- Il tasto destro su una chat della lista apre il suo menu: Remove chat,
-  Mute o Unmute, Enable ring (gruppi e canali), Sound... e Show hidden
-  messages.
+- Il tasto destro su una chat della lista apre il suo menu: Pin,
+  Archive, Mark as read o unread, Remove chat, Mute... o Unmute, Enable
+  ring (gruppi e canali), Sound..., Show hidden messages, e Leave... o
+  Delete chat...
+- Mute... chiede per quanto: un'ora, otto ore, o finche' non togli il
+  silenzioso. Il silenzioso va a Telegram, quindi lo seguono anche gli
+  altri tuoi dispositivi.
+- Leave... e Delete chat... tolgono la chat dal tuo account su
+  Telegram, dopo una domanda. Per una chat con una persona la domanda
+  e' se i messaggi spariscono per tutti e due o solo per te. Nessuna
+  delle due si puo' annullare.
 - Una chat silenziata su Telegram lo mostra nell'elenco: il numero dei
   non letti e' grigio invece che azzurro, e se non c'e' niente da
   leggere un piccolo altoparlante barrato sta a destra della sua riga.

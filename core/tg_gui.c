@@ -6655,9 +6655,14 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
         /* Muted on Telegram, or only on this machine (a mute from before
            it was sent there, or one Telegram did not get). */
+        /* "Mute..." asks for how long; Saved Messages is muted here only,
+           and for good. */
         labels[n] = (state->ctx_muted ||
-                     state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE) ?
-                    "Unmute" : "Mute";
+                     state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE)
+                        ? "Unmute"
+                        : (state->chats[state->ctx_chat - 1].index !=
+                                   TG_GUI_SAVED_PEER_INDEX
+                               ? "Mute..." : "Mute");
         ids[n++] = TG_GUI_CTX_CHAT_MUTE;
         if (state->chats[state->ctx_chat - 1].is_group) {
             labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_RING ?
@@ -9286,7 +9291,7 @@ static int tg_gui_notify_menu_self_test(void)
         ids[2] != TG_GUI_CTX_CHAT_READ ||
         strcmp(labels[2], "Mark as unread") != 0 ||
         ids[3] != TG_GUI_CTX_CHAT_REMOVE || ids[4] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[4], "Mute") != 0 || ids[5] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[4], "Mute...") != 0 || ids[5] != TG_GUI_CTX_CHAT_SOUND ||
         strcmp(labels[5], "Sound...") != 0 ||
         ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
         strcmp(labels[6], "Default sound") != 0 ||
@@ -9333,6 +9338,12 @@ static int tg_gui_notify_menu_self_test(void)
         puts("gui self-test: Saved Messages offers no pin");
         return 2;
     }
+    /* Saved Messages is muted on this machine only, and nothing is asked:
+       its item has no dots. */
+    if (ids[1] != TG_GUI_CTX_CHAT_MUTE || strcmp(labels[1], "Mute") != 0) {
+        puts("gui self-test: Saved Messages' Mute promises a question");
+        return 2;
+    }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
     if (tg_gui_context_items(state, labels, ids) != 10 ||
@@ -9351,7 +9362,8 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
     if (tg_gui_context_items(state, labels, ids) != 11 ||
-        strcmp(labels[4], "Mute") != 0 || strcmp(labels[5], "Disable ring") != 0) {
+        strcmp(labels[4], "Mute...") != 0 ||
+        strcmp(labels[5], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }

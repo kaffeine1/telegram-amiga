@@ -1082,8 +1082,9 @@ typedef struct tg_mtproto_send_style {
 void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list,
                                 int count);
 
-/* messages.deleteHistory for this account only (not for a channel), and the
-   offset its messages.affectedHistory reply leaves to delete. */
+/* messages.deleteHistory (not for a channel): for this account only, or
+   with revoke for the other side of a private chat too; and the offset
+   its messages.affectedHistory reply leaves to delete. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -1091,7 +1092,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
     unsigned long peer_id_lo,
     unsigned long access_hash_hi,
     unsigned long access_hash_lo,
-    int has_access_hash);
+    int has_access_hash,
+    int revoke);
 tg_mtproto_tl_status tg_mtproto_parse_affected_history_offset(
     unsigned long constructor,
     const unsigned char *body,

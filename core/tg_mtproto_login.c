@@ -1858,7 +1858,8 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_unread_marks(
    max_date:flags.3?int = messages.AffectedHistory (layer 214 schema,
    checked 2026-11-10). No flags: the whole history goes for this account
    only, on all its devices, and the chat leaves the dialog list; the other
-   side keeps its copy. A long history takes several calls: the reply's
+   side keeps its copy. With revoke (flags.1) the other side of a private
+   chat loses it too. A long history takes several calls: the reply's
    offset says whether to call again. */
 tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
     tg_mtproto_tl_writer *writer,
@@ -1867,7 +1868,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
     unsigned long peer_id_lo,
     unsigned long access_hash_hi,
     unsigned long access_hash_lo,
-    int has_access_hash)
+    int has_access_hash,
+    int revoke)
 {
     tg_mtproto_tl_status status;
 
@@ -1877,7 +1879,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_delete_history(
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_MESSAGES_DELETE_HISTORY_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+        status = tg_mtproto_tl_write_u32(writer, revoke ? 2UL : 0UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -13293,17 +13295,27 @@ int tg_mtproto_login_self_test(void)
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_delete_history(
                 &pw, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
-                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                0UL, 0UL, 0, 0) != TG_MTPROTO_TL_OK ||
             pw.length != 24UL || pin_query[0] != 0x2aU ||
             pin_query[1] != 0x92U || pin_query[2] != 0x8fU ||
             pin_query[3] != 0xb0U || pin_query[4] != 0x00U ||
             pin_query[8] != 0xb9U || pin_query[20] != 0x00U) {
             return 2;
         }
+        /* for the other side too: revoke, flags.1, and nothing else */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_delete_history(
+                &pw, TG_PEER_USER_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0x11223344UL, 0x55667788UL, 1, 1) != TG_MTPROTO_TL_OK ||
+            pin_query[4] != 0x02U || pin_query[5] != 0x00U ||
+            pin_query[6] != 0x00U || pin_query[7] != 0x00U) {
+            puts("login self-test: deleteHistory for both sides built wrong");
+            return 2;
+        }
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_delete_history(
                 &pw, TG_PEER_CHANNEL_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
-                0x11223344UL, 0x55667788UL, 1) == TG_MTPROTO_TL_OK) {
+                0x11223344UL, 0x55667788UL, 1, 0) == TG_MTPROTO_TL_OK) {
             return 2; /* a channel's history is not ours to delete */
         }
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));

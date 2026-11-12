@@ -26255,8 +26255,10 @@ int tg_gui_session_chat_muted(unsigned long peer_index, FILE *stream)
    or unmute (0) the chat at this 1-based cache index on Telegram
    (account.updateNotifySettings, its mute alone: sound and previews stay
    as they are). Every device follows. 0 = done, 2 = failed. */
-int tg_gui_session_set_muted(unsigned long peer_index, int muted,
-                             FILE *stream)
+/* The mute of a chat sent to Telegram: until this moment of its clock
+   (0 = not muted, 0x7fffffff = for good). */
+static int tg_gui_session_mute_until(unsigned long peer_index,
+                                     unsigned long until, FILE *stream)
 {
     unsigned char query[64];
     char index_text[24];
@@ -26265,7 +26267,7 @@ int tg_gui_session_set_muted(unsigned long peer_index, int muted,
     unsigned long pl;
     unsigned long ahh;
     unsigned long ahl;
-    unsigned long until = muted ? 0x7fffffffUL : 0UL;
+    int muted = until != 0UL;
     unsigned long prev_timeout;
     int hah;
     tg_mtproto_rpc_result result;
@@ -26305,6 +26307,26 @@ int tg_gui_session_set_muted(unsigned long peer_index, int muted,
     tg_gui_log(muted ? "mute: muted on Telegram" : "mute: unmuted on Telegram");
     (void)tg_gui_session_apply_mute_updates(); /* the row's mark, at once */
     return 0;
+}
+
+int tg_gui_session_set_muted(unsigned long peer_index, int muted,
+                             FILE *stream)
+{
+    return tg_gui_session_mute_until(peer_index, muted ? 0x7fffffffUL : 0UL,
+                                     stream);
+}
+
+/* Public: mute for a while. The end is counted on Telegram's clock, which
+   the other devices share, not on this machine's. */
+int tg_gui_session_mute_for(unsigned long peer_index, unsigned long seconds,
+                            FILE *stream)
+{
+    unsigned long now = tg_gui_session_server_time();
+
+    if (seconds == 0UL || seconds > 366UL * 86400UL || now == 0UL) {
+        return 2;
+    }
+    return tg_gui_session_mute_until(peer_index, now + seconds, stream);
 }
 
 /* Public: what leaving the chat at this cache index means: 0 a private chat
@@ -26350,7 +26372,8 @@ int tg_gui_session_chat_kind(unsigned long peer_index)
    account (the other side keeps theirs). The chat then leaves the list
    here (its row stays in the cache, hidden, as Remove chat does). 0 = done,
    2 = failed (nothing, or not everything, was done). */
-int tg_gui_session_leave_chat(unsigned long peer_index, FILE *stream)
+int tg_gui_session_leave_chat(unsigned long peer_index, int both,
+                              FILE *stream)
 {
     unsigned char query[64];
     char index_text[24];
@@ -26409,7 +26432,9 @@ int tg_gui_session_leave_chat(unsigned long peer_index, FILE *stream)
 
             tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
             if (tg_mtproto_build_messages_delete_history(
-                    &writer, pc, ph, pl, ahh, ahl, hah) != TG_MTPROTO_TL_OK ||
+                    &writer, pc, ph, pl, ahh, ahl, hah,
+                    both && pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
                 tg_gui_session_peer_request(query, writer.length, &result,
                                             "mtproto messages.deleteHistory",
                                             emsg, sizeof(emsg), quiet) != 0) {

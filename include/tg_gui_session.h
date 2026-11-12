@@ -404,15 +404,21 @@ int tg_gui_session_pin_message_as(unsigned long message_id, int pin,
 int tg_gui_session_chat_muted(unsigned long peer_index, FILE *stream);
 int tg_gui_session_set_muted(unsigned long peer_index, int muted,
                              FILE *stream);
+/* Mute for a while: `seconds` from now by Telegram's clock, after which
+   the chat rings again by itself. 0 = done, 2 = failed. */
+int tg_gui_session_mute_for(unsigned long peer_index, unsigned long seconds,
+                            FILE *stream);
 
 /* What leaving a chat means for it: 0 a private chat, 1 a basic group, 2 a
    channel or a supergroup, -1 unknown. */
 int tg_gui_session_chat_kind(unsigned long peer_index);
 
 /* Takes the chat off the account on Telegram: leaves a group or a channel,
-   deletes a private chat's (and a basic group's) history for this account.
+   deletes a private chat's (and a basic group's) history for this account;
+   with `both`, a private chat's history goes for the other person too.
    The chat then leaves the list here. 0 = done, 2 = failed. */
-int tg_gui_session_leave_chat(unsigned long peer_index, FILE *stream);
+int tg_gui_session_leave_chat(unsigned long peer_index, int both,
+                              FILE *stream);
 
 /* 1 when the chat with this peer id is pinned on Telegram (as last read). */
 int tg_gui_session_chat_pinned(unsigned long peer_id_hi,

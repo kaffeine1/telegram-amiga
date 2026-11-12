@@ -47,6 +47,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Mute... in a chat's menu asks for how long: an hour, eight hours, or
+  until it is taken back. A timed mute ends by itself on Telegram's
+  clock, on every device. Until now a mute was always for good.
+- Delete chat..., for a chat with one person, asks whether its messages
+  go for both of you or for you only; until now they went for this
+  account alone.
 - Delete and Pin ask how. In a chat with one person Delete is now on
   every message, theirs too, and asks whether the message goes for both
   of you or for you only; several selected messages get the same

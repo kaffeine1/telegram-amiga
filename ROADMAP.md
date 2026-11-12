@@ -325,8 +325,9 @@ it works today:
   `messages.deleteChatUser`) and Delete chat...
   (`messages.deleteHistory`, for this account only), both after a
   confirmation. A chat on screen is marked as read on Telegram
-  (`readHistory` from the window's idle path). Still missing: the same
-  in the text client; deleting a private chat for both sides. A mark
+  (`readHistory` from the window's idle path). Delete chat... asks
+  whether a private chat goes for both sides (`revoke`). Still missing:
+  the same in the text client. A mark
   changed on another device while running is followed
   (`updateDialogUnreadMark`);
 - drafts shown and kept in step with the other devices: done in the
@@ -354,7 +355,8 @@ it works today:
   the list: a grey unread badge, or a small crossed loudspeaker when
   nothing is unread; the mutes are learnt in the background after the
   start, one `account.getNotifySettings` a chat, and follow every
-  change after it. Still missing: a mute for a few hours, the text
+  change after it. Mute... asks for how long: an hour, eight hours or
+  for good (`mute_until` on Telegram's clock). Still missing: the text
   client's own command;
 - an ARexx port: done, AMIGRAM with SHOW, HIDE, OPEN <name>, QUIT, the
   answers UNREAD, CHAT and VERSION, and SEND <chat> <text> behind a
