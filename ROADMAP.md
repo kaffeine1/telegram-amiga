@@ -430,9 +430,10 @@ Middle, more interface:
   switch in the settings. It reads a list of up to eight names, one
   channel at each quiet moment. What is missing is the list:
   `TG_UPDATE_CHANNELS` is empty, so nothing is asked yet;
-- stickers through a WEBP datatype where the user has one (see "let
-  datatypes read what we cannot"): a fallback, never a requirement, and
-  AROS keeps the emoji.
+- stickers through a WEBP datatype where the user has one: done (see
+  "let datatypes read what we cannot"). A fallback, never a
+  requirement: without a datatype the emoji stays. AROS has a WEBP
+  datatype in the system, the other systems need one installed.
 
 Large, later if at all: chat folders of one's own, scheduled messages, a
 calendar, editing the profile, administering groups. Out of reach by our
@@ -773,6 +774,18 @@ which we do not decode, and keep the `[GIF ...]` label. That is the
 rule working as written, not a gap to fill.
 
 ## Worth deciding: let datatypes read what we cannot
+
+DECIDED, and done for stickers in the 0.2 cycle, in the shape described
+below. `core/tg_image_dt.c` asks `datatypes.library` for the pixels of a
+file (`PDTA_DestMode` V43, `PDTM_READPIXELARRAY` a row at a time, alpha
+blended over the chat's background), a sticker's WEBP still is offered
+to the photo pipeline only after a tiny WEBP has been opened that way
+once (`tg_image_dt_reads_webp`), and what the datatype gives is written
+as the photo's canonical cache, so each sticker is read once. It sits
+behind "Show inline photos" and its own "Sticker pictures" switch, off
+by default on 68k. One thing below turned out differently: AROS ships a
+WEBP datatype of its own, so the AROS lanes show stickers with nothing
+installed. What follows is the reasoning as it was written.
 
 Asked whether anything on Amiga reads WEBP outside this client, and the
 answer turned out to be yes, twice, and the second one is usable.

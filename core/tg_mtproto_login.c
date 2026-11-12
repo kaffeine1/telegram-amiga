@@ -3800,6 +3800,15 @@ static tg_mtproto_tl_status tg_read_document_attribute(
     }
 }
 
+/* 1 = a sticker's still picture is offered to the photo pipeline, which
+   the window asks for where the system can read a WEBP. */
+static int tg_sticker_stills = 0;
+
+void tg_mtproto_set_sticker_stills(int on)
+{
+    tg_sticker_stills = on ? 1 : 0;
+}
+
 tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
                                               tg_mtproto_document_meta *out,
                                               tg_mtproto_photo_meta *thumb)
@@ -3896,9 +3905,12 @@ tg_mtproto_tl_status tg_mtproto_read_document(tg_mtproto_tl_reader *reader,
        Offering it would cost a fetch on every session, on the lanes least
        able to afford one, to end at the emoji label anyway. That covers all
        three sticker kinds, since WEBP, Lottie and WEBM are all one kind here.
-       The emoji stays; the picture is a WEBP decoder away, which the roadmap
-       does not plan. */
-    if (thumb != 0 && out->kind == (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
+       The emoji stays. The picture is a WEBP decoder away, and this program
+       has none: where the system has a datatype for the format the window
+       says so (tg_mtproto_set_sticker_stills), the thumbnail is offered
+       like any other, and the datatype reads it. */
+    if (thumb != 0 && !tg_sticker_stills &&
+        out->kind == (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
         /* The stripped preview survives the wipe. It is inline in the message,
            it costs no request, and it is a JPEG whatever the sticker is: if we
            ever decide a blurred thumbnail beats no thumbnail here, the bytes
@@ -12783,6 +12795,31 @@ int tg_mtproto_login_self_test(void)
         if (thumb.stripped_len != sizeof(stripped_thumb) ||
             thumb.stripped[0] != 0x01U || thumb.stripped[4] != 0xbbU) {
             puts("0.0.92 self-test: sticker refusal lost the stripped bytes");
+            return 2;
+        }
+
+        /* Where the system reads WEBP the same sticker offers its still:
+           the "m" size, asked for as this document's thumbnail. */
+        tg_mtproto_set_sticker_stills(1);
+        memset(&thumb, 0, sizeof(thumb));
+        tg_mtproto_tl_reader_init(&dr, wire, dw.length);
+        if (tg_mtproto_read_document(&dr, &doc, &thumb) != TG_MTPROTO_TL_OK ||
+            doc.kind != (unsigned char)TG_MTPROTO_DOC_KIND_STICKER ||
+            !thumb.has_photo || !thumb.from_document ||
+            strcmp(thumb.thumb_type, "m") != 0 || thumb.size != 24088UL ||
+            thumb.width != 320UL || thumb.height != 320UL ||
+            thumb.id_hi != doc.id_hi || thumb.id_lo != doc.id_lo ||
+            thumb.stripped_len != sizeof(stripped_thumb)) {
+            tg_mtproto_set_sticker_stills(0);
+            puts("sticker self-test: the still was not offered");
+            return 2;
+        }
+        tg_mtproto_set_sticker_stills(0);
+        memset(&thumb, 0, sizeof(thumb));
+        tg_mtproto_tl_reader_init(&dr, wire, dw.length);
+        if (tg_mtproto_read_document(&dr, &doc, &thumb) != TG_MTPROTO_TL_OK ||
+            thumb.has_photo) {
+            puts("sticker self-test: the still stayed on after the switch");
             return 2;
         }
 

@@ -4118,6 +4118,66 @@ static int tg_gui_photo_preview_drain_visible(tg_gui_amiga_ctx *ctx)
     return drain.changed;
 }
 
+/* A sticker's still is a WEBP, which this program does not decode: the
+   system's datatype reads the cached file, once, and what it gives is
+   kept as the photo's canonical copy, sized like any other. From there on
+   the sticker is a photo like the others. Its transparent parts take the
+   colour of the chat's background, where a sticker stands without a
+   bubble. 1 = the canonical copy is written. */
+static int tg_gui_photo_webp_canonical(const char *path, unsigned long id_hi,
+                                       unsigned long id_lo, int width,
+                                       int height)
+{
+    const tg_gui_rgb *back = &tg_gui_dark_pens[TG_GUI_PEN_WINDOW];
+    unsigned char *rgb = 0;
+    unsigned char *fit = 0;
+    char cache_path[64];
+    int w = 0;
+    int h = 0;
+    int rc;
+    int ok = 0;
+
+    rc = tg_image_dt_decode_rgb(path,
+                                ((unsigned long)back->r << 16) |
+                                    ((unsigned long)back->g << 8) |
+                                    (unsigned long)back->b,
+                                &rgb, &w, &h);
+    if (rc != 0) {
+        if (tg_gui_log_is_enabled()) {
+            char line[64];
+
+            sprintf(line, "photo: sticker not read by a datatype rc=%d", rc);
+            tg_gui_log(line);
+        }
+        return 0;
+    }
+    if (w == width && h == height) {
+        fit = rgb;
+    } else {
+        fit = (unsigned char *)malloc((size_t)width * (size_t)height * 3U);
+        if (fit != 0 &&
+            tg_image_scale_rgb_bilinear(rgb, w, h, fit, width, height) != 0) {
+            free(fit);
+            fit = 0;
+        }
+    }
+    if (fit != 0 &&
+        tg_gui_session_photo_canonical_cache_path(
+            cache_path, sizeof(cache_path), id_hi, id_lo,
+            TG_GUI_PHOTO_KIND_INLINE) == 0) {
+        ok = tg_image_canonical_cache_write(cache_path, fit, width,
+                                            height) == 0;
+        tg_gui_window_photo_cache_file_changed(cache_path);
+    }
+    if (fit != rgb) {
+        free(fit);
+    }
+    free(rgb);
+    tg_gui_photo_diag(ok ? "photo: sticker read by a datatype"
+                         : "photo: sticker could not be kept");
+    return ok;
+}
+
 static int tg_gui_photo_decode_start(tg_gui_amiga_ctx *ctx)
 {
     tg_gui_photo_request request;
@@ -4206,6 +4266,20 @@ static int tg_gui_photo_decode_start(tg_gui_amiga_ctx *ctx)
         tg_gui_photo_pipeline_release(slot);
         tg_gui_photo_request_offer(request.id_hi, request.id_lo,
                                    request.source_w, request.source_h);
+        return 0;
+    }
+    if (got >= 12UL && memcmp(slot->jpeg, "RIFF", 4U) == 0 &&
+        memcmp(slot->jpeg + 8, "WEBP", 4U) == 0) {
+        /* a sticker's still: the system reads it, not this program */
+        free(slot->jpeg);
+        slot->jpeg = 0;
+        if (tg_gui_photo_webp_canonical(path, request.id_hi, request.id_lo,
+                                        canonical_w, canonical_h) &&
+            tg_gui_photo_canonical_load_start(slot, canonical_w, canonical_h,
+                                              0)) {
+            return 1;
+        }
+        tg_gui_photo_decode_reject(slot, -1);
         return 0;
     }
     slot->jpeg_len = got;
@@ -9363,7 +9437,7 @@ static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
     if (ui->draft->quiz) {
         /* the right answer: its number between two arrows */
         static const char ra_text[] = "Right answer:";
-        char number[8];
+        char number[16];
         int aw = tg_gui_sendphoto_text_width(b, "<", 1UL) + 10;
 
         x += 16;
@@ -13770,6 +13844,25 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                                ? "Updates: a look once a day"
                                : "Updates: not looked for");
         return 0;
+    case TG_GUI_SET_STICKERS:
+        /* Read when a chat's messages are: the stickers already on screen
+           stay as they are until their chat is opened again. */
+        state->stickers = !state->stickers;
+        if (state->stickers) {
+            state->sticker_can = tg_image_dt_reads_webp();
+        }
+        tg_mtproto_set_sticker_stills(state->stickers && state->sticker_can);
+        (void)mkdir("data", 0777);
+        tg_gui_window_copy(
+            state->status, sizeof(state->status),
+            tg_gui_emoji_preferences_save(TG_GUI_STICKERS_FILE,
+                                          state->stickers) != 0
+                ? "Could not save the sticker setting"
+                : !state->stickers ? "Stickers: shown as their emoji"
+                : !state->sticker_can
+                      ? "No WEBP datatype here: stickers stay emoji"
+                      : "Stickers: pictures from the next chat opened");
+        return 0;
     case TG_GUI_SET_MARKDOWN:
         /* Read by the session when a message leaves. */
         state->markdown = !state->markdown;
@@ -17417,6 +17510,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_window_paint(state, &backend);
                                 continue;
                             }
+                            if (tg_gui_message_is_sticker_still(
+                                    &state->messages[mi])) {
+                                /* a sticker is its small picture: there
+                                   is no larger one for the viewer */
+                                continue;
+                            }
                             if (tg_gui_photo_viewer_show(
                                     &viewer, &ctx, &state->messages[mi]) == 0) {
                                 tg_gui_window_copy(state->status,
@@ -18850,6 +18949,23 @@ int tg_gui_run_window(tg_gui_state *state)
         state->markdown = 1;
         tg_gui_emoji_preferences_load(TG_GUI_MARKDOWN_FILE, &state->markdown,
                                       &markdown_explicit);
+    }
+    {
+        /* Sticker pictures: on, where the system has a WEBP datatype to
+           read them; off on the 68k, where reading one takes seconds,
+           until the user asks for them. The datatype is looked for only
+           when they are wanted. */
+        int stickers_explicit = 0;
+
+#if defined(__m68k__)
+        state->stickers = 0;
+#else
+        state->stickers = 1;
+#endif
+        tg_gui_emoji_preferences_load(TG_GUI_STICKERS_FILE, &state->stickers,
+                                      &stickers_explicit);
+        state->sticker_can = state->stickers ? tg_image_dt_reads_webp() : 0;
+        tg_mtproto_set_sticker_stills(state->stickers && state->sticker_can);
     }
     state->emoji_default_resolved = 0;
     tg_gui_avatar_preferences_load("data/telegram-avatars.txt",

@@ -147,6 +147,19 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - A quiz shows its explanation once it is answered, on a line that
   starts with "Why:", under the votes; a poll whose votes are public
   says so next to the number of votes. Both were read past until now.
+- Stickers show their picture where the system has a datatype for
+  WEBP. A sticker's still (animated and video stickers have one too) is
+  a WEBP picture, which Amigram does not decode: it is fetched like a
+  photo's and handed to `datatypes.library`, once, and what comes back
+  is kept in the photo cache. The picture stands on the chat's
+  background, without a bubble, 160 pixels wide at most. Where no
+  datatype reads WEBP, or reading fails, a sticker stays the emoji it
+  stands for, as before, and nothing is fetched. "Sticker pictures" in
+  the settings switches it (`data/telegram-stickers.txt`): on by
+  default, off by default on 68k, where a datatype takes seconds for
+  each sticker, and it needs "Show inline photos". AROS has a WEBP
+  datatype in the system; AmigaOS 3 (with picture.datatype V43 or
+  later), AmigaOS 4 and MorphOS need one installed.
 - Who voted..., in the menu of a poll whose votes are public, once you
   have voted (or the poll is yours, or closed): Telegram is asked for
   the voters and a requester lists them under each answer, the latest

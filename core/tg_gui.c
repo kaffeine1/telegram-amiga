@@ -3870,6 +3870,10 @@ static void tg_gui_photo_geometry(const tg_gui_message *message,
     if (max_w > TG_GUI_INLINE_PHOTO_MAX_W) {
         max_w = TG_GUI_INLINE_PHOTO_MAX_W;
     }
+    if (max_w > TG_GUI_STICKER_MAX_W &&
+        tg_gui_message_is_sticker_still(message)) {
+        max_w = TG_GUI_STICKER_MAX_W; /* a sticker is a small picture */
+    }
     if (max_w < 1) {
         max_w = 1;
     }
@@ -3971,6 +3975,13 @@ static void tg_gui_day_label(const tg_gui_state *state, unsigned long day,
         sprintf(out, "%d %.9s %d", parts->tm_mday % 100, months[parts->tm_mon],
                 (parts->tm_year + 1900) % 10000);
     }
+}
+
+int tg_gui_message_is_sticker_still(const tg_gui_message *message)
+{
+    /* Among the documents only a sticker is nothing but its picture. */
+    return message != 0 && message->has_document && message->has_photo &&
+           message->photo_only;
 }
 
 static int tg_gui_message_grouped(const tg_gui_state *state, int index)
@@ -4318,6 +4329,13 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
                                    (unsigned long)strlen(message->sender));
             }
         }
+    }
+    if (photo_h > 0 && inline_photos &&
+        tg_gui_message_is_sticker_still(message)) {
+        /* A sticker has no bubble: its picture stands on the chat's own
+           background, the colour its transparent parts were filled with. */
+        fill_pen = TG_GUI_PEN_WINDOW;
+        time_pen = TG_GUI_PEN_TEXT_DIM;
     }
 
     /* Clip every drawn part to the transcript bottom so a tall bubble near the
@@ -8346,6 +8364,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {"Built-in chime", TG_GUI_SET_CHIME},
     {"Photos and emoji", 0},
     {"Show inline photos", TG_GUI_SET_INLINE},
+    {"Sticker pictures", TG_GUI_SET_STICKERS},
     {"Full-size photos", TG_GUI_SET_FULLSIZE},
     {"Photo dithering", TG_GUI_SET_DITHER},
     {"Photo cache limit", TG_GUI_SET_CACHE},
@@ -8408,6 +8427,7 @@ int tg_gui_settings_disabled(const tg_gui_state *state, int id)
         return 1;
     }
     return (id == TG_GUI_SET_EMOTICONS && !state->emoji_enabled) ||
+           (id == TG_GUI_SET_STICKERS && !state->inline_photos) ||
            (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port) ||
            (id == TG_GUI_SET_UPDATES && !state->update_can);
 }
@@ -8478,6 +8498,9 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     case TG_GUI_SET_EMOJI: on = state->emoji_enabled; break;
     case TG_GUI_SET_EMOTICONS: on = state->emoticon_replace; break;
     case TG_GUI_SET_MARKDOWN: on = state->markdown; break;
+    case TG_GUI_SET_STICKERS:
+        on = state->sticker_can && state->stickers;
+        break;
     case TG_GUI_SET_AVATARS: on = state->avatars_enabled; break;
     case TG_GUI_SET_OWN_SCREEN: on = state->settings_own_screen; break;
     case TG_GUI_SET_AREXX_PORT: on = state->arexx_port; break;
@@ -12297,7 +12320,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 23 && switches == 11 &&
+        ok_set = ok_set && lines == 24 && switches == 12 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&

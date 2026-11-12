@@ -130,6 +130,22 @@ int tg_image_canonical_cache_read(const char *path,
                                   unsigned long rgb_cap,
                                   int expected_w, int expected_h);
 
+/* A picture read through the system's datatypes, for the formats this
+   program has no decoder for (a sticker is a WEBP): the file's pixels as
+   tightly packed RGB888 in a block the caller frees, its transparent
+   parts filled with `background` (0xRRGGBB). 0 = read; otherwise one of
+   the TG_IMAGE_DT_ reasons. Only the Amiga builds with a window have
+   datatypes: elsewhere it always says there is none. */
+#define TG_IMAGE_DT_NO_DATATYPE 1 /* no datatype of this system reads it */
+#define TG_IMAGE_DT_NO_MEMORY 2
+#define TG_IMAGE_DT_FAILED 3      /* read, but no true-colour pixels came */
+#define TG_IMAGE_DT_EDGE_MAX 1024
+int tg_image_dt_decode_rgb(const char *path, unsigned long background,
+                           unsigned char **rgb_out, int *w_out, int *h_out);
+/* 1 when this machine has a datatype that reads WEBP. Asked once: a tiny
+   WEBP is written to data/ and opened. */
+int tg_image_dt_reads_webp(void);
+
 /* Apply the 4x4 ordered-dither offset used before palette matching. */
 void tg_image_ordered_dither_rgb(const unsigned char *rgb,
                                  int x, int y,

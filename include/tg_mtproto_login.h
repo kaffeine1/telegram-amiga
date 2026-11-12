@@ -219,6 +219,11 @@ int tg_mtproto_web_page_suffix(const tg_mtproto_web_page *page,
 tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
                                              tg_mtproto_web_page *out);
 
+/* A sticker's still picture is a WEBP, which this program cannot decode:
+   it is offered to the photo pipeline only after the window has said
+   that the system can read it (a WEBP datatype). Off at start. */
+void tg_mtproto_set_sticker_stills(int on);
+
 /* Parses one bare Document (document#8fd4c4d8 / documentEmpty#36f8c871),
    reader positioned ON the constructor; leaves the reader right after the
    object (every variant is walked wire-exactly).

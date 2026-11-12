@@ -374,6 +374,8 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
 /* "Markdown formatting" of the settings, one on/off line like the emoji
    files. */
 #define TG_GUI_MARKDOWN_FILE "data/telegram-markdown.txt"
+/* "Sticker pictures" of the settings, the same kind of line. */
+#define TG_GUI_STICKERS_FILE "data/telegram-stickers.txt"
 
 /* A chat's name for a requester's button ("For me and Anna"): '|' and '%'
    would break the requester apart and are replaced, a name longer than
@@ -475,6 +477,8 @@ typedef struct tg_gui_state {
     int emoji_enabled;    /* picker and graphical emoji; off keeps text emoticons */
     int emoticon_replace; /* a typed :) becomes its emoji (on by default) */
     int markdown; /* **bold** and its kin are formatting when sent (on) */
+    int stickers;    /* a sticker shows its picture, not its emoji */
+    int sticker_can; /* this machine has a datatype that reads WEBP */
     int emoticon_undo_at; /* where the last one went in, for Backspace; -1 */
     char emoticon_undo[8]; /* the characters typed for it */
     int emoji_explicit;   /* user saved an on/off choice */
@@ -1124,6 +1128,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_AREXX_SEND 16
 #define TG_GUI_SET_UPDATES 17     /* look for a newer version once a day */
 #define TG_GUI_SET_MARKDOWN 18    /* **bold** and its kin when sending */
+#define TG_GUI_SET_STICKERS 19    /* a sticker's picture, through a datatype */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2
@@ -1246,6 +1251,10 @@ void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh);
    the server clears the out flag on every message (nothing in Saved Messages
    is "outgoing"), yet everything is yours: Edit/Delete gate on this too. */
 int tg_gui_open_chat_is_self(const tg_gui_state *state);
+/* A sticker whose picture is being shown: it stands on the chat's own
+   background, with no bubble around it. */
+int tg_gui_message_is_sticker_still(const tg_gui_message *message);
+#define TG_GUI_STICKER_MAX_W 160 /* as wide as a sticker is drawn */
 
 /* Selecting several messages. begin: the mode starts with message `mi`
    chosen (a reply or an edit under way is dropped). toggle: a click on
