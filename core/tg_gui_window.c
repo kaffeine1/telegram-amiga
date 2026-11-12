@@ -10107,6 +10107,29 @@ static void tg_gui_window_poll_vote(tg_gui_state *state,
     tg_gui_window_paint(state, backend);
 }
 
+/* ENTER or Send on an edit. 1 = the edit is over: saved, or the text is
+   what the composer was given, and then nothing is sent (Telegram would
+   refuse it as not modified). 0 = Telegram did not take it: the caller
+   leaves the text in the composer and the edit open, so that nothing
+   typed is lost. */
+static int tg_gui_window_save_edit(tg_gui_state *state)
+{
+    static char before[TG_GUI_MSG_TEXT_MAX];
+    int i;
+
+    for (i = 0; i < state->message_count; ++i) {
+        if (state->messages[i].id == state->edit_to_id) {
+            (void)tg_gui_edit_text(state, state->messages[i].text, before,
+                                   sizeof(before));
+            if (strcmp(before, state->input) == 0) {
+                return 1;
+            }
+            break;
+        }
+    }
+    return tg_gui_session_edit(state->input, state->edit_to_id, stdout) == 0;
+}
+
 /* Stop poll: asked first, since a stopped poll stays stopped. */
 static void tg_gui_window_poll_stop(tg_gui_state *state, struct Window *win,
                                     tg_gui_backend *backend,
@@ -14679,8 +14702,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->in_sel_active = 0;
                             /* Edit mode: save the edit, then leave edit mode (the
                                bubble is updated in place by the session call). */
-                            (void)tg_gui_session_edit(state->input,
-                                                      state->edit_to_id, stdout);
+                            if (!tg_gui_window_save_edit(state)) {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    "Not saved - ENTER tries again, ESC gives up");
+                                tg_gui_window_paint(state, &backend);
+                                continue;
+                            }
                             state->edit_to_id = 0UL;
                         } else if (tg_gui_session_send(state->input,
                                                        state->reply_to_id,
@@ -16301,16 +16329,20 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->reply_to_id = 0UL;
                         state->reply_sender[0] = '\0';
                         state->reply_snippet[0] = '\0';
-                        tg_gui_strip_markers(state->input, sizeof(state->input),
-                                           m->text);
+                        /* With its markers, so that the styles are sent
+                           again; plain when they cannot be. */
+                        tg_gui_window_copy(
+                            state->status, sizeof(state->status),
+                            tg_gui_edit_text(state, m->text, state->input,
+                                             sizeof(state->input))
+                                ? "Editing - ENTER saves, ESC cancels"
+                                : "Editing - saving changes the formatting");
                         state->search_active = 0;
                         state->msg_search_active = 0;
                         state->composing = 1;
                         state->input_caret = (int)strlen(state->input);
                         state->cursor_on = 1;
                         caret_ticks = 0;
-                        tg_gui_window_copy(state->status, sizeof(state->status),
-                                           "Editing - ENTER saves, ESC cancels");
                     } else if (it == TG_GUI_CTX_DELETE && m != 0 &&
                                !m->is_system && m->id != 0UL) {
                         unsigned long del_id = m->id;
@@ -17023,9 +17055,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->in_sel_active = 0; /* input is consumed below */
                         if (state->input[0] != '\0') {
                             if (state->edit_to_id != 0UL) {
-                                (void)tg_gui_session_edit(state->input,
-                                                          state->edit_to_id,
-                                                          stdout);
+                                if (!tg_gui_window_save_edit(state)) {
+                                    tg_gui_window_copy(
+                                        state->status, sizeof(state->status),
+                                        "Not saved - ENTER tries again, ESC gives up");
+                                    tg_gui_window_paint(state, &backend);
+                                    continue;
+                                }
                                 state->edit_to_id = 0UL;
                             } else if (tg_gui_session_send(state->input,
                                                            state->reply_to_id,

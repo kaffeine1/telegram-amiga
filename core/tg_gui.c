@@ -2729,6 +2729,89 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size)
     return 1;
 }
 
+int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
+                     unsigned long size)
+{
+    static char back[TG_GUI_MSG_TEXT_MAX]; /* what the markers give again */
+    unsigned long len;
+    unsigned long i = 0UL;
+    unsigned long o = 0UL;
+    int marks = 0;
+    int block = 0; /* the code being written is a block */
+    int code_open = 0;
+    int fits = 1;
+
+    if (out == 0 || size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (shown == 0) {
+        return 1;
+    }
+    len = (unsigned long)strlen(shown);
+    while (state != 0 && state->markdown && fits && i < len) {
+        const char *mark = 0;
+        unsigned long n;
+
+        if (TG_TEXT_IS_MARKER(shown[i])) {
+            if (shown[i] == TG_TEXT_MARKER_CODE) {
+                if (!code_open) {
+                    /* code that runs over a line break is a block */
+                    unsigned long j = i + 1UL;
+
+                    block = 0;
+                    while (j < len && shown[j] != TG_TEXT_MARKER_CODE) {
+                        block = block || shown[j] == '\n';
+                        ++j;
+                    }
+                }
+                code_open = !code_open;
+                mark = block ? "```" : "`";
+            } else if (shown[i] == TG_TEXT_MARKER_BOLD) {
+                mark = "**";
+            } else if (shown[i] == TG_TEXT_MARKER_ITALIC) {
+                mark = "__";
+            } else {
+                mark = "~~";
+            }
+            n = (unsigned long)strlen(mark);
+            ++marks;
+            ++i;
+        } else {
+            mark = shown + i; /* any other byte, as it is */
+            n = 1UL;
+            ++i;
+        }
+        if (o + n >= size) {
+            fits = 0;
+        } else {
+            memcpy(out + o, mark, (size_t)n);
+            o += n;
+        }
+    }
+    out[o] = '\0';
+    if (state != 0 && state->markdown && fits) {
+        /* Kept only when the markers read back as the message shows. */
+        int formats = tg_gui_markdown_display(out, back, sizeof(back));
+
+        if (formats ? strcmp(back, shown) == 0 : marks == 0) {
+            return 1;
+        }
+    }
+    /* The plain text: what an edit sent before there were markers. */
+    tg_gui_strip_markers(out, size, shown);
+    for (i = 0UL; i < len; ++i) {
+        if (TG_TEXT_IS_MARKER(shown[i])) {
+            return 0; /* its styles go when it is saved */
+        }
+    }
+    if (state != 0 && state->markdown &&
+        tg_gui_markdown_display(out, back, sizeof(back))) {
+        return 0; /* markers once sent as text would now count */
+    }
+    return 1;
+}
+
 void tg_gui_requester_name(char *out, unsigned long size, const char *name)
 {
     unsigned long n = 0UL;
@@ -9527,6 +9610,63 @@ static int tg_gui_notify_menu_self_test(void)
             puts("gui self-test: markdown limits are wrong");
             return 2;
         }
+    }
+    /* A message back in the composer for an edit: its styles as the
+       markers that give them again, or the plain text and a 0 when
+       saving would change how it shows. */
+    {
+        static const struct {
+            int setting;
+            const char *shown;
+            const char *composer;
+            int kept;
+        } ed[] = {
+            { 1, "\034bold\034 e \035it\035", "**bold** e __it__", 1 },
+            { 1, "x \037no\037, \036code\036.", "x ~~no~~, `code`.", 1 },
+            { 1, "\036a = 1;\nb = 2;\036", "```a = 1;\nb = 2;```", 1 },
+            { 1, "\034bold \035both\035\034", "**bold __both__**", 1 },
+            { 1, "\034a\x80*\034 fine", "**a\x80*** fine", 1 },
+            { 1, "plain text", "plain text", 1 },
+            { 1, "2 ** 3 e __init__.py", "2 ** 3 e __init__.py", 1 },
+            { 1, "", "", 1 },
+            /* bold inside a word has no marker that is understood */
+            { 1, "a\034b\034c", "abc", 0 },
+            { 1, "\034 spaced\034", " spaced", 0 },
+            /* markers sent as text would count when saved again */
+            { 1, "**x** was typed", "**x** was typed", 0 },
+            /* the setting off: plain, and the styles go */
+            { 0, "\034bold\034", "bold", 0 },
+            { 0, "**x** was typed", "**x** was typed", 1 },
+            { 0, "plain text", "plain text", 1 },
+        };
+        char composer[64];
+        int was = state->markdown;
+        unsigned long c;
+
+        for (c = 0UL; c < sizeof(ed) / sizeof(ed[0]); ++c) {
+            int kept;
+
+            state->markdown = ed[c].setting;
+            kept = tg_gui_edit_text(state, ed[c].shown, composer,
+                                    sizeof(composer));
+            if (kept != ed[c].kept || strcmp(composer, ed[c].composer) != 0) {
+                state->markdown = was;
+                printf("gui self-test: edit text case %lu wrong (%s)\n", c,
+                       composer);
+                return 2;
+            }
+        }
+        /* a text that does not fit with its markers goes in plain */
+        state->markdown = 1;
+        if (tg_gui_edit_text(state, "\034bold\034", composer, 8UL) != 0 ||
+            strcmp(composer, "bold") != 0 ||
+            tg_gui_edit_text(state, "\034bold\034", composer, 9UL) != 1 ||
+            strcmp(composer, "**bold**") != 0) {
+            state->markdown = was;
+            puts("gui self-test: edit text limits are wrong");
+            return 2;
+        }
+        state->markdown = was;
     }
     {
         char name[16];

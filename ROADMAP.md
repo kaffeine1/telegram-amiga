@@ -401,9 +401,13 @@ Middle, more interface:
 - formatting typed in the composer: done (`**bold**`, `__italic__`,
   `~~strike~~`, `||spoiler||`, one backtick for code and three for a
   block become the message's entities when it is sent, counted in
-  UTF-16 units; conservative rules, a switch in the settings). Still
-  missing: the same when a message is edited, the language of a block,
-  links with a text of their own, and showing a spoiler as one;
+  UTF-16 units; conservative rules, a switch in the settings), and
+  kept by an edit (the message comes back into the composer with its
+  styles as markers; `messages.editMessage` with the entities). Still
+  missing: the language of a block, links with a text of their own,
+  showing a spoiler as one, and an edit keeping what the transcript
+  does not hold (a spoiler, a link with its own text, a mention by
+  name, underline);
 - the update notice (its section): step 1 is in place and asleep. The
   client can look a public channel up by name, search its posts for
   "Amigram" and a version (`contacts.resolveUsername`,

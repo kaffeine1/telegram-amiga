@@ -26978,9 +26978,14 @@ int tg_gui_session_edit(const char *text, unsigned long message_id, FILE *stream
     FILE *quiet;
     unsigned long prev_timeout;
     int rc;
+    int styled;
     const char *edit_text;
+    const char *styled_text;
 #if TG_MTPROTO_DISPLAY_LATIN1
-    char edit_line[1024];
+    /* As large as the one of a new message: with 1024 bytes a long text
+       did not fit, went out as raw Latin-1, and its accents reached the
+       other clients as replacement characters. */
+    static char edit_line[(TG_GUI_MSG_TEXT_MAX * 2) + 1];
 #endif
 
     if (!tg_gui_session_state.open || stream == 0 || text == 0 ||
@@ -26997,12 +27002,30 @@ int tg_gui_session_edit(const char *text, unsigned long message_id, FILE *stream
         edit_text = edit_line; /* send UTF-8; the local echo keeps Latin-1 */
     }
 #endif
+    /* The markers of the composer become the styles of the edited
+       message, as for a new one. */
+    styled_text = tg_gui_markdown_for_send(edit_text);
+    styled = styled_text != edit_text;
     rc = tg_mtproto_auth_edit_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
         tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
         tg_gui_session_state.peer_cache_file,
-        tg_gui_session_state.current_peer_index, message_id, edit_text, quiet);
+        tg_gui_session_state.current_peer_index, message_id, styled_text,
+        quiet);
+    tg_mtproto_send_set_styles(0, 0);
+#if !defined(TG_NO_GUI)
+    if (rc == 0 && styled) {
+        /* The bubble shows the styles, not the markers. */
+        static char shown[TG_GUI_MSG_TEXT_MAX];
+
+        if (tg_gui_markdown_display(text, shown, sizeof(shown))) {
+            text = shown;
+        }
+    }
+#else
+    (void)styled;
+#endif
     if (rc == 0) {
         /* Update the on-screen bubble at once with the ORIGINAL Latin-1 text. */
         tg_gui_driver_set_pending_webpage(&tg_gui_session_state.gui_driver,

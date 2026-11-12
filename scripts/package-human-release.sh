@@ -609,6 +609,12 @@ Messages
   of one line ends on that line, so that 2 ** 3, a || b or __init__.py
   go as they are. "Settings > Markdown formatting" switches it off, and
   then everything goes as typed.
+- Edit brings a message back into the input line with its formatting
+  written as those markers, so that saving it keeps the styles. Where
+  that cannot be done (bold in the middle of a word, for one) the plain
+  text comes back and the status line says that saving changes the
+  formatting. ENTER on a text you did not change sends nothing; if an
+  edit cannot be saved the text stays in the input line.
 - Drag across text to select it. Right-Amiga+C copies, Right-Amiga+X
   cuts from the input line, Right-Amiga+V pastes; the Edit menu has the
   same.
@@ -828,6 +834,13 @@ Messaggi
   su quella riga: cosi' 2 ** 3, a || b o __init__.py partono come sono.
   "Settings > Markdown formatting" lo spegne, e allora tutto parte
   com'e' scritto.
+- Edit riporta un messaggio nella riga di input con la sua
+  formattazione scritta con quei marcatori, cosi' salvandolo gli stili
+  restano. Dove non si puo' (un grassetto in mezzo a una parola, per
+  esempio) torna il testo semplice e la riga di stato dice che il
+  salvataggio cambia la formattazione. INVIO su un testo che non hai
+  cambiato non manda niente; se una modifica non si salva il testo
+  resta nella riga di input.
 - Trascina sul testo per selezionarlo. Amiga-destro+C copia,
   Amiga-destro+X taglia dalla riga di input, Amiga-destro+V incolla; il
   menu Edit fa lo stesso.

@@ -2655,8 +2655,12 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_MESSAGES_EDIT_MESSAGE_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer,
-                                         TG_MESSAGES_EDIT_MESSAGE_FLAG_MESSAGE);
+        /* flags.3: the entities, when the text has styles set for it
+           (tg_mtproto_send_set_styles). An edit without them takes the
+           old formatting away, as Telegram defines it. */
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_MESSAGES_EDIT_MESSAGE_FLAG_MESSAGE |
+                        (tg_send_style_count > 0 ? 8UL : 0UL));
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -2668,6 +2672,21 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_string(writer, message);
+    }
+    if (tg_send_style_count > 0) {
+        int s;
+
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(
+                writer, (unsigned long)tg_send_style_count);
+        }
+        for (s = 0; s < tg_send_style_count && status == TG_MTPROTO_TL_OK;
+             ++s) {
+            status = tg_write_send_style(writer, &tg_send_styles[s]);
+        }
     }
     return status;
 }
@@ -12545,6 +12564,42 @@ int tg_mtproto_login_self_test(void)
         query[20] != 0x0dU || query[23] != 0x0aU ||          /* id LE */
         query[24] != 0x02U || query[25] != 'h' || query[26] != 'i') {
         return 2;
+    }
+    /* An edit with formatting: flags 0x808, and after the text a vector
+       with the styles (italic on "hi", 12 bytes). The edit after it
+       carries none. */
+    {
+        tg_mtproto_send_style italic;
+
+        italic.kind = TG_MTPROTO_STYLE_ITALIC;
+        italic.offset = 0UL;
+        italic.length = 2UL;
+        tg_mtproto_send_set_styles(&italic, 1);
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_edit_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0, 0x0A0B0C0DUL, "hi") != TG_MTPROTO_TL_OK ||
+            writer.length != 28UL + 8UL + 12UL ||
+            query[4] != 0x08U || query[5] != 0x08U ||        /* flags 0x808 */
+            query[24] != 0x02U || query[25] != 'h' ||
+            query[28] != 0x15U || query[31] != 0x1cU ||      /* vector */
+            query[32] != 0x01U ||                            /* one entity */
+            query[36] != 0x60U || query[37] != 0x8bU ||
+            query[38] != 0x6fU || query[39] != 0x82U ||      /* italic */
+            query[40] != 0x00U || query[44] != 0x02U) {
+            tg_mtproto_send_set_styles(0, 0);
+            puts("login self-test: an edit with formatting built wrong");
+            return 2;
+        }
+        tg_mtproto_send_set_styles(0, 0);
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_edit_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0, 0x0A0B0C0DUL, "hi") != TG_MTPROTO_TL_OK ||
+            writer.length != 28UL || query[4] != 0x00U) {
+            puts("login self-test: formatting outlived its edit");
+            return 2;
+        }
     }
     /* DELETE (peer): messages.deleteMessages#e58e95d2 revoke=1 id=[hi] ->
        ctor + flags + vector + count + id = 20 bytes. */

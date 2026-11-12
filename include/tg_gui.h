@@ -1176,6 +1176,19 @@ int tg_gui_photo_save_allowed(int destination_exists,
    is not in the list shown. */
 const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state);
 
+/* A message about to be edited, as the composer takes it: `shown` is its
+   text as the transcript holds it, internal style marks included. With
+   the formatting setting on, the marks become the markers that stand for
+   them, so that saving the edit sends the styles again. Returns 1 when
+   what is saved as it stands shows as the message does now; 0 when it
+   would not (a style where no marker is understood, such as bold inside
+   a word; the setting off on a styled message; typed markers that were
+   sent as text and would now count): the composer then gets the plain
+   text, and the caller says that saving changes the formatting. `out`
+   is always filled. */
+int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
+                     unsigned long size);
+
 /* Opens the paperclip's menu: Photo..., File... and, where Telegram takes
    polls (a group, a channel, Saved Messages), Poll... It sits above the
    click at (x, y), so that it never covers the input line; lh is the

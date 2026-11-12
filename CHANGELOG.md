@@ -77,6 +77,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   inside code is a marker, so that `2 ** 3`, `a || b` or `__init__.py`
   go as they are. "Markdown formatting" in the settings switches it
   off (`data/telegram-markdown.txt`); the text client sends as typed.
+  Edit brings a message back with its bold, italic, code and strike
+  written as those markers, and saving sends the styles again; before,
+  an edit sent the bare text and the message lost its formatting. Where
+  the markers cannot say what the message shows, the plain text comes
+  back and the status line says that saving changes the formatting.
 - Stop poll, in the menu of a poll's message, on one's own polls while
   they are open: after a confirmation the poll is closed for good and
   the message shows the final results.
@@ -278,6 +283,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- An edit of a long message (more than about a thousand characters)
+  with accented letters reached the other clients with replacement
+  characters in their place: the buffer for its UTF-8 text was smaller
+  than the one of a new message.
+- ENTER on an edit that changed nothing asked Telegram all the same and
+  was refused in silence; it now sends nothing. An edit that cannot be
+  saved no longer throws the text away: it stays in the message box,
+  and the status line says so.
 - A message with a quote block lost its bold, italic, code and strike,
   and its reactions were not shown: the quote entity of the current
   layer carries its flags before its place and was read as an unknown
