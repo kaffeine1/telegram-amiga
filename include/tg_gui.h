@@ -1010,6 +1010,10 @@ int tg_gui_composer_emoticon_undo(tg_gui_state *state);
 void tg_gui_set_avatars_enabled(tg_gui_state *state, int enabled);
 /* The same for "Sticker pictures", whose default is the processor's alone. */
 void tg_gui_set_stickers(tg_gui_state *state, int enabled);
+/* What pressing the "Sticker pictures" line asks for. The line shows them
+   on only where a datatype reads WEBP, so a line that shows off asks for
+   them, whatever was wanted before: 1 = pictures, 0 = the emoji. */
+int tg_gui_stickers_pressed(const tg_gui_state *state);
 /* Zero means emoji disabled; otherwise a square of at least 16px. Line
    height and ascent reserve that cell while keeping the actual font intact. */
 int tg_gui_emoji_inline_size(const tg_gui_state *state, int font_height);

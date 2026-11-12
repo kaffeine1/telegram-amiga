@@ -59,6 +59,53 @@
 #ifndef TG_UPDATE_WORD
 #define TG_UPDATE_WORD TG_APP_NAME
 #endif
+/* The WEBP datatype this program offers to fetch and install where the
+   system has none, so that stickers can be pictures (AmigaOS 3, AmigaOS 4
+   and MorphOS; AROS has one of its own). It is not in the archives: it is
+   a project of its own (github.com/kaffeine1/webp-datatype) and is fetched
+   only when the user asks for it. Here are the public channel that posts
+   its files, and for each file the name it is posted under, its size and
+   its SHA-256 (64 lowercase hex digits). Only a file with that very hash
+   is ever kept: what gets installed is decided here, when a release is
+   cut, and not by what the channel comes to hold later. A posted file is
+   never replaced: a new build of the datatype is a new version, posted
+   under new names and pinned by a new release of this program, so the
+   older releases go on finding theirs. An empty hash = no offer, and the
+   settings line says there is no datatype. scripts/webp-datatype-pin.sh
+   writes the twelve lines below from the files of a release of the
+   datatype and puts those files, named as here, where they can be posted
+   from. The channel can be given on the compiler's command line: an empty
+   name stands for the account's Saved Messages, which is how the offer is
+   tried without posting anything where others read. */
+#ifndef TG_WEBP_DT_CHANNEL
+#define TG_WEBP_DT_CHANNEL "amigram1"
+#endif
+#define TG_WEBP_DT_OS3_NAME "webp-45.1-os3.datatype"
+#define TG_WEBP_DT_OS3_SIZE 130464UL
+#define TG_WEBP_DT_OS3_SHA256 "32d20714fec40237b96124de75ebbadd2324f654110163141ebeb3bef52bfbd9"
+#define TG_WEBP_DT_OS4_NAME "webp-45.1-os4.datatype"
+#define TG_WEBP_DT_OS4_SIZE 223524UL
+#define TG_WEBP_DT_OS4_SHA256 "9c487032571de5d2c30535c1201cdf69144612a7ae34faf33b7362ec6f132326"
+#define TG_WEBP_DT_MOS_NAME "webp-45.1-morphos.datatype"
+#define TG_WEBP_DT_MOS_SIZE 176648UL
+#define TG_WEBP_DT_MOS_SHA256 "b2ba6a951fdac2ee3f75a0206fe39e8fbf8937e8cae1d6b608c9facc309e415d"
+#define TG_WEBP_DT_DESC_NAME "WebP-45.1.descriptor"
+#define TG_WEBP_DT_DESC_SIZE 142UL
+#define TG_WEBP_DT_DESC_SHA256 "ba3d7bb91221b090904d65d997f41de74febe14a22d6385a2377a1051ac4202b"
+/* the library of the system this build is for */
+#if defined(__amigaos4__)
+#define TG_WEBP_DT_NAME TG_WEBP_DT_OS4_NAME
+#define TG_WEBP_DT_SIZE TG_WEBP_DT_OS4_SIZE
+#define TG_WEBP_DT_SHA256 TG_WEBP_DT_OS4_SHA256
+#elif defined(__MORPHOS__)
+#define TG_WEBP_DT_NAME TG_WEBP_DT_MOS_NAME
+#define TG_WEBP_DT_SIZE TG_WEBP_DT_MOS_SIZE
+#define TG_WEBP_DT_SHA256 TG_WEBP_DT_MOS_SHA256
+#else
+#define TG_WEBP_DT_NAME TG_WEBP_DT_OS3_NAME
+#define TG_WEBP_DT_SIZE TG_WEBP_DT_OS3_SIZE
+#define TG_WEBP_DT_SHA256 TG_WEBP_DT_OS3_SHA256
+#endif
 /* What the same terms (2.2) ask every client to tell its users, shown under
    the title where the program introduces itself. */
 #define TG_APP_INTRO_NOTE "A Telegram API client, part of the Telegram ecosystem"

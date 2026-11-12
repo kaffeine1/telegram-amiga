@@ -19668,6 +19668,7 @@ static int tg_gui_markdown_send_self_test(void);
 static int tg_gui_saved_self_test(void);
 static int tg_gui_batch_self_test(void);
 static int tg_gui_update_self_test(void);
+static int tg_gui_channel_install_self_test(void);
 static int tg_gui_unread_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
@@ -21897,7 +21898,9 @@ int tg_mtproto_probe_self_test(void)
     if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0 ||
         tg_gui_markdown_send_self_test() != 0 ||
         tg_gui_saved_self_test() != 0 || tg_gui_batch_self_test() != 0 ||
-        tg_gui_update_self_test() != 0 || tg_gui_unread_self_test() != 0) {
+        tg_gui_update_self_test() != 0 ||
+        tg_gui_channel_install_self_test() != 0 ||
+        tg_gui_unread_self_test() != 0) {
         return 2;
     }
 #endif
@@ -32154,8 +32157,15 @@ static void tg_mtproto_download_park_alloc(void)
     tg_gui_dl.win_max = TG_GUI_DL_WINDOW;
 }
 
-static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
-                                     unsigned long msg_id, FILE *stream)
+/* `given` and `fixed_path` are for a file that is not a message of a chat
+   in the list (a public channel's post, found by a search): the document
+   as the search gave it, and where it is written. With them no chat is
+   read for the document, at the start or later, and the download drawer
+   is left alone. Both 0 = the file of message `msg_id` of the chat. */
+static int tg_mtproto_download_begin_at(const tg_mtproto_file_ctx *fc,
+                                        unsigned long msg_id,
+                                        const tg_mtproto_document_meta *given,
+                                        const char *fixed_path, FILE *stream)
 {
     char safe[TG_MTPROTO_DOC_NAME_MAX];
     unsigned long home;
@@ -32167,14 +32177,18 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
         return 1; /* one transfer at a time; fail[] belongs to the running one */
     }
     memset(&tg_gui_dl, 0, sizeof(tg_gui_dl)); /* fail[] cleared for the caller */
-    if (fc == 0 || stream == 0 ||
-        fc->peer_index == 0 || fc->peer_index[0] == '\0') {
+    if (fc == 0 || stream == 0 || (given == 0) != (fixed_path == 0) ||
+        (given == 0 &&
+         (fc->peer_index == 0 || fc->peer_index[0] == '\0')) ||
+        (fixed_path != 0 &&
+         (fixed_path[0] == '\0' ||
+          strlen(fixed_path) >= sizeof(tg_gui_dl.path)))) {
         return 1;
     }
     tg_gui_dl.fc = *fc;
     /* Copy the peer index: the caller's points at the session's CURRENT chat
        and would silently retarget this transfer on a chat switch. */
-    for (n = 0UL; fc->peer_index[n] != '\0' &&
+    for (n = 0UL; given == 0 && fc->peer_index[n] != '\0' &&
                   n + 1UL < sizeof(tg_gui_dl.peer_index_copy); ++n) {
         tg_gui_dl.peer_index_copy[n] = fc->peer_index[n];
     }
@@ -32184,9 +32198,16 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
     tg_gui_dl.stream = stream;
     tg_gui_dl.quiet = tg_mtproto_open_quiet_stream(stream);
     tg_dl_diag[0] = '\0';
-    if (tg_mtproto_file_find_document(&tg_gui_dl.fc, msg_id, tg_gui_dl.quiet,
-                                      &tg_gui_dl.doc,
-                                      &tg_gui_dl.resolved_msg_id) != 0) {
+    if (given != 0) {
+        tg_gui_dl.doc = *given;
+        tg_gui_dl.resolved_msg_id = msg_id;
+        /* its reference is fresh from the search, and there is no chat to
+           ask for another one */
+        tg_gui_dl.refetched = 1;
+    } else if (tg_mtproto_file_find_document(&tg_gui_dl.fc, msg_id,
+                                             tg_gui_dl.quiet, &tg_gui_dl.doc,
+                                             &tg_gui_dl.resolved_msg_id) !=
+               0) {
         tg_gui_log("download: not found");
         sprintf(tg_gui_dl.fail, "%.90s", tg_dl_diag);
         tg_mtproto_close_quiet_stream(tg_gui_dl.quiet, stream);
@@ -32220,7 +32241,9 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
         tg_gui_log("download: foreign DC, using its file channel");
     }
     tg_gui_dl_file_name(&tg_gui_dl.doc, safe, sizeof(safe));
-    {
+    if (fixed_path != 0) {
+        strcpy(tg_gui_dl.path, fixed_path);
+    } else {
         const char *dir = tg_gui_session_download_dir();
 
         (void)mkdir(dir, 0777); /* EEXIST is the norm; volume roots fail
@@ -32268,6 +32291,12 @@ static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
     tg_gui_dl.active = 1;
     tg_mtproto_download_park_alloc();
     return 0;
+}
+
+static int tg_mtproto_download_begin(const tg_mtproto_file_ctx *fc,
+                                     unsigned long msg_id, FILE *stream)
+{
+    return tg_mtproto_download_begin_at(fc, msg_id, 0, 0, stream);
 }
 
 /* Move ONE chunk. Returns 1 while the transfer is running, 0 once finished
@@ -34620,6 +34649,374 @@ static int tg_gui_update_ask(const char *channel, FILE *quiet)
     return 0;
 }
 
+/* --- a file from a public channel's posts --------------------------------
+   The client can fetch one file a public channel posted: the WEBP
+   datatype it offers to install where the system has none. The file is
+   known beforehand by its exact name and by its SHA-256, which this
+   program carries: whatever else the channel may hold, or come to hold,
+   nothing but that very file is ever kept. */
+
+/* The newest of the listed messages that carries a file of exactly this
+   name and of this size: its place in the list, -1 when there is none.
+   Size 0 = any size up to TG_GUI_CHANNEL_FILE_MAX: what is fetched this
+   way is small, and a name alone must not bring down something that is
+   not. */
+#define TG_GUI_CHANNEL_FILE_MAX 1048576UL
+static int tg_gui_channel_file_pick(const tg_mtproto_message_text_list *list,
+                                    const char *file_name,
+                                    unsigned long size)
+{
+    unsigned long best_id = 0UL;
+    unsigned long i;
+    int best = -1;
+
+    for (i = 0UL; i < list->count; ++i) {
+        const tg_mtproto_message_text *m = &list->messages[i];
+
+        if (m->document.has_document &&
+            m->document.file_reference_len != 0UL &&
+            strcmp(m->document.file_name, file_name) == 0 &&
+            m->document.size_hi == 0UL &&
+            (size == 0UL ? m->document.size_lo <= TG_GUI_CHANNEL_FILE_MAX
+                         : m->document.size_lo == size) &&
+            m->id > best_id) {
+            best = (int)i;
+            best_id = m->id;
+        }
+    }
+    return best;
+}
+
+/* The SHA-256 of a file as 64 lowercase hex digits. 1 = `hex` holds it. */
+static int tg_gui_file_sha256_hex(const char *path, char hex[65])
+{
+    static const char digits[] = "0123456789abcdef";
+    static unsigned char block[4096];
+    unsigned char digest[TG_MTPROTO_SHA256_LENGTH];
+    tg_mtproto_sha256_ctx ctx;
+    FILE *f = fopen(path, "rb");
+    size_t got;
+    int k;
+
+    hex[0] = '\0';
+    if (f == 0) {
+        return 0;
+    }
+    tg_mtproto_sha256_init(&ctx);
+    while ((got = fread(block, 1, sizeof(block), f)) > 0U) {
+        tg_mtproto_sha256_update(&ctx, block, (unsigned long)got);
+    }
+    k = ferror(f);
+    fclose(f);
+    if (k) {
+        return 0;
+    }
+    tg_mtproto_sha256_final(&ctx, digest);
+    for (k = 0; k < (int)TG_MTPROTO_SHA256_LENGTH; ++k) {
+        hex[2 * k] = digits[digest[k] >> 4];
+        hex[(2 * k) + 1] = digits[digest[k] & 15U];
+    }
+    hex[64] = '\0';
+    return 1;
+}
+
+/* Public: fetches the file `file_name`, `size` bytes long (0 = any small
+   one), that the public channel `channel` posted, into `out_path`, and
+   keeps it only when its SHA-256 is `sha256_hex` (64 lowercase hex
+   digits). An empty channel name stands for this account's Saved
+   Messages, which is how the function is tried without a channel. 0 = the
+   file is there and is the one expected, 1 = Telegram refused (emsg says
+   why), 2 = failed, 3 = the channel or the file was not found, 4 = what
+   came is not the file expected (it is removed). */
+int tg_gui_session_fetch_channel_file(const char *channel,
+                                      const char *file_name,
+                                      unsigned long size,
+                                      const char *sha256_hex,
+                                      const char *out_path, char *emsg,
+                                      unsigned long emsg_size, FILE *stream)
+{
+    static unsigned char query[192];
+    static tg_mtproto_document_meta doc;
+    static const char label[] = "channel file";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_file_ctx fc;
+    unsigned long pc = TG_MTPROTO_PEER_SELF_CONSTRUCTOR;
+    unsigned long ph = 0UL;
+    unsigned long pl = 0UL;
+    unsigned long ahh = 0UL;
+    unsigned long ahl = 0UL;
+    unsigned long msg_id = 0UL;
+    char hex[65];
+    FILE *quiet;
+    int pass;
+    int at = -1;
+    int rc;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 || file_name == 0 ||
+        file_name[0] == '\0' || sha256_hex == 0 ||
+        strlen(sha256_hex) != 64UL || out_path == 0 || out_path[0] == '\0' ||
+        tg_shared_message_texts_busy || tg_gui_dl.active) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (channel != 0 && channel[0] != '\0') {
+        const tg_mtproto_peer_cache_entry *e;
+
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        rc = tg_mtproto_build_contacts_resolve_username_flags(
+                 &writer, channel) == TG_MTPROTO_TL_OK
+                 ? tg_gui_session_peer_request(query, writer.length, &result,
+                                               label, emsg, emsg_size, quiet)
+                 : 3;
+        if (rc == 0 &&
+            (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
+             tg_mtproto_parse_resolved_peer_cache(
+                 result.result_constructor, result.result_body,
+                 result.result_body_length, &tg_peer_cache_scratch) !=
+                 TG_MTPROTO_TL_OK ||
+             tg_peer_cache_scratch.count == 0UL)) {
+            rc = 3;
+        }
+        if (rc == 0) {
+            e = &tg_peer_cache_scratch.entries[0];
+            if (e->peer_constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
+                !e->has_access_hash) {
+                rc = 3; /* a person's name, not a channel's */
+            } else {
+                pc = e->peer_constructor;
+                ph = e->id_hi;
+                pl = e->id_lo;
+                ahh = e->access_hash_hi;
+                ahl = e->access_hash_lo;
+            }
+        }
+        if (rc != 0) {
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            tg_gui_log("channel file: the channel was not found");
+            return rc;
+        }
+    }
+    /* The channel's files by that name; where the search does not look at
+       file names, its latest files, among which the name is looked for. */
+    for (pass = 0; pass < 2 && at < 0; ++pass) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        rc = tg_mtproto_build_messages_search_documents(
+                 &writer, pc, ph, pl, ahh, ahl,
+                 pc != TG_MTPROTO_PEER_SELF_CONSTRUCTOR,
+                 pass == 0 ? file_name : "",
+                 pass == 0 ? 10UL : 30UL) == TG_MTPROTO_TL_OK
+                 ? tg_gui_session_peer_request(query, writer.length, &result,
+                                               label, emsg, emsg_size, quiet)
+                 : 2;
+        if (rc == 0 &&
+            tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+            rc = 2;
+        }
+        if (rc != 0) {
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            tg_gui_log("channel file: the search was not answered");
+            return rc;
+        }
+        tg_shared_message_texts_busy = 1;
+        if (tg_mtproto_parse_message_text_list(
+                result.result_constructor, result.result_body,
+                result.result_body_length, &tg_shared_message_texts) ==
+            TG_MTPROTO_TL_OK) {
+            at = tg_gui_channel_file_pick(&tg_shared_message_texts,
+                                          file_name, size);
+            if (at >= 0) {
+                doc = tg_shared_message_texts.messages[at].document;
+                msg_id = tg_shared_message_texts.messages[at].id;
+            }
+        }
+        tg_shared_message_texts_busy = 0;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (at < 0) {
+        tg_gui_log("channel file: no post carries that file");
+        return 3;
+    }
+    tg_gui_session_file_ctx(&fc);
+    rc = tg_mtproto_download_begin_at(&fc, msg_id, &doc, out_path, stream);
+    if (rc == 0) {
+        while (tg_mtproto_download_step()) {
+        }
+        rc = tg_mtproto_download_end(0, 0UL);
+    }
+    if (rc != 0) {
+        (void)remove(out_path);
+        tg_gui_log("channel file: the download failed");
+        return 2;
+    }
+    if (!tg_gui_file_sha256_hex(out_path, hex) ||
+        strcmp(hex, sha256_hex) != 0) {
+        (void)remove(out_path);
+        tg_gui_log("channel file: not the file expected, removed");
+        return 4;
+    }
+    tg_gui_log("channel file: fetched and checked");
+    return 0;
+}
+
+/* a variable, so that the self-test can install without a network */
+static int (*tg_gui_channel_fetch_fn)(const char *channel,
+                                      const char *file_name,
+                                      unsigned long size,
+                                      const char *sha256_hex,
+                                      const char *out_path, char *emsg,
+                                      unsigned long emsg_size,
+                                      FILE *stream) =
+    tg_gui_session_fetch_channel_file;
+
+static int tg_gui_file_is_there(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+
+    if (f == 0) {
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+/* A checked file is copied to a place where there is none. 0 = copied, and
+   the copy read back has the hash expected; TG_GUI_INSTALL_EXISTS = a file
+   is already there (left as it is); TG_GUI_INSTALL_WRITE = it could not be
+   written (whatever was written is removed). */
+static int tg_gui_install_copy(const char *from, const char *to,
+                               const char *sha256_hex)
+{
+    static unsigned char block[4096];
+    char hex[65];
+    FILE *in;
+    FILE *out;
+    size_t got;
+    int bad = 0;
+
+    if (tg_gui_file_is_there(to)) {
+        return TG_GUI_INSTALL_EXISTS;
+    }
+    in = fopen(from, "rb");
+    if (in == 0) {
+        return TG_GUI_INSTALL_WRITE;
+    }
+    out = fopen(to, "wb");
+    if (out == 0) {
+        fclose(in);
+        return TG_GUI_INSTALL_WRITE;
+    }
+    while ((got = fread(block, 1, sizeof(block), in)) > 0U) {
+        if (fwrite(block, 1, got, out) != got) {
+            bad = 1;
+            break;
+        }
+    }
+    if (ferror(in)) {
+        bad = 1;
+    }
+    fclose(in);
+    if (fclose(out) != 0) {
+        bad = 1;
+    }
+    if (!bad && (!tg_gui_file_sha256_hex(to, hex) ||
+                 strcmp(hex, sha256_hex) != 0)) {
+        bad = 1; /* a full disk can cut a file without an error */
+    }
+    if (bad) {
+        (void)remove(to);
+        return TG_GUI_INSTALL_WRITE;
+    }
+    return 0;
+}
+
+static void tg_gui_install_say(char *emsg, unsigned long emsg_size,
+                               const char *text)
+{
+    unsigned long n = 0UL;
+
+    if (emsg == 0 || emsg_size == 0UL) {
+        return;
+    }
+    while (text[n] != '\0' && n + 1UL < emsg_size) {
+        emsg[n] = text[n];
+        ++n;
+    }
+    emsg[n] = '\0';
+}
+
+/* Public: fetches `count` files a public channel posted and puts each into
+   its place in the system: all of them or none. Nothing is fetched when
+   one of the places already holds a file, and no file already there is
+   ever written over or removed. The files are fetched and checked one by
+   one into their `staging` paths first, then copied; if a copy fails, the
+   ones this call had already put in place come out again. 0 = all in
+   place; 1 to 4 as tg_gui_session_fetch_channel_file() says;
+   TG_GUI_INSTALL_EXISTS = a file is already there, TG_GUI_INSTALL_WRITE =
+   a file could not be written (emsg holds its path in both). */
+int tg_gui_session_install_channel_files(const char *channel,
+                                         const tg_gui_channel_install *items,
+                                         unsigned int count, char *emsg,
+                                         unsigned long emsg_size,
+                                         FILE *stream)
+{
+    unsigned int placed = 0U;
+    unsigned int i;
+    int rc = 0;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (items == 0 || count == 0U || count > TG_GUI_INSTALL_MAX ||
+        stream == 0) {
+        return 2;
+    }
+    for (i = 0U; i < count; ++i) {
+        if (items[i].file_name == 0 || items[i].sha256_hex == 0 ||
+            items[i].staging == 0 || items[i].staging[0] == '\0' ||
+            items[i].target == 0 || items[i].target[0] == '\0') {
+            return 2;
+        }
+    }
+    for (i = 0U; i < count; ++i) {
+        if (tg_gui_file_is_there(items[i].target)) {
+            tg_gui_install_say(emsg, emsg_size, items[i].target);
+            tg_gui_log("install: a file is already there, nothing fetched");
+            return TG_GUI_INSTALL_EXISTS;
+        }
+    }
+    for (i = 0U; i < count && rc == 0; ++i) {
+        rc = tg_gui_channel_fetch_fn(channel, items[i].file_name,
+                                     items[i].size, items[i].sha256_hex,
+                                     items[i].staging, emsg, emsg_size,
+                                     stream);
+    }
+    for (i = 0U; i < count && rc == 0; ++i) {
+        rc = tg_gui_install_copy(items[i].staging, items[i].target,
+                                 items[i].sha256_hex);
+        if (rc == 0) {
+            ++placed;
+        } else {
+            tg_gui_install_say(emsg, emsg_size, items[i].target);
+        }
+    }
+    if (rc != 0) {
+        /* all or none: what this call put into the system comes out */
+        for (i = 0U; i < placed; ++i) {
+            (void)remove(items[i].target);
+        }
+    }
+    for (i = 0U; i < count; ++i) {
+        (void)remove(items[i].staging);
+    }
+    tg_gui_log(rc == 0 ? "install: all the files are in place"
+                       : "install: nothing was installed");
+    return rc;
+}
+
 /* a variable, so that the self-test can go round without a network */
 static int (*tg_gui_update_ask_fn)(const char *channel, FILE *quiet) =
     tg_gui_update_ask;
@@ -35025,6 +35422,307 @@ static int tg_gui_update_self_test(void)
     memset(&tg_gui_update, 0, sizeof(tg_gui_update));
     if (!ok) {
         puts("probe self-test: update notice: the round failed");
+        return 2;
+    }
+    return 0;
+}
+
+static const char *tg_install_fake_body[TG_GUI_INSTALL_MAX];
+static char tg_install_fake_asked[TG_GUI_INSTALL_MAX][24];
+static unsigned long tg_install_fake_sizes[TG_GUI_INSTALL_MAX];
+static const char *tg_install_fake_plants; /* a file that turns up meanwhile */
+static int tg_install_fake_calls;
+static int tg_install_fake_fail_at; /* the call, counted from 1, that fails */
+static int tg_install_fake_rc;
+
+static int tg_install_test_write(const char *path, const char *text)
+{
+    FILE *f = fopen(path, "wb");
+
+    if (f == 0) {
+        return 0;
+    }
+    fputs(text, f);
+    return fclose(f) == 0;
+}
+
+static int tg_install_test_holds(const char *path, const char *text)
+{
+    char got[96];
+    FILE *f = fopen(path, "rb");
+    size_t n;
+
+    if (f == 0) {
+        return 0;
+    }
+    n = fread(got, 1, sizeof(got) - 1U, f);
+    fclose(f);
+    got[n] = '\0';
+    return strcmp(got, text) == 0;
+}
+
+static int tg_install_fake_fetch(const char *channel, const char *file_name,
+                                 unsigned long size, const char *sha256_hex,
+                                 const char *out_path, char *emsg,
+                                 unsigned long emsg_size, FILE *stream)
+{
+    int at = tg_install_fake_calls++;
+
+    (void)sha256_hex;
+    (void)stream;
+    if (at >= (int)TG_GUI_INSTALL_MAX || strcmp(channel, "chan") != 0) {
+        return 2;
+    }
+    sprintf(tg_install_fake_asked[at], "%.23s", file_name);
+    tg_install_fake_sizes[at] = size;
+    if (at + 1 == tg_install_fake_fail_at) {
+        if (emsg != 0 && emsg_size > 8UL) {
+            strcpy(emsg, "REFUSED");
+        }
+        return tg_install_fake_rc;
+    }
+    if (at == 1 && tg_install_fake_plants != 0 &&
+        !tg_install_test_write(tg_install_fake_plants, "kept")) {
+        return 2;
+    }
+    return tg_install_test_write(out_path, tg_install_fake_body[at]) ? 0 : 2;
+}
+
+static void tg_install_fake_reset(void)
+{
+    memset(tg_install_fake_asked, 0, sizeof(tg_install_fake_asked));
+    memset(tg_install_fake_sizes, 0, sizeof(tg_install_fake_sizes));
+    tg_install_fake_plants = 0;
+    tg_install_fake_calls = 0;
+    tg_install_fake_fail_at = 0;
+    tg_install_fake_rc = 0;
+}
+
+static void tg_install_test_post(tg_mtproto_message_text *m,
+                                 unsigned long id, const char *name,
+                                 unsigned long size)
+{
+    memset(m, 0, sizeof(*m));
+    m->id = id;
+    m->document.has_document = 1;
+    m->document.file_reference_len = 4UL;
+    m->document.size_lo = size;
+    strcpy(m->document.file_name, name);
+}
+
+/* A file from a channel and its way into the system, without a network:
+   which post is the file's, the hash of a file, the copy that writes over
+   nothing, and the installation that is all or none. */
+static int tg_gui_channel_install_self_test(void)
+{
+    static const char abc_hex[] =
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    static const char two_text[] =
+        "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    static const char two_hex[] =
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1";
+    /* five thousand times "a": more than one block is read */
+    static const char big_hex[] =
+        "c526c6222044dab5674de9c4ac7f4566ebb5e4d8bf9d8ea34c9cc8a7cc3c869c";
+    static const char sa[] = "telegram-install-a.tmp";
+    static const char sb[] = "telegram-install-b.tmp";
+    static const char ta[] = "telegram-install-ta.tmp";
+    static const char tb[] = "telegram-install-tb.tmp";
+    static const char tc[] = "telegram-install-tc.tmp";
+    static const char nowhere[] = "telegram-install-nodir.tmp/x";
+    tg_mtproto_message_text_list *list = &tg_shared_message_texts;
+    tg_gui_channel_install items[2];
+    int keep_open = tg_gui_session_state.open;
+    char hex[65];
+    char why[80];
+    FILE *f;
+    int i;
+    int ok = 1;
+
+    (void)remove(sa);
+    (void)remove(sb);
+    (void)remove(ta);
+    (void)remove(tb);
+    (void)remove(tc);
+
+    /* the hash of a file */
+    ok = ok && tg_install_test_write(sa, "abc") &&
+         tg_gui_file_sha256_hex(sa, hex) && strcmp(hex, abc_hex) == 0;
+    f = fopen(sa, "wb");
+    for (i = 0; f != 0 && i < 5000; ++i) {
+        fputc('a', f);
+    }
+    ok = ok && f != 0 && fclose(f) == 0 && tg_gui_file_sha256_hex(sa, hex) &&
+         strcmp(hex, big_hex) == 0;
+    (void)remove(sa);
+    strcpy(hex, "x");
+    ok = ok && !tg_gui_file_sha256_hex(sa, hex) && hex[0] == '\0';
+    if (!ok) {
+        puts("probe self-test: channel file: the hash failed");
+        return 2;
+    }
+
+    /* which post is the file's */
+    memset(list, 0, sizeof(*list));
+    tg_install_test_post(&list->messages[0], 5UL, "f.bin", 100UL);
+    tg_install_test_post(&list->messages[1], 9UL, "f.bin", 100UL);
+    tg_install_test_post(&list->messages[2], 20UL, "g.bin", 100UL);
+    tg_install_test_post(&list->messages[3], 30UL, "f.bin", 101UL);
+    tg_install_test_post(&list->messages[4], 40UL, "f.bin", 100UL);
+    list->messages[4].document.size_hi = 1UL; /* over four gigabytes */
+    tg_install_test_post(&list->messages[5], 50UL, "f.bin", 100UL);
+    list->messages[5].document.file_reference_len = 0UL;
+    tg_install_test_post(&list->messages[6], 60UL, "f.bin", 100UL);
+    list->messages[6].document.has_document = 0;
+    tg_install_test_post(&list->messages[7], 70UL, "f.bin",
+                         TG_GUI_CHANNEL_FILE_MAX + 1UL);
+    tg_install_test_post(&list->messages[8], 80UL, "F.bin", 100UL);
+    list->count = 9UL;
+    ok = ok && tg_gui_channel_file_pick(list, "f.bin", 100UL) == 1 &&
+         /* no size given: the newest that is small enough */
+         tg_gui_channel_file_pick(list, "f.bin", 0UL) == 3 &&
+         tg_gui_channel_file_pick(list, "f.bin", 102UL) == -1 &&
+         tg_gui_channel_file_pick(list, "h.bin", 0UL) == -1;
+    list->messages[7].document.size_lo = TG_GUI_CHANNEL_FILE_MAX;
+    ok = ok && tg_gui_channel_file_pick(list, "f.bin", 0UL) == 7;
+    list->messages[0].id = 12UL; /* the newest, wherever it is listed */
+    ok = ok && tg_gui_channel_file_pick(list, "f.bin", 100UL) == 0;
+    list->count = 0UL;
+    ok = ok && tg_gui_channel_file_pick(list, "f.bin", 100UL) == -1;
+    memset(list, 0, sizeof(*list));
+    if (!ok) {
+        puts("probe self-test: channel file: the wrong post was picked");
+        return 2;
+    }
+
+    /* the copy: only to a free place, only the file expected */
+    ok = ok && tg_install_test_write(sa, "abc") &&
+         tg_gui_install_copy(sa, ta, two_hex) == TG_GUI_INSTALL_WRITE &&
+         !tg_gui_file_is_there(ta) &&
+         tg_gui_install_copy(sa, ta, abc_hex) == 0 &&
+         tg_install_test_holds(ta, "abc") &&
+         tg_install_test_write(tb, "kept") &&
+         tg_gui_install_copy(sa, tb, abc_hex) == TG_GUI_INSTALL_EXISTS &&
+         tg_install_test_holds(tb, "kept") &&
+         tg_gui_install_copy(sb, tc, abc_hex) == TG_GUI_INSTALL_WRITE &&
+         !tg_gui_file_is_there(tc) &&
+         tg_gui_install_copy(sa, nowhere, abc_hex) == TG_GUI_INSTALL_WRITE;
+    (void)remove(sa);
+    (void)remove(ta);
+    (void)remove(tb);
+    if (!ok) {
+        puts("probe self-test: channel file: the copy failed");
+        return 2;
+    }
+
+    /* the installation */
+    items[0].file_name = "one.bin";
+    items[0].size = 3UL;
+    items[0].sha256_hex = abc_hex;
+    items[0].staging = sa;
+    items[0].target = ta;
+    items[1].file_name = "two.bin";
+    items[1].size = 56UL;
+    items[1].sha256_hex = two_hex;
+    items[1].staging = sb;
+    items[1].target = tb;
+    tg_install_fake_body[0] = "abc";
+    tg_install_fake_body[1] = two_text;
+    tg_gui_channel_fetch_fn = tg_install_fake_fetch;
+    /* a file is already in one of the places: nothing is even fetched */
+    tg_install_fake_reset();
+    ok = ok && tg_install_test_write(tb, "kept") &&
+         tg_gui_session_install_channel_files(
+             "chan", items, 2U, why, sizeof(why), stdout) ==
+             TG_GUI_INSTALL_EXISTS &&
+         strcmp(why, tb) == 0 && tg_install_fake_calls == 0 &&
+         !tg_gui_file_is_there(ta) && tg_install_test_holds(tb, "kept");
+    (void)remove(tb);
+    /* Telegram refuses the first: the second is not asked for */
+    tg_install_fake_reset();
+    tg_install_fake_fail_at = 1;
+    tg_install_fake_rc = 1;
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) == 1 &&
+         strcmp(why, "REFUSED") == 0 && tg_install_fake_calls == 1 &&
+         !tg_gui_file_is_there(ta) && !tg_gui_file_is_there(tb);
+    /* the second is not the file expected: the first stays out as well */
+    tg_install_fake_reset();
+    tg_install_fake_fail_at = 2;
+    tg_install_fake_rc = 4;
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) == 4 &&
+         tg_install_fake_calls == 2 && !tg_gui_file_is_there(ta) &&
+         !tg_gui_file_is_there(tb) && !tg_gui_file_is_there(sa) &&
+         !tg_gui_file_is_there(sb);
+    /* the second cannot be written: the first comes out again */
+    tg_install_fake_reset();
+    items[1].target = nowhere;
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) ==
+                   TG_GUI_INSTALL_WRITE &&
+         strcmp(why, nowhere) == 0 && tg_install_fake_calls == 2 &&
+         !tg_gui_file_is_there(ta) && !tg_gui_file_is_there(sa) &&
+         !tg_gui_file_is_there(sb);
+    items[1].target = tb;
+    /* a file turns up in the second place meanwhile: it is left alone,
+       and the first comes out again */
+    tg_install_fake_reset();
+    tg_install_fake_plants = tb;
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) ==
+                   TG_GUI_INSTALL_EXISTS &&
+         strcmp(why, tb) == 0 && !tg_gui_file_is_there(ta) &&
+         tg_install_test_holds(tb, "kept") && !tg_gui_file_is_there(sa) &&
+         !tg_gui_file_is_there(sb);
+    (void)remove(tb);
+    /* both in place */
+    tg_install_fake_reset();
+    strcpy(why, "x");
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) == 0 &&
+         why[0] == '\0' && tg_install_fake_calls == 2 &&
+         strcmp(tg_install_fake_asked[0], "one.bin") == 0 &&
+         strcmp(tg_install_fake_asked[1], "two.bin") == 0 &&
+         tg_install_fake_sizes[0] == 3UL &&
+         tg_install_fake_sizes[1] == 56UL &&
+         tg_install_test_holds(ta, "abc") &&
+         tg_install_test_holds(tb, two_text) &&
+         !tg_gui_file_is_there(sa) && !tg_gui_file_is_there(sb);
+    (void)remove(ta);
+    (void)remove(tb);
+    /* what is not an installation asks nothing */
+    tg_install_fake_reset();
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 0U, why, sizeof(why), stdout) == 2 &&
+         tg_gui_session_install_channel_files(
+             "chan", items, TG_GUI_INSTALL_MAX + 1U, why, sizeof(why),
+             stdout) == 2 &&
+         tg_gui_session_install_channel_files(
+             "chan", 0, 2U, why, sizeof(why), stdout) == 2 &&
+         tg_gui_session_install_channel_files(
+             "chan", items, 2U, why, sizeof(why), 0) == 2;
+    items[1].target = "";
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) == 2;
+    items[1].target = tb;
+    items[0].staging = 0;
+    ok = ok && tg_gui_session_install_channel_files(
+                   "chan", items, 2U, why, sizeof(why), stdout) == 2 &&
+         tg_install_fake_calls == 0 && !tg_gui_file_is_there(ta) &&
+         !tg_gui_file_is_there(tb);
+    items[0].staging = sa;
+    tg_gui_channel_fetch_fn = tg_gui_session_fetch_channel_file;
+    /* and with no session open the real one fetches nothing */
+    tg_gui_session_state.open = 0;
+    strcpy(why, "x");
+    ok = ok && tg_gui_session_fetch_channel_file(
+                   "chan", "one.bin", 3UL, abc_hex, sa, why, sizeof(why),
+                   stdout) == 2 &&
+         why[0] == '\0' && !tg_gui_file_is_there(sa);
+    tg_gui_session_state.open = keep_open;
+    if (!ok) {
+        puts("probe self-test: channel file: the installation failed");
         return 2;
     }
     return 0;

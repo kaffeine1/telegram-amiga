@@ -436,7 +436,12 @@ Middle, more interface:
 - stickers through a WEBP datatype where the user has one: done (see
   "let datatypes read what we cannot"). A fallback, never a
   requirement: without a datatype the emoji stays. AROS has a WEBP
-  datatype in the system, the other systems need one installed.
+  datatype in the system, the other systems need one installed, and
+  there the "Sticker pictures" line of the settings offers to fetch
+  and install the project's own (webp.datatype 45.1, a separate
+  project, fetched from the channel @amigram1 and kept only if its
+  hash is the one in `include/tg_version.h`). It is not in the
+  archives.
 
 Large, later if at all: chat folders of one's own, scheduled messages, a
 calendar, editing the profile, administering groups. Out of reach by our
@@ -789,7 +794,13 @@ behind "Show inline photos" and its own "Sticker pictures" switch, off
 by default on a 68k below the 68040 (the processor decides, not the
 screen). One thing below turned out differently: AROS ships a
 WEBP datatype of its own, so the AROS lanes show stickers with nothing
-installed. What follows is the reasoning as it was written.
+installed. And a second one: the datatype recommended below is not the
+one the client offers. Ours (github.com/kaffeine1/webp-datatype, libwebp
+behind a datatype for AmigaOS 3, AmigaOS 4 and MorphOS) came out of
+this cycle, and the settings offer to fetch it from a Telegram channel
+and to install it (`tg_gui_session_install_channel_files`: two files,
+pinned by SHA-256, all or none, never over a file already there).
+What follows is the reasoning as it was written.
 
 Asked whether anything on Amiga reads WEBP outside this client, and the
 answer turned out to be yes, twice, and the second one is usable.

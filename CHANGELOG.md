@@ -167,6 +167,26 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   as "auto" and follows the machine the drawer is on. AROS has a WEBP
   datatype in the system; AmigaOS 3 (with picture.datatype V43 or
   later), AmigaOS 4 and MorphOS need one installed.
+- Where AmigaOS 3, AmigaOS 4 or MorphOS has no WEBP datatype, Amigram
+  offers its own. It is not in the archives: webp.datatype is a project
+  of its own (github.com/kaffeine1/webp-datatype), and the client
+  fetches it only when asked. Pressing "Sticker pictures" in the
+  settings on a system with no datatype opens a requester that says
+  which two files would be written (`SYS:Classes/DataTypes/webp.datatype`
+  and `DEVS:DataTypes/WebP`) and from where. On Install the two files
+  of version 45.1 are fetched from the public Telegram channel
+  @amigram1, each is kept only if its SHA-256 is the one this program
+  carries (`include/tg_version.h`), they are copied into place, the
+  system is told (`AddDataTypes REFRESH`) and stickers are pictures
+  from the next chat opened. It is all or none: no file already there
+  is ever replaced or removed, a file that is not the one expected is
+  deleted, and if the second file cannot be written the first comes out
+  again. The offer is not made on AROS, which has its datatype, nor
+  where picture.datatype is older than V43, which cannot hand a
+  true-colour picture to the client (the status line says so). A press
+  on the line when it shows "off" now always asks for the pictures:
+  before, with the pictures wanted and no datatype, the first press
+  switched them off.
 - Who voted..., in the menu of a poll whose votes are public, once you
   have voted (or the poll is yours, or closed): Telegram is asked for
   the voters and a requester lists them under each answer, the latest

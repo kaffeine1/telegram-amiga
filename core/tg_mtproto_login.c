@@ -69,6 +69,7 @@
 #define TG_INPUT_FOLDER_PEER_CONSTRUCTOR 0xfbd2c296UL
 #define TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR 0x57e2f66cUL
 #define TG_INPUT_MESSAGES_FILTER_PINNED_CONSTRUCTOR 0x1bb00451UL
+#define TG_INPUT_MESSAGES_FILTER_DOCUMENT_CONSTRUCTOR 0x9eddf188UL
 #define TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR 0xfe05dc9aUL
 /* messages.forwardMessages#978928ca at layer 214, verified against the
    official TDLib schema revision that declares MTPROTO_LAYER = 214. */
@@ -2096,6 +2097,27 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
         writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
         access_hash_lo, has_access_hash, "",
         TG_INPUT_MESSAGES_FILTER_PINNED_CONSTRUCTOR, 0UL, limit);
+}
+
+/* The files of a chat, newest first: the same search with
+   inputMessagesFilterDocument#9eddf188 (layer 214 schema) and the words
+   given, which may be none. A public channel's files are found this way
+   without reading its history. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_documents(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long limit)
+{
+    return tg_build_messages_search(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, query_utf8 != 0 ? query_utf8 : "",
+        TG_INPUT_MESSAGES_FILTER_DOCUMENT_CONSTRUCTOR, 0UL, limit);
 }
 
 static tg_mtproto_tl_status tg_build_messages_search(
@@ -14119,6 +14141,29 @@ int tg_mtproto_login_self_test(void)
         query[24] != 0x51U || query[25] != 0x04U ||
         query[26] != 0xb0U || query[27] != 0x1bU ||
         query[36] != 0x00U || query[44] != 1U || query[56] != 0x00U) {
+        return 2;
+    }
+    /* The files of the same group named "WebP": the words (4 bytes and
+       their length byte, padded to 8), inputMessagesFilterDocument#9eddf188,
+       limit 8 -> 68 bytes; with no words, 64. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_documents(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, "WebP", 8UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 68UL ||
+        query[0] != 0x7aU || query[3] != 0x29U || query[4] != 0x00U ||
+        query[20] != 0x04U || query[21] != 'W' || query[24] != 'P' ||
+        query[28] != 0x88U || query[29] != 0xf1U ||
+        query[30] != 0xddU || query[31] != 0x9eU ||
+        query[40] != 0x00U || query[48] != 8U || query[60] != 0x00U) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_search_documents(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 0, 8UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 64UL || query[20] != 0x00U ||
+        query[24] != 0x88U || query[27] != 0x9eU || query[44] != 8U) {
         return 2;
     }
     /* messages.searchGlobal#4bc6589a: flags 0, q "ciao", no filter, no

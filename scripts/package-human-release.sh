@@ -65,6 +65,13 @@ if [ -z "$CHANNEL" ]; then
         *)     CHANNEL=beta ;;
     esac
 fi
+# The client offers to fetch its own WEBP datatype from a Telegram channel
+# and to install it (AmigaOS 3, AmigaOS 4, MorphOS), but only a build whose
+# header pins the hashes of the datatype's files makes the offer. While
+# they are empty the manuals say, as before, that a datatype must be
+# installed; fill_platform_text adds the paragraph where it applies.
+WEBP_DT_PINNED=$(sed -n 's/.*define TG_WEBP_DT_DESC_SHA256 "\([0-9a-f]\{64\}\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)
+WEBP_DT_CHANNEL=$(sed -n 's/.*define TG_WEBP_DT_CHANNEL "\([^"]*\)".*/\1/p' "$ROOT_DIR/include/tg_version.h" 2>/dev/null)
 
 md5of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | awk '{print $1}'; fi; }
 
@@ -153,6 +160,30 @@ fill_platform_text() {
     "AmigaOS 3.x (68000)") tui_icon=1; gui_icon=0 ;;
     "AmigaOS 3.x") tui_icon=1; gui_icon=1 ;;
     *) tui_icon=0; gui_icon=1 ;;
+    esac
+    # The WEBP datatype offered from the settings: on the systems it is
+    # built for, and only when this release pins its files.
+    webp_manual_en=""
+    webp_manual_it=""
+    case "$1" in
+    "AmigaOS 3.x"|"AmigaOS 4"*|"MorphOS")
+        if [ -n "$WEBP_DT_PINNED" ] && [ -n "$WEBP_DT_CHANNEL" ]; then
+            webp_manual_en="
+- Where the system has no WEBP datatype, \"Settings > Sticker pictures\"
+  offers to fetch $APP_NAME's own (webp.datatype, from @$WEBP_DT_CHANNEL on
+  Telegram) and to install it. A requester says which two files are
+  written and where before anything is fetched. No file already there
+  is replaced, and what is fetched is kept only if it is exactly the
+  file this release expects. It needs picture.datatype V43 or later."
+            webp_manual_it="
+- Dove il sistema non ha un datatype WEBP, \"Settings > Sticker
+  pictures\" propone di scaricare quello di $APP_NAME (webp.datatype, da
+  @$WEBP_DT_CHANNEL su Telegram) e di installarlo. Un requester dice
+  quali due file vengono scritti e dove prima di scaricare qualsiasi
+  cosa. Nessun file gia' presente viene sostituito, e cio' che arriva
+  viene tenuto solo se e' esattamente il file che questa versione si
+  aspetta. Serve picture.datatype V43 o successivo."
+        fi ;;
     esac
     # The plain-68000 package thanks the tester who made it possible. Empty
     # elsewhere.
@@ -717,7 +748,7 @@ Emoji
   chat's background and without a bubble. Without a datatype, or with
   "Settings > Sticker pictures" off, a sticker shows the emoji it
   stands for. Below a 68040 the switch is off until you turn it on: a
-  WEBP takes seconds to read there.
+  WEBP takes seconds to read there.$webp_manual_en
 
 Photos and previews
 - Photos appear in the message, blurred first, then sharp. Videos show
@@ -996,7 +1027,7 @@ Emoji
   della chat e senza fumetto. Senza datatype, o con "Settings > Sticker
   pictures" spento, uno sticker mostra l'emoji che rappresenta. Sotto
   il 68040 l'interruttore e' spento finche' non lo accendi: li' un WEBP
-  si legge in qualche secondo.
+  si legge in qualche secondo.$webp_manual_it
 
 Foto e anteprime
 - Le foto compaiono nel messaggio, prima sfocate, poi nitide. I video

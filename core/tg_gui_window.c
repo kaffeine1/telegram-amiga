@@ -578,6 +578,9 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_ARCHIVE 38
 #define TG_MENU_SETTINGS 39
 #define TG_MENU_POLL 40
+/* not in a menu: what the "Sticker pictures" line of the settings asks for
+   on a system with no WEBP datatype */
+#define TG_MENU_WEBP_DT 41
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -10569,6 +10572,114 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* 1 when this build can offer its WEBP datatype to this system: the
+   release pinned its files, the system is one the datatype is built for
+   (AROS has a webp.datatype of its own) and its picture.datatype can hand
+   a true-colour picture to this program. */
+static int tg_gui_window_webp_offer_ready(void)
+{
+#if defined(__AROS__)
+    return 0;
+#else
+    return sizeof(TG_WEBP_DT_SHA256) == 65U &&
+           sizeof(TG_WEBP_DT_DESC_SHA256) == 65U && tg_image_dt_truecolor();
+#endif
+}
+
+/* The WEBP datatype, fetched from the channel and installed: asked for
+   with the "Sticker pictures" line of the settings on a system that has
+   none. The requester says what is written where before anything is
+   fetched; what happens after is all or none (see
+   tg_gui_session_install_channel_files). */
+static void tg_gui_window_webp_install(tg_gui_state *state,
+                                       struct Window *win,
+                                       tg_gui_backend *backend)
+{
+    static const tg_gui_channel_install items[2] = {
+        { TG_WEBP_DT_NAME, TG_WEBP_DT_SIZE, TG_WEBP_DT_SHA256,
+          "data/webp-datatype.tmp", "SYS:Classes/DataTypes/webp.datatype" },
+        { TG_WEBP_DT_DESC_NAME, TG_WEBP_DT_DESC_SIZE, TG_WEBP_DT_DESC_SHA256,
+          "data/webp-descriptor.tmp", "DEVS:DataTypes/WebP" }
+    };
+    static char body[512];
+    const char *channel = TG_WEBP_DT_CHANNEL;
+    struct EasyStruct es;
+    char from[72];
+    char why[96];
+    char line[96]; /* the status line is shorter: cut on the copy */
+    int rc;
+
+    if (channel[0] != '\0') {
+        sprintf(from, "its Telegram channel, @%.40s,", channel);
+    } else {
+        strcpy(from, "this account's Saved Messages");
+    }
+    sprintf(body,
+            "Stickers are WEBP pictures, and this system has\n"
+            "no datatype that reads them.\n\n"
+            TG_APP_NAME " can fetch its own webp.datatype (%lu KB)\n"
+            "from %s\n"
+            "and install it:\n\n"
+            "    %s\n"
+            "    %s\n\n"
+            "No file already there is replaced.",
+            ((unsigned long)TG_WEBP_DT_SIZE + 1023UL) / 1024UL, from,
+            items[0].target, items[1].target);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)"Sticker pictures";
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)"Install|Cancel";
+    if (tg_gui_amiga_easyreq_cancel_args(win, &es) != 1L) {
+        tg_gui_log("webp: the datatype was offered and declined");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Fetching the WEBP datatype...");
+    tg_gui_window_paint(state, backend);
+    (void)mkdir("data", 0777);
+    rc = tg_gui_session_install_channel_files(channel, items, 2U, why,
+                                              sizeof(why), stdout);
+    if (rc == 0) {
+        (void)tg_image_dt_refresh();
+        state->sticker_can = tg_image_dt_reads_webp();
+        tg_mtproto_set_sticker_stills(state->stickers && state->sticker_can);
+        tg_gui_log(state->sticker_can
+                       ? "webp: datatype installed, it reads WEBP"
+                       : "webp: datatype installed, not seen yet");
+        strcpy(line, state->sticker_can
+                         ? "WEBP datatype installed: stickers are pictures"
+                         : "Datatype installed: restart to see stickers");
+    } else if (rc == TG_GUI_INSTALL_EXISTS || rc == TG_GUI_INSTALL_WRITE) {
+        sprintf(body,
+                rc == TG_GUI_INSTALL_EXISTS
+                    ? "A file is already there:\n\n    %.80s\n\n"
+                      "It was left as it is, and nothing was installed.\n"
+                      "If it is a WEBP datatype that does not work here,\n"
+                      "take it out by hand and ask again."
+                    : "This file could not be written:\n\n    %.80s\n\n"
+                      "Nothing was installed.",
+                why);
+        strcpy(line, "The WEBP datatype was not installed");
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+        tg_gui_window_paint(state, backend);
+        tg_gui_amiga_easyreq(win, "Sticker pictures", body);
+    } else if (rc == 1) {
+        sprintf(line, "Telegram refused: %.28s",
+                why[0] != '\0' ? why : "no reason given");
+    } else if (rc == 3) {
+        strcpy(line, "The WEBP datatype is not posted there yet");
+    } else if (rc == 4) {
+        strcpy(line, "Not the file expected: nothing installed");
+    } else {
+        strcpy(line, "Could not fetch the WEBP datatype");
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+    tg_gui_window_paint(state, backend);
+}
+
 static void tg_gui_window_poll_stop(tg_gui_state *state, struct Window *win,
                                     tg_gui_backend *backend,
                                     const tg_gui_message *m)
@@ -13856,12 +13967,16 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                                ? "Updates: a look once a day"
                                : "Updates: not looked for");
         return 0;
-    case TG_GUI_SET_STICKERS:
+    case TG_GUI_SET_STICKERS: {
         /* Read when a chat's messages are: the stickers already on screen
            stay as they are until their chat is opened again. */
-        tg_gui_set_stickers(state, !state->stickers);
+        int offer = 0;
+
+        tg_gui_set_stickers(state, tg_gui_stickers_pressed(state));
         if (state->stickers) {
             state->sticker_can = tg_image_dt_reads_webp();
+            /* no datatype: this program's own is offered, where it can be */
+            offer = !state->sticker_can && tg_gui_window_webp_offer_ready();
         }
         tg_mtproto_set_sticker_stills(state->stickers && state->sticker_can);
         (void)mkdir("data", 0777);
@@ -13872,10 +13987,13 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                     state->stickers_explicit) != 0
                 ? "Could not save the sticker setting"
                 : !state->stickers ? "Stickers: shown as their emoji"
-                : !state->sticker_can
+                : state->sticker_can
+                      ? "Stickers: pictures from the next chat opened"
+                : tg_image_dt_truecolor()
                       ? "No WEBP datatype here: stickers stay emoji"
-                      : "Stickers: pictures from the next chat opened");
-        return 0;
+                      : "Sticker pictures need picture.datatype V43");
+        return offer ? (APTR)TG_MENU_WEBP_DT : 0;
+    }
     case TG_GUI_SET_MARKDOWN:
         /* Read by the session when a message leaves. */
         state->markdown = !state->markdown;
@@ -15695,6 +15813,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                           &backend)) {
                                 session_dirty = 1; /* the poll shows it */
                             }
+                        } else if (ud == (APTR)TG_MENU_WEBP_DT) {
+                            tg_gui_window_webp_install(state, ctx.window,
+                                                       &backend);
                         } else if (ud == (APTR)TG_MENU_COPY) {
                             /* Copy the highlighted message's text (issue #5).
                                Selection = the row the user last right-clicked

@@ -25,6 +25,7 @@
 #include <exec/libraries.h>
 #include <dos/dos.h>
 #include <dos/dosextens.h>
+#include <dos/dostags.h>
 #include <utility/tagitem.h>
 #include <intuition/classusr.h>
 #include <intuition/gadgetclass.h>
@@ -288,19 +289,21 @@ static const unsigned char tg_image_dt_webp_probe[] = {
     0x00, 0x00
 };
 
+/* -1 = not asked yet */
+static int tg_image_dt_webp_known = -1;
+
 int tg_image_dt_reads_webp(void)
 {
     static const char probe[] = "data/tg-webp-probe.webp";
-    static int known = -1;
     unsigned char *rgb = 0;
     FILE *f;
     int w = 0;
     int h = 0;
 
-    if (known >= 0) {
-        return known;
+    if (tg_image_dt_webp_known >= 0) {
+        return tg_image_dt_webp_known;
     }
-    known = 0;
+    tg_image_dt_webp_known = 0;
     f = fopen(probe, "wb");
     if (f == 0) {
         return 0;
@@ -308,12 +311,57 @@ int tg_image_dt_reads_webp(void)
     w = fwrite(tg_image_dt_webp_probe, 1, sizeof(tg_image_dt_webp_probe),
                f) == sizeof(tg_image_dt_webp_probe);
     if (fclose(f) == 0 && w) {
-        known = tg_image_dt_decode_rgb(probe, 0UL, &rgb, &w, &h) == 0 &&
-                w == 2 && h == 2;
+        tg_image_dt_webp_known =
+            tg_image_dt_decode_rgb(probe, 0UL, &rgb, &w, &h) == 0 &&
+            w == 2 && h == 2;
         free(rgb);
     }
     (void)remove(probe);
-    return known;
+    return tg_image_dt_webp_known;
+}
+
+int tg_image_dt_truecolor(void)
+{
+    /* opened by its version alone: nothing of it is called from here */
+    struct Library *picture =
+        OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 43L);
+
+    if (picture == 0) {
+        return 0;
+    }
+    CloseLibrary(picture);
+    return 1;
+}
+
+int tg_image_dt_refresh(void)
+{
+    struct TagItem tags[3];
+    BPTR nil_in;
+    BPTR nil_out;
+    LONG rc = -1L;
+
+    tg_image_dt_webp_known = -1; /* whatever follows, the machine is asked
+                                    again */
+    nil_in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
+    nil_out = Open((CONST_STRPTR)"NIL:", MODE_NEWFILE);
+    if (nil_in != 0 && nil_out != 0) {
+        /* The system's own command reads the descriptors in DEVS:DataTypes
+           again: datatypes.library has no call for it. */
+        tags[0].ti_Tag = SYS_Input;
+        tags[0].ti_Data = TG_DT_TAG(nil_in);
+        tags[1].ti_Tag = SYS_Output;
+        tags[1].ti_Data = TG_DT_TAG(nil_out);
+        tags[2].ti_Tag = TAG_DONE;
+        tags[2].ti_Data = 0UL;
+        rc = SystemTagList((CONST_STRPTR)"AddDataTypes REFRESH", tags);
+    }
+    if (nil_in != 0) {
+        Close(nil_in);
+    }
+    if (nil_out != 0) {
+        Close(nil_out);
+    }
+    return rc == 0L ? 0 : 1;
 }
 
 #else /* no datatypes here: the host, the text-only builds */
@@ -334,6 +382,16 @@ int tg_image_dt_decode_rgb(const char *path, unsigned long background,
 int tg_image_dt_reads_webp(void)
 {
     return 0;
+}
+
+int tg_image_dt_truecolor(void)
+{
+    return 0;
+}
+
+int tg_image_dt_refresh(void)
+{
+    return 1;
 }
 
 #endif

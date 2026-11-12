@@ -1200,6 +1200,19 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
     int has_access_hash,
     unsigned long limit);
 
+/* The files of a chat, newest first (messages.search with the document
+   filter); `query_utf8` narrows it and may be "" or NULL. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_documents(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long limit);
+
 /* Unread mentions. messages.getUnreadMentions answers like a history
    page with the unread messages that mention this account (offset_id 1
    with add_offset -limit gives the oldest ones first, as the official

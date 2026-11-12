@@ -810,6 +810,11 @@ void tg_gui_set_stickers(tg_gui_state *state, int enabled)
     state->stickers_default_resolved = 1;
 }
 
+int tg_gui_stickers_pressed(const tg_gui_state *state)
+{
+    return state != 0 && !(state->sticker_can && state->stickers);
+}
+
 int tg_gui_emoji_inline_size(const tg_gui_state *state, int font_height)
 {
     /* Keep the sheet readable even with Topaz 8. The shared line metrics
@@ -12660,16 +12665,26 @@ int tg_gui_self_test(void)
             state.sticker_can = 0;
             tg_gui_settings_value(&state, TG_GUI_SET_STICKERS, value,
                                   sizeof(value));
+            /* Pressing the line asks for the opposite of what it shows:
+               wanted, but with no datatype, it shows off, and a press
+               still asks for the pictures (so the datatype is offered). */
             ok_set = ok_set && strcmp(value, "[ ]") == 0 &&
-                     !tg_gui_settings_disabled(&state, TG_GUI_SET_STICKERS);
+                     !tg_gui_settings_disabled(&state, TG_GUI_SET_STICKERS) &&
+                     tg_gui_stickers_pressed(&state) == 1;
             state.sticker_can = 1;
             tg_gui_settings_value(&state, TG_GUI_SET_STICKERS, value,
                                   sizeof(value));
-            ok_set = ok_set && strcmp(value, "[x]") == 0;
+            ok_set = ok_set && strcmp(value, "[x]") == 0 &&
+                     tg_gui_stickers_pressed(&state) == 0;
             state.stickers = 0;
             tg_gui_settings_value(&state, TG_GUI_SET_STICKERS, value,
                                   sizeof(value));
-            ok_set = ok_set && strcmp(value, "[ ]") == 0;
+            ok_set = ok_set && strcmp(value, "[ ]") == 0 &&
+                     tg_gui_stickers_pressed(&state) == 1 &&
+                     tg_gui_stickers_pressed(0) == 0;
+            state.sticker_can = 0;
+            ok_set = ok_set && tg_gui_stickers_pressed(&state) == 1;
+            state.sticker_can = 1;
             state.inline_photos = 0;
             ok_set = ok_set &&
                      tg_gui_settings_disabled(&state, TG_GUI_SET_STICKERS);

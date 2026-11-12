@@ -612,6 +612,42 @@ int tg_gui_session_poll_create(const char *question,
                                const char *solution, char *emsg,
                                unsigned long emsg_size, FILE *stream);
 
+/* Fetches the file `file_name`, `size` bytes long (0 = any small one),
+   that the public channel `channel` posted, into `out_path`, and keeps it
+   only when its SHA-256 is `sha256_hex` (64 lowercase hex digits): the
+   WEBP datatype offered where a system has none. An empty channel name
+   stands for this account's Saved Messages. Blocking, for a small file.
+   0 = the file is there and is the one expected, 1 = Telegram refused
+   (emsg says why), 2 = failed, 3 = the channel or the file was not found,
+   4 = what came is not the file expected (removed). */
+int tg_gui_session_fetch_channel_file(const char *channel,
+                                      const char *file_name,
+                                      unsigned long size,
+                                      const char *sha256_hex,
+                                      const char *out_path, char *emsg,
+                                      unsigned long emsg_size, FILE *stream);
+
+/* One file a channel posted and the place it goes to in the system. */
+typedef struct tg_gui_channel_install {
+    const char *file_name;  /* as the channel posted it */
+    unsigned long size;     /* its bytes, 0 = any small one */
+    const char *sha256_hex; /* 64 lowercase hex digits */
+    const char *staging;    /* where it is fetched to and checked */
+    const char *target;     /* its place: never over a file already there */
+} tg_gui_channel_install;
+#define TG_GUI_INSTALL_MAX 4U
+#define TG_GUI_INSTALL_EXISTS 5 /* a file is already there: nothing done */
+#define TG_GUI_INSTALL_WRITE 6  /* a file could not be written */
+/* Fetches `count` files from the channel and puts each into its place: all
+   of them or none, and never over a file already there. 0 = all in place;
+   1 to 4 as tg_gui_session_fetch_channel_file() says; the two reasons
+   above come with the path in emsg. Blocking. */
+int tg_gui_session_install_channel_files(const char *channel,
+                                         const tg_gui_channel_install *items,
+                                         unsigned int count, char *emsg,
+                                         unsigned long emsg_size,
+                                         FILE *stream);
+
 /* Searches Telegram for `query` (contacts.search), adds the first openable
    result to the peer cache and opens it. Small reply, MorphOS-safe. Returns 0 =
    opened, 1 = no result / network issue, 2 = bad args. */

@@ -145,6 +145,13 @@ int tg_image_dt_decode_rgb(const char *path, unsigned long background,
 /* 1 when this machine has a datatype that reads WEBP. Asked once: a tiny
    WEBP is written to data/ and opened. */
 int tg_image_dt_reads_webp(void);
+/* 1 when the system's picture.datatype keeps true-colour pixels (V43 or
+   later): without it no datatype can hand a picture to this program. */
+int tg_image_dt_truecolor(void);
+/* Tells the system to read the datatype descriptors again, after one was
+   installed, and forgets what tg_image_dt_reads_webp() learned. 0 = the
+   system was told. */
+int tg_image_dt_refresh(void);
 
 /* Apply the 4x4 ordered-dither offset used before palette matching. */
 void tg_image_ordered_dither_rgb(const unsigned char *rgb,
