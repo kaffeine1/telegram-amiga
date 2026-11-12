@@ -275,9 +275,9 @@ while trying to prove a quiet cycle.
 
 In November 2026 a second native client appeared on Aminet, built on MUI
 and AmiSSL. Its manual and the API methods its binary calls make a
-useful list of what users of the official apps miss here. Ideas only:
-its code is closed and we never read it, and we keep our own rules, no
-dependencies, the 68000 lane, six systems.
+useful list of what users of the official apps miss here. Its code is
+closed; what goes into this program stays our own, under our own
+rules: no dependencies, the 68000 lane, six systems.
 
 State checked against the code on 2026-11-08. Already there, so off
 this list: captions when sending a photo (the send-photo dialog), and
