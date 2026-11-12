@@ -7331,11 +7331,14 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                             ? "Leave..." : "Delete chat...";
             ids[n++] = TG_GUI_CTX_CHAT_LEAVE;
         }
-        /* The list's own commands, as in the Amigram menu. */
-        labels[n] = state->archive_view ? "Back to chats" : "Archived chats";
-        ids[n++] = TG_GUI_CTX_LIST_ARCHIVE;
-        labels[n] = "Reload chat list";
-        ids[n++] = TG_GUI_CTX_LIST_RELOAD;
+        /* A row's menu holds what concerns that chat. The list's own
+           commands (Archived chats, Reload chat list) are in the Amigram
+           menu, with their shortcuts; the way out of the Archive is the
+           one kept here too, where the pointer already is. */
+        if (state->archive_view) {
+            labels[n] = "Back to chats";
+            ids[n++] = TG_GUI_CTX_LIST_ARCHIVE;
+        }
         return n;
     }
     /* A poll's answers, one a line; with several allowed, each carries
@@ -7482,19 +7485,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
         }
     }
-    /* Chat-level: send a file to the open chat. Always offered (the popup only
-       appears over a conversation) so it need not be reached via the menubar.
-       "Download drawer..." is deliberately NOT here (issue #11): it is a
-       preference, not a message action, so it lives in the menus only. */
-    labels[n] = "Find in chat";
-    ids[n] = TG_GUI_CTX_CHAT_FIND;
-    ++n;
-    labels[n] = "Send file...";
-    ids[n] = TG_GUI_CTX_SENDFILE;
-    ++n;
-    labels[n] = "Send photo...";
-    ids[n] = TG_GUI_CTX_SENDPHOTO;
-    ++n;
+    /* A message's menu holds what concerns that message. What is about
+       the chat (Find in chat, Send file..., Send photo...) is in the
+       menus and under the paperclip, and what is a preference
+       ("Download drawer...", issue #11) in the settings. */
     return n;
 }
 
@@ -10096,7 +10090,7 @@ static int tg_gui_notify_menu_self_test(void)
     state->ctx_chat = 1;
     state->chats[0].index = 5UL;
     state->chats[0].pinned = 0;
-    if (tg_gui_context_items(state, labels, ids) != 10 ||
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
         ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
         ids[1] != TG_GUI_CTX_CHAT_ARCHIVE ||
         strcmp(labels[1], "Archive") != 0 ||
@@ -10108,34 +10102,33 @@ static int tg_gui_notify_menu_self_test(void)
         ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
         strcmp(labels[6], "Default sound") != 0 ||
         ids[7] != TG_GUI_CTX_CHAT_LEAVE ||
-        strcmp(labels[7], "Delete chat...") != 0 ||
-        ids[8] != TG_GUI_CTX_LIST_ARCHIVE ||
-        strcmp(labels[8], "Archived chats") != 0 ||
-        ids[9] != TG_GUI_CTX_LIST_RELOAD) {
+        strcmp(labels[7], "Delete chat...") != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->chats[0].pinned = 1;
-    if (tg_gui_context_items(state, labels, ids) != 10 ||
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
         strcmp(labels[0], "Unpin") != 0) {
         puts("gui self-test: a pinned chat's menu cannot unpin");
         return 2;
     }
     /* A chat with something unread, or marked so, offers to mark it read. */
     state->chats[0].unread_mark = 1;
-    if (tg_gui_context_items(state, labels, ids) != 10 ||
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
         strcmp(labels[2], "Mark as read") != 0) {
         puts("gui self-test: a marked chat's menu cannot mark it read");
         return 2;
     }
     state->chats[0].unread_mark = 0;
-    /* In the Archive the menu leads with the way back, and has no pin. */
+    /* In the Archive the menu leads with the way back, and has no pin;
+       its last line, there only, leaves the Archive. */
     state->archive_view = 1;
-    if (tg_gui_context_items(state, labels, ids) != 9 ||
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
         ids[0] != TG_GUI_CTX_CHAT_ARCHIVE ||
         strcmp(labels[0], "Unarchive") != 0 ||
         ids[1] != TG_GUI_CTX_CHAT_READ ||
         ids[2] != TG_GUI_CTX_CHAT_REMOVE ||
+        ids[7] != TG_GUI_CTX_LIST_ARCHIVE ||
         strcmp(labels[7], "Back to chats") != 0) {
         puts("gui self-test: an archived chat's menu cannot unarchive");
         return 2;
@@ -10143,10 +10136,9 @@ static int tg_gui_notify_menu_self_test(void)
     state->archive_view = 0;
     state->chats[0].pinned = 0;
     state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
-    if (tg_gui_context_items(state, labels, ids) != 6 ||
+    if (tg_gui_context_items(state, labels, ids) != 4 ||
         ids[0] != TG_GUI_CTX_CHAT_REMOVE ||
-        ids[4] != TG_GUI_CTX_LIST_ARCHIVE ||
-        ids[5] != TG_GUI_CTX_LIST_RELOAD) {
+        ids[3] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: Saved Messages offers no pin");
         return 2;
     }
@@ -10158,13 +10150,13 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
-    if (tg_gui_context_items(state, labels, ids) != 10 ||
+    if (tg_gui_context_items(state, labels, ids) != 8 ||
         strcmp(labels[4], "Unmute") != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
-    if (tg_gui_context_items(state, labels, ids) != 11 ||
+    if (tg_gui_context_items(state, labels, ids) != 9 ||
         ids[5] != TG_GUI_CTX_CHAT_RING || strcmp(labels[5], "Enable ring") != 0 ||
         ids[6] != TG_GUI_CTX_CHAT_SOUND ||
         ids[7] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
@@ -10173,7 +10165,7 @@ static int tg_gui_notify_menu_self_test(void)
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
-    if (tg_gui_context_items(state, labels, ids) != 11 ||
+    if (tg_gui_context_items(state, labels, ids) != 9 ||
         strcmp(labels[4], "Mute...") != 0 ||
         strcmp(labels[5], "Disable ring") != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
@@ -10181,7 +10173,7 @@ static int tg_gui_notify_menu_self_test(void)
     }
     /* Muted on Telegram: Unmute, whatever this machine's own choice. */
     state->ctx_muted = 1;
-    if (tg_gui_context_items(state, labels, ids) != 11 ||
+    if (tg_gui_context_items(state, labels, ids) != 9 ||
         strcmp(labels[4], "Unmute") != 0 ||
         strcmp(labels[5], "Disable ring") != 0) {
         puts("gui self-test: a chat muted on Telegram cannot be unmuted");
@@ -10189,13 +10181,31 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->ctx_muted = 0;
     state->ctx_hidden_count = 2UL;
-    if (tg_gui_context_items(state, labels, ids) != 12 ||
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
         ids[8] != TG_GUI_CTX_CHAT_SHOW_HIDDEN ||
         ids[9] != TG_GUI_CTX_CHAT_LEAVE) {
         puts("gui self-test: group menu cannot show hidden messages");
         return 2;
     }
     state->ctx_hidden_count = 0UL;
+    /* The list's own commands are the Amigram menu's: outside the
+       Archive a row's menu has none of them, and what sends a file or a
+       photo is no part of it either. */
+    {
+        int n = tg_gui_context_items(state, labels, ids);
+        int i;
+
+        for (i = 0; i < n; ++i) {
+            if (ids[i] == TG_GUI_CTX_LIST_ARCHIVE ||
+                ids[i] == TG_GUI_CTX_SENDFILE ||
+                ids[i] == TG_GUI_CTX_SENDPHOTO ||
+                strcmp(labels[i], "Reload chat list") == 0) {
+                puts("gui self-test: a chat's menu repeats the Amigram "
+                     "menu");
+                return 2;
+            }
+        }
+    }
     /* "Hide message": someone else's message, and only in a group. */
     {
         static const struct {
@@ -10234,6 +10244,18 @@ static int tg_gui_notify_menu_self_test(void)
                 n > TG_GUI_CTX_MENU_ITEMS) {
                 printf("gui self-test: Hide message case %lu wrong\n", c);
                 return 2;
+            }
+            /* What is about the chat, not the message, is in the menus
+               and under the paperclip: a message's menu ends with its
+               own items. */
+            for (i = 0; i < n; ++i) {
+                if (ids[i] == TG_GUI_CTX_SENDFILE ||
+                    ids[i] == TG_GUI_CTX_SENDPHOTO ||
+                    strcmp(labels[i], "Find in chat") == 0) {
+                    printf("gui self-test: message menu %lu repeats the "
+                           "menus\n", c);
+                    return 2;
+                }
             }
         }
         /* A service line has neither, in a chat with one person too. */
@@ -14946,6 +14968,9 @@ int tg_gui_self_test(void)
         cb.context = &frec;
         st->ctx_visible = 1;
         st->ctx_msg = 0;
+        /* a message Telegram knows, as the window asks before it opens
+           the menu: its menu has more than one line to hover over */
+        st->messages[0].id = 77UL;
         st->ctx_x = 300;
         st->ctx_y = 120;
         st->ctx_hover = 1;

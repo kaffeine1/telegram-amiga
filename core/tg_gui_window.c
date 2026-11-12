@@ -10215,7 +10215,7 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     }
 }
 
-/* "Reload chat list", from the menu and from the list's own menu: pages
+/* "Reload chat list", from the Amigram menu: pages
    the dialog list again from the server. Blocking but bounded. */
 static void tg_gui_window_reload_list(tg_gui_state *state,
                                       tg_gui_backend *backend)
@@ -16565,14 +16565,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
                                            "Hidden messages shown again");
-                    } else if (it == TG_GUI_CTX_CHAT_FIND) {
-                        /* Find in chat, from the menu over the open chat. */
-                        tg_gui_window_begin_msg_search(state, &backend, 0);
                     } else if (it == TG_GUI_CTX_LIST_ARCHIVE) {
+                        /* Back to chats, in the Archive's row menu. */
                         tg_gui_window_show_archive(state, &backend,
                                                    !state->archive_view);
-                    } else if (it == TG_GUI_CTX_LIST_RELOAD) {
-                        tg_gui_window_reload_list(state, &backend);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_LEAVE) {
                         tg_gui_window_leave_chat(state, ctx.window, ci,

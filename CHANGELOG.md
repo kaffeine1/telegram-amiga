@@ -10,8 +10,7 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ### Added
 - Find in chat (Edit menu, Amiga+S): the search box at the top of the
-  chat list searches the messages of the open chat on Telegram; it is
-  also in the menu that a right click inside the chat opens. Type the
+  chat list searches the messages of the open chat on Telegram. Type the
   words and press ENTER; the messages found take the place of the chat
   list, newest first, with who wrote them, how they start and their
   date. A click or ENTER on one shows the chat around that message, with
@@ -303,8 +302,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   in this list as Remove chat does: a group or a channel is left; a
   private chat has its messages deleted for you, on all your devices,
   while the other person keeps theirs. Both ask first.
-- Archived chats and Reload chat list are also in the menu that a right
-  click on the chat list opens.
+- In the Archive, Back to chats is also the last line of the menu that
+  a right click on a chat opens.
 - Pinned chats. The chats pinned on Telegram (on the phone, in the
   desktop client or here) come first in the chat list, in Telegram's
   order, with a pin mark at the right of the row where the unread badge
@@ -313,6 +312,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   starts and on Reload chat list; Saved Messages stays at the bottom.
 
 ### Changed
+- The right-click menus hold only what concerns the thing clicked. A
+  chat's menu no longer repeats Archived chats and Reload chat list,
+  which are in the Amigram menu (Amiga+A for the first); a message's
+  menu no longer ends with Find in chat, Send file... and Send
+  photo..., which are in the menus (Amiga+S, Amiga+F, Amiga+P) and
+  under the paperclip. The longest menu goes from fifteen lines to
+  twelve.
 - Amigram is now free software under the GNU General Public License,
   version 3 or later (the LICENSE file in every archive). Up to and
   including the 0.1 beta it was under the MIT License: those releases
