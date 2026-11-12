@@ -2672,7 +2672,8 @@ static char tg_gui_md_marker(int kind)
     case TG_GUI_MD_CODE:
     case TG_GUI_MD_PRE: return TG_TEXT_MARKER_CODE;
     case TG_GUI_MD_STRIKE: return TG_TEXT_MARKER_STRIKE;
-    default: return 0; /* a spoiler shows as plain text here */
+    case TG_GUI_MD_SPOILER: return TG_TEXT_MARKER_SPOILER;
+    default: return 0;
     }
 }
 
@@ -2771,6 +2772,8 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
                 mark = "**";
             } else if (shown[i] == TG_TEXT_MARKER_ITALIC) {
                 mark = "__";
+            } else if (shown[i] == TG_TEXT_MARKER_SPOILER) {
+                mark = "||";
             } else {
                 mark = "~~";
             }
@@ -3248,6 +3251,17 @@ static unsigned long tg_gui_link_remaining(const char *text, unsigned long at,
    link_pen and underlined (0.0.8) so a clickable URL looks clickable.
    Backends without set_style get clean text (markers skipped), just
    unstyled. */
+/* Set by the bubble's painter for the message it draws: 1 = its spoilers
+   were clicked open and show as plain text. */
+static int tg_gui_spoilers_shown = 0;
+
+/* The style the backend is given: a spoiler that was opened is no longer
+   one. */
+static int tg_gui_markup_style(int style)
+{
+    return tg_gui_spoilers_shown ? (style & ~TG_GUI_STYLE_SPOILER) : style;
+}
+
 static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
                                int x, int baseline, const char *text,
                                unsigned long from, unsigned long length,
@@ -3277,6 +3291,9 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
             case TG_TEXT_MARKER_STRIKE:
                 toggle = TG_GUI_STYLE_STRIKE;
                 break;
+            case TG_TEXT_MARKER_SPOILER:
+                toggle = TG_GUI_STYLE_SPOILER;
+                break;
             default:
                 break;
             }
@@ -3294,10 +3311,12 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
         if (toggle != 0 || boundary || i == to) {
             if (i > run_start) {
                 if (backend->set_style != 0) {
-                    backend->set_style(backend, link_left > 0UL && !boundary
-                                                    ? (*style |
-                                                       TG_GUI_STYLE_UNDERLINE)
-                                                    : *style);
+                    backend->set_style(
+                        backend,
+                        tg_gui_markup_style(link_left > 0UL && !boundary
+                                                ? (*style |
+                                                   TG_GUI_STYLE_UNDERLINE)
+                                                : *style));
                 }
                 backend->draw_text(backend,
                                    (link_left > 0UL && !boundary) ? link_pen
@@ -3322,8 +3341,9 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
 
                 if (end > run_start) {
                     if (backend->set_style != 0) {
-                        backend->set_style(backend,
-                                           *style | TG_GUI_STYLE_UNDERLINE);
+                        backend->set_style(
+                            backend, tg_gui_markup_style(
+                                         *style | TG_GUI_STYLE_UNDERLINE));
                     }
                     backend->draw_text(backend, link_pen, x, baseline,
                                        text + run_start, end - run_start);
@@ -4045,11 +4065,13 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             /* On an OWN bubble the background is the accent blue, where a
                blue link would vanish: use the azure that the read-receipt
                ticks already prove readable there. */
+            tg_gui_spoilers_shown = message->spoiler_open;
             tg_gui_draw_markup(backend, text_pen,
                                message->is_own ? TG_GUI_PEN_READ
                                                : TG_GUI_PEN_LINK,
                                bubble_x + pad, baseline,
                                message->text, starts[k], lengths[k], &style);
+            tg_gui_spoilers_shown = 0;
         }
     }
     if (backend->set_style != 0) {
@@ -5791,6 +5813,22 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
         }
     }
     return ls + ll;
+}
+
+int tg_gui_message_reveal_spoiler(tg_gui_message *m)
+{
+    unsigned long i;
+
+    if (m == 0 || m->spoiler_open) {
+        return 0;
+    }
+    for (i = 0UL; m->text[i] != '\0'; ++i) {
+        if (m->text[i] == TG_TEXT_MARKER_SPOILER) {
+            m->spoiler_open = 1;
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /* If the character at offset `ch` of message `m` sits inside a web link,
@@ -8880,6 +8918,63 @@ static int tg_gui_markup_self_test(void)
         }
     }
     {
+        /* A spoiler is drawn with its own style until its message was
+           clicked open; then it is text like the rest, and what else
+           styles it stays (the bold here). */
+        static const char hidden[] = "a \034\032hid\032\034 b";
+        static tg_gui_message sm;
+        int open;
+
+        for (open = 0; open <= 1; ++open) {
+            memset(&record, 0, sizeof(record));
+            style = 0;
+            tg_gui_spoilers_shown = open;
+            tg_gui_draw_markup(&backend, 0, 0, 0, 0, hidden, 0UL,
+                               (unsigned long)strlen(hidden), &style);
+            tg_gui_spoilers_shown = 0;
+            if (strcmp(record.text, "a hid b") != 0 || style != 0) {
+                puts("gui self-test: a spoiler's markers were drawn");
+                return 2;
+            }
+            for (i = 0UL; i < record.length; ++i) {
+                int want = (i >= 2UL && i < 5UL)
+                               ? (TG_GUI_STYLE_BOLD |
+                                  (open ? 0 : TG_GUI_STYLE_SPOILER))
+                               : 0;
+
+                if (record.styles[i] != want) {
+                    puts("gui self-test: a spoiler has the wrong style");
+                    return 2;
+                }
+            }
+        }
+        /* The click that opens it: once, and only where there is one. */
+        memset(&sm, 0, sizeof(sm));
+        tg_gui_copy(sm.text, sizeof(sm.text), "a \032hid\032 b");
+        if (tg_gui_message_reveal_spoiler(&sm) != 1 || !sm.spoiler_open ||
+            tg_gui_message_reveal_spoiler(&sm) != 0) {
+            puts("gui self-test: a spoiler does not open on its click");
+            return 2;
+        }
+        memset(&sm, 0, sizeof(sm));
+        tg_gui_copy(sm.text, sizeof(sm.text), "\034plain bold\034");
+        if (tg_gui_message_reveal_spoiler(&sm) != 0 || sm.spoiler_open ||
+            tg_gui_message_reveal_spoiler(0) != 0) {
+            puts("gui self-test: a message without a spoiler opened one");
+            return 2;
+        }
+        /* The text client and the plain copies print it between bars. */
+        if (TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_SPOILER) != '|' ||
+            TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_STRIKE) != '~' ||
+            TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_BOLD) != '*' ||
+            !TG_TEXT_IS_MARKER(TG_TEXT_MARKER_SPOILER) ||
+            TG_TEXT_IS_MARKER('\033') || TG_TEXT_IS_MARKER('\031') ||
+            TG_TEXT_IS_MARKER(' ')) {
+            puts("gui self-test: the spoiler's marker is not one");
+            return 2;
+        }
+    }
+    {
         const char *wrapped = "\034ab_cd\034";
         unsigned long starts[4];
         unsigned long lengths[4];
@@ -9745,7 +9840,8 @@ static int tg_gui_notify_menu_self_test(void)
             { "a **b** c", "a \034b\034 c" },
             { "__it__ and ~~no~~", "\035it\035 and \037no\037" },
             { "`code` here", "\036code\036 here" },
-            { "||secret|| x", "secret x" }, /* a spoiler shows plain */
+            { "||secret|| x", "\032secret\032 x" },
+            { "**a ||b||**", "\034a \032b\032\034" },
             { "**bold __both__**", "\034bold \035both\035\034" },
             { "(**b**), \"__i__\".", "(\034b\034), \"\035i\035\"." },
             { "```\nint a;\nint b;\n```", "\036int a;\nint b;\036" },
@@ -9867,6 +9963,7 @@ static int tg_gui_notify_menu_self_test(void)
             { 1, "\036a = 1;\nb = 2;\036", "```a = 1;\nb = 2;```", 1 },
             { 1, "\034bold \035both\035\034", "**bold __both__**", 1 },
             { 1, "\034a\x80*\034 fine", "**a\x80*** fine", 1 },
+            { 1, "x \032secret\032 y", "x ||secret|| y", 1 },
             { 1, "plain text", "plain text", 1 },
             { 1, "2 ** 3 e __init__.py", "2 ** 3 e __init__.py", 1 },
             { 1, "", "", 1 },
@@ -9877,6 +9974,7 @@ static int tg_gui_notify_menu_self_test(void)
             { 1, "**x** was typed", "**x** was typed", 0 },
             /* the setting off: plain, and the styles go */
             { 0, "\034bold\034", "bold", 0 },
+            { 0, "\032secret\032", "secret", 0 },
             { 0, "**x** was typed", "**x** was typed", 1 },
             { 0, "plain text", "plain text", 1 },
         };

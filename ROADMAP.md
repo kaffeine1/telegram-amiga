@@ -409,10 +409,10 @@ Middle, more interface:
   block become the message's entities when it is sent, counted in
   UTF-16 units; conservative rules, a switch in the settings), and
   kept by an edit (the message comes back into the composer with its
-  styles as markers; `messages.editMessage` with the entities). Still
-  missing: the language of a block, links with a text of their own,
-  showing a spoiler as one, and an edit keeping what the transcript
-  does not hold (a spoiler, a link with its own text, a mention by
+  styles as markers; `messages.editMessage` with the entities). A spoiler shows as one: a bar until its message is
+  clicked, and an edit keeps it. Still missing: the language of a
+  block, links with a text of their own, and an edit keeping what the
+  transcript does not hold (a link with its own text, a mention by
   name, underline);
 - the update notice (its section): step 1 is in place and asleep. The
   client can look public channels and groups up by name, search their

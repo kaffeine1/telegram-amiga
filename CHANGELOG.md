@@ -47,6 +47,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Spoilers. Hidden text, in a message received or in one sent with
+  `||spoiler||`, is covered by a bar in the text's colour until its
+  message is clicked; the click opens every spoiler of that message and
+  does nothing else. It used to show as plain text. An edit brings the
+  spoiler back as its markers, so saving keeps it. The text client
+  prints it between two bars.
 - The text client has the chat menu's commands for the open chat:
   /mute (for good, or with a time: /mute 30m, 1h, 8h, 2d) and /unmute
   send the mute to Telegram; /markread marks the chat as read on every
@@ -97,8 +103,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   `**bold**`, `__italic__`, `~~strike~~`, `||spoiler||`, a backtick
   before and after for code, three of them for a block of code. The
   markers leave the text and the message carries the styles, so the
-  other clients show them; the message just sent shows them here too
-  (a spoiler as plain text). A marker counts only at the start and at
+  other clients show them; the message just sent shows them here too.
+  A marker counts only at the start and at
   the end of a word, a style of one line ends on that line, and nothing
   inside code is a marker, so that `2 ** 3`, `a || b` or `__init__.py`
   go as they are. "Markdown formatting" in the settings switches it

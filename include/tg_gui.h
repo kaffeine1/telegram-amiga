@@ -73,6 +73,7 @@ typedef struct tg_gui_rect {
 #define TG_GUI_STYLE_CODE   4
 #define TG_GUI_STYLE_STRIKE 8
 #define TG_GUI_STYLE_UNDERLINE 16 /* clickable URLs (0.0.8) */
+#define TG_GUI_STYLE_SPOILER 32 /* hidden text: a bar until it is clicked */
 
 /* Per-platform drawing shim. The portable renderer owns all layout and only
    calls these. The host build supplies a recording backend for the self-test. */
@@ -417,6 +418,7 @@ typedef struct tg_gui_message {
     unsigned long poll_id_lo;
     /* Chosen while several messages are being selected (pick_mode). */
     unsigned char picked;
+    unsigned char spoiler_open; /* its hidden text was clicked open */
     /* The renderer's own: the height it worked out for this message and a
        key of everything that height depends on (0 = none yet). */
     unsigned long layout_key;
@@ -1291,6 +1293,10 @@ long tg_gui_transcript_char_at(const tg_gui_state *state,
 
 /* Copies the selected substring into out (NUL-terminated). 1 = a non-empty
    selection was copied, 0 = no live selection. */
+/* A click on a message whose spoiler is still covered opens it: 1 when
+   the message had one and now shows it, 0 when there was nothing to open
+   (the click is then a click like any other). */
+int tg_gui_message_reveal_spoiler(tg_gui_message *m);
 /* The first address in the message's text, the one its link preview is
    for: 1 and the address in out, 0 when the text holds none. */
 int tg_gui_first_url(const tg_gui_message *m, char *out,

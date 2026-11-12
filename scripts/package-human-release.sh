@@ -627,7 +627,8 @@ Messages
 - Formatting can be typed: **bold**, __italic__, \`code\`,
   ~~strike~~, ||spoiler||, and three backticks before and after a block
   of code. When the message is sent the markers leave the text and the
-  other clients show the styles; here a spoiler shows as plain text. A
+  other clients show the styles. A spoiler, sent or received, is
+  covered by a bar until its message is clicked. A
   marker counts only at the start and at the end of a word, and a style
   of one line ends on that line, so that 2 ** 3, a || b or __init__.py
   go as they are. "Settings > Markdown formatting" switches it off, and
@@ -876,8 +877,9 @@ Messaggi
 - La formattazione si puo' scrivere: **grassetto**, __corsivo__,
   \`codice\`, ~~barrato~~, ||spoiler||, e tre accenti gravi prima e
   dopo un blocco di codice. Quando il messaggio parte i marcatori
-  escono dal testo e gli altri client mostrano gli stili; qui uno
-  spoiler si vede come testo normale. Un marcatore vale solo
+  escono dal testo e gli altri client mostrano gli stili. Uno spoiler,
+  mandato o ricevuto, e' coperto da una barra finche' non si fa click
+  sul suo messaggio. Un marcatore vale solo
   all'inizio e alla fine di una parola, e uno stile di una riga finisce
   su quella riga: cosi' 2 ** 3, a || b o __init__.py partono come sono.
   "Settings > Markdown formatting" lo spegne, e allora tutto parte

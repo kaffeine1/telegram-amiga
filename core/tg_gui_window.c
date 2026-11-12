@@ -672,6 +672,7 @@ typedef struct tg_gui_amiga_ctx {
     int photo_direct_report; /* 1 pass / -1 fallback; log only outside layer lock */
     unsigned int afa_profile_paints; /* bounded --gui-live-debug paint samples */
     int strike; /* the style in force strikes its text through */
+    int spoiler; /* the style in force covers its text with a bar */
 } tg_gui_amiga_ctx;
 
 static int tg_gui_amiga_width(tg_gui_backend *backend)
@@ -5563,8 +5564,8 @@ static void tg_gui_amiga_draw_run(tg_gui_amiga_ctx *ctx, int pen, int x,
                                   int baseline, const char *text,
                                   unsigned long length)
 {
-    if (length == 0UL) {
-        return;
+    if (length == 0UL || ctx->spoiler) {
+        return; /* a covered spoiler draws no letters: its bar comes after */
     }
     if (length > 0x7fffUL) {
         length = 0x7fffUL; /* Text count is 16-bit; clamp defensively */
@@ -5611,9 +5612,11 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
             x += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
             if (cell > 0) {
                 ascent = tg_gui_amiga_font_ascent(backend);
-                tg_gui_amiga_glyph_image(backend, index, x,
-                                         baseline - ascent,
-                                         cell);
+                if (!ctx->spoiler) {
+                    tg_gui_amiga_glyph_image(backend, index, x,
+                                             baseline - ascent,
+                                             cell);
+                }
                 x += cell;
             } else {
                 const char *t = tg_gui_session_emoji_text(index);
@@ -5630,17 +5633,25 @@ static void tg_gui_amiga_draw_text(tg_gui_backend *backend, int pen, int x,
     }
     tg_gui_amiga_draw_run(ctx, pen, x, baseline, text + run_start,
                           i - run_start);
-    if (ctx->strike) {
-        /* Struck through: a line one pixel thick across the small letters,
-           a third of the ascent above the baseline, in the text's pen. */
+    if (ctx->strike || ctx->spoiler) {
         x += tg_gui_amiga_run_width(ctx, text + run_start, i - run_start);
         if (x > x0) {
-            int y = baseline - (tg_gui_amiga_font_ascent(backend) + 1) / 3;
+            int ascent = tg_gui_amiga_font_ascent(backend);
+            int y = baseline - (ascent + 1) / 3;
+            int y2 = y;
 
+            if (ctx->spoiler) {
+                /* A covered spoiler: a bar in the text's pen where the
+                   letters would be, from their tops to the baseline. */
+                y = baseline - ascent + 1;
+                y2 = baseline;
+            }
+            /* Struck through: a line one pixel thick across the small
+               letters, a third of the ascent above the baseline. */
             SetAPen(ctx->rport, tg_gui_amiga_resolve_pen(ctx, pen));
             SetDrMd(ctx->rport, JAM1);
             RectFill(ctx->rport, ctx->origin_x + x0, ctx->origin_y + y,
-                     ctx->origin_x + x - 1, ctx->origin_y + y);
+                     ctx->origin_x + x - 1, ctx->origin_y + y2);
         }
     }
 }
@@ -5666,6 +5677,7 @@ static void tg_gui_amiga_set_style(tg_gui_backend *backend, int style)
         soft |= FSF_UNDERLINED;
     }
     ctx->strike = (style & TG_GUI_STYLE_STRIKE) != 0;
+    ctx->spoiler = (style & TG_GUI_STYLE_SPOILER) != 0;
     SetSoftStyle(ctx->rport, soft, FSF_BOLD | FSF_ITALIC | FSF_UNDERLINED);
 }
 
@@ -16734,6 +16746,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                            dbl_press_secs,
                                                            dbl_press_micros));
 
+                                    /* A click on a message whose spoiler
+                                       is covered opens the spoiler, and is
+                                       nothing else. */
+                                    if (tg_gui_message_reveal_spoiler(
+                                            &state->messages[mi])) {
+                                        dbl_last_id = 0UL; /* never a reply */
+                                        tg_gui_window_copy(
+                                            state->status,
+                                            sizeof(state->status),
+                                            "Spoiler shown");
+                                    } else
                                     /* A click ON A LINK beats select/reply:
                                        open it in the browser, or copy it to
                                        the clipboard when no OpenURL/URLOpen

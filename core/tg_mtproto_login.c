@@ -6299,6 +6299,7 @@ static tg_mtproto_tl_status tg_read_peer_cache_chat(
 #define TG_MSG_ENT_ITALIC 2UL
 #define TG_MSG_ENT_CODE   3UL /* inline code + pre block */
 #define TG_MSG_ENT_STRIKE 4UL
+#define TG_MSG_ENT_SPOILER 5UL
 #define TG_MSG_ENTITY_MAX 24
 
 typedef struct tg_msg_entity {
@@ -6320,6 +6321,8 @@ static char tg_msg_entity_marker(unsigned long type)
         return TG_TEXT_MARKER_CODE;
     case TG_MSG_ENT_STRIKE:
         return TG_TEXT_MARKER_STRIKE;
+    case TG_MSG_ENT_SPOILER:
+        return TG_TEXT_MARKER_SPOILER;
     default:
         return 0;
     }
@@ -6577,8 +6580,10 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
         case 0x9c4e7e8bUL: /* messageEntityUnderline */
         case 0x20df5d0UL:  /* messageEntityBlockquote, before its flags */
         case 0xf1ccaaacUL: /* messageEntityBlockquote */
-        case 0x32ca960fUL: /* messageEntitySpoiler */
         case 0x761e6af4UL: /* messageEntityBankCard */
+            break;
+        case 0x32ca960fUL: /* messageEntitySpoiler */
+            type = TG_MSG_ENT_SPOILER;
             break;
         default:
             return TG_MTPROTO_TL_INVALID_DATA;
