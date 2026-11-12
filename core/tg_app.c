@@ -3943,13 +3943,28 @@ static int tg_run_telegram_send_last_default(const tg_config *config)
    probes. One object, off the stack: it is over half a megabyte on a 64-bit
    build, and a copy of it in tg_app_run's frame (under which every self-test
    and the live window run) took more than half of the 1 MB AmigaOS stack on
-   AROS ARM. The four users are exclusive, each returns before the next. */
-static tg_gui_state tg_app_gui_state;
-
+   AROS ARM. The four users are exclusive, each returns before the next.
+   It is taken from the heap, once: as static data it was 300 KB of the one
+   block of two megabytes the 68k program needed free in one piece to load
+   at all, which a machine with 4 MB of fast RAM did not have. 0 = no
+   memory for it: there is no window then, and the caller says so. */
 static tg_gui_state *tg_app_gui_state_zeroed(void)
 {
-    memset(&tg_app_gui_state, 0, sizeof(tg_app_gui_state));
-    return &tg_app_gui_state;
+    static tg_gui_state *state = 0;
+
+    if (state == 0) {
+        state = (tg_gui_state *)malloc(sizeof(*state));
+    }
+    if (state != 0) {
+        memset(state, 0, sizeof(*state));
+    }
+    return state;
+}
+
+static int tg_app_gui_no_memory(void)
+{
+    puts("Not enough free memory for the window.");
+    return 2;
 }
 
 /* The header names the selected chat, or the program before any chat. */
@@ -4540,6 +4555,9 @@ int tg_app_run(int argc, char **argv)
     if (config.run_gui_window) {
         tg_gui_state *gui_demo = tg_app_gui_state_zeroed();
 
+        if (gui_demo == 0) {
+            return tg_app_gui_no_memory();
+        }
         tg_gui_demo_state(gui_demo);
         return tg_gui_run_window(gui_demo);
     }
@@ -4549,6 +4567,9 @@ int tg_app_run(int argc, char **argv)
         FILE *auth_probe;
         int rc;
 
+        if (gui == 0) {
+            return tg_app_gui_no_memory();
+        }
         memset(gui, 0, sizeof(*gui));
         gui->theme = TG_GUI_THEME_DARK;
         tg_gui_photo_preferences_load_full("data/telegram-photos.txt",
@@ -4602,6 +4623,9 @@ int tg_app_run(int argc, char **argv)
         int i;
         int rc;
 
+        if (gui == 0) {
+            return tg_app_gui_no_memory();
+        }
         memset(gui, 0, sizeof(*gui));
         gui->theme = TG_GUI_THEME_DARK;
         gui->inline_photos = 1;
@@ -4633,6 +4657,9 @@ int tg_app_run(int argc, char **argv)
         int count;
         int missing;
 
+        if (gui == 0) {
+            return tg_app_gui_no_memory();
+        }
         memset(gui, 0, sizeof(*gui));
         memset(&driver, 0, sizeof(driver));
         gui->theme = TG_GUI_THEME_DARK;

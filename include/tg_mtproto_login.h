@@ -534,7 +534,16 @@ typedef struct tg_mtproto_messages_summary {
    text ends with " [...]", cut on a character boundary. */
 #ifndef TG_MTPROTO_MESSAGE_TEXT_MAX /* overridable: the 68000 LOWMEM build
                                        shrinks the per-message text buffer */
+#if defined(__m68k__)
+/* The window keeps 2 KB of a message on the 68k (TG_GUI_MSG_TEXT_MAX), so
+   8 KB for each of the 32 messages read at a time was mostly unused: 4.5
+   KB holds a message of Telegram's full length in Latin letters with its
+   marks, and gives 115 KB back to a machine with 4 MB. A longer text
+   (4096 characters of Cyrillic) is cut, and says so. */
+#define TG_MTPROTO_MESSAGE_TEXT_MAX 4608U
+#else
 #define TG_MTPROTO_MESSAGE_TEXT_MAX 8192U
+#endif
 #endif
 /* How many messages one getHistory read parses into the shared static list.
    This caps the GUI open-backlog -- it was 8, far too few. Each entry is

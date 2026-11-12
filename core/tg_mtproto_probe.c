@@ -8992,6 +8992,16 @@ static int tg_mtproto_load_peer_cache_file(const char *path,
 
 /* Shared static scratch for leaf peer-cache file operations (never on stack). */
 static tg_mtproto_peer_cache tg_peer_cache_scratch;
+/* Three more scratch chat lists, for the functions that read the chat
+   cache from its file, change it and write it back (the reader of
+   oneself, a page of the chat list, a username looked up, a chat added,
+   the search that adds its pick). Each had lists of its own, eight in
+   all, 26 KB apiece on the 68k: none keeps anything in them from one call
+   to the next, and none runs inside another, except the search, which
+   calls the adding and so has the third list to itself. */
+static tg_mtproto_peer_cache tg_peer_work_a;
+static tg_mtproto_peer_cache tg_peer_work_b;
+static tg_mtproto_peer_cache tg_peer_work_c;
 
 static int tg_mtproto_peer_cache_available(const char *path)
 {
@@ -9153,7 +9163,7 @@ static int tg_mtproto_auth_refresh_self_cache_on_context(
 {
     unsigned char query[64];
     int has_cache;
-    static tg_mtproto_peer_cache cache;
+#define cache tg_peer_work_a /* scratch: see tg_peer_work_a */
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     tg_mtproto_user_summary user;
@@ -9201,6 +9211,7 @@ static int tg_mtproto_auth_refresh_self_cache_on_context(
     return tg_mtproto_save_peer_cache_file(peer_cache_file, &cache, stream,
                                            label);
 }
+#undef cache
 
 /* updates.getState: primes (or refreshes) the gap-handling cursor. */
 static int tg_mtproto_chat_get_updates_state_on_context(
@@ -9415,8 +9426,8 @@ static int tg_mtproto_list_peers_page(const char *host,
     char api_id[32];
     tg_mtproto_dialogs_summary dialogs;
     const tg_mtproto_peer_cache_entry *last;
-    static tg_mtproto_peer_cache cache;
-    static tg_mtproto_peer_cache existing_cache;
+#define cache tg_peer_work_a /* scratch: see tg_peer_work_a */
+#define existing_cache tg_peer_work_b /* scratch: see tg_peer_work_a */
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     static const char label[] = "mtproto list-peers";
@@ -9577,6 +9588,8 @@ static int tg_mtproto_list_peers_page(const char *host,
     fprintf(stream, "%s: peer_cache_saved %s\n", label, peer_cache_file);
     return 0;
 }
+#undef cache
+#undef existing_cache
 
 /* The first page of the dialog list, merged into the peer cache file. */
 int tg_mtproto_auth_list_peers_file(const char *host,
@@ -9680,8 +9693,8 @@ int tg_mtproto_auth_resolve_username_file(const char *host,
     char username[128];
     unsigned long i;
     int has_existing_cache;
-    static tg_mtproto_peer_cache cache;
-    static tg_mtproto_peer_cache existing_cache;
+#define cache tg_peer_work_a /* scratch: see tg_peer_work_a */
+#define existing_cache tg_peer_work_b /* scratch: see tg_peer_work_a */
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     static const char label[] = "mtproto resolve-username";
@@ -9776,6 +9789,8 @@ int tg_mtproto_auth_resolve_username_file(const char *host,
     fprintf(stream, "%s: peer_cache_saved %s\n", label, peer_cache_file);
     return 0;
 }
+#undef cache
+#undef existing_cache
 
 int tg_mtproto_auth_get_history_self(const char *host,
                                      const char *port,
@@ -10847,8 +10862,8 @@ static int tg_mtproto_peer_cache_add_selected(
     unsigned long label_size,
     FILE *stream)
 {
-    static tg_mtproto_peer_cache cache;
-    static tg_mtproto_peer_cache fresh;
+#define cache tg_peer_work_a /* scratch: see tg_peer_work_a */
+#define fresh tg_peer_work_b /* scratch: see tg_peer_work_a */
     unsigned long public_index;
     int has_cache;
 
@@ -10887,6 +10902,8 @@ static int tg_mtproto_peer_cache_add_selected(
     tg_mtproto_peer_cache_entry_label(selected, label, label_size);
     return 0;
 }
+#undef cache
+#undef fresh
 
 static int tg_mtproto_chat_prompt_line(const char *prompt,
                                        char *out,
@@ -10918,7 +10935,7 @@ static int tg_mtproto_auth_search_global_on_context(
     unsigned long i;
     const tg_mtproto_peer_cache_entry *selected;
     FILE *quiet;
-    static tg_mtproto_peer_cache search_cache;
+#define search_cache tg_peer_work_c /* scratch: see tg_peer_work_a */
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
     static const char label[] = "mtproto contacts.search";
@@ -11056,6 +11073,7 @@ static int tg_mtproto_auth_search_global_on_context(
     fprintf(stream, ".\n");
     return 0;
 }
+#undef search_cache
 
 int tg_mtproto_auth_get_history_peer_file(const char *host,
                                           const char *port,

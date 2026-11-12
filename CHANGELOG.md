@@ -284,6 +284,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   version 3 or later (the LICENSE file in every archive). Up to and
   including the 0.1 beta it was under the MIT License: those releases
   stay under it, and so does the code contributed in that time.
+- The 68k program asks for less memory in one piece. Its static data
+  was one block of 2.1 MB that had to be free as a whole for the
+  program to load at all, which a machine with 4 MB of fast RAM does
+  not have: the window's own state (300 KB) is now taken from the free
+  memory when the window opens, the text kept for each message read is
+  4.5 KB instead of 8 (the window shows 2 KB of it on the 68k), and
+  five functions that each had their own scratch copies of the chat
+  list share three. The block is 1.5 MB, the whole program takes about
+  3.7 MB instead of 4.1, and the text client of the 68000 package 1.7
+  MB instead of 1.8.
 - The paperclip at the left of the message box is redrawn after the
   desktop client's: a thin clip tilted on its side, outer and inner
   loop, in crisp one-pixel lines. It comes in two sizes, 16 pixels for
