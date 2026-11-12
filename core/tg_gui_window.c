@@ -16756,7 +16756,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                             state->status,
                                             sizeof(state->status),
                                             "Spoiler shown");
-                                    } else
+                                        tg_gui_window_paint(state, &backend);
+                                        continue;
+                                    }
                                     /* A click ON A LINK beats select/reply:
                                        open it in the browser, or copy it to
                                        the clipboard when no OpenURL/URLOpen
