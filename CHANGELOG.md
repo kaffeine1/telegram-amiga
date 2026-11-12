@@ -47,6 +47,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- A chat pinned or unpinned, or marked as unread or read, on another
+  device is followed while the client runs: the pins and the marks are
+  read again from Telegram at the next poll and the chat list is drawn
+  again. They used to wait for the next start or for Reload chat list.
 - Muted chats are marked in the chat list, as in the official clients:
   the unread badge of a muted chat is grey instead of blue, and with
   nothing unread a small crossed loudspeaker sits at the right of its

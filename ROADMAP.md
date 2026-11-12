@@ -302,10 +302,11 @@ it works today:
 - pinned chats at the top of the list and the Archive (`folder_id` 1).
   Pins done on `main`: read with `messages.getPinnedDialogs` at start
   and on Reload chat list, listed first with a pin mark, Pin and Unpin
-  in the chat's menu (`messages.toggleDialogPin`); still missing: Saved
-  Messages pinned, the order of the pins changed by dragging
-  (`messages.reorderPinnedDialogs`), pins changed on another device
-  while running (`updatePinnedDialogs`). Archive done on `main`:
+  in the chat's menu (`messages.toggleDialogPin`), and pins changed on
+  another device are read again while running (`updateDialogPinned`,
+  `updatePinnedDialogs`); still missing: Saved Messages pinned, the
+  order of the pins changed by dragging
+  (`messages.reorderPinnedDialogs`). Archive done on `main`:
   Archived chats (Amiga+A) reads folder 1 with `messages.getDialogs`
   and lists it in place of the chat list, Archive and Unarchive in the
   chat's menu (`folders.editPeerFolders`), moves made elsewhere follow
@@ -325,9 +326,9 @@ it works today:
   (`messages.deleteHistory`, for this account only), both after a
   confirmation. A chat on screen is marked as read on Telegram
   (`readHistory` from the window's idle path). Still missing: the same
-  in the text client; a mark changed on another
-  device while running (`updateDialogUnreadMark`); deleting a private
-  chat for both sides;
+  in the text client; deleting a private chat for both sides. A mark
+  changed on another device while running is followed
+  (`updateDialogUnreadMark`);
 - drafts shown and kept in step with the other devices: done in the
   window (`messages.getAllDrafts` at start and on Reload,
   `updateDraftMessage` live, `messages.saveDraft` on leaving a chat and

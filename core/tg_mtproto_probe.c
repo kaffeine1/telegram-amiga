@@ -238,6 +238,15 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
    pts_count:int, folderPeer#e9baa668 peer:Peer folder_id:int (layer 214
    schema, checked 2026-11-10): chats moved in or out of the Archive. */
 #define TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR 0x19360dc0UL
+/* updateDialogPinned#6e6fe51c flags:# pinned:flags.0?true folder_id:flags.1?int
+   peer:DialogPeer; updatePinnedDialogs#fa0f3ca2 flags:# folder_id:flags.1?int
+   order:flags.0?Vector<DialogPeer>; updateDialogUnreadMark#b658f23e flags:#
+   unread:flags.0?true peer:DialogPeer saved_peer_id:flags.1?Peer. Layer 214. */
+#define TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR 0x6e6fe51cUL
+#define TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR 0xfa0f3ca2UL
+#define TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR 0xb658f23eUL
+#define TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR 0xe56dbf05UL
+#define TG_MTPROTO_DIALOG_PEER_FOLDER_CONSTRUCTOR 0x514519e2UL
 #define TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR 0xedfc111eUL
 #define TG_MTPROTO_UPDATE_NOTIFY_SETTINGS_CONSTRUCTOR 0xbec268efUL
 #define TG_MTPROTO_UPDATE_PINNED_MESSAGES_CONSTRUCTOR 0xed85eab5UL
@@ -551,6 +560,11 @@ typedef struct tg_chat_folder_entry {
 } tg_chat_folder_entry;
 static tg_chat_folder_entry tg_chat_folder_queue[TG_CHAT_FOLDER_QUEUE_MAX];
 static unsigned long tg_chat_folder_count = 0UL;
+/* The pinned chats, or the chats marked as unread, changed on another
+   device: the window reads them again at its next tick rather than piece
+   the change together from the update. */
+static int tg_chat_pins_stale = 0;
+static int tg_chat_marks_stale = 0;
 /* The last message sent came back with a mention by name in it. */
 static int tg_chat_sent_named_mention = 0;
 /* A draft written, changed or deleted on another device: the window's
@@ -4357,6 +4371,51 @@ static void tg_chat_folder_parse_update(tg_mtproto_tl_reader *reader)
     }
 }
 
+/* updateDialogPinned, updatePinnedDialogs or updateDialogUnreadMark, the
+   reader just past the constructor: the window's pins or unread marks are
+   out of date. The envelope scan offers any aligned constructor match, so
+   the update counts only when its flags hold nothing unknown and what
+   follows them is what the schema puts there. */
+static void tg_chat_list_marks_parse_update(tg_mtproto_tl_reader *reader,
+                                            unsigned long constructor)
+{
+    unsigned long flags;
+    unsigned long word;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: nobody shows pins or marks */
+    }
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & ~3UL) != 0UL) {
+        return;
+    }
+    if (constructor == TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR) {
+        if (tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+            (word != TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR &&
+             word != TG_MTPROTO_DIALOG_PEER_FOLDER_CONSTRUCTOR)) {
+            return;
+        }
+        tg_chat_marks_stale = 1;
+        return;
+    }
+    if ((flags & 2UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK) {
+        return; /* folder_id */
+    }
+    if (constructor == TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR) {
+        if (tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+            (word != TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR &&
+             word != TG_MTPROTO_DIALOG_PEER_FOLDER_CONSTRUCTOR)) {
+            return;
+        }
+    } else if ((flags & 1UL) != 0UL &&
+               (tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+                word != TG_MTPROTO_TL_VECTOR_CONSTRUCTOR)) {
+        return; /* updatePinnedDialogs: the new order, when it is there */
+    }
+    tg_chat_pins_stale = 1;
+}
+
 /* updateMessagePoll, the reader just past the constructor: the poll kept
    takes the new votes, and the window shows them. The envelope scan
    offers any aligned match: the reader counts it only when it reads as a
@@ -4564,6 +4623,15 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_folder_parse_update(&reader);
+        } else if (constructor ==
+                       TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
+                   constructor ==
+                       TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR ||
+                   constructor ==
+                       TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_list_marks_parse_update(&reader, constructor);
         } else if (constructor == TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
@@ -4714,6 +4782,12 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     }
     if (update_ctor == TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR) {
         tg_chat_folder_parse_update(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
+        update_ctor == TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR ||
+        update_ctor == TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR) {
+        tg_chat_list_marks_parse_update(reader, update_ctor);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
@@ -20998,6 +21072,125 @@ int tg_mtproto_probe_self_test(void)
                 puts("probe self-test: truncated delete must queue nothing");
                 return 2;
             }
+            /* Pins and unread marks changed elsewhere: each of the three
+               updates says its list is out of date; flags with a bit the
+               schema does not have, or something else where the DialogPeer
+               goes, say nothing; nor does any of them without a window. */
+            {
+                static const struct {
+                    unsigned long ctor;
+                    unsigned long flags;
+                    unsigned long next;
+                    int pins;
+                    int marks;
+                } cases[] = {
+                    { TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR, 1UL,
+                      TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR, 1, 0 },
+                    { TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR, 0UL,
+                      TG_MTPROTO_DIALOG_PEER_FOLDER_CONSTRUCTOR, 1, 0 },
+                    { TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR, 1UL,
+                      TG_MTPROTO_TL_VECTOR_CONSTRUCTOR, 1, 0 },
+                    { TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR, 0UL,
+                      0x12345678UL, 1, 0 },
+                    { TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR, 1UL,
+                      TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR, 0, 1 },
+                    { TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR, 4UL,
+                      TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR, 0, 0 },
+                    { TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR, 1UL,
+                      0x12345678UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR, 1UL,
+                      0x12345678UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR, 1UL,
+                      0x12345678UL, 0, 0 }
+                };
+                unsigned int c;
+                int window;
+
+                for (window = 1; window >= 0; --window) {
+                    for (c = 0U; c < sizeof(cases) / sizeof(cases[0]); ++c) {
+                        tg_chat_pins_stale = 0;
+                        tg_chat_marks_stale = 0;
+                        tg_chat_delete_target = window ? &del_sink : 0;
+                        tg_mtproto_tl_writer_init(&writer, payload,
+                                                  sizeof(payload));
+                        ok = tg_mtproto_tl_write_u32(
+                                 &writer,
+                                 TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer,
+                                                     cases[c].ctor) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer,
+                                                     cases[c].flags) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer,
+                                                     cases[c].next) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer, 0UL) ==
+                                 TG_MTPROTO_TL_OK;
+                        if (ok) {
+                            tg_chat_notify_collect(payload, writer.length);
+                        }
+                        tg_chat_delete_target = 0;
+                        if (!ok ||
+                            tg_chat_pins_stale !=
+                                (window ? cases[c].pins : 0) ||
+                            tg_chat_marks_stale !=
+                                (window ? cases[c].marks : 0)) {
+                            tg_chat_pins_stale = 0;
+                            tg_chat_marks_stale = 0;
+                            tg_chat_nq = 0;
+                            tg_chat_typing_target = 0;
+                            tg_chat_edit_target = 0;
+                            printf("probe self-test: pins or marks changed "
+                                   "elsewhere, case %u (window %d) wrong\n",
+                                   c, window);
+                            return 2;
+                        }
+                    }
+                }
+                /* The scan of a whole envelope, which is how the updates
+                   of a getDifference get here, finds them as well. */
+                tg_chat_pins_stale = 0;
+                tg_chat_marks_stale = 0;
+                tg_chat_delete_target = &del_sink;
+                tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+                ok = tg_mtproto_tl_write_u32(&writer, 0x11111111UL) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(
+                         &writer,
+                         TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, 1UL) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(
+                         &writer, TG_MTPROTO_DIALOG_PEER_CONSTRUCTOR) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(
+                         &writer,
+                         TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, 0UL) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, 0UL) ==
+                         TG_MTPROTO_TL_OK;
+                if (ok) {
+                    tg_chat_edit_scan_updates(payload, writer.length, 0UL);
+                }
+                tg_chat_delete_target = 0;
+                if (!ok || !tg_chat_marks_stale || !tg_chat_pins_stale) {
+                    tg_chat_pins_stale = 0;
+                    tg_chat_marks_stale = 0;
+                    tg_chat_nq = 0;
+                    tg_chat_typing_target = 0;
+                    tg_chat_edit_target = 0;
+                    puts("probe self-test: pins or marks changed elsewhere "
+                         "not found in an envelope");
+                    return 2;
+                }
+                tg_chat_pins_stale = 0;
+                tg_chat_marks_stale = 0;
+            }
         }
 
         tg_chat_nq = 0;
@@ -33959,6 +34152,39 @@ static int tg_gui_session_apply_draft_updates(void)
 #endif
 }
 
+/* The pinned chats or the unread marks changed on another device: they are
+   read again from Telegram (two small requests at most) and the list is
+   drawn again. Not while the list shows something else in its place or
+   under an open menu: the next tick finds the change still waiting. */
+static int tg_gui_session_apply_list_mark_updates(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    tg_chat_pins_stale = 0;
+    tg_chat_marks_stale = 0;
+    return 0;
+#else
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+    if ((!tg_chat_pins_stale && !tg_chat_marks_stale) || stream == 0 ||
+        gst == 0 || gst->in_search || gst->in_filter ||
+        gst->forward_pick_active || gst->ctx_visible) {
+        return 0;
+    }
+    if (tg_chat_pins_stale) {
+        tg_chat_pins_stale = 0;
+        (void)tg_gui_session_fetch_pins(stream);
+    }
+    if (tg_chat_marks_stale) {
+        tg_chat_marks_stale = 0;
+        (void)tg_gui_session_fetch_marks(stream);
+    }
+    tg_gui_log("list: pins or unread marks changed, read again");
+    tg_gui_session_reload_chats();
+    return 1;
+#endif
+}
+
 /* A chat muted or unmuted, here or on another device: the list draws its
    mutes again (not while it shows something else in the list's place, and
    not under an open menu, which a list drawn again would take away: the
@@ -33992,6 +34218,9 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
         dirty = 1;
     }
     if (tg_gui_session_apply_mute_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_list_mark_updates(stream)) {
         dirty = 1;
     }
     if (tg_gui_session_apply_folder_updates()) {
