@@ -7520,16 +7520,58 @@ static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
 }
 
 /* One-line confirm before deleting a message for everyone. 1 = Delete. */
-static int tg_gui_amiga_confirm_delete(struct Window *win)
+/* own_chat: Saved Messages, where there is no "everyone" to speak of. */
+static int tg_gui_amiga_confirm_delete(struct Window *win, int own_chat)
 {
     struct EasyStruct es;
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     es.es_Title = (STRPTR)"Delete message";
-    es.es_TextFormat = (STRPTR)"Delete this message for everyone?";
+    es.es_TextFormat = own_chat
+        ? (STRPTR)"Delete this message?"
+        : (STRPTR)"Delete this message for everyone?";
     es.es_GadgetFormat = (STRPTR)"Delete|Cancel";
     return (int)tg_gui_amiga_easyreq_args(win, &es);
+}
+
+/* A question with the choice a chat with one person allows: the first
+   button acts for both sides, the second for this account alone.
+   1 = for both, 0 = for me only, -1 = cancelled. */
+static int tg_gui_amiga_ask_both_sides(struct Window *win, const char *title,
+                                       const char *body, const char *name)
+{
+    struct EasyStruct es;
+    char who[24];
+    char gadgets[64];
+    LONG choice;
+
+    tg_gui_requester_name(who, sizeof(who), name);
+    sprintf(gadgets, "For me and %s|For me only|Cancel", who);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)title;
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)gadgets;
+    choice = tg_gui_amiga_easyreq_args(win, &es);
+    return choice == 1 ? 1 : (choice == 2 ? 0 : -1);
+}
+
+/* 1 when the open chat is a chat with one person (not a group, not a
+   channel, not Saved Messages), and then *name is that person's. */
+static int tg_gui_window_chat_is_private(const tg_gui_state *state,
+                                         const char **name)
+{
+    const tg_gui_chat *row = tg_gui_open_chat_row(state);
+
+    if (row == 0 || row->is_group || row->index == TG_GUI_SAVED_PEER_INDEX) {
+        return 0;
+    }
+    if (name != 0) {
+        *name = row->name;
+    }
+    return 1;
 }
 
 /* Save requesters never replace an existing photo without an explicit yes. */
@@ -10557,10 +10599,43 @@ static void tg_gui_window_pick_delete(tg_gui_state *state, struct Window *win,
                                    TG_GUI_PICK_OTHERS);
     int is_group =
         tg_gui_session_chat_kind(tg_gui_session_current_peer_index()) > 0;
+    const char *other = 0;
     int failed = 0;
     int k;
 
     if (n_own + n_others <= 0) {
+        return;
+    }
+    if (tg_gui_window_chat_is_private(state, &other)) {
+        /* A chat with one person: all of them the same way, for both or
+           for this account alone, in one request. */
+        static unsigned long all[TG_GUI_MAX_MESSAGES];
+        int n_all = tg_gui_pick_ids(state, all, TG_GUI_MAX_MESSAGES,
+                                    TG_GUI_PICK_ALL);
+        int both;
+
+        sprintf(body, "Delete %d message%s?", n_all, n_all == 1 ? "" : "s");
+        both = tg_gui_amiga_ask_both_sides(win, "Delete messages", body,
+                                           other);
+        if (both < 0) {
+            return; /* the selection stays as it was */
+        }
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Deleting...");
+        tg_gui_window_paint(state, backend);
+        failed = tg_gui_session_delete_list(all, n_all, both, stdout) != 0;
+        tg_gui_pick_end(state);
+        if (failed) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "The messages could not be deleted");
+        } else {
+            char done[64];
+
+            sprintf(done, "%d message%s deleted%s", n_all,
+                    n_all == 1 ? "" : "s", both ? " for both" : "");
+            tg_gui_window_copy(state->status, sizeof(state->status), done);
+        }
+        tg_gui_window_paint(state, backend);
         return;
     }
     if (n_others == 0) {
@@ -16179,12 +16254,32 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status, sizeof(state->status),
                                            "Editing - ENTER saves, ESC cancels");
                     } else if (it == TG_GUI_CTX_DELETE && m != 0 &&
-                               (m->is_own ||
-                                tg_gui_open_chat_is_self(state)) &&
-                               m->id != 0UL) {
+                               !m->is_system && m->id != 0UL) {
                         unsigned long del_id = m->id;
+                        const char *other = 0;
 
-                        if (tg_gui_amiga_confirm_delete(ctx.window) != 0) {
+                        /* The menu leaves the screen before the question. */
+                        tg_gui_window_paint(state, &backend);
+                        if (tg_gui_window_chat_is_private(state, &other)) {
+                            /* A chat with one person: any message of it,
+                               for both or for this account alone. */
+                            int both = tg_gui_amiga_ask_both_sides(
+                                ctx.window, "Delete message",
+                                "Delete this message?", other);
+
+                            if (both >= 0 &&
+                                tg_gui_session_delete_list(&del_id, 1, both,
+                                                           stdout) != 0) {
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    "Could not delete this message");
+                            }
+                        } else if ((m->is_own ||
+                                    tg_gui_open_chat_is_self(state)) &&
+                                   tg_gui_amiga_confirm_delete(
+                                       ctx.window,
+                                       tg_gui_open_chat_is_self(state)) !=
+                                       0) {
                             (void)tg_gui_session_delete(del_id, stdout);
                         }
                     } else if (it == TG_GUI_CTX_HIDE && m != 0 &&
@@ -16233,26 +16328,66 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                !m->is_system && m->id != 0UL) {
                         char why[48];
                         int want = !state->ctx_msg_pinned;
-                        int prc;
+                        int kind = tg_gui_session_chat_kind(
+                            tg_gui_session_current_peer_index());
+                        const char *other = 0;
+                        int wide = 0;
+                        int prc = 0;
 
-                        tg_gui_window_copy(state->status,
-                                           sizeof(state->status),
-                                           want ? "Pinning..."
-                                                : "Unpinning...");
-                        tg_gui_window_paint(state, &backend);
-                        prc = tg_gui_session_pin_message(m->id, want, why,
-                                                         sizeof(why), stdout);
-                        if (prc == 0) {
-                            int private_chat =
-                                tg_gui_session_chat_kind(
-                                    tg_gui_session_current_peer_index()) == 0;
+                        /* How to pin: in a chat with one person for both
+                           or for this account alone, in a group or a
+                           channel with or without telling the members.
+                           Unpinning, and Saved Messages, ask nothing. */
+                        if (want &&
+                            tg_gui_window_chat_is_private(state, &other)) {
+                            tg_gui_window_paint(state, &backend);
+                            wide = tg_gui_amiga_ask_both_sides(
+                                ctx.window, "Pin message",
+                                "Pin this message?", other);
+                        } else if (want && kind > 0) {
+                            struct EasyStruct pes;
+                            LONG pick;
 
+                            tg_gui_window_paint(state, &backend);
+                            pes.es_StructSize =
+                                (ULONG)sizeof(struct EasyStruct);
+                            pes.es_Flags = 0UL;
+                            pes.es_Title = (APTR)"Pin message";
+                            pes.es_TextFormat =
+                                (APTR)"Pin this message for everyone here?";
+                            pes.es_GadgetFormat =
+                                (APTR)"Pin and notify|Pin quietly|Cancel";
+                            pick = tg_gui_amiga_easyreq_args(ctx.window,
+                                                             &pes);
+                            wide = pick == 1 ? 1 : (pick == 2 ? 0 : -1);
+                        }
+                        if (wide < 0) {
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status),
+                                               "Not pinned");
+                            tg_gui_window_paint(state, &backend);
+                            prc = -1;
+                        } else {
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status),
+                                               want ? "Pinning..."
+                                                    : "Unpinning...");
+                            tg_gui_window_paint(state, &backend);
+                            prc = tg_gui_session_pin_message_as(
+                                m->id, want, wide, why, sizeof(why), stdout);
+                        }
+                        if (prc < 0) {
+                            /* cancelled: said above */
+                        } else if (prc == 0) {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
                                 !want ? "Unpinned"
-                                      : (private_chat
-                                             ? "Pinned, for you only"
-                                             : "Pinned for everyone"));
+                                      : (kind == 0
+                                             ? (wide ? "Pinned for both"
+                                                     : "Pinned, for you only")
+                                             : (wide
+                                                    ? "Pinned, members notified"
+                                                    : "Pinned for everyone")));
                         } else if (prc == 1) {
                             /* CHAT_ADMIN_REQUIRED and its kin: only who
                                may pin here can. */

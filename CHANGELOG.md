@@ -47,6 +47,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Delete and Pin ask how. In a chat with one person Delete is now on
+  every message, theirs too, and asks whether the message goes for both
+  of you or for you only; several selected messages get the same
+  question once and leave in one request. Pin asks, in a chat with one
+  person, whether the message is pinned for both of you or for you
+  only, and in a group or a channel whether the members are told ("Pin
+  and notify") or not ("Pin quietly"). Cancel leaves everything as it
+  was. Until now a pin was always quiet and, in a chat with one person,
+  always for this account alone, and there only one's own messages
+  could be deleted from the menu.
 - Create poll... in the first menu makes a poll in the open chat. A
   small window takes the question, two to ten answers and a switch for
   several answers; TAB or the cursor keys move between the lines, ENTER

@@ -308,6 +308,11 @@ typedef struct tg_gui_poll_draft {
    fewer than two answers. The draft is tidied in every case. */
 int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft);
 
+/* A chat's name for a requester's button ("For me and Anna"): '|' and '%'
+   would break the requester apart and are replaced, a name longer than
+   the buffer ends in two dots, an empty one reads "them". */
+void tg_gui_requester_name(char *out, unsigned long size, const char *name);
+
 /* A muted chat in the list, as the official clients show it: its unread
    badge is dim instead of the badge colour, and with nothing unread a small
    crossed loudspeaker sits where the badge would be (left of the pin mark
@@ -1112,6 +1117,9 @@ int tg_gui_photo_build_destination(char *out, unsigned long out_size,
 int tg_gui_photo_save_allowed(int destination_exists,
                               int overwrite_confirmed);
 
+/* The chat list row of the open chat, 0 when no chat is open or its row
+   is not in the list shown. */
+const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state);
 /* 1 when the currently selected sidebar row is the pinned Saved Messages
    (self) chat -- the row whose index carries TG_GUI_SAVED_PEER_INDEX. There
    the server clears the out flag on every message (nothing in Saved Messages

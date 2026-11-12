@@ -2424,6 +2424,48 @@ int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft)
     return kept >= 2 ? kept : -2;
 }
 
+void tg_gui_requester_name(char *out, unsigned long size, const char *name)
+{
+    unsigned long n = 0UL;
+    unsigned long len;
+    unsigned long i;
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (name == 0) {
+        return;
+    }
+    len = (unsigned long)strlen(name);
+    /* '|' parts the buttons of a requester and '%' starts an argument:
+       a name carrying either would break the requester apart. An emoji
+       of the name is left out: the system's button cannot draw it. */
+    for (i = 0UL; i < len && n + 1UL < size; ++i) {
+        char c = name[i];
+
+        if (tg_gui_emoji_pair_at(name, len, i, 0)) {
+            ++i;
+            continue;
+        }
+        if ((unsigned char)c < 32U) {
+            continue;
+        }
+        out[n++] = (c == '|') ? '/' : (c == '%') ? ' ' : c;
+    }
+    out[n] = '\0';
+    if (i < len && n >= 3UL) { /* cut short: say so */
+        out[n - 1UL] = '.';
+        out[n - 2UL] = '.';
+    }
+    while (n > 0UL && out[n - 1UL] == ' ') {
+        out[--n] = '\0';
+    }
+    if (out[0] == '\0') {
+        tg_gui_copy(out, size, "them");
+    }
+}
+
 int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat)
 {
     /* White on the dim grey is hard to read; the window's colour, which
@@ -5901,7 +5943,7 @@ void tg_gui_note_open_chat(tg_gui_state *state)
 /* The row of the chat open in the transcript: its sidebar row, or the copy
    taken when it was opened while it sits in the other list (selected_chat
    -1). NULL when there is neither. */
-static const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state)
+const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state)
 {
     if (state == 0) {
         return 0;
@@ -6290,6 +6332,12 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                themselves in a supergroup: the client hides it instead. */
             labels[n] = "Hide message";
             ids[n] = TG_GUI_CTX_HIDE;
+            ++n;
+        } else if (!m->is_system && tg_gui_open_chat_row(state) != 0) {
+            /* A chat with one person: either side may delete any message
+               of it, for itself or for both. */
+            labels[n] = "Delete";
+            ids[n] = TG_GUI_CTX_DELETE;
             ++n;
         }
         if (m->has_document && state->ctx_file_saved) {
@@ -8884,9 +8932,12 @@ static int tg_gui_notify_menu_self_test(void)
             int group;
             int own;
             int hide;
-        } cases[] = { { 1, 0, 1 }, { 1, 1, 0 }, { 0, 0, 0 } };
+            int del;
+        } cases[] = { { 1, 0, 1, 0 }, { 1, 1, 0, 1 }, { 0, 0, 0, 1 },
+                      { 0, 1, 0, 1 } };
         unsigned long c;
         int found;
+        int deletes;
         int n;
         int i;
 
@@ -8901,16 +8952,80 @@ static int tg_gui_notify_menu_self_test(void)
             state->messages[0].is_own = cases[c].own;
             n = tg_gui_context_items(state, labels, ids);
             found = 0;
+            deletes = 0;
             for (i = 0; i < n; ++i) {
                 found = found || (ids[i] == TG_GUI_CTX_HIDE &&
                                   strcmp(labels[i], "Hide message") == 0);
+                deletes += ids[i] == TG_GUI_CTX_DELETE;
             }
-            if (found != cases[c].hide || n > TG_GUI_CTX_MENU_ITEMS) {
+            /* ...and Delete: one's own anywhere, and in a chat with one
+               person the other person's too. */
+            if (found != cases[c].hide || deletes != cases[c].del ||
+                n > TG_GUI_CTX_MENU_ITEMS) {
                 printf("gui self-test: Hide message case %lu wrong\n", c);
                 return 2;
             }
         }
+        /* A service line has neither, in a chat with one person too. */
+        state->chats[0].is_group = 0;
+        state->messages[0].is_own = 0;
+        state->messages[0].is_system = 1;
+        n = tg_gui_context_items(state, labels, ids);
+        for (i = 0; i < n; ++i) {
+            if (ids[i] == TG_GUI_CTX_DELETE || ids[i] == TG_GUI_CTX_HIDE) {
+                puts("gui self-test: a service line can be deleted");
+                return 2;
+            }
+        }
+        state->messages[0].is_system = 0;
         state->message_count = 0;
+    }
+    /* A name on a requester's button: nothing that parts the buttons or
+       starts an argument, cut with two dots when it is long. */
+    {
+        char name[16];
+
+        tg_gui_requester_name(name, sizeof(name), "Anna|Bo 100%");
+        if (strcmp(name, "Anna/Bo 100") != 0) {
+            printf("gui self-test: requester name wrong (%s)\n", name);
+            return 2;
+        }
+        tg_gui_requester_name(name, sizeof(name), "A very long name indeed");
+        if (strlen(name) != 15U || strcmp(name + 13, "..") != 0 ||
+            strncmp(name, "A very long n", 13U) != 0) {
+            printf("gui self-test: long requester name wrong (%s)\n", name);
+            return 2;
+        }
+        tg_gui_requester_name(name, sizeof(name), "");
+        if (strcmp(name, "them") != 0) {
+            puts("gui self-test: empty requester name wrong");
+            return 2;
+        }
+        {
+            /* an emoji of the name, as the chat list keeps it */
+            char with_emoji[12];
+
+            strcpy(with_emoji, "Anna ");
+            with_emoji[5] = (char)TG_GUI_EMOJI_PREFIX0;
+            with_emoji[6] = (char)TG_GUI_EMOJI_INDEX_MIN;
+            strcpy(with_emoji + 7, " Bo");
+            tg_gui_requester_name(name, sizeof(name), with_emoji);
+            if (strcmp(name, "Anna  Bo") != 0) {
+                printf("gui self-test: requester name keeps an emoji (%s)\n",
+                       name);
+                return 2;
+            }
+            with_emoji[5] = '\0';
+            with_emoji[4] = (char)TG_GUI_EMOJI_PREFIX0; /* "Anna" + a pair */
+            with_emoji[5] = (char)TG_GUI_EMOJI_INDEX_MIN;
+            with_emoji[6] = '\0';
+            tg_gui_requester_name(name, sizeof(name), with_emoji);
+            if (strcmp(name, "Anna") != 0) {
+                printf("gui self-test: requester name ends in an emoji (%s)\n",
+                       name);
+                return 2;
+            }
+        }
     }
     return 0;
 }

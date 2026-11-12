@@ -577,6 +577,14 @@ Messages
 - Click a message to reply to it. The right mouse button on a message
   opens its menu: React..., Reply, Forward to Saved, Forward to..., and
   on your own messages Edit and Delete (for everyone).
+- In a chat with one person Delete is on every message, theirs too, and
+  asks how: for you and for them, or for you only.
+- A chat with pinned messages shows the latest under its header,
+  "Pinned:" and how it starts; a click shows the chat around it, and
+  the next click the one pinned before. Pin and Unpin are in a
+  message's menu. Pin asks how: in a chat with one person for both of
+  you or for you only; in a group or a channel, where only those who
+  may pin can, telling the members or quietly.
 - In a group or a channel, someone else's message offers Hide message:
   it leaves the chat and stays out. "Show hidden messages" in the chat's
   menu brings it back. In a basic group Telegram also deletes it for
@@ -610,9 +618,10 @@ Messages
   last clicked to that one. The input line gives way to a bar that says
   how many are selected, with Forward, Delete and Cancel; Esc cancels
   too, and so does opening another chat. Forward asks for the chat and
-  sends them in order. Delete asks once for all of them: your own
-  messages go for everyone; other people's are hidden here in a group,
-  and deleted for you only in a private chat.
+  sends them in order. Delete asks once for all of them: in a group
+  your own messages go for everyone and other people's are hidden here;
+  in a chat with one person it asks whether they go for both of you or
+  for you only.
 - A poll shows its question and its answers, numbered. To vote, open
   the menu of the poll's message (right mouse button) and choose
   Vote...: the answers take the menu's place, and a click votes. Where
@@ -772,6 +781,14 @@ Messaggi
 - Clicca un messaggio per rispondere. Il tasto destro su un messaggio
   apre il suo menu: React..., Reply, Forward to Saved, Forward to..., e
   sui tuoi messaggi Edit e Delete (per tutti).
+- In una chat con una persona Delete c'e' su ogni messaggio, anche sui
+  suoi, e chiede come: per te e per l'altra persona, o solo per te.
+- Una chat con messaggi fissati mostra l'ultimo sotto l'intestazione,
+  "Pinned:" e come comincia; un click mostra la chat attorno a quel
+  messaggio, e il click dopo quello fissato prima. Pin e Unpin sono nel
+  menu di un messaggio. Pin chiede come: in una chat con una persona
+  per tutti e due o solo per te; in un gruppo o in un canale, dove
+  fissa solo chi puo', avvisando i membri o in silenzio.
 - In un gruppo o in un canale, sul messaggio di un altro c'e' Hide
   message: esce dalla chat e resta fuori. "Show hidden messages" nel
   menu della chat lo riporta. In un gruppo semplice Telegram lo cancella
@@ -806,9 +823,10 @@ Messaggi
   ultimo fino a quello. La riga di input lascia il posto a una barra
   che dice quanti sono selezionati, con Forward, Delete e Cancel; anche
   Esc annulla, e cosi' aprire un'altra chat. Forward chiede la chat e
-  li manda in ordine. Delete chiede una volta sola per tutti: i tuoi
-  messaggi spariscono per tutti; quelli degli altri in un gruppo
-  vengono nascosti qui, in una chat privata cancellati solo per te.
+  li manda in ordine. Delete chiede una volta sola per tutti: in un
+  gruppo i tuoi messaggi spariscono per tutti e quelli degli altri
+  vengono nascosti qui; in una chat con una persona chiede se vanno via
+  per tutti e due o solo per te.
 - Un sondaggio mostra la domanda e le risposte, numerate. Per votare
   apri il menu del messaggio del sondaggio (tasto destro) e scegli
   Vote...: le risposte prendono il posto del menu, e un click vota. Se

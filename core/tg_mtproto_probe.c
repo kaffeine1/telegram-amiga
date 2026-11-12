@@ -34095,18 +34095,21 @@ int tg_gui_session_message_pinned(unsigned long message_id)
 #endif
 }
 
-/* Public: pin (1) or unpin (0) a message of the open chat on Telegram:
-   for everyone in a group or a channel, for this account alone in a
-   private chat. The pin is silent: the members get no notification, the
-   service line still shows. The bar follows. 0 = done,
-   1 = Telegram refused (emsg says why: no right to pin here, usually),
-   2 = failed. */
-int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
-                               unsigned long emsg_size, FILE *stream)
+/* Public: pin (1) or unpin (0) a message of the open chat on Telegram.
+   A pin is for everyone in a group or a channel. `wide` is the louder of
+   the two ways to pin: in a private chat the other person sees the pin
+   too (otherwise it stays with this account), in a group or a channel
+   the members are notified (otherwise the pin is silent; the service
+   line shows either way). The bar follows. 0 = done, 1 = Telegram
+   refused (emsg says why: no right to pin here, usually), 2 = failed. */
+int tg_gui_session_pin_message_as(unsigned long message_id, int pin,
+                                  int wide, char *emsg,
+                                  unsigned long emsg_size, FILE *stream)
 {
 #if defined(TG_NO_GUI)
     (void)message_id;
     (void)pin;
+    (void)wide;
     (void)stream;
     if (emsg != 0 && emsg_size > 0UL) {
         emsg[0] = '\0';
@@ -34145,10 +34148,13 @@ int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
-    /* In a private chat the pin stays with this account: the other person
-       is not shown a pin they did not ask for. */
+    /* In a private chat the pin stays with this account unless asked
+       otherwise: the other person is not shown a pin they did not ask
+       for. Elsewhere it is silent unless asked otherwise. */
     rc = tg_mtproto_build_messages_update_pinned_message(
-             &writer, pin, pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+             &writer, pin,
+             pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR && !wide,
+             pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR || !wide,
              message_id, pc, ph, pl, ahh, ahl, hah) ==
              TG_MTPROTO_TL_OK
              ? tg_gui_session_peer_request(
@@ -34203,6 +34209,15 @@ int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
     tg_gui_pinned_step_failed = 0;
     return 0;
 #endif
+}
+
+/* The quiet pin: for this account alone in a private chat, without a
+   notification elsewhere. */
+int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
+                               unsigned long emsg_size, FILE *stream)
+{
+    return tg_gui_session_pin_message_as(message_id, pin, 0, emsg, emsg_size,
+                                         stream);
 }
 
 /* Public: the bar moves to the message pinned before the one it shows,

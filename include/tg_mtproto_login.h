@@ -1103,12 +1103,14 @@ tg_mtproto_tl_status tg_mtproto_build_read_message_contents(
     unsigned long access_hash_lo,
     unsigned long message_id);
 
-/* messages.updatePinnedMessage: pin (silently) or unpin one message;
-   one_side keeps a private chat's pin to this account alone. */
+/* messages.updatePinnedMessage: pin or unpin one message; one_side keeps
+   a private chat's pin to this account alone, silent pins without
+   notifying the members. */
 tg_mtproto_tl_status tg_mtproto_build_messages_update_pinned_message(
     tg_mtproto_tl_writer *writer,
     int pin,
     int one_side,
+    int silent,
     unsigned long message_id,
     unsigned long peer_constructor,
     unsigned long peer_id_hi,

@@ -390,6 +390,12 @@ int tg_gui_session_pinned_next(void);
 int tg_gui_session_message_pinned(unsigned long message_id);
 int tg_gui_session_pin_message(unsigned long message_id, int pin, char *emsg,
                                unsigned long emsg_size, FILE *stream);
+/* The same with a choice. wide = 1 is the louder way to pin: in a private
+   chat the other person sees the pin too, in a group or a channel the
+   members are notified. wide = 0 is what tg_gui_session_pin_message does. */
+int tg_gui_session_pin_message_as(unsigned long message_id, int pin,
+                                  int wide, char *emsg,
+                                  unsigned long emsg_size, FILE *stream);
 
 /* Whether Telegram holds the chat at this 1-based cache index muted right
    now (1), not (0), or nobody knows (-1); and Mute (muted = 1, for good)
