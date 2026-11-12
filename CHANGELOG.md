@@ -302,6 +302,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- The unread badges of the chat list were those of the last time the
+  list was saved: a chat read meanwhile on the phone still showed its
+  old count after a start, until Reload chat list. The background step
+  that learns the mutes now asks Telegram for each chat's dialog
+  (`messages.getPeerDialogs`, one chat every few seconds, top of the
+  list first), which carries the mute and the unread count together,
+  and the badges follow. The open chat keeps its own count.
+- Struck-through text was drawn underlined, like code. It now has a
+  line through it.
 - A chat whose latest messages are heavy (links with previews, photos,
   files) could open empty on the 68k builds and then show only its
   newest five messages: thirty of them unpack to more than the 64 KB

@@ -11943,6 +11943,10 @@ static int tg_mtproto_auth_delete_list_on_context(
    was last read (the open chat's, at its opening and on the read-receipt
    poll): the same answer carries it, so it costs no request. */
 static unsigned long tg_chat_dialog_unread_mentions = 0UL;
+/* The dialog that request read last, whole: its unread count is what the
+   chat list's badge is brought up to date with. valid = 0 until one came. */
+static tg_mtproto_dialog_peer tg_chat_dialog_last;
+static int tg_chat_dialog_last_valid = 0;
 
 static int tg_mtproto_chat_fetch_read_outbox_on_context(
     const char *host,
@@ -11972,6 +11976,7 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
     if (out_read_outbox_max != 0) {
         *out_read_outbox_max = 0UL;
     }
+    tg_chat_dialog_last_valid = 0;
     if (stream == 0 || out_read_outbox_max == 0) {
         return 2;
     }
@@ -12015,6 +12020,8 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
             *out_read_outbox_max = dialogs.peers[i].read_outbox_max_id;
             tg_chat_dialog_unread_mentions =
                 dialogs.peers[i].unread_mentions_count;
+            tg_chat_dialog_last = dialogs.peers[i];
+            tg_chat_dialog_last_valid = 1;
             break;
         }
     }
@@ -19169,6 +19176,7 @@ static int tg_gui_markdown_send_self_test(void);
 static int tg_gui_saved_self_test(void);
 static int tg_gui_batch_self_test(void);
 static int tg_gui_update_self_test(void);
+static int tg_gui_unread_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
 
@@ -21397,7 +21405,7 @@ int tg_mtproto_probe_self_test(void)
     if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0 ||
         tg_gui_markdown_send_self_test() != 0 ||
         tg_gui_saved_self_test() != 0 || tg_gui_batch_self_test() != 0 ||
-        tg_gui_update_self_test() != 0) {
+        tg_gui_update_self_test() != 0 || tg_gui_unread_self_test() != 0) {
         return 2;
     }
 #endif
@@ -34906,12 +34914,15 @@ static int tg_gui_session_apply_folder_updates(void)
 }
 
 #if !defined(TG_NO_GUI)
-/* The mutes of the chats in the list. The chat list is not read from
-   Telegram at every start (an existing cache is used as it is), so a run
-   begins knowing the mute of the open chat and little else. The rest is
+/* The mutes and the unread counts of the chats in the list. The chat list
+   is not read from Telegram at every start (an existing cache is used as
+   it is), so a run begins knowing the mute of the open chat and little
+   else, and with the unread badges of the last time the cache was written:
+   what was read since on another device still showed as unread. Both are
    learnt in the background: one chat a step, one small
-   account.getNotifySettings, top of the list first, a few seconds apart,
-   and never again in the same run for a chat already asked about. */
+   messages.getPeerDialogs (the chat's dialog carries its mute and its
+   unread count), top of the list first, a few seconds apart, and never
+   again in the same run for a chat already asked about. */
 #if defined(__m68k__)
 #define TG_GUI_MUTES_PACE 10UL
 #else
@@ -34938,6 +34949,93 @@ static int tg_gui_chat_mute_known(const tg_gui_chat *chat)
     }
     return settings.valid;
 }
+
+/* A row's badge brought to what Telegram counts as unread there: 1 when it
+   changed. The open chat is left alone: it is being read right here, and
+   its own count is kept by the reading. */
+static int tg_gui_row_take_unread(tg_gui_state *gst, int row,
+                                  unsigned long unread)
+{
+    int want = unread > 99999UL ? 99999 : (int)unread;
+
+    if (gst == 0 || row < 0 || row >= gst->chat_count ||
+        row == gst->selected_chat || gst->chats[row].unread == want) {
+        return 0;
+    }
+    gst->chats[row].unread = want;
+    return 1;
+}
+
+/* Asks Telegram for the dialog of the chat at this 1-based cache index:
+   its mute is stored where the mutes are kept, its unread count is given
+   back. 0 = asked, 2 = no such chat, 1 = Telegram did not answer. */
+static int tg_gui_session_chat_dialog(unsigned long peer_index,
+                                      unsigned long *unread, FILE *stream)
+{
+    char index_text[24];
+    unsigned long read_max;
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    *unread = 0UL;
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_chat_fetch_read_outbox_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file, index_text, &read_max, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 0 && tg_chat_dialog_last_valid) {
+        *unread = tg_chat_dialog_last.unread_count;
+        tg_gui_log("dialog: asked Telegram");
+        return 0;
+    }
+    tg_gui_log(rc == 2 ? "dialog: no such chat" : "dialog: could not ask");
+    return rc == 2 ? 2 : 1;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* The badge that follows Telegram's count: every row but the open one. */
+static int tg_gui_unread_self_test(void)
+{
+    tg_gui_state *gst = tg_gui_test_scratch_state();
+    int ok;
+
+    memset(gst, 0, sizeof(*gst));
+    gst->chat_count = 3;
+    gst->selected_chat = 1;
+    gst->chats[0].unread = 919;
+    gst->chats[1].unread = 4;
+    gst->chats[2].unread = 0;
+    ok = tg_gui_row_take_unread(gst, 0, 0UL) == 1 &&
+         gst->chats[0].unread == 0 &&
+         tg_gui_row_take_unread(gst, 0, 0UL) == 0 && /* nothing changed */
+         tg_gui_row_take_unread(gst, 2, 7UL) == 1 &&
+         gst->chats[2].unread == 7 &&
+         tg_gui_row_take_unread(gst, 1, 0UL) == 0 && /* the open chat */
+         gst->chats[1].unread == 4 &&
+         tg_gui_row_take_unread(gst, 3, 5UL) == 0 &&
+         tg_gui_row_take_unread(gst, -1, 5UL) == 0 &&
+         tg_gui_row_take_unread(0, 0, 5UL) == 0 &&
+         tg_gui_row_take_unread(gst, 0, 4000000000UL) == 1 &&
+         gst->chats[0].unread == 99999;
+    memset(gst, 0, sizeof(*gst));
+    if (!ok) {
+        puts("probe self-test: unread badge from the dialog failed");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 /* The first row of the list whose mute is not known, or -1. */
 static int tg_gui_mutes_next(const tg_gui_state *gst)
@@ -34995,15 +35093,39 @@ int tg_gui_session_mutes_step(FILE *stream)
         return 0;
     }
     asked_index = gst->chats[row].index;
-    tg_gui_mute_ask_failed = 0;
-    (void)tg_gui_session_chat_muted(asked_index, stream);
-    if (tg_gui_mute_ask_failed) {
-        /* Telegram refused or was out of reach: the chats not asked about
-           yet keep no mark until their menu is opened or they write */
-        stopped = 1;
-        tg_gui_log("mutes: Telegram did not answer, learning stops");
+    {
+        unsigned long unread = 0UL;
+        int drc = tg_gui_session_chat_dialog(asked_index, &unread, stream);
+        int changed = 0;
+
+        if (drc == 0) {
+            if (!tg_gui_chat_mute_known(&gst->chats[row])) {
+                /* a dialog without the chat's mute in it: asked the plain
+                   way, so that the row is not asked about for ever */
+                tg_gui_mute_ask_failed = 0;
+                (void)tg_gui_session_chat_muted(asked_index, stream);
+                if (tg_gui_mute_ask_failed) {
+                    stopped = 1;
+                    tg_gui_log("mutes: Telegram did not answer, learning "
+                               "stops");
+                }
+            }
+            if (tg_gui_row_take_unread(gst, row, unread)) {
+                tg_gui_session_persist_unread();
+                changed = 1;
+            }
+        } else if (drc == 1) {
+            /* Telegram refused or was out of reach: the chats not asked
+               about yet keep their marks and counts as they are until
+               their menu is opened or they write */
+            stopped = 1;
+            tg_gui_log("mutes: Telegram did not answer, learning stops");
+        }
+        if (tg_gui_session_apply_mute_updates()) {
+            changed = 1;
+        }
+        return changed;
     }
-    return tg_gui_session_apply_mute_updates();
 #endif
 }
 
