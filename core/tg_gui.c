@@ -2378,6 +2378,52 @@ int tg_gui_chat_badge_pen(const tg_gui_chat *chat)
                                      : TG_GUI_PEN_BADGE;
 }
 
+/* Blanks off both ends of a text, in place. */
+static void tg_gui_poll_trim(char *text)
+{
+    unsigned long n = (unsigned long)strlen(text);
+    unsigned long lead = 0UL;
+
+    while (n > 0UL && text[n - 1UL] == ' ') {
+        text[--n] = '\0';
+    }
+    while (text[lead] == ' ') {
+        ++lead;
+    }
+    if (lead > 0UL) {
+        memmove(text, text + lead, n - lead + 1UL);
+    }
+}
+
+int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft)
+{
+    int kept = 0;
+    int k;
+
+    if (draft == 0) {
+        return -1;
+    }
+    draft->question[sizeof(draft->question) - 1U] = '\0';
+    tg_gui_poll_trim(draft->question);
+    for (k = 0; k < TG_GUI_POLL_NEW_ANSWERS; ++k) {
+        draft->answers[k][sizeof(draft->answers[k]) - 1U] = '\0';
+        tg_gui_poll_trim(draft->answers[k]);
+        if (draft->answers[k][0] == '\0') {
+            continue;
+        }
+        if (k != kept) {
+            strcpy(draft->answers[kept], draft->answers[k]);
+            draft->answers[k][0] = '\0';
+        }
+        ++kept;
+    }
+    draft->multiple = draft->multiple ? 1 : 0;
+    if (draft->question[0] == '\0') {
+        return -1;
+    }
+    return kept >= 2 ? kept : -2;
+}
+
 int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat)
 {
     /* White on the dim grey is hard to read; the window's colour, which
@@ -8682,6 +8728,53 @@ static int tg_gui_mute_mark_self_test(void)
     return 0;
 }
 
+/* A poll before it leaves: the blanks at the ends go, the answers left
+   empty are dropped and the others close up in their order; a poll needs a
+   question and two answers. */
+static int tg_gui_poll_draft_self_test(void)
+{
+    static tg_gui_poll_draft draft;
+    int n;
+
+    memset(&draft, 0, sizeof(draft));
+    strcpy(draft.question, "  Pizza o pasta?  ");
+    strcpy(draft.answers[0], " Pizza");
+    strcpy(draft.answers[2], "Pasta ");
+    strcpy(draft.answers[3], "   ");
+    strcpy(draft.answers[9], "Tutte e due");
+    draft.multiple = 7;
+    n = tg_gui_poll_draft_tidy(&draft);
+    if (n != 3 || strcmp(draft.question, "Pizza o pasta?") != 0 ||
+        strcmp(draft.answers[0], "Pizza") != 0 ||
+        strcmp(draft.answers[1], "Pasta") != 0 ||
+        strcmp(draft.answers[2], "Tutte e due") != 0 ||
+        draft.answers[3][0] != '\0' || draft.answers[9][0] != '\0' ||
+        draft.multiple != 1) {
+        printf("gui self-test: poll draft not tidied (%d answers)\n", n);
+        return 2;
+    }
+    draft.answers[1][0] = '\0';
+    draft.answers[2][0] = '\0';
+    if (tg_gui_poll_draft_tidy(&draft) != -2) {
+        puts("gui self-test: a poll with one answer passed");
+        return 2;
+    }
+    strcpy(draft.answers[5], "Pasta");
+    strcpy(draft.question, "   ");
+    if (tg_gui_poll_draft_tidy(&draft) != -1 ||
+        strcmp(draft.answers[1], "Pasta") != 0 ||
+        tg_gui_poll_draft_tidy(0) != -1) {
+        puts("gui self-test: a poll without a question passed");
+        return 2;
+    }
+    strcpy(draft.question, "Ok?");
+    if (tg_gui_poll_draft_tidy(&draft) != 2) {
+        puts("gui self-test: a good poll draft was refused");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_gui_notify_menu_self_test(void)
 {
     tg_gui_state *state = tg_gui_test_scratch_state();
@@ -9461,6 +9554,7 @@ int tg_gui_self_test(void)
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||
         tg_gui_mute_mark_self_test() != 0 ||
+        tg_gui_poll_draft_self_test() != 0 ||
         tg_gui_notify_sound_preferences_self_test() != 0 ||
         tg_gui_notify_sound_override_self_test() != 0 ||
         tg_gui_notify_sound_choice_self_test() != 0 ||

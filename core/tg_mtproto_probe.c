@@ -28114,6 +28114,106 @@ int tg_gui_session_poll_vote(unsigned long message_id,
     (void)tg_gui_session_apply_poll_updates(); /* the caller repaints */
     return 0;
 }
+
+/* One text of a new poll as the wire wants it: UTF-8, from the keyboard's
+   Latin-1 where that is what the composer holds. 0 when it does not fit. */
+static int tg_gui_poll_wire_text(const char *text, char *out,
+                                 unsigned long size)
+{
+    unsigned long n;
+
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(text, out, size)) {
+        return 1;
+    }
+#endif
+    n = (unsigned long)strlen(text);
+    if (n + 1UL > size) {
+        return 0;
+    }
+    memcpy(out, text, n + 1UL);
+    return 1;
+}
+
+/* Public: makes a poll in the open chat, anonymous, with one answer or
+   several allowed: `count` answers (2 to TG_MTPROTO_POLL_CREATE_MAX), none
+   empty, in the composer's charset like the question. The poll shows with
+   the next poll of the chat. 0 = sent, 1 = Telegram refused (emsg says
+   why), 2 = failed, 3 = the texts are missing or do not fit. */
+int tg_gui_session_poll_create(const char *question,
+                               const char *const *answers, int count,
+                               int multiple, char *emsg,
+                               unsigned long emsg_size, FILE *stream)
+{
+    /* twice the bytes: a Latin-1 letter can take two in UTF-8 */
+    static char wire_question[(TG_GUI_POLL_NEW_QUESTION * 2) + 1];
+    static char wire_answers[TG_MTPROTO_POLL_CREATE_MAX]
+                            [(TG_GUI_POLL_NEW_ANSWER * 2) + 1];
+    static unsigned char query[sizeof(wire_question) + sizeof(wire_answers) +
+                               (TG_MTPROTO_POLL_CREATE_MAX * 32U) + 96U];
+    static const char label[] = "mtproto messages.sendMedia(poll)";
+    const char *list[TG_MTPROTO_POLL_CREATE_MAX];
+    unsigned char rnd[8];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int rc;
+    int k;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return 2;
+    }
+    if (question == 0 || question[0] == '\0' || answers == 0 || count < 2 ||
+        count > (int)TG_MTPROTO_POLL_CREATE_MAX ||
+        !tg_gui_poll_wire_text(question, wire_question,
+                               sizeof(wire_question))) {
+        return 3;
+    }
+    for (k = 0; k < count; ++k) {
+        if (answers[k] == 0 || answers[k][0] == '\0' ||
+            !tg_gui_poll_wire_text(answers[k], wire_answers[k],
+                                   sizeof(wire_answers[k]))) {
+            return 3;
+        }
+        list[k] = wire_answers[k];
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "poll peer") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_saved_session_random(rnd, sizeof(rnd));
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_send_media_poll(
+             &writer, pc, ph, pl, ahh, ahl, hah, wire_question, list,
+             (unsigned int)count, multiple, tg_mtproto_read_u32_le(rnd + 4U),
+             tg_mtproto_read_u32_le(rnd)) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log(rc == 0 ? "poll: created"
+                       : rc == 1 ? "poll: Telegram refused the new poll"
+                                 : "poll: could not be created");
+    return rc;
+}
 #endif /* !TG_NO_GUI: polls */
 
 /* Avatar v2 (safe scope): ONE bounded download of the OPEN chat's small

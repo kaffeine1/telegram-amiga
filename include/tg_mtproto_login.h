@@ -677,6 +677,26 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_vote(
     const tg_mtproto_poll *poll,
     unsigned long mask);
 
+/* A poll made here: messages.sendMedia#ac55d9c1 with
+   inputMediaPoll#f94e5f1 and a new poll#58747131, anonymous, with one
+   answer or several allowed. question and answers are UTF-8; two to
+   TG_MTPROTO_POLL_CREATE_MAX answers, none empty. */
+#define TG_MTPROTO_POLL_CREATE_MAX 10U
+tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *question,
+    const char *const *answers,
+    unsigned int count,
+    int multiple,
+    unsigned long random_id_hi,
+    unsigned long random_id_lo);
+
 tg_mtproto_tl_status tg_mtproto_read_message_reactions(
     tg_mtproto_tl_reader *reader, tg_reactions *out);
 tg_mtproto_tl_status tg_mtproto_read_update_message_reactions(

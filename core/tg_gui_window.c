@@ -565,6 +565,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_FINDALL 37
 #define TG_MENU_ARCHIVE 38
 #define TG_MENU_SETTINGS 39
+#define TG_MENU_POLL 40
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -7065,6 +7066,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_SENDFILE },
     { NM_ITEM,  (STRPTR)"Send photo...", (STRPTR)"P", 0, 0,
       (APTR)TG_MENU_SENDPHOTO },
+    { NM_ITEM,  (STRPTR)"Create poll...", 0, 0, 0,
+      (APTR)TG_MENU_POLL },
     { NM_ITEM,  (STRPTR)"Insert emoji...", (STRPTR)"E", 0, 0,
       (APTR)TG_MENU_EMOJI },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
@@ -9113,6 +9116,521 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
                                     : "Uploading... (ESC cancels)");
     }
     tg_gui_window_paint(state, backend);
+}
+
+/* --- Create poll (0.2). ---------------------------------------------------
+   A small window like the send-photo one, drawn the same way: a question,
+   up to ten answers, a switch for several answers, Create and Cancel. TAB
+   or the cursor keys move between the lines (Shift+TAB back), ENTER goes
+   to the next line and, on Create, sends; a click picks a line. The texts
+   are plain, as typed: no emoji picker in here. On a low screen fewer
+   answer lines are shown. */
+typedef struct tg_gui_pollnew_ui {
+    tg_gui_sendphoto_ui base; /* the window, the font, the drawing helpers */
+    tg_gui_poll_draft *draft;
+    int rows;      /* answer lines shown */
+    int focus;     /* 0 the question, 1..rows an answer, then the switch,
+                      then Create */
+    int field_x;
+    int field_w;
+    int row_h;
+    int sw_y;
+    int btn_y;
+    int btn_x[2];
+    int btn_w[2];  /* Create, Cancel */
+    const char *note; /* what is missing, said beside the buttons */
+} tg_gui_pollnew_ui;
+
+static char *tg_gui_pollnew_text(tg_gui_pollnew_ui *ui, int line,
+                                 unsigned long *limit)
+{
+    if (line == 0) {
+        *limit = TG_GUI_POLL_NEW_QUESTION - 1UL;
+        return ui->draft->question;
+    }
+    *limit = TG_GUI_POLL_NEW_ANSWER - 1UL;
+    return ui->draft->answers[line - 1];
+}
+
+/* One text line: its label, its box, the end of the text that fits, and
+   the caret when the line has the keyboard. */
+static void tg_gui_pollnew_line(tg_gui_pollnew_ui *ui, int line)
+{
+    tg_gui_sendphoto_ui *b = &ui->base;
+    struct RastPort *rp = b->win->RPort;
+    int lh = b->main_ctx->line_h;
+    int y = 8 + line * ui->row_h;
+    int ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline : lh - 2;
+    unsigned long limit;
+    char *text = tg_gui_pollnew_text(ui, line, &limit);
+    unsigned long len = (unsigned long)strlen(text);
+    unsigned long start = 0UL;
+    char label[24];
+
+    if (line == 0) {
+        strcpy(label, "Question");
+    } else {
+        sprintf(label, "Answer %d", line);
+    }
+    tg_gui_sendphoto_box(b, TG_GUI_PEN_WINDOW, 0, y, ui->field_x, lh + 6);
+    tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT_DIM, 8, y + 3 + ascent, label,
+                          (unsigned long)strlen(label));
+    tg_gui_sendphoto_box(b, TG_GUI_PEN_SURFACE, ui->field_x, y, ui->field_w,
+                         lh + 6);
+    if (ui->focus == line) { /* the line being typed in: underlined */
+        tg_gui_sendphoto_box(b, TG_GUI_PEN_ACCENT, ui->field_x, y + lh + 4,
+                             ui->field_w, 2);
+    }
+    while (start < len &&
+           tg_gui_sendphoto_text_width(b, text + start, len - start) >
+               ui->field_w - 14) {
+        ++start; /* keep the END visible while typing */
+    }
+    if (len > start) {
+        tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT, ui->field_x + 4,
+                              y + 3 + ascent, text + start, len - start);
+    }
+    if (ui->focus == line && b->cursor_on) {
+        int cx = ui->field_x + 4 +
+                 tg_gui_sendphoto_text_width(b, text + start, len - start) +
+                 1;
+
+        tg_gui_sendphoto_box(b, TG_GUI_PEN_TEXT, cx, y + 3, 2, lh);
+    }
+}
+
+/* The switch, the note and the two buttons. */
+static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
+{
+    static const char *labels[2] = { "Create", "Cancel" };
+    static const char sw_text[] = "Several answers may be chosen";
+    tg_gui_sendphoto_ui *b = &ui->base;
+    struct RastPort *rp = b->win->RPort;
+    int lh = b->main_ctx->line_h;
+    int ascent = (rp->Font != 0) ? (int)rp->Font->tf_Baseline : lh - 2;
+    int sw_focus = ui->focus == ui->rows + 1;
+    int go_focus = ui->focus == ui->rows + 2;
+    int box = lh - 2;
+    int x;
+    int i;
+
+    tg_gui_sendphoto_box(b, TG_GUI_PEN_WINDOW, 0, ui->sw_y, b->iw,
+                         b->ih - ui->sw_y);
+    /* the switch: a square, filled when on, its text beside it */
+    tg_gui_sendphoto_box(b, sw_focus ? TG_GUI_PEN_ACCENT : TG_GUI_PEN_TEXT_DIM,
+                         ui->field_x, ui->sw_y + 3, box, box);
+    tg_gui_sendphoto_box(b, TG_GUI_PEN_SURFACE, ui->field_x + 2,
+                         ui->sw_y + 5, box - 4, box - 4);
+    if (ui->draft->multiple) {
+        tg_gui_sendphoto_box(b, TG_GUI_PEN_TEXT, ui->field_x + 4,
+                             ui->sw_y + 7, box - 8, box - 8);
+    }
+    tg_gui_sendphoto_text(b, sw_focus ? TG_GUI_PEN_TEXT : TG_GUI_PEN_TEXT_DIM,
+                          ui->field_x + box + 8, ui->sw_y + 3 + ascent,
+                          sw_text, (unsigned long)(sizeof(sw_text) - 1U));
+    /* buttons, right-aligned: [Create] [Cancel] */
+    x = b->iw - 8;
+    for (i = 1; i >= 0; --i) {
+        int tw = tg_gui_sendphoto_text_width(
+            b, labels[i], (unsigned long)strlen(labels[i]));
+
+        ui->btn_w[i] = tw + 16;
+        x -= ui->btn_w[i];
+        ui->btn_x[i] = x;
+        x -= 6;
+    }
+    for (i = 0; i < 2; ++i) {
+        int fill = (i == 0) ? TG_GUI_PEN_ACCENT : TG_GUI_PEN_SURFACE;
+        int ink = (i == 0) ? TG_GUI_PEN_ACCENT_TEXT : TG_GUI_PEN_TEXT;
+
+        tg_gui_sendphoto_box(b, fill, ui->btn_x[i], ui->btn_y, ui->btn_w[i],
+                             lh + 8);
+        tg_gui_sendphoto_text(b, ink, ui->btn_x[i] + 8,
+                              ui->btn_y + 4 + ascent, labels[i],
+                              (unsigned long)strlen(labels[i]));
+    }
+    if (go_focus) { /* ENTER sends from here: underlined */
+        tg_gui_sendphoto_box(b, TG_GUI_PEN_TEXT, ui->btn_x[0],
+                             ui->btn_y + lh + 8, ui->btn_w[0], 2);
+    }
+    if (ui->note != 0) {
+        tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT, 8, ui->btn_y + 4 + ascent,
+                              ui->note, (unsigned long)strlen(ui->note));
+    }
+}
+
+static void tg_gui_pollnew_paint(tg_gui_pollnew_ui *ui)
+{
+    int i;
+
+    tg_gui_sendphoto_box(&ui->base, TG_GUI_PEN_WINDOW, 0, 0, ui->base.iw,
+                         ui->base.ih);
+    for (i = 0; i <= ui->rows; ++i) {
+        tg_gui_pollnew_line(ui, i);
+    }
+    tg_gui_pollnew_foot(ui);
+}
+
+/* Redraws what a change of line touches, under the layer lock like every
+   draw outside a refresh in this file. */
+static void tg_gui_pollnew_redraw(tg_gui_pollnew_ui *ui, int line_a,
+                                  int line_b)
+{
+    struct Window *win = ui->base.win;
+
+    if (win->RPort != 0 && win->RPort->Layer != 0) {
+        LockLayerRom(win->RPort->Layer);
+    }
+    if (line_a >= 0 && line_a <= ui->rows) {
+        tg_gui_pollnew_line(ui, line_a);
+    }
+    if (line_b >= 0 && line_b <= ui->rows && line_b != line_a) {
+        tg_gui_pollnew_line(ui, line_b);
+    }
+    if (line_a > ui->rows || line_b > ui->rows || line_a < 0) {
+        tg_gui_pollnew_foot(ui);
+    }
+    if (win->RPort != 0 && win->RPort->Layer != 0) {
+        UnlockLayerRom(win->RPort->Layer);
+    }
+}
+
+static void tg_gui_pollnew_focus(tg_gui_pollnew_ui *ui, int to)
+{
+    int last = ui->rows + 2;
+    int from = ui->focus;
+
+    if (to < 0) {
+        to = last;
+    } else if (to > last) {
+        to = 0;
+    }
+    ui->focus = to;
+    ui->base.cursor_on = 1;
+    tg_gui_pollnew_redraw(ui, from, to);
+}
+
+/* 1 = Create (the draft is tidy and good to send), 0 = cancelled. */
+static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
+                                     struct Window *parent,
+                                     tg_gui_poll_draft *draft)
+{
+    tg_gui_pollnew_ui ui;
+    struct TagItem tags[16];
+    struct Screen *screen;
+    int lh;
+    int i;
+    int result = 0;
+    int done = 0;
+    int bor_w;
+    int bor_h;
+    int init_l;
+    int init_t;
+
+    if (main_ctx == 0 || parent == 0 || draft == 0) {
+        return 0;
+    }
+    memset(&ui, 0, sizeof(ui));
+    ui.base.main_ctx = main_ctx;
+    ui.base.cursor_on = 1;
+    ui.draft = draft;
+    lh = main_ctx->line_h;
+    screen = parent->WScreen;
+    ui.row_h = lh + 10;
+    ui.base.iw = 440;
+    if (screen != 0 && ui.base.iw > (int)screen->Width - 40) {
+        ui.base.iw = (int)screen->Width - 40;
+    }
+    bor_w = (screen != 0) ? (int)screen->WBorLeft + (int)screen->WBorRight
+                          : (int)parent->BorderLeft + (int)parent->BorderRight;
+    bor_h = (screen != 0)
+        ? (int)screen->WBorTop + (int)screen->WBorBottom +
+          ((screen->Font != 0) ? (int)screen->Font->ta_YSize + 1 : 11)
+        : (int)parent->BorderTop + (int)parent->BorderBottom;
+    /* as many answer lines as the screen has room for, ten at most */
+    ui.rows = TG_GUI_POLL_NEW_ANSWERS;
+    if (screen != 0) {
+        int room = (int)screen->Height - bor_h - 8 /* top */ -
+                   (2 * ui.row_h) /* question, switch */ -
+                   (lh + 8 + 14) /* buttons */;
+
+        if (room / ui.row_h < ui.rows) {
+            ui.rows = room / ui.row_h;
+        }
+    }
+    if (ui.rows < 2) {
+        return 0; /* no room for a poll's two answers */
+    }
+    ui.sw_y = 8 + (ui.rows + 1) * ui.row_h;
+    ui.btn_y = ui.sw_y + ui.row_h + 4;
+    ui.base.ih = ui.btn_y + lh + 8 + 10;
+    {
+        int est_w = ui.base.iw + bor_w;
+        int est_h = ui.base.ih + bor_h;
+
+        init_l = (int)parent->LeftEdge + (((int)parent->Width - est_w) / 2);
+        init_t = (int)parent->TopEdge + (((int)parent->Height - est_h) / 2);
+        if (screen != 0) {
+            if (init_l + est_w > (int)screen->Width) {
+                init_l = (int)screen->Width - est_w;
+            }
+            if (init_t + est_h > (int)screen->Height) {
+                init_t = (int)screen->Height - est_h;
+            }
+        }
+        if (init_l < 0) {
+            init_l = 0;
+        }
+        if (init_t < 0) {
+            init_t = 0;
+        }
+    }
+    i = 0;
+    tags[i].ti_Tag = WA_Title;
+    tags[i++].ti_Data = TG_GUI_TAG("Create poll");
+    tags[i].ti_Tag = WA_InnerWidth;
+    tags[i++].ti_Data = (ULONG)ui.base.iw;
+    tags[i].ti_Tag = WA_InnerHeight;
+    tags[i++].ti_Data = (ULONG)ui.base.ih;
+    tags[i].ti_Tag = WA_Left;
+    tags[i++].ti_Data = (ULONG)init_l;
+    tags[i].ti_Tag = WA_Top;
+    tags[i++].ti_Data = (ULONG)init_t;
+    tags[i].ti_Tag = WA_DragBar;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_DepthGadget;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_CloseGadget;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_Activate;
+    tags[i++].ti_Data = FALSE;
+    tags[i].ti_Tag = WA_SmartRefresh;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_AutoAdjust;
+    tags[i++].ti_Data = TRUE;
+    tags[i].ti_Tag = WA_IDCMP;
+    tags[i++].ti_Data = IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY | IDCMP_RAWKEY |
+                        IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW |
+                        IDCMP_INTUITICKS;
+    tags[i].ti_Tag = WA_CustomScreen;
+    tags[i++].ti_Data = TG_GUI_TAG(screen);
+    tags[i].ti_Tag = TAG_END;
+    tags[i++].ti_Data = 0;
+    ui.base.win = OpenWindowTagList(0, tags);
+    if (ui.base.win == 0) {
+        return 0;
+    }
+    if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
+        SetFont(ui.base.win->RPort, main_ctx->rport->Font);
+    }
+    /* the labels' column is as wide as the widest label in this font */
+    ui.field_x = 8 + tg_gui_sendphoto_text_width(&ui.base, "Answer 10", 9UL) +
+                 8;
+    ui.field_w = ui.base.iw - ui.field_x - 8;
+    if (ui.base.win->RPort != 0 && ui.base.win->RPort->Layer != 0) {
+        LockLayerRom(ui.base.win->RPort->Layer);
+    }
+    tg_gui_pollnew_paint(&ui);
+    if (ui.base.win->RPort != 0 && ui.base.win->RPort->Layer != 0) {
+        UnlockLayerRom(ui.base.win->RPort->Layer);
+    }
+    ActivateWindow(ui.base.win);
+    while (!done) {
+        struct IntuiMessage *msg;
+
+        Wait(1UL << ui.base.win->UserPort->mp_SigBit);
+        while ((msg = (struct IntuiMessage *)GetMsg(
+                    ui.base.win->UserPort)) != 0) {
+            ULONG cls = msg->Class;
+            UWORD code = msg->Code;
+            UWORD qual = msg->Qualifier;
+            WORD mx = msg->MouseX;
+            WORD my = msg->MouseY;
+            int create = 0;
+
+            ReplyMsg((struct Message *)msg);
+            if (cls == IDCMP_CLOSEWINDOW) {
+                done = 1;
+            } else if (cls == IDCMP_REFRESHWINDOW) {
+                BeginRefresh(ui.base.win);
+                tg_gui_pollnew_paint(&ui);
+                EndRefresh(ui.base.win, TRUE);
+            } else if (cls == IDCMP_INTUITICKS) {
+                /* the caret, at the cadence of the composer's */
+                if (++ui.base.tick_count >= 5 && ui.focus <= ui.rows) {
+                    ui.base.tick_count = 0;
+                    ui.base.cursor_on = !ui.base.cursor_on;
+                    tg_gui_pollnew_redraw(&ui, ui.focus, ui.focus);
+                }
+            } else if (cls == IDCMP_RAWKEY) {
+                if (code == 0x4cU) { /* cursor up */
+                    tg_gui_pollnew_focus(&ui, ui.focus - 1);
+                } else if (code == 0x4dU) { /* cursor down */
+                    tg_gui_pollnew_focus(&ui, ui.focus + 1);
+                }
+            } else if (cls == IDCMP_VANILLAKEY) {
+                if (code == 27U) {
+                    done = 1;
+                } else if (code == 9U) {
+                    tg_gui_pollnew_focus(
+                        &ui, ui.focus +
+                             ((qual & (IEQUALIFIER_LSHIFT |
+                                       IEQUALIFIER_RSHIFT)) != 0 ? -1 : 1));
+                } else if (ui.focus == ui.rows + 2) {
+                    if (code == 13U || code == 32U) {
+                        create = 1;
+                    }
+                } else if (ui.focus == ui.rows + 1) {
+                    if (code == 32U) {
+                        draft->multiple = !draft->multiple;
+                        tg_gui_pollnew_redraw(&ui, ui.focus, ui.focus);
+                    } else if (code == 13U) {
+                        tg_gui_pollnew_focus(&ui, ui.focus + 1);
+                    }
+                } else if (code == 13U) {
+                    tg_gui_pollnew_focus(&ui, ui.focus + 1);
+                } else {
+                    unsigned long limit;
+                    char *text = tg_gui_pollnew_text(&ui, ui.focus, &limit);
+                    unsigned long len = (unsigned long)strlen(text);
+
+                    if (code == 8U) {
+                        if (len > 0UL) {
+                            text[len - 1UL] = '\0';
+                        }
+                    } else if (code >= 32U && code != 127U && len < limit) {
+                        text[len] = (char)code;
+                        text[len + 1UL] = '\0';
+                    }
+                    ui.base.cursor_on = 1;
+                    if (ui.note != 0) {
+                        ui.note = 0; /* being put right */
+                        tg_gui_pollnew_redraw(&ui, ui.focus, ui.rows + 1);
+                    } else {
+                        tg_gui_pollnew_redraw(&ui, ui.focus, ui.focus);
+                    }
+                }
+            } else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
+                int ix = (int)mx - (int)ui.base.win->BorderLeft;
+                int iy = (int)my - (int)ui.base.win->BorderTop;
+
+                if (iy >= ui.btn_y && iy < ui.btn_y + lh + 8) {
+                    if (ix >= ui.btn_x[0] && ix < ui.btn_x[0] + ui.btn_w[0]) {
+                        create = 1;
+                    } else if (ix >= ui.btn_x[1] &&
+                               ix < ui.btn_x[1] + ui.btn_w[1]) {
+                        done = 1;
+                    }
+                } else if (iy >= ui.sw_y && iy < ui.sw_y + ui.row_h) {
+                    draft->multiple = !draft->multiple;
+                    tg_gui_pollnew_focus(&ui, ui.rows + 1);
+                } else if (iy >= 8 && iy < 8 + (ui.rows + 1) * ui.row_h) {
+                    tg_gui_pollnew_focus(&ui, (iy - 8) / ui.row_h);
+                }
+            }
+            if (create) {
+                int n = tg_gui_poll_draft_tidy(draft);
+
+                if (n >= 2) {
+                    result = 1;
+                    done = 1;
+                } else {
+                    /* say what is missing, go to where it is typed */
+                    ui.note = n == -1 ? "A poll needs a question"
+                                      : "A poll needs two answers";
+                    ui.focus = n == -1 ? 0 : (n == -2 && draft->answers[0][0]
+                                                  != '\0' ? 2 : 1);
+                    if (ui.focus > ui.rows) {
+                        ui.focus = ui.rows;
+                    }
+                    ui.base.cursor_on = 1;
+                    if (ui.base.win->RPort != 0 &&
+                        ui.base.win->RPort->Layer != 0) {
+                        LockLayerRom(ui.base.win->RPort->Layer);
+                    }
+                    tg_gui_pollnew_paint(&ui);
+                    if (ui.base.win->RPort != 0 &&
+                        ui.base.win->RPort->Layer != 0) {
+                        UnlockLayerRom(ui.base.win->RPort->Layer);
+                    }
+                }
+            }
+        }
+    }
+    CloseWindow(ui.base.win);
+    return result;
+}
+
+/* "Create poll...": the dialog, then the poll into the open chat. What was
+   typed is kept when Telegram refuses or cannot be reached, so that it can
+   be sent again; it is cleared once sent or cancelled. 1 = sent. */
+static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
+                                     tg_gui_backend *backend)
+{
+    static tg_gui_poll_draft draft;
+    static int keep = 0;
+    const char *answers[TG_GUI_POLL_NEW_ANSWERS];
+    char why[48];
+    char line[96];
+    unsigned long idx;
+    int count;
+    int rc;
+    int k;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        state->chat_count <= 0 || state->selected_chat < 0 ||
+        state->selected_chat >= state->chat_count) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Open a chat first");
+        tg_gui_window_paint(state, backend);
+        return 0;
+    }
+    idx = state->chats[state->selected_chat].index;
+    /* Telegram takes polls in groups and channels (and in Saved Messages),
+       not in a chat with one person. */
+    if (idx != TG_GUI_SAVED_PEER_INDEX && tg_gui_session_chat_kind(idx) == 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Polls are for groups and channels");
+        tg_gui_window_paint(state, backend);
+        return 0;
+    }
+    if (!keep) {
+        memset(&draft, 0, sizeof(draft));
+    }
+    keep = 0;
+    if (!tg_gui_window_poll_dialog((tg_gui_amiga_ctx *)backend->context, win,
+                                   &draft)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Poll cancelled");
+        tg_gui_window_paint(state, backend);
+        return 0;
+    }
+    count = tg_gui_poll_draft_tidy(&draft);
+    if (count < 2) {
+        return 0; /* the dialog only says Create for a poll that is whole */
+    }
+    for (k = 0; k < count; ++k) {
+        answers[k] = draft.answers[k];
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Sending the poll...");
+    tg_gui_window_paint_status(state, backend);
+    why[0] = '\0';
+    rc = tg_gui_session_poll_create(draft.question, answers, count,
+                                    draft.multiple, why, sizeof(why), stdout);
+    if (rc == 0) {
+        strcpy(line, "Poll sent");
+    } else {
+        keep = 1; /* the menu item opens on the same texts */
+        if (rc == 1 && why[0] != '\0') {
+            sprintf(line, "Poll not sent: %.30s", why);
+        } else {
+            strcpy(line, "Poll not sent (Create poll... tries again)");
+        }
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+    tg_gui_window_paint(state, backend);
+    return rc == 0;
 }
 
 static void tg_gui_window_send_file(tg_gui_state *state, struct Window *win,
@@ -14515,6 +15033,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else if (ud == (APTR)TG_MENU_SENDPHOTO) {
                             tg_gui_window_send_photo(state, ctx.window,
                                                      &backend);
+                        } else if (ud == (APTR)TG_MENU_POLL) {
+                            if (tg_gui_window_create_poll(state, ctx.window,
+                                                          &backend)) {
+                                session_dirty = 1; /* the poll shows it */
+                            }
                         } else if (ud == (APTR)TG_MENU_COPY) {
                             /* Copy the highlighted message's text (issue #5).
                                Selection = the row the user last right-clicked

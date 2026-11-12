@@ -7640,6 +7640,118 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_vote(
     return status;
 }
 
+#if !defined(TG_NO_GUI)
+/* A poll made here: messages.sendMedia#ac55d9c1 with
+   inputMediaPoll#f94e5f1 flags:# poll:Poll. The poll#58747131 goes with id
+   0 and its flags (multiple_choice is flags.2; voting stays anonymous, the
+   default, since public_voters is left off), the question and the answers
+   as textWithEntities without entities, each answer's option one byte, '0'
+   for the first, as the official clients number them. Layer 214. The
+   texts are UTF-8; two to TG_MTPROTO_POLL_CREATE_MAX answers, none empty.
+   The window only: the text client has nowhere to type one. */
+#define TG_INPUT_MEDIA_POLL_CONSTRUCTOR 0x0f94e5f1UL
+
+static tg_mtproto_tl_status tg_write_text_with_entities(
+    tg_mtproto_tl_writer *writer, const char *text)
+{
+    tg_mtproto_tl_status status;
+
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_TEXT_WITH_ENTITIES_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, text);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *question,
+    const char *const *answers,
+    unsigned int count,
+    int multiple,
+    unsigned long random_id_hi,
+    unsigned long random_id_lo)
+{
+    tg_mtproto_tl_status status;
+    unsigned int k;
+
+    if (writer == 0 || question == 0 || question[0] == '\0' ||
+        answers == 0 || count < 2U || count > TG_MTPROTO_POLL_CREATE_MAX) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    for (k = 0U; k < count; ++k) {
+        if (answers[k] == 0 || answers[k][0] == '\0') {
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0xac55d9c1UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* sendMedia flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer,
+                                         TG_INPUT_MEDIA_POLL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* media flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_POLL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* id: new */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, multiple ? 4UL : 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_text_with_entities(writer, question);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, (unsigned long)count);
+    }
+    for (k = 0U; k < count && status == TG_MTPROTO_TL_OK; ++k) {
+        unsigned char option = (unsigned char)('0' + k);
+
+        status = tg_mtproto_tl_write_u32(writer, TG_POLL_ANSWER_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_write_text_with_entities(writer, answers[k]);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_bytes(writer, &option, 1UL);
+        }
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, ""); /* message: no caption */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
+    }
+    return status;
+}
+#endif /* !TG_NO_GUI: a poll made here */
+
 /* A short bracketed placeholder for a media-only message (no caption), so the
    transcript shows "[Photo]" instead of an empty bubble. The client does not
    download media -- this is awareness only. Constructor ids verified against the
@@ -9963,6 +10075,95 @@ static int tg_poll_self_test(void)
          tg_mtproto_poll_find(0UL, 0x100UL) != 0 &&
          tg_mtproto_poll_find(
              0UL, 0x100UL + (unsigned long)(TG_MTPROTO_POLLS_MAX - 1)) != 0;
+#if !defined(TG_NO_GUI)
+    /* A poll made here reads back as the one meant: the question, three
+       answers numbered '0' to '2', several allowed, nothing else set; then
+       the empty caption and the random id, and not a byte more. One answer
+       alone, eleven, an empty one or no question are not built. */
+    {
+        static const char *const made[11] = {
+            "Rosso", "Verde", "Blu", "4", "5", "6", "7", "8", "9", "10", "11"
+        };
+        static const char *const hole[3] = { "Rosso", "", "Blu" };
+        const unsigned char *bytes;
+        unsigned long length;
+        unsigned long a;
+        unsigned long b;
+        int built;
+
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        built = tg_mtproto_build_messages_send_media_poll(
+                    &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                    0, "Che colore?", made, 3U, 1, 0x21UL, 0x22UL) ==
+                TG_MTPROTO_TL_OK;
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        built = built &&
+                tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+                a == 0xac55d9c1UL &&
+                tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+                a == 0UL &&
+                tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+                a == 0x7da07ec9UL && /* inputPeerSelf */
+                tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+                a == 0x0f94e5f1UL &&
+                tg_mtproto_tl_read_u32(&r, &a) == TG_MTPROTO_TL_OK &&
+                a == 0UL &&
+                tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+                tg_poll_scratch.id_hi == 0UL &&
+                tg_poll_scratch.id_lo == 0UL &&
+                strcmp(tg_poll_scratch.question, "Che colore?") == 0 &&
+                tg_poll_scratch.answer_count == 3 &&
+                tg_poll_scratch.multiple && !tg_poll_scratch.quiz &&
+                !tg_poll_scratch.closed &&
+                strcmp(tg_poll_scratch.answers[0].text, "Rosso") == 0 &&
+                strcmp(tg_poll_scratch.answers[2].text, "Blu") == 0 &&
+                tg_poll_scratch.answers[0].option_len == 1 &&
+                tg_poll_scratch.answers[0].option[0] == '0' &&
+                tg_poll_scratch.answers[2].option_len == 1 &&
+                tg_poll_scratch.answers[2].option[0] == '2' &&
+                tg_mtproto_tl_read_bytes(&r, &bytes, &length) ==
+                    TG_MTPROTO_TL_OK &&
+                length == 0UL &&
+                tg_mtproto_tl_read_u64(&r, &a, &b) == TG_MTPROTO_TL_OK &&
+                a == 0x21UL && b == 0x22UL && r.offset == w.length;
+        /* one answer allowed: the flag stays off */
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        built = built &&
+                tg_mtproto_build_messages_send_media_poll(
+                    &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                    0, "Che colore?", made, 2U, 0, 1UL, 2UL) ==
+                    TG_MTPROTO_TL_OK;
+        tg_mtproto_tl_reader_init(&r, wire, w.length);
+        r.offset = 20UL; /* past sendMedia, its flags, the peer, the media */
+        built = built &&
+                tg_read_poll(&r, &tg_poll_scratch) == TG_MTPROTO_TL_OK &&
+                !tg_poll_scratch.multiple &&
+                tg_poll_scratch.answer_count == 2;
+        tg_mtproto_tl_writer_init(&w, wire, sizeof(wire));
+        built = built &&
+                tg_mtproto_build_messages_send_media_poll(
+                    &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                    0, "Che colore?", made, 1U, 0, 1UL, 2UL) !=
+                    TG_MTPROTO_TL_OK &&
+                tg_mtproto_build_messages_send_media_poll(
+                    &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                    0, "Che colore?", made, 11U, 0, 1UL, 2UL) !=
+                    TG_MTPROTO_TL_OK &&
+                tg_mtproto_build_messages_send_media_poll(
+                    &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                    0, "Che colore?", hole, 3U, 0, 1UL, 2UL) !=
+                    TG_MTPROTO_TL_OK &&
+                tg_mtproto_build_messages_send_media_poll(
+                    &w, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                    0, "", made, 3U, 0, 1UL, 2UL) != TG_MTPROTO_TL_OK;
+        if (!built) {
+            memset(tg_poll_table, 0, sizeof(tg_poll_table));
+            memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
+            puts("login self-test: a poll made here is built wrong");
+            return 2;
+        }
+    }
+#endif
     memset(tg_poll_table, 0, sizeof(tg_poll_table));
     memset(tg_poll_stamp, 0, sizeof(tg_poll_stamp));
     if (!ok) {

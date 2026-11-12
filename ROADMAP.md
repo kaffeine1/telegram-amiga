@@ -386,8 +386,11 @@ Middle, more interface:
 - polls shown and voted: done (`messageMediaPoll` written out as the
   message's text, `messages.sendVote` from the message's menu, the
   answers in the menu's place, `updateMessagePoll` followed while the
-  chat is open). Still missing: voting in the text client, a quiz's
-  explanation, who voted in a public poll, creating a poll;
+  chat is open), and made (Create poll... in the first menu:
+  `messages.sendMedia` with `inputMediaPoll`, anonymous, one answer or
+  several). Still missing: voting in the text client, a quiz's
+  explanation, who voted in a public poll, making a quiz or a poll with
+  public votes;
 - the update notice (its section): step 1 is in place and asleep. The
   client can look a public channel up by name, search its posts for
   "Amigram" and a version (`contacts.resolveUsername`,

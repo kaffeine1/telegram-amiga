@@ -47,6 +47,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on MorphOS, 4 on 68k). A message just pinned, here or by someone else
   while the chat is open, is the one the bar shows, at once; one just
   unpinned leaves the bar at once.
+- Create poll... in the first menu makes a poll in the open chat. A
+  small window takes the question, two to ten answers and a switch for
+  several answers; TAB or the cursor keys move between the lines, ENTER
+  goes to the next and, on Create, sends, and a click picks a line.
+  Answers left empty are dropped, and the window says what is missing
+  when the question or the second answer is. Votes are anonymous.
+  Telegram takes polls in groups and channels (and in Saved Messages),
+  not in a chat with one person, where the menu item says so. If
+  Telegram refuses the poll, or cannot be reached, what was typed is
+  kept and the menu item opens on it again.
 - A chat pinned or unpinned, or marked as unread or read, on another
   device is followed while the client runs: the pins and the marks are
   read again from Telegram at the next poll and the chat list is drawn

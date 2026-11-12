@@ -288,6 +288,26 @@ typedef struct tg_gui_chat {
     int muted;                /* muted on Telegram: a dim badge, or the mute mark */
 } tg_gui_chat;
 
+/* A poll being written in the Create poll dialog: the question and up to
+   ten answers as typed (the keyboard's charset), and whether several
+   answers may be chosen. Telegram takes a question of 255 characters and
+   answers of 100. */
+#define TG_GUI_POLL_NEW_ANSWERS 10
+#define TG_GUI_POLL_NEW_QUESTION 256
+#define TG_GUI_POLL_NEW_ANSWER 101
+
+typedef struct tg_gui_poll_draft {
+    char question[TG_GUI_POLL_NEW_QUESTION];
+    char answers[TG_GUI_POLL_NEW_ANSWERS][TG_GUI_POLL_NEW_ANSWER];
+    int multiple;
+} tg_gui_poll_draft;
+
+/* Tidies a poll before it is sent: blanks at the ends of each text go, the
+   answers left empty are dropped and the others move up in their order.
+   Returns how many answers are left; -1 when there is no question, -2 with
+   fewer than two answers. The draft is tidied in every case. */
+int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft);
+
 /* A muted chat in the list, as the official clients show it: its unread
    badge is dim instead of the badge colour, and with nothing unread a small
    crossed loudspeaker sits where the badge would be (left of the pin mark

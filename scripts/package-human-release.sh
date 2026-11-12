@@ -621,6 +621,11 @@ Messages
   share of each answer and the number of votes, and follows the votes
   of the others while the chat is open. Take back vote, in the same
   menu, undoes it; the answer given to a quiz stays.
+- "Create poll..." in the first menu makes a poll in the open chat: a
+  question, two to ten answers, and a switch to allow several answers.
+  TAB or the cursor keys move between the lines, ENTER goes to the next
+  one and, on Create, sends. Votes are anonymous. Telegram takes polls
+  in groups and channels, not in a chat with one person.
 
 Emoji
 - The smiley next to Send, or "Insert emoji..." (Amiga+E), opens the
@@ -812,6 +817,12 @@ Messaggi
   percentuale di ogni risposta e il numero dei voti, e segue i voti
   degli altri finche' la chat e' aperta. Take back vote, nello stesso
   menu, lo ritira; la risposta data a un quiz resta.
+- "Create poll..." nel primo menu crea un sondaggio nella chat aperta:
+  una domanda, da due a dieci risposte, e un interruttore per
+  permettere piu' risposte. TAB o i tasti cursore passano da una riga
+  all'altra, INVIO va alla successiva e, su Create, lo manda. I voti
+  sono anonimi. Telegram accetta i sondaggi nei gruppi e nei canali,
+  non nella chat con una persona sola.
 
 Emoji
 - La faccina accanto a Send, o "Insert emoji..." (Amiga+E), apre il
