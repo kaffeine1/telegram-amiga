@@ -14756,9 +14756,25 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 continue;
                             }
                             state->edit_to_id = 0UL;
-                        } else if (tg_gui_session_send(state->input,
-                                                       state->reply_to_id,
-                                                       stdout) == 0) {
+                        } else {
+                            int sent = tg_gui_session_send(state->input,
+                                                           state->reply_to_id,
+                                                           stdout);
+
+                            if (sent != 0) {
+                                /* Not sent: the text stays in the composer
+                                   and the status line says why. */
+                                char line[80];
+
+                                tg_gui_send_failure_line(
+                                    sent, tg_gui_session_send_refusal(), line,
+                                    sizeof(line));
+                                tg_gui_window_copy(state->status,
+                                                   sizeof(state->status),
+                                                   line);
+                                tg_gui_window_paint(state, &backend);
+                                continue;
+                            }
                             tg_gui_history_add(state, state->input);
                             state->in_sel_active = 0;
                             state->reply_to_id = 0UL; /* clear only on success */
@@ -17142,9 +17158,24 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     continue;
                                 }
                                 state->edit_to_id = 0UL;
-                            } else if (tg_gui_session_send(state->input,
-                                                           state->reply_to_id,
-                                                           stdout) == 0) {
+                            } else {
+                                int sent = tg_gui_session_send(
+                                    state->input, state->reply_to_id, stdout);
+
+                                if (sent != 0) {
+                                    /* Not sent: the text stays, and the
+                                       status line says why. */
+                                    char line[80];
+
+                                    tg_gui_send_failure_line(
+                                        sent, tg_gui_session_send_refusal(),
+                                        line, sizeof(line));
+                                    tg_gui_window_copy(state->status,
+                                                       sizeof(state->status),
+                                                       line);
+                                    tg_gui_window_paint(state, &backend);
+                                    continue;
+                                }
                                 tg_gui_history_add(state, state->input);
                                 state->reply_to_id = 0UL; /* clear on success */
                                 state->reply_sender[0] = '\0';

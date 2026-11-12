@@ -451,6 +451,11 @@ const char *tg_mtproto_sent_code_next_route(void);
    asked now. */
 unsigned long tg_mtproto_sent_code_resend_wait(void);
 
+/* Why Telegram refused the last message sent from here: its own error
+   text ("USER_BANNED_IN_CHANNEL"), or "" when the message went or no
+   answer came at all. */
+const char *tg_gui_session_send_refusal(void);
+
 int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                         FILE *stream);
 

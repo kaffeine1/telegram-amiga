@@ -6586,6 +6586,61 @@ unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i)
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids);
 
+void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
+                              unsigned long size)
+{
+    static const struct {
+        const char *code;
+        const char *words;
+    } known[] = {
+        { "CHAT_WRITE_FORBIDDEN", "you cannot write in this chat" },
+        { "USER_BANNED_IN_CHANNEL", "you cannot write in this chat" },
+        { "CHAT_RESTRICTED", "you cannot write in this chat" },
+        { "CHAT_SEND_PLAIN_FORBIDDEN", "you cannot write in this chat" },
+        { "CHAT_GUEST_SEND_FORBIDDEN", "you cannot write in this chat" },
+        { "CHAT_ADMIN_REQUIRED", "only the admins can write here" },
+        { "CHANNEL_PRIVATE", "you are not in this chat any more" },
+        { "PRIVACY_PREMIUM_REQUIRED", "only their contacts can write" },
+        { "USER_IS_BLOCKED", "this person has blocked you" },
+        { "YOU_BLOCKED_USER", "you have blocked this person" },
+        { "PEER_FLOOD", "Telegram limits your new chats now" },
+        { "INPUT_USER_DEACTIVATED", "this account was deleted" },
+        { "USER_DEACTIVATED", "this account was deleted" },
+        { "MESSAGE_TOO_LONG", "the message is too long" },
+        { "MESSAGE_EMPTY", "the message is empty" },
+        { "ENTITY_BOUNDS_INVALID", "Telegram refused the formatting" },
+        { "ENTITIES_TOO_LONG", "Telegram refused the formatting" },
+    };
+    char line[80];
+    unsigned long k;
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    if (rc == 3) {
+        /* it may have gone: sending it again could make two */
+        strcpy(line, "Not confirmed: check the chat before resending");
+    } else if (refusal == 0 || refusal[0] == '\0') {
+        strcpy(line, "Not sent: no answer from Telegram");
+    } else if (strncmp(refusal, "SLOWMODE_WAIT_", 14U) == 0 ||
+               strncmp(refusal, "FLOOD_WAIT_", 11U) == 0) {
+        int slow = refusal[0] == 'S';
+        unsigned long secs = strtoul(refusal + (slow ? 14 : 11), 0, 10);
+
+        sprintf(line, slow ? "Not sent: slow mode, wait %lu s"
+                           : "Not sent: too many messages, wait %lu s",
+                secs);
+    } else {
+        sprintf(line, "Not sent: %.36s", refusal);
+        for (k = 0UL; k < sizeof(known) / sizeof(known[0]); ++k) {
+            if (strcmp(refusal, known[k].code) == 0) {
+                sprintf(line, "Not sent: %s", known[k].words);
+            }
+        }
+    }
+    tg_gui_copy(out, size, line);
+}
+
 void tg_gui_context_sender_label(tg_gui_state *state)
 {
     const tg_gui_chat *row;
@@ -9472,6 +9527,73 @@ static int tg_gui_notify_menu_self_test(void)
     }
     /* A name on a requester's button: nothing that parts the buttons or
        starts an argument, cut with two dots when it is long. */
+    /* A message that did not leave: the reason in words, never longer
+       than the status line. */
+    {
+        static const struct {
+            int rc;
+            const char *refusal;
+            const char *line;
+        } fail[] = {
+            { 2, "", "Not sent: no answer from Telegram" },
+            { 2, 0, "Not sent: no answer from Telegram" },
+            { 3, "", "Not confirmed: check the chat before resending" },
+            { 3, "PEER_FLOOD",
+              "Not confirmed: check the chat before resending" },
+            { 2, "USER_BANNED_IN_CHANNEL",
+              "Not sent: you cannot write in this chat" },
+            { 2, "CHAT_WRITE_FORBIDDEN",
+              "Not sent: you cannot write in this chat" },
+            { 2, "PRIVACY_PREMIUM_REQUIRED",
+              "Not sent: only their contacts can write" },
+            { 2, "USER_IS_BLOCKED", "Not sent: this person has blocked you" },
+            { 2, "INPUT_USER_DEACTIVATED",
+              "Not sent: this account was deleted" },
+            { 2, "SLOWMODE_WAIT_30", "Not sent: slow mode, wait 30 s" },
+            { 2, "FLOOD_WAIT_417",
+              "Not sent: too many messages, wait 417 s" },
+            { 2, "ENTITY_BOUNDS_INVALID",
+              "Not sent: Telegram refused the formatting" },
+            { 2, "SOMETHING_NEW", "Not sent: SOMETHING_NEW" },
+            { 2, "A_CODE_FAR_LONGER_THAN_ANY_STATUS_LINE_COULD_EVER_HOLD",
+              "Not sent: A_CODE_FAR_LONGER_THAN_ANY_STATUS_LI" },
+        };
+        static const char *const codes[] = {
+            "CHAT_WRITE_FORBIDDEN", "USER_BANNED_IN_CHANNEL",
+            "CHAT_RESTRICTED", "CHAT_SEND_PLAIN_FORBIDDEN",
+            "CHAT_GUEST_SEND_FORBIDDEN", "CHAT_ADMIN_REQUIRED",
+            "CHANNEL_PRIVATE", "PRIVACY_PREMIUM_REQUIRED", "USER_IS_BLOCKED",
+            "YOU_BLOCKED_USER", "PEER_FLOOD", "INPUT_USER_DEACTIVATED",
+            "USER_DEACTIVATED", "MESSAGE_TOO_LONG", "MESSAGE_EMPTY",
+            "ENTITY_BOUNDS_INVALID", "ENTITIES_TOO_LONG",
+            "SLOWMODE_WAIT_999999999", "FLOOD_WAIT_999999999"
+        };
+        char line[80];
+        char status[48]; /* as large as the window's status line */
+        unsigned long c;
+
+        for (c = 0UL; c < sizeof(fail) / sizeof(fail[0]); ++c) {
+            tg_gui_send_failure_line(fail[c].rc, fail[c].refusal, line,
+                                     sizeof(line));
+            if (strcmp(line, fail[c].line) != 0) {
+                printf("gui self-test: send failure case %lu wrong (%s)\n",
+                       c, line);
+                return 2;
+            }
+        }
+        /* every reason it knows fits the status line whole, and none is
+           left as Telegram's bare code */
+        for (c = 0UL; c < sizeof(codes) / sizeof(codes[0]); ++c) {
+            tg_gui_send_failure_line(2, codes[c], line, sizeof(line));
+            tg_gui_send_failure_line(2, codes[c], status, sizeof(status));
+            if (strlen(line) > 47U || strcmp(line, status) != 0 ||
+                strstr(line, "_") != 0) {
+                printf("gui self-test: send failure words wrong (%s)\n",
+                       line);
+                return 2;
+            }
+        }
+    }
     /* "Message <name>": on someone else's message in a group, when the
        sender is a person; right under Reply. Nowhere else. */
     {

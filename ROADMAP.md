@@ -1500,10 +1500,10 @@ next to the multiple selection, which works on the same popup.
 Done on `main` for the window: Message <name> in the menu of a group
 message from a person, `users.getUsers` with `inputUserFromMessage` for
 the full user every time (a supergroup's senders come as "min" ones),
-the chat added to the list like one found by the search. Still missing:
-the same from the row with the sender's name, the text client's
-command, and words instead of a code when Telegram refuses the first
-message. What follows is the plan as it was written.
+the chat added to the list like one found by the search. A message
+Telegram refuses now stays in the composer with the reason in words.
+Still missing: the same from the row with the sender's name, and the
+text client's command. What follows is the plan as it was written.
 
 In a group, the desktop client takes you from someone's message to a
 private chat with them in one step. Here that means leaving the group,

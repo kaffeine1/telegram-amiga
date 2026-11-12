@@ -11289,6 +11289,16 @@ int tg_mtproto_auth_send_peer_file(const char *host,
     return 0;
 }
 
+/* Why Telegram refused the last message sent: its own error text, as
+   "USER_BANNED_IN_CHANNEL"; "" when the message went, or when no answer
+   came at all. The window turns it into words. */
+static char tg_chat_send_refusal[48];
+
+const char *tg_gui_session_send_refusal(void)
+{
+    return tg_chat_send_refusal;
+}
+
 static int tg_mtproto_auth_send_peer_on_context(
     const char *host,
     const char *port,
@@ -11327,6 +11337,7 @@ static int tg_mtproto_auth_send_peer_on_context(
     int qrc;
     static const char label[] = "mtproto messages.sendMessage(peer)";
 
+    tg_chat_send_refusal[0] = '\0';
     memset(&tg_chat_sent_webpage, 0, sizeof(tg_chat_sent_webpage));
     if (sent_message_id != 0) {
         *sent_message_id = 0UL;
@@ -11375,9 +11386,16 @@ static int tg_mtproto_auth_send_peer_on_context(
             TG_MTPROTO_QUERY_SOFT_FAIL : 2;
     }
     if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+
         if (!tg_mtproto_print_rpc_error(label, &result, stream)) {
             fprintf(stream, "%s: rpc-error-parse-failed\n", label);
         }
+        /* kept for the window: the reason, in Telegram's own word */
+        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                         result.result_body_length + 4U,
+                                         &ecode, tg_chat_send_refusal,
+                                         sizeof(tg_chat_send_refusal));
         return 2;
     }
     if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {

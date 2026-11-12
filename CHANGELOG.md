@@ -295,6 +295,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- A message that Telegram refused, or that got no answer, vanished from
+  the message box without a word. It now stays there, and the status
+  line says why in plain words: you cannot write in this chat, only
+  their contacts can write, this account was deleted, slow mode and how
+  long to wait, no answer from Telegram, and so on; a reason it does not
+  know is shown as Telegram's own code. When no confirmation came the
+  message may have gone all the same, and the line says to check the
+  chat before sending again.
 - An edit of a long message (more than about a thousand characters)
   with accented letters reached the other clients with replacement
   characters in their place: the buffer for its UTF-8 text was smaller

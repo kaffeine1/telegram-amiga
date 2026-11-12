@@ -1194,6 +1194,13 @@ const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state);
 int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
                      unsigned long size);
 
+/* A message that did not leave, in words for the status line (47
+   characters at most). rc is what the session's send returned: 3 = no
+   confirmation came, so it may have gone all the same; anything else =
+   not sent. refusal is Telegram's own error text, "" when it gave none. */
+void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
+                              unsigned long size);
+
 /* Writes the label of "Message <name>" for the message the menu is on
    (ctx_msg), or "" when there is nobody to write to in private: not a
    group, one's own message, a service line, a sender that is not a

@@ -580,7 +580,8 @@ Messages
 - Scroll with the wheel, the scrollbar or the arrow keys. At the top,
   older messages load and your place is kept.
 - Click the input line to write; a click inside the text moves the
-  cursor. Enter sends, Shift+Enter starts a new line.
+  cursor. Enter sends, Shift+Enter starts a new line. A message that
+  cannot be sent stays in the input line, and the status line says why.
 - Click a message to reply to it. The right mouse button on a message
   opens its menu: React..., Reply, Forward to Saved, Forward to..., and
   on your own messages Edit and Delete (for everyone).
@@ -814,7 +815,9 @@ Messaggi
 - Scorri con la rotella, la barra o le frecce. In cima si caricano i
   messaggi piu' vecchi e il punto in cui eri resta fermo.
 - Clicca la riga di input per scrivere; un click dentro il testo sposta
-  il cursore. Invio manda, Shift+Invio va a capo.
+  il cursore. Invio manda, Shift+Invio va a capo. Un messaggio che non
+  si riesce a mandare resta nella riga di input, e la riga di stato
+  dice perche'.
 - Clicca un messaggio per rispondere. Il tasto destro su un messaggio
   apre il suo menu: React..., Reply, Forward to Saved, Forward to..., e
   sui tuoi messaggi Edit e Delete (per tutti).
