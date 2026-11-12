@@ -418,12 +418,18 @@ vecchio cassetto si puo' togliere.
   bsdsocket.library (Roadshow, AmiTCP, Miami/MiamiDx) and an internet
   connection.
 - A 68020 or better. A plain 68000 has its own package.
-- A few MB of free RAM. No ixemul.library, no AmiSSL."
+- About 4 MB of free RAM, 2 MB of it in one block: 8 MB of fast RAM is the
+  comfortable size. With less, the package for the plain 68000 (the text
+  client only, about 2 MB) runs on these machines too.
+- No ixemul.library, no AmiSSL."
         req_it="- AmigaOS 3.1, 3.1.4 o 3.2 con uno stack TCP/IP che fornisca
   bsdsocket.library (Roadshow, AmiTCP, Miami/MiamiDx) e una connessione
   internet.
 - Un 68020 o superiore. Il 68000 liscio ha un pacchetto suo.
-- Qualche MB di RAM libera. Non servono ixemul.library ne' AmiSSL."
+- Circa 4 MB di RAM libera, di cui 2 MB in un blocco solo: 8 MB di fast
+  RAM sono la misura comoda. Con meno, il pacchetto per il 68000 liscio
+  (solo il client testuale, circa 2 MB) gira anche su queste macchine.
+- Non servono ixemul.library ne' AmiSSL."
         notes_en="- The first login (a Diffie-Hellman key exchange) takes a while on a
   68k. It happens once.
 - With a cloud password (2FA), checking it takes about 35 minutes on a
@@ -1226,7 +1232,7 @@ aminet_meta() {
     case "$1" in
     amigaos3)    archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
                  lhaname="$APP_NAME"
-                 requires="68020+ CPU and a bsdsocket.library TCP/IP stack" ;;
+                 requires="68020+ CPU, 4 MB free RAM, a bsdsocket.library TCP/IP stack" ;;
     morphos)     archtag="ppc-morphos";  archval="ppc-morphos"
                  lhaname="$APP_NAME-MOS"
                  requires="MorphOS 3.x with its TCP/IP stack" ;;

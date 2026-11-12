@@ -57,9 +57,11 @@ client. No private files.
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases>.
 
-AmigaOS 3 needs a 68020 or better; the plain-68000 package has the text
-client only, runs in about 2 MB of free fast RAM and wants its first login
-made on a faster Amiga or in an emulator. AROS i386 is the ABIv0 build and
+AmigaOS 3 needs a 68020 or better and about 4 MB of free RAM, 2 MB of it
+in one block (8 MB of fast RAM is the comfortable size); the plain-68000
+package has the text client only, runs in about 2 MB of free RAM, on a
+68020 with little memory too, and wants its first login made on a faster
+Amiga or in an emulator. AROS i386 is the ABIv0 build and
 the one for most AROS systems. AROS x86_64 needs a system built from the
 current SDK (AROS One v0.38 will not run it). AROS aarch64 runs on the
 native image for the Raspberry Pi 4, 400 and 5 dated 2026-08-22 or later.
