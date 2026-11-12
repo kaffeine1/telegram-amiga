@@ -300,6 +300,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- A chat whose latest messages are heavy (links with previews, photos,
+  files) could open empty on the 68k builds and then show only its
+  newest five messages: thirty of them unpack to more than the 64 KB
+  those builds keep for an answer (32 KB in the 68000 text client), and
+  the whole page was dropped. Such a page is now asked again shorter, a
+  third each time, so the chat opens with what fits; its older pages and
+  a search in it are asked that short from the start, and a search still
+  offers its further results. Seen on an emulated A1200.
 - A message that Telegram refused, or that got no answer, vanished from
   the message box without a word. It now stays there, and the status
   line says why in plain words: you cannot write in this chat, only

@@ -341,6 +341,9 @@ typedef struct tg_mtproto_auth_context {
 
 #if TG_ENABLE_GZIP || TG_ENABLE_GZIP_PUFF
 static unsigned char tg_mtproto_gzip_unpacked[TG_MTPROTO_GZIP_UNPACKED_MAX];
+/* Set by tg_mtproto_unpack_gzip_result() when the answer it was given did not
+   fit that buffer, and by nothing else: whoever asked can ask for less. */
+static int tg_mtproto_gzip_overflow = 0;
 #endif
 
 static int tg_mtproto_auth_check_password_text(const char *host,
@@ -355,6 +358,9 @@ static FILE *tg_mtproto_open_quiet_stream(FILE *fallback);
 static void tg_mtproto_close_quiet_stream(FILE *quiet, FILE *fallback);
 static void tg_mtproto_quiet_tmp_sweep(void);
 static void tg_mtproto_replay_quiet_stream(FILE *quiet, FILE *fallback);
+#if !defined(TG_NO_SELFTEST)
+static int tg_hist_short_self_test(void);
+#endif
 static int tg_chat_notify_gunzip(const unsigned char *body,
                                  unsigned long body_length,
                                  const unsigned char **out,
@@ -703,6 +709,10 @@ static long tg_mtproto_history_add_offset_override = 0L;
    to arm the forced "pull older" scrollbar when the chat has more history than the
    loaded page (see tg_gui_state.more_above). */
 static unsigned long tg_gui_last_hist_total = 0UL;
+/* How many messages the last getHistory or search answer was asked for: less
+   than its caller wanted when the page had to be shortened to fit the unpack
+   buffer. A search page is full when it brings this many. */
+static unsigned long tg_gui_last_hist_limit = 0UL;
 
 /* tg_chat_notify_reset / tg_chat_notify_seen now live in tg_chat_engine.c and
    operate on the engine's notify queue (reached here via tg_chat_nq). */
@@ -3726,6 +3736,9 @@ static int tg_mtproto_gzip_unpack_puff(const unsigned char *packed_data,
     dest_length = TG_MTPROTO_GZIP_UNPACKED_MAX;
     rc = puff(tg_mtproto_gzip_unpacked, &dest_length,
               packed_data + offset, &source_length);
+    if (rc == 1) {
+        return 3; /* sound so far, but larger than the buffer */
+    }
     if (rc != 0 || dest_length < 4UL) {
         return 2;
     }
@@ -3830,6 +3843,7 @@ static int tg_mtproto_unpack_gzip_result(tg_mtproto_rpc_result *result,
     unsigned long packed_length;
     tg_mtproto_tl_reader reader;
 
+    tg_mtproto_gzip_overflow = 0;
     if (result == 0 || stream == 0 || label == 0 ||
         result->result_constructor != TG_MTPROTO_GZIP_PACKED_CONSTRUCTOR) {
         return 0;
@@ -3866,6 +3880,8 @@ static int tg_mtproto_unpack_gzip_result(tg_mtproto_rpc_result *result,
             (void)inflateEnd(&zs);
         }
         if (zrc != Z_STREAM_END || zs.total_out < 4UL) {
+            tg_mtproto_gzip_overflow =
+                (zrc != Z_STREAM_END && zs.avail_out == 0U) ? 1 : 0;
             fprintf(stream, "%s: gzip-unpack-failed\n", label);
             return 2;
         }
@@ -3879,9 +3895,12 @@ static int tg_mtproto_unpack_gzip_result(tg_mtproto_rpc_result *result,
 #elif TG_ENABLE_GZIP_PUFF
     {
         unsigned long unpacked_length;
+        int unpack_rc;
 
-        if (tg_mtproto_gzip_unpack_puff(packed_data, packed_length,
-                                        &unpacked_length) != 0) {
+        unpack_rc = tg_mtproto_gzip_unpack_puff(packed_data, packed_length,
+                                                &unpacked_length);
+        if (unpack_rc != 0) {
+            tg_mtproto_gzip_overflow = (unpack_rc == 3) ? 1 : 0;
             fprintf(stream, "%s: gzip-unpack-failed\n", label);
             return 2;
         }
@@ -14717,6 +14736,63 @@ static int tg_hidden_msgs_skip(unsigned long peer_constructor,
 static tg_mtproto_message_text_list tg_shared_message_texts;
 static int tg_shared_message_texts_busy = 0;
 
+/* A page of messages that does not fit the unpack buffer is asked again
+   shorter: a third each time, down to one message. Thirty messages with link
+   previews and photos unpack to more than the 64 KB a 68k build has (32 KB on
+   the 68000 one), and the chat opened empty. 0 = nothing shorter to ask. */
+static unsigned long tg_hist_shorter_page(unsigned long limit)
+{
+    if (limit <= 1UL) {
+        return 0UL;
+    }
+    return limit > 3UL ? limit / 3UL : 1UL;
+}
+
+/* The chats that needed a shorter page in this session, and the page that
+   fitted: their next pages (older ones, a search) are asked that short from
+   the start, instead of failing first every time. */
+#define TG_HIST_SHORT_MAX 4
+static struct {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long limit; /* 0 = free */
+} tg_hist_short[TG_HIST_SHORT_MAX];
+static int tg_hist_short_next = 0;
+
+static unsigned long tg_hist_short_limit(unsigned long id_hi,
+                                         unsigned long id_lo,
+                                         unsigned long limit)
+{
+    int i;
+
+    for (i = 0; i < TG_HIST_SHORT_MAX; ++i) {
+        if (tg_hist_short[i].limit != 0UL && tg_hist_short[i].id_hi == id_hi &&
+            tg_hist_short[i].id_lo == id_lo) {
+            return limit > tg_hist_short[i].limit ? tg_hist_short[i].limit
+                                                  : limit;
+        }
+    }
+    return limit;
+}
+
+static void tg_hist_short_note(unsigned long id_hi, unsigned long id_lo,
+                               unsigned long limit)
+{
+    int i;
+
+    for (i = 0; i < TG_HIST_SHORT_MAX; ++i) {
+        if (tg_hist_short[i].limit != 0UL && tg_hist_short[i].id_hi == id_hi &&
+            tg_hist_short[i].id_lo == id_lo) {
+            tg_hist_short[i].limit = limit;
+            return;
+        }
+    }
+    tg_hist_short[tg_hist_short_next].id_hi = id_hi;
+    tg_hist_short[tg_hist_short_next].id_lo = id_lo;
+    tg_hist_short[tg_hist_short_next].limit = limit;
+    tg_hist_short_next = (tg_hist_short_next + 1) % TG_HIST_SHORT_MAX;
+}
+
 static int tg_mtproto_auth_print_history_text_peer_on_context(
     const char *host,
     const char *port,
@@ -14750,6 +14826,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     unsigned long max_seen_message_id;
     unsigned long printed;
     unsigned long k;
+    int shortened = 0;
     FILE *quiet;
 #define texts tg_shared_message_texts
     tg_mtproto_rpc_result result;
@@ -14779,57 +14856,77 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     }
     is_group = (peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR ||
                 peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR);
-    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-    if ((tg_mtproto_history_search_query != 0
-             ? tg_mtproto_build_messages_search_peer(
-                   &writer, peer_constructor, peer_id_hi, peer_id_lo,
-                   access_hash_hi, access_hash_lo, has_access_hash,
-                   tg_mtproto_history_search_query,
-                   tg_mtproto_history_offset_id_override, limit)
-             : tg_mtproto_build_messages_get_history_peer_at(
-                   &writer, peer_constructor, peer_id_hi, peer_id_lo,
-                   access_hash_hi, access_hash_lo, has_access_hash,
-                   tg_mtproto_history_offset_id_override,
-                   tg_mtproto_history_add_offset_override, limit)) !=
-        TG_MTPROTO_TL_OK) {
-        tg_mtproto_close_quiet_stream(quiet, stream);
-        return 2;
-    }
-    /* Propagate the real query result (SOFT_FAIL vs hard 2) instead of
-       collapsing to 2, so the chat shows "slow link" (timeout) vs "error N".
-       A higher receive cap lets one read drain more of a heavy account's
-       pending-update backlog before the time budget is spent. */
-    query_rc = tg_mtproto_send_saved_query_on_context(
-        host, port, api_id, auth_file, dc_id_text, context, query,
-        writer.length, &result, quiet, label, 600U);
-    if (query_rc != 0) {
-        char qline[40];
+    limit = tg_hist_short_limit(peer_id_hi, peer_id_lo, limit);
+    tg_gui_last_hist_limit = limit;
+    for (;;) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if ((tg_mtproto_history_search_query != 0
+                 ? tg_mtproto_build_messages_search_peer(
+                       &writer, peer_constructor, peer_id_hi, peer_id_lo,
+                       access_hash_hi, access_hash_lo, has_access_hash,
+                       tg_mtproto_history_search_query,
+                       tg_mtproto_history_offset_id_override, limit)
+                 : tg_mtproto_build_messages_get_history_peer_at(
+                       &writer, peer_constructor, peer_id_hi, peer_id_lo,
+                       access_hash_hi, access_hash_lo, has_access_hash,
+                       tg_mtproto_history_offset_id_override,
+                       tg_mtproto_history_add_offset_override, limit)) !=
+            TG_MTPROTO_TL_OK) {
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            return 2;
+        }
+        /* Propagate the real query result (SOFT_FAIL vs hard 2) instead of
+           collapsing to 2, so the chat shows "slow link" (timeout) vs "error N".
+           A higher receive cap lets one read drain more of a heavy account's
+           pending-update backlog before the time budget is spent. */
+        query_rc = tg_mtproto_send_saved_query_on_context(
+            host, port, api_id, auth_file, dc_id_text, context, query,
+            writer.length, &result, quiet, label, 600U);
+        if (query_rc != 0) {
+            char qline[40];
 
-        sprintf(qline, "hist: query fail rc=%d", query_rc);
-        tg_gui_log(qline);
-        tg_mtproto_close_quiet_stream(quiet, stream);
-        return query_rc;
-    }
-    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
-        long ecode;
-        char emsg[48];
-        char eline[96];
+            sprintf(qline, "hist: query fail rc=%d", query_rc);
+            tg_gui_log(qline);
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            return query_rc;
+        }
+        if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+            long ecode;
+            char emsg[48];
+            char eline[96];
 
-        (void)tg_mtproto_print_rpc_error(label, &result, quiet);
-        ecode = 0L;
-        emsg[0] = '\0';
-        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
-                                         result.result_body_length + 4U,
-                                         &ecode, emsg, sizeof(emsg));
-        sprintf(eline, "hist: rpc error %ld %.48s", ecode, emsg);
-        tg_gui_log(eline);
-        tg_mtproto_close_quiet_stream(quiet, stream);
-        return 2;
+            (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+            ecode = 0L;
+            emsg[0] = '\0';
+            (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                             result.result_body_length + 4U,
+                                             &ecode, emsg, sizeof(emsg));
+            sprintf(eline, "hist: rpc error %ld %.48s", ecode, emsg);
+            tg_gui_log(eline);
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            return 2;
+        }
+        if (tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0) {
+            if (shortened) {
+                tg_hist_short_note(peer_id_hi, peer_id_lo, limit);
+            }
+            break;
+        }
+        if (!tg_mtproto_gzip_overflow || tg_hist_shorter_page(limit) == 0UL) {
+            tg_gui_log("hist: unpack fail");
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            return 2;
+        }
+        limit = tg_hist_shorter_page(limit);
+        shortened = 1;
+        {
+            char sline[64];
+
+            sprintf(sline, "hist: page over the unpack buffer, asking %lu", limit);
+            tg_gui_log(sline);
+        }
     }
-    if (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
-        tg_mtproto_close_quiet_stream(quiet, stream);
-        return 2;
-    }
+    tg_gui_last_hist_limit = limit;
     if (tg_shared_message_texts_busy) {
         tg_mtproto_close_quiet_stream(quiet, stream);
         return 2;
@@ -21655,6 +21752,9 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
 #endif
+    if (tg_hist_short_self_test() != 0) {
+        return 2;
+    }
     if (tg_mtproto_first_contact_self_test() != 0) {
         return 2;
     }
@@ -24133,6 +24233,168 @@ int tg_gui_session_load_older(FILE *stream, int allow_drop_newest)
 #define TG_GUI_SEARCH_PAGE_TEXT "20"
 #endif
 
+/* A page of hits is full, so older ones may follow, when it brought as many
+   as were asked for: the usual page, or the shorter one a chat of heavy
+   messages was asked with. */
+static int tg_gui_search_page_full(int hits)
+{
+    unsigned long page = (unsigned long)TG_GUI_SEARCH_PAGE;
+
+    if (tg_gui_last_hist_limit != 0UL && tg_gui_last_hist_limit < page) {
+        page = tg_gui_last_hist_limit;
+    }
+    return hits > 0 && (unsigned long)hits >= page;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* The shorter pages of a chat of heavy messages: the steps down, the chats
+   remembered, what counts as a full page of hits, and the one sign they all
+   hang on: an answer that did not fit the unpack buffer says so, a broken
+   one does not. */
+static int tg_hist_short_self_test(void)
+{
+    int i;
+
+    if (tg_hist_shorter_page(30UL) != 10UL || tg_hist_shorter_page(20UL) != 6UL ||
+        tg_hist_shorter_page(10UL) != 3UL || tg_hist_shorter_page(3UL) != 1UL ||
+        tg_hist_shorter_page(2UL) != 1UL || tg_hist_shorter_page(1UL) != 0UL ||
+        tg_hist_shorter_page(0UL) != 0UL) {
+        puts("probe self-test: shorter history page steps mismatch");
+        return 2;
+    }
+    memset(tg_hist_short, 0, sizeof(tg_hist_short));
+    tg_hist_short_next = 0;
+    if (tg_hist_short_limit(1UL, 2UL, 30UL) != 30UL) {
+        puts("probe self-test: a chat never shortened lost its page");
+        return 2;
+    }
+    tg_hist_short_note(1UL, 2UL, 10UL);
+    if (tg_hist_short_limit(1UL, 2UL, 30UL) != 10UL ||
+        tg_hist_short_limit(1UL, 2UL, 5UL) != 5UL ||
+        tg_hist_short_limit(2UL, 2UL, 30UL) != 30UL ||
+        tg_hist_short_limit(1UL, 3UL, 30UL) != 30UL) {
+        puts("probe self-test: remembered short page mismatch");
+        return 2;
+    }
+    tg_hist_short_note(1UL, 2UL, 3UL); /* the same chat again: no second slot */
+    if (tg_hist_short_limit(1UL, 2UL, 30UL) != 3UL || tg_hist_short_next != 1) {
+        puts("probe self-test: short page of a known chat not replaced");
+        return 2;
+    }
+    for (i = 0; i < TG_HIST_SHORT_MAX; ++i) { /* newer chats push it out */
+        tg_hist_short_note(100UL, (unsigned long)i, 6UL);
+    }
+    if (tg_hist_short_limit(1UL, 2UL, 30UL) != 30UL ||
+        tg_hist_short_limit(100UL, 0UL, 30UL) != 6UL ||
+        tg_hist_short_limit(100UL, (unsigned long)(TG_HIST_SHORT_MAX - 1),
+                            30UL) != 6UL) {
+        puts("probe self-test: short page memory did not turn over");
+        return 2;
+    }
+    memset(tg_hist_short, 0, sizeof(tg_hist_short));
+    tg_hist_short_next = 0;
+
+    tg_gui_last_hist_limit = 0UL;
+    if (!tg_gui_search_page_full(TG_GUI_SEARCH_PAGE) ||
+        tg_gui_search_page_full(TG_GUI_SEARCH_PAGE - 1) ||
+        tg_gui_search_page_full(0)) {
+        puts("probe self-test: full search page mismatch");
+        return 2;
+    }
+    tg_gui_last_hist_limit = 6UL; /* the page was asked shorter */
+    if (!tg_gui_search_page_full(6) || tg_gui_search_page_full(5) ||
+        tg_gui_search_page_full(0)) {
+        puts("probe self-test: full short search page mismatch");
+        return 2;
+    }
+    tg_gui_last_hist_limit = 100UL; /* never more than the usual page */
+    if (!tg_gui_search_page_full(TG_GUI_SEARCH_PAGE)) {
+        puts("probe self-test: full search page against a longer one");
+        return 2;
+    }
+    tg_gui_last_hist_limit = 0UL;
+#if TG_ENABLE_GZIP || TG_ENABLE_GZIP_PUFF
+    {
+        /* 262144 zero bytes, gzip-packed: larger than any build's buffer. */
+        static const unsigned char gz_zeros[289] = {
+        0x1fU, 0x8bU, 0x08U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x02U, 0xffU, 0xedU, 0xc1U,
+        0x31U, 0x01U, 0x00U, 0x00U, 0x00U, 0xc2U, 0xa0U, 0xf5U, 0x4fU, 0xedU, 0x6dU, 0x07U,
+        0xa0U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0xdeU, 0x00U, 0x22U, 0xeaU, 0x0eU, 0xe2U, 0x00U, 0x00U, 0x04U,
+        0x00U
+        };
+        static unsigned char packed[sizeof(gz_zeros) + 8U];
+        tg_mtproto_tl_writer writer;
+        tg_mtproto_rpc_result result;
+        FILE *quiet;
+        int rc_big;
+        int flag_big;
+        int rc_cut;
+        int flag_cut;
+        int rc_plain;
+        int flag_plain;
+
+        quiet = tg_mtproto_open_quiet_stream(stdout);
+        tg_mtproto_tl_writer_init(&writer, packed, sizeof(packed));
+        (void)tg_mtproto_tl_write_bytes(&writer, gz_zeros, sizeof(gz_zeros));
+        memset(&result, 0, sizeof(result));
+        result.result_constructor = TG_MTPROTO_GZIP_PACKED_CONSTRUCTOR;
+        result.result_body = packed;
+        result.result_body_length = writer.length;
+        rc_big = tg_mtproto_unpack_gzip_result(&result, quiet, "self-test");
+        flag_big = tg_mtproto_gzip_overflow;
+
+        /* the same stream cut short: broken, not too large */
+        tg_mtproto_tl_writer_init(&writer, packed, sizeof(packed));
+        (void)tg_mtproto_tl_write_bytes(&writer, gz_zeros, 40UL);
+        memset(&result, 0, sizeof(result));
+        result.result_constructor = TG_MTPROTO_GZIP_PACKED_CONSTRUCTOR;
+        result.result_body = packed;
+        result.result_body_length = writer.length;
+        tg_mtproto_gzip_overflow = 1;
+        rc_cut = tg_mtproto_unpack_gzip_result(&result, quiet, "self-test");
+        flag_cut = tg_mtproto_gzip_overflow;
+
+        /* an answer that was never packed clears the sign of the one before */
+        memset(&result, 0, sizeof(result));
+        result.result_constructor = 0x12345678UL;
+        tg_mtproto_gzip_overflow = 1;
+        rc_plain = tg_mtproto_unpack_gzip_result(&result, quiet, "self-test");
+        flag_plain = tg_mtproto_gzip_overflow;
+        tg_mtproto_close_quiet_stream(quiet, stdout);
+        if (rc_big == 0 || flag_big != 1 || rc_cut == 0 || flag_cut != 0 ||
+            rc_plain != 0 || flag_plain != 0) {
+            printf("probe self-test: unpack overflow sign mismatch "
+                   "(%d/%d %d/%d %d/%d)\n", rc_big, flag_big, rc_cut,
+                   flag_cut, rc_plain, flag_plain);
+            return 2;
+        }
+    }
+#endif
+    return 0;
+}
+#endif
+
 /* The last search inside a chat, kept for its later pages: the words as
    they went on the wire, and the chat they were searched in. */
 static char tg_gui_msg_search_wire[TG_GUI_SEARCH_MAX * 2 + 4];
@@ -24239,7 +24501,7 @@ int tg_gui_session_search_messages(const char *query, FILE *stream)
         return -1;
     }
     hits = gst->chat_count;
-    if (hits >= TG_GUI_SEARCH_PAGE &&
+    if (tg_gui_search_page_full(hits) &&
         strlen(wire) < sizeof(tg_gui_msg_search_wire)) {
         /* A full page: there may be older hits. The words and the chat are
            kept for them, and a last row offers them. */
@@ -24280,7 +24542,7 @@ int tg_gui_session_search_messages_more(FILE *stream)
         gst->chats[gst->chat_count++] = more; /* the row stays: try again */
         return -1;
     }
-    if (got >= TG_GUI_SEARCH_PAGE) {
+    if (tg_gui_search_page_full(got)) {
         tg_gui_search_more_row(gst);
     }
     return got;
