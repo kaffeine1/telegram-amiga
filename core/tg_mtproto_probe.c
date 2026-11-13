@@ -360,6 +360,7 @@ static void tg_mtproto_quiet_tmp_sweep(void);
 static void tg_mtproto_replay_quiet_stream(FILE *quiet, FILE *fallback);
 #if !defined(TG_NO_SELFTEST)
 static int tg_hist_short_self_test(void);
+static int tg_forum_count_self_test(void);
 #endif
 static int tg_chat_notify_gunzip(const unsigned char *body,
                                  unsigned long body_length,
@@ -16890,6 +16891,246 @@ static void tg_mtproto_chat_print_help(FILE *stream)
     tg_console_ui_end_line(stream);
 }
 
+/* --- a topic never read ------------------------------------------------
+   Telegram counts nothing unread (unread_count 0) for a topic this account
+   never opened (read_inbox_max_id 0), whatever arrived in it. For a topic
+   opened after this account joined the group every message in it is
+   unread (tg_mtproto_topic_all_unread), and how many is asked:
+   messages.getReplies with limit 1 says how many messages the thread
+   holds, the one that opened the topic among them (seen on a real forum:
+   3 for a topic of three messages, as the phone counted), so that one
+   comes off when this account opened the topic itself. Kept per topic
+   with the newest message it was asked for, so each is asked once; a few
+   per reading of the list, the rest at the next. One place per topic, as
+   many as a list holds, so a forum's own counts never push each other
+   out; a count asked for an older newest message stands until the new
+   one is known. */
+#define TG_FORUM_COUNTS_MAX ((int)TG_MTPROTO_TOPICS_MAX)
+#define TG_FORUM_COUNTS_PER_READ 3
+
+static struct {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long topic;
+    unsigned long top;
+    unsigned long count;
+} tg_forum_counts[TG_FORUM_COUNTS_MAX];
+static int tg_forum_counts_next = 0;
+
+static int tg_forum_count_slot(unsigned long id_hi, unsigned long id_lo,
+                               unsigned long topic)
+{
+    int i;
+
+    for (i = 0; i < TG_FORUM_COUNTS_MAX; ++i) {
+        if (tg_forum_counts[i].topic == topic &&
+            tg_forum_counts[i].id_hi == id_hi &&
+            tg_forum_counts[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* 1 = the count asked for this newest message; 0 = to be asked, and
+   *count is the last one known for the topic, 0 when none. */
+static int tg_forum_count_known(unsigned long id_hi, unsigned long id_lo,
+                                unsigned long topic, unsigned long top,
+                                unsigned long *count)
+{
+    int slot = tg_forum_count_slot(id_hi, id_lo, topic);
+
+    *count = slot >= 0 ? tg_forum_counts[slot].count : 0UL;
+    return slot >= 0 && tg_forum_counts[slot].top == top;
+}
+
+static void tg_forum_count_keep(unsigned long id_hi, unsigned long id_lo,
+                                unsigned long topic, unsigned long top,
+                                unsigned long count)
+{
+    int slot = tg_forum_count_slot(id_hi, id_lo, topic);
+
+    if (slot < 0) {
+        slot = tg_forum_counts_next;
+        tg_forum_counts_next = (tg_forum_counts_next + 1) % TG_FORUM_COUNTS_MAX;
+    }
+    tg_forum_counts[slot].id_hi = id_hi;
+    tg_forum_counts[slot].id_lo = id_lo;
+    tg_forum_counts[slot].topic = topic;
+    tg_forum_counts[slot].top = top;
+    tg_forum_counts[slot].count = count;
+}
+
+/* What a thread's first page says it holds, less one's own opening
+   message. */
+static unsigned long tg_forum_thread_unread(
+    const tg_mtproto_messages_summary *summary, int mine)
+{
+    unsigned long n = (summary->is_slice || summary->is_channel_messages)
+                          ? summary->count : summary->message_count;
+
+    if (mine && n > 0UL) {
+        --n;
+    }
+    return n > 99999UL ? 99999UL : n;
+}
+
+/* Gives the never-read topics of `list` their count. `joined` and `left`
+   are the group's, read from the same reply before this asks anything
+   (the questions here reuse the reply's buffer). */
+static void tg_forum_fill_unread(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, unsigned long ph, unsigned long pl,
+    unsigned long ahh, unsigned long ahl, unsigned long joined, int left,
+    tg_mtproto_forum_topic_list *list, FILE *quiet)
+{
+    static const char label[] = "mtproto messages.getReplies(count)";
+    unsigned char query[96];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_messages_summary summary;
+    tg_mtproto_tl_writer writer;
+    unsigned long k;
+    unsigned long count;
+    int asked = 0;
+    int down = 0;
+
+    for (k = 0UL; k < list->count; ++k) {
+        tg_mtproto_forum_topic *t = &list->topics[k];
+        int known;
+
+        if (!tg_mtproto_topic_all_unread(t, joined, left)) {
+            continue;
+        }
+        known = tg_forum_count_known(ph, pl, t->id, t->top_message, &count);
+        t->unread_count = count;
+        if (known || down || asked >= TG_FORUM_COUNTS_PER_READ) {
+            continue;
+        }
+        ++asked;
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_get_replies_peer_at(
+                &writer, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, ph, pl, ahh,
+                ahl, 1, t->id, 0UL, 0L, 1UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_send_saved_query_on_context(
+                host, port, api_id, auth_file, dc_id_text, context, query,
+                writer.length, &result, quiet, label, 200U) != 0) {
+            down = 1; /* the link: the next reading of the list asks again,
+                         the counts already known still go on their rows */
+            continue;
+        }
+        if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
+            tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
+            tg_mtproto_parse_messages_summary(result.result_constructor,
+                                              result.result_body,
+                                              result.result_body_length,
+                                              &summary) != TG_MTPROTO_TL_OK) {
+            continue;
+        }
+        t->unread_count = tg_forum_thread_unread(&summary, t->mine);
+        tg_forum_count_keep(ph, pl, t->id, t->top_message, t->unread_count);
+    }
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* The count of a never-read topic from its thread's first page: the total
+   a page of a longer thread says, or the messages of a short one, less the
+   opening message when it is one's own. */
+static int tg_forum_count_self_test(void)
+{
+    tg_mtproto_messages_summary s;
+
+    memset(&s, 0, sizeof(s));
+    s.is_channel_messages = 1;
+    s.count = 2UL;
+    s.message_count = 1UL;
+    if (tg_forum_thread_unread(&s, 0) != 2UL ||
+        tg_forum_thread_unread(&s, 1) != 1UL) {
+        puts("probe self-test: a never-read topic's count");
+        return 2;
+    }
+    memset(&s, 0, sizeof(s));
+    s.message_count = 1UL; /* messages.messages: all of them are here */
+    s.count = 9UL;
+    if (tg_forum_thread_unread(&s, 0) != 1UL ||
+        tg_forum_thread_unread(&s, 1) != 0UL) {
+        puts("probe self-test: a short thread's count");
+        return 2;
+    }
+    s.message_count = 0UL;
+    if (tg_forum_thread_unread(&s, 1) != 0UL) {
+        puts("probe self-test: an empty thread's count went below zero");
+        return 2;
+    }
+    s.is_slice = 1;
+    s.count = 500000UL;
+    if (tg_forum_thread_unread(&s, 0) != 99999UL) {
+        puts("probe self-test: a huge thread's count is not capped");
+        return 2;
+    }
+    /* The counts kept: per forum, topic and newest message. */
+    {
+        unsigned long n = 77UL;
+        int i;
+        int rc = 0;
+
+        memset(tg_forum_counts, 0, sizeof(tg_forum_counts));
+        tg_forum_counts_next = 0;
+        if (tg_forum_count_known(0UL, 5UL, 896UL, 898UL, &n) || n != 0UL) {
+            puts("probe self-test: a count nobody asked is known");
+            rc = 2;
+        }
+        tg_forum_count_keep(0UL, 5UL, 896UL, 898UL, 3UL);
+        n = 77UL;
+        if (!tg_forum_count_known(0UL, 5UL, 896UL, 898UL, &n) || n != 3UL) {
+            puts("probe self-test: a kept count is not found");
+            rc = 2;
+        }
+        n = 77UL;
+        if (tg_forum_count_known(0UL, 5UL, 896UL, 899UL, &n) || n != 3UL) {
+            puts("probe self-test: a count for an older newest message");
+            rc = 2;
+        }
+        n = 77UL;
+        if (tg_forum_count_known(0UL, 6UL, 896UL, 898UL, &n) || n != 0UL ||
+            tg_forum_count_known(1UL, 5UL, 896UL, 898UL, &n) || n != 0UL ||
+            tg_forum_count_known(0UL, 5UL, 897UL, 898UL, &n) || n != 0UL) {
+            puts("probe self-test: another forum's or topic's count taken");
+            rc = 2;
+        }
+        /* asked again for the new newest message: the same place */
+        tg_forum_count_keep(0UL, 5UL, 896UL, 899UL, 4UL);
+        n = 77UL;
+        if (!tg_forum_count_known(0UL, 5UL, 896UL, 899UL, &n) || n != 4UL ||
+            tg_forum_counts_next != 1) {
+            puts("probe self-test: a topic's count took a second place");
+            rc = 2;
+        }
+        /* a full table lets the oldest go, not the newest */
+        for (i = 1; i < TG_FORUM_COUNTS_MAX + 1; ++i) {
+            tg_forum_count_keep(0UL, 5UL, 1000UL + (unsigned long)i, 1UL,
+                                (unsigned long)i);
+        }
+        n = 77UL;
+        if (tg_forum_count_known(0UL, 5UL, 896UL, 899UL, &n) || n != 0UL ||
+            !tg_forum_count_known(0UL, 5UL,
+                                  1000UL + (unsigned long)TG_FORUM_COUNTS_MAX,
+                                  1UL, &n) ||
+            n != (unsigned long)TG_FORUM_COUNTS_MAX ||
+            !tg_forum_count_known(0UL, 5UL, 1001UL, 1UL, &n) || n != 1UL) {
+            puts("probe self-test: a full table of counts");
+            rc = 2;
+        }
+        memset(tg_forum_counts, 0, sizeof(tg_forum_counts));
+        tg_forum_counts_next = 0;
+        if (rc != 0) {
+            return rc;
+        }
+    }
+    return 0;
+}
+#endif
+
 /* --- the text client and a forum's topics (0.5) ------------------------
    /topics lists them, numbered; /topic n reads only that topic from then
    on (history, new messages, what is sent); another chat forgets it. */
@@ -16944,6 +17185,18 @@ static int tg_mtproto_chat_fetch_topics_on_context(
         return 2;
     }
     sprintf(tg_chat_topic_peer, "%.31s", peer_index);
+    {
+        unsigned long joined = 0UL;
+        int left = 0;
+
+        if (tg_mtproto_find_channel_joined(result.result_body,
+                                           result.result_body_length, ph, pl,
+                                           &joined, &left)) {
+            tg_forum_fill_unread(host, port, api_id, auth_file, dc_id_text,
+                                 context, ph, pl, ahh, ahl, joined, left,
+                                 &tg_chat_topics, stream);
+        }
+    }
     return 0;
 }
 
@@ -16968,6 +17221,12 @@ static void tg_mtproto_chat_print_topics(FILE *stream)
         }
         if (t->id == tg_mtproto_history_topic_id) {
             fprintf(cap, "  <- reading");
+        }
+        if (tg_chat_ids_shown) {
+            /* /ids on: the topic's id and how far it is read, as Telegram
+               says them (what a report about its counts needs) */
+            fprintf(cap, "  #%lu read %lu of %lu", t->id,
+                    t->read_inbox_max_id, t->top_message);
         }
         fprintf(cap, "\n");
     }
@@ -22437,7 +22696,7 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
 #endif
-    if (tg_hist_short_self_test() != 0) {
+    if (tg_hist_short_self_test() != 0 || tg_forum_count_self_test() != 0) {
         return 2;
     }
     if (tg_mtproto_first_contact_self_test() != 0) {
@@ -24844,6 +25103,58 @@ static int tg_gui_topics_project(void)
     return 1;
 }
 
+/* The forum's own row in the chat list counts what its topics hold unread,
+   the open one aside (it is being read): written to the chat cache, which
+   the list is drawn from when it comes back. Without this the row kept the
+   count it had when the forum was opened: its topics stand where the row
+   was, and the count kept there is never touched. */
+static void tg_gui_forum_store_unread(unsigned long id_hi, unsigned long id_lo)
+{
+    /* what was written last, so the cache is read from the disk only when
+       the sum moved and not at every reading of the topics */
+    static unsigned long last_hi = 0UL;
+    static unsigned long last_lo = 0UL;
+    static unsigned long last_sum = 0UL;
+    static int last_set = 0;
+    unsigned long sum = 0UL;
+    unsigned long i;
+    int k;
+
+    for (k = 0; k < tg_gui_topic_row_count; ++k) {
+        if (tg_gui_topic_rows[k].id != tg_gui_topic) {
+            sum += tg_gui_topic_rows[k].unread;
+        }
+    }
+    if (sum > 99999UL) {
+        sum = 99999UL;
+    }
+    if (last_set && last_hi == id_hi && last_lo == id_lo && last_sum == sum) {
+        return;
+    }
+    if (tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
+                                        &tg_gui_probe_cache) != 0) {
+        return;
+    }
+    last_hi = id_hi;
+    last_lo = id_lo;
+    last_sum = sum;
+    last_set = 1;
+    for (i = 0UL; i < tg_gui_probe_cache.count; ++i) {
+        tg_mtproto_peer_cache_entry *e = &tg_gui_probe_cache.entries[i];
+
+        if (e->peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
+            e->id_hi == id_hi && e->id_lo == id_lo) {
+            if (e->unread_count != sum) {
+                e->unread_count = sum;
+                (void)tg_mtproto_save_peer_cache_file(
+                    tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache,
+                    0, "chat cache");
+            }
+            return;
+        }
+    }
+}
+
 /* Reads the open forum's topics (channels.getForumTopics, newest activity
    first) with each one's newest message, and puts them in the sidebar when
    it may show them. 1 = read, 0 = no forum is open, -1 = could not. */
@@ -24919,6 +25230,39 @@ static int tg_gui_session_fetch_topics(FILE *stream)
             &tg_shared_message_texts);
         tg_mtproto_parse_message_peers(at, left, &tg_chat_sender_cache);
     }
+    {
+        /* The never-read topics get their count: asked after the reply
+           is read whole, the questions reuse its buffer. */
+        static unsigned long logged_joined = 0UL;
+        unsigned long joined = 0UL;
+        int left = 0;
+
+        if (tg_mtproto_find_channel_joined(result.result_body,
+                                           result.result_body_length, ph, pl,
+                                           &joined, &left)) {
+            if (joined + (unsigned long)left != logged_joined) {
+                char line[64];
+
+                /* for a field report: why a never-read topic is or is not
+                   counted (numbers only) */
+                logged_joined = joined + (unsigned long)left;
+                sprintf(line, "topics: in the group since %lu%s", joined,
+                        left ? " (not a member)" : "");
+                tg_gui_log(line);
+            }
+            quiet = tg_mtproto_open_quiet_stream(stream);
+            prev_timeout = tg_net_connect_timeout_seconds();
+            tg_net_set_connect_timeout_seconds(10UL);
+            tg_forum_fill_unread(
+                tg_gui_session_state.host, tg_gui_session_state.port,
+                tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+                tg_gui_session_state.dc_id_text,
+                &tg_gui_session_state.context, ph, pl, ahh, ahl, joined, left,
+                &tg_gui_topic_list, quiet);
+            tg_net_set_connect_timeout_seconds(prev_timeout);
+            tg_mtproto_close_quiet_stream(quiet, stream);
+        }
+    }
     display_delta = tg_mtproto_display_delta(
         tg_gui_session_state.context.server_time_delta_seconds,
         tg_mtproto_local_clock_skew());
@@ -24973,21 +25317,49 @@ static int tg_gui_session_fetch_topics(FILE *stream)
                 row->last.local_epoch =
                     tg_mtproto_chat_local_epoch(m->date, display_delta);
             }
+            if (row->last.is_out && t->read_inbox_max_id == 0UL) {
+                row->unread = 0UL; /* never read, but its newest is one's own */
+            }
             break;
         }
         ++n;
     }
     tg_gui_topic_row_count = n;
+    tg_gui_forum_store_unread(ph, pl);
     tg_shared_message_texts_busy = 0;
     (void)tg_gui_topics_project();
     tg_gui_topic_subtitle();
     tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
     {
-        char line[48];
+        /* For a field report (--gui-live-debug): what Telegram counts for
+           each topic, numbers only, written again only when one changed. */
+        static unsigned long logged = 0UL;
+        unsigned long sum = tg_gui_topic_list.count * 131UL;
+        char line[96];
 
+        for (k = 0UL; k < tg_gui_topic_list.count; ++k) {
+            const tg_mtproto_forum_topic *t = &tg_gui_topic_list.topics[k];
+
+            sum = sum * 31UL + t->id + t->unread_count * 7UL +
+                  t->read_inbox_max_id * 3UL + t->top_message;
+        }
         sprintf(line, "topics: %lu of %lu", tg_gui_topic_list.count,
                 tg_gui_topic_list.total);
         tg_gui_log(line);
+        if (sum != logged) {
+            logged = sum;
+            for (k = 0UL; k < tg_gui_topic_list.count; ++k) {
+                const tg_mtproto_forum_topic *t =
+                    &tg_gui_topic_list.topics[k];
+
+                sprintf(line, "topic %lu: unread %lu mentions %lu read %lu "
+                              "top %lu%s%s",
+                        t->id, t->unread_count, t->unread_mentions,
+                        t->read_inbox_max_id, t->top_message,
+                        t->pinned ? " pinned" : "", t->closed ? " closed" : "");
+                tg_gui_log(line);
+            }
+        }
     }
     return 1;
 }

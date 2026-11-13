@@ -7347,6 +7347,7 @@ static tg_mtproto_tl_status tg_read_forum_topic(tg_mtproto_tl_reader *reader,
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     t->icon_color &= 0xffffffUL;
+    t->mine = (flags & 2UL) != 0UL;
     t->closed = (flags & 4UL) != 0UL;
     t->pinned = (flags & 8UL) != 0UL;
     t->hidden = (flags & 64UL) != 0UL;
@@ -7402,6 +7403,91 @@ static unsigned long tg_forum_topic_resync(const tg_mtproto_tl_reader *reader,
         }
     }
     return 0UL;
+}
+
+int tg_mtproto_topic_all_unread(const tg_mtproto_forum_topic *topic,
+                                unsigned long joined, int left)
+{
+    return topic != 0 && !left && joined != 0UL &&
+           topic->id != TG_MTPROTO_TOPIC_GENERAL &&
+           topic->read_inbox_max_id == 0UL && topic->unread_count == 0UL &&
+           topic->top_message != 0UL && topic->date >= joined;
+}
+
+/* channel#fe685355 flags:# ... left:flags.2 ... flags2:# id:long
+   access_hash:flags.13?long title:string username:flags.6?string
+   photo:ChatPhoto date:int ..., looked for by its id at every 4-byte
+   step, as the chats of a reply are scanned elsewhere. chatPhotoEmpty
+   #37c1011c has no fields; chatPhoto#1c6e1c11 flags:# photo_id:long
+   stripped_thumb:flags.1?bytes dc_id:int. */
+int tg_mtproto_find_channel_joined(const unsigned char *body,
+                                   unsigned long body_length,
+                                   unsigned long id_hi, unsigned long id_lo,
+                                   unsigned long *date, int *left)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long offset;
+    unsigned long flags;
+    unsigned long flags2;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long c;
+    unsigned long scratch;
+    const unsigned char *bytes;
+    unsigned long n;
+
+    if (date != 0) {
+        *date = 0UL;
+    }
+    if (left != 0) {
+        *left = 0;
+    }
+    if (body == 0 || date == 0 || left == 0) {
+        return 0;
+    }
+    for (offset = 0UL; offset + 24UL <= body_length; offset += 4UL) {
+        if (tg_read_u32_le(body + offset) != TG_CHANNEL_CONSTRUCTOR) {
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&reader, body + offset + 4UL,
+                                  body_length - offset - 4UL);
+        if (tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&reader, &flags2) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u64(&reader, &hi, &lo) != TG_MTPROTO_TL_OK ||
+            hi != id_hi || lo != id_lo) {
+            continue;
+        }
+        if ((flags & (1UL << 13)) != 0UL &&
+            tg_mtproto_tl_read_u64(&reader, &hi, &lo) != TG_MTPROTO_TL_OK) {
+            continue;
+        }
+        if (tg_skip_string(&reader) != TG_MTPROTO_TL_OK ||
+            ((flags & (1UL << 6)) != 0UL &&
+             tg_skip_string(&reader) != TG_MTPROTO_TL_OK) ||
+            tg_mtproto_tl_read_u32(&reader, &c) != TG_MTPROTO_TL_OK) {
+            continue;
+        }
+        if (c == TG_CHAT_PHOTO_CONSTRUCTOR) {
+            if (tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_read_u64(&reader, &hi, &lo) !=
+                    TG_MTPROTO_TL_OK ||
+                ((scratch & 2UL) != 0UL &&
+                 tg_mtproto_tl_read_bytes(&reader, &bytes, &n) !=
+                     TG_MTPROTO_TL_OK) ||
+                tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK) {
+                continue;
+            }
+        } else if (c != TG_CHAT_PHOTO_EMPTY_CONSTRUCTOR) {
+            continue;
+        }
+        if (tg_mtproto_tl_read_u32(&reader, date) != TG_MTPROTO_TL_OK) {
+            *date = 0UL;
+            continue;
+        }
+        *left = (flags & 4UL) != 0UL;
+        return 1;
+    }
+    return 0;
 }
 
 tg_mtproto_tl_status tg_mtproto_parse_forum_topics(
@@ -12997,6 +13083,140 @@ static int tg_forum_self_test(void)
             puts("login self-test: a forum stays after it is turned off");
             return 2;
         }
+    }
+
+    /* Since when this account is in a channel, behind a photo with its
+       thumb and a username, and whether it has left it. */
+    {
+        unsigned long date = 7UL;
+        int left = 7;
+
+        tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+        (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 2UL);
+        (void)tg_mtproto_tl_write_u32(&w, TG_CHANNEL_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, (1UL << 13) | (1UL << 6));
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x7e57UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x5678UL);
+        (void)tg_write_string(&w, "Forum");
+        (void)tg_write_string(&w, "forum");
+        (void)tg_mtproto_tl_write_u32(&w, TG_CHAT_PHOTO_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 2UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x9UL);
+        (void)tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"ab", 2UL);
+        (void)tg_mtproto_tl_write_u32(&w, 4UL);
+        (void)tg_mtproto_tl_write_u32(&w, 1700UL);
+        /* a second one, left, with no photo */
+        (void)tg_mtproto_tl_write_u32(&w, TG_CHANNEL_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, (1UL << 13) | 4UL);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x7e58UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x5678UL);
+        (void)tg_write_string(&w, "Other");
+        (void)tg_mtproto_tl_write_u32(&w, TG_CHAT_PHOTO_EMPTY_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 900UL);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        /* a third whose photo is of a kind not known here: what follows
+           it cannot be told for a date */
+        (void)tg_mtproto_tl_write_u32(&w, TG_CHANNEL_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 1UL << 13);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x7e5aUL);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x5678UL);
+        (void)tg_write_string(&w, "Odd");
+        (void)tg_mtproto_tl_write_u32(&w, 0x0badf00dUL);
+        (void)tg_mtproto_tl_write_u32(&w, 4242UL);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        if (!tg_mtproto_find_channel_joined(rpc, w.length, 0UL, 0x7e57UL,
+                                            &date, &left) ||
+            date != 1700UL || left != 0) {
+            printf("login self-test: a channel's join date (%lu, %d)\n", date,
+                   left);
+            return 2;
+        }
+        if (!tg_mtproto_find_channel_joined(rpc, w.length, 0UL, 0x7e58UL,
+                                            &date, &left) ||
+            date != 900UL || left != 1) {
+            printf("login self-test: a left channel (%lu, %d)\n", date, left);
+            return 2;
+        }
+        if (tg_mtproto_find_channel_joined(rpc, w.length, 0UL, 0x7e59UL,
+                                           &date, &left) ||
+            date != 0UL || left != 0) {
+            puts("login self-test: a channel that is not there was found");
+            return 2;
+        }
+        if (tg_mtproto_find_channel_joined(rpc, w.length, 0UL, 0x7e5aUL,
+                                           &date, &left) ||
+            date != 0UL || left != 0) {
+            puts("login self-test: a date read behind an unknown photo");
+            return 2;
+        }
+    }
+
+    /* A topic never read counts as unread whole only when it was opened
+       after this account joined, in a group it is still in. */
+    {
+        tg_mtproto_forum_topic t;
+
+        memset(&t, 0, sizeof(t));
+        t.id = 896UL;
+        t.date = 2000UL;
+        t.top_message = 898UL;
+        if (!tg_mtproto_topic_all_unread(&t, 1500UL, 0) ||
+            !tg_mtproto_topic_all_unread(&t, 2000UL, 0) ||
+            tg_mtproto_topic_all_unread(&t, 2500UL, 0) || /* joined later */
+            tg_mtproto_topic_all_unread(&t, 1500UL, 1) || /* not in it */
+            tg_mtproto_topic_all_unread(&t, 0UL, 0) ||    /* not known */
+            tg_mtproto_topic_all_unread(0, 1500UL, 0)) {
+            puts("login self-test: a never-read topic and the join date");
+            return 2;
+        }
+        t.read_inbox_max_id = 897UL;
+        if (tg_mtproto_topic_all_unread(&t, 1500UL, 0)) {
+            puts("login self-test: a topic read before counts whole");
+            return 2;
+        }
+        t.read_inbox_max_id = 0UL;
+        t.unread_count = 2UL; /* Telegram does count: its number stands */
+        if (tg_mtproto_topic_all_unread(&t, 1500UL, 0)) {
+            puts("login self-test: a counted topic is counted again");
+            return 2;
+        }
+        t.unread_count = 0UL;
+        t.top_message = 0UL;
+        if (tg_mtproto_topic_all_unread(&t, 1500UL, 0)) {
+            puts("login self-test: an empty topic counts as unread");
+            return 2;
+        }
+        t.top_message = 898UL;
+        t.id = TG_MTPROTO_TOPIC_GENERAL;
+        if (tg_mtproto_topic_all_unread(&t, 1500UL, 0)) {
+            puts("login self-test: General counts whole");
+            return 2;
+        }
+    }
+    /* my:flags.1 of a topic */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, 2UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 2UL);
+    tg_topic_test_topic(&w, 50UL, 2UL, "Mine", 0UL, 0);
+    tg_topic_test_topic(&w, 51UL, 0UL, "Theirs", 0UL, 0);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    if (tg_mtproto_parse_forum_topics(TG_MESSAGES_FORUM_TOPICS_CONSTRUCTOR, rpc,
+                                      w.length, &topics) != TG_MTPROTO_TL_OK ||
+        topics.count != 2UL || !topics.topics[0].mine ||
+        topics.topics[1].mine) {
+        puts("login self-test: whose topic it is");
+        return 2;
     }
     return 0;
 }

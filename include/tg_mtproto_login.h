@@ -1015,6 +1015,7 @@ typedef struct tg_mtproto_forum_topic {
     int pinned;
     int closed;                  /* only admins may write in it */
     int hidden;                  /* General folded away by the admins */
+    int mine;                    /* this account opened it (my:flags.1) */
     char title[TG_MTPROTO_TOPIC_TITLE_MAX]; /* UTF-8, as Telegram sends it */
 } tg_mtproto_forum_topic;
 
@@ -1051,6 +1052,25 @@ tg_mtproto_tl_status tg_mtproto_parse_forum_topics(
     const unsigned char *body,
     unsigned long body_length,
     tg_mtproto_forum_topic_list *out);
+
+/* The channel `id` among the chats of a reply (channel#fe685355): since
+   when this account is in it (date: for a channel it is not in, the
+   channel's own creation) and whether it is out of it (left:flags.2).
+   1 = found. */
+int tg_mtproto_find_channel_joined(const unsigned char *body,
+                                   unsigned long body_length,
+                                   unsigned long id_hi, unsigned long id_lo,
+                                   unsigned long *date, int *left);
+
+/* A topic this account never opened (read_inbox_max_id 0) comes with
+   unread_count 0 whatever arrived in it: seen on a real forum, where a
+   phone that had followed the messages as they came showed 3. When the
+   topic was opened after this account joined the group (`joined`, 0 =
+   not known; `left` = not in the group), every message in it is unread:
+   1 says so, and the caller asks how many there are. Never for General,
+   which is as old as the group. */
+int tg_mtproto_topic_all_unread(const tg_mtproto_forum_topic *topic,
+                                unsigned long joined, int left);
 
 /* messages.getReplies#22ddd30c peer:InputPeer msg_id:int offset_id:int
    offset_date:int add_offset:int limit:int max_id:int min_id:int hash:long

@@ -1494,6 +1494,22 @@ row. The other chats have no row while the topics are on show: the
 session counts their news in the chat cache, which the chat list is
 drawn from when it comes back, and names the chat for the pop-up.
 
+A topic this account never opened comes back from
+channels.getForumTopics with unread_count 0 and read_inbox_max_id 0
+whatever it holds, while the official clients badge it with every
+message in it (seen on a real forum the day the topics went in: a topic
+of three messages, 3 on the phone, nothing here). For a topic opened
+after this account joined the group (the channel's date, when it has
+not left) the count is asked: messages.getReplies with limit 1 says how
+many messages the thread holds, the one that opened it among them, and
+that one comes off when the topic is this account's own. A count is
+kept per topic with the newest message it was asked for, at most three
+are asked per reading of the list, and a topic whose newest message is
+one's own counts nothing. The forum's row in the chat cache takes the
+sum of its topics' counts, the open one aside, so the chat list is
+right when it comes back without waiting for the next reading of the
+dialogs.
+
 Left for later: creating, renaming, closing and pinning topics; the
 pinned message of a topic (the bar stays off in a forum rather than
 show another topic's); the "@" count of a topic; a draft per topic.

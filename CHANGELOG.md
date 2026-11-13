@@ -28,11 +28,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on that topic's row at once and is told like any other chat's news
   (title, sound, pop-up), and the news of the other chats are not lost
   while the topics stand in their place: they are counted for when the
-  chat list comes back. The text client has /topics, which lists them numbered, and
-  /topic n, which reads only that topic from then on (history, new
-  messages, what is sent); /topic alone goes back to every topic. Not
-  yet: creating, renaming or closing topics, the pinned message of a
-  topic, and the "@" count of a topic.
+  chat list comes back. A topic you never opened shows all its messages
+  as unread, as the official clients do: Telegram's own count for such a
+  topic is zero whatever it holds, so the number is asked from the
+  topic's thread (for the topics opened after you joined the group).
+  The group's own row counts what its topics hold unread, so it is right
+  the moment the chat list comes back. The text client has /topics,
+  which lists them numbered, and /topic n, which reads only that topic
+  from then on (history, new messages, what is sent); /topic alone goes
+  back to every topic; with /ids on, /topics adds each topic's id and
+  how far it is read. Not yet: creating, renaming or closing topics, the
+  pinned message of a topic, and the "@" count of a topic.
 - Find in chat (Edit menu, Amiga+S): the search box at the top of the
   chat list searches the messages of the open chat on Telegram. Type the
   words and press ENTER; the messages found take the place of the chat
