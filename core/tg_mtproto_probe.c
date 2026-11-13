@@ -36641,7 +36641,10 @@ static int tg_gui_channel_install_self_test(void)
     memset(list, 0, sizeof(*list));
     tg_install_test_post(&list->messages[0], 5UL, "f.bin", 100UL);
     tg_install_test_post(&list->messages[1], 9UL, "f.bin", 100UL);
-    tg_install_test_post(&list->messages[2], 20UL, "g.bin", 100UL);
+    /* another name, and one that differs only by the case of a letter:
+       never the file's, newer than the right one though it is (eight
+       posts in all: the smallest list a build holds) */
+    tg_install_test_post(&list->messages[2], 20UL, "F.bin", 100UL);
     tg_install_test_post(&list->messages[3], 30UL, "f.bin", 101UL);
     tg_install_test_post(&list->messages[4], 40UL, "f.bin", 100UL);
     list->messages[4].document.size_hi = 1UL; /* over four gigabytes */
@@ -36651,8 +36654,7 @@ static int tg_gui_channel_install_self_test(void)
     list->messages[6].document.has_document = 0;
     tg_install_test_post(&list->messages[7], 70UL, "f.bin",
                          TG_GUI_CHANNEL_FILE_MAX + 1UL);
-    tg_install_test_post(&list->messages[8], 80UL, "F.bin", 100UL);
-    list->count = 9UL;
+    list->count = 8UL;
     ok = ok && tg_gui_channel_file_pick(list, "f.bin", 100UL) == 1 &&
          /* no size given: the newest that is small enough */
          tg_gui_channel_file_pick(list, "f.bin", 0UL) == 3 &&
