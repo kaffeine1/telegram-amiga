@@ -311,6 +311,8 @@ int tg_gui_session_forum_open(void);      /* the open chat is a forum */
 unsigned long tg_gui_session_topic(void); /* the topic open, 0 = none */
 int tg_gui_session_topic_open(unsigned long topic_id, FILE *stream);
 void tg_gui_session_topics_leave(void);
+/* The open forum's row clicked again: its topics back in the sidebar. */
+int tg_gui_session_topics_show(FILE *stream);
 
 /* Pages OLDER history at the top of the open chat: fetches the getHistory page
    just below the oldest message currently shown and PREPENDS it to the transcript.

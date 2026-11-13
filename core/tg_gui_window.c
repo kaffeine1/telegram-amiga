@@ -15804,6 +15804,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     if (idx < state->chat_count &&
                         idx != state->selected_chat) {
                         tg_gui_window_open_selection(state, idx, &backend);
+                    } else if (idx == state->selected_chat &&
+                               state->forum_open &&
+                               !tg_gui_topics_listed(state)) {
+                        (void)tg_gui_session_topics_show(stdout);
+                        tg_gui_window_paint(state, &backend);
                     }
                 } else if (msg_code == 0x4C || msg_code == 0x4D) {
                     /* Cursor up/down act on the PANEL UNDER THE POINTER --
@@ -17485,6 +17490,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (hit >= 0 && hit < state->chat_count &&
                                 hit != state->selected_chat) {
                                 tg_gui_window_open_selection(state, hit, &backend);
+                            } else if (hit >= 0 && hit == state->selected_chat &&
+                                       state->forum_open &&
+                                       !tg_gui_topics_listed(state)) {
+                                /* the open forum's row again: its topics
+                                   come back, the topic stays open */
+                                (void)tg_gui_session_topics_show(stdout);
+                                tg_gui_window_paint(state, &backend);
                             } else {
                                 tg_gui_window_paint(state, &backend);
                             }

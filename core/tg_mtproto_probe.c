@@ -25278,6 +25278,27 @@ int tg_gui_session_topic_open(unsigned long topic_id, FILE *stream)
     return tg_gui_session_open_chat(index, stream) != 0 ? 1 : -1;
 }
 
+/* Public: the open forum's topics into the sidebar again (its row was
+   clicked once more), read afresh; the transcript stays as it is. 1 =
+   shown, 0 = no forum is open, -1 = could not read them (the last list
+   read, if any, is shown). */
+int tg_gui_session_topics_show(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return 0;
+#else
+    if (!tg_gui_session_state.open || stream == 0 || !tg_gui_forum) {
+        return 0;
+    }
+    tg_gui_topics_shown = 1;
+    if (tg_gui_session_fetch_topics(stream) > 0) {
+        return 1;
+    }
+    return tg_gui_topics_project() ? 1 : -1;
+#endif
+}
+
 /* Public: the sidebar goes back from the topics to the chats; the topic
    stays open in the transcript. */
 void tg_gui_session_topics_leave(void)
