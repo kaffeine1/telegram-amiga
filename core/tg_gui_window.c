@@ -12868,6 +12868,17 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
             (void)tg_gui_context_follow((tg_gui_state *)state);
             tg_gui_window_session_changed(session_dirty, header_dirty);
         }
+        {
+            /* The interval counts from the END of a look. One that took as
+               long as the interval itself (a 14 MHz 68020 on a slow link,
+               seen on a real A1200: 2.5 s each) was followed at once by
+               the next, for as long as they stayed that slow. */
+            time_t ended = time(0);
+
+            if (ended != (time_t)-1 && ended > *last_session_poll) {
+                *last_session_poll = ended;
+            }
+        }
         tg_gui_tick_after(last_session_poll, eff);
     }
 }
@@ -14713,6 +14724,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         int photo_background_turn;
         int viewer_dirty;
         int viewer_save_requested;
+        int tick_polled; /* the session was looked at in this turn */
         ULONG wake_signals;
 
         session_dirty = 0;
@@ -14726,6 +14738,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         photo_background_turn = 0;
         viewer_dirty = 0;
         viewer_save_requested = 0;
+        tick_polled = 0;
         wake_signals = 0UL;
         if (older_cooldown > 0) {
             older_cooldown -= 1;
@@ -16620,8 +16633,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                        reception + the "is typing" header). To keep typing smooth,
                        defer the (blocking) tick until the composer has been idle
                        for TG_GUI_COMPOSE_IDLE_POLL_SECONDS; skip it entirely when
-                       a close/quit is already queued this drain. */
-                    if (!done) {
+                       a close/quit is already queued this drain. Once in a
+                       turn: Intuition sends the next tick as soon as this
+                       one is answered, so a look that takes longer than a
+                       tick finds another waiting when it comes back, and a
+                       second look here kept this loop from ever ending:
+                       nothing after it ran (the repaint of what arrived,
+                       ARexx, the pop-up, the photo work) until a key or a
+                       click broke the run. */
+                    if (!done && !tick_polled) {
+                        tick_polled = 1;
                         tg_gui_window_poll_session(
                             state, session_boot, watch_seconds,
                             watch_boot_seconds, watch_boot_grace,

@@ -455,6 +455,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- On a slow machine the window could stop showing what arrived. When a
+  look at Telegram for new messages took as long as the pause between
+  two looks (a real A1200 with a 68020 at 14 MHz and a busy chat: two
+  and a half seconds each), the next one started at once and the window
+  never reached the rest of its work: new messages were not drawn,
+  ARexx commands were not answered and the pop-up did not come, until
+  a key or a click broke the run. The pause now counts from the end of
+  a look, and the window makes one look in each turn.
 - The pills of the reactions under a message were too tight: with four
   pixels at each end the count ran into the pill's round end, plainly
   so with a wide font. The room at the ends now follows the pill's
