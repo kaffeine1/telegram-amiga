@@ -215,19 +215,23 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   (every ten seconds on 68k), never while typing, during a transfer or
   under an open menu. The marks then follow a Mute or Unmute from here,
   at once, or from another device.
-- The update notice, not switched on yet. Releases will be announced on
-  public Telegram channels or groups, one or several, in a post that
-  says "Amigram" and the version. Once a day the client goes round
+- The update notice. Releases are announced on the public Telegram
+  channel @amigram1 (the list can hold more channels or groups), in a
+  post that says "Amigram" and the version. Once a day the client goes round
   them, one at each quiet moment: it asks a channel for its newest
   posts with the program's name in them, and the highest version the
   round reads counts; when it is higher than the one running, the
   status line says so, once for each version, and About says it for as
   long as it holds. Nothing is downloaded and nothing is installed.
   "Check for updates" in the settings switches it off; what it knows is
-  kept in `data/telegram-update.txt`. The list of channels
-  (`TG_UPDATE_CHANNELS`, eight names at most) is still empty: until it
-  is set the client never looks and that line of the settings is
-  greyed.
+  kept in `data/telegram-update.txt`. The list of channels is
+  `TG_UPDATE_CHANNELS` in `include/tg_version.h`, eight names at most;
+  a build with an empty list never looks, and there that line of the
+  settings is greyed. @amigram1 is also where the WEBP datatype is
+  fetched from: a post counts as an announcement only where "Amigram"
+  is followed, after a space, by a version, so the datatype's files
+  raise nothing as long as no caption puts its number right after the
+  program's name.
 - Albums, and several files at once. The requester of "Send photo..."
   and of "Send file...", from the menus or from the paperclip, now
   takes several files: hold

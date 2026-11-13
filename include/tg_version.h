@@ -54,7 +54,7 @@
    never looks. Both can be given on the compiler's command line, to try
    the notice against channels that exist. */
 #ifndef TG_UPDATE_CHANNELS
-#define TG_UPDATE_CHANNELS ""
+#define TG_UPDATE_CHANNELS "amigram1"
 #endif
 #ifndef TG_UPDATE_WORD
 #define TG_UPDATE_WORD TG_APP_NAME
@@ -76,7 +76,10 @@
    datatype and puts those files, named as here, where they can be posted
    from. The channel can be given on the compiler's command line: an empty
    name stands for the account's Saved Messages, which is how the offer is
-   tried without posting anything where others read. */
+   tried without posting anything where others read. The same channel is
+   in TG_UPDATE_CHANNELS: a caption there must never put a number right
+   after the word "Amigram" ("Amigram 45.1 ..."), or every client reads
+   it as a release of this program. */
 #ifndef TG_WEBP_DT_CHANNEL
 #define TG_WEBP_DT_CHANNEL "amigram1"
 #endif

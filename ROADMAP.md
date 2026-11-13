@@ -425,14 +425,14 @@ Middle, more interface:
   numbered and the address stands under the text), both kept by an
   edit. Still missing: an edit keeping a mention by name and an
   underline, which the transcript does not hold;
-- the update notice (its section): step 1 is in place and asleep. The
-  client can look public channels and groups up by name, search their
-  posts for "Amigram" and a version (`contacts.resolveUsername`,
-  `messages.search`), take the highest of the day's round, compare it
-  with its own and say it once in the status line and in About, with a
+- the update notice (its section): step 1 is done. The client looks
+  public channels and groups up by name, searches their posts for
+  "Amigram" and a version (`contacts.resolveUsername`,
+  `messages.search`), takes the highest of the day's round, compares it
+  with its own and says it once in the status line and in About, with a
   switch in the settings. It reads a list of up to eight names, one
-  channel at each quiet moment. What is missing is the list:
-  `TG_UPDATE_CHANNELS` is empty, so nothing is asked yet;
+  channel at each quiet moment; the list is `TG_UPDATE_CHANNELS`, and
+  holds @amigram1, the channel that also carries the WEBP datatype;
 - stickers through a WEBP datatype where the user has one: done (see
   "let datatypes read what we cannot"). A fallback, never a
   requirement: without a datatype the emoji stays. AROS has a WEBP
