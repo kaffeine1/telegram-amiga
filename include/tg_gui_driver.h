@@ -54,6 +54,19 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
 void tg_gui_search_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
                                tg_chat_driver *chat_driver);
 
+/* A forum's topics into the sidebar rows (0.5), in the order given, under
+   a first row that goes back to the chats (index TG_GUI_TOPIC_BACK_INDEX):
+   name = the topic's title, preview = its newest message with who wrote it,
+   time = HH:MM today or the date, the unread count, the pin, and the
+   topic's colour as the nearest avatar tint; index = the topic's id. Sets
+   state->topic_view. */
+void tg_gui_driver_show_topics(tg_gui_state *state,
+                               const tg_chat_topic_row *rows, int count);
+
+/* The avatar tint nearest to a topic's icon colour (0xRRGGBB): Telegram's
+   six land on six different tints. */
+int tg_gui_driver_topic_color(unsigned long rgb);
+
 /* UTF-8 from Telegram into the text the GUI draws and the composer edits:
    Latin-1, an emoji the glyph sheet knows as its two-byte pair, line breaks
    kept. Cut to the buffer on a character boundary. */

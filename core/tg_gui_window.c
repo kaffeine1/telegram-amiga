@@ -6570,6 +6570,83 @@ static void tg_gui_window_paint_composer_edit(tg_gui_state *state,
    start is not marked as read on Telegram: nobody chose to look at it. */
 static int tg_gui_chat_touched = 0;
 
+/* A row of a forum's topic list was chosen (a click, ENTER, an F-key):
+   "All chats" puts the chats back in the sidebar, a topic opens in the
+   transcript. reload = open it even when it is the one already open (the
+   jump to the newest after deep paging). */
+static void tg_gui_window_topic_pick(tg_gui_state *state, int row,
+                                     tg_gui_backend *backend, int reload)
+{
+    unsigned long id;
+
+    if (row < 0 || row >= state->chat_count) {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    id = state->chats[row].index;
+    if (id == TG_GUI_TOPIC_BACK_INDEX) {
+        tg_gui_session_topics_leave();
+        state->nav_chat = -1;
+        state->chat_scroll = 0;
+        state->chat_scroll_to_sel = 1;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Live - F1-F10 chats, Amiga+Q quits");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (!reload && id == state->topic_open) {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_chat_touched = 1; /* a topic opened on purpose is one to read */
+    state->selected_chat = row;
+    state->nav_chat = -1;
+    state->selected_msg = -1;
+    state->transcript_scroll = 0;
+    state->chats[row].unread = 0;
+    state->chats[row].flash = 0;
+    state->reply_to_id = 0UL; /* a reply belongs to the topic it was in */
+    state->reply_sender[0] = '\0';
+    state->reply_snippet[0] = '\0';
+    state->message_count = 0;
+    state->msg_gen++;
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_is_open()) {
+        int topup;
+
+        (void)tg_gui_session_topic_open(id, stdout);
+        tg_gui_window_paint(state, backend);
+        /* As a chat that opens on few rows: older pages until a
+           scrollbar shows (see tg_gui_window_open_selection). */
+        for (topup = 0; topup < TG_GUI_TOPUP_MAX; ++topup) {
+            if (state->sb_tr_max > 0 ||
+                tg_gui_session_load_older(stdout, 0) <= 0) {
+                break;
+            }
+            tg_gui_window_paint(state, backend);
+        }
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       state->topic_open != 0UL
+                           ? "Topic open - ENTER writes in it"
+                           : "Live - F1-F10 chats, Amiga+Q quits");
+    tg_gui_window_paint(state, backend);
+}
+
+/* A forum open with no topic chosen takes nothing to send: says so. 1 =
+   stopped here. */
+static int tg_gui_window_topic_needed(tg_gui_state *state,
+                                      tg_gui_backend *backend)
+{
+    if (state->forum_open && state->topic_open == 0UL) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Choose a topic in the list first");
+        tg_gui_window_paint(state, backend);
+        return 1;
+    }
+    return 0;
+}
+
 /* Switch to chat `sel`: show its header + an empty transcript at once, then
    fetch the history. The instant first paint keeps the switch responsive on a
    slow link instead of the window appearing frozen on the old chat until the
@@ -6582,6 +6659,11 @@ static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
        -- the silent half of the "remove leaves the app stuck" report. */
     if (sel < 0 || sel >= state->chat_count) {
         tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (tg_gui_topics_listed(state)) {
+        /* the rows are a forum's topics, not chats */
+        tg_gui_window_topic_pick(state, sel, backend, 1);
         return;
     }
     tg_gui_chat_touched = 1; /* a chat opened on purpose is one to read */
@@ -9131,6 +9213,9 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
         state->chat_count <= 0) {
         return;
     }
+    if (tg_gui_window_topic_needed(state, backend)) {
+        return;
+    }
     if (tg_gui_session_transfer_busy()) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            "A transfer is already running");
@@ -9958,7 +10043,11 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
         tg_gui_window_paint(state, backend);
         return 0;
     }
-    idx = state->chats[state->selected_chat].index;
+    if (tg_gui_window_topic_needed(state, backend)) {
+        return 0;
+    }
+    idx = tg_gui_open_chat_row(state) != 0 ? tg_gui_open_chat_row(state)->index
+                                           : 0UL;
     /* Telegram takes polls in groups and channels (and in Saved Messages),
        not in a chat with one person. */
     if (idx != TG_GUI_SAVED_PEER_INDEX && tg_gui_session_chat_kind(idx) == 0) {
@@ -10037,9 +10126,9 @@ static void tg_gui_window_remove_chat(tg_gui_state *state,
     if (sel < 0 || sel >= state->chat_count) {
         return;
     }
-    if (state->in_search) {
-        /* The rows are search results (a message id or a result number),
-           not chats of the list. */
+    if (state->in_search || tg_gui_topics_listed(state)) {
+        /* The rows are search results (a message id or a result number)
+           or a forum's topics, not chats of the list. */
         return;
     }
     idx = state->chats[sel].index;
@@ -10173,7 +10262,8 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     int both;
 
     if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
-        state->in_search || sel < 0 || sel >= state->chat_count) {
+        state->in_search || sel < 0 || sel >= state->chat_count ||
+        tg_gui_topics_listed(state)) {
         return;
     }
     idx = state->chats[sel].index;
@@ -11025,6 +11115,7 @@ static void tg_gui_window_open_by_index(tg_gui_state *state,
     state->msg_search_active = 0;
     state->search_query[0] = '\0';
     state->search_caret = 0;
+    tg_gui_session_topics_leave(); /* a chat, not a forum's topic */
     (void)tg_gui_session_unhide_chat(want, stdout);
     tg_gui_session_refresh_chats();
     for (i = 0; i < state->chat_count; ++i) {
@@ -14710,8 +14801,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     done = 1;
                 } else if (rx_code == TG_GUI_REXX_OPEN) {
                     /* Only from the chat list itself: search results and
-                       the forward picker are other rows. */
-                    int row = (state->mode == TG_GUI_MODE_CHAT &&
+                       the forward picker are other rows; a forum's topics
+                       give the chats back first. */
+                    int row;
+
+                    if (tg_gui_topics_listed(state)) {
+                        tg_gui_session_topics_leave();
+                    }
+                    row = (state->mode == TG_GUI_MODE_CHAT &&
                                !state->in_search && !state->in_filter &&
                                !state->forward_pick_active &&
                                tg_gui_session_is_open())
@@ -15471,7 +15568,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    closed the program as soon as a word was typed before
                    clicking the text field, and ESC after the ESC that
                    cancels typing closed it too. */
-                if (msg_code == 27 && state->archive_view) {
+                if (msg_code == 27 && tg_gui_topics_listed(state)) {
+                    /* ESC with nothing else to cancel: from a forum's
+                       topics back to the chats. */
+                    tg_gui_window_topic_pick(state, 0, &backend, 0);
+                } else if (msg_code == 27 && state->archive_view) {
                     /* ESC with nothing else to cancel: back from the
                        Archive to the main list. */
                     tg_gui_window_show_archive(state, &backend, 0);
@@ -16533,7 +16634,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                               ctx.line_h, hx, hy);
 
                     if (hit >= 0 && hit < state->chat_count &&
-                        !state->in_search && !state->in_filter) {
+                        !state->in_search && !state->in_filter &&
+                        !tg_gui_topics_listed(state)) {
                         tg_gui_notify_override value;
                         const tg_gui_chat *chat = &state->chats[hit];
 
@@ -17604,7 +17706,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->mention_active = 0;
                         if (state->mode == TG_GUI_MODE_CHAT &&
                             tg_gui_session_is_open() &&
-                            state->chat_count > 0) {
+                            state->chat_count > 0 &&
+                            !tg_gui_window_topic_needed(state, &backend)) {
                             tg_gui_attach_menu_open(state, hx, hy,
                                                     ctx.line_h);
                             state->ctx_w = tg_gui_context_menu_measure(
@@ -17659,6 +17762,20 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_paint(state, &backend);
                         }
                         continue;
+                    } else if (hit >= 0 && hit < state->chat_count &&
+                               tg_gui_topics_listed(state) &&
+                               !state->forward_pick_active) {
+                        /* A forum's topic list: a click opens the topic
+                           (no reorder drag: the order is Telegram's). */
+                        state->search_active = 0;
+                        if (state->composing && state->input[0] == '\0') {
+                            state->composing = 0;
+                        }
+                        tg_gui_window_topic_pick(state, hit, &backend, 0);
+                        older_exhausted = 0;
+                        older_cooldown = 0;
+                        picked_secs = msg_secs;   /* swallow the second click */
+                        picked_micros = msg_micros;
                     } else if (hit >= 0 && state->in_search &&
                                state->msg_search_active) {
                         tg_gui_window_open_msg_hit(state, &backend, hit,
@@ -18096,6 +18213,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     tg_gui_window_copy(state->status, sizeof(state->status),
                                        "Open a chat first, then drop the file");
                     tg_gui_window_paint(state, &backend);
+                } else if (tg_gui_window_topic_needed(state, &backend)) {
+                    /* a forum with no topic open: said in the status line */
                 } else if (tg_gui_session_transfer_busy()) {
                     tg_gui_window_copy(state->status, sizeof(state->status),
                                        "A transfer is already running");

@@ -795,6 +795,16 @@ typedef struct tg_gui_state {
        Set when "Edit" is picked from the context menu; the next send routes to
        messages.editMessage instead of sendMessage. */
     unsigned long edit_to_id;
+    /* Forum groups (0.5). topic_view: the sidebar lists the open forum's
+       topics (a row's index is a topic, TG_GUI_TOPIC_BACK_INDEX goes back
+       to the chats). topic_open: the topic the transcript shows, 0 = none
+       (a forum opened shows no messages until a topic is chosen);
+       topic_title its title, for the header. Set by the session. */
+    int topic_view;
+    unsigned long topic_open;
+    char topic_title[TG_GUI_NAME_MAX];
+    int forum_open; /* the open chat is a forum: with no topic open there
+                       is nothing to write into */
 } tg_gui_state;
 
 /* Fills state with the demo conversation the GUI design was signed off on; used
@@ -1108,6 +1118,9 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 /* The index of the sidebar row "More results...", under the hits of a
    search inside a chat: no message has this id. */
 #define TG_GUI_MORE_HITS_INDEX 0xfffffffeUL
+/* The first row of a forum's topic list, "All chats": back to the chat
+   list. No topic has this id. */
+#define TG_GUI_TOPIC_BACK_INDEX 0xfffffffdUL
 /* Answer i of the poll is TG_GUI_CTX_POLL_FIRST + i, under the reactions. */
 #define TG_GUI_CTX_POLL_FIRST 48
 /* Chooser entry i is TG_GUI_CTX_REACTION_FIRST + i, above every other id. */
@@ -1247,6 +1260,11 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
    characters at most). rc is what the session's send returned: 3 = no
    confirmation came, so it may have gone all the same; anything else =
    not sent. refusal is Telegram's own error text, "" when it gave none. */
+/* The sidebar lists an open forum's topics (topic_view, with its first row
+   "All chats" still there: a search or the filter puts other rows in
+   their place). */
+int tg_gui_topics_listed(const tg_gui_state *state);
+
 void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
                               unsigned long size);
 

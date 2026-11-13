@@ -9,6 +9,26 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 ## [Unreleased]
 
 ### Added
+- Topics in forum groups. A group divided into topics opened as one
+  transcript with every topic's messages mixed, each one quoting the
+  line that created its topic, and what was sent landed in General. Now
+  such a group opens on the list of its topics, in place of the chat
+  list: "All chats" first, which goes back, then each topic with its
+  title, its newest message and who wrote it, the time, how many
+  messages are unread, a pin when the group pins it, and the topic's
+  colour as its square. A click, ENTER or an F-key opens a topic: the
+  header says which, the messages are that topic's alone, older ones
+  page in as in any chat, and what is written, replied, attached or
+  polled goes into it. Until a topic is open there is nothing to send,
+  and the status line says so. ESC, or "All chats", brings the chat
+  list back with the topic still open; a click on the group's row shows
+  its topics again. The list is read again every 30 seconds while it is
+  on show, and a topic is marked as read when it is open in front of
+  you. The text client has /topics, which lists them numbered, and
+  /topic n, which reads only that topic from then on (history, new
+  messages, what is sent); /topic alone goes back to every topic. Not
+  yet: creating, renaming or closing topics, the pinned message of a
+  topic, and the "@" count of a topic.
 - Find in chat (Edit menu, Amiga+S): the search box at the top of the
   chat list searches the messages of the open chat on Telegram. Type the
   words and press ENTER; the messages found take the place of the chat

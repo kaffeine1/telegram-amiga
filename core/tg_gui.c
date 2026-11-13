@@ -5710,11 +5710,11 @@ static void tg_gui_paint_header(const tg_gui_state *state,
         const tg_gui_chat *open_chat = 0;
 
         if (state->in_filter || state->in_search ||
-            state->forward_pick_active) {
-            /* The sidebar shows other rows and selected_chat is the one
-               highlighted there, while the title and the messages below are
-               still the open chat's: its avatar comes from the copy taken
-               when it was opened. */
+            state->forward_pick_active || tg_gui_topics_listed(state)) {
+            /* The sidebar shows other rows (a forum's topics among them)
+               and selected_chat is the one highlighted there, while the
+               title and the messages below are still the open chat's: its
+               avatar comes from the copy taken when it was opened. */
             if (state->open_chat_valid) {
                 open_chat = &state->open_chat;
             }
@@ -6915,7 +6915,8 @@ void tg_gui_paint_caret(const tg_gui_state *state, tg_gui_backend *backend)
 void tg_gui_note_open_chat(tg_gui_state *state)
 {
     if (state == 0 || state->selected_chat < 0 ||
-        state->selected_chat >= state->chat_count) {
+        state->selected_chat >= state->chat_count ||
+        tg_gui_topics_listed(state)) { /* a topic's row is no chat */
         return;
     }
     state->open_chat = state->chats[state->selected_chat];
@@ -6931,7 +6932,8 @@ const tg_gui_chat *tg_gui_open_chat_row(const tg_gui_state *state)
         return 0;
     }
     if (state->selected_chat >= 0 &&
-        state->selected_chat < state->chat_count) {
+        state->selected_chat < state->chat_count &&
+        !tg_gui_topics_listed(state)) {
         return &state->chats[state->selected_chat];
     }
     return state->open_chat_valid ? &state->open_chat : 0;
@@ -7180,6 +7182,12 @@ unsigned long tg_gui_react_choice_at(const tg_gui_state *state, int i)
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids);
 
+int tg_gui_topics_listed(const tg_gui_state *state)
+{
+    return state != 0 && state->topic_view && state->chat_count > 0 &&
+           state->chats[0].index == TG_GUI_TOPIC_BACK_INDEX;
+}
+
 void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
                               unsigned long size)
 {
@@ -7204,6 +7212,9 @@ void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
         { "MESSAGE_EMPTY", "the message is empty" },
         { "ENTITY_BOUNDS_INVALID", "Telegram refused the formatting" },
         { "ENTITIES_TOO_LONG", "Telegram refused the formatting" },
+        { "TOPIC_NOT_CHOSEN", "choose a topic in the list first" },
+        { "TOPIC_CLOSED", "this topic is closed" },
+        { "TOPIC_DELETED", "this topic was deleted" },
     };
     char line[80];
     unsigned long k;

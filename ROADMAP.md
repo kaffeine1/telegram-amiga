@@ -1452,36 +1452,44 @@ badge at 4.0 from the window. All of it is the pen table in
 `tg_gui_window.c` and a name table next to the avatar colours; to be
 checked on real screens, since 16-bit RTG and AGA round the pens.
 
-## Planned: topics in forum groups
+## Done for 0.5: topics in forum groups
 
 A group can be turned into a forum: its messages live in topics, each
 with its own title, icon and thread ("General", "News", "Games" and so
 on), and the official clients open such a group on the list of its
 topics, each row with its last message and time, much like the chat
-list itself. This client knows topics only as service lines ("created
-the topic ..."): a forum opens as one transcript with every topic's
-messages mixed, and what one sends lands in General.
+list itself. This client knew topics only as service lines ("created
+the topic ..."): a forum opened as one transcript with every topic's
+messages mixed, each quoting the line that created its topic, and what
+one sent landed in General. With topics in, the next release is 0.5
+(decided 2026-11-13).
 
-The plan follows the desktop client. Opening a forum shows its topics in
-the transcript area, newest activity first, with the topic's icon colour
-standing in for its emoji, its unread count and the last message's
-sender and text. A click opens that topic's thread, the header gets a
-way back to the list, and the composer sends into the topic, so replies
-and new messages stay where they belong. The text client gets /topics
-to list them and /topic <n> to open one.
+As the desktop client does in its chat column, a forum opens on its
+topics in place of the chat list: "All chats" first, then each topic,
+newest activity first, with the topic's colour standing in for its
+emoji, its unread count, a pin, and the newest message with who wrote
+it. A click, ENTER or an F-key opens a topic: the header's second line
+names it, the transcript is its thread alone, paging and the jump to
+the newest work as in a chat, and the composer, the paperclip and the
+polls write into it. With no topic open nothing can be sent, and the
+status line says so. ESC or "All chats" brings the chats back and
+leaves the topic open. The text client has /topics and /topic <n>.
 
-On the wire: the forum flag comes with the group, the topic list from
-the forum-topics method, a topic's thread from messages.getReplies on
-the topic's first message, and a message is sent into a topic by
-naming that message as top_msg_id in its reply header. Telegram has
-moved the topic methods between namespaces in recent layers, so names
-and constructors are checked against the current schema before any
-code is written. Updates already carry the topic of each new message,
-which the unread counts per topic need.
+On the wire (layer 214, TDLib 9581c743097a, and core.telegram.org/api/
+forum): the forum flag is channel flags.30; the list is
+channels.getForumTopics#de560d1 (the topic methods are still in
+channels.* at 214, they moved to messages.* later); a topic's thread,
+General's (id 1) too, is messages.getReplies#22ddd30c on the topic's id,
+as TDLib does; it is read with messages.readDiscussion#f731a9f4; a new
+message names the topic as reply_to_msg_id, and a reply inside it names
+the topic in top_msg_id; General takes messages with no reply header.
+A message's own header says its topic (forum_topic, reply_to_top_id),
+and one that only names its topic is no longer drawn as a reply.
 
-It touches the transcript, the header, the composer and the history
-paging, so it is a feature of its own and not a fix: a slot after the
-0.1 beta, unless forum groups turn out to be where most users are.
+Left for later: creating, renaming, closing and pinning topics; the
+pinned message of a topic (the bar stays off in a forum rather than
+show another topic's); the "@" count of a topic; a notification for a
+message in another topic of the open forum; a draft per topic.
 
 ## Done for 0.2: select several messages, then delete or forward them
 

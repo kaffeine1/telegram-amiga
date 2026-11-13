@@ -301,6 +301,17 @@ int tg_gui_session_transfer_end(char *out_path, unsigned long out_path_size);
    open, 0 otherwise. */
 int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream);
 
+/* Topics of a forum group (0.5). A forum opens on its topic list in the
+   sidebar (tg_gui_state.topic_view, each row's index a topic, the first
+   row TG_GUI_TOPIC_BACK_INDEX) and with no messages. topic_open shows a
+   topic's thread in the transcript, and from then on the composer, the
+   files, the polls and the search go into it. topics_leave puts the chats
+   back in the sidebar and leaves the topic open. */
+int tg_gui_session_forum_open(void);      /* the open chat is a forum */
+unsigned long tg_gui_session_topic(void); /* the topic open, 0 = none */
+int tg_gui_session_topic_open(unsigned long topic_id, FILE *stream);
+void tg_gui_session_topics_leave(void);
+
 /* Pages OLDER history at the top of the open chat: fetches the getHistory page
    just below the oldest message currently shown and PREPENDS it to the transcript.
    allow_drop_newest = 1 lets a full ring evict its newest tail to make room (only

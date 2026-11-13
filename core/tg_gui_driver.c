@@ -958,6 +958,7 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
     }
     state->chat_count = 0;
     state->selected_chat = 0;
+    state->topic_view = 0; /* the chats, not a forum's topics */
     for (i = 0; i < n; ++i) {
         tg_gui_chat *chat;
         char display[TG_GUI_NAME_MAX];
@@ -1220,6 +1221,151 @@ static void tg_gui_search_driver_on_message(void *ctx,
     hit->initials[1] = '\0';
     hit->avatar_color = tg_gui_driver_color_for(who);
     hit->index = row->id; /* a message id here, never a peer */
+}
+
+/* --- topics of a forum (0.5) -------------------------------------------- */
+
+int tg_gui_driver_topic_color(unsigned long rgb)
+{
+    /* Telegram's topic colours and the tint each takes: blue, yellow,
+       violet, green, rose, red -> blue, amber, purple, teal, pink, coral. */
+    static const unsigned long topic_rgb[6] = {
+        0x6fb9f0UL, 0xffd67eUL, 0xcb86dbUL, 0x8eee98UL, 0xff93b2UL, 0xfb6f5fUL
+    };
+    static const int tint[6] = { 5, 4, 2, 0, 3, 1 };
+    unsigned long best = 0xffffffffUL;
+    int pick = 5;
+    int k;
+
+    for (k = 0; k < 6; ++k) {
+        long dr = (long)((rgb >> 16) & 0xffUL) -
+                  (long)((topic_rgb[k] >> 16) & 0xffUL);
+        long dg = (long)((rgb >> 8) & 0xffUL) -
+                  (long)((topic_rgb[k] >> 8) & 0xffUL);
+        long db = (long)(rgb & 0xffUL) - (long)(topic_rgb[k] & 0xffUL);
+        unsigned long d = (unsigned long)(dr * dr + dg * dg + db * db);
+
+        if (d < best) {
+            best = d;
+            pick = tint[k];
+        }
+    }
+    return pick % TG_GUI_AVATAR_COLORS;
+}
+
+void tg_gui_driver_show_topics(tg_gui_state *state,
+                               const tg_chat_topic_row *rows, int count)
+{
+    tg_gui_chat *row;
+    char line[TG_GUI_TEXT_MAX];
+    char who[TG_GUI_NAME_MAX];
+    unsigned long i;
+    int k;
+
+    if (state == 0) {
+        return;
+    }
+    if (state->ctx_chat > 0) {
+        state->ctx_visible = 0; /* the row indices are about to change */
+        state->ctx_chat = 0;
+    }
+    state->chat_count = 0;
+    state->topic_view = 1;
+    row = &state->chats[state->chat_count++];
+    memset(row, 0, sizeof(*row));
+    sprintf(row->name, "%.31s", "All chats");
+    sprintf(row->preview, "%.47s", "Back to the chat list");
+    row->initials[0] = '<';
+    row->index = TG_GUI_TOPIC_BACK_INDEX;
+    for (k = 0; rows != 0 && k < count && state->chat_count < TG_GUI_MAX_CHATS;
+         ++k) {
+        const tg_chat_topic_row *t = &rows[k];
+        const tg_chat_message_row *m = &t->last;
+
+        row = &state->chats[state->chat_count++];
+        memset(row, 0, sizeof(*row));
+        tg_gui_driver_copy_latin1(row->name, sizeof(row->name),
+                                  t->title != 0 ? t->title : "");
+        tg_gui_strip_markers(row->name, sizeof(row->name), row->name);
+        if (row->name[0] == '\0') {
+            sprintf(row->name, "Topic %lu", t->id % 1000000UL);
+        }
+        if (m->text != 0) {
+            who[0] = '\0';
+            if (m->is_service) {
+                who[0] = '\0';
+            } else if (m->is_out) {
+                strcpy(who, "You");
+            } else if (m->sender != 0) {
+                tg_gui_driver_copy_latin1(who, sizeof(who), m->sender);
+                tg_gui_strip_markers(who, sizeof(who), who);
+            }
+            tg_gui_driver_copy_latin1(line, sizeof(line), m->text);
+            if (who[0] != '\0') {
+                char joined[TG_GUI_TEXT_MAX];
+
+                unsigned long j;
+
+                sprintf(joined, "%.40s: ", who);
+                i = (unsigned long)strlen(joined);
+                for (j = 0UL; line[j] != '\0' && i + 1UL < sizeof(joined);
+                     ++j) {
+                    joined[i++] = line[j];
+                }
+                joined[i] = '\0';
+                tg_gui_strip_markers(row->preview, sizeof(row->preview),
+                                     joined);
+            } else {
+                tg_gui_strip_markers(row->preview, sizeof(row->preview), line);
+            }
+            for (i = 0UL; row->preview[i] != '\0'; ++i) {
+                if (row->preview[i] == '\n' || row->preview[i] == '\r' ||
+                    row->preview[i] == '\t') {
+                    row->preview[i] = ' ';
+                }
+            }
+            if (m->has_time) {
+                time_t when = (time_t)m->local_epoch;
+                struct tm *parts = gmtime(&when);
+                unsigned long day = m->local_epoch / TG_GUI_DAY_SECONDS + 1UL;
+
+                if (parts != 0) {
+                    if (state->today != 0UL && day == state->today) {
+                        sprintf(row->time, "%02d:%02d", parts->tm_hour % 24,
+                                parts->tm_min % 60);
+                    } else {
+                        sprintf(row->time, "%02d/%02d", parts->tm_mday % 32,
+                                (parts->tm_mon + 1) % 13);
+                    }
+                }
+            }
+        } else if (t->closed) {
+            sprintf(row->preview, "%.47s", "Closed");
+        }
+        {
+            /* one letter, past an emoji (its two-byte pair) or a blank */
+            const unsigned char *p = (const unsigned char *)row->name;
+
+            while (*p != 0U) {
+                if (*p == 0x80U || *p == 0x81U) {
+                    p += (p[1] != 0U) ? 2 : 1;
+                } else if (*p == ' ') {
+                    ++p;
+                } else {
+                    break;
+                }
+            }
+            row->initials[0] = (char)(*p != 0U ? *p : '#');
+            if (row->initials[0] >= 'a' && row->initials[0] <= 'z') {
+                row->initials[0] = (char)(row->initials[0] - 32);
+            }
+        }
+        row->avatar_color = tg_gui_driver_topic_color(t->color);
+        row->unread = (int)(t->unread > 9999UL ? 9999UL : t->unread);
+        row->pinned = t->pinned;
+        row->is_group = 1;
+        row->index = t->id;
+    }
 }
 
 void tg_gui_search_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
@@ -1782,6 +1928,134 @@ static const char *tg_gui_driver_test_draft(int is_user,
     return 0;
 }
 
+/* A forum's topics in the sidebar: the row back to the chats first, then
+   each topic with its title, newest message and who wrote it, its time,
+   unread count, pin and colour; a list of chats drawn after them ends the
+   topic view. */
+static int tg_gui_driver_topics_self_test(void)
+{
+    static tg_gui_state state;
+    static const unsigned long tints[6][2] = {
+        { 0x6fb9f0UL, 5UL }, { 0xffd67eUL, 4UL }, { 0xcb86dbUL, 2UL },
+        { 0x8eee98UL, 0UL }, { 0xff93b2UL, 3UL }, { 0xfb6f5fUL, 1UL }
+    };
+    tg_chat_topic_row rows[4];
+    tg_chat_list_row chat;
+    tg_gui_chat_driver gui;
+    tg_chat_driver driver;
+    char title[8];
+    int k;
+
+    for (k = 0; k < 6; ++k) {
+        if (tg_gui_driver_topic_color(tints[k][0]) != (int)tints[k][1]) {
+            printf("gui driver self-test: topic colour %06lx\n", tints[k][0]);
+            return 0;
+        }
+    }
+    if (tg_gui_driver_topic_color(0x6ab0e8UL) != 5 ||
+        tg_gui_driver_topic_color(0xf06a5aUL) != 1) {
+        puts("gui driver self-test: a colour near a topic one");
+        return 0;
+    }
+    memset(&state, 0, sizeof(state));
+    memset(rows, 0, sizeof(rows));
+    state.today = 1700000000UL / TG_GUI_DAY_SECONDS + 1UL;
+    rows[0].id = 1UL;
+    rows[0].title = "General";
+    rows[0].color = 0x6fb9f0UL;
+    rows[0].unread = 3UL;
+    rows[0].last.text = "hi\nall";
+    rows[0].last.sender = "Ann";
+    rows[0].last.has_time = 1;
+    rows[0].last.local_epoch = 1700000000UL; /* today, 22:13 */
+    rows[1].id = 40UL;
+    rows[1].title = "news";
+    rows[1].color = 0xfb6f5fUL;
+    rows[1].pinned = 1;
+    rows[1].last.text = "\034mine\034";
+    rows[1].last.is_out = 1;
+    rows[1].last.sender = "Me";
+    rows[1].last.has_time = 1;
+    rows[1].last.local_epoch = 1699000000UL; /* an earlier day */
+    /* an emoji before the word (U+1F600, which the sheet draws) */
+    title[0] = (char)0xf0;
+    title[1] = (char)0x9f;
+    title[2] = (char)0x98;
+    title[3] = (char)0x80;
+    title[4] = ' ';
+    title[5] = 'x';
+    title[6] = '\0';
+    rows[2].id = 41UL;
+    rows[2].title = title;
+    rows[2].closed = 1;
+    rows[3].id = 42UL;
+    rows[3].title = "";
+    rows[3].last.text = "Ann created the topic";
+    rows[3].last.sender = "Ann";
+    rows[3].last.is_service = 1;
+    tg_gui_driver_show_topics(&state, rows, 4);
+    if (state.chat_count != 5 || !state.topic_view ||
+        !tg_gui_topics_listed(&state) ||
+        state.chats[0].index != TG_GUI_TOPIC_BACK_INDEX ||
+        strcmp(state.chats[0].name, "All chats") != 0) {
+        puts("gui driver self-test: topic list head");
+        return 0;
+    }
+    if (state.chats[1].index != 1UL ||
+        strcmp(state.chats[1].name, "General") != 0 ||
+        strcmp(state.chats[1].preview, "Ann: hi all") != 0 ||
+        strcmp(state.chats[1].time, "22:13") != 0 ||
+        state.chats[1].unread != 3 || state.chats[1].avatar_color != 5 ||
+        strcmp(state.chats[1].initials, "G") != 0) {
+        printf("gui driver self-test: topic row [%s] [%s] [%s] %d %d [%s]\n",
+               state.chats[1].name, state.chats[1].preview,
+               state.chats[1].time, state.chats[1].unread,
+               state.chats[1].avatar_color, state.chats[1].initials);
+        return 0;
+    }
+    if (state.chats[2].index != 40UL ||
+        strcmp(state.chats[2].preview, "You: mine") != 0 ||
+        strcmp(state.chats[2].time, "03/11") != 0 || !state.chats[2].pinned ||
+        state.chats[2].avatar_color != 1 ||
+        strcmp(state.chats[2].initials, "N") != 0) {
+        printf("gui driver self-test: own topic row [%s] [%s] %d\n",
+               state.chats[2].preview, state.chats[2].time,
+               state.chats[2].avatar_color);
+        return 0;
+    }
+    if (((unsigned char)state.chats[3].name[0] != 0x80U &&
+         (unsigned char)state.chats[3].name[0] != 0x81U) ||
+        strcmp(state.chats[3].initials, "X") != 0 ||
+        strcmp(state.chats[3].preview, "Closed") != 0 ||
+        strcmp(state.chats[4].name, "Topic 42") != 0 ||
+        strcmp(state.chats[4].preview, "Ann created the topic") != 0) {
+        printf("gui driver self-test: topic rows [%s] [%s] [%s] [%s]\n",
+               state.chats[3].initials, state.chats[3].preview,
+               state.chats[4].name, state.chats[4].preview);
+        return 0;
+    }
+    /* the chats drawn again: no topic list any more */
+    tg_gui_chat_driver_bind(&gui, &state, &driver);
+    memset(&chat, 0, sizeof(chat));
+    chat.index = 7UL;
+    strcpy(chat.name, "Bob");
+    chat.is_user = 1;
+    driver.on_chat_list_changed(driver.ctx, &chat, 1);
+    if (state.topic_view || tg_gui_topics_listed(&state) ||
+        state.chat_count != 1) {
+        puts("gui driver self-test: the topic view outlives the chats");
+        return 0;
+    }
+    /* a list whose first row is not "All chats" is not the topics */
+    tg_gui_driver_show_topics(&state, rows, 1);
+    state.chats[0].index = 3UL;
+    if (tg_gui_topics_listed(&state)) {
+        puts("gui driver self-test: other rows taken for the topics");
+        return 0;
+    }
+    return 1;
+}
+
 int tg_gui_driver_self_test(void)
 {
     static tg_gui_state state; /* over half a megabyte on a 64-bit build: not on the stack */
@@ -1790,6 +2064,7 @@ int tg_gui_driver_self_test(void)
     int i;
 
     if (!tg_gui_driver_reactions_self_test()) return 2;
+    if (!tg_gui_driver_topics_self_test()) return 2;
     if (!tg_gui_driver_notify_mute_self_test()) {
         return 2;
     }

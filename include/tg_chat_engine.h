@@ -114,6 +114,21 @@ typedef struct tg_chat_message_row {
     int reactions_unknown;
 } tg_chat_message_row;
 
+/* One topic of a forum group, as its list shows it (0.5): the topic is
+   named by the id of its first message, General is 1. `last` is its newest
+   message, resolved like a transcript row; last.text == NULL when the reply
+   did not bring it. */
+typedef struct tg_chat_topic_row {
+    unsigned long id;
+    const char *title;      /* UTF-8 */
+    unsigned long color;    /* 0xRRGGBB: what stands for the topic's emoji */
+    unsigned long unread;
+    unsigned long mentions; /* unread messages that mention this account */
+    int pinned;
+    int closed;             /* only admins may write in it */
+    tg_chat_message_row last;
+} tg_chat_topic_row;
+
 /* One resolved chat-list row. The engine parses the peer cache into these
    (resolving the display name + whether it is a @username, the user-vs-group
    kind for grouping, unread and the open-chat marker); a driver renders them --

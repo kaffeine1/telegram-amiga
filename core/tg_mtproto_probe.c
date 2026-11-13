@@ -709,6 +709,15 @@ static const char *tg_mtproto_history_search_query = 0;
 /* getHistory add_offset: negative centres the page on offset_id (the jump
    to a search hit); 0 everywhere else. */
 static long tg_mtproto_history_add_offset_override = 0L;
+/* The forum topic the history reads (0 = the whole chat): getReplies on
+   it instead of getHistory, and a search inside it. Set while a topic is
+   open, by the window's session or the text client. */
+static unsigned long tg_mtproto_history_topic_id = 0UL;
+/* The open chat is a forum, and the topic its transcript shows (0 = none
+   chosen yet): see "topics of a forum group" by the chat open. */
+static int tg_gui_forum = 0;
+static unsigned long tg_gui_topic = 0UL;
+static unsigned int tg_gui_session_changes; /* defined with the tick */
 
 /* Server-side total message count for the last getHistory, used by the open path
    to arm the forced "pull older" scrollbar when the chat has more history than the
@@ -12765,7 +12774,8 @@ static void tg_chat_history_add(const char *text)
     "          /history /forward /forwardto /react /reactions /ids\n" \
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
-    "          /voters /markread /markunread /help /quit\n"
+    "          /voters /markread /markunread /topics /topic\n" \
+    "          /help /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -15100,18 +15110,31 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     tg_gui_last_hist_limit = limit;
     for (;;) {
         tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        /* A forum topic reads its own thread; the whole chat otherwise. A
+           topic only makes sense in a channel (a forum is a supergroup). */
         if ((tg_mtproto_history_search_query != 0
-                 ? tg_mtproto_build_messages_search_peer(
+                 ? tg_mtproto_build_messages_search_peer_topic(
                        &writer, peer_constructor, peer_id_hi, peer_id_lo,
                        access_hash_hi, access_hash_lo, has_access_hash,
                        tg_mtproto_history_search_query,
-                       tg_mtproto_history_offset_id_override, limit)
-                 : tg_mtproto_build_messages_get_history_peer_at(
-                       &writer, peer_constructor, peer_id_hi, peer_id_lo,
-                       access_hash_hi, access_hash_lo, has_access_hash,
-                       tg_mtproto_history_offset_id_override,
-                       tg_mtproto_history_add_offset_override, limit)) !=
-            TG_MTPROTO_TL_OK) {
+                       tg_mtproto_history_offset_id_override, limit,
+                       peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR
+                           ? tg_mtproto_history_topic_id : 0UL)
+                 : (tg_mtproto_history_topic_id != 0UL &&
+                    peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR)
+                       ? tg_mtproto_build_messages_get_replies_peer_at(
+                             &writer, peer_constructor, peer_id_hi,
+                             peer_id_lo, access_hash_hi, access_hash_lo,
+                             has_access_hash, tg_mtproto_history_topic_id,
+                             tg_mtproto_history_offset_id_override,
+                             tg_mtproto_history_add_offset_override, limit)
+                       : tg_mtproto_build_messages_get_history_peer_at(
+                             &writer, peer_constructor, peer_id_hi,
+                             peer_id_lo, access_hash_hi, access_hash_lo,
+                             has_access_hash,
+                             tg_mtproto_history_offset_id_override,
+                             tg_mtproto_history_add_offset_override,
+                             limit)) != TG_MTPROTO_TL_OK) {
             tg_mtproto_close_quiet_stream(quiet, stream);
             return 2;
         }
@@ -16700,6 +16723,8 @@ static const char *const tg_chat_help_lines[] = {
     "  /markunread     mark this chat as unread",
     "  /vote n [n..]   vote the last poll shown here; /vote none takes it back",
     "  /voters         who voted in that poll, when its votes are public",
+    "  /topics         the topics of this group, when it is a forum",
+    "  /topic n        only topic n of that list; /topic alone: all again",
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
     "Support my work on Patreon: www.patreon.com/c/kaffeine1",
@@ -16862,6 +16887,94 @@ static void tg_mtproto_chat_print_help(FILE *stream)
     tg_console_ui_end_line(stream);
     tg_console_ui_reset(stream);
     tg_console_ui_end_line(stream);
+}
+
+/* --- the text client and a forum's topics (0.5) ------------------------
+   /topics lists them, numbered; /topic n reads only that topic from then
+   on (history, new messages, what is sent); another chat forgets it. */
+static tg_mtproto_forum_topic_list tg_chat_topics;
+static char tg_chat_topic_peer[32]; /* the chat tg_chat_topics belongs to */
+
+/* channels.getForumTopics for the chat at that cache index. 0 = read, 1 =
+   not a forum, 2 = could not ask. */
+static int tg_mtproto_chat_fetch_topics_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index, FILE *stream)
+{
+    unsigned char query[96];
+    static const char label[] = "mtproto channels.getForumTopics";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+
+    tg_chat_topics.count = 0UL;
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc, &ph,
+                                        &pl, &ahh, &ahl, &hah, stream,
+                                        label) != 0) {
+        return 2;
+    }
+    if (pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR || !hah) {
+        return 1;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_channels_get_forum_topics(&writer, ph, pl, ahh, ahl,
+                                                   TG_MTPROTO_TOPICS_MAX) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_send_saved_query_on_context(
+            host, port, api_id, auth_file, dc_id_text, context, query,
+            writer.length, &result, stream, label, 200U) != 0) {
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        return 1; /* CHANNEL_FORUM_MISSING: an ordinary group */
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        tg_mtproto_parse_forum_topics(result.result_constructor,
+                                      result.result_body,
+                                      result.result_body_length,
+                                      &tg_chat_topics) != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    sprintf(tg_chat_topic_peer, "%.31s", peer_index);
+    return 0;
+}
+
+/* The list as /topics prints it: number, title, what is unread. */
+static void tg_mtproto_chat_print_topics(FILE *stream)
+{
+    FILE *cap = tg_console_tui_capture_begin(stream);
+    unsigned long k;
+
+    fprintf(cap, "Topics (/topic n reads one):\n");
+    for (k = 0UL; k < tg_chat_topics.count; ++k) {
+        const tg_mtproto_forum_topic *t = &tg_chat_topics.topics[k];
+
+        fprintf(cap, "%3lu  ", k + 1UL);
+        tg_mtproto_print_cache_text(cap, t->title[0] != '\0' ? t->title
+                                                             : "(no title)");
+        if (t->unread_count > 0UL) {
+            fprintf(cap, "  (%lu new)", t->unread_count % 100000UL);
+        }
+        if (t->closed) {
+            fprintf(cap, "  [closed]");
+        }
+        if (t->id == tg_mtproto_history_topic_id) {
+            fprintf(cap, "  <- reading");
+        }
+        fprintf(cap, "\n");
+    }
+    if (tg_chat_topics.count < tg_chat_topics.total) {
+        fprintf(cap, "(the %lu most active of %lu)\n", tg_chat_topics.count,
+                tg_chat_topics.total);
+    }
+    tg_console_tui_capture_end(cap, stream);
 }
 
 static int tg_mtproto_chat_open_history(FILE *stream,
@@ -17397,6 +17510,12 @@ int tg_mtproto_auth_chat_file(const char *host,
             line_length = 0UL;
             tg_chat_caret = 0UL;
         }
+        if (tg_mtproto_history_topic_id != 0UL &&
+            strcmp(peer_index, tg_chat_topic_peer) != 0) {
+            /* another chat: the topic was the forum's */
+            tg_mtproto_history_topic_id = 0UL;
+            tg_mtproto_send_set_topic(0UL);
+        }
         if (tg_mtproto_tui_apply_reactions(stream, peer_cache_file, peer_index) |
             tg_mtproto_tui_apply_webpages(stream)) {
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label,
@@ -17786,6 +17905,68 @@ int tg_mtproto_auth_chat_file(const char *host,
                     fprintf(tui_cap, "No message found.\n");
                 }
                 tg_console_tui_capture_end(tui_cap, stream);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (strcmp(line, "/topics") == 0 ||
+            tg_mtproto_chat_named_command_arg(line, "/topic", &cmd_arg)) {
+            int listing = strcmp(line, "/topics") == 0;
+            unsigned long n = 0UL;
+            int frc = 0;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Choose a chat first with /list or /add name.");
+            } else if (!listing && (cmd_arg == 0 || cmd_arg[0] == '\0' ||
+                                    strcmp(cmd_arg, "0") == 0)) {
+                tg_mtproto_history_topic_id = 0UL;
+                tg_mtproto_send_set_topic(0UL);
+                tg_mtproto_chat_print_system_line(
+                    stream, "Every topic again: /history shows them.");
+            } else if (!listing &&
+                       (tg_mtproto_parse_ulong_arg(cmd_arg, &n) != 0 ||
+                        n == 0UL)) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Use /topic and a number from /topics.");
+            } else {
+                if (listing || tg_chat_topics.count == 0UL ||
+                    strcmp(tg_chat_topic_peer, peer_index) != 0) {
+                    quiet = tg_mtproto_open_quiet_stream(stream);
+                    frc = tg_mtproto_chat_fetch_topics_on_context(
+                        host, port, api_id, auth_file, dc_id_text,
+                        &chat_context, peer_cache_file, peer_index, quiet);
+                    tg_mtproto_close_quiet_stream(quiet, stream);
+                }
+                if (frc == 1) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, "This chat has no topics.");
+                } else if (frc != 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, "Telegram did not give the topics. Try again.");
+                } else if (listing) {
+                    tg_mtproto_chat_print_topics(stream);
+                } else if (n > tg_chat_topics.count) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, "No topic with that number: /topics lists "
+                                "them.");
+                } else {
+                    const tg_mtproto_forum_topic *t =
+                        &tg_chat_topics.topics[n - 1UL];
+                    FILE *cap = tg_console_tui_capture_begin(stream);
+
+                    tg_mtproto_history_topic_id = t->id;
+                    tg_mtproto_send_set_topic(t->id);
+                    fprintf(cap, "Topic: ");
+                    tg_mtproto_print_cache_text(cap, t->title);
+                    fprintf(cap, " (what you write goes there; /topic alone: "
+                                 "every topic)\n");
+                    tg_console_tui_capture_end(cap, stream);
+                    last_seen_message_id = 0UL;
+                    peer_history_ready = 0; /* its messages, from the top */
+                }
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
@@ -23229,7 +23410,7 @@ static void tg_gui_draft_enter(void)
     if (gst == 0 || gst->mode != TG_GUI_MODE_CHAT) {
         return;
     }
-    text = tg_gui_session_state.open_peer_constructor != 0UL
+    text = tg_gui_session_state.open_peer_constructor != 0UL && !tg_gui_forum
                ? tg_gui_draft_lookup(
                      tg_gui_session_state.open_peer_constructor ==
                          TG_MTPROTO_PEER_USER_CONSTRUCTOR,
@@ -23277,7 +23458,8 @@ static void tg_gui_draft_leave(FILE *stream)
 
     if (!tg_gui_session_state.open || stream == 0 ||
         tg_gui_session_state.open_peer_constructor == 0UL ||
-        !tg_gui_draft_composer_free(gst)) {
+        !tg_gui_draft_composer_free(gst) ||
+        tg_gui_forum) { /* a topic's text is no draft of the whole chat */
         return;
     }
     is_user = tg_gui_session_state.open_peer_constructor ==
@@ -23634,6 +23816,13 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
         tg_gui_session_state.open_peer_constructor == 0UL) {
         return 0;
     }
+    if (tg_gui_forum) {
+        /* A forum's pins belong to its topics: no bar for now, rather
+           than one from another topic. */
+        tg_gui_pinned_count = 0;
+        tg_gui_pinned_at = 0;
+        return tg_gui_pinned_show();
+    }
     if (tg_shared_message_texts_busy) {
         tg_gui_pinned_pending = 1; /* the list is in use: next time */
         return 0;
@@ -23766,6 +23955,9 @@ static int tg_gui_mentions_show(void)
     int n = tg_chat_dialog_unread_mentions > 999UL
                 ? 999 : (int)tg_chat_dialog_unread_mentions;
 
+    if (tg_gui_forum) {
+        n = 0; /* a forum's count spans its topics: each row has its own */
+    }
     if (gst == 0 || gst->unread_mentions == n) {
         return 0;
     }
@@ -24472,6 +24664,299 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
 
 static void tg_gui_session_fetch_open_avatar(FILE *stream);
 
+/* --- topics of a forum group (0.5) -------------------------------------
+   A forum opens on the list of its topics in the sidebar, under a first row
+   back to the chats, and with no messages: they come when a topic is
+   chosen. The transcript then shows that topic's thread (getReplies), the
+   composer writes into it, and the tick follows it. Leaving the forum for
+   another chat forgets the topic; opening the same forum again keeps it.
+   tg_gui_forum and tg_gui_topic are declared at the top of the file. */
+#if defined(__MORPHOS__) || defined(__MORPHOS) || defined(__m68k__)
+#define TG_GUI_TOPICS_PAGE 20UL
+#else
+#define TG_GUI_TOPICS_PAGE 40UL
+#endif
+#define TG_GUI_TOPICS_SECONDS 30UL /* how often the open list is read again */
+#define TG_GUI_TOPIC_TEXT_MAX 128U
+
+static unsigned long tg_gui_topic_wanted = 0UL; /* the next open goes there */
+static int tg_gui_topics_shown = 0; /* the sidebar is to list the topics */
+static tg_mtproto_forum_topic_list tg_gui_topic_list;
+static int tg_gui_topic_row_count = 0;
+#if !defined(TG_NO_GUI)
+static time_t tg_gui_topics_read_at = (time_t)0;
+/* Each listed topic as its row shows it: the rows point into the texts,
+   kept here so the list can be drawn again without asking (the list of
+   chats is drawn again by many things, and the topics take its place). */
+static tg_chat_topic_row tg_gui_topic_rows[TG_MTPROTO_TOPICS_MAX];
+static char tg_gui_topic_texts[TG_MTPROTO_TOPICS_MAX][TG_GUI_TOPIC_TEXT_MAX];
+static char tg_gui_topic_whos[TG_MTPROTO_TOPICS_MAX][64];
+#endif
+
+/* The history, the search and every message built follow the topic open. */
+static void tg_gui_topic_apply(void)
+{
+    unsigned long topic = tg_gui_forum ? tg_gui_topic : 0UL;
+
+    tg_mtproto_history_topic_id = topic;
+    tg_mtproto_send_set_topic(topic);
+}
+
+/* A forum no longer open: nothing of its topics stays in force. */
+static void tg_gui_topic_forget(void)
+{
+    tg_gui_forum = 0;
+    tg_gui_topic = 0UL;
+    tg_gui_topic_wanted = 0UL;
+    tg_gui_topics_shown = 0;
+    tg_gui_topic_row_count = 0;
+    tg_gui_topic_list.count = 0UL;
+    tg_gui_topic_apply();
+}
+
+#if !defined(TG_NO_GUI)
+static const tg_mtproto_forum_topic *tg_gui_topic_find(unsigned long id)
+{
+    unsigned long k;
+
+    for (k = 0UL; k < tg_gui_topic_list.count; ++k) {
+        if (tg_gui_topic_list.topics[k].id == id) {
+            return &tg_gui_topic_list.topics[k];
+        }
+    }
+    return 0;
+}
+
+/* The header's second line: the open topic's title, or what to do. */
+static void tg_gui_topic_subtitle(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    const tg_mtproto_forum_topic *t;
+
+    if (gst == 0) {
+        return;
+    }
+    gst->forum_open = tg_gui_forum;
+    gst->topic_open = tg_gui_forum ? tg_gui_topic : 0UL;
+    gst->topic_title[0] = '\0';
+    if (!tg_gui_forum) {
+        return;
+    }
+    t = tg_gui_topic_find(tg_gui_topic);
+    if (tg_gui_topic != 0UL && t != 0) {
+        tg_gui_driver_text_from_utf8(gst->topic_title,
+                                     sizeof(gst->topic_title), t->title);
+        tg_gui_strip_markers(gst->topic_title, sizeof(gst->topic_title),
+                             gst->topic_title);
+    } else if (tg_gui_topic == TG_MTPROTO_TOPIC_GENERAL) {
+        strcpy(gst->topic_title, "General");
+    }
+    if (tg_gui_topic != 0UL) {
+        sprintf(gst->subtitle, "%.60s",
+                gst->topic_title[0] != '\0' ? gst->topic_title : "Topic");
+    } else {
+        sprintf(gst->subtitle, "%.60s", "Topics: choose one on the left");
+    }
+}
+
+/* The sidebar may show the topics: not while it picks a forward's
+   destination, holds the hits of a search, or filters the chats. */
+static int tg_gui_topics_may_show(const tg_gui_state *gst)
+{
+    return gst != 0 && !gst->forward_pick_active && !gst->msg_search_active &&
+           !gst->in_filter && !gst->in_search && !gst->search_active;
+}
+
+/* The topics into the sidebar again, as last read, the open one
+   highlighted. 1 = drawn. */
+static int tg_gui_topics_project(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int i;
+
+    if (gst == 0 || !tg_gui_forum || !tg_gui_topics_shown ||
+        !tg_gui_topics_may_show(gst)) {
+        return 0;
+    }
+    tg_gui_driver_show_topics(gst, tg_gui_topic_rows, tg_gui_topic_row_count);
+    gst->selected_chat = -1;
+    for (i = 1; i < gst->chat_count; ++i) {
+        if (tg_gui_topic != 0UL && gst->chats[i].index == tg_gui_topic) {
+            gst->selected_chat = i;
+            gst->chats[i].unread = 0; /* reading it now */
+            break;
+        }
+    }
+    gst->nav_chat = -1;
+    tg_gui_topic_subtitle();
+    return 1;
+}
+
+/* Reads the open forum's topics (channels.getForumTopics, newest activity
+   first) with each one's newest message, and puts them in the sidebar when
+   it may show them. 1 = read, 0 = no forum is open, -1 = could not. */
+static int tg_gui_session_fetch_topics(FILE *stream)
+{
+    unsigned char query[96];
+    static const char label[] = "gui forum topics";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long k;
+    unsigned long j;
+    long display_delta;
+    int hah;
+    int rc;
+    int n;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || !tg_gui_forum) {
+        return 0;
+    }
+    if (tg_shared_message_texts_busy) {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "topics peer") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl) ||
+        pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR || !hah) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (tg_mtproto_build_channels_get_forum_topics(
+              &writer, ph, pl, ahh, ahl, TG_GUI_TOPICS_PAGE) ==
+              TG_MTPROTO_TL_OK &&
+          tg_gui_session_peer_request(query, writer.length, &result, label, 0,
+                                      0UL, quiet) == 0 &&
+          tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
+             ? 0 : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_topics_read_at = time(0);
+    if (rc != 0 ||
+        tg_mtproto_parse_forum_topics(result.result_constructor,
+                                      result.result_body,
+                                      result.result_body_length,
+                                      &tg_gui_topic_list) !=
+            TG_MTPROTO_TL_OK) {
+        tg_gui_log("topics: could not read them");
+        return -1;
+    }
+    tg_shared_message_texts_busy = 1;
+    memset(&tg_shared_message_texts, 0, sizeof(tg_shared_message_texts));
+    if (tg_gui_topic_list.messages_offset != 0UL &&
+        tg_gui_topic_list.messages_offset < result.result_body_length) {
+        const unsigned char *at =
+            result.result_body + tg_gui_topic_list.messages_offset;
+        unsigned long left =
+            result.result_body_length - tg_gui_topic_list.messages_offset;
+
+        (void)tg_mtproto_parse_message_text_list(
+            TG_MTPROTO_MESSAGES_MESSAGES_CONSTRUCTOR, at, left,
+            &tg_shared_message_texts);
+        tg_mtproto_parse_message_peers(at, left, &tg_chat_sender_cache);
+    }
+    display_delta = tg_mtproto_display_delta(
+        tg_gui_session_state.context.server_time_delta_seconds,
+        tg_mtproto_local_clock_skew());
+    n = 0;
+    for (k = 0UL; k < tg_gui_topic_list.count; ++k) {
+        const tg_mtproto_forum_topic *t = &tg_gui_topic_list.topics[k];
+        tg_chat_topic_row *row = &tg_gui_topic_rows[n];
+
+        if (t->hidden && t->id == TG_MTPROTO_TOPIC_GENERAL) {
+            continue; /* folded away by the admins, as the other clients do */
+        }
+        memset(row, 0, sizeof(*row));
+        row->id = t->id;
+        row->title = t->title;
+        row->color = t->icon_color;
+        row->unread = t->unread_count;
+        row->mentions = t->unread_mentions;
+        row->pinned = t->pinned;
+        row->closed = t->closed;
+        for (j = 0UL; j < tg_shared_message_texts.count; ++j) {
+            const tg_mtproto_message_text *m =
+                &tg_shared_message_texts.messages[j];
+            const char *who;
+
+            if (m->id != t->top_message) {
+                continue;
+            }
+            who = tg_mtproto_cache_user_name(&tg_chat_sender_cache,
+                                             m->from_id_hi, m->from_id_lo);
+            row->last.id = m->id;
+            row->last.is_out = tg_mtproto_message_is_own(m, pc);
+            tg_gui_topic_whos[n][0] = '\0';
+            if (who != 0) {
+                tg_mtproto_copy_utf8_name(tg_gui_topic_whos[n],
+                                          sizeof(tg_gui_topic_whos[n]), who);
+                row->last.sender = tg_gui_topic_whos[n];
+            }
+            if (m->service_action != 0UL) {
+                tg_mtproto_service_text(m, row->last.is_out ? "You" : who,
+                                        row->last.is_out, 0,
+                                        tg_gui_topic_texts[n],
+                                        sizeof(tg_gui_topic_texts[n]));
+                row->last.is_service = 1;
+            } else {
+                tg_mtproto_copy_utf8_name(tg_gui_topic_texts[n],
+                                          sizeof(tg_gui_topic_texts[n]),
+                                          m->text);
+            }
+            row->last.text = tg_gui_topic_texts[n];
+            if (m->date != 0UL) {
+                row->last.has_time = 1;
+                row->last.local_epoch =
+                    tg_mtproto_chat_local_epoch(m->date, display_delta);
+            }
+            break;
+        }
+        ++n;
+    }
+    tg_gui_topic_row_count = n;
+    tg_shared_message_texts_busy = 0;
+    (void)tg_gui_topics_project();
+    tg_gui_topic_subtitle();
+    tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+    {
+        char line[48];
+
+        sprintf(line, "topics: %lu of %lu", tg_gui_topic_list.count,
+                tg_gui_topic_list.total);
+        tg_gui_log(line);
+    }
+    return 1;
+}
+#endif /* !TG_NO_GUI */
+
+/* The transcript of a forum with no topic chosen: one line that says so. */
+static void tg_gui_topic_hint(void)
+{
+    tg_chat_message_row row;
+
+    if (tg_gui_session_state.driver.on_message == 0) {
+        return;
+    }
+    memset(&row, 0, sizeof(row));
+    row.is_service = 1;
+    row.is_group = 1;
+    row.text = "This group is divided into topics: choose one in the list";
+    tg_gui_session_state.driver.on_message(tg_gui_session_state.driver.ctx,
+                                           &row);
+}
+
 /* When the open chat's reactions were last polled (0 = not yet). */
 #define TG_GUI_SESSION_REACTIONS_SECONDS 20UL
 static time_t tg_gui_session_reactions_polled = (time_t)0;
@@ -24500,6 +24985,16 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         strcmp(next_index, tg_gui_session_state.current_peer_index) != 0;
     if (other_chat) {
         tg_gui_draft_leave(stream);
+        tg_gui_topic_forget(); /* another chat: its topics are not this one's */
+    }
+    {
+        /* A topic chosen in the list opens through here (the same chat). */
+        unsigned long wanted = tg_gui_topic_wanted;
+
+        tg_gui_topic_wanted = 0UL;
+        if (wanted != 0UL) {
+            tg_gui_topic = wanted;
+        }
     }
     tg_chat_reactions_count = 0;
     tg_chat_webpage_count = 0UL;
@@ -24603,21 +25098,53 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
                 (pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR) ? 1 : 0;
         }
     }
+    /* A forum, as the chats Telegram sent this run said: it opens on its
+       topics. Not known yet (its first open this run), the history below
+       brings the chat and says so. */
+    tg_gui_forum = tg_gui_session_state.open_peer_constructor ==
+                       TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
+                   tg_mtproto_channel_is_forum(
+                       tg_gui_session_state.open_peer_id_hi,
+                       tg_gui_session_state.open_peer_id_lo);
+    if (!tg_gui_forum) {
+        tg_gui_topic = 0UL;
+    }
+    tg_gui_topic_apply();
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL); /* the recent history can stream */
     printed = 0UL;
     /* Route the resolved rows into the GUI transcript (in + out), then restore
        the console default. */
     tg_chat_message_driver_override = &tg_gui_session_state.driver;
-    (void)tg_mtproto_auth_print_history_text_peer_on_context(
-        tg_gui_session_state.host, tg_gui_session_state.port,
-        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
-        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
-        tg_gui_session_state.peer_cache_file,
-        tg_gui_session_state.current_peer_index, history_limit, quiet,
-        &tg_gui_session_state.last_seen_message_id, &printed, 0, 1, 0,
-        tg_gui_session_state.current_peer_label,
-        tg_gui_session_state.own_label);
+    if (tg_gui_forum && tg_gui_topic == 0UL) {
+        tg_gui_topic_hint(); /* no messages before a topic is chosen */
+        printed = 1UL;
+    } else {
+        (void)tg_mtproto_auth_print_history_text_peer_on_context(
+            tg_gui_session_state.host, tg_gui_session_state.port,
+            tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+            tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, history_limit, quiet,
+            &tg_gui_session_state.last_seen_message_id, &printed, 0, 1, 0,
+            tg_gui_session_state.current_peer_label,
+            tg_gui_session_state.own_label);
+        if (!tg_gui_forum &&
+            tg_gui_session_state.open_peer_constructor ==
+                TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
+            tg_mtproto_channel_is_forum(tg_gui_session_state.open_peer_id_hi,
+                                        tg_gui_session_state.open_peer_id_lo) &&
+            tg_gui_session_state.gui_driver.state != 0) {
+            /* The history said it is a forum: its topics instead. */
+            tg_gui_forum = 1;
+            tg_gui_topic = 0UL;
+            tg_gui_topic_apply();
+            tg_gui_session_state.gui_driver.state->message_count = 0;
+            tg_gui_session_state.gui_driver.state->msg_gen++;
+            tg_gui_session_state.last_seen_message_id = 0UL;
+            tg_gui_topic_hint();
+        }
+    }
     tg_chat_message_driver_override = 0;
     if (printed == 0UL) {
         /* Zero rows means the history call failed or filtered everything --
@@ -24638,6 +25165,33 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
              (unsigned long)tg_gui_session_state.gui_driver.state->message_count)
                 ? 1 : 0;
     }
+#if !defined(TG_NO_GUI)
+    if (tg_gui_forum) {
+        tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+        if (tg_gui_topic == 0UL && gst != 0) {
+            gst->more_above = 0; /* the hint has nothing above it */
+        }
+        /* The list is read when it is not on show (the forum opened from
+           the chats) or is getting old; a topic picked in a fresh list
+           only highlights its row. */
+        if (!tg_gui_topics_shown || gst == 0 || !gst->topic_view ||
+            tg_gui_topic_row_count == 0 ||
+            (unsigned long)(time(0) - tg_gui_topics_read_at) >= 10UL) {
+            tg_gui_topics_shown = 1;
+            if (tg_gui_session_fetch_topics(quiet) <= 0) {
+                (void)tg_gui_topics_project(); /* what was read before */
+            }
+        } else {
+            (void)tg_gui_topics_project();
+        }
+        tg_gui_topic_subtitle();
+    } else if (tg_gui_session_state.gui_driver.state != 0) {
+        tg_gui_session_state.gui_driver.state->forum_open = 0;
+        tg_gui_session_state.gui_driver.state->topic_open = 0UL;
+        tg_gui_session_state.gui_driver.state->topic_title[0] = '\0';
+    }
+#endif
     /* One getPeerDialogs read so own messages already read by the peer show the
        double-check at open (the tick refreshes it live thereafter). Now ALSO on
        MorphOS: the freeze this was disabled for was the first-tick repaint racing
@@ -24681,8 +25235,60 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     }
     tg_gui_pinned_chat_opened(other_chat);
     tg_gui_read_chat_opened(other_chat);
+#if !defined(TG_NO_GUI)
+    if (other_chat && !tg_gui_forum &&
+        tg_gui_session_state.gui_driver.state != 0 &&
+        tg_gui_session_state.gui_driver.state->topic_view) {
+        /* a forum's topics were on show: the chats come back */
+        tg_gui_session_state.gui_driver.state->topic_view = 0;
+        tg_gui_session_reload_chats();
+    }
+#endif
     tg_gui_log("open_chat: done");
     return 1; /* the selection changed -> always repaint */
+}
+
+/* --- forum topics: what the window and the text client ask -------------- */
+int tg_gui_session_forum_open(void)
+{
+    return tg_gui_session_state.open && tg_gui_forum;
+}
+
+unsigned long tg_gui_session_topic(void)
+{
+    return tg_gui_forum ? tg_gui_topic : 0UL;
+}
+
+/* Public: opens a topic of the open forum in the transcript (its id, as
+   the topic list gives it). 1 = opened, -1 = no forum is open. */
+int tg_gui_session_topic_open(unsigned long topic_id, FILE *stream)
+{
+    unsigned long index;
+
+    if (!tg_gui_session_state.open || stream == 0 || !tg_gui_forum ||
+        topic_id == 0UL ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+    index = tg_gui_session_current_peer_index();
+    if (index == 0UL) {
+        return -1;
+    }
+    tg_gui_topic_wanted = topic_id;
+    return tg_gui_session_open_chat(index, stream) != 0 ? 1 : -1;
+}
+
+/* Public: the sidebar goes back from the topics to the chats; the topic
+   stays open in the transcript. */
+void tg_gui_session_topics_leave(void)
+{
+    tg_gui_topics_shown = 0;
+#if !defined(TG_NO_GUI)
+    if (tg_gui_session_state.gui_driver.state != 0) {
+        tg_gui_session_state.gui_driver.state->topic_view = 0;
+    }
+#endif
+    tg_gui_session_reload_chats();
 }
 
 /* Public: page OLDER history at the top of the open chat. Fetches the getHistory
@@ -25233,6 +25839,13 @@ static void tg_gui_session_reload_chats(void)
     if (tg_gui_session_state.driver.on_chat_list_changed == 0) {
         return;
     }
+#if !defined(TG_NO_GUI)
+    /* An open forum's topics stand in the sidebar for the chats until the
+       user goes back to them: the list drawn again is the topics. */
+    if (tg_gui_topics_shown && tg_gui_forum && tg_gui_topics_project()) {
+        return;
+    }
+#endif
     missing = 0;
     count = tg_gui_chat_list_project(tg_gui_session_state.peer_cache_file,
                                      TG_GUI_HIDDEN_FILE, 0UL, rows,
@@ -26791,6 +27404,12 @@ int tg_gui_session_archive_view(void)
 void tg_gui_session_set_archive_view(int on)
 {
     tg_gui_archive_view = on ? 1 : 0;
+    tg_gui_topics_shown = 0; /* the Archive or the chats, not the topics */
+#if !defined(TG_NO_GUI)
+    if (tg_gui_session_state.gui_driver.state != 0) {
+        tg_gui_session_state.gui_driver.state->topic_view = 0;
+    }
+#endif
     tg_gui_session_reload_chats();
 }
 
@@ -27749,6 +28368,11 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.current_peer_index[0] == '\0') {
         return 2;
     }
+    if (tg_gui_forum && tg_gui_topic == 0UL) {
+        /* a forum's topics on show and none open: where would it go? */
+        strcpy(tg_chat_send_refusal, "TOPIC_NOT_CHOSEN");
+        return 2;
+    }
     quiet = tg_mtproto_open_quiet_stream(stream);
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
@@ -27874,12 +28498,15 @@ int tg_gui_session_send_to(unsigned long peer_index, const char *text,
     quiet = tg_mtproto_open_quiet_stream(stream);
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
+    /* Another chat: the topic open here does not go with the message. */
+    tg_mtproto_send_set_topic(0UL);
     rc = tg_mtproto_auth_send_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
         tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
         tg_gui_session_state.peer_cache_file, index_text, send_text, 0UL,
         &sent_id, quiet);
+    tg_gui_topic_apply();
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_gui_log(rc == 0 ? "arexx: message sent" : "arexx: send failed");
@@ -36849,8 +37476,14 @@ int tg_gui_session_read_step(FILE *stream)
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL);
-    if (tg_mtproto_build_read_history_peer(&writer, pc, ph, pl, ahh, ahl,
-                                           hah, target) != TG_MTPROTO_TL_OK ||
+    /* A forum topic is read on its own (messages.readDiscussion, General
+       too), as TDLib's ReadForumTopicQuery does. */
+    if ((tg_gui_forum && tg_gui_topic != 0UL
+             ? tg_mtproto_build_messages_read_discussion(
+                   &writer, pc, ph, pl, ahh, ahl, hah, tg_gui_topic, target)
+             : tg_mtproto_build_read_history_peer(&writer, pc, ph, pl, ahh,
+                                                  ahl, hah, target)) !=
+            TG_MTPROTO_TL_OK ||
         tg_gui_session_peer_request(query, writer.length, &result,
                                     "mtproto readHistory", 0, 0UL,
                                     quiet) != 0) {
@@ -37387,8 +38020,24 @@ int tg_gui_session_tick(FILE *stream)
 #else
         tg_net_set_connect_timeout_seconds(3UL);
 #endif
-    /* New messages in the open chat stream straight into the transcript. */
-    if (tg_gui_session_state.current_peer_index[0] != '\0') {
+#if !defined(TG_NO_GUI)
+    /* An open forum's topic list is read again now and then: the unread
+       counts and the newest messages of the other topics. */
+    if (tg_gui_forum && tg_gui_topics_shown &&
+        tg_gui_session_state.gui_driver.state != 0 &&
+        tg_gui_session_state.gui_driver.state->topic_view &&
+        (unsigned long)(time(0) - tg_gui_topics_read_at) >=
+            TG_GUI_TOPICS_SECONDS) {
+        tried = 1;
+        if (tg_gui_session_fetch_topics(quiet) > 0) {
+            dirty = 1;
+        }
+    }
+#endif
+    /* New messages in the open chat stream straight into the transcript;
+       a forum's come with its topic, none before one is chosen. */
+    if (tg_gui_session_state.current_peer_index[0] != '\0' &&
+        !(tg_gui_forum && tg_gui_topic == 0UL)) {
         unsigned long printed;
 
         printed = 0UL;
@@ -37592,6 +38241,7 @@ void tg_gui_session_close(void)
     tg_gui_session_link_failed = 0UL;
     tg_mtproto_avatar_store_save(); /* keep the previews for next run */
     tg_gui_photo_queue_reset();
+    tg_gui_topic_forget(); /* no topic outlives the session */
     if (!tg_gui_session_state.open) {
         tg_chat_nq = 0;
         tg_chat_typing_target = 0;

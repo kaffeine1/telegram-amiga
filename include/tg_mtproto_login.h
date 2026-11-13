@@ -619,6 +619,12 @@ typedef struct tg_mtproto_message_text {
        the media before it reads whole: a photo, a file. */
     unsigned long grouped_id_hi;
     unsigned long grouped_id_lo;
+    /* The forum topic the message is in: the id of the topic's first
+       message (messageReplyHeader forum_topic, reply_to_top_id or else
+       reply_to_msg_id); 0 = in no topic, which in a forum is General. A
+       message that only names its topic is no reply: has_reply and
+       reply_to_msg_id stay 0 for it. */
+    unsigned long topic_id;
 } tg_mtproto_message_text;
 
 /* --- polls ---------------------------------------------------------------
@@ -978,6 +984,119 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
     long add_offset,
     unsigned long limit);
 
+/* --- topics of a forum group (0.5) -------------------------------------
+   A supergroup can be a forum: its messages live in topics, each with a
+   title, a colour and its own thread. A topic is named by the id of the
+   message that opened it; General is topic 1, and its messages carry no
+   reply header at all. Layer 214 (TDLib 9581c743097a): the topic methods
+   are still in channels.*, a topic's thread (General's too) is
+   messages.getReplies on that id, and a message goes into a topic with the
+   topic as inputReplyToMessage.reply_to_msg_id (core.telegram.org/api/forum;
+   a reply inside it names the topic in top_msg_id). */
+#define TG_MTPROTO_TOPIC_GENERAL 1UL
+#define TG_MTPROTO_TOPIC_TITLE_MAX 128U
+/* messages.messages#8c718e87: what the topics' newest messages read as
+   (tg_mtproto_parse_message_text_list at messages_offset). */
+#define TG_MTPROTO_MESSAGES_MESSAGES_CONSTRUCTOR 0x8c718e87UL
+#if defined(__m68k__)
+#define TG_MTPROTO_TOPICS_MAX 24U
+#else
+#define TG_MTPROTO_TOPICS_MAX 48U
+#endif
+
+typedef struct tg_mtproto_forum_topic {
+    unsigned long id;            /* the first message's id; 1 = General */
+    unsigned long date;
+    unsigned long icon_color;    /* 0xRRGGBB, what stands for its emoji */
+    unsigned long top_message;   /* its newest message */
+    unsigned long read_inbox_max_id;
+    unsigned long unread_count;
+    unsigned long unread_mentions;
+    int pinned;
+    int closed;                  /* only admins may write in it */
+    int hidden;                  /* General folded away by the admins */
+    char title[TG_MTPROTO_TOPIC_TITLE_MAX]; /* UTF-8, as Telegram sends it */
+} tg_mtproto_forum_topic;
+
+typedef struct tg_mtproto_forum_topic_list {
+    unsigned long count;  /* topics kept, in the server's order */
+    unsigned long total;  /* how many the forum has (count:int) */
+    /* Where the topics' newest messages start in the body (their
+       Vector<Message>, then chats and users, as messages.messages has
+       them); 0 = not found. */
+    unsigned long messages_offset;
+    int truncated;        /* more topics came than the list holds */
+    tg_mtproto_forum_topic topics[TG_MTPROTO_TOPICS_MAX];
+} tg_mtproto_forum_topic_list;
+
+/* channels.getForumTopics#de560d1 flags:# channel:InputChannel
+   q:flags.0?string offset_date:int offset_id:int offset_topic:int limit:int
+   = messages.ForumTopics; the first page asks with zeros, newest activity
+   first. */
+tg_mtproto_tl_status tg_mtproto_build_channels_get_forum_topics(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long limit);
+
+/* messages.forumTopics#367617d3 flags:# order_by_create_date:flags.0?true
+   count:int topics:Vector<ForumTopic> messages:Vector<Message>
+   chats:Vector<Chat> users:Vector<User> pts:int. forumTopicDeleted is
+   left out; a topic the reader cannot walk to its end (a draft it does
+   not know) is kept and the walk goes on from the next topic. */
+tg_mtproto_tl_status tg_mtproto_parse_forum_topics(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_forum_topic_list *out);
+
+/* messages.getReplies#22ddd30c peer:InputPeer msg_id:int offset_id:int
+   offset_date:int add_offset:int limit:int max_id:int min_id:int hash:long
+   = messages.Messages: one topic's messages (msg_id = the topic), paged
+   as getHistory is. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_replies_peer_at(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long topic_id,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit);
+
+/* messages.readDiscussion#f731a9f4 peer:InputPeer msg_id:int read_max_id:int
+   = Bool: a topic read up to that message. */
+tg_mtproto_tl_status tg_mtproto_build_messages_read_discussion(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long topic_id,
+    unsigned long read_max_id);
+
+/* The topic the messages built from now on go into (0 = none): a text, a
+   file, a photo, an album, a poll and the "typing" line all carry it,
+   General (1) as no topic at all, as the other clients send it. It stays
+   until it is set again: the client sets it when a topic opens and takes
+   it away when another chat does. */
+void tg_mtproto_send_set_topic(unsigned long topic_id);
+unsigned long tg_mtproto_send_topic(void);
+
+/* Which channels are forums, as the chats Telegram sent this run said
+   (channel#fe685355 forum:flags.30). In memory only: every list, history
+   or search reply that names the chat brings it again. */
+int tg_mtproto_channel_is_forum(unsigned long id_hi, unsigned long id_lo);
+void tg_mtproto_channel_note_forum(unsigned long id_hi, unsigned long id_lo,
+                                   int forum);
+
 /* messages.getPinnedDialogs#d6b94df2 folder_id:int -> messages.peerDialogs
    with the pinned dialogs of that folder (0 = the main list), in order. */
 tg_mtproto_tl_status tg_mtproto_build_messages_get_pinned_dialogs(
@@ -1268,6 +1387,20 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     const char *query_utf8,
     unsigned long offset_id,
     unsigned long limit);
+/* The same inside one topic of a forum (top_msg_id, flags.1); 0 = the
+   whole chat. */
+tg_mtproto_tl_status tg_mtproto_build_messages_search_peer_topic(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long offset_id,
+    unsigned long limit,
+    unsigned long topic_id);
 
 /* messages.searchGlobal: the same text search across every chat of the
    account, first page, newest first. query_utf8 must be non-empty. */

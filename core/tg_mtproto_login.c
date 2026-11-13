@@ -2056,7 +2056,8 @@ static tg_mtproto_tl_status tg_build_messages_search(
     const char *query_utf8,
     unsigned long filter_constructor,
     unsigned long offset_id,
-    unsigned long limit);
+    unsigned long limit,
+    unsigned long topic_id);
 
 tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     tg_mtproto_tl_writer *writer,
@@ -2076,7 +2077,30 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_peer(
     return tg_build_messages_search(
         writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
         access_hash_lo, has_access_hash, query_utf8,
-        TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR, offset_id, limit);
+        TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR, offset_id, limit, 0UL);
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_search_peer_topic(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    const char *query_utf8,
+    unsigned long offset_id,
+    unsigned long limit,
+    unsigned long topic_id)
+{
+    if (query_utf8 == 0 || query_utf8[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_build_messages_search(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, query_utf8,
+        TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR, offset_id, limit,
+        topic_id);
 }
 
 /* The chat's pinned messages, newest pin first: the same search with no
@@ -2096,7 +2120,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_pinned(
     return tg_build_messages_search(
         writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
         access_hash_lo, has_access_hash, "",
-        TG_INPUT_MESSAGES_FILTER_PINNED_CONSTRUCTOR, 0UL, limit);
+        TG_INPUT_MESSAGES_FILTER_PINNED_CONSTRUCTOR, 0UL, limit, 0UL);
 }
 
 /* The files of a chat, newest first: the same search with
@@ -2117,7 +2141,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_search_documents(
     return tg_build_messages_search(
         writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
         access_hash_lo, has_access_hash, query_utf8 != 0 ? query_utf8 : "",
-        TG_INPUT_MESSAGES_FILTER_DOCUMENT_CONSTRUCTOR, 0UL, limit);
+        TG_INPUT_MESSAGES_FILTER_DOCUMENT_CONSTRUCTOR, 0UL, limit, 0UL);
 }
 
 static tg_mtproto_tl_status tg_build_messages_search(
@@ -2131,7 +2155,8 @@ static tg_mtproto_tl_status tg_build_messages_search(
     const char *query_utf8,
     unsigned long filter_constructor,
     unsigned long offset_id,
-    unsigned long limit)
+    unsigned long limit,
+    unsigned long topic_id)
 {
     tg_mtproto_tl_status status;
     int k;
@@ -2141,7 +2166,8 @@ static tg_mtproto_tl_status tg_build_messages_search(
     }
     status = tg_mtproto_tl_write_u32(writer, TG_MESSAGES_SEARCH_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+        /* flags: top_msg_id (flags.1) inside a forum topic */
+        status = tg_mtproto_tl_write_u32(writer, topic_id != 0UL ? 2UL : 0UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -2152,6 +2178,9 @@ static tg_mtproto_tl_status tg_build_messages_search(
         status = tg_mtproto_tl_write_bytes(
             writer, (const unsigned char *)query_utf8,
             (unsigned long)strlen(query_utf8));
+    }
+    if (status == TG_MTPROTO_TL_OK && topic_id != 0UL) {
+        status = tg_mtproto_tl_write_u32(writer, topic_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, filter_constructor);
@@ -2434,9 +2463,12 @@ void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list, int count)
     }
 }
 
+static unsigned long tg_send_topic_top(void);
+
 static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
 {
-    return ((reply_to_msg_id != 0UL) ? 1UL : 0UL) |
+    return ((reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL) ? 1UL
+                                                                   : 0UL) |
            (tg_send_mention_count + tg_send_style_count > 0 ? 8UL : 0UL) |
            (tg_send_clear_draft ? 128UL : 0UL);
 }
@@ -2552,20 +2584,47 @@ static tg_mtproto_tl_status tg_write_send_message_tail(
     return status;
 }
 
+/* In a forum topic other than General (core.telegram.org/api/forum): a new
+   message names the topic as its reply_to_msg_id; a reply to a message in
+   the topic names that message, and the topic in top_msg_id (flags.0), so
+   that it still lands in the topic if the message is deleted meanwhile. */
 static tg_mtproto_tl_status tg_write_input_reply_to_message(
     tg_mtproto_tl_writer *writer, unsigned long reply_to_msg_id)
 {
     tg_mtproto_tl_status status;
+    unsigned long top = tg_send_topic_top();
+    int with_top = top != 0UL && reply_to_msg_id != 0UL &&
+                   reply_to_msg_id != top;
 
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags = 0 */
+        status = tg_mtproto_tl_write_u32(writer, with_top ? 1UL : 0UL);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, reply_to_msg_id);
+        status = tg_mtproto_tl_write_u32(
+            writer, reply_to_msg_id != 0UL ? reply_to_msg_id : top);
+    }
+    if (status == TG_MTPROTO_TL_OK && with_top) {
+        status = tg_mtproto_tl_write_u32(writer, top);
     }
     return status;
+}
+
+/* The reply_to of a messages.sendMedia or sendMultiMedia (flags.0): only a
+   topic, none outside one. */
+static unsigned long tg_send_media_flags(void)
+{
+    return tg_send_topic_top() != 0UL ? 1UL : 0UL;
+}
+
+static tg_mtproto_tl_status tg_write_media_reply_to(
+    tg_mtproto_tl_writer *writer)
+{
+    if (tg_send_topic_top() == 0UL) {
+        return TG_MTPROTO_TL_OK;
+    }
+    return tg_write_input_reply_to_message(writer, 0UL);
 }
 
 tg_mtproto_tl_status tg_mtproto_build_messages_send_self(
@@ -2589,7 +2648,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_self(
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, TG_INPUT_PEER_SELF_CONSTRUCTOR);
     }
-    if (status == TG_MTPROTO_TL_OK && reply_to_msg_id != 0UL) {
+    if (status == TG_MTPROTO_TL_OK &&
+        (reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL)) {
         status = tg_write_input_reply_to_message(writer, reply_to_msg_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
@@ -2628,7 +2688,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_user(
         status = tg_write_input_peer_user(writer, user_id_hi, user_id_lo,
                                           access_hash_hi, access_hash_lo);
     }
-    if (status == TG_MTPROTO_TL_OK && reply_to_msg_id != 0UL) {
+    if (status == TG_MTPROTO_TL_OK &&
+        (reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL)) {
         status = tg_write_input_reply_to_message(writer, reply_to_msg_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
@@ -2670,7 +2731,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_peer(
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
     }
-    if (status == TG_MTPROTO_TL_OK && reply_to_msg_id != 0UL) {
+    if (status == TG_MTPROTO_TL_OK &&
+        (reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL)) {
         status = tg_write_input_reply_to_message(writer, reply_to_msg_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
@@ -4150,12 +4212,16 @@ static tg_mtproto_tl_status tg_build_messages_send_media_document_common(
     /* messages.sendMedia#ac55d9c1 -- the LAYER-214 id (not the live one). */
     status = tg_mtproto_tl_write_u32(writer, 0xac55d9c1UL);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+        /* flags: reply_to (flags.0) in a forum topic */
+        status = tg_mtproto_tl_write_u32(writer, tg_send_media_flags());
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_media_reply_to(writer);
     }
     if (status == TG_MTPROTO_TL_OK) { /* inputMediaUploadedDocument */
         status = tg_mtproto_tl_write_u32(writer, 0x037c9330UL);
@@ -4254,12 +4320,16 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_photo(
     }
     status = tg_mtproto_tl_write_u32(writer, 0xac55d9c1UL);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* sendMedia flags */
+        /* sendMedia flags: reply_to (flags.0) in a forum topic */
+        status = tg_mtproto_tl_write_u32(writer, tg_send_media_flags());
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_media_reply_to(writer);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(
@@ -4422,12 +4492,16 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_multi_media(
     }
     status = tg_mtproto_tl_write_u32(writer, 0x1bf89d74UL);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+        /* flags: reply_to (flags.0) in a forum topic */
+        status = tg_mtproto_tl_write_u32(writer, tg_send_media_flags());
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_media_reply_to(writer);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, 0x1cb5c415UL); /* Vector */
@@ -6203,6 +6277,60 @@ static void tg_chat_photo_capture(tg_mtproto_tl_reader *reader,
     }
 }
 
+/* The forums met this run: a small table, the oldest out when it is full
+   (a forum that falls out is learnt again from the next reply naming it). */
+#if defined(__m68k__)
+#define TG_FORUMS_MAX 16
+#else
+#define TG_FORUMS_MAX 48
+#endif
+static unsigned long tg_forum_ids[TG_FORUMS_MAX][2];
+static int tg_forum_count = 0;
+
+int tg_mtproto_channel_is_forum(unsigned long id_hi, unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_forum_count; ++i) {
+        if (tg_forum_ids[i][0] == id_hi && tg_forum_ids[i][1] == id_lo) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void tg_mtproto_channel_note_forum(unsigned long id_hi, unsigned long id_lo,
+                                   int forum)
+{
+    int i;
+
+    for (i = 0; i < tg_forum_count; ++i) {
+        if (tg_forum_ids[i][0] == id_hi && tg_forum_ids[i][1] == id_lo) {
+            break;
+        }
+    }
+    if (i < tg_forum_count) {
+        if (!forum) { /* no longer a forum: out of the table */
+            memmove(tg_forum_ids[i], tg_forum_ids[i + 1],
+                    sizeof(tg_forum_ids[0]) *
+                        (size_t)(tg_forum_count - i - 1));
+            --tg_forum_count;
+        }
+        return;
+    }
+    if (!forum || (id_hi == 0UL && id_lo == 0UL)) {
+        return;
+    }
+    if (tg_forum_count == TG_FORUMS_MAX) {
+        memmove(tg_forum_ids[0], tg_forum_ids[1],
+                sizeof(tg_forum_ids[0]) * (size_t)(TG_FORUMS_MAX - 1));
+        --tg_forum_count;
+    }
+    tg_forum_ids[tg_forum_count][0] = id_hi;
+    tg_forum_ids[tg_forum_count][1] = id_lo;
+    ++tg_forum_count;
+}
+
 static tg_mtproto_tl_status tg_read_chat_leading_from_reader(
     tg_mtproto_tl_reader *reader,
     tg_mtproto_peer_cache *cache)
@@ -6267,6 +6395,12 @@ static tg_mtproto_tl_status tg_read_chat_leading_from_reader(
             tg_read_string_copy(reader, username, sizeof(username)) !=
                 TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        /* forum:flags.30. A min constructor (flags.12) may leave flags
+           out, so it only ever says yes. */
+        if ((flags & (1UL << 30)) != 0UL || (flags & (1UL << 12)) == 0UL) {
+            tg_mtproto_channel_note_forum(id_hi, id_lo,
+                                          (flags & (1UL << 30)) != 0UL);
         }
         (void)flags2;
         if (!tg_peer_cache_apply_chat(cache, TG_PEER_CHANNEL_CONSTRUCTOR,
@@ -6876,18 +7010,28 @@ static tg_mtproto_tl_status tg_read_draft_styles(tg_mtproto_tl_reader *reader,
    out_quote are non-NULL the reply target and the inline quote are captured;
    passing NULL just skips the header (consuming its bytes). reply_from /
    reply_media (flags 5/8) are still rejected -- this small reader cannot walk
-   a nested fwd-header / media there. */
+   a nested fwd-header / media there.
+   In a forum (forum_topic, flags.3) the header names the message's topic:
+   reply_to_top_id when the message also replies to one in it, else
+   reply_to_msg_id, which is then the topic itself and no reply (TDLib
+   MessageReplyHeader does the same). *out_topic gets the topic, 0 when
+   none, and *out_reply_to_msg_id is 0 for a message that only names it. */
 static tg_mtproto_tl_status tg_read_message_reply_header(
     tg_mtproto_tl_reader *reader, unsigned long *out_reply_to_msg_id,
-    char *out_quote, unsigned long quote_size)
+    char *out_quote, unsigned long quote_size, unsigned long *out_topic)
 {
     unsigned long constructor;
     unsigned long flags;
     unsigned long scratch;
+    unsigned long reply_to = 0UL;
+    unsigned long top_id = 0UL;
     tg_mtproto_dialog_peer peer;
 
     if (out_reply_to_msg_id != 0) {
         *out_reply_to_msg_id = 0UL;
+    }
+    if (out_topic != 0) {
+        *out_topic = 0UL;
     }
     if (out_quote != 0 && quote_size > 0UL) {
         out_quote[0] = '\0';
@@ -6898,9 +7042,7 @@ static tg_mtproto_tl_status tg_read_message_reply_header(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & (1UL << 4)) != 0UL &&
-        tg_mtproto_tl_read_u32(
-            reader, out_reply_to_msg_id != 0 ? out_reply_to_msg_id : &scratch) !=
-            TG_MTPROTO_TL_OK) {
+        tg_mtproto_tl_read_u32(reader, &reply_to) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 1UL) != 0UL &&
@@ -6911,8 +7053,24 @@ static tg_mtproto_tl_status tg_read_message_reply_header(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 2UL) != 0UL &&
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_tl_read_u32(reader, &top_id) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 8UL) != 0UL && (flags & 1UL) == 0UL) {
+        /* forum_topic: the topic, and a reply only inside it */
+        if (top_id != 0UL) {
+            if (out_topic != 0) {
+                *out_topic = top_id;
+            }
+        } else {
+            if (out_topic != 0) {
+                *out_topic = reply_to;
+            }
+            reply_to = 0UL;
+        }
+    }
+    if (out_reply_to_msg_id != 0) {
+        *out_reply_to_msg_id = reply_to;
     }
     if ((flags & (1UL << 6)) != 0UL) {
         if (out_quote != 0 && quote_size > 0UL) {
@@ -6942,7 +7100,373 @@ static tg_mtproto_tl_status tg_read_message_reply_header(
 static tg_mtproto_tl_status tg_skip_message_reply_header(
     tg_mtproto_tl_reader *reader)
 {
-    return tg_read_message_reply_header(reader, 0, 0, 0UL);
+    return tg_read_message_reply_header(reader, 0, 0, 0UL, 0);
+}
+
+/* --- topics of a forum group (0.5) ------------------------------------- */
+#define TG_CHANNELS_GET_FORUM_TOPICS_CONSTRUCTOR 0x0de560d1UL
+#define TG_MESSAGES_FORUM_TOPICS_CONSTRUCTOR 0x367617d3UL
+#define TG_FORUM_TOPIC_CONSTRUCTOR 0x71701da9UL
+#define TG_FORUM_TOPIC_DELETED_CONSTRUCTOR 0x023f109bUL
+#define TG_MESSAGES_GET_REPLIES_CONSTRUCTOR 0x22ddd30cUL
+#define TG_MESSAGES_READ_DISCUSSION_CONSTRUCTOR 0xf731a9f4UL
+
+static unsigned long tg_send_topic_id = 0UL;
+
+void tg_mtproto_send_set_topic(unsigned long topic_id)
+{
+    tg_send_topic_id = topic_id;
+}
+
+unsigned long tg_mtproto_send_topic(void)
+{
+    return tg_send_topic_id;
+}
+
+/* The topic a message built now goes into, as its InputReplyTo carries it:
+   0 for none and for General, whose messages carry no reply header. */
+static unsigned long tg_send_topic_top(void)
+{
+    return tg_send_topic_id > TG_MTPROTO_TOPIC_GENERAL ? tg_send_topic_id
+                                                       : 0UL;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_channels_get_forum_topics(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long limit)
+{
+    tg_mtproto_tl_status status;
+    int k;
+
+    if (writer == 0 || limit == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_CHANNELS_GET_FORUM_TOPICS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags: no q */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_CHANNEL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, channel_id_hi, channel_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi, access_hash_lo);
+    }
+    /* offset_date, offset_id, offset_topic */
+    for (k = 0; k < 3 && status == TG_MTPROTO_TL_OK; ++k) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, limit);
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_get_replies_peer_at(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long topic_id,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || limit == 0UL || topic_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_GET_REPLIES_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, topic_id); /* msg_id */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, offset_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset_date */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        /* add_offset:int, two's complement on the wire */
+        status = tg_mtproto_tl_write_u32(
+            writer, add_offset < 0L
+                        ? (unsigned long)(0xFFFFFFFFUL -
+                                          (unsigned long)(-(add_offset + 1L)))
+                        : (unsigned long)add_offset);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, limit);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* max_id */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* min_id */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* hash */
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_read_discussion(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long topic_id,
+    unsigned long read_max_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || topic_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_MESSAGES_READ_DISCUSSION_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, topic_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, read_max_id);
+    }
+    return status;
+}
+
+/* A topic's draft, skipped: draftMessageEmpty, or a draftMessage whose
+   reply, words, formatting, date and effect this reader knows (a media or
+   a suggested post fails it, and the caller looks for the next topic). */
+static tg_mtproto_tl_status tg_skip_topic_draft(tg_mtproto_tl_reader *reader)
+{
+    unsigned long constructor;
+    unsigned long flags;
+    unsigned long scratch;
+    unsigned long scratch_hi;
+
+    if (reader->offset + 8UL > reader->length) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    constructor = tg_read_u32_le(reader->buffer + reader->offset);
+    flags = tg_read_u32_le(reader->buffer + reader->offset + 4UL);
+    if (constructor != TG_DRAFT_MESSAGE_CONSTRUCTOR ||
+        (flags & (8UL | 16UL)) == 0UL) {
+        return tg_skip_draft_message(reader);
+    }
+    reader->offset += 8UL;
+    if ((flags & ~(2UL | 8UL | 16UL | 64UL | 128UL)) != 0UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 16UL) != 0UL &&
+        tg_skip_draft_reply_to(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 8UL) != 0UL &&
+        tg_skip_message_entity_vector(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 128UL) != 0UL &&
+        tg_mtproto_tl_read_u64(reader, &scratch_hi, &scratch) !=
+            TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* forumTopic#71701da9 flags:# my:flags.1?true closed:flags.2?true
+   pinned:flags.3?true short:flags.5?true hidden:flags.6?true id:int date:int
+   title:string icon_color:int icon_emoji_id:flags.0?long top_message:int
+   read_inbox_max_id:int read_outbox_max_id:int unread_count:int
+   unread_mentions_count:int unread_reactions_count:int from_id:Peer
+   notify_settings:PeerNotifySettings draft:flags.4?DraftMessage, the
+   reader just past the constructor. *whole is 0 when the topic's fields
+   were read but its end was not (the caller then looks for the next). */
+static tg_mtproto_tl_status tg_read_forum_topic(tg_mtproto_tl_reader *reader,
+                                                tg_mtproto_forum_topic *t,
+                                                int *whole)
+{
+    unsigned long flags;
+    unsigned long scratch;
+    unsigned long scratch_hi;
+    tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings notify;
+
+    memset(t, 0, sizeof(*t));
+    *whole = 0;
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &t->id) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &t->date) != TG_MTPROTO_TL_OK ||
+        tg_read_string_copy(reader, t->title, sizeof(t->title)) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &t->icon_color) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((flags & 1UL) != 0UL &&
+        tg_mtproto_tl_read_u64(reader, &scratch_hi, &scratch) !=
+            TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (tg_mtproto_tl_read_u32(reader, &t->top_message) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &t->read_inbox_max_id) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &t->unread_count) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &t->unread_mentions) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    t->icon_color &= 0xffffffUL;
+    t->closed = (flags & 4UL) != 0UL;
+    t->pinned = (flags & 8UL) != 0UL;
+    t->hidden = (flags & 64UL) != 0UL;
+    if (t->id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK ||
+        tg_read_peer_notify_settings(reader, &notify) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_OK;
+    }
+    if ((flags & 16UL) != 0UL &&
+        tg_skip_topic_draft(reader) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_OK;
+    }
+    *whole = 1;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* The next forumTopic, forumTopicDeleted or Vector constructor from `from`
+   on (4-byte steps): where a walk that lost its place picks up again. The
+   vector is the messages' one, after the last topic. 0 = none. */
+static int tg_forum_vector_is_messages(const tg_mtproto_tl_reader *reader,
+                                       unsigned long at)
+{
+    unsigned long c;
+
+    if (at + 12UL > reader->length ||
+        tg_read_u32_le(reader->buffer + at) != TG_VECTOR_CONSTRUCTOR) {
+        return 0;
+    }
+    if (tg_read_u32_le(reader->buffer + at + 4UL) == 0UL) {
+        /* no messages: the chats' vector follows */
+        return tg_read_u32_le(reader->buffer + at + 8UL) ==
+               TG_VECTOR_CONSTRUCTOR;
+    }
+    c = tg_read_u32_le(reader->buffer + at + 8UL);
+    return c == TG_MESSAGE_CONSTRUCTOR || c == TG_MESSAGE_SERVICE_CONSTRUCTOR ||
+           c == TG_MESSAGE_EMPTY_CONSTRUCTOR;
+}
+
+static unsigned long tg_forum_topic_resync(const tg_mtproto_tl_reader *reader,
+                                           unsigned long from)
+{
+    unsigned long at;
+    unsigned long c;
+
+    for (at = from; at + 8UL <= reader->length; at += 4UL) {
+        c = tg_read_u32_le(reader->buffer + at);
+        if (c == TG_FORUM_TOPIC_CONSTRUCTOR ||
+            c == TG_FORUM_TOPIC_DELETED_CONSTRUCTOR ||
+            tg_forum_vector_is_messages(reader, at)) {
+            return at;
+        }
+    }
+    return 0UL;
+}
+
+tg_mtproto_tl_status tg_mtproto_parse_forum_topics(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_forum_topic_list *out)
+{
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_forum_topic topic;
+    unsigned long flags;
+    unsigned long n;
+    unsigned long i;
+    unsigned long c;
+    unsigned long scratch;
+    int whole;
+
+    if (body == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(out, 0, sizeof(*out));
+    if (constructor != TG_MESSAGES_FORUM_TOPICS_CONSTRUCTOR) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(&reader, &out->total) != TG_MTPROTO_TL_OK ||
+        tg_read_vector_count(&reader, &n) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    for (i = 0UL; i < n; ++i) {
+        if (tg_mtproto_tl_read_u32(&reader, &c) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_OK; /* the topics read so far */
+        }
+        if (c == TG_FORUM_TOPIC_DELETED_CONSTRUCTOR) {
+            if (tg_mtproto_tl_read_u32(&reader, &scratch) != TG_MTPROTO_TL_OK) {
+                return TG_MTPROTO_TL_OK;
+            }
+            continue;
+        }
+        if (c != TG_FORUM_TOPIC_CONSTRUCTOR ||
+            tg_read_forum_topic(&reader, &topic, &whole) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_OK;
+        }
+        if (out->count < TG_MTPROTO_TOPICS_MAX) {
+            out->topics[out->count++] = topic;
+        } else {
+            out->truncated = 1;
+        }
+        if (!whole) {
+            unsigned long at = tg_forum_topic_resync(&reader, reader.offset);
+
+            if (at == 0UL) {
+                return TG_MTPROTO_TL_OK;
+            }
+            reader.offset = at;
+            if (tg_read_u32_le(reader.buffer + at) == TG_VECTOR_CONSTRUCTOR) {
+                break; /* the messages: no topic after this one */
+            }
+        }
+    }
+    if (tg_forum_vector_is_messages(&reader, reader.offset)) {
+        out->messages_offset = reader.offset;
+    }
+    return TG_MTPROTO_TL_OK;
 }
 
 static tg_mtproto_tl_status tg_skip_message_fwd_header(
@@ -7463,11 +7987,14 @@ static tg_mtproto_tl_status tg_read_service_message(
     if ((flags & 8UL) != 0UL) {
         if (tg_read_message_reply_header(reader, &out->reply_to_msg_id,
                                          out->reply_quote,
-                                         sizeof(out->reply_quote)) !=
+                                         sizeof(out->reply_quote),
+                                         &out->topic_id) !=
             TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
-        out->has_reply = 1;
+        /* a header that only names the forum topic is no reply */
+        out->has_reply =
+            !(out->topic_id != 0UL && out->reply_to_msg_id == 0UL);
     }
     if (tg_mtproto_tl_read_u32(reader, &out->date) != TG_MTPROTO_TL_OK ||
         tg_read_message_action(reader, out, &action_complete) !=
@@ -8461,12 +8988,16 @@ tg_mtproto_tl_status tg_mtproto_build_messages_send_media_poll(
     }
     status = tg_mtproto_tl_write_u32(writer, 0xac55d9c1UL);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* sendMedia flags */
+        /* sendMedia flags: reply_to (flags.0) in a forum topic */
+        status = tg_mtproto_tl_write_u32(writer, tg_send_media_flags());
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
                                      access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_media_reply_to(writer);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer,
@@ -9404,11 +9935,14 @@ static tg_mtproto_tl_status tg_read_common_message_text(
     if ((flags & 8UL) != 0UL) {
         if (tg_read_message_reply_header(reader, &out->reply_to_msg_id,
                                          out->reply_quote,
-                                         sizeof(out->reply_quote)) !=
+                                         sizeof(out->reply_quote),
+                                         &out->topic_id) !=
             TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
-        out->has_reply = 1;
+        /* a header that only names the forum topic is no reply */
+        out->has_reply =
+            !(out->topic_id != 0UL && out->reply_to_msg_id == 0UL);
     }
     if (tg_mtproto_tl_read_u32(reader, &out->date) != TG_MTPROTO_TL_OK ||
         tg_read_string_copy_cut(reader, out->text, sizeof(out->text),
@@ -12098,6 +12632,375 @@ static int tg_album_id_self_test(void)
     return 0;
 }
 
+/* A text message in channel 0x1234 with a reply header: hflags as the
+   header has them, reply_to_msg_id and reply_to_top_id when non-zero. */
+static void tg_topic_test_message(tg_mtproto_tl_writer *w, unsigned long id,
+                                  unsigned long hflags, unsigned long reply_to,
+                                  unsigned long top)
+{
+    (void)tg_mtproto_tl_write_u32(w, TG_MESSAGE_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, hflags != 0UL ? 8UL : 0UL);
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+    (void)tg_mtproto_tl_write_u32(w, id);
+    (void)tg_mtproto_tl_write_u32(w, TG_PEER_CHANNEL_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(w, 0UL, 0x1234UL);
+    if (hflags != 0UL) {
+        (void)tg_mtproto_tl_write_u32(w, TG_MESSAGE_REPLY_HEADER_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, hflags);
+        if ((hflags & 16UL) != 0UL) {
+            (void)tg_mtproto_tl_write_u32(w, reply_to);
+        }
+        if ((hflags & 1UL) != 0UL) { /* reply_to_peer_id: another chat */
+            (void)tg_mtproto_tl_write_u32(w, TG_PEER_CHANNEL_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u64(w, 0UL, 0x9999UL);
+        }
+        if ((hflags & 2UL) != 0UL) {
+            (void)tg_mtproto_tl_write_u32(w, top);
+        }
+    }
+    (void)tg_mtproto_tl_write_u32(w, 2225UL);
+    (void)tg_write_string(w, "hi");
+}
+
+/* A forumTopic as the server writes it: no emoji, from a user, default
+   notify settings, and the draft given (0 = none; 1 = a reply with styles,
+   which this reader walks; 2 = a draft with a media, which it does not). */
+static void tg_topic_test_topic(tg_mtproto_tl_writer *w, unsigned long id,
+                                unsigned long flags, const char *title,
+                                unsigned long unread, int draft)
+{
+    (void)tg_mtproto_tl_write_u32(w, TG_FORUM_TOPIC_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, flags | (draft != 0 ? 16UL : 0UL));
+    (void)tg_mtproto_tl_write_u32(w, id);
+    (void)tg_mtproto_tl_write_u32(w, 2000UL + id);
+    (void)tg_write_string(w, title);
+    (void)tg_mtproto_tl_write_u32(w, 0x6fb9f0UL);
+    (void)tg_mtproto_tl_write_u32(w, 900UL + id); /* top_message */
+    (void)tg_mtproto_tl_write_u32(w, 800UL + id); /* read_inbox_max_id */
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+    (void)tg_mtproto_tl_write_u32(w, unread);
+    (void)tg_mtproto_tl_write_u32(w, 1UL); /* mentions */
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+    (void)tg_mtproto_tl_write_u32(w, TG_PEER_USER_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(w, 0UL, 0x77UL);
+    (void)tg_mtproto_tl_write_u32(w, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(w, 0UL);
+    if (draft == 1) {
+        (void)tg_mtproto_tl_write_u32(w, TG_DRAFT_MESSAGE_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 8UL | 16UL);
+        (void)tg_mtproto_tl_write_u32(w, TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, 905UL);
+        (void)tg_mtproto_tl_write_u32(w, id);
+        (void)tg_write_string(w, "half");
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, 0xbd610bc9UL);
+        (void)tg_mtproto_tl_write_u32(w, 0UL);
+        (void)tg_mtproto_tl_write_u32(w, 4UL);
+        (void)tg_mtproto_tl_write_u32(w, 2300UL); /* date */
+    } else if (draft == 2) {
+        /* styles (a vector the resync must not take for the messages) and
+           a media */
+        (void)tg_mtproto_tl_write_u32(w, TG_DRAFT_MESSAGE_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 8UL | 32UL);
+        (void)tg_write_string(w, "pic");
+        (void)tg_mtproto_tl_write_u32(w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(w, 1UL);
+        (void)tg_mtproto_tl_write_u32(w, 0xbd610bc9UL);
+        (void)tg_mtproto_tl_write_u32(w, 0UL);
+        (void)tg_mtproto_tl_write_u32(w, 3UL);
+        (void)tg_mtproto_tl_write_u32(w, 0x9664f57fUL); /* inputMediaEmpty */
+        (void)tg_mtproto_tl_write_u32(w, 2300UL);
+    }
+}
+
+/* Topics of a forum: the requests on the wire, the topic list, which topic
+   a message is in, and which channels are forums. */
+static int tg_forum_self_test(void)
+{
+    static unsigned char rpc[1536];
+    static tg_mtproto_message_text_list list;
+    static tg_mtproto_forum_topic_list topics;
+    static tg_mtproto_peer_cache cache;
+    static const unsigned char want_topics[] = {
+        0xd1U, 0x60U, 0xe5U, 0x0dU, 0U, 0U, 0U, 0U,
+        0x28U, 0xecU, 0x5aU, 0xf3U
+    };
+    static const unsigned char want_reply_to[] = {
+        0x10U, 0xbeU, 0x9fU, 0x86U, 0U, 0U, 0U, 0U, 40U, 0U, 0U, 0U,
+        2U, 'o', 'k', 0U
+    };
+    tg_mtproto_tl_writer w;
+    unsigned long vec;
+
+    /* channels.getForumTopics: flags 0, the channel, three zero offsets,
+       the limit */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_channels_get_forum_topics(&w, 0UL, 0x1234UL, 0UL,
+                                                   0x5678UL, 30UL) !=
+            TG_MTPROTO_TL_OK ||
+        w.length != 44UL || memcmp(rpc, want_topics, sizeof(want_topics)) != 0 ||
+        tg_read_u32_le(rpc + 40) != 30UL || tg_read_u32_le(rpc + 28) != 0UL) {
+        puts("login self-test: channels.getForumTopics layout");
+        return 2;
+    }
+    /* messages.getReplies: the topic, then getHistory's fields */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_get_replies_peer_at(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            40UL, 900UL, -5L, 20UL) != TG_MTPROTO_TL_OK ||
+        w.length != 60UL || tg_read_u32_le(rpc) != 0x22ddd30cUL ||
+        tg_read_u32_le(rpc + 4) != TG_INPUT_PEER_CHANNEL_CONSTRUCTOR ||
+        tg_read_u32_le(rpc + 24) != 40UL || tg_read_u32_le(rpc + 28) != 900UL ||
+        tg_read_u32_le(rpc + 32) != 0UL ||
+        tg_read_u32_le(rpc + 36) != 0xfffffffbUL ||
+        tg_read_u32_le(rpc + 40) != 20UL) {
+        puts("login self-test: messages.getReplies layout");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_get_replies_peer_at(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            0UL, 0UL, 0L, 20UL) == TG_MTPROTO_TL_OK) {
+        puts("login self-test: getReplies without a topic was built");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_read_discussion(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            40UL, 977UL) != TG_MTPROTO_TL_OK ||
+        w.length != 32UL || tg_read_u32_le(rpc) != 0xf731a9f4UL ||
+        tg_read_u32_le(rpc + 24) != 40UL || tg_read_u32_le(rpc + 28) != 977UL) {
+        puts("login self-test: messages.readDiscussion layout");
+        return 2;
+    }
+    /* messages.search inside a topic: flags.1 and top_msg_id after q */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_search_peer_topic(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            "ok", 0UL, 20UL, 40UL) != TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(rpc + 4) != 2UL || tg_read_u32_le(rpc + 32) != 40UL ||
+        tg_read_u32_le(rpc + 36) != TG_INPUT_MESSAGES_FILTER_EMPTY_CONSTRUCTOR) {
+        puts("login self-test: messages.search in a topic layout");
+        return 2;
+    }
+    /* a text sent into topic 40: reply_to names it; a reply in it names
+       the message, and the topic in top_msg_id; General sends as no
+       topic */
+    tg_mtproto_send_set_topic(40UL);
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_send_peer(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            "ok", 0UL, 1UL, 2UL) != TG_MTPROTO_TL_OK ||
+        (tg_read_u32_le(rpc + 4) & 1UL) == 0UL ||
+        memcmp(rpc + 28, want_reply_to, sizeof(want_reply_to)) != 0) {
+        tg_mtproto_send_set_topic(0UL);
+        puts("login self-test: a text into a topic layout");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_send_peer(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            "ok", 905UL, 1UL, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(rpc + 32) != 1UL || tg_read_u32_le(rpc + 36) != 905UL ||
+        tg_read_u32_le(rpc + 40) != 40UL) {
+        tg_mtproto_send_set_topic(0UL);
+        puts("login self-test: a reply inside a topic layout");
+        return 2;
+    }
+    /* a file into the topic: sendMedia flags.0 and reply_to after the peer */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_send_media_document(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            0UL, 9UL, 1UL, "a.lha", "application/x-lha", "", 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(rpc + 4) != 1UL ||
+        tg_read_u32_le(rpc + 28) != TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR ||
+        tg_read_u32_le(rpc + 32) != 0UL || tg_read_u32_le(rpc + 36) != 40UL ||
+        tg_read_u32_le(rpc + 40) != 0x037c9330UL) {
+        tg_mtproto_send_set_topic(0UL);
+        puts("login self-test: a file into a topic layout");
+        return 2;
+    }
+    tg_mtproto_send_set_topic(TG_MTPROTO_TOPIC_GENERAL);
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_send_peer(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            "ok", 0UL, 1UL, 2UL) != TG_MTPROTO_TL_OK ||
+        (tg_read_u32_le(rpc + 4) & 1UL) != 0UL ||
+        tg_read_u32_le(rpc + 28) != 0x006b6f02UL) {
+        tg_mtproto_send_set_topic(0UL);
+        puts("login self-test: General sent with a reply header");
+        return 2;
+    }
+    tg_mtproto_send_set_topic(0UL);
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_messages_send_media_document(
+            &w, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x1234UL, 0UL, 0x5678UL, 1,
+            0UL, 9UL, 1UL, "a.lha", "application/x-lha", "", 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(rpc + 4) != 0UL ||
+        tg_read_u32_le(rpc + 28) != 0x037c9330UL) {
+        puts("login self-test: a file outside topics changed");
+        return 2;
+    }
+
+    /* the topic of each message, and no reply for one that names it */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 5UL);
+    /* a reply to a message of another chat: no topic of this one */
+    tg_topic_test_message(&w, 505UL, 8UL | 16UL | 1UL, 77UL, 0UL);
+    tg_topic_test_message(&w, 504UL, 8UL | 16UL | 2UL, 501UL, 40UL);
+    tg_topic_test_message(&w, 503UL, 16UL, 7UL, 0UL);
+    tg_topic_test_message(&w, 502UL, 0UL, 0UL, 0UL);
+    tg_topic_test_message(&w, 501UL, 8UL | 16UL, 40UL, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    if (tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           rpc, w.length, &list) !=
+            TG_MTPROTO_TL_OK ||
+        list.count != 5UL) {
+        printf("login self-test: topic messages do not parse (%lu)\n",
+               list.count);
+        return 2;
+    }
+    if (list.messages[0].topic_id != 0UL ||
+        list.messages[0].reply_to_msg_id != 77UL ||
+        !list.messages[0].has_reply) {
+        puts("login self-test: a reply to another chat read as a topic");
+        return 2;
+    }
+    if (list.messages[1].topic_id != 40UL ||
+        list.messages[1].reply_to_msg_id != 501UL ||
+        !list.messages[1].has_reply) {
+        puts("login self-test: a reply inside a topic is lost");
+        return 2;
+    }
+    if (list.messages[2].topic_id != 0UL ||
+        list.messages[2].reply_to_msg_id != 7UL ||
+        !list.messages[2].has_reply || list.messages[3].topic_id != 0UL ||
+        list.messages[3].has_reply) {
+        puts("login self-test: a message outside topics changed");
+        return 2;
+    }
+    if (list.messages[4].topic_id != 40UL ||
+        list.messages[4].reply_to_msg_id != 0UL ||
+        list.messages[4].has_reply) {
+        puts("login self-test: a topic's message reads as a reply");
+        return 2;
+    }
+
+    /* the topic list: General (hidden), a deleted one, News with a draft
+       the reader walks, Games with one it does not, then the messages */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, 4UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 4UL);
+    tg_topic_test_topic(&w, 1UL, 64UL, "General", 0UL, 0);
+    (void)tg_mtproto_tl_write_u32(&w, TG_FORUM_TOPIC_DELETED_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 33UL);
+    tg_topic_test_topic(&w, 40UL, 8UL, "News", 3UL, 1);
+    tg_topic_test_topic(&w, 41UL, 4UL, "Games", 5UL, 2);
+    vec = w.length;
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);
+    tg_topic_test_message(&w, 941UL, 8UL | 16UL, 41UL, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, 77UL); /* pts */
+    if (tg_mtproto_parse_forum_topics(TG_MESSAGES_FORUM_TOPICS_CONSTRUCTOR, rpc,
+                                      w.length, &topics) != TG_MTPROTO_TL_OK ||
+        topics.count != 3UL || topics.total != 4UL) {
+        printf("login self-test: the topic list does not parse (%lu)\n",
+               topics.count);
+        return 2;
+    }
+    if (topics.topics[0].id != 1UL || !topics.topics[0].hidden ||
+        strcmp(topics.topics[0].title, "General") != 0 ||
+        topics.topics[1].id != 40UL || !topics.topics[1].pinned ||
+        topics.topics[1].closed || topics.topics[1].unread_count != 3UL ||
+        topics.topics[1].top_message != 940UL ||
+        topics.topics[1].icon_color != 0x6fb9f0UL ||
+        strcmp(topics.topics[1].title, "News") != 0 ||
+        topics.topics[2].id != 41UL || topics.topics[2].unread_count != 5UL ||
+        !topics.topics[2].closed || topics.topics[2].pinned ||
+        topics.topics[2].read_inbox_max_id != 841UL ||
+        topics.topics[2].unread_mentions != 1UL) {
+        puts("login self-test: a topic's fields are wrong");
+        return 2;
+    }
+    if (topics.messages_offset != vec) {
+        printf("login self-test: the topics' messages at %lu, not %lu\n",
+               topics.messages_offset, vec);
+        return 2;
+    }
+    if (tg_mtproto_parse_message_text_list(
+            TG_MESSAGES_MESSAGES_CONSTRUCTOR, rpc + topics.messages_offset,
+            w.length - topics.messages_offset, &list) != TG_MTPROTO_TL_OK ||
+        list.count != 1UL || list.messages[0].id != 941UL ||
+        list.messages[0].topic_id != 41UL) {
+        puts("login self-test: the topics' newest messages are lost");
+        return 2;
+    }
+    if (tg_mtproto_parse_forum_topics(TG_MESSAGES_MESSAGES_CONSTRUCTOR, rpc,
+                                      w.length, &topics) == TG_MTPROTO_TL_OK) {
+        puts("login self-test: another reply read as topics");
+        return 2;
+    }
+
+    /* channel#fe685355 forum:flags.30, as any reply's chats bring it; a
+       min channel does not say no */
+    {
+        static const unsigned long kinds[4][2] = {
+            { (1UL << 30) | (1UL << 13), 1UL }, /* a forum */
+            { (1UL << 13) | (1UL << 12), 1UL }, /* min: still one */
+            { (1UL << 13), 0UL },               /* turned off */
+            { (1UL << 30) | (1UL << 13) | (1UL << 12), 1UL } /* min, on */
+        };
+        int k;
+
+        for (k = 0; k < 4; ++k) {
+            tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+            (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u32(&w, 0UL);
+            (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u32(&w, 1UL);
+            (void)tg_mtproto_tl_write_u32(&w, TG_CHANNEL_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u32(&w, kinds[k][0]);
+            (void)tg_mtproto_tl_write_u32(&w, 0UL);
+            (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x7e57UL);
+            (void)tg_mtproto_tl_write_u64(&w, 0UL, 0x5678UL);
+            (void)tg_write_string(&w, "Forum");
+            (void)tg_mtproto_tl_write_u32(&w, 0x37c1011cUL); /* no photo */
+            (void)tg_mtproto_tl_write_u32(&w, 2225UL);
+            (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+            (void)tg_mtproto_tl_write_u32(&w, 0UL);
+            memset(&cache, 0, sizeof(cache));
+            cache.collect_all = 1;
+            tg_mtproto_parse_message_peers(rpc, w.length, &cache);
+            if (tg_mtproto_channel_is_forum(0UL, 0x7e57UL) !=
+                (int)kinds[k][1]) {
+                printf("login self-test: forum flag, case %d\n", k);
+                tg_mtproto_channel_note_forum(0UL, 0x7e57UL, 0);
+                return 2;
+            }
+        }
+        tg_mtproto_channel_note_forum(0UL, 0x7e57UL, 0);
+        if (tg_mtproto_channel_is_forum(0UL, 0x7e57UL)) {
+            puts("login self-test: a forum stays after it is turned off");
+            return 2;
+        }
+    }
+    return 0;
+}
+
 static int tg_entity_marker_self_test(void)
 {
     tg_msg_entity e[2];
@@ -12766,7 +13669,8 @@ int tg_mtproto_login_self_test(void)
     tg_mtproto_tl_writer writer;
 
     if (tg_peer_notify_self_test() != 0 ||
-        tg_entity_marker_self_test() != 0 || tg_poll_self_test() != 0) {
+        tg_entity_marker_self_test() != 0 || tg_poll_self_test() != 0 ||
+        tg_forum_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)
