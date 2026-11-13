@@ -24,7 +24,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   list back with the topic still open; a click on the group's row shows
   its topics again. The list is read again every 30 seconds while it is
   on show, and a topic is marked as read when it is open in front of
-  you. The text client has /topics, which lists them numbered, and
+  you. A message that arrives in another topic of the open group counts
+  on that topic's row at once and is told like any other chat's news
+  (title, sound, pop-up), and the news of the other chats are not lost
+  while the topics stand in their place: they are counted for when the
+  chat list comes back. The text client has /topics, which lists them numbered, and
   /topic n, which reads only that topic from then on (history, new
   messages, what is sent); /topic alone goes back to every topic. Not
   yet: creating, renaming or closing topics, the pinned message of a
@@ -445,6 +449,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- The pills of the reactions under a message were too tight: with four
+  pixels at each end the count ran into the pill's round end, plainly
+  so with a wide font. The room at the ends now follows the pill's
+  height (a very narrow window keeps the old measure).
 - A message with a photo, a file, a link preview or a bot's keyboard
   lost its formatting: the caption of a photo was never bold, and a
   post with a link preview, the usual place for a link with words of

@@ -263,8 +263,10 @@ tg_chat_notify_entry *tg_chat_notify_claim(tg_chat_notify *notify)
         return 0;
     }
     entry = &notify->queue[notify->count];
-    /* A reused slot must not keep the preceding message's sender. */
+    /* A reused slot must not keep the preceding message's sender, nor its
+       forum topic. */
     entry->sender_name[0] = '\0';
+    entry->topic_id = 0UL;
     ++notify->count;
     return entry;
 }

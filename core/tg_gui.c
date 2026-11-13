@@ -4100,6 +4100,10 @@ static int tg_gui_reactions_layout(tg_gui_backend *backend,
     int dx = 0;
     int dy = 0;
     int ih = lh + 4;
+    /* Room at each end of the pill: its ends are half circles, and with
+       four pixels the count ran into the curve (seen on a wide font). */
+    int pad = ih / 2 - 2;
+    int cpad; /* this chip's: the small one where the column is very narrow */
     int w;
     int gi;
     int n;
@@ -4107,6 +4111,7 @@ static int tg_gui_reactions_layout(tg_gui_backend *backend,
     char label[32];
 
     *widest = 0;
+    if (pad < 5) pad = 5;
     if (reactions->count == 0 || width <= 0) return 0;
     for (i = 0; i < reactions->count && i < TG_REACTION_MAX; ++i) {
         const tg_reaction *reaction = &reactions->items[i];
@@ -4121,14 +4126,22 @@ static int tg_gui_reactions_layout(tg_gui_backend *backend,
         }
         sprintf(label, "%.7s %lu%.1s", symbol, tg_reaction_count(reaction),
                 reaction->chosen ? "+" : "");
-        w = backend->text_width(backend, label, (unsigned long)strlen(label)) + 8;
+        cpad = pad;
+        w = backend->text_width(backend, label, (unsigned long)strlen(label)) +
+            2 * cpad;
         if (w > width) {
             /* The picture and long emoticons yield to the count first. */
             sprintf(label, "* %lu%.1s", tg_reaction_count(reaction),
                     reaction->chosen ? "+" : "");
             w = backend->text_width(backend, label,
-                                     (unsigned long)strlen(label)) + 8;
-            if (w > width) w = width;
+                                     (unsigned long)strlen(label)) + 2 * cpad;
+            if (w > width) {
+                /* ...and then the room at the ends */
+                cpad = 4;
+                w = backend->text_width(backend, label,
+                                         (unsigned long)strlen(label)) + 8;
+                if (w > width) w = width;
+            }
         }
         if (dx > 0 && dx + w > width) { dx = 0; dy += ih + 2; }
         if (dx + w > *widest) *widest = dx + w;
@@ -4137,8 +4150,9 @@ static int tg_gui_reactions_layout(tg_gui_backend *backend,
             tg_gui_fill_pill(backend, reaction->chosen ? TG_GUI_PEN_ACCENT :
                 TG_GUI_PEN_SURFACE, tg_gui_make_rect(x + dx, y + dy, w, ih));
             tg_gui_draw_clipped(backend, reaction->chosen ?
-                TG_GUI_PEN_ACCENT_TEXT : TG_GUI_PEN_TEXT, x + dx + 4,
-                tg_gui_centred_baseline(backend, y + dy, ih), label, w - 8);
+                TG_GUI_PEN_ACCENT_TEXT : TG_GUI_PEN_TEXT, x + dx + cpad,
+                tg_gui_centred_baseline(backend, y + dy, ih), label,
+                w - 2 * cpad);
         }
         dx += w + 4;
     }
@@ -11161,6 +11175,13 @@ static int tg_gui_reactions_self_test(void)
     (void)tg_gui_reactions_layout(&backend, &message->reactions, 32, 18,
                                    0, 10, 11, 31, 1, &w);
     ok = ok && record.watch_hits[0] == 0;
+    /* Room at the ends of a chip: its ends are round, and the count stays
+       off them (line height 18: a chip 22 high, 9 pixels at each end). */
+    record.watch_hits[0] = 0;
+    record.watch_text[0] = label;
+    (void)tg_gui_reactions_layout(&backend, &message->reactions, 300, 18,
+                                   0, 10, 0, 200, 1, &w);
+    ok = ok && record.watch_hits[0] == 1 && record.watch_x[0] == 9;
     metrics = tg_gui_layout_metrics(&backend, 100, 18, 0);
     (void)tg_gui_message_height_kept(state, &backend, 0, 100, 18, 0, metrics);
     key = message->layout_key;
@@ -12559,6 +12580,57 @@ int tg_gui_self_test(void)
             }
         }
         state.chats[0] = saved_chat;
+    }
+
+    /* A forum's topic row: its unread count sits on the line of its newest
+       message, right of it, as a chat's does on a one-line row. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        tg_gui_chat saved0 = state.chats[0];
+        tg_gui_chat saved1 = state.chats[1];
+        int saved_count = state.chat_count;
+        int saved_sel = state.selected_chat;
+
+        memset(&state.chats[0], 0, sizeof(state.chats[0]));
+        memset(&state.chats[1], 0, sizeof(state.chats[1]));
+        tg_gui_copy(state.chats[0].name, sizeof(state.chats[0].name),
+                    "All chats");
+        tg_gui_copy(state.chats[0].preview, sizeof(state.chats[0].preview),
+                    "Back to the chat list");
+        state.chats[0].index = TG_GUI_TOPIC_BACK_INDEX;
+        tg_gui_copy(state.chats[1].name, sizeof(state.chats[1].name), "News");
+        tg_gui_copy(state.chats[1].preview, sizeof(state.chats[1].preview),
+                    "Ann: hello there");
+        tg_gui_copy(state.chats[1].time, sizeof(state.chats[1].time), "12:33");
+        state.chats[1].index = 40UL;
+        state.chats[1].unread = 7;
+        state.chats[1].is_group = 1;
+        state.chat_count = 2;
+        state.selected_chat = -1;
+        state.topic_view = 1;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 480;
+        rec.watch_text[0] = "7";
+        rec.watch_text[1] = state.chats[1].preview;
+        rec.watch_text[2] = "12:33";
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        state.topic_view = 0;
+        state.chats[0] = saved0;
+        state.chats[1] = saved1;
+        state.chat_count = saved_count;
+        state.selected_chat = saved_sel;
+        if (rec.watch_hits[0] != 1 || rec.watch_hits[1] != 1 ||
+            rec.watch_hits[2] != 1 || rec.watch_y[0] != rec.watch_y[1] ||
+            rec.watch_x[0] <= rec.watch_x[1] ||
+            rec.watch_y[2] >= rec.watch_y[1]) {
+            printf("gui self-test: topic row drew %d/%d/%d at y %d/%d/%d\n",
+                   rec.watch_hits[0], rec.watch_hits[1], rec.watch_hits[2],
+                   rec.watch_y[0], rec.watch_y[1], rec.watch_y[2]);
+            return 2;
+        }
     }
 
     /* The settings panel: its lines and values, the selection that skips

@@ -37,6 +37,13 @@ typedef struct tg_gui_chat_driver {
        under the name. */
     const char *(*draft_text)(int is_user, unsigned long peer_id_hi,
                               unsigned long peer_id_lo);
+    /* News of a chat that has no row on show, because a forum's topics
+       stand in the sidebar: the session counts it for when the chat list
+       comes back and gives the chat's name, in the GUI's text. 1 = a chat
+       of the list; 0 = not one (hidden, archived, unknown): no notice.
+       Set by the session after the bind; 0 = none (the tests). */
+    int (*offlist_news)(const tg_chat_notify_entry *entry, char *name,
+                        unsigned long size);
 } tg_gui_chat_driver;
 
 /* Binds chat_driver (the engine-facing vtable) so its on_message appends to

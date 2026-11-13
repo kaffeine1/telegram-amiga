@@ -1039,11 +1039,60 @@ static void tg_gui_driver_notify_text(tg_gui_state *state,
                               entry->text);
 }
 
+/* News that is not being read, told: counted for the title, and, unless
+   its chat is muted, for the chime and the pop-up, under the chat's name.
+   Muted news still count in the title and on the row. Only mute_until or
+   local mute hides the pop-up; Telegram's per-chat silent setting silences
+   the chime alone. */
+static void tg_gui_driver_notify_tell(tg_gui_state *state,
+                                      const tg_chat_notify_entry *entry,
+                                      const char *name,
+                                      unsigned long server_now)
+{
+    tg_mtproto_peer_notify_settings settings;
+    tg_gui_notify_override value;
+    time_t now;
+
+    tg_gui_notify_count(state, entry->peer_id_hi, entry->peer_id_lo);
+    tg_mtproto_peer_notify_get(entry->peer_constructor, entry->peer_id_hi,
+                               entry->peer_id_lo, &settings);
+    tg_gui_notify_override_get(state->notify_override_path,
+                               entry->peer_id_hi, entry->peer_id_lo, &value);
+    if (settings.mute_until > server_now ||
+        value.choice == TG_GUI_NOTIFY_MUTE) {
+        return;
+    }
+    now = time(0);
+    tg_gui_notify_ring_note(state, entry->peer_constructor,
+                            entry->peer_id_hi, entry->peer_id_lo,
+                            entry->silent, entry->is_out,
+                            now == (time_t)-1 ? 0UL : (unsigned long)now);
+    state->notify_last_peer_hi = entry->peer_id_hi;
+    state->notify_last_peer_lo = entry->peer_id_lo;
+    tg_gui_driver_copy(state->notify_last_name,
+                       sizeof(state->notify_last_name), name);
+    tg_gui_driver_notify_text(state, entry);
+    state->notify_seq += 1UL;
+}
+
+/* The topic a message of a forum is in: General when it names none. */
+static unsigned long tg_gui_driver_entry_topic(
+    const tg_chat_notify_entry *entry)
+{
+    return entry->topic_id != 0UL ? entry->topic_id
+                                  : TG_MTPROTO_TOPIC_GENERAL;
+}
+
 /* A cross-chat notification: find the sidebar row whose peer id matches and
    bump its unread badge + flag it to blink. Peer ids in one cache are unique
    per chat, so the id alone disambiguates. The currently open chat does not
    flash (you are already reading it). Unmatched peers (not in the sidebar) are
-   ignored -- there is no row to badge. */
+   ignored -- there is no row to badge.
+   A forum is read one topic at a time: a message in another of its topics
+   is news like any other chat's. While its topics stand in the sidebar the
+   topic's row takes the count (and the list is read again soon, for the
+   row's newest message), and the other chats, which have no row on show,
+   are counted by the session for when the chat list comes back. */
 static void tg_gui_driver_notify_at(void *ctx,
                                      const tg_chat_notify_entry *entry,
                                      unsigned long server_now)
@@ -1065,6 +1114,39 @@ static void tg_gui_driver_notify_at(void *ctx,
     if (state->in_search) {
         return;
     }
+    if (tg_gui_topics_listed(state)) {
+        char name[TG_GUI_NAME_MAX];
+
+        if (state->open_chat_valid &&
+            state->open_chat.peer_id_hi == entry->peer_id_hi &&
+            state->open_chat.peer_id_lo == entry->peer_id_lo) {
+            unsigned long topic = tg_gui_driver_entry_topic(entry);
+            int reading = topic == state->topic_open;
+
+            if (reading && !state->notify_away) {
+                return; /* it is in the transcript */
+            }
+            if (!reading) {
+                for (i = 1; i < state->chat_count; ++i) {
+                    if (state->chats[i].index == topic) {
+                        state->chats[i].unread += 1;
+                        state->chats[i].flash = 1;
+                        break;
+                    }
+                }
+                state->topics_stale = 1;
+            }
+            tg_gui_driver_notify_tell(state, entry, state->open_chat.name,
+                                      server_now);
+            return;
+        }
+        name[0] = '\0';
+        if (gui->offlist_news != 0 &&
+            gui->offlist_news(entry, name, sizeof(name))) {
+            tg_gui_driver_notify_tell(state, entry, name, server_now);
+        }
+        return;
+    }
     for (i = 0; i < state->chat_count; ++i) {
         tg_gui_chat *chat;
 
@@ -1073,44 +1155,22 @@ static void tg_gui_driver_notify_at(void *ctx,
             chat->peer_id_lo == entry->peer_id_lo) {
             /* Only count/flash what you are NOT reading: the open chat's incoming
                messages are already shown in the transcript, so its badge must not
-               grow while you look at it. With the window behind or parked the
-               open chat is not in front of you either: its news count for the
-               title and the pop-up, still without a badge on the row. */
-            if (i != state->selected_chat || state->notify_away) {
-                tg_mtproto_peer_notify_settings settings;
-                tg_gui_notify_override value;
-                time_t now;
+               grow while you look at it (in a forum, the open topic's). With
+               the window behind or parked the open chat is not in front of
+               you either: its news count for the title and the pop-up, still
+               without a badge on the row. */
+            int reading = i == state->selected_chat &&
+                          !(state->forum_open &&
+                            tg_gui_driver_entry_topic(entry) !=
+                                state->topic_open);
 
-                if (i != state->selected_chat) {
+            if (!reading || state->notify_away) {
+                if (!reading) {
                     chat->unread += 1;
                     chat->flash = 1;
                 }
-                /* Muted news still count in the title and on the row. Only
-                   mute_until or local mute hides the pop-up; Telegram's
-                   per-chat silent setting silences the chime alone. */
-                tg_gui_notify_count(state, entry->peer_id_hi,
-                                    entry->peer_id_lo);
-                tg_mtproto_peer_notify_get(entry->peer_constructor,
-                    entry->peer_id_hi, entry->peer_id_lo, &settings);
-                tg_gui_notify_override_get(state->notify_override_path,
-                    entry->peer_id_hi, entry->peer_id_lo, &value);
-                if (settings.mute_until > server_now ||
-                    value.choice == TG_GUI_NOTIFY_MUTE) {
-                    return;
-                }
-                now = time(0);
-                tg_gui_notify_ring_note(state, entry->peer_constructor,
-                                         entry->peer_id_hi, entry->peer_id_lo,
-                                         entry->silent, entry->is_out,
-                                         now == (time_t)-1 ? 0UL :
-                                         (unsigned long)now);
-                state->notify_last_peer_hi = entry->peer_id_hi;
-                state->notify_last_peer_lo = entry->peer_id_lo;
-                tg_gui_driver_copy(state->notify_last_name,
-                                   sizeof(state->notify_last_name),
-                                   chat->name);
-                tg_gui_driver_notify_text(state, entry);
-                state->notify_seq += 1UL;
+                tg_gui_driver_notify_tell(state, entry, chat->name,
+                                          server_now);
             }
             return;
         }
@@ -1133,6 +1193,7 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
     gui->prepend_at = -1; /* append by default; load-older flips it transiently */
     gui->prepend_allow_drop = 0;
     gui->draft_text = 0;
+    gui->offlist_news = 0;
     chat_driver->ctx = gui;
     chat_driver->on_message = tg_gui_driver_on_message;
     chat_driver->on_chat_list_changed = tg_gui_driver_on_chat_list_changed;
@@ -1928,10 +1989,30 @@ static const char *tg_gui_driver_test_draft(int is_user,
     return 0;
 }
 
+static int tg_gui_driver_test_offlist_no(const tg_chat_notify_entry *entry,
+                                         char *name, unsigned long size)
+{
+    (void)entry;
+    if (size > 0UL) {
+        name[0] = '\0';
+    }
+    return 0;
+}
+
+static int tg_gui_driver_test_offlist_yes(const tg_chat_notify_entry *entry,
+                                          char *name, unsigned long size)
+{
+    (void)entry;
+    if (size > 3UL) {
+        strcpy(name, "Bob");
+    }
+    return 1;
+}
+
 /* A forum's topics in the sidebar: the row back to the chats first, then
    each topic with its title, newest message and who wrote it, its time,
    unread count, pin and colour; a list of chats drawn after them ends the
-   topic view. */
+   topic view. News while they are on show. */
 static int tg_gui_driver_topics_self_test(void)
 {
     static tg_gui_state state;
@@ -2052,6 +2133,118 @@ static int tg_gui_driver_topics_self_test(void)
     if (tg_gui_topics_listed(&state)) {
         puts("gui driver self-test: other rows taken for the topics");
         return 0;
+    }
+
+    /* News while the topics are on show. The open forum is chat 0x1234,
+       its topic 40 is open: a message there is being read; one in another
+       topic counts on that topic's row and asks for the list again; one of
+       another chat is counted by the session, which names the chat. */
+    {
+        tg_chat_notify_entry note;
+        unsigned long seq;
+
+        memset(&state, 0, sizeof(state));
+        tg_gui_chat_driver_bind(&gui, &state, &driver);
+        state.notify_override_path = "tg-gui-driver-topics-self-test.tmp";
+        (void)remove(state.notify_override_path);
+        tg_gui_driver_show_topics(&state, rows, 2);
+        state.open_chat_valid = 1;
+        state.open_chat.peer_id_lo = 0x1234UL;
+        strcpy(state.open_chat.name, "Forum");
+        state.forum_open = 1;
+        state.topic_open = 40UL;
+        state.chats[1].unread = 0;
+        state.chats[2].unread = 0;
+        memset(&note, 0, sizeof(note));
+        note.is_chat = 1;
+        note.peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        note.peer_id_lo = 0x1234UL;
+        strcpy(note.text, "hi");
+        note.topic_id = 40UL;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        if (state.notify_seq != 0UL || state.topics_stale ||
+            state.chats[1].unread != 0 || state.chats[2].unread != 0) {
+            puts("gui driver self-test: the open topic's message is news");
+            return 0;
+        }
+        note.topic_id = 0UL; /* General, row 1 */
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        if (state.notify_seq != 1UL || !state.topics_stale ||
+            state.chats[1].unread != 1 || !state.chats[1].flash ||
+            state.chats[2].unread != 0 ||
+            strcmp(state.notify_last_name, "Forum") != 0) {
+            printf("gui driver self-test: another topic's message: seq %lu "
+                   "stale %d rows %d %d [%s]\n", state.notify_seq,
+                   state.topics_stale, state.chats[1].unread,
+                   state.chats[2].unread, state.notify_last_name);
+            return 0;
+        }
+        /* the window behind: the open topic's message is told too, with no
+           count on its row */
+        state.topics_stale = 0;
+        state.notify_away = 1;
+        note.topic_id = 40UL;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        state.notify_away = 0;
+        if (state.notify_seq != 2UL || state.chats[2].unread != 0 ||
+            state.topics_stale) {
+            puts("gui driver self-test: the open topic's message, away");
+            return 0;
+        }
+        /* another chat: no row for it here */
+        note.is_chat = 0;
+        note.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        note.peer_id_lo = 0x999UL;
+        note.topic_id = 0UL;
+        seq = state.notify_seq;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL); /* no session */
+        gui.offlist_news = tg_gui_driver_test_offlist_no;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL); /* not a listed chat */
+        if (state.notify_seq != seq) {
+            puts("gui driver self-test: an unlisted chat's news is told");
+            return 0;
+        }
+        gui.offlist_news = tg_gui_driver_test_offlist_yes;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        if (state.notify_seq != seq + 1UL ||
+            strcmp(state.notify_last_name, "Bob") != 0 ||
+            state.notify_last_peer_lo != 0x999UL) {
+            puts("gui driver self-test: another chat's news is lost while "
+                 "the topics are on show");
+            return 0;
+        }
+        /* the chat list on show, the forum's row the open one: a message
+           in another topic counts on it, one in the open topic does not;
+           an ordinary open chat's message never does */
+        memset(&chat, 0, sizeof(chat));
+        chat.index = 5UL;
+        strcpy(chat.name, "Forum");
+        chat.peer_id_lo = 0x1234UL;
+        chat.is_current = 1;
+        driver.on_chat_list_changed(driver.ctx, &chat, 1);
+        note.is_chat = 1;
+        note.peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        note.peer_id_lo = 0x1234UL;
+        note.topic_id = 41UL;
+        seq = state.notify_seq;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        note.topic_id = 40UL;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        if (state.selected_chat != 0 || state.chats[0].unread != 1 ||
+            state.notify_seq != seq + 1UL) {
+            printf("gui driver self-test: the forum's row: unread %d seq "
+                   "%lu\n", state.chats[0].unread, state.notify_seq - seq);
+            return 0;
+        }
+        state.forum_open = 0;
+        state.topic_open = 0UL;
+        note.topic_id = 0UL;
+        tg_gui_driver_notify_at(&gui, &note, 1000UL);
+        if (state.chats[0].unread != 1 || state.notify_seq != seq + 1UL) {
+            puts("gui driver self-test: the open chat's message is news");
+            return 0;
+        }
+        (void)remove(state.notify_override_path);
     }
     return 1;
 }

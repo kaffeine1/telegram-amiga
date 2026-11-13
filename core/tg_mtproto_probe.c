@@ -4041,6 +4041,7 @@ static void tg_chat_notify_push_message(const tg_mtproto_message_text *message,
     }
     entry->from_id_hi = message->from_id_hi;
     entry->from_id_lo = message->from_id_lo;
+    entry->topic_id = message->topic_id; /* a forum: which topic it is in */
     /* message carries the same silent:flags.13?true bit. */
     entry->silent = (message->flags & (1UL << 13)) != 0UL;
     entry->is_out = message->is_out != 0;
@@ -23323,6 +23324,55 @@ static int tg_gui_draft_is_open_peer(unsigned long peer_constructor,
            tg_gui_session_state.open_peer_id_lo == id_lo;
 }
 
+/* News of a chat while a forum's topics stand in the sidebar, where the
+   chat has no row to count it on: its unread count goes up in the chat
+   cache, which the chat list is drawn from when it comes back, and its
+   name is given for the pop-up. Only a chat the list would show: not a
+   hidden one, not an archived one, not one the cache does not know.
+   1 = counted. */
+static int tg_gui_offlist_news(const tg_chat_notify_entry *entry, char *name,
+                               unsigned long size)
+{
+    unsigned long i;
+    int is_user;
+
+    if (name != 0 && size > 0UL) {
+        name[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || entry == 0 || name == 0 ||
+        size == 0UL) {
+        return 0;
+    }
+    is_user = !entry->is_chat;
+    if (tg_gui_hidden_contains(entry->peer_id_hi, entry->peer_id_lo) ||
+        tg_gui_archived_find(is_user, entry->peer_id_hi,
+                             entry->peer_id_lo) >= 0 ||
+        tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
+                                        &tg_gui_probe_cache) != 0) {
+        return 0;
+    }
+    for (i = 0UL; i < tg_gui_probe_cache.count; ++i) {
+        tg_mtproto_peer_cache_entry *e = &tg_gui_probe_cache.entries[i];
+
+        if (e->is_self || e->id_hi != entry->peer_id_hi ||
+            e->id_lo != entry->peer_id_lo ||
+            (e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR) !=
+                is_user) {
+            continue;
+        }
+        if (e->unread_count < 99999UL) {
+            ++e->unread_count;
+            (void)tg_mtproto_save_peer_cache_file(
+                tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache, 0,
+                "chat cache");
+        }
+        tg_gui_driver_text_from_utf8(
+            name, size, e->title[0] != '\0' ? e->title : e->username);
+        return 1;
+    }
+    return 0;
+}
+
 /* The draft a chat's row shows, which is what the chat list asks for: its
    own, except for the open chat, whose draft is in the composer in front
    of the user. So text typed there and deleted again does not stay on the
@@ -24517,6 +24567,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
                             &tg_gui_session_state.driver);
 #if !defined(TG_NO_GUI)
     tg_gui_session_state.gui_driver.draft_text = tg_gui_draft_for_row;
+    tg_gui_session_state.gui_driver.offlist_news = tg_gui_offlist_news;
     tg_gui_draft_count = 0;
     tg_gui_drafts_changed = 0;
     tg_gui_draft_follow = 0;
@@ -24677,6 +24728,7 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream);
 #define TG_GUI_TOPICS_PAGE 40UL
 #endif
 #define TG_GUI_TOPICS_SECONDS 30UL /* how often the open list is read again */
+#define TG_GUI_TOPICS_STALE_SECONDS 5UL /* ...after news in another topic */
 #define TG_GUI_TOPIC_TEXT_MAX 128U
 
 static unsigned long tg_gui_topic_wanted = 0UL; /* the next open goes there */
@@ -37353,6 +37405,7 @@ int tg_gui_session_mutes_step(FILE *stream)
 
     if (stopped || !tg_gui_session_state.open || stream == 0 || gst == 0 ||
         gst->in_search || gst->in_filter || gst->forward_pick_active ||
+        gst->topic_view || /* a forum's topics: their rows are no chats */
         tg_gui_transfer_dir != 0 || tg_gui_session_link_failures() != 0UL) {
         return 0;
     }
@@ -38049,8 +38102,12 @@ int tg_gui_session_tick(FILE *stream)
         tg_gui_session_state.gui_driver.state != 0 &&
         tg_gui_session_state.gui_driver.state->topic_view &&
         (unsigned long)(time(0) - tg_gui_topics_read_at) >=
-            TG_GUI_TOPICS_SECONDS) {
+            (tg_gui_session_state.gui_driver.state->topics_stale
+                 ? TG_GUI_TOPICS_STALE_SECONDS : TG_GUI_TOPICS_SECONDS)) {
+        /* ...and a few seconds after a message came in another topic:
+           its row then shows the message and Telegram's own count. */
         tried = 1;
+        tg_gui_session_state.gui_driver.state->topics_stale = 0;
         if (tg_gui_session_fetch_topics(quiet) > 0) {
             dirty = 1;
         }

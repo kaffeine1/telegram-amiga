@@ -805,6 +805,8 @@ typedef struct tg_gui_state {
     char topic_title[TG_GUI_NAME_MAX];
     int forum_open; /* the open chat is a forum: with no topic open there
                        is nothing to write into */
+    int topics_stale; /* a message came in a topic that is not the open
+                         one: the list is to be read again soon */
 } tg_gui_state;
 
 /* Fills state with the demo conversation the GUI design was signed off on; used

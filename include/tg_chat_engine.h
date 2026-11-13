@@ -42,6 +42,9 @@ typedef struct tg_chat_notify_entry {
     unsigned long from_id_lo;
     char sender_name[TG_CHAT_NOTIFY_NAME]; /* UTF-8, empty unless a named user in a group */
     char text[TG_CHAT_NOTIFY_TEXT];
+    /* The forum topic the message is in (its first message's id); 0 = in
+       none, which in a forum is General. */
+    unsigned long topic_id;
 } tg_chat_notify_entry;
 
 typedef struct tg_chat_notify {

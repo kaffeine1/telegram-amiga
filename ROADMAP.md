@@ -1486,10 +1486,17 @@ the topic in top_msg_id; General takes messages with no reply header.
 A message's own header says its topic (forum_topic, reply_to_top_id),
 and one that only names its topic is no longer drawn as a reply.
 
+News follow the topics: a message in a topic other than the open one
+counts on its row at once (the list is read again a few seconds later,
+for the row's newest message and Telegram's own count) and is told as
+any chat's news; with the chat list on show it counts on the forum's
+row. The other chats have no row while the topics are on show: the
+session counts their news in the chat cache, which the chat list is
+drawn from when it comes back, and names the chat for the pop-up.
+
 Left for later: creating, renaming, closing and pinning topics; the
 pinned message of a topic (the bar stays off in a forum rather than
-show another topic's); the "@" count of a topic; a notification for a
-message in another topic of the open forum; a draft per topic.
+show another topic's); the "@" count of a topic; a draft per topic.
 
 ## Done for 0.2: select several messages, then delete or forward them
 

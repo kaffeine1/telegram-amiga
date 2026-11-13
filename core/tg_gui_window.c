@@ -6599,6 +6599,11 @@ static void tg_gui_window_topic_pick(tg_gui_state *state, int row,
         return;
     }
     tg_gui_chat_touched = 1; /* a topic opened on purpose is one to read */
+    if (state->open_chat_valid) {
+        /* the forum's news are being looked at: off the title's count */
+        tg_gui_notify_seen(state, state->open_chat.peer_id_hi,
+                           state->open_chat.peer_id_lo);
+    }
     state->selected_chat = row;
     state->nav_chat = -1;
     state->selected_msg = -1;
