@@ -24952,7 +24952,8 @@ static void tg_gui_topic_hint(void)
     memset(&row, 0, sizeof(row));
     row.is_service = 1;
     row.is_group = 1;
-    row.text = "This group is divided into topics: choose one in the list";
+    /* short: the pill is cut where the column is narrow or the font wide */
+    row.text = "Choose a topic in the list on the left";
     tg_gui_session_state.driver.on_message(tg_gui_session_state.driver.ctx,
                                            &row);
 }
