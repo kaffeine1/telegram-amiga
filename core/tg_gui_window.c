@@ -338,9 +338,34 @@ static void tg_gui_amiga_close_cybergraphics(void)
    build blocks the loop (seconds on a stock A1200), so it must not land in
    the middle of typing or of a menu. */
 #define TG_GUI_AV_IDLE_SECONDS 2UL
-/* Seconds between two avatar downloads for chats never opened: one getFile
-   each, in the background, so the list fills in without crowding the link. */
-#define TG_GUI_AV_PREFETCH_GAP_SECONDS 4UL
+/* The pause between two avatar downloads for chats never opened is
+   tg_gui_avatar_prefetch_gap() (tg_gui.h): none on a machine and a link
+   that do one in a blink, a few seconds elsewhere. A build for anything
+   but a 68k starts quick; a 68k earns it download by download. */
+#if defined(__m68k__)
+#define TG_GUI_AV_QUICK_MACHINE 0
+#else
+#define TG_GUI_AV_QUICK_MACHINE 1
+#endif
+
+/* A quick machine starts the walk without the pause, but not while the
+   program is still settling after its start (the slow first looks of
+   MorphOS, watch_boot_grace): until then the first one waits like any. */
+static int tg_gui_window_av_quick_start(time_t session_boot,
+                                        unsigned long boot_grace)
+{
+    time_t now;
+
+    if (!TG_GUI_AV_QUICK_MACHINE) {
+        return 0;
+    }
+    if (boot_grace == 0UL || session_boot == (time_t)-1) {
+        return 1;
+    }
+    now = time(0);
+    return now != (time_t)-1 && now >= session_boot &&
+           (unsigned long)(now - session_boot) >= boot_grace;
+}
 static unsigned long tg_gui_av_paint_budget_ms = TG_GUI_AV_PAINT_BUDGET_MS;
 static unsigned long tg_gui_av_paint_spent_ms = 0UL;
 static void tg_gui_av_set_lean(int lean); /* with the avatar grid below */
@@ -14213,6 +14238,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     int avatars_unpainted;       /* built in the background, not shown yet */
     time_t last_input_time;      /* last real window event (not a tick) */
     time_t last_avatar_prefetch; /* last list-avatar download (quiet turns) */
+    unsigned long last_avatar_ms; /* how long it took, 0 = none yet */
+    int last_avatar_none; /* the last look found nothing to fetch */
     ULONG wbn_mask;              /* Workbench reset warnings, 0 = none */
     struct Message *wbn_close;   /* a close warning answered after CloseWindow */
     int resize_pending;
@@ -14657,6 +14684,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     avatars_unpainted = 0;
     last_input_time = time(0);
     last_avatar_prefetch = last_input_time;
+    last_avatar_ms = 0UL;
+    last_avatar_none = 0;
     done = 0;
     caret_ticks = 0;
     xfer_mark = (time_t)0;
@@ -18540,14 +18569,41 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             tg_gui_session_link_failures() == 0UL &&
             tg_gui_window_quiet_for(last_input_time,
                                     TG_GUI_AV_IDLE_SECONDS) &&
-            tg_gui_window_quiet_for(last_avatar_prefetch,
-                                    TG_GUI_AV_PREFETCH_GAP_SECONDS) &&
+            tg_gui_window_quiet_for(
+                last_avatar_prefetch,
+                last_avatar_none
+                    ? TG_GUI_AV_PREFETCH_GAP_SECONDS
+                    : tg_gui_avatar_prefetch_gap(
+                          last_avatar_ms,
+                          tg_gui_window_av_quick_start(session_boot,
+                                                       watch_boot_grace))) &&
             !tg_gui_window_user_events_pending(&ctx, &viewer)) {
+            unsigned long av_start = tg_gui_photo_now_ms();
+            int av_quick = tg_gui_avatar_prefetch_gap(
+                               last_avatar_ms,
+                               tg_gui_window_av_quick_start(
+                                   session_boot, watch_boot_grace)) == 0UL;
+
             last_avatar_prefetch = time(0);
-            if (tg_gui_session_prefetch_list_avatar(stdout)) {
+            if (tg_gui_session_prefetch_list_avatar(av_quick, stdout)) {
                 /* the download dropped the row's old grid: repaint the list
                    so it is built again from the JPEG */
                 tg_gui_window_paint_sidebar(state, &backend);
+                /* what this one cost, download and drawing: a blink lets
+                   the next follow at once, anything more brings the
+                   breathing space back */
+                last_avatar_ms = tg_gui_photo_elapsed_ms(
+                    av_start, tg_gui_photo_now_ms());
+                if (last_avatar_ms == 0UL) {
+                    last_avatar_ms = 1UL;
+                }
+                last_avatar_none = 0;
+            } else {
+                /* nothing to fetch now (the chats' pictures are not known
+                   yet, or all are here): look again after the pause, not
+                   at every turn of the loop. What the last one cost stays
+                   as it was: an empty look says nothing about the speed. */
+                last_avatar_none = 1;
             }
         }
         /* Explicit user transfers still win. Otherwise move one bounded cache

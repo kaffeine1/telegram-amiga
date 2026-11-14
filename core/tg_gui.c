@@ -7202,6 +7202,16 @@ int tg_gui_topics_listed(const tg_gui_state *state)
            state->chats[0].index == TG_GUI_TOPIC_BACK_INDEX;
 }
 
+unsigned long tg_gui_avatar_prefetch_gap(unsigned long last_ms,
+                                         int quick_machine)
+{
+    if (last_ms == 0UL) {
+        return quick_machine ? 0UL : TG_GUI_AV_PREFETCH_GAP_SECONDS;
+    }
+    return last_ms <= TG_GUI_AV_QUICK_MS ? 0UL
+                                         : TG_GUI_AV_PREFETCH_GAP_SECONDS;
+}
+
 void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
                               unsigned long size)
 {
@@ -11454,6 +11464,23 @@ int tg_gui_self_test(void)
         tg_gui_notify_sound_override_self_test() != 0 ||
         tg_gui_notify_sound_choice_self_test() != 0 ||
         tg_gui_notify_settings_self_test() != 0) {
+        return 2;
+    }
+    /* The pause between two background avatars: none where the last one
+       came in a blink, or on a quick machine before the first; the old
+       breathing space after a slow one, on any machine. */
+    if (tg_gui_avatar_prefetch_gap(0UL, 1) != 0UL ||
+        tg_gui_avatar_prefetch_gap(0UL, 0) != TG_GUI_AV_PREFETCH_GAP_SECONDS ||
+        tg_gui_avatar_prefetch_gap(1UL, 0) != 0UL ||
+        tg_gui_avatar_prefetch_gap(TG_GUI_AV_QUICK_MS, 0) != 0UL ||
+        tg_gui_avatar_prefetch_gap(TG_GUI_AV_QUICK_MS + 1UL, 0) !=
+            TG_GUI_AV_PREFETCH_GAP_SECONDS ||
+        tg_gui_avatar_prefetch_gap(TG_GUI_AV_QUICK_MS + 1UL, 1) !=
+            TG_GUI_AV_PREFETCH_GAP_SECONDS ||
+        tg_gui_avatar_prefetch_gap(4000UL, 1) !=
+            TG_GUI_AV_PREFETCH_GAP_SECONDS ||
+        TG_GUI_AV_PREFETCH_GAP_SECONDS == 0UL) {
+        puts("gui self-test: the pause between background avatars");
         return 2;
     }
     tg_gui_demo_state(&state);

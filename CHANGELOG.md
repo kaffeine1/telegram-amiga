@@ -12,16 +12,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - Topics in forum groups. A group divided into topics opened as one
   transcript with every topic's messages mixed, each one quoting the
   line that created its topic, and what was sent landed in General. Now
-  such a group opens on the list of its topics, in place of the chat
-  list: "All chats" first, which goes back, then each topic with its
-  title, its newest message and who wrote it, the time, how many
-  messages are unread, a pin when the group pins it, and the topic's
-  colour as its square. A click, ENTER or an F-key opens a topic: the
-  header says which, the messages are that topic's alone, older ones
-  page in as in any chat, and what is written, replied, attached or
-  polled goes into it. Until a topic is open there is nothing to send,
-  and the status line says so. ESC, or "All chats", brings the chat
-  list back with the topic still open; a click on the group's row shows
+  such a group opens on General, its main topic, with the list of its
+  topics in place of the chat list: "All chats" first, which goes back,
+  then each topic with its title, its newest message and who wrote it,
+  the time, how many messages are unread, a pin when the group pins it,
+  and the topic's colour as its square. A click, ENTER or an F-key
+  opens another topic: the header says which is open, the messages are
+  that topic's alone, older ones page in as in any chat, and what is
+  written, replied, attached or polled goes into it. (A group whose
+  General gives nothing opens on the list alone, says to choose a topic
+  and sends nothing until one is open.) ESC, or "All chats", brings the
+  chat list back with the topic still open; a click on the group's row shows
   its topics again. The list is read again every 30 seconds while it is
   on show, and a topic is marked as read when it is open in front of
   you. A message that arrives in another topic of the open group counts
@@ -378,6 +379,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   starts and on Reload chat list; Saved Messages stays at the bottom.
 
 ### Changed
+- The pictures of the chats come much sooner on a quick machine. The
+  avatars of chats never opened were fetched one every four seconds on
+  every machine, and those kept on another of Telegram's datacenters
+  only when their chat was opened. Where one is fetched and drawn in
+  half a second at most, and from the start on PowerPC, x86 and ARM,
+  the next now follows at once, and the ones on another datacenter are
+  fetched too (the one-off key exchange with it is paid once, about a
+  second on those machines). A slow machine or a slow link keeps the
+  pause after each picture, and a 68k never pays that key exchange for
+  the list.
 - The right-click menus hold only what concerns the thing clicked. A
   chat's menu no longer repeats Archived chats and Reload chat list,
   which are in the Amigram menu (Amiga+A for the first); a message's

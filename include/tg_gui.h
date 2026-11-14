@@ -1267,6 +1267,19 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
    their place). */
 int tg_gui_topics_listed(const tg_gui_state *state);
 
+/* The avatars of the chats never opened are fetched in the background, one
+   at a time. On a slow machine or a slow link each fetch is followed by a
+   breathing space (TG_GUI_AV_PREFETCH_GAP_SECONDS), so the list fills in
+   without crowding the link or holding the window; where one is fetched and
+   drawn in a blink (TG_GUI_AV_QUICK_MS at most) the next follows at once.
+   last_ms = how long the last one took, 0 = none fetched yet: then the
+   machine's kind decides (quick_machine: every build but the 68k ones).
+   Returns the seconds to wait before the next. */
+#define TG_GUI_AV_PREFETCH_GAP_SECONDS 4UL
+#define TG_GUI_AV_QUICK_MS 500UL
+unsigned long tg_gui_avatar_prefetch_gap(unsigned long last_ms,
+                                         int quick_machine);
+
 void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
                               unsigned long size);
 

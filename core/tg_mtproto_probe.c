@@ -25533,6 +25533,10 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
                        tg_gui_session_state.open_peer_id_lo);
     if (!tg_gui_forum) {
         tg_gui_topic = 0UL;
+    } else if (tg_gui_topic == 0UL) {
+        /* A forum opens on its main topic, General, with the list of the
+           others beside it: nothing to choose before one can read. */
+        tg_gui_topic = TG_MTPROTO_TOPIC_GENERAL;
     }
     tg_gui_topic_apply();
     prev_timeout = tg_net_connect_timeout_seconds();
@@ -25541,34 +25545,51 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     /* Route the resolved rows into the GUI transcript (in + out), then restore
        the console default. */
     tg_chat_message_driver_override = &tg_gui_session_state.driver;
-    if (tg_gui_forum && tg_gui_topic == 0UL) {
-        tg_gui_topic_hint(); /* no messages before a topic is chosen */
-        printed = 1UL;
-    } else {
-        (void)tg_mtproto_auth_print_history_text_peer_on_context(
-            tg_gui_session_state.host, tg_gui_session_state.port,
-            tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
-            tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
-            tg_gui_session_state.peer_cache_file,
-            tg_gui_session_state.current_peer_index, history_limit, quiet,
-            &tg_gui_session_state.last_seen_message_id, &printed, 0, 1, 0,
-            tg_gui_session_state.current_peer_label,
-            tg_gui_session_state.own_label);
-        if (!tg_gui_forum &&
-            tg_gui_session_state.open_peer_constructor ==
-                TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
-            tg_mtproto_channel_is_forum(tg_gui_session_state.open_peer_id_hi,
-                                        tg_gui_session_state.open_peer_id_lo) &&
-            tg_gui_session_state.gui_driver.state != 0) {
-            /* The history said it is a forum: its topics instead. */
+    {
+        int pass;
+
+        /* Twice at most: a chat not yet known as a forum is read whole
+           first, and its history is what says so; then General alone. */
+        for (pass = 0; pass < 2; ++pass) {
+            (void)tg_mtproto_auth_print_history_text_peer_on_context(
+                tg_gui_session_state.host, tg_gui_session_state.port,
+                tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+                tg_gui_session_state.dc_id_text,
+                &tg_gui_session_state.context,
+                tg_gui_session_state.peer_cache_file,
+                tg_gui_session_state.current_peer_index, history_limit, quiet,
+                &tg_gui_session_state.last_seen_message_id, &printed, 0, 1, 0,
+                tg_gui_session_state.current_peer_label,
+                tg_gui_session_state.own_label);
+            if (tg_gui_forum ||
+                tg_gui_session_state.open_peer_constructor !=
+                    TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
+                !tg_mtproto_channel_is_forum(
+                    tg_gui_session_state.open_peer_id_hi,
+                    tg_gui_session_state.open_peer_id_lo) ||
+                tg_gui_session_state.gui_driver.state == 0) {
+                break;
+            }
+            /* The history said it is a forum: General instead of all its
+               topics mixed. */
             tg_gui_forum = 1;
-            tg_gui_topic = 0UL;
+            tg_gui_topic = TG_MTPROTO_TOPIC_GENERAL;
             tg_gui_topic_apply();
             tg_gui_session_state.gui_driver.state->message_count = 0;
             tg_gui_session_state.gui_driver.state->msg_gen++;
             tg_gui_session_state.last_seen_message_id = 0UL;
-            tg_gui_topic_hint();
+            printed = 0UL;
         }
+    }
+    if (tg_gui_forum && tg_gui_topic == TG_MTPROTO_TOPIC_GENERAL &&
+        printed == 0UL && tg_gui_session_state.gui_driver.state != 0 &&
+        tg_gui_session_state.gui_driver.state->message_count == 0) {
+        /* General gave nothing (empty, hidden away, or the link): the list
+           is there to choose from, and the transcript says so. */
+        tg_gui_topic = 0UL;
+        tg_gui_topic_apply();
+        tg_gui_topic_hint();
+        printed = 1UL;
     }
     tg_chat_message_driver_override = 0;
     if (printed == 0UL) {
@@ -37090,7 +37111,33 @@ static void tg_gui_session_fetch_open_avatar(FILE *stream)
    screens of the sidebar. */
 #define TG_GUI_PREFETCH_ROWS 30
 
-int tg_gui_session_prefetch_list_avatar(FILE *stream)
+/* The list's walk pays the first contact with a datacenter (the key
+   exchange) once in a run, and never on a 68k: about a second on a PowerPC
+   or a PC, a minute on a 68020. 1 = this is that once. */
+static int tg_gui_prefetch_may_contact(unsigned long dc)
+{
+#if defined(__m68k__)
+    (void)dc;
+    return 0;
+#else
+    static unsigned long asked[8];
+    static int asked_n = 0;
+    int i;
+
+    for (i = 0; i < asked_n; ++i) {
+        if (asked[i] == dc) {
+            return 0;
+        }
+    }
+    if (asked_n >= (int)(sizeof(asked) / sizeof(asked[0]))) {
+        return 0;
+    }
+    asked[asked_n++] = dc;
+    return 1;
+#endif
+}
+
+int tg_gui_session_prefetch_list_avatar(int quick, FILE *stream)
 {
     tg_gui_state *gs = tg_gui_session_state.gui_driver.state;
     unsigned long home = 0UL;
@@ -37128,20 +37175,43 @@ int tg_gui_session_prefetch_list_avatar(FILE *stream)
         if (k < tg_gui_avfetch_n) {
             continue; /* tried, or found on disk, this session */
         }
-        /* A photo on another datacenter only when the file channel already
-           points there: the walk never moves it under the photo pipeline
-           or pays a first contact. Those wait for their chat to open. */
-        if (tg_mtproto_avatar_meta_lookup(c->peer_id_hi, c->peer_id_lo,
-                                          &photo_hi, &photo_lo, &dc) &&
-            home != 0UL && dc != 0UL && dc != home &&
-            (tg_gui_foreign_dc != dc ||
-             !tg_gui_foreign_context.connection_open)) {
-            continue;
-        }
-        sprintf(index_text, "%lu", c->index);
-        if (tg_gui_session_fetch_avatar(index_text, c->peer_id_hi,
-                                        c->peer_id_lo, 0, stream)) {
-            return 1;
+        /* A photo on another datacenter when the file channel already
+           points there. Otherwise only in a quick walk, and never under
+           the photo pipeline, which may be fetching through that channel:
+           the walk then moves the channel, and pays the first contact with
+           that datacenter once. A slow walk leaves those for their chat to
+           open, as before. */
+        {
+            int contact = 0;
+            int got;
+
+            if (tg_mtproto_avatar_meta_lookup(c->peer_id_hi, c->peer_id_lo,
+                                              &photo_hi, &photo_lo, &dc) &&
+                home != 0UL && dc != 0UL && dc != home &&
+                (tg_gui_foreign_dc != dc ||
+                 !tg_gui_foreign_context.connection_open)) {
+                if (!quick || tg_gui_session_photo_pending()) {
+                    continue;
+                }
+                contact = tg_gui_session_needs_first_contact(dc);
+                if (contact && !tg_gui_prefetch_may_contact(dc)) {
+                    continue;
+                }
+            }
+            sprintf(index_text, "%lu", c->index);
+            if (contact) {
+                tg_gui_log("avatar: first contact with a datacenter, for "
+                           "the list");
+                tg_gui_contact_running = 1;
+            }
+            got = tg_gui_session_fetch_avatar(index_text, c->peer_id_hi,
+                                              c->peer_id_lo, 0, stream);
+            if (contact) {
+                tg_gui_contact_running = 0;
+            }
+            if (got) {
+                return 1;
+            }
         }
     }
     return 0;

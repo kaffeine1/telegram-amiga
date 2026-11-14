@@ -1464,16 +1464,19 @@ messages mixed, each quoting the line that created its topic, and what
 one sent landed in General. With topics in, the next release is 0.5
 (decided 2026-11-13).
 
-As the desktop client does in its chat column, a forum opens on its
+As the desktop client does in its chat column, a forum opens with its
 topics in place of the chat list: "All chats" first, then each topic,
 newest activity first, with the topic's colour standing in for its
 emoji, its unread count, a pin, and the newest message with who wrote
-it. A click, ENTER or an F-key opens a topic: the header's second line
-names it, the transcript is its thread alone, paging and the jump to
-the newest work as in a chat, and the composer, the paperclip and the
-polls write into it. With no topic open nothing can be sent, and the
-status line says so. ESC or "All chats" brings the chats back and
-leaves the topic open. The text client has /topics and /topic <n>.
+it. The transcript opens on General, the main topic (asked for after
+the first hands-on round: a forum that opened on an empty transcript
+and a line saying to choose a topic felt like a step too many); when
+General gives nothing the line is still there. A click, ENTER or an
+F-key opens another topic: the header's second line names it, the
+transcript is its thread alone, paging and the jump to the newest work
+as in a chat, and the composer, the paperclip and the polls write into
+it. ESC or "All chats" brings the chats back and leaves the topic
+open. The text client has /topics and /topic <n>.
 
 On the wire (layer 214, TDLib 9581c743097a, and core.telegram.org/api/
 forum): the forum flag is channel flags.30; the list is

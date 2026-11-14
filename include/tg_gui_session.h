@@ -739,9 +739,14 @@ void tg_gui_session_run_deferred_contact(FILE *stream);
    an open chat fetched its picture, so their rows kept the blurred stripped
    thumb. Takes the first of the most recent rows with no JPEG on disk and no
    try this session, on the home datacenter or on the one the file channel
-   already points at (never a first contact). The window calls it on quiet
-   turns; 1 when it tried one, 0 when nothing is left to do now. */
-int tg_gui_session_prefetch_list_avatar(FILE *stream);
+   already points at. quick = the window is fetching them one after the
+   other (a machine and a link that do one in a blink): then a picture on
+   another datacenter is fetched too, moving the file channel there when no
+   photo is being fetched through it, and paying the first contact with
+   that datacenter once (never on a 68k, where it takes a minute). The
+   window calls it on quiet turns; 1 when it tried one, 0 when nothing is
+   left to do now. */
+int tg_gui_session_prefetch_list_avatar(int quick, FILE *stream);
 
 /* Closes the held connection and unbinds the notification queue. */
 void tg_gui_session_close(void);

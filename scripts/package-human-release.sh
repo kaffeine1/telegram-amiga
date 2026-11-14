@@ -695,14 +695,15 @@ Messages
   page holds, the last row, More results..., brings the older ones.
   Find in all chats (Amiga+G) searches every chat the same way. Esc
   ends the search.
-- A group divided into topics opens on the list of its topics, in the
-  chat list's place: All chats first, which goes back, then each topic
-  with its newest message, the time and what is unread. A click, Enter
-  or an F-key opens a topic: the header says which, and what you write,
-  attach or poll goes into it. Until a topic is open there is nothing to
-  send. Esc or All chats brings the chats back; a click on the group's
-  row shows its topics again. In the text client /topics lists them and
-  /topic n reads only that one; /topic alone shows every topic again.
+- A group divided into topics opens on General, its main topic, with
+  the list of its topics in the chat list's place: All chats first,
+  which goes back, then each topic with its newest message, the time
+  and what is unread. A click, Enter or an F-key opens another topic:
+  the header says which is open, and what you write, attach or poll
+  goes into it. Esc or All chats brings the chats back; a click on the
+  group's row shows its topics again. In the text client /topics lists
+  them and /topic n reads only that one; /topic alone shows every topic
+  again.
 - To act on several messages together, choose Select in the menu of
   one of them: it is marked, and a click on any other message marks it
   or takes its mark away; Shift+click marks everything from the message
@@ -979,15 +980,15 @@ Messaggi
   quel messaggio. Se sono piu' di una pagina, l'ultima riga, More
   results..., porta i piu' vecchi. Find in all chats (Amiga+G) cerca
   allo stesso modo in tutte le chat. Esc chiude la ricerca.
-- Un gruppo diviso in argomenti (topic) si apre sull'elenco dei suoi
-  argomenti, al posto dell'elenco delle chat: prima All chats, che
-  torna indietro, poi ogni argomento con l'ultimo messaggio, l'ora e i
-  non letti. Un click, Invio o un tasto F apre un argomento:
-  l'intestazione dice quale, e cio' che scrivi, alleghi o proponi come
-  sondaggio va li'. Finche' nessun argomento e' aperto non si puo'
-  scrivere. Esc o All chats riporta le chat; un click sulla riga del
-  gruppo mostra di nuovo i suoi argomenti. Nel client testuale /topics
-  li elenca e /topic n legge solo quello; /topic da solo torna a tutti.
+- Un gruppo diviso in argomenti (topic) si apre su General, il suo
+  argomento principale, con l'elenco degli argomenti al posto
+  dell'elenco delle chat: prima All chats, che torna indietro, poi ogni
+  argomento con l'ultimo messaggio, l'ora e i non letti. Un click,
+  Invio o un tasto F apre un altro argomento: l'intestazione dice quale
+  e' aperto, e cio' che scrivi, alleghi o proponi come sondaggio va
+  li'. Esc o All chats riporta le chat; un click sulla riga del gruppo
+  mostra di nuovo i suoi argomenti. Nel client testuale /topics li
+  elenca e /topic n legge solo quello; /topic da solo torna a tutti.
 - Per agire su piu' messaggi insieme scegli Select nel menu di uno di
   loro: viene segnato, e un click su un altro messaggio lo segna o gli
   toglie il segno; Shift+click segna tutto dal messaggio cliccato per
