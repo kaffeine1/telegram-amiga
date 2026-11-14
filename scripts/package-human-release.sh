@@ -500,16 +500,13 @@ vecchio cassetto si puo' togliere.
         req_it="- MorphOS 3.x con il suo stack TCP/IP e una connessione internet.
 - Qualche MB di RAM libera."
         notes_en="- The chat list is not fetched at the first login: use \"Reload chat
-  list\" in the Amigram menu, or find chats with the search box.
-- In groups the typing line says \"someone is typing\" and the @ member
-  list is off: fetching a group's members freezes MorphOS.
+  list\" in the Chats menu, or find chats with the search box.
+- In groups the typing line says \"someone is typing\".
 - Own screen: MorphOS 3.16 or newer is recommended."
         notes_it="- La lista chat non viene scaricata al primo accesso: usa \"Reload chat
-  list\" nel menu Amigram, oppure cerca le chat con la casella di
+  list\" nel menu Chats, oppure cerca le chat con la casella di
   ricerca.
-- Nei gruppi la riga di scrittura dice \"someone is typing\" e l'elenco
-  dei membri con @ e' spento: scaricare i membri di un gruppo blocca
-  MorphOS.
+- Nei gruppi la riga di scrittura dice \"someone is typing\".
 - Schermo proprio: consigliato MorphOS 3.16 o piu' recente."
         ;;
     "AROS aarch64")
@@ -729,7 +726,7 @@ Messages
   /vote 2 votes the second answer of the last poll shown (/vote 1 3
   where several are allowed), /vote none takes the vote back and
   /voters lists who voted, where the votes are public.
-- "Create poll..." in the first menu makes a poll in the open chat: a
+- "Create poll..." in the Chats menu makes a poll in the open chat: a
   question, two to ten answers, and three switches. "Several answers"
   lets people choose more than one; "Public votes" lets everybody see
   who voted what (votes are anonymous otherwise); "Quiz" makes one
@@ -1015,7 +1012,7 @@ Messaggi
   (/vote 1 3 dove se ne possono scegliere piu' d'una), /vote none
   ritira il voto e /voters elenca chi ha votato, dove i voti sono
   pubblici.
-- "Create poll..." nel primo menu crea un sondaggio nella chat aperta:
+- "Create poll..." nel menu Chats crea un sondaggio nella chat aperta:
   una domanda, da due a dieci risposte, e tre interruttori. "Several
   answers" permette di scegliere piu' risposte; "Public votes" fa
   vedere a tutti chi ha votato cosa (altrimenti i voti sono anonimi);

@@ -7270,7 +7270,9 @@ static unsigned long tg_gui_clip_read_text(char *out, unsigned long out_size)
 
 /* Cut/copy/paste live in their own Edit menu per the AmigaOS UI Style Guide
    (an issue #5 follow-up); the MENUPICK handler keys off GTMENUITEM_USERDATA,
-   so item positions are free to move. */
+   so item positions are free to move. The first menu had grown to fifteen
+   lines: what concerns the chat list and the open chat has a menu of its
+   own, Chats, after Edit as the Style Guide orders them (issue #20). */
 static struct NewMenu tg_gui_newmenu[] = {
 /* Project */
     { NM_TITLE, (STRPTR)TG_APP_NAME, 0, 0, 0, 0 },
@@ -7284,21 +7286,6 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_HELP },
     { NM_ITEM,  (STRPTR)"Support development...", 0, 0, 0,
       (APTR)TG_MENU_SUPPORT },
-    { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
-    { NM_ITEM,  (STRPTR)"Remove chat from list", (STRPTR)"R", 0, 0,
-      (APTR)TG_MENU_REMOVE },
-    { NM_ITEM,  (STRPTR)"Reload chat list", 0, 0, 0,
-      (APTR)TG_MENU_RELOAD },
-    { NM_ITEM,  (STRPTR)"Archived chats", (STRPTR)"A", 0, 0,
-      (APTR)TG_MENU_ARCHIVE },
-    { NM_ITEM,  (STRPTR)"Send file...", (STRPTR)"F", 0, 0,
-      (APTR)TG_MENU_SENDFILE },
-    { NM_ITEM,  (STRPTR)"Send photo...", (STRPTR)"P", 0, 0,
-      (APTR)TG_MENU_SENDPHOTO },
-    { NM_ITEM,  (STRPTR)"Create poll...", 0, 0, 0,
-      (APTR)TG_MENU_POLL },
-    { NM_ITEM,  (STRPTR)"Insert emoji...", (STRPTR)"E", 0, 0,
-      (APTR)TG_MENU_EMOJI },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Quit", (STRPTR)"Q", 0, 0,
       (APTR)TG_MENU_QUIT },
@@ -7315,7 +7302,23 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_FINDCHAT },
     { NM_ITEM,  (STRPTR)"Find in all chats...", (STRPTR)"G", 0, 0,
       (APTR)TG_MENU_FINDALL },
-/* Settings */
+/* Chats: the list first, then what is sent to the open chat */
+    { NM_TITLE, (STRPTR)"Chats", 0, 0, 0, 0 },
+    { NM_ITEM,  (STRPTR)"Remove chat from list", (STRPTR)"R", 0, 0,
+      (APTR)TG_MENU_REMOVE },
+    { NM_ITEM,  (STRPTR)"Reload chat list", 0, 0, 0,
+      (APTR)TG_MENU_RELOAD },
+    { NM_ITEM,  (STRPTR)"Archived chats", (STRPTR)"A", 0, 0,
+      (APTR)TG_MENU_ARCHIVE },
+    { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
+    { NM_ITEM,  (STRPTR)"Send file...", (STRPTR)"F", 0, 0,
+      (APTR)TG_MENU_SENDFILE },
+    { NM_ITEM,  (STRPTR)"Send photo...", (STRPTR)"P", 0, 0,
+      (APTR)TG_MENU_SENDPHOTO },
+    { NM_ITEM,  (STRPTR)"Create poll...", 0, 0, 0,
+      (APTR)TG_MENU_POLL },
+    { NM_ITEM,  (STRPTR)"Insert emoji...", (STRPTR)"E", 0, 0,
+      (APTR)TG_MENU_EMOJI },
     { NM_END,   0, 0, 0, 0, 0 }
 };
 
@@ -10350,7 +10353,7 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     }
 }
 
-/* "Reload chat list", from the Amigram menu: pages
+/* "Reload chat list", from the Chats menu: pages
    the dialog list again from the server. Blocking but bounded. */
 static void tg_gui_window_reload_list(tg_gui_state *state,
                                       tg_gui_backend *backend)
@@ -16900,7 +16903,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                want ? "Archived (Amigram menu, Archived chats)"
+                                want ? "Archived (Chats menu, Archived chats)"
                                      : "Back in your chats");
                         }
                     } else if (ci >= 0 && ci < state->chat_count &&

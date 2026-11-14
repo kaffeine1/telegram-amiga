@@ -7431,7 +7431,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ids[n++] = TG_GUI_CTX_CHAT_LEAVE;
         }
         /* A row's menu holds what concerns that chat. The list's own
-           commands (Archived chats, Reload chat list) are in the Amigram
+           commands (Archived chats, Reload chat list) are in the Chats
            menu, with their shortcuts; the way out of the Archive is the
            one kept here too, where the pointer already is. */
         if (state->archive_view) {
@@ -10341,7 +10341,7 @@ static int tg_gui_notify_menu_self_test(void)
         return 2;
     }
     state->ctx_hidden_count = 0UL;
-    /* The list's own commands are the Amigram menu's: outside the
+    /* The list's own commands are the Chats menu's: outside the
        Archive a row's menu has none of them, and what sends a file or a
        photo is no part of it either. */
     {
@@ -10353,7 +10353,7 @@ static int tg_gui_notify_menu_self_test(void)
                 ids[i] == TG_GUI_CTX_SENDFILE ||
                 ids[i] == TG_GUI_CTX_SENDPHOTO ||
                 strcmp(labels[i], "Reload chat list") == 0) {
-                puts("gui self-test: a chat's menu repeats the Amigram "
+                puts("gui self-test: a chat's menu repeats the Chats "
                      "menu");
                 return 2;
             }

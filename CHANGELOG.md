@@ -8,6 +8,19 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Changed
+- The first menu is split in two (issue #20). It had grown to fifteen
+  lines, most of them about the chats, and those now have a menu of
+  their own, Chats, after Edit: Remove chat from list, Reload chat list
+  and Archived chats, then Send file..., Send photo..., Create poll...
+  and Insert emoji... The Amigram menu keeps Iconify, Settings...,
+  About..., Help..., Support development... and Quit. Every shortcut is
+  the same as before.
+
+### Fixed
+- The MorphOS manual still said that the "@" list of a group's members
+  was off on MorphOS. It has opened there since 0.5.
+
 ## [0.5] - 2026-11-14
 
 ### Added
