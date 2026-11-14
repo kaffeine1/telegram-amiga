@@ -15,7 +15,10 @@ It uses the Telegram API but is not made by Telegram.
 One engine, two clients: a window drawn with Intuition and GadTools, and
 a text client for the Shell, which also runs on a plain 68000.
 
-![The Amigram window](assets/screenshots/telegram-amiga-gui.png)
+![Amigram 0.5 on MorphOS: a forum group and its topics](assets/screenshots/amigram-topics-morphos.png)
+
+*Amigram 0.5 on MorphOS: a forum group, with its topics in place of the
+chat list.*
 
 Status: **beta 0.5** (2026-11-14). Direct chats, groups, channels and the
 topics of forum groups work on all six platforms. 0.5 is the first
@@ -92,26 +95,37 @@ reconnects, so let it run. There is no need to turn 2FA off.
 ## What works
 
 - Chat list with users, groups and channels: avatars, unread counts,
-  search, reorder by drag, remove, hidden chats.
+  pinned chats, the Archive, drafts, mute marks, mark as unread, search,
+  reorder by drag, remove, hidden chats.
+- Forum groups: the topics in place of the chat list, each one read,
+  written to and marked as read on its own.
 - History with older messages on demand and the date where the day
-  changes.
+  changes. Search in a chat and in all chats, the pinned messages on a
+  bar under the header, a button for the mentions not yet seen.
 - Long multi-line messages, replies, edit, delete, forward, @mentions,
-  emoji panel, Copy/Cut/Paste.
+  emoji panel, Copy/Cut/Paste. Bold, italic, strike, code and spoilers
+  typed with markers. Several messages selected at once.
 - Reactions, including the full list a chat allows.
-- Photos in the chat and in a viewer, link previews, a frame of each
-  video. A text-only mode for slow machines.
-- Files both ways, up to 125 MiB on 68k and 250 MiB elsewhere, with Saved
-  Messages as a cloud drawer.
+- Polls and quizzes: read, vote, create, stop, see who voted.
+- Photos in the chat and in a viewer, albums, link previews, a frame of
+  each video, and stickers where the system has a WEBP datatype (the
+  client offers to install one). A text-only mode for slow machines.
+- Files both ways, several at once, up to 125 MiB on 68k and 250 MiB
+  elsewhere, with Saved Messages as a cloud drawer. A downloaded file
+  opens from its message.
 - New-message notifications: window title, pop-up, sound (the built-in one
-  or a file of your choice) and AppIcon. Mute and ring per chat.
+  or a file of your choice) and AppIcon. Mute and ring per chat, with
+  the mutes kept on Telegram.
 - Typing indicator, read receipts, hiding messages in groups.
-- Own screen, Iconify, dark theme, remembered window, an ARexx port.
-- Text client: chats as tabs under F1 to F10, `/` lists the commands.
+- Own screen, Iconify, dark theme, remembered window, a settings panel,
+  an ARexx port, and a notice when a new release is out.
+- Text client: chats as tabs under F1 to F10, `/` lists the commands,
+  `/find` searches the open chat.
 
 ## Not yet
 
-Contacts, albums, voice and video playback, files served by Telegram's
-CDN (some big downloads from public channels) and creating an account.
+Contacts, voice and video playback, files served by Telegram's CDN (some
+big downloads from public channels) and creating an account.
 
 ## Privacy & security
 
