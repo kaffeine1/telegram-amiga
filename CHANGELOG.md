@@ -8,6 +8,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
 
+## [0.5] - 2026-11-14
+
 ### Added
 - Topics in forum groups. A group divided into topics opened as one
   transcript with every topic's messages mixed, each one quoting the
@@ -471,6 +473,22 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   member list like the other systems: 64 recent members (24 on 68k).
 
 ### Fixed
+- A pinned chat showed the unread count it had the last time the chat
+  list was read, until it was opened: what had been read on the phone
+  since still counted. After the start the counts are corrected in the
+  background, a chat at a time, but the pinned chats were skipped (their
+  mute was already known from the answer that lists the pins, and the
+  walk asks only about chats whose mute it does not know). Their counts
+  now come from that same answer: at the start, on Reload chat list and
+  when the pins change on another device.
+- The chat the program opens by itself at the start kept its unread
+  badge after it had been read: the badge went only with a click on the
+  row. It now goes when Telegram is told the chat was read.
+- A result of Search Telegram no longer shows the pin or the mute mark of
+  the chat that was on that row of the list before the search. The
+  results took the rows as they were and changed only the name, so the
+  second result of a search could carry the pin of the second chat of
+  the list.
 - On a slow machine the window could stop showing what arrived. When a
   look at Telegram for new messages took as long as the pause between
   two looks (a real A1200 with a 68020 at 14 MHz and a busy chat: two

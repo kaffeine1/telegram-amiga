@@ -255,8 +255,17 @@ Features are therefore grouped by the work they share.
   a stock A1200, a Vampire, a PiStorm under AfA OS, a G5 under MorphOS
   and a Raspberry Pi 400, as a plain 68000 in WinUAE, and in the OS4,
   MorphOS, AROS i386, x86_64 and aarch64 VMs.
-- **0.2, what a desktop user expects.** The first feature release after
-  the beta; see "Planned for 0.2" below.
+- **0.5, what a desktop user expects.** The first feature release after
+  the beta, planned as 0.2 and numbered 0.5 once forum topics were in
+  (the section below keeps its name, "Planned for 0.2"). RELEASED
+  2026-11-14. Tried during the cycle on a stock A1200, a Vampire, a
+  PiStorm under AfA OS, a G5 under MorphOS and a Raspberry Pi 400. The
+  builds that shipped were tried in emulation: an A1200 with a 68EC020
+  and a plain 68000 under Kickstart 3.1 in WinUAE, and the AmigaOS 4,
+  MorphOS and AROS i386 VMs, after a sanitizer round on the code that
+  ships. That last round found three small defects in the chat list
+  (the unread count of a pinned chat, the badge of the chat opened at
+  the start, a pin left on a search result), fixed before the cut.
 - **After the beta: skins and translations.** Colours, fonts and more
   still to be defined, and the client in other languages through the
   system's locale.library. Both touch every colour or every word on

@@ -17,11 +17,14 @@ a text client for the Shell, which also runs on a plain 68000.
 
 ![The Amigram window](assets/screenshots/telegram-amiga-gui.png)
 
-Status: **beta 0.1** (2026-11-07), the first release as Amigram. Direct
-chats, groups and channels work on all six platforms. 0.1 adds no
-features: it brings the new name, carries the Telegram api credentials
-inside the client and fixes what the beta round found. New features start
-with 0.2: see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md).
+Status: **beta 0.5** (2026-11-14). Direct chats, groups, channels and the
+topics of forum groups work on all six platforms. 0.5 is the first
+release with new features since the name changed: topics, search in a
+chat and in all chats, the Archive, pinned messages and pinned chats,
+drafts, polls, albums, stickers through a WEBP datatype, an ARexx port,
+a settings panel and an update notice among them. The whole list is in
+[CHANGELOG.md](CHANGELOG.md); what comes next is in
+[ROADMAP.md](ROADMAP.md).
 
 The plain-68000 package exists thanks to Paolo Arus (DaRkHoRaCe), who
 tested it on an A600 round after round.
@@ -47,13 +50,13 @@ client. No private files.
 
 | Platform | CPU | Release |
 |---|---|---|
-| AmigaOS 3.x (68020+) | m68k | [os3-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-beta-0.1) |
-| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-beta-0.1) |
-| AmigaOS 4.x | PPC | [os4-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-beta-0.1) |
-| MorphOS | PPC | [morphos-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-beta-0.1) |
-| AROS i386 (ABIv0) | x86 | [aros-i386-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-beta-0.1) |
-| AROS x86_64 | x86-64 | [aros-x86_64-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-beta-0.1) |
-| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-beta-0.1](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-beta-0.1) |
+| AmigaOS 3.x (68020+) | m68k | [os3-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-beta-0.5) |
+| AmigaOS 3.x (plain 68000, text client) | m68k | [os3-68000-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/os3-68000-beta-0.5) |
+| AmigaOS 4.x | PPC | [os4-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/os4-beta-0.5) |
+| MorphOS | PPC | [morphos-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/morphos-beta-0.5) |
+| AROS i386 (ABIv0) | x86 | [aros-i386-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-i386-beta-0.5) |
+| AROS x86_64 | x86-64 | [aros-x86_64-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-x86_64-beta-0.5) |
+| AROS aarch64 (Raspberry Pi) | ARM64 | [aros-aarch64-beta-0.5](https://github.com/kaffeine1/telegram-amiga/releases/tag/aros-aarch64-beta-0.5) |
 
 All releases: <https://github.com/kaffeine1/telegram-amiga/releases>.
 

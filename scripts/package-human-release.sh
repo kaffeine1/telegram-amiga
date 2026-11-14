@@ -99,11 +99,11 @@ LHA_BIN=${LHA_BIN:-"$HOME/amiga-dev/tools/lha-src/src/lha"}
 AMINET_ROOT=${AMINET_ROOT:-"$PACKAGE_ROOT/aminet"}
 AROSARCHIVES_ROOT=${AROSARCHIVES_ROOT:-"$PACKAGE_ROOT/arosarchives"} # set here: package_one stages the aarch64 lha there
 # The program's name, and the name its archives had in the release before.
-# The first Amigram release (0.1) replaces the TelegramAmiga archives on every
-# channel through their Replaces fields; from the release after it, set
-# PREV_NAME=Amigram (or change the default) so each release replaces the last.
+# The first Amigram release (0.1) replaced the TelegramAmiga archives on
+# every channel through their Replaces fields (PREV_NAME=TelegramAmiga);
+# from 0.5 each release replaces the last one's archives, of the same name.
 APP_NAME=Amigram
-PREV_NAME=${PREV_NAME:-TelegramAmiga}
+PREV_NAME=${PREV_NAME:-Amigram}
 prev_lower=$(printf '%s' "$PREV_NAME" | tr 'A-Z' 'a-z')
 app_lower=$(printf '%s' "$APP_NAME" | tr 'A-Z' 'a-z')
 # The line that follows the name wherever we publish, so that whoever knew the
