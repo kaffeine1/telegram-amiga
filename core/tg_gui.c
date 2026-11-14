@@ -2386,6 +2386,29 @@ int tg_gui_pin_mark_width(int lh)
     return ((tg_gui_pin_mark_height(lh) * 7) / 9) | 1;
 }
 
+/* A result of the online search takes a row of the sidebar that was a
+   chat's: nothing of that chat may stay on it (its pin, its mute mark, its
+   unread mark, its draft), only the result's name, the letter of its round
+   mark and its place in the results (1 = the first). */
+void tg_gui_chat_set_search_result(tg_gui_chat *row, const char *name, int k)
+{
+    char c;
+
+    if (row == 0 || name == 0) {
+        return;
+    }
+    memset(row, 0, sizeof(*row));
+    tg_gui_copy(row->name, sizeof(row->name), name);
+    c = name[0];
+    if (c >= 'a' && c <= 'z') {
+        c = (char)(c - 32);
+    }
+    row->initials[0] = (c != '\0') ? c : '?';
+    row->initials[1] = '\0';
+    row->avatar_color = k % TG_GUI_AVATAR_COLORS;
+    row->index = (unsigned long)(k + 1);
+}
+
 static void tg_gui_draw_pin_mark(tg_gui_backend *backend, int pen, int x,
                                  int centre_y, int lh)
 {
@@ -10088,6 +10111,46 @@ static int tg_gui_mute_mark_self_test(void)
     return 0;
 }
 
+static int tg_gui_search_result_row_self_test(void)
+{
+    static tg_gui_chat row;
+
+    memset(&row, 0, sizeof(row));
+    tg_gui_copy(row.name, sizeof(row.name), "Pinned chat");
+    tg_gui_copy(row.preview, sizeof(row.preview), "a draft");
+    tg_gui_copy(row.time, sizeof(row.time), "09:50");
+    row.unread = 5;
+    row.index = 40UL;
+    row.peer_id_hi = 1UL;
+    row.peer_id_lo = 2UL;
+    row.is_group = 1;
+    row.flash = 1;
+    row.pinned = 1;
+    row.unread_mark = 1;
+    row.draft = 1;
+    row.muted = 1;
+    tg_gui_chat_set_search_result(&row, "python", 2);
+    if (strcmp(row.name, "python") != 0 || strcmp(row.initials, "P") != 0 ||
+        row.index != 3UL || row.avatar_color != 2 % TG_GUI_AVATAR_COLORS) {
+        puts("gui self-test: a search result's row is not the result");
+        return 2;
+    }
+    if (row.pinned || row.muted || row.unread_mark || row.draft ||
+        row.unread != 0 || row.flash || row.is_group ||
+        row.preview[0] != '\0' || row.time[0] != '\0' ||
+        row.peer_id_hi != 0UL || row.peer_id_lo != 0UL) {
+        puts("gui self-test: a search result kept marks of the chat whose "
+             "row it took");
+        return 2;
+    }
+    tg_gui_chat_set_search_result(&row, "", 0);
+    if (strcmp(row.initials, "?") != 0 || row.index != 1UL) {
+        puts("gui self-test: a nameless search result has no mark");
+        return 2;
+    }
+    return 0;
+}
+
 /* A poll before it leaves: the blanks at the ends go, the answers left
    empty are dropped and the others close up in their order; a poll needs a
    question and two answers. */
@@ -11484,6 +11547,7 @@ int tg_gui_self_test(void)
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||
         tg_gui_mute_mark_self_test() != 0 ||
+        tg_gui_search_result_row_self_test() != 0 ||
         tg_gui_poll_draft_self_test() != 0 ||
         tg_gui_notify_sound_preferences_self_test() != 0 ||
         tg_gui_notify_sound_override_self_test() != 0 ||

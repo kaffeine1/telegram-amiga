@@ -395,6 +395,9 @@ void tg_gui_requester_name(char *out, unsigned long size, const char *name);
    this line height. */
 int tg_gui_chat_badge_pen(const tg_gui_chat *chat);
 int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat);
+/* Makes a sidebar row one result of the online search (k = 0 the first):
+   its name and letter, and none of the marks of the chat that was there. */
+void tg_gui_chat_set_search_result(tg_gui_chat *row, const char *name, int k);
 int tg_gui_mute_mark_width(int lh);
 
 /* Window mode: the normal chat UI, or one of the first-login screens shown when

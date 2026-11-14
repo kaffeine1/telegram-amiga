@@ -10974,25 +10974,10 @@ static void tg_gui_window_load_search_results(tg_gui_state *state)
         n = TG_GUI_MAX_CHATS;
     }
     for (k = 0; k < n; ++k) {
-        const char *nm = tg_gui_session_search_name(k);
-        char c;
-
-        tg_gui_window_copy(state->chats[k].name, sizeof(state->chats[k].name),
-                           nm);
-        state->chats[k].preview[0] = '\0';
-        state->chats[k].time[0] = '\0';
-        c = nm[0];
-        if (c >= 'a' && c <= 'z') {
-            c = (char)(c - 32);
-        }
-        state->chats[k].initials[0] = (c != '\0') ? c : '?';
-        state->chats[k].initials[1] = '\0';
-        state->chats[k].avatar_color = k % TG_GUI_AVATAR_COLORS;
-        state->chats[k].unread = 0;
-        state->chats[k].index = (unsigned long)(k + 1);
-        state->chats[k].peer_id_hi = 0UL;
-        state->chats[k].peer_id_lo = 0UL;
-        state->chats[k].flash = 0;
+        /* the row from scratch: it was a chat's, and that chat's pin or
+           mute mark is not the result's */
+        tg_gui_chat_set_search_result(&state->chats[k],
+                                      tg_gui_session_search_name(k), k);
     }
     state->chat_count = n;
     state->selected_chat = 0;
