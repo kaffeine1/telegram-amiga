@@ -379,6 +379,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   starts and on Reload chat list; Saved Messages stays at the bottom.
 
 ### Changed
+- A pinned chat with unread messages shows its pin beside the badge.
+  The pin stood where the badge goes and gave way to it, as in Telegram
+  Desktop, so a pinned chat with something new could not be told from
+  the others (the phone tells it by its shade). The topics of a forum
+  follow the same rule.
 - The pictures of the chats come much sooner on a quick machine. The
   avatars of chats never opened were fetched one every four seconds on
   every machine, and those kept on another of Telegram's datacenters

@@ -5281,21 +5281,20 @@ static tg_mtproto_tl_status tg_skip_folder(tg_mtproto_tl_reader *reader)
     unsigned long scratch;
 
     /* folder#ff544e65 flags:# autofill_new_broadcasts:flags.0?true
-       exclude_pinned:flags.1?true emoticon:flags.3?string id:int title:string
-       photo:flags.2?ChatPhoto */
+       autofill_public_groups:flags.1?true
+       autofill_new_correspondents:flags.2?true id:int title:string
+       photo:flags.3?ChatPhoto (layer 214; the first three bits carry no
+       data). */
     if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
         constructor != TG_FOLDER_CONSTRUCTOR ||
         tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_INVALID_DATA;
-    }
-    if ((flags & 8UL) != 0UL && tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if (tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
         tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-    if ((flags & 4UL) != 0UL &&
+    if ((flags & 8UL) != 0UL &&
         tg_skip_chat_photo(reader) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
@@ -5315,15 +5314,20 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if (constructor == TG_DIALOG_FOLDER_CONSTRUCTOR) {
-        /* dialogFolder#71bd134c folder:Folder peer:Peer top_message:int
-           unread_muted_peers_count:int unread_unmuted_peers_count:int
-           unread_muted_messages_count:int unread_unmuted_messages_count:int.
+        /* dialogFolder#71bd134c flags:# pinned:flags.2?true folder:Folder
+           peer:Peer top_message:int unread_muted_peers_count:int
+           unread_unmuted_peers_count:int unread_muted_messages_count:int
+           unread_unmuted_messages_count:int.
            This is the Archived-chats container, not a selectable chat: consume
            its bytes and leave peer->peer_constructor 0 so callers skip it while
-           the real dialogs that follow it still parse. */
+           the real dialogs that follow it still parse. Its flags word was
+           not read here until 0.5 (seen in a real answer of
+           messages.getPinnedDialogs): the entry was never read whole, and
+           only the search for the next dialog saved the ones after it. */
         tg_mtproto_dialog_peer folder_peer;
         memset(&folder_peer, 0, sizeof(folder_peer));
-        if (tg_skip_folder(reader) != TG_MTPROTO_TL_OK ||
+        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+            tg_skip_folder(reader) != TG_MTPROTO_TL_OK ||
             tg_read_peer_ref(reader, &folder_peer) != TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
@@ -12803,6 +12807,50 @@ static void tg_topic_test_topic(tg_mtproto_tl_writer *w, unsigned long id,
 
 /* Topics of a forum: the requests on the wire, the topic list, which topic
    a message is in, and which channels are forums. */
+/* The Archive's own entry among the dialogs is read whole, to its last
+   byte: its flags, the folder (with a photo or without), its peer and the
+   five numbers. */
+static int tg_dialog_folder_self_test(void)
+{
+    unsigned char body[160];
+    tg_mtproto_tl_writer w;
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_dialog_peer peer;
+    tg_mtproto_peer_notify_settings notify;
+    int with_photo;
+    int k;
+
+    for (with_photo = 0; with_photo < 2; ++with_photo) {
+        tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+        (void)tg_mtproto_tl_write_u32(&w, TG_DIALOG_FOLDER_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 4UL); /* pinned */
+        (void)tg_mtproto_tl_write_u32(&w, TG_FOLDER_CONSTRUCTOR);
+        /* the three bits that carry no data are all set */
+        (void)tg_mtproto_tl_write_u32(&w, with_photo ? (8UL | 7UL) : 7UL);
+        (void)tg_mtproto_tl_write_u32(&w, 1UL); /* id */
+        (void)tg_write_string(&w, "Archived Chats");
+        if (with_photo) {
+            (void)tg_mtproto_tl_write_u32(&w, TG_CHAT_PHOTO_EMPTY_CONSTRUCTOR);
+        }
+        (void)tg_mtproto_tl_write_u32(&w, TG_PEER_USER_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, 77UL);
+        for (k = 0; k < 5; ++k) {
+            (void)tg_mtproto_tl_write_u32(&w, (unsigned long)(k + 1));
+        }
+        tg_mtproto_tl_reader_init(&reader, body, w.length);
+        memset(&peer, 0, sizeof(peer));
+        if (tg_read_dialog_peer(&reader, &peer, &notify) !=
+                TG_MTPROTO_TL_OK ||
+            reader.offset != w.length || peer.peer_constructor != 0UL) {
+            printf("login self-test: the Archive's entry is not read whole "
+                   "(photo %d: stopped at %lu of %lu)\n", with_photo,
+                   reader.offset, w.length);
+            return 2;
+        }
+    }
+    return 0;
+}
+
 static int tg_forum_self_test(void)
 {
     static unsigned char rpc[1536];
@@ -13890,7 +13938,7 @@ int tg_mtproto_login_self_test(void)
 
     if (tg_peer_notify_self_test() != 0 ||
         tg_entity_marker_self_test() != 0 || tg_poll_self_test() != 0 ||
-        tg_forum_self_test() != 0) {
+        tg_forum_self_test() != 0 || tg_dialog_folder_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)

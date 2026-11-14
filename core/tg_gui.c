@@ -3462,6 +3462,17 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
             }
             right_x = (badge_on || (chat->pinned && badge_w > 0))
                           ? badge_x : list_w - 6;
+            /* A pinned chat with something unread shows both, the pin left
+               of the badge. Telegram Desktop drops the pin there; the phone
+               tells a pinned chat by its shade, and here the mark is all
+               there is to tell it by. */
+            if (chat->pinned && badge_on) {
+                right_x -= 4 + tg_gui_pin_mark_width(lh);
+                tg_gui_draw_pin_mark(backend, preview_pen, right_x,
+                                     has_preview ? y + slot_h + slot_h / 2
+                                                 : y + row_h / 2,
+                                     lh);
+            }
             /* A muted chat with nothing unread shows the mute mark there,
                left of the pin when it has one; with something unread its
                dim badge says it. */
@@ -9992,6 +10003,7 @@ static int tg_gui_mute_mark_self_test(void)
     int both;
     int unread;
     int unread_muted;
+    int unread_pinned;
 
     memset(&backend, 0, sizeof(backend));
     backend.context = &record;
@@ -10029,12 +10041,25 @@ static int tg_gui_mute_mark_self_test(void)
     TG_MUTE_PAINT(unread);
     chat->muted = 1;
     TG_MUTE_PAINT(unread_muted);
+    chat->muted = 0;
+    chat->pinned = 1;
+    TG_MUTE_PAINT(unread_pinned);
+    chat->pinned = 0;
+    chat->muted = 1;
 #undef TG_MUTE_PAINT
     if (muted != plain + 8 || both != pinned + 8 || pinned <= plain ||
         unread_muted != unread) {
         printf("gui self-test: mute mark wrong (fills %d/%d plain, %d/%d "
                "pinned, %d/%d unread)\n", plain, muted, pinned, both,
                unread, unread_muted);
+        return 2;
+    }
+    /* a pinned chat with something unread shows its pin beside the badge:
+       the badge's rectangles and the pin's */
+    if (unread_pinned != unread + (pinned - plain)) {
+        printf("gui self-test: a pinned chat with unread messages lost its "
+               "pin (fills %d, badge alone %d, pin alone %d)\n",
+               unread_pinned, unread, pinned - plain);
         return 2;
     }
     /* the badge: dim when muted, with its number in the window's colour;
