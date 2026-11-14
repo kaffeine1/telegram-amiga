@@ -37973,6 +37973,20 @@ int tg_gui_session_read_step(FILE *stream)
         tg_gui_session_state.open_peer_constructor == 0UL) {
         return 0;
     }
+    {
+        /* How far this visit has read is kept for one topic at a time: a
+           forum's topics share the group's message ids, so after General
+           (whose messages are the newest) a topic whose newest message is
+           older looked read already, was never marked as read, and its
+           count came back with the next reading of the list. */
+        static unsigned long read_topic = 0UL;
+
+        if (read_topic != tg_gui_topic) {
+            read_topic = tg_gui_topic;
+            tg_gui_read_sent_id = 0UL;
+            tg_gui_read_failed_id = 0UL;
+        }
+    }
     for (k = 0; k < gst->message_count; ++k) {
         if (gst->messages[k].id > target) {
             target = gst->messages[k].id;
@@ -38017,6 +38031,18 @@ int tg_gui_session_read_step(FILE *stream)
     tg_gui_read_sent_id = target;
     tg_gui_read_failed_id = 0UL;
     tg_gui_log("read: told Telegram");
+    if (tg_gui_forum && tg_gui_topic != 0UL) {
+        /* The topic's row counts nothing from now on, also in the copy
+           the list is drawn from again when another topic is picked:
+           without this the count came back on the row just left, until
+           the list was read again. */
+        for (k = 0; k < tg_gui_topic_row_count; ++k) {
+            if (tg_gui_topic_rows[k].id == tg_gui_topic) {
+                tg_gui_topic_rows[k].unread = 0UL;
+                break;
+            }
+        }
+    }
     /* Reading takes Telegram's "marked as unread" dot away too. */
     is_user = pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
     if (tg_gui_mark_find(is_user, ph, pl) < 0) {
