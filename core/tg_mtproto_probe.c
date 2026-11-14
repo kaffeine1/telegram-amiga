@@ -23405,9 +23405,13 @@ typedef struct tg_gui_pin {
     int is_user;
     unsigned long id_hi;
     unsigned long id_lo;
+    unsigned long unread; /* the dialog's unread count when it was read */
 } tg_gui_pin;
 static tg_gui_pin tg_gui_pins[TG_GUI_PINS_MAX];
 static int tg_gui_pin_count = 0;
+/* The pins were just read and their unread counts are not on the rows
+   yet (tg_gui_pins_take_unread). */
+static int tg_gui_pins_fresh = 0;
 
 static int tg_gui_pin_matches(const tg_gui_pin *pin, const tg_chat_list_row *row)
 {
@@ -26394,8 +26398,10 @@ static int tg_gui_session_fetch_pins(FILE *stream)
                 ? 1 : 0;
         tg_gui_pins[tg_gui_pin_count].id_hi = pinned.peers[i].id_hi;
         tg_gui_pins[tg_gui_pin_count].id_lo = pinned.peers[i].id_lo;
+        tg_gui_pins[tg_gui_pin_count].unread = pinned.peers[i].unread_count;
         ++tg_gui_pin_count;
     }
+    tg_gui_pins_fresh = 1;
     return 0;
 }
 
@@ -37744,6 +37750,114 @@ static int tg_gui_row_take_unread(tg_gui_state *gst, int row,
     return 1;
 }
 
+/* 1 when the row is this chat: a user and a group may share a number. */
+static int tg_gui_row_is_peer(const tg_gui_chat *chat, int is_user,
+                              unsigned long id_hi, unsigned long id_lo)
+{
+    return chat->index != TG_GUI_SAVED_PEER_INDEX && chat->index != 0UL &&
+           chat->peer_id_hi == id_hi && chat->peer_id_lo == id_lo &&
+           (chat->is_group ? 0 : 1) == (is_user ? 1 : 0);
+}
+
+/* The pinned chats' badges, from the answer that listed the pins. That
+   answer carries each pinned dialog whole, so the mutes of the pinned
+   chats are known from the start, the walk below never asks about them,
+   and their counts stayed those of the cache: what had been read on the
+   phone since still showed as unread. Given to the rows once for each
+   reading of the pins; the open chat is left alone, as for any count.
+   1 = a badge changed. */
+static int tg_gui_pins_take_unread(tg_gui_state *gst)
+{
+    int changed = 0;
+    int i;
+    int k;
+
+    if (gst == 0 || !tg_gui_pins_fresh) {
+        return 0;
+    }
+    tg_gui_pins_fresh = 0;
+    for (i = 0; i < tg_gui_pin_count; ++i) {
+        for (k = 0; k < gst->chat_count; ++k) {
+            if (tg_gui_row_is_peer(&gst->chats[k], tg_gui_pins[i].is_user,
+                                   tg_gui_pins[i].id_hi,
+                                   tg_gui_pins[i].id_lo)) {
+                if (tg_gui_row_take_unread(gst, k, tg_gui_pins[i].unread)) {
+                    changed = 1;
+                }
+                break;
+            }
+        }
+    }
+    return changed;
+}
+
+/* Telegram was told the open chat is read: its own row counts nothing from
+   now on. The chat the program opens by itself at the start is not read
+   until the user is there, and kept the count it had: the badge then
+   stayed on the row until the row was clicked. Not while the rows are
+   something else (search results, a forum's topics). 1 = the row changed. */
+static int tg_gui_row_read(tg_gui_state *gst, int is_user,
+                           unsigned long id_hi, unsigned long id_lo)
+{
+    int k;
+
+    if (gst == 0 || gst->in_search || gst->forward_pick_active ||
+        gst->topic_view) {
+        return 0;
+    }
+    for (k = 0; k < gst->chat_count; ++k) {
+        if (tg_gui_row_is_peer(&gst->chats[k], is_user, id_hi, id_lo)) {
+            if (gst->chats[k].unread == 0 && !gst->chats[k].flash) {
+                return 0;
+            }
+            gst->chats[k].unread = 0;
+            gst->chats[k].flash = 0;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* ...and the cache's count for that chat goes too, whatever the rows are
+   at that moment (search results, a filtered list without the chat): the
+   chat list read back from the cache brought the count back. 1 = the
+   cache changed and is to be saved. */
+static int tg_gui_cache_read(tg_mtproto_peer_cache *cache, int is_user,
+                             unsigned long id_hi, unsigned long id_lo)
+{
+    unsigned long i;
+
+    for (i = 0UL; i < cache->count; ++i) {
+        tg_mtproto_peer_cache_entry *e = &cache->entries[i];
+
+        if (!e->is_self && e->id_hi == id_hi && e->id_lo == id_lo &&
+            (e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR
+                 ? 1 : 0) == (is_user ? 1 : 0)) {
+            if (e->unread_count == 0UL) {
+                return 0;
+            }
+            e->unread_count = 0UL;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* ...and the count that came with its pin, if it is pinned and that count
+   is still waiting to be given to the rows: it is of before the read. */
+static void tg_gui_pin_read(int is_user, unsigned long id_hi,
+                            unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_pin_count; ++i) {
+        if (tg_gui_pins[i].is_user == (is_user ? 1 : 0) &&
+            tg_gui_pins[i].id_hi == id_hi && tg_gui_pins[i].id_lo == id_lo) {
+            tg_gui_pins[i].unread = 0UL;
+        }
+    }
+}
+
 /* Asks Telegram for the dialog of the chat at this 1-based cache index:
    its mute is stored where the mutes are kept, its unread count is given
    back. 0 = asked, 2 = no such chat, 1 = Telegram did not answer. */
@@ -37811,6 +37925,127 @@ static int tg_gui_unread_self_test(void)
         puts("probe self-test: unread badge from the dialog failed");
         return 2;
     }
+    {
+        /* The pinned chats take their counts from the reading of the
+           pins: a group with 919 in the cache and 25 on Telegram, the open
+           chat (left alone), a user with the group's number (not pinned:
+           another chat), a group read elsewhere. Once for each reading. */
+        tg_gui_pin keep[3];
+        int keep_n = tg_gui_pin_count;
+        int keep_fresh = tg_gui_pins_fresh;
+
+        keep[0] = tg_gui_pins[0];
+        keep[1] = tg_gui_pins[1];
+        keep[2] = tg_gui_pins[2];
+        gst->chat_count = 4;
+        gst->selected_chat = 1;
+        gst->chats[0].index = 1UL;
+        gst->chats[0].is_group = 1;
+        gst->chats[0].peer_id_lo = 7UL;
+        gst->chats[0].unread = 919;
+        gst->chats[1].index = 2UL;
+        gst->chats[1].peer_id_lo = 8UL;
+        gst->chats[1].unread = 56;
+        gst->chats[2].index = 3UL;
+        gst->chats[2].peer_id_lo = 7UL;
+        gst->chats[2].unread = 3;
+        gst->chats[3].index = 4UL;
+        gst->chats[3].is_group = 1;
+        gst->chats[3].peer_id_lo = 9UL;
+        gst->chats[3].unread = 76;
+        memset(tg_gui_pins, 0, 3U * sizeof(tg_gui_pins[0]));
+        tg_gui_pins[0].id_lo = 7UL;
+        tg_gui_pins[0].unread = 25UL;
+        tg_gui_pins[1].is_user = 1;
+        tg_gui_pins[1].id_lo = 8UL;
+        tg_gui_pins[2].id_lo = 9UL;
+        tg_gui_pin_count = 3;
+        tg_gui_pins_fresh = 0;
+        ok = tg_gui_pins_take_unread(gst) == 0 && /* nothing new was read */
+             gst->chats[0].unread == 919;
+        tg_gui_pins_fresh = 1;
+        ok = ok && tg_gui_pins_take_unread(gst) == 1 &&
+             gst->chats[0].unread == 25 && gst->chats[1].unread == 56 &&
+             gst->chats[2].unread == 3 && gst->chats[3].unread == 0 &&
+             tg_gui_pins_fresh == 0 && tg_gui_pins_take_unread(gst) == 0;
+        /* The open chat's row when Telegram is told it was read: that row
+           and no other, and not while the rows are something else. */
+        gst->chats[1].flash = 1;
+        gst->in_search = 1;
+        ok = ok && tg_gui_row_read(gst, 1, 0UL, 8UL) == 0 &&
+             gst->chats[1].unread == 56;
+        gst->in_search = 0;
+        gst->topic_view = 1;
+        ok = ok && tg_gui_row_read(gst, 1, 0UL, 8UL) == 0;
+        gst->topic_view = 0;
+        ok = ok && tg_gui_row_read(gst, 1, 0UL, 8UL) == 1 &&
+             gst->chats[1].unread == 0 && gst->chats[1].flash == 0 &&
+             tg_gui_row_read(gst, 1, 0UL, 8UL) == 0 &&
+             tg_gui_row_read(gst, 1, 0UL, 7UL) == 1 &&
+             gst->chats[2].unread == 0 && gst->chats[0].unread == 25 &&
+             tg_gui_row_read(gst, 0, 0UL, 7UL) == 1 &&
+             gst->chats[0].unread == 0 &&
+             tg_gui_row_read(gst, 0, 0UL, 99UL) == 0 &&
+             tg_gui_row_read(0, 0, 0UL, 7UL) == 0;
+        /* A pin's count of before the read is not given afterwards. */
+        gst->chats[0].unread = 0;
+        tg_gui_pins_fresh = 1;
+        tg_gui_pin_read(1, 0UL, 7UL); /* a user: not the pinned group */
+        ok = ok && tg_gui_pins[0].unread == 25UL;
+        tg_gui_pin_read(0, 0UL, 7UL);
+        ok = ok && tg_gui_pins[0].unread == 0UL &&
+             tg_gui_pins_take_unread(gst) == 0 && gst->chats[0].unread == 0;
+        {
+            /* The cache's count of the chat that was read: that chat's
+               and no other's (a user with the group's number, the
+               account's own entry). */
+            unsigned long keep_count = tg_gui_search_results.count;
+            tg_mtproto_peer_cache_entry keep0 =
+                tg_gui_search_results.entries[0];
+            tg_mtproto_peer_cache_entry keep1 =
+                tg_gui_search_results.entries[1];
+            tg_mtproto_peer_cache_entry keep2 =
+                tg_gui_search_results.entries[2];
+            tg_mtproto_peer_cache_entry *e = tg_gui_search_results.entries;
+
+            memset(e, 0, 3U * sizeof(e[0]));
+            e[0].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+            e[0].id_lo = 7UL;
+            e[0].unread_count = 919UL;
+            e[1].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+            e[1].id_lo = 7UL;
+            e[1].unread_count = 3UL;
+            e[2].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+            e[2].id_lo = 8UL;
+            e[2].unread_count = 5UL;
+            e[2].is_self = 1;
+            tg_gui_search_results.count = 3UL;
+            ok = ok &&
+                 tg_gui_cache_read(&tg_gui_search_results, 0, 0UL, 7UL) == 1 &&
+                 e[0].unread_count == 0UL && e[1].unread_count == 3UL &&
+                 tg_gui_cache_read(&tg_gui_search_results, 0, 0UL, 7UL) == 0 &&
+                 tg_gui_cache_read(&tg_gui_search_results, 1, 0UL, 8UL) == 0 &&
+                 e[2].unread_count == 5UL &&
+                 tg_gui_cache_read(&tg_gui_search_results, 1, 0UL, 7UL) == 1 &&
+                 e[1].unread_count == 0UL &&
+                 tg_gui_cache_read(&tg_gui_search_results, 1, 0UL, 99UL) == 0;
+            e[0] = keep0;
+            e[1] = keep1;
+            e[2] = keep2;
+            tg_gui_search_results.count = keep_count;
+        }
+        tg_gui_pins[0] = keep[0];
+        tg_gui_pins[1] = keep[1];
+        tg_gui_pins[2] = keep[2];
+        tg_gui_pin_count = keep_n;
+        tg_gui_pins_fresh = keep_fresh;
+        memset(gst, 0, sizeof(*gst));
+        if (!ok) {
+            puts("probe self-test: unread badge of a pinned or a read chat "
+                 "failed");
+            return 2;
+        }
+    }
     return 0;
 }
 #endif
@@ -37847,6 +38082,16 @@ int tg_gui_session_mutes_step(FILE *stream)
     time_t now;
     int row;
 
+    /* The pinned chats first: their counts came with the pins and cost
+       nothing to give (not while the rows are something else: the counts
+       wait for the chat list to be back). */
+    if (tg_gui_session_state.open && gst != 0 && tg_gui_pins_fresh &&
+        !gst->in_search && !gst->in_filter && !gst->forward_pick_active &&
+        !gst->topic_view && !tg_gui_archive_view &&
+        tg_gui_pins_take_unread(gst)) {
+        tg_gui_session_persist_unread();
+        return 1;
+    }
     if (stopped || !tg_gui_session_state.open || stream == 0 || gst == 0 ||
         gst->in_search || gst->in_filter || gst->forward_pick_active ||
         gst->topic_view || /* a forum's topics: their rows are no chats */
@@ -37967,6 +38212,7 @@ int tg_gui_session_read_step(FILE *stream)
     int hah;
     int is_user;
     int k;
+    int row_read = 0;
     FILE *quiet;
 
     if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
@@ -38043,10 +38289,28 @@ int tg_gui_session_read_step(FILE *stream)
             }
         }
     }
-    /* Reading takes Telegram's "marked as unread" dot away too. */
     is_user = pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    if (!(tg_gui_forum && tg_gui_topic != 0UL)) {
+        /* the chat's badge goes with the read: on its row, in the cache
+           and with its pin */
+        row_read = tg_gui_row_read(tg_gui_session_state.gui_driver.state,
+                                   is_user, ph, pl);
+        tg_gui_pin_read(is_user, ph, pl);
+        if (tg_mtproto_load_peer_cache_file(
+                tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache) ==
+                0 &&
+            tg_gui_cache_read(&tg_gui_probe_cache, is_user, ph, pl)) {
+            (void)tg_mtproto_save_peer_cache_file(
+                tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache, 0,
+                "chat cache");
+        }
+    }
+    /* Reading takes Telegram's "marked as unread" dot away too. */
     if (tg_gui_mark_find(is_user, ph, pl) < 0) {
-        return 0;
+        if (row_read) {
+            tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+        }
+        return row_read;
     }
     tg_gui_mark_set(is_user, ph, pl, 0);
     if (!gst->in_search && !gst->in_filter && !gst->forward_pick_active) {
