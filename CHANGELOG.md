@@ -18,6 +18,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the same as before.
 
 ### Fixed
+- A picture whose name does not end in .jpg or .png could not be sent
+  as a photo (a tester reported it). "Send photo..." did not list it,
+  its icon dropped on the window left as a file without asking, and
+  when it was sent as a photo all the same Telegram refused it:
+  Telegram reads the ending of the name a photo is uploaded under, and
+  takes none, .iff or .txt for something else. On an Amiga a picture
+  needs no extension. The requester now lists every file, what is
+  picked or dropped is known by its content, and a photo travels under
+  a name that ends the way its content says.
+- When Telegram refused an upload, the status line said "Upload failed"
+  and nothing else. It now says why.
 - The MorphOS manual still said that the "@" list of a group's members
   was off on MorphOS. It has opened there since 0.5.
 

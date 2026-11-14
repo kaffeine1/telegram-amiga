@@ -3651,6 +3651,27 @@ static int tg_mtproto_print_rpc_error(const char *label,
     return 1;
 }
 
+/* Telegram's word for a refused request, kept where a status line looks for
+   it and printed nowhere. For the requests that answer through the window
+   and have no console line to write: a refused upload said "Upload failed"
+   and nothing else, the reason lost. An answer that is not an error leaves
+   the text as it is. */
+static void tg_mtproto_keep_rpc_error(const tg_mtproto_rpc_result *result)
+{
+    char error_message[128];
+    long error_code;
+
+    if (result != 0 &&
+        result->result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR &&
+        tg_mtproto_parse_rpc_error(result->result_body - 4U,
+                                   result->result_body_length + 4U,
+                                   &error_code, error_message,
+                                   sizeof(error_message)) ==
+            TG_MTPROTO_TL_OK) {
+        sprintf(tg_mtproto_query_fail, "%.63s", error_message);
+    }
+}
+
 static int tg_mtproto_rpc_phone_migrate_dc(
     const tg_mtproto_rpc_result *result,
     unsigned long *dc_id)
@@ -31869,7 +31890,9 @@ static int tg_mtproto_png_file_valid(FILE *f, unsigned long *out_w,
 /* The photo gate: the first bytes say what the file is, the matching walk
    says whether it is whole, and Telegram's size rule says whether it will be
    taken as a photo. `why` gets a sentence a status line can show. Extension
-   is not consulted: a JPEG called .png is still a JPEG. */
+   is not consulted: a JPEG called .png is still a JPEG, and so is one with
+   no extension at all. Returns 0 when it is not a photo, else what it is:
+   1 a JPEG, 2 a PNG. */
 static int tg_mtproto_photo_file_valid(FILE *f, const char **why)
 {
     unsigned char magic[4];
@@ -31897,10 +31920,60 @@ static int tg_mtproto_photo_file_valid(FILE *f, const char **why)
             *why = "not a valid PNG (truncated or damaged)";
             return 0;
         }
-        return tg_mtproto_photo_dims_ok(w, h, why);
+        return tg_mtproto_photo_dims_ok(w, h, why) ? 2 : 0;
     }
     (void)fseek(f, 0L, SEEK_SET);
     return 0;
+}
+
+/* The name an uploaded photo travels under. Telegram reads the ending of
+   that name before it takes the file as a photo. Seen on the wire on
+   2026-11-14, with pictures it had never been sent: a JPEG or a PNG is
+   refused (PHOTO_EXT_INVALID) under a name with no ending, with a bare
+   dot, or ending in .iff, .txt or .webp, and taken under .jpg, .JPG,
+   .jpeg, .png, .gif or .bmp; a PNG called .jpg is taken too.
+   On an Amiga a picture needs no extension and can be called anything, so
+   a photo whose name does not end like a photo gets the ending its content
+   calls for. Nobody sees this name: a photo keeps none.
+   A trap for whoever tests this: a content Telegram has taken once it
+   knows again, and takes under any name. Try with pictures never sent.
+   kind is what the gate said: 1 a JPEG, 2 a PNG. */
+static void tg_mtproto_photo_upload_name(char *name, unsigned long size,
+                                         int kind)
+{
+    static const char *const fine[] = { ".jpg", ".jpeg", ".png" };
+    unsigned long len;
+    unsigned long i;
+
+    if (name == 0 || size < 6UL) {
+        return;
+    }
+    len = (unsigned long)strlen(name);
+    for (i = 0UL; i < sizeof(fine) / sizeof(fine[0]); ++i) {
+        unsigned long el = (unsigned long)strlen(fine[i]);
+        unsigned long k;
+
+        if (len < el) {
+            continue;
+        }
+        for (k = 0UL; k < el; ++k) {
+            char c = name[len - el + k];
+
+            if (c >= 'A' && c <= 'Z') {
+                c = (char)(c - 'A' + 'a');
+            }
+            if (c != fine[i][k]) {
+                break;
+            }
+        }
+        if (k == el) {
+            return; /* a PNG called .jpg is taken as it is */
+        }
+    }
+    if (len + 5UL > size) {
+        len = size - 5UL; /* a very long name gives up its tail */
+    }
+    strcpy(name + len, kind == 2 ? ".png" : ".jpg");
 }
 
 /* The server's own refusals of a photo, said in words. Anything else keeps
@@ -32168,7 +32241,7 @@ static int tg_mtproto_photo_gate_self_test(void)
     png_big[20] = 0x00; png_big[21] = 0x00; png_big[22] = 0x00; png_big[23] = 0x08; /* h 8 */
     c[0].a = jpeg_ok; c[0].an = sizeof(jpeg_ok); c[0].b = 0; c[0].bn = 0UL; c[0].want = 1; c[0].why_has = 0;
     c[1].a = jpeg_ok; c[1].an = sizeof(jpeg_ok) - 4UL; c[1].b = 0; c[1].bn = 0UL; c[1].want = 0; c[1].why_has = "JPEG";
-    c[2].a = png_head; c[2].an = sizeof(png_head); c[2].b = png_tail; c[2].bn = sizeof(png_tail); c[2].want = 1; c[2].why_has = 0;
+    c[2].a = png_head; c[2].an = sizeof(png_head); c[2].b = png_tail; c[2].bn = sizeof(png_tail); c[2].want = 2; c[2].why_has = 0;
     c[3].a = png_head; c[3].an = sizeof(png_head); c[3].b = png_tail; c[3].bn = 9UL; c[3].want = 0; c[3].why_has = "PNG";
     c[4].a = png_big; c[4].an = sizeof(png_big); c[4].b = png_tail; c[4].bn = sizeof(png_tail); c[4].want = 0; c[4].why_has = "10000";
     c[5].a = txt; c[5].an = sizeof(txt) - 1UL; c[5].b = 0; c[5].bn = 0UL; c[5].want = 0; c[5].why_has = "JPEG or PNG";
@@ -32195,6 +32268,82 @@ static int tg_mtproto_photo_gate_self_test(void)
             (c[i].why_has != 0 && (why == 0 || strstr(why, c[i].why_has) == 0))) {
             printf("photo gate self-test: case %d gave %d (%s)\n", i, got,
                    why != 0 ? why : "-");
+            return 2;
+        }
+    }
+    {
+        /* A refused upload keeps Telegram's word for the status line; an
+           answer that is no error leaves the text alone. */
+        static const unsigned char refused[] = {
+            0x19, 0xca, 0x44, 0x21,             /* rpc_error */
+            0x90, 0x01, 0x00, 0x00,             /* 400 */
+            17, 'P', 'H', 'O', 'T', 'O', '_', 'E', 'X', 'T', '_',
+            'I', 'N', 'V', 'A', 'L', 'I', 'D', 0, 0
+        };
+        tg_mtproto_rpc_result res;
+        char kept[sizeof(tg_mtproto_query_fail)];
+        int ok_kept;
+
+        memcpy(kept, tg_mtproto_query_fail, sizeof(kept));
+        memset(&res, 0, sizeof(res));
+        res.result_constructor = TG_MTPROTO_RPC_ERROR_CONSTRUCTOR;
+        res.result_body = refused + 4;
+        res.result_body_length = (unsigned long)sizeof(refused) - 4UL;
+        tg_mtproto_query_fail[0] = '\0';
+        tg_mtproto_keep_rpc_error(&res);
+        ok_kept = strcmp(tg_mtproto_query_fail, "PHOTO_EXT_INVALID") == 0 &&
+                  strstr(tg_gui_session_last_transfer_error(),
+                         "does not take this image format") != 0;
+        res.result_constructor = 0x12345678UL; /* an answer, not an error */
+        strcpy(tg_mtproto_query_fail, "before");
+        tg_mtproto_keep_rpc_error(&res);
+        tg_mtproto_keep_rpc_error(0);
+        ok_kept = ok_kept && strcmp(tg_mtproto_query_fail, "before") == 0;
+        memcpy(tg_mtproto_query_fail, kept, sizeof(kept));
+        if (!ok_kept) {
+            puts("photo gate self-test: a refusal's reason is not kept");
+            return 2;
+        }
+    }
+    {
+        /* The name a photo travels under ends the way its content says,
+           unless it already ends like a photo. */
+        static const struct { const char *in; int kind; const char *out; }
+            names[] = {
+            { "FotoProva", 1, "FotoProva.jpg" },
+            { "Disegno", 2, "Disegno.png" },
+            { "Brush.iff", 1, "Brush.iff.jpg" },
+            { "photo.jpg.bak", 2, "photo.jpg.bak.png" },
+            { "jpg", 1, "jpg.jpg" },
+            { "a.JPG", 1, "a.JPG" },
+            { "b.JpEg", 2, "b.JpEg" },
+            { "c.png", 1, "c.png" },
+            { "d.PNG", 2, "d.PNG" }
+        };
+        char nm[32];
+        char tight[16];
+        unsigned long k;
+
+        for (k = 0UL; k < sizeof(names) / sizeof(names[0]); ++k) {
+            strcpy(nm, names[k].in);
+            tg_mtproto_photo_upload_name(nm, sizeof(nm), names[k].kind);
+            if (strcmp(nm, names[k].out) != 0) {
+                printf("photo gate self-test: name %s became %s\n",
+                       names[k].in, nm);
+                return 2;
+            }
+        }
+        /* a name that fills its buffer gives up its tail, never the end */
+        strcpy(tight, "abcdefghijklmno");
+        tg_mtproto_photo_upload_name(tight, sizeof(tight), 2);
+        if (strcmp(tight, "abcdefghijk.png") != 0) {
+            printf("photo gate self-test: long name became %s\n", tight);
+            return 2;
+        }
+        strcpy(tight, "abcdefghijk.jpg"); /* fits and is fine: untouched */
+        tg_mtproto_photo_upload_name(tight, sizeof(tight), 1);
+        if (strcmp(tight, "abcdefghijk.jpg") != 0) {
+            puts("photo gate self-test: a good long name was changed");
             return 2;
         }
     }
@@ -32287,6 +32436,7 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
     const char *name;
     const char *p;
     unsigned long n;
+    int photo_kind = 0; /* 1 a JPEG, 2 a PNG, when it leaves as a photo */
 
     TG_XFER_RESET();
 
@@ -32348,7 +32498,8 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
             return 7;
         } else if (tg_gui_ul.big_file) {
             tg_gui_ul.photo_fallback = 1;
-        } else if (!tg_mtproto_photo_file_valid(tg_gui_ul.f, &why)) {
+        } else if ((photo_kind = tg_mtproto_photo_file_valid(tg_gui_ul.f,
+                                                             &why)) == 0) {
             sprintf(tg_mtproto_query_fail, "%.63s", why); /* 64 byte buffer */
             fclose(tg_gui_ul.f);
             tg_gui_ul.f = 0;
@@ -32375,6 +32526,10 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
         tg_gui_ul.name[n] = name[n];
     }
     tg_gui_ul.name[n] = '\0';
+    if (tg_gui_ul.as_photo) {
+        tg_mtproto_photo_upload_name(tg_gui_ul.name, sizeof(tg_gui_ul.name),
+                                     photo_kind);
+    }
     tg_gui_ul.quiet = tg_mtproto_open_quiet_stream(stream);
 #if !defined(TG_NO_GUI)
     if (tg_gui_ul.batch) { /* the chat the batch began in */
@@ -32616,6 +32771,7 @@ static int tg_mtproto_upload_step(void)
                     "mtproto uploadMedia(photo)", 600U) != 0 ||
                 result.result_constructor ==
                     TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+                tg_mtproto_keep_rpc_error(&result); /* why, for the window */
                 return 0; /* rc 1 */
             }
             /* a photo's answer carries its small preview and can come
@@ -32674,6 +32830,7 @@ static int tg_mtproto_upload_step(void)
                 query, writer.length, &result, tg_gui_ul.quiet,
                 query_name, 600U) != 0 ||
             result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+            tg_mtproto_keep_rpc_error(&result); /* why, for the window */
             return 0; /* rc 1 */
         }
         tg_gui_ul.rc = 0; /* the tick's history poll shows the sent row */
@@ -35118,6 +35275,8 @@ int tg_gui_session_batch_send_album(const char *caption, FILE *stream)
                 "mtproto sendMultiMedia", 600U) == 0 &&
             result.result_constructor != TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
             rc = 0;
+        } else {
+            tg_mtproto_keep_rpc_error(&result); /* why, for the window */
         }
         tg_mtproto_close_quiet_stream(quiet, stream);
     }

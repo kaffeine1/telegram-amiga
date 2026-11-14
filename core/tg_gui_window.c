@@ -9274,11 +9274,12 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
         req = (struct FileRequester *)AllocAslRequestTags(
             ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
             ASLFR_TitleText, TG_GUI_TAG("Send photo to this chat"),
-            /* InitialPattern rather than AcceptPattern (issue #13,
-               javierdlr): the pattern then SHOWS in the requester's gadget,
-               so the user can see what is being filtered and widen it. */
+            /* Every file is listed: an Amiga picture needs no extension,
+               and what was picked is known by its content afterwards. The
+               pattern gadget stays (issue #13 asked for it to show), so a
+               crowded drawer can be narrowed by hand, say to #?.jpg. */
             ASLFR_DoPatterns, TRUE, ASLFR_InitialPattern,
-            TG_GUI_TAG("#?.(jpg|jpeg|png)"),
+            TG_GUI_TAG("#?"),
             /* several photos picked together leave as one album */
             ASLFR_DoMultiSelect, TRUE, TAG_DONE);
     } else {

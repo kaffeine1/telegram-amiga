@@ -7880,43 +7880,44 @@ int tg_gui_chat_by_name(const tg_gui_state *state, const char *name)
     return -1;
 }
 
+/* What the first bytes of a file say it is: 1 a JPEG, 2 a PNG, 0 neither.
+   The name is not asked: on an Amiga a picture needs no extension, the
+   datatypes read the content, and so do we. */
+int tg_gui_file_photo_kind(const unsigned char *head, unsigned long count)
+{
+    static const unsigned char png[8] = {
+        0x89U, 'P', 'N', 'G', 0x0dU, 0x0aU, 0x1aU, 0x0aU
+    };
+
+    if (head == 0) {
+        return 0;
+    }
+    if (count >= 3UL && head[0] == 0xffU && head[1] == 0xd8U &&
+        head[2] == 0xffU) {
+        return 1;
+    }
+    if (count >= 8UL && memcmp(head, png, 8) == 0) {
+        return 2;
+    }
+    return 0;
+}
+
 int tg_gui_attachment_is_photo(const char *path)
 {
-    const char *dot;
-    const char *p;
-    char ext[6];
-    int n;
+    unsigned char head[8];
+    unsigned long got;
+    FILE *file;
 
-    if (path == 0) {
+    if (path == 0 || path[0] == '\0') {
         return 0;
     }
-    dot = 0;
-    for (p = path; *p != '\0'; ++p) {
-        if (*p == '/' || *p == ':') {
-            dot = 0;
-        } else if (*p == '.') {
-            dot = p;
-        }
+    file = fopen(path, "rb");
+    if (file == 0) {
+        return 0; /* a drawer, or a file that cannot be read */
     }
-    if (dot == 0) {
-        return 0;
-    }
-    n = 0;
-    while (dot[n] != '\0' && n < 5) {
-        char c;
-
-        c = dot[n];
-        if (c >= 'A' && c <= 'Z') {
-            c = (char)(c - 'A' + 'a');
-        }
-        ext[n++] = c;
-    }
-    ext[n] = '\0';
-    if (dot[n] != '\0') {
-        return 0;
-    }
-    return strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0 ||
-           strcmp(ext, ".png") == 0;
+    got = (unsigned long)fread(head, 1, sizeof(head), file);
+    fclose(file);
+    return tg_gui_file_photo_kind(head, got) != 0;
 }
 
 int tg_gui_photo_default_filename(char *out, unsigned long out_size,
@@ -14054,15 +14055,70 @@ int tg_gui_self_test(void)
                 }
             }
         }
-        if (!tg_gui_attachment_is_photo("Work:photo.PNG") ||
-            !tg_gui_attachment_is_photo("Work:photo.JpEg") ||
-            !tg_gui_attachment_is_photo("Work:photo.jpg") ||
-            tg_gui_attachment_is_photo("Work:photo.jpeg.backup") ||
-            tg_gui_attachment_is_photo("Work:images.png/readme") ||
-            tg_gui_attachment_is_photo("Work:archive.lha") ||
-            tg_gui_attachment_is_photo(0)) {
-            puts("gui self-test: attachment photo/file choice mismatch");
-            return 2;
+        {
+            /* A photo is known by its first bytes, whatever it is called:
+               no extension, or another file's, changes nothing. */
+            static const unsigned char jpg[8] = {
+                0xffU, 0xd8U, 0xffU, 0xe0U, 0x00U, 0x10U, 'J', 'F'
+            };
+            static const unsigned char png[8] = {
+                0x89U, 'P', 'N', 'G', 0x0dU, 0x0aU, 0x1aU, 0x0aU
+            };
+            static const unsigned char iff[12] = {
+                'F', 'O', 'R', 'M', 0, 0, 1, 0, 'I', 'L', 'B', 'M'
+            };
+            static const char bare[] = "tg-photo-kind-test";
+            static const char liar[] = "tg-photo-kind-test.jpg";
+            unsigned char bad[8];
+            int ok_kind;
+            FILE *f;
+
+            memcpy(bad, png, sizeof(bad));
+            bad[7] = 0x00U;
+            ok_kind = tg_gui_file_photo_kind(jpg, 8UL) == 1 &&
+                      tg_gui_file_photo_kind(jpg, 3UL) == 1 &&
+                      tg_gui_file_photo_kind(jpg, 2UL) == 0 &&
+                      tg_gui_file_photo_kind(png, 8UL) == 2 &&
+                      tg_gui_file_photo_kind(png, 7UL) == 0 &&
+                      tg_gui_file_photo_kind(bad, 8UL) == 0 &&
+                      tg_gui_file_photo_kind(iff, 12UL) == 0 &&
+                      tg_gui_file_photo_kind(jpg, 0UL) == 0 &&
+                      tg_gui_file_photo_kind(0, 8UL) == 0;
+            (void)remove(bare);
+            (void)remove(liar);
+            ok_kind = ok_kind && !tg_gui_attachment_is_photo(bare) &&
+                      !tg_gui_attachment_is_photo("") &&
+                      !tg_gui_attachment_is_photo(0);
+            f = fopen(bare, "wb"); /* a JPEG with no extension */
+            if (f != 0) {
+                fwrite(jpg, 1, sizeof(jpg), f);
+                fclose(f);
+            }
+            ok_kind = ok_kind && f != 0 && tg_gui_attachment_is_photo(bare);
+            f = fopen(bare, "wb"); /* a PNG with no extension */
+            if (f != 0) {
+                fwrite(png, 1, sizeof(png), f);
+                fclose(f);
+            }
+            ok_kind = ok_kind && f != 0 && tg_gui_attachment_is_photo(bare);
+            f = fopen(bare, "wb"); /* two bytes: too short to say */
+            if (f != 0) {
+                fwrite(jpg, 1, 2, f);
+                fclose(f);
+            }
+            ok_kind = ok_kind && f != 0 && !tg_gui_attachment_is_photo(bare);
+            f = fopen(liar, "wb"); /* called .jpg, and it is not one */
+            if (f != 0) {
+                fwrite(iff, 1, sizeof(iff), f);
+                fclose(f);
+            }
+            ok_kind = ok_kind && f != 0 && !tg_gui_attachment_is_photo(liar);
+            (void)remove(bare);
+            (void)remove(liar);
+            if (!ok_kind) {
+                puts("gui self-test: attachment photo/file choice mismatch");
+                return 2;
+            }
         }
     }
 

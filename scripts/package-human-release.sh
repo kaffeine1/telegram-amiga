@@ -794,7 +794,8 @@ Files
 - Send a file with "Send file..." (Amiga+F), or by dropping its icon
   on the window: up to $upload_limit on this build. "Send photo..."
   (Amiga+P) sends a JPEG or PNG as a photo, and a dropped picture asks
-  Photo, File or Cancel. The paperclip left of the input line opens a
+  Photo, File or Cancel. A picture is known by its content, so its name
+  needs no .jpg or .png. The paperclip left of the input line opens a
   small menu with the same two, Photo... and File..., and Poll... where
   Telegram takes polls; any key or a click elsewhere closes it.
   Telegram may re-encode photos as JPEG: send a PNG as File to keep it
@@ -1086,12 +1087,13 @@ File
 - Manda un file con "Send file..." (Amiga+F) o trascinandone l'icona
   sulla finestra: fino a $upload_limit su questa build. "Send photo..."
   (Amiga+P) manda un JPEG o un PNG come foto, e un'immagine trascinata
-  chiede Photo, File o Cancel. La graffetta a sinistra della riga di
-  input apre un piccolo menu con le stesse due, Photo... e File..., e
-  Poll... dove Telegram accetta i sondaggi; un tasto qualsiasi o un
-  click altrove lo chiude. Telegram puo' ricodificare le foto in JPEG:
-  manda un PNG come File per tenerlo com'e'. Una foto oltre 10 MiB
-  parte come file.
+  chiede Photo, File o Cancel. Un'immagine si riconosce dal contenuto:
+  il nome non ha bisogno di .jpg o .png. La graffetta a sinistra della
+  riga di input apre un piccolo menu con le stesse due, Photo... e
+  File..., e Poll... dove Telegram accetta i sondaggi; un tasto
+  qualsiasi o un click altrove lo chiude. Telegram puo' ricodificare le
+  foto in JPEG: manda un PNG come File per tenerlo com'e'. Una foto
+  oltre 10 MiB parte come file.
 - Piu' file insieme: nel requester tieni premuto Shift e fai click su
   piu' di uno, dieci al massimo. Le foto scelte insieme con "Send
   photo..." partono come album, un solo messaggio:

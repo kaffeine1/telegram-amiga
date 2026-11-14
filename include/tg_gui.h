@@ -1135,8 +1135,11 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_MENU_ITEMS 12 /* the longest message menu */
 #define TG_GUI_CTX_ITEMS_MAX TG_GUI_REACT_CHOICES_MAX /* the whole chooser */
 
-/* Attachment chooser: known image extensions get the Photo/File dialog;
-   validation of the actual bytes still belongs to the upload gate. */
+/* Attachment chooser: a file whose first bytes are a JPEG's or a PNG's gets
+   the Photo/File dialog, whatever its name (an Amiga picture needs no
+   extension). The whole file is still checked by the upload gate.
+   tg_gui_file_photo_kind: 1 a JPEG, 2 a PNG, 0 neither. */
+int tg_gui_file_photo_kind(const unsigned char *head, unsigned long count);
 int tg_gui_attachment_is_photo(const char *path);
 
 /* The settings panel. Every preference has one line in it: a switch, a
