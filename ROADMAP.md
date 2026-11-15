@@ -35,45 +35,34 @@ on at least one real Amiga-like platform.
 
 ## Current Status
 
-The project has moved past the Bot-API diagnostic tester to a real MTProto
-client:
+On 2026-11-15: 0.5, the second beta, is out in all seven packages
+(2026-11-14). Direct chats, groups, channels and the topics of forum
+groups work on the six systems; what each release brought is in
+CHANGELOG.md. On `main` for the next release: the Chats menu (issue
+#20), a picture sent as a photo whatever its name, and a long text sent
+as several messages (issue #14).
 
-- MTProto human releases ship for AmigaOS 3.x, AmigaOS 4.x, MorphOS,
-  AROS i386, AROS x86_64 and, from 0.0.94, AROS aarch64 on the Raspberry
-  Pi: login wizard, 2FA/SRP, saved chat list, text chat and file transfer.
-- Release 0.0.7 adds: robust big-file transfers (live %, chunk retry,
-  cancellable, send timeouts on stalled links), GUI text selection and
-  Copy/Cut/Paste in an Edit menu, reply on double-click, TUI file
-  transfer/drop support, live remote edits and receive-only updates while
-  composing, accented-name search, and a TUI_MODE icon tooltype.
-- Release 0.0.8 (transfers 2.0): non-blocking transfers (use the client
-  while a file moves) with pipelined downloads and drag-and-drop upload,
-  multi-DC downloads and avatars, local-first search with a two-stage
-  online search and a browse of the full dialog list, clickable URLs,
-  system-coloured menus, chat list reload with a memory of the chats you
-  removed, a configurable download drawer, and AfA_OS (AmiKit)
-  compatibility. First release cycle with an adversarial review pass.
-- Release 0.0.9 (photos): inline photo bubbles fed by an instant blurred
-  preview from Telegram's stripped thumbnail, a progressive viewer, a
-  canonical pixel cache on disk with a size limit and a clear action,
-  pacing measured per cost centre, and JPEG upload as a native photo.
-  Persistent Settings, forwarding to Saved Messages or a chosen chat,
-  hidden chats in local search, and a text client that word-wraps and
-  grows its composer. System datatypes remain an optional OS4-side
-  optimization, while the zero-install in-binary decoder stays the
-  portable base path.
-- Next come the 0.0.9x releases, then 0.1, the first BETA: same
-  program, a different promise. It ships once no known freeze remains on
-  any of the six platforms, an adversarial review pass has run, and a
-  full cycle has gone by without field regressions. See "The road to
-  0.1 beta" below for what each step carries.
-- Later: per-chat file browser and archive management. Selecting several
-  messages to delete or forward them has its own entry below.
-- A Bot-API text path stays available as a fallback for tokens/bots.
-- TLS certificate validation has passed a live CA-bundle smoke test on all four
-  platforms (see `docs/TLS_CERTIFICATES.md`).
-- Ongoing: broader community testing, reliability work on slow links and
-  packaging polish for future releases.
+Open, each in its section below:
+
+- what the 0.5 list still misses: pins reordered by dragging and Saved
+  Messages pinned; the Archive's unread count and more than its latest
+  32 chats; drafts with their reply, in topics, in Saved Messages and
+  in the text client; albums of documents or videos, of more than ten
+  photos, and several icons dropped at once; topics created, renamed or
+  closed;
+- videos: the resolution in the details, and a player of the user's
+  choice;
+- sign-in by QR code, creating an account, the update fetched and
+  installed (the notice is done), AmiUpdate on AmigaOS 4;
+- transfer speed, photo speed under AfA_OS, avatars on paletted
+  screens, the send-photo dialog's preview, a MorphOS popup flicker;
+- letters outside Latin-1, Cyrillic first;
+- after the beta: skins and translations;
+- in the text client: a line longer than one message.
+
+A Bot-API text path stays available as a fallback for tokens and bots.
+TLS certificate validation passed a live CA-bundle smoke test on all four
+systems of its time (see `docs/TLS_CERTIFICATES.md`).
 
 ## Phase 4: User Interface
 
@@ -90,6 +79,8 @@ client:
 - Packaging for the supported platforms
 
 ## The road to the 0.1 beta
+
+0.1 shipped on 2026-11-07; the section stays as it was written.
 
 0.0.9 shipped, and 0.1 is the first beta. In between come the 0.0.9x
 releases, whose job is to put every new feature in front of real
@@ -280,7 +271,11 @@ the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce
 while trying to prove a quiet cycle.
 
-## Planned for 0.2: what a desktop user expects
+## Done in 0.5: what a desktop user expects
+
+Planned as 0.2 and shipped as 0.5 on 2026-11-14, together with the
+topics of forum groups, which earned the bigger number. What an item
+still misses is said in its line.
 
 In November 2026 a second native client appeared on Aminet, built on MUI
 and AmiSSL. Its manual and the API methods its binary calls make a
@@ -574,7 +569,11 @@ testers, but never says where the project lives. Add the repository URL
 report something or fetch a newer build reads the address right there;
 it is the same place the manuals and the Aminet readme already point to.
 
-## Planned: captions when sending photos
+## Done in 0.0.91: captions when sending photos
+
+A photo carries a caption since 0.0.91: the send-photo dialog in the
+window, `/photo <path> [caption]` in the text client. The plan as it was
+written:
 
 Requested alongside the 0.0.9 feedback: let the user attach a caption to
 a photo they send. The wire side is already there; both media writers
@@ -594,7 +593,13 @@ input surface:
 - The over-10-MiB fallback that sends a photo as a document carries the
   same caption.
 
-## Planned: video messages, details and hand off to a player
+## Partly done: video messages, details and hand off to a player
+
+Since 0.0.92 a video shows a frame, with its length and size beside it,
+and since 0.5 a downloaded file opens from its message through the
+Workbench, which hands it to the program the system has for it. Still
+open: the resolution in the details, and a player command of the user's
+own.
 
 A video arrives today as a plain `[File]` with its name and size, which
 tells the user nothing about what a slow line is about to spend minutes
@@ -632,7 +637,10 @@ conversion recipe belongs with the user instead: the download drawer is
 configurable onto a network share, and Saved Messages already works as a
 two-way drawer between the Amiga and a machine that has the CPU.
 
-## Planned: update notice, and later self-update
+## Done in 0.5: the update notice. Planned: self-update
+
+Step 1 shipped in 0.5 and reads the channel @amigram1, where the release
+posts go; steps 2 and 3 are still to do.
 
 A user asked for automatic update download and install, the way another
 actively developed Amiga program does it. Worth doing, but staged, and
@@ -689,7 +697,13 @@ Timing: step 1 fits a 0.0.9x cycle. Steps 2 and 3 belong after the
 0.1 beta, whose gate asks for no known freeze and a quiet cycle, which
 is the worst moment to add a path that installs code.
 
-## Planned: send other image formats, PNG first
+## Planned: send IFF pictures as photos (PNG done in 0.0.93)
+
+On `main` for the next release: a picture is known by its content,
+whatever its name, and goes up under a name that ends the way its
+content says, since Telegram refuses a photo it has never seen when the
+name it is uploaded under has no ending it knows (none, .iff or .txt
+among them).
 
 JPEG and PNG can be sent as photos in the 0.0.93 candidate. Other image
 formats still go out as documents; IFF conversion remains planned below.
@@ -727,7 +741,11 @@ as pictures rather than as attachments.
 Anything we cannot turn into a picture keeps going as a document,
 unchanged.
 
-## Planned: read PNG, and why WEBP is a different question
+## Read PNG, and WEBP: stickers through a datatype since 0.5
+
+WEBP was settled another way: since 0.5 a sticker's still is read
+through a WEBP datatype where the system has one (the next section). A
+PNG reader of our own is still not written.
 
 Reading and writing are not the same problem, and until 0.0.92 only the
 writing half was on this list. The section above covers sending a PNG,
@@ -1206,20 +1224,29 @@ a username is mentioned by first name with an
 of a basic group (`messages.getFullChat`), so in one of those only who
 wrote lately is offered.
 
-## Planned: split long pastes into protocol-sized messages
+## Done after 0.5: a long text goes as several messages
 
-A 6 KB pasted text is refused today (issue #14). That ceiling is
-Telegram's own: the protocol caps a single message at 4096 characters,
-and the composer buffer matches it (2048 on classic 68k, where RAM is
-the budget). The desktop client handles the same paste by quietly
-splitting it into consecutive messages, and that is the behaviour to
-copy: when the text to send exceeds the cap, split at the last line
-break or space before the limit, send the pieces one after another
-through the existing send path, and stop cleanly at the first failure
-so nothing is lost silently. Same rule in the TUI. Until then the
-manuals' answer stands: a long text travels better as a document.
+A 6 KB pasted text could not go whole (issue #14). The ceiling is
+Telegram's own, 4096 characters a message, and the composer held one
+message (2048 bytes on 68k, where RAM is the budget). The desktop client
+splits such a text into consecutive messages, and so does this one now,
+on `main` for the next release. The composer holds four messages, 16 KB
+(8 KB on 68k); ENTER sends the text in parts, each cut at the last line
+break that fits in the second half of a message, else at the last space,
+and only inside one endless word at the limit itself, never between an
+emoji's two bytes (`tg_gui_message_part`). The reply goes with the first
+part, a name picked from the "@" list with whichever part holds it. At
+the first part that does not go, the parts sent stay in the chat and the
+rest stays in the composer with the reason. Paste says how many messages
+the text will make. A composer that long is wrapped from a line near its
+end, since the box shows its last rows only.
 
-## Planned: new-message notification without stealing focus
+What stays one message: an edit, which says so when it grows longer,
+and a draft, which keeps the first part of a long text, here and on
+Telegram. Still to do: the same in the text client, whose line holds
+one message, 4096 characters, and says so when it is full.
+
+## Done in 0.0.97: new-message notification without stealing focus
 
 A user asked for the screen to come to the front when a message arrives,
 optional, for the times the client sits in the background while they do
@@ -1351,7 +1378,7 @@ group followed on `main` for 0.0.98: the short update gives only its id,
 so the name comes from the users that travel with a full update, or from
 the names the client already holds.
 
-## Planned for 0.0.99: hide a message in a group
+## Done in 0.0.99: hide a message in a group
 
 A user asked to get rid of posts that do not interest them in group
 chats. Today Delete is offered only on one's own messages, and it deletes
@@ -1382,7 +1409,7 @@ on the last message received from the others like /react, or on an id,
 and /unhide. In a basic group "Show hidden messages" cannot bring back
 what Telegram has deleted for this account; the manuals say so.
 
-## Planned for 0.0.99: /ring in the text client
+## Done in 0.0.99: /ring in the text client
 
 Since 0.0.98 groups and channels stay quiet until one lets them ring, and
 the switch is "Enable ring" in the chat row's right-button menu, which
@@ -1402,7 +1429,7 @@ are Unmute and Mute, so on and off mean the same thing everywhere.
 /ring alone also says when /bell is off, and that Saved Messages never
 ring.
 
-## Planned for 0.0.99: more reactions than the ten of the grid
+## Done in 0.0.99: more reactions than the ten of the grid
 
 A user on OS4 asked how to pick a reaction other than the ten that
 "React..." offers: the desktop client ends its strip with an arrow that
@@ -1430,7 +1457,7 @@ after the 109 so the saved recent emoji keep their indexes, each with a
 short emoticon for the text client, like (unicorn) or o7. The 68000
 build has no window and is not touched.
 
-## Planned for 0.0.99: more contrast, same colours
+## Done in 0.0.99: more contrast, same colours
 
 A user asked for more contrast and for no dark blue on black. The colours
 are the desktop client's dark mode and stay so; measured with the WCAG
@@ -1647,7 +1674,7 @@ The 6 MiB whole-file read cap and the aspect-fit window sizing from
 the pulled version are worth keeping. Fits any 0.0.9x cycle, and it is
 the kind of change one MorphOS screenshot can judge in a minute.
 
-## Planned: centre the initials inside the avatar circle
+## Done in 0.0.91: centre the initials inside the avatar circle
 
 Field note from MorphOS: the two letters in a chat's coloured circle,
 "SM" for Saved Messages among them, sit slightly off vertically. The
@@ -1666,7 +1693,13 @@ box from the font's real ascent, and the circles are boxes. Two call
 sites change, no new metric and nothing platform-specific; the
 horizontal centring, which measures the text, is already right.
 
-## Planned: avatars and emoji in full colour, with a smooth edge
+## Partly done: avatars and emoji in full colour, with a smooth edge
+
+Done on true-colour screens in 0.0.98: avatars and emoji keep their own
+colours there, scaled bilinearly, the avatar with a soft edge on its
+disc. On a 32- or 64-colour AGA Workbench the emoji keep their colours
+since 0.0.96. Still open from the plan below: avatars on paletted
+screens, the 256-colour dither and the 32-colour choice of pens.
 
 Field note: the round pictures in the chat list and in the chat header
 look poster-like and their edge is jagged, on MorphOS, AmigaOS 4 and
@@ -1720,7 +1753,7 @@ the network path. It fits the 0.0.9x line in a slot after the 0.0.95
 speed release, the next-generation systems first and the 68k steps
 after them, the 32-colour one first among those.
 
-## Planned: say where Telegram sent the login code (0.0.92)
+## Done in 0.0.92: say where Telegram sent the login code
 
 A first-time user could not find his code and wrote in. The answer was
 not a bug: Telegram does not send an SMS when another device is already
@@ -1774,7 +1807,7 @@ first login that cannot fail because a message did not arrive. The
 existing code path stays: a phone that cannot scan, or a user who
 prefers typing, still gets the number and the code.
 
-## Planned: the new name, Amigram, before the 0.1 beta
+## Done in 0.1: the new name, Amigram
 
 Telegram's API terms let an app's title carry the word Telegram only
 after "Unofficial" (2.3). The title already says "Unofficial Telegram
@@ -1856,7 +1889,11 @@ the people for whom that is not an option: a phone that receives SMS
 and no smartphone. It fits the 0.0.9x line after the 0.0.95 speed
 release.
 
-## Planned for 0.1: AmiUpdate on AmigaOS 4
+## Planned: AmiUpdate on AmigaOS 4
+
+Not done in 0.1 nor in 0.5: the entry still waits for the account on
+the AmiUpdate site. The version keeps the two numbers the system
+compares (0.5).
 
 A user asked for the client among the updates AmiUpdate offers, the
 update tool of AmigaOS 4 (the other systems have no equivalent). Its
@@ -1882,7 +1919,7 @@ licences and leave the session and the data drawer alone, comes later,
 after a release or two with the plain entry, and is tried in the OS4 VM
 on a drawer with a real session, RollBack included.
 
-## Planned: the api credentials the packages carry
+## Done in 0.1: the api credentials the packages carry
 
 Every package ships the same api_id and api_hash in a plain text file, so
 that the client works the moment it is unpacked. That convenience has two

@@ -37503,8 +37503,9 @@ void tg_gui_session_run_deferred_contact(FILE *stream)
 
 /* Resolve the open group's typing member id->name. Tries the lazily-fetched
    member cache first; if empty and not yet attempted for this group, fetches the
-   recent members ONCE (peerChannel + off-MorphOS) and re-scans. Returns a pointer
-   into the member cache (valid until the next open/fetch) or 0 for "someone". */
+   recent members ONCE and re-scans, on MorphOS too since 0.5 (82cf7c0). Returns
+   a pointer into the member cache (valid until the next open/fetch) or 0 for
+   "someone". */
 static const char *tg_gui_session_resolve_typing_member(FILE *stream)
 {
     unsigned long fh;

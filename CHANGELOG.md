@@ -44,6 +44,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   and nothing else. It now says why.
 - The MorphOS manual still said that the "@" list of a group's members
   was off on MorphOS. It has opened there since 0.5.
+- The MorphOS manual also said that the typing line of a group reads
+  "someone is typing". Since 0.5 it names who is typing there too, as
+  on the other systems: the members are fetched on MorphOS as well.
 - The input line's recall with the arrow keys kept the first 255
   characters of a message sent, and ENTER sent them as if whole. It now
   recalls a message in full.

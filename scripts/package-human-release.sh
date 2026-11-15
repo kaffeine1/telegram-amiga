@@ -501,12 +501,10 @@ vecchio cassetto si puo' togliere.
 - Qualche MB di RAM libera."
         notes_en="- The chat list is not fetched at the first login: use \"Reload chat
   list\" in the Chats menu, or find chats with the search box.
-- In groups the typing line says \"someone is typing\".
 - Own screen: MorphOS 3.16 or newer is recommended."
         notes_it="- La lista chat non viene scaricata al primo accesso: usa \"Reload chat
   list\" nel menu Chats, oppure cerca le chat con la casella di
   ricerca.
-- Nei gruppi la riga di scrittura dice \"someone is typing\".
 - Schermo proprio: consigliato MorphOS 3.16 o piu' recente."
         ;;
     "AROS aarch64")
