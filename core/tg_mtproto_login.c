@@ -10358,18 +10358,23 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_peer_cache(
         return TG_MTPROTO_TL_OK;
     }
     tg_mtproto_tl_reader_init(&reader, body, body_length);
+    /* messages.peerDialogs#3371c354 (the answer of getPinnedDialogs) is laid
+       out as messages.dialogs#15ba6c40, dialogs messages chats users, with
+       the updates state after them, which nothing here reads (checked on
+       core.telegram.org, 2026-11-15). */
     if (constructor == TG_MESSAGES_DIALOGS_SLICE_CONSTRUCTOR) {
         if (tg_mtproto_tl_read_u32(&reader, &out->total_dialog_count) !=
             TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
-    } else if (constructor != TG_MESSAGES_DIALOGS_CONSTRUCTOR) {
+    } else if (constructor != TG_MESSAGES_DIALOGS_CONSTRUCTOR &&
+               constructor != TG_MESSAGES_PEER_DIALOGS_CONSTRUCTOR) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if (tg_read_vector_count(&reader, &count) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
-    if (constructor == TG_MESSAGES_DIALOGS_CONSTRUCTOR) {
+    if (constructor != TG_MESSAGES_DIALOGS_SLICE_CONSTRUCTOR) {
         out->total_dialog_count = count;
     }
     for (i = 0UL; i < count; ++i) {
@@ -12867,6 +12872,71 @@ static int tg_dialog_folder_self_test(void)
     return 0;
 }
 
+/* The answer of getPinnedDialogs, messages.peerDialogs, reads as a chat
+   list like a page of getDialogs: its dialogs become the cache's chats and
+   the updates state after the users is no trouble. */
+static int tg_peer_dialogs_cache_self_test(void)
+{
+    unsigned char body[256];
+    tg_mtproto_tl_writer w;
+    tg_mtproto_peer_cache *cache;
+    int k;
+    int ok;
+
+    tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+    (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u32(&w, 2UL);
+    for (k = 0; k < 2; ++k) {
+        (void)tg_mtproto_tl_write_u32(&w, TG_DIALOG_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 4UL); /* pinned */
+        (void)tg_mtproto_tl_write_u32(&w, k == 0 ? TG_PEER_USER_CONSTRUCTOR
+                                                 : TG_PEER_CHAT_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u64(&w, 0UL, k == 0 ? 0x12345678UL
+                                                      : 0x87654321UL);
+        (void)tg_mtproto_tl_write_u32(&w, 11UL); /* top_message */
+        (void)tg_mtproto_tl_write_u32(&w, 9UL);
+        (void)tg_mtproto_tl_write_u32(&w, 10UL);
+        (void)tg_mtproto_tl_write_u32(&w, 3UL);  /* unread_count */
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+        (void)tg_mtproto_tl_write_u32(&w, TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    }
+    for (k = 0; k < 3; ++k) { /* messages, chats, users */
+        (void)tg_mtproto_tl_write_u32(&w, TG_VECTOR_CONSTRUCTOR);
+        (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    }
+    /* updates.state#a56c2a3e pts qts date seq unread_count */
+    (void)tg_mtproto_tl_write_u32(&w, 0xa56c2a3eUL);
+    for (k = 0; k < 5; ++k) {
+        (void)tg_mtproto_tl_write_u32(&w, (unsigned long)(k + 100));
+    }
+    cache = (tg_mtproto_peer_cache *)malloc(sizeof(*cache));
+    if (cache == 0) {
+        return 0; /* no memory for the test is no fault of the reader */
+    }
+    ok = tg_mtproto_parse_dialog_peer_cache(
+             TG_MESSAGES_PEER_DIALOGS_CONSTRUCTOR, body, w.length, cache) ==
+             TG_MTPROTO_TL_OK &&
+         cache->count == 2UL && cache->total_dialog_count == 2UL &&
+         cache->entries[0].from_dialog && cache->entries[1].from_dialog &&
+         cache->entries[0].id_lo == 0x12345678UL &&
+         cache->entries[1].peer_constructor == TG_PEER_CHAT_CONSTRUCTOR &&
+         cache->entries[1].id_lo == 0x87654321UL &&
+         cache->entries[1].unread_count == 3UL &&
+         /* any other answer is still refused */
+         tg_mtproto_parse_dialog_peer_cache(
+             TG_MESSAGES_GET_PEER_DIALOGS_CONSTRUCTOR, body, w.length,
+             cache) != TG_MTPROTO_TL_OK;
+    free(cache);
+    if (!ok) {
+        puts("login self-test: the pinned chats' answer does not read as "
+             "a chat list");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_forum_self_test(void)
 {
     static unsigned char rpc[1536];
@@ -13972,7 +14042,8 @@ int tg_mtproto_login_self_test(void)
 
     if (tg_peer_notify_self_test() != 0 ||
         tg_entity_marker_self_test() != 0 || tg_poll_self_test() != 0 ||
-        tg_forum_self_test() != 0 || tg_dialog_folder_self_test() != 0) {
+        tg_forum_self_test() != 0 || tg_dialog_folder_self_test() != 0 ||
+        tg_peer_dialogs_cache_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)

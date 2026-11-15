@@ -20127,6 +20127,7 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 #if !defined(TG_NO_SELFTEST)
 static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
+static int tg_gui_pins_join_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
@@ -22358,7 +22359,7 @@ int tg_mtproto_probe_self_test(void)
     if (tg_gui_hidden_projection_self_test() != 0) {
         return 2;
     }
-    if (tg_gui_pins_self_test() != 0) {
+    if (tg_gui_pins_self_test() != 0 || tg_gui_pins_join_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)
@@ -26379,6 +26380,267 @@ static void tg_gui_session_reload_chats(void)
     tg_gui_session_reselect_open();
 }
 
+/* --- pinned chats the list does not have --------------------------------
+   A chat pinned on Telegram that the local list does not have joins it, so
+   its pin shows (seen on the G5 on 2026-11-15: two groups pinned on
+   Telegram were not in the list at all; there the list starts empty and
+   grows by Search and Reload chat list, and a full list takes no more).
+   The answer of getPinnedDialogs names those chats whole, with the groups
+   and users behind them, so nothing more is asked. A chat hidden or
+   removed here stays out, and so does Saved Messages, which has its own
+   row. With the list full, the pinned chat takes the place of a hidden
+   one, else of the last chat of the main list that is neither pinned nor
+   open: in place, so no other chat changes its number. */
+
+/* The entry of a full list a pinned chat may take, or -1. */
+static long tg_gui_pins_free_slot(const tg_mtproto_peer_cache *cache,
+                                  const char *hidden_path)
+{
+    long k;
+
+    for (k = (long)cache->count - 1L; k >= 0L; --k) {
+        const tg_mtproto_peer_cache_entry *e = &cache->entries[k];
+
+        if (!e->is_self &&
+            tg_gui_hidden_contains_file(hidden_path, e->id_hi, e->id_lo)) {
+            return k;
+        }
+    }
+    for (k = (long)cache->count - 1L; k >= 0L; --k) {
+        const tg_mtproto_peer_cache_entry *e = &cache->entries[k];
+        int is_user = e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        int p;
+
+        if (e->is_self ||
+            tg_gui_archived_find(is_user, e->id_hi, e->id_lo) >= 0 ||
+            (e->peer_constructor ==
+                 tg_gui_session_state.open_peer_constructor &&
+             e->id_hi == tg_gui_session_state.open_peer_id_hi &&
+             e->id_lo == tg_gui_session_state.open_peer_id_lo)) {
+            continue;
+        }
+        for (p = 0; p < tg_gui_pin_count; ++p) {
+            if (tg_gui_pins[p].is_user == is_user &&
+                tg_gui_pins[p].id_hi == e->id_hi &&
+                tg_gui_pins[p].id_lo == e->id_lo) {
+                break;
+            }
+        }
+        if (p == tg_gui_pin_count) {
+            return k;
+        }
+    }
+    return -1L;
+}
+
+/* Puts into `cache` the pinned chats of `fresh` (the answer of
+   getPinnedDialogs, read as a chat list) that it does not have. The
+   number of chats put in. */
+static int tg_gui_pins_join_cache(tg_mtproto_peer_cache *cache,
+                                  const tg_mtproto_peer_cache *fresh,
+                                  const char *hidden_path)
+{
+    unsigned long i;
+    unsigned long k;
+    int joined = 0;
+
+    for (i = 0UL; i < fresh->count; ++i) {
+        const tg_mtproto_peer_cache_entry *e = &fresh->entries[i];
+        long slot;
+        int self = 0;
+
+        if (!e->from_dialog || e->folder_id == 1UL ||
+            !tg_mtproto_peer_cache_entry_is_openable(e) ||
+            tg_gui_hidden_contains_file(hidden_path, e->id_hi, e->id_lo) ||
+            tg_mtproto_peer_cache_find_local(cache, e->peer_constructor,
+                                             e->id_hi, e->id_lo) != 0) {
+            continue;
+        }
+        /* Saved Messages pinned: the account's own entry, when the answer
+           did not say so itself. */
+        for (k = 0UL; k < cache->count; ++k) {
+            if (cache->entries[k].is_self &&
+                cache->entries[k].id_hi == e->id_hi &&
+                cache->entries[k].id_lo == e->id_lo) {
+                self = 1;
+                break;
+            }
+        }
+        if (self) {
+            continue;
+        }
+        if (cache->count < TG_MTPROTO_PEER_CACHE_MAX) {
+            cache->entries[cache->count++] = *e;
+        } else {
+            slot = tg_gui_pins_free_slot(cache, hidden_path);
+            if (slot < 0L) {
+                continue;
+            }
+            cache->entries[slot] = *e;
+        }
+        ++joined;
+    }
+    if (joined > 0) {
+        tg_mtproto_recount_peer_cache(cache);
+    }
+    return joined;
+}
+
+/* The pinned chats of the answer join the list file. 1 = it changed. */
+static int tg_gui_pins_join_list(const tg_mtproto_rpc_result *result)
+{
+#define fresh tg_peer_work_a /* scratch: see tg_peer_work_a */
+#define cache tg_peer_work_b /* scratch: see tg_peer_work_a */
+    const char *path = tg_gui_session_state.peer_cache_file;
+    FILE *f;
+
+    if (path == 0 || path[0] == '\0' ||
+        tg_mtproto_parse_dialog_peer_cache(result->result_constructor,
+                                           result->result_body,
+                                           result->result_body_length,
+                                           &fresh) != TG_MTPROTO_TL_OK) {
+        return 0;
+    }
+    if (tg_mtproto_load_peer_cache_file(path, &cache) != 0) {
+        /* No list yet starts one; a list that cannot be read is left as it
+           is, not written over. */
+        f = fopen(path, "r");
+        if (f != 0) {
+            fclose(f);
+            return 0;
+        }
+        memset(&cache, 0, sizeof(cache));
+    }
+    if (tg_gui_pins_join_cache(&cache, &fresh, TG_GUI_HIDDEN_FILE) == 0 ||
+        tg_mtproto_save_peer_cache_file(path, &cache, 0, "chat cache") != 0) {
+        return 0;
+    }
+    tg_gui_log("pins: pinned chats joined the list");
+    return 1;
+#undef fresh
+#undef cache
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* Pinned chats join the list: a new one, and none of a chat already there,
+   one that cannot be opened, Saved Messages, a hidden one, an archived one
+   or a chat that is no dialog. A full list gives a hidden chat's place
+   first, then the last one that is neither pinned nor open, in place. */
+static int tg_gui_pins_join_self_test(void)
+{
+#define cache tg_peer_work_a /* scratch: see tg_peer_work_a */
+#define fresh tg_peer_work_b /* scratch: see tg_peer_work_a */
+    static const char hidden[] = "tg-pins-hidden-test.txt";
+    tg_gui_pin saved_pins[2];
+    int saved_pin_count = tg_gui_pin_count;
+    unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+    unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+    unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+    unsigned long max = TG_MTPROTO_PEER_CACHE_MAX;
+    unsigned long k;
+    FILE *f;
+    int joined;
+    int ok;
+
+    memcpy(saved_pins, tg_gui_pins, sizeof(saved_pins));
+    f = fopen(hidden, "w");
+    if (f == 0) {
+        puts("probe self-test: no room for the hidden-chats test file");
+        return 2;
+    }
+    fprintf(f, "%08lx %08lx\n%08lx %08lx\n", 0UL, 50UL, 0UL, 1005UL);
+    fclose(f);
+
+    memset(&cache, 0, sizeof(cache));
+    cache.entries[0].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[0].id_lo = 1UL;
+    cache.entries[0].is_self = 1;
+    cache.entries[0].has_access_hash = 1;
+    cache.entries[1].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[1].id_lo = 10UL;
+    cache.entries[1].has_access_hash = 1;
+    cache.entries[2].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    cache.entries[2].id_lo = 20UL;
+    cache.count = 3UL;
+    memset(&fresh, 0, sizeof(fresh));
+    for (k = 0UL; k < 7UL; ++k) {
+        fresh.entries[k].from_dialog = 1;
+        fresh.entries[k].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        fresh.entries[k].has_access_hash = 1;
+    }
+    fresh.entries[0].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    fresh.entries[0].id_lo = 30UL;             /* new: joins */
+    fresh.entries[0].unread_count = 4UL;
+    fresh.entries[1].id_lo = 10UL;             /* already there */
+    fresh.entries[2].id_lo = 40UL;             /* no access hash */
+    fresh.entries[2].has_access_hash = 0;
+    fresh.entries[3].id_lo = 1UL;              /* the account itself */
+    fresh.entries[4].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    fresh.entries[4].id_lo = 50UL;             /* hidden */
+    fresh.entries[5].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    fresh.entries[5].id_lo = 60UL;             /* in the Archive */
+    fresh.entries[5].folder_id = 1UL;
+    fresh.entries[6].id_lo = 70UL;             /* no dialog */
+    fresh.entries[6].from_dialog = 0;
+    fresh.count = 7UL;
+    joined = tg_gui_pins_join_cache(&cache, &fresh, hidden);
+    ok = joined == 1 && cache.count == 4UL &&
+         cache.entries[3].peer_constructor ==
+             TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+         cache.entries[3].id_lo == 30UL &&
+         cache.entries[3].unread_count == 4UL &&
+         cache.entries[1].id_lo == 10UL && cache.entries[2].id_lo == 20UL;
+    /* Joined once, not twice. */
+    ok = ok && tg_gui_pins_join_cache(&cache, &fresh, hidden) == 0 &&
+         cache.count == 4UL;
+
+    /* A full list: the account, then groups 1001.. in order; 1005 is
+       hidden, the last one pinned, the one before it open. */
+    memset(&cache, 0, sizeof(cache));
+    cache.entries[0].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[0].id_lo = 1UL;
+    cache.entries[0].is_self = 1;
+    for (k = 1UL; k < max; ++k) {
+        cache.entries[k].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+        cache.entries[k].id_lo = 1000UL + k;
+    }
+    cache.count = max;
+    tg_gui_pin_count = 1;
+    tg_gui_pins[0].is_user = 0;
+    tg_gui_pins[0].id_hi = 0UL;
+    tg_gui_pins[0].id_lo = 1000UL + max - 1UL;
+    tg_gui_session_state.open_peer_constructor =
+        TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    tg_gui_session_state.open_peer_id_hi = 0UL;
+    tg_gui_session_state.open_peer_id_lo = 1000UL + max - 2UL;
+    fresh.entries[0].id_lo = 31UL;
+    fresh.count = 1UL;
+    ok = ok && tg_gui_pins_join_cache(&cache, &fresh, hidden) == 1 &&
+         cache.count == max && cache.entries[5].id_lo == 31UL;
+    remove(hidden);
+    /* Nothing hidden now: the last chat neither pinned nor open. */
+    fresh.entries[0].id_lo = 32UL;
+    ok = ok && tg_gui_pins_join_cache(&cache, &fresh, hidden) == 1 &&
+         cache.count == max && cache.entries[max - 3UL].id_lo == 32UL &&
+         cache.entries[max - 2UL].id_lo == 1000UL + max - 2UL &&
+         cache.entries[max - 1UL].id_lo == 1000UL + max - 1UL &&
+         cache.entries[5].id_lo == 31UL && cache.entries[0].is_self;
+
+    memcpy(tg_gui_pins, saved_pins, sizeof(saved_pins));
+    tg_gui_pin_count = saved_pin_count;
+    tg_gui_session_state.open_peer_constructor = saved_pc;
+    tg_gui_session_state.open_peer_id_hi = saved_hi;
+    tg_gui_session_state.open_peer_id_lo = saved_lo;
+    if (!ok) {
+        puts("probe self-test: pinned chats do not join the list");
+        return 2;
+    }
+    return 0;
+#undef cache
+#undef fresh
+}
+#endif
+
 /* Read Telegram's pinned chats into tg_gui_pins. 0 = read (the list may be
    empty), non-zero = the request failed and the old list stays. */
 static int tg_gui_session_fetch_pins(FILE *stream)
@@ -26444,6 +26706,8 @@ static int tg_gui_session_fetch_pins(FILE *stream)
         ++tg_gui_pin_count;
     }
     tg_gui_pins_fresh = 1;
+    /* Every caller draws the list again next, the joined chats with it. */
+    (void)tg_gui_pins_join_list(&result);
     return 0;
 }
 

@@ -69,6 +69,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - The input line's recall with the arrow keys kept the first 255
   characters of a message sent, and ENTER sent them as if whole. It now
   recalls a message in full.
+- A chat pinned on Telegram was missing from the top of the list, pin
+  and all, when the list here did not have it (seen on a G5 on
+  2026-11-15: two pinned groups did not show). The list is the one kept
+  here, which on MorphOS starts empty and grows by Search and Reload
+  chat list, and the pins only marked chats already in it. A pinned
+  chat the list lacks now joins it whenever the pins are read: at start,
+  on Reload chat list and when they change on another device. In a full
+  list it takes the place of a hidden chat, or else of the last one that
+  is neither pinned nor open. A chat removed from the list here stays
+  out, pinned or not.
 
 ## [0.5] - 2026-11-14
 
