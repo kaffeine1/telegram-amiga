@@ -40,9 +40,9 @@ On 2026-11-15: 0.5, the second beta, is out in all seven packages
 groups work on the six systems; what each release brought is in
 CHANGELOG.md. On `main` for the next release: the Chats menu (issue
 #20), a picture sent as a photo whatever its name, a long text sent as
-several messages (issue #14), Play on a video with a player of one's
-choice, and the account online while the window is in front, without
-which Telegram sends no "is typing".
+several messages (issue #14), Play on a video, a voice message or an
+audio file with a player of one's choice, and the account online while
+the window is in front, without which Telegram sends no "is typing".
 
 Open, each in its section below:
 
@@ -59,6 +59,8 @@ Open, each in its section below:
 - transfer speed, photo speed under AfA_OS, avatars on paletted
   screens, the send-photo dialog's preview, a MorphOS popup flicker;
 - sending stickers, a panel that suits each processor;
+- voice messages heard in the window on 68k, through opusfile.library
+  when it is installed;
 - letters outside Latin-1, Cyrillic first;
 - after the beta: skins and translations;
 - in the text client: a line longer than one message.
@@ -451,8 +453,10 @@ Middle, more interface:
   archives.
 
 Large, later if at all: chat folders of one's own, scheduled messages, a
-calendar, editing the profile, administering groups. Out of reach by our
-rules: voice messages, which need an Opus decoder.
+calendar, editing the profile, administering groups. Voice messages,
+which need an Opus decoder, were out of reach by our rules; they now
+play through a media player, and on 68k they may play inside the
+window (see "Planned: voice messages heard in the window").
 
 ## After the 0.1 beta: skins and translations
 
@@ -602,9 +606,10 @@ Since 0.0.92 a video shows a frame, with its length and size beside it,
 and since 0.5 a downloaded file opens from its message through the
 Workbench. On `main` for the next release, at a user's request: Play at
 the top of a video's menu downloads the video when it is not here and
-then hands it to the player chosen in "Settings > Video player..."
+then hands it to the player chosen in "Settings > Media player..."
 (MPlayer, say), or to the Workbench when none is chosen; the player runs
-as a process of its own, with the file's path as its argument. Still
+as a process of its own, with the file's path as its argument. Voice
+messages and audio files have the same Play. Still
 open: the resolution in the details, and playing while the video still
 downloads. That one would feed the player through a pipe (PIPE:) as the
 parts arrive, and only works for videos whose index comes first
@@ -1085,6 +1090,49 @@ Emoji reduced to 16 pixels, on one shared palette, OFL 1.1, generated
 by scripts/gen-emoji-sheet.py from the emoticon table so the two stay
 in step; the three table entries with no Noto image (two arrows and a
 check mark) remain text only.
+
+## Planned: voice messages heard in the window
+
+A voice message is Ogg Opus, and on `main`, for the next release, Play
+hands it to the media player of the settings. On MorphOS, AmigaOS 4 and
+AROS that is MPlayer or its kin, which decode Opus, and there it is
+enough. On a classic Amiga there is hardly a player that does, so the
+second step is to hear it inside the window: a play and stop control on
+the voice bubble, the sound through AHI the way the notification sound
+already goes.
+
+The decoder is not ours to write first. opusfile.library 1.0 is on
+Aminet since 2026-11-02 (util/libs/opusfile.lha, by the author of the
+other native client): libopus in fixed point, no FPU, one build per CPU
+from the 68000 to the 68060, 48 kHz 16-bit output, and it takes a memory
+block as its input, which is how a downloaded voice message would reach
+it. It exists for 68k only. The client opens it when it is there and
+says where to find it when it is not, the datatypes' rule: a help,
+never a requirement. Nothing of it goes into our packages before its
+licence is read.
+
+What each processor can do decides how it plays, chosen at run time:
+
+- the 68000's text client: no sound. Play hands the file to a player,
+  as in the window.
+- a 68020 or 68030 at Amiga speeds: decode the whole message first, into
+  a buffer in memory, with a progress in the status line, and play it
+  when it is decoded. The library's own figures are from a Vampire,
+  where speech decodes at 5.6 times real time; a stock A1200 is many
+  times slower, so a short message may take tens of seconds there. That
+  is a guess to measure before promising anything, and the buffer
+  (about 96 KB a second at 48 kHz mono, 16-bit) needs a ceiling on the
+  8 MB machine: a long message plays in parts or is refused with a word.
+- a 68040, a 68060, a Vampire, a PiStorm: decode while it plays, a
+  little ahead of the sound, at the window's quiet moments.
+- PowerPC and AROS: the media player, unless a library for them turns
+  up; an Opus decoder of our own (libopus is BSD) would cover every lane
+  without dependencies, but it is a lot of code and of arithmetic, and
+  the players already do it there.
+
+The rest is ordinary: one message plays at a time, opening another chat
+stops it, and the play control shows only where AHI and the library are
+there.
 
 ## Planned: sending stickers
 

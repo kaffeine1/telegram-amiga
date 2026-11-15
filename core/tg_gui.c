@@ -7791,10 +7791,10 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ids[n] = TG_GUI_CTX_DELETE;
             ++n;
         }
-        if (m->has_document && m->is_video) {
-            /* A video plays: downloaded first when it is not here yet,
-               then handed to the player of the settings, or to the
-               Workbench. It takes Open's place once the file is here. */
+        if (m->has_document && m->playable) {
+            /* A video or a sound plays: downloaded first when it is not
+               here yet, then handed to the player of the settings, or to
+               the Workbench. It takes Open's place once the file is here. */
             labels[n] = "Play";
             ids[n] = TG_GUI_CTX_FILE_PLAY;
             ++n;
@@ -7802,7 +7802,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         if (m->has_document && state->ctx_file_saved) {
             /* Already saved from here and still on disk: what one does
                with a file one has. */
-            if (!m->is_video) {
+            if (!m->playable) {
                 labels[n] = "Open";
                 ids[n] = TG_GUI_CTX_FILE_OPEN;
                 ++n;
@@ -8785,7 +8785,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {"Window and files", 0},
     {"Use own screen", TG_GUI_SET_OWN_SCREEN},
     {"Download drawer...", TG_GUI_SET_DOWNLOAD},
-    {"Video player...", TG_GUI_SET_PLAYER},
+    {"Media player...", TG_GUI_SET_PLAYER},
     {"Check for updates", TG_GUI_SET_UPDATES},
     {"ARexx", 0},
     {"ARexx port", TG_GUI_SET_AREXX_PORT},
@@ -12421,7 +12421,7 @@ int tg_gui_self_test(void)
             state.messages[0].is_own = 1;
             state.messages[0].has_document = 1;
             state.messages[0].has_photo = 1; /* the frame */
-            state.messages[0].is_video = 1;
+            state.messages[0].playable = 1;
             for (pass = 0; pass < 2; ++pass) {
                 int at_play = -1;
                 int saw_download = 0;
@@ -12441,7 +12441,8 @@ int tg_gui_self_test(void)
                 }
                 if (at_play < 0 || saw_open || count > TG_GUI_CTX_MENU_ITEMS ||
                     saw_download != !pass || saw_show != pass) {
-                    puts("gui self-test: a video's menu must offer Play");
+                    puts("gui self-test: a video's or a sound's menu must "
+                         "offer Play");
                     return 2;
                 }
             }
@@ -12450,7 +12451,7 @@ int tg_gui_self_test(void)
             state.messages[0].is_own = 0;
             state.messages[0].has_document = 0;
             state.messages[0].has_photo = 0;
-            state.messages[0].is_video = 0;
+            state.messages[0].playable = 0;
         }
         /* The player: its line in the settings, the command that hands a
            file to it, and its file read back. */
@@ -12466,7 +12467,7 @@ int tg_gui_self_test(void)
             if (strcmp(value, "(the Workbench)") != 0 ||
                 tg_gui_settings_kind(TG_GUI_SET_PLAYER) !=
                     TG_GUI_SET_KIND_ACTION) {
-                puts("gui self-test: video player settings line");
+                puts("gui self-test: media player settings line");
                 return 2;
             }
             tg_gui_copy(state.video_player, sizeof(state.video_player),
@@ -12488,25 +12489,25 @@ int tg_gui_self_test(void)
                 tg_gui_player_command(cmd, 20UL, "MPlayer",
                                       "a-name-far-too-long.mp4") ||
                 cmd[0] != '\0') {
-                puts("gui self-test: video player command line");
+                puts("gui self-test: media player command line");
                 return 2;
             }
             if (tg_gui_player_save(tmp_player, state.video_player) != 0) {
-                puts("gui self-test: video player not saved");
+                puts("gui self-test: media player not saved");
                 return 2;
             }
             tg_gui_player_load(tmp_player, back, sizeof(back));
             if (strcmp(back, "Work:Video/MPlayer") != 0 ||
                 tg_gui_player_save(tmp_player, "") != 0) {
                 (void)remove(tmp_player);
-                puts("gui self-test: video player not read back");
+                puts("gui self-test: media player not read back");
                 return 2;
             }
             tg_gui_player_load(tmp_player, back, sizeof(back));
             state.video_player[0] = '\0';
             if (back[0] != '\0') {
                 (void)remove(tmp_player);
-                puts("gui self-test: video player not cleared");
+                puts("gui self-test: media player not cleared");
                 return 2;
             }
         }

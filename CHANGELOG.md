@@ -20,15 +20,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   message and says so when it grows longer; a long text left in a chat
   keeps its first message as the draft. In the text client a line still
   holds one message, 4096 characters.
-- Play on a video (a user asked for one step instead of downloading and
-  opening by hand). A video or an animation has Play at the top of its
-  menu: the video is downloaded if it is not here yet and then opened by
-  itself, by the program chosen in the new "Video player..." line of the
-  settings (MPlayer, for instance), or by the Workbench when none is
-  chosen. Once the video is here Play takes the place of Open. The
-  player gets the file's path as its argument and runs as a process of
-  its own, so the window goes on; a file that is in fact a program is
-  not run.
+- Play on a video, a voice message or an audio file (a user asked for
+  one step instead of downloading and opening by hand). Such a message
+  has Play at the top of its menu: the file is downloaded if it is not
+  here yet and then opened by itself, by the program chosen in the new
+  "Media player..." line of the settings (MPlayer, for instance, which
+  plays voice messages too), or by the Workbench when none is chosen.
+  Once the file is here Play takes the place of Open. The player gets
+  the file's path as its argument and runs as a process of its own, so
+  the window goes on; a file that is in fact a program is not run.
+  Voice messages are Ogg Opus, which nothing in Amigram decodes yet: the
+  player does it.
 
 ### Changed
 - The first menu is split in two (issue #20). It had grown to fifteen

@@ -398,7 +398,8 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
    (tg_gui_graphics_preferences_resolve). A choice equal to the machine's
    own is saved as "auto", like the photos'. */
 #define TG_GUI_STICKERS_FILE "data/telegram-stickers.txt"
-/* "Video player..." of the settings: the program Play hands a video to,
+/* "Media player..." of the settings: the program Play hands a video, a
+   voice message or an audio file to,
    one line with its path; no file or an empty line = the Workbench. */
 #define TG_GUI_PLAYER_FILE "data/telegram-player.txt"
 
@@ -451,8 +452,9 @@ typedef struct tg_gui_message {
     unsigned long from_id_lo;
     int from_user;                     /* the sender is a person: can be written to */
     int has_document;                  /* F9: a document is attached (Download) */
-    int is_video;                      /* the document is a video or an
-                                          animation: its menu offers Play */
+    int playable;                      /* a video, an animation, a voice
+                                          message or an audio file: its
+                                          menu offers Play */
     int has_photo;                     /* 0.0.9: inline photo metadata present */
     int photo_ready;                   /* cached JPEG is ready for the backend */
     int photo_only;                    /* hide the synthetic label once drawn */
@@ -537,7 +539,7 @@ typedef struct tg_gui_state {
     int notify_mode;       /* TG_GUI_NOTIFY_*, from data/telegram-notify.txt */
     int notify_beep;       /* sound on eligible news */
     char notify_sound[TG_NOTIFY_SOUND_MAX];
-    /* The program Play hands a video to ("" = the Workbench decides), kept
+    /* The program Play hands media to ("" = the Workbench decides), kept
        in TG_GUI_PLAYER_FILE. */
     char video_player[TG_NOTIFY_SOUND_MAX];
     int notify_explicit;   /* the user picked the mode (else "auto") */
@@ -976,7 +978,7 @@ void tg_gui_emoji_preferences_load(const char *path, int *enabled,
                                    int *explicit_choice);
 int tg_gui_emoji_preferences_save(const char *path, int enabled);
 /* explicit_choice 0 writes "auto". */
-/* The video player's path from `path` into out ("" when none); writing ""
+/* The media player's path from `path` into out ("" when none); writing ""
    removes the file. Save returns 0 when done. */
 void tg_gui_player_load(const char *path, char *out, unsigned long size);
 int tg_gui_player_save(const char *path, const char *player);

@@ -795,12 +795,12 @@ Files
   you trust who sent it. On a Workbench that cannot open files for a
   program (3.0, 3.1) the status line says where the file is. If you
   move or delete the file, the menu offers Download again.
-- A video, or an animation, has Play at the top of its menu: it is
-  downloaded if it is not here yet and then opened by itself, by the
-  program chosen with "Settings > Video player..." (MPlayer, for
-  instance) or, with none chosen, by the Workbench, with whatever the
-  system has for videos. Once the video is here, Play takes Open's
-  place.
+- A video, an animation, a voice message or an audio file has Play at
+  the top of its menu: it is downloaded if it is not here yet and then
+  opened by itself, by the program chosen with "Settings > Media
+  player..." (MPlayer, for instance, which also plays voice messages)
+  or, with none chosen, by the Workbench, with whatever the system has
+  for it. Once the file is here, Play takes Open's place.
 - Send a file with "Send file..." (Amiga+F), or by dropping its icon
   on the window: up to $upload_limit on this build. "Send photo..."
   (Amiga+P) sends a JPEG or PNG as a photo, and a dropped picture asks
@@ -1100,11 +1100,12 @@ File
   Workbench che non sa aprire i file per conto di un programma (3.0,
   3.1) la riga di stato dice dov'e' il file. Se sposti o cancelli il
   file, il menu torna a offrire Download.
-- Un video, o un'animazione, ha Play in cima al suo menu: viene
-  scaricato se non c'e' ancora e poi aperto da solo, dal programma
-  scelto con "Settings > Video player..." (MPlayer, per esempio) o, se
-  non ne hai scelto uno, dal Workbench, con quello che il sistema usa
-  per i video. Quando il video c'e' gia', Play prende il posto di Open.
+- Un video, un'animazione, un messaggio vocale o un file audio ha Play
+  in cima al suo menu: viene scaricato se non c'e' ancora e poi aperto
+  da solo, dal programma scelto con "Settings > Media player..."
+  (MPlayer, per esempio, che suona anche i vocali) o, se non ne hai
+  scelto uno, dal Workbench, con quello che il sistema usa per quel
+  tipo di file. Quando il file c'e' gia', Play prende il posto di Open.
 - Manda un file con "Send file..." (Amiga+F) o trascinandone l'icona
   sulla finestra: fino a $upload_limit su questa build. "Send photo..."
   (Amiga+P) manda un JPEG o un PNG come foto, e un'immagine trascinata

@@ -611,6 +611,8 @@ static const char *tg_gui_markdown_for_send(const char *utf8);
 #define tg_gui_mentions_sent(sent) ((void)(sent))
 #define tg_gui_markdown_for_send(utf8) (utf8)
 #endif
+/* Play's reach (a video, an animation, a voice message, an audio file). */
+static int tg_gui_doc_playable(const tg_mtproto_document_meta *doc);
 /* Defer application until the receive call returns: an update can arrive
    during sendMessage, before the optimistic echo has entered the ring. */
 #define TG_CHAT_WEBPAGE_QUEUE_MAX 8U
@@ -15466,11 +15468,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.from_user = texts.messages[i].from_constructor ==
                                 TG_MTPROTO_PEER_USER_CONSTRUCTOR;
                 row.has_document = texts.messages[i].document.has_document;
-                row.is_video = row.has_document &&
-                               (texts.messages[i].document.kind ==
-                                    TG_MTPROTO_DOC_KIND_VIDEO ||
-                                texts.messages[i].document.kind ==
-                                    TG_MTPROTO_DOC_KIND_GIF);
+                row.playable =
+                    tg_gui_doc_playable(&texts.messages[i].document);
                 row.has_photo = texts.messages[i].photo.has_photo;
                 row.photo_only = texts.messages[i].photo_only;
                 row.photo_is_link = texts.messages[i].photo_is_link;
@@ -28858,6 +28857,17 @@ int tg_gui_session_search_open(const char *query, FILE *stream)
     return tg_gui_session_search_open_result(0, stream) == 0 ? 0 : 1;
 }
 
+/* What Play can hand to a player: a video, an animation, a voice message or
+   an audio file. Not a sticker, a photo or any other file. */
+static int tg_gui_doc_playable(const tg_mtproto_document_meta *doc)
+{
+    return doc != 0 && doc->has_document &&
+           (doc->kind == TG_MTPROTO_DOC_KIND_VIDEO ||
+            doc->kind == TG_MTPROTO_DOC_KIND_GIF ||
+            doc->kind == TG_MTPROTO_DOC_KIND_VOICE ||
+            doc->kind == TG_MTPROTO_DOC_KIND_AUDIO);
+}
+
 #if !defined(TG_NO_GUI)
 /* Online while the window is in front. Telegram sends "is typing" only to an
    account that is online (seen on the G5 on 2026-11-15: no typing at all
@@ -28965,6 +28975,41 @@ static int tg_gui_presence_self_test(void)
                             1005UL + TG_GUI_ONLINE_RETRY_SECONDS) != 1) {
         puts("gui session self-test: online status timing");
         return 2;
+    }
+    /* Play's reach: the four kinds a player takes, nothing else. */
+    {
+        static tg_mtproto_document_meta doc;
+        static const unsigned char yes[4] = {
+            TG_MTPROTO_DOC_KIND_VIDEO, TG_MTPROTO_DOC_KIND_GIF,
+            TG_MTPROTO_DOC_KIND_VOICE, TG_MTPROTO_DOC_KIND_AUDIO
+        };
+        static const unsigned char no[2] = {
+            TG_MTPROTO_DOC_KIND_FILE, TG_MTPROTO_DOC_KIND_STICKER
+        };
+        int k;
+
+        memset(&doc, 0, sizeof(doc));
+        doc.has_document = 1;
+        for (k = 0; k < 4; ++k) {
+            doc.kind = yes[k];
+            if (!tg_gui_doc_playable(&doc)) {
+                puts("gui session self-test: a video or a sound not playable");
+                return 2;
+            }
+        }
+        for (k = 0; k < 2; ++k) {
+            doc.kind = no[k];
+            if (tg_gui_doc_playable(&doc)) {
+                puts("gui session self-test: a file or a sticker playable");
+                return 2;
+            }
+        }
+        doc.kind = TG_MTPROTO_DOC_KIND_VOICE;
+        doc.has_document = 0;
+        if (tg_gui_doc_playable(&doc) || tg_gui_doc_playable(0)) {
+            puts("gui session self-test: no document, yet playable");
+            return 2;
+        }
     }
     return 0;
 }

@@ -607,7 +607,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 /* not in a menu: what the "Sticker pictures" line of the settings asks for
    on a system with no WEBP datatype */
 #define TG_MENU_WEBP_DT 41
-/* not in a menu either: the video player line of the settings */
+/* not in a menu either: the media player line of the settings */
 #define TG_MENU_PLAYER 42
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
@@ -8579,7 +8579,7 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
 
 /* Reuse ASL's native path joining, and reject a long name rather than save
    a truncated path that could name a different file. Cancel keeps the choice.
-   `title` names what is picked: a sound, or the video player. */
+   `title` names what is picked: a sound, or the media player. */
 static int tg_gui_window_pick_file(tg_gui_state *state, struct Window *win,
                                    const char *title, char *path,
                                    unsigned long size)
@@ -10699,7 +10699,7 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
    ends is the one Play started. */
 static unsigned long tg_gui_play_after = 0UL;
 
-/* Hands `path` to the video player of the settings as a process of its own,
+/* Hands `path` to the media player of the settings as a process of its own,
    so the window goes on while it plays; what the player prints goes to
    NIL:. 1 = it started. */
 static int tg_gui_window_run_player(const char *player, const char *path)
@@ -10739,20 +10739,20 @@ static int tg_gui_window_run_player(const char *player, const char *path)
     return 1;
 }
 
-/* Play on a video that is here: to the player of the settings, or to the
-   Workbench, which opens it with what the system has for videos. A file
-   that is in fact a program is not run. */
+/* Play on a video or a sound that is here: to the player of the settings,
+   or to the Workbench, which opens it with what the system has for it. A
+   file that is in fact a program is not run. */
 static void tg_gui_window_play_path(tg_gui_state *state,
                                     tg_gui_backend *backend, const char *path)
 {
     if (tg_gui_session_file_is_program(path)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "That file is a program, not a video");
+                           "That file is a program, not media");
     } else if (state->video_player[0] != '\0') {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            tg_gui_window_run_player(state->video_player, path)
-                               ? "Handed to the video player"
-                               : "The video player did not start");
+                               ? "Handed to the media player"
+                               : "The media player did not start");
     } else if (tg_gui_amiga_wb_open(path, 0)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            "Handed to the Workbench");
@@ -10763,8 +10763,8 @@ static void tg_gui_window_play_path(tg_gui_state *state,
     tg_gui_window_paint(state, backend);
 }
 
-/* Play on a video message: at once when its file is here, else after the
-   download it starts now. */
+/* Play on a video, voice or audio message: at once when its file is here,
+   else after the download it starts now. */
 static void tg_gui_window_video_play(tg_gui_state *state,
                                      tg_gui_backend *backend,
                                      unsigned long message_id)
@@ -16586,7 +16586,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_PLAYER) {
-                            /* The program Play hands a video to, or none:
+                            /* The program Play hands media to, or none:
                                then the Workbench opens it with whatever
                                the system has for it. With one chosen, the
                                line asks which of the two. */
@@ -16602,11 +16602,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                    requester reads its text as a format */
                                 tg_gui_requester_text(shown, sizeof(shown),
                                                       state->video_player, 2);
-                                sprintf(text, "Play hands videos to\n%s",
+                                sprintf(text,
+                                        "Play hands videos and sounds to\n%s",
                                         shown);
                                 es.es_StructSize = (ULONG)sizeof(es);
                                 es.es_Flags = 0UL;
-                                es.es_Title = (APTR)"Video player";
+                                es.es_Title = (APTR)"Media player";
                                 es.es_TextFormat = (APTR)text;
                                 es.es_GadgetFormat =
                                     (APTR)"Choose another...|Use the Workbench|Cancel";
@@ -16618,7 +16619,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 changed = 1;
                             } else if (pick == 1) {
                                 changed = tg_gui_window_pick_file(state,
-                                    ctx.window, "Video player",
+                                    ctx.window, "Media player",
                                     state->video_player,
                                     sizeof(state->video_player));
                             }
@@ -16628,10 +16629,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     sizeof(state->status),
                                     tg_gui_player_save(TG_GUI_PLAYER_FILE,
                                         state->video_player) != 0
-                                        ? "Could not save the video player"
+                                        ? "Could not save the media player"
                                         : state->video_player[0] != '\0'
-                                              ? "Play: videos go to that program"
-                                              : "Play: the Workbench opens videos");
+                                              ? "Play: media go to that program"
+                                              : "Play: the Workbench decides");
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_NOTIFY_SOUND ||
@@ -17241,7 +17242,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_notify_sound(value.sound);
                         }
                     } else if (it == TG_GUI_CTX_FILE_PLAY && m != 0 &&
-                               m->has_document && m->is_video &&
+                               m->has_document && m->playable &&
                                m->id != 0UL) {
                         tg_gui_window_video_play(state, &backend, m->id);
                     } else if ((it == TG_GUI_CTX_FILE_OPEN ||

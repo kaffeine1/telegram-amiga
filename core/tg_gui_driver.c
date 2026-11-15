@@ -412,7 +412,7 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     message->is_own = (row->is_out && !row->is_service) ? 1 : 0;
     message->is_system = row->is_service ? 1 : 0;
     message->has_document = row->has_document; /* F9: gates the Download item */
-    message->is_video = row->is_video;
+    message->playable = row->playable;
     message->has_photo = row->has_photo;
     message->photo_ready = row->photo_ready;
     message->photo_only = row->photo_only;
