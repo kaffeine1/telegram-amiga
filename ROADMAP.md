@@ -58,6 +58,7 @@ Open, each in its section below:
   installed (the notice is done), AmiUpdate on AmigaOS 4;
 - transfer speed, photo speed under AfA_OS, avatars on paletted
   screens, the send-photo dialog's preview, a MorphOS popup flicker;
+- sending stickers, a panel that suits each processor;
 - letters outside Latin-1, Cyrillic first;
 - after the beta: skins and translations;
 - in the text client: a line longer than one message.
@@ -1084,6 +1085,66 @@ Emoji reduced to 16 pixels, on one shared palette, OFL 1.1, generated
 by scripts/gen-emoji-sheet.py from the emoticon table so the two stay
 in step; the three table entries with no Noto image (two arrows and a
 check mark) remain text only.
+
+## Planned: sending stickers
+
+Asked for on 2026-11-15, after it turned out that the other native
+client sends them since its 0.3.5 (a sticker panel beside the emoji,
+with recent ones, favourites and a search of the sets). Here a sticker
+is shown since 0.5, through a WEBP datatype, and is never sent. The
+wire side is small; the work, and the care, is in the panel, because
+the same panel has to make sense on a 7 MHz 68000 and on a G5.
+
+What travels:
+
+- the list of the user's sets, `messages.getAllStickers`, with its hash
+  so an unchanged list costs one short answer; kept in `data/` between
+  runs;
+- the stickers of one set, `messages.getStickerSet`, asked when the set
+  is opened in the panel and not before. A set can hold a hundred and
+  twenty stickers or more, each a whole `document` in the answer, so the
+  answer is the size to plan for: the reply buffers of the 68k and
+  LOWMEM profiles, and the small replies MorphOS keeps since the
+  bsdsocket hunt, decide whether a big set is read whole or refused with
+  a word;
+- recent and favourite stickers, `messages.getRecentStickers` and
+  `messages.getFavedStickers`: short lists, the first tab, and on a slow
+  machine the only one most people need;
+- the send, `messages.sendMedia` with `inputMediaDocument` (the
+  sticker's id, access hash and file reference), in reply or not, into
+  a topic like any message. A file reference expires: on
+  FILE_REFERENCE_EXPIRED the set is read again once and the send tried
+  again, then the status line says so.
+
+What each machine shows, chosen at run time from the processor and the
+screen, never from the build alone, the way "Sticker pictures" is
+already off by default below the 68040:
+
+- the 68000 and its text client: no panel. A later `/sticker` could
+  send one of the recent stickers by its emoji, which is all a console
+  can show. Not before the window has it.
+- a 68020 or 68030 at Amiga speeds (a stock A1200): the panel shows each
+  sticker as its emoji, a grid that costs nothing to draw, and the
+  picture of the one under the cursor only when asked. A WEBP still
+  takes seconds there, a page of thirty would take minutes.
+- a 68040, a 68060, a Vampire, a PiStorm: pictures, decoded one at a
+  time at quiet moments (the avatar build's discipline: never while
+  typing, never while a menu is open), the page on screen first, each
+  kept in the photo cache on disk so a set opens fast the second time.
+  The emoji stands in until its picture is ready.
+- PowerPC and the AROS lanes: the same, with a larger page and a
+  shorter pause between pictures; still lazy, since a set's thumbnails
+  are a hundred small downloads before they are a hundred decodes.
+
+Limits that hold everywhere: pictures only where a WEBP datatype reads
+(the settings offer this project's own where there is none, AROS has
+its own); an animated or video sticker shows its still and is sent like
+any other; the thumbnails are the small ones Telegram serves for the
+panel, not the stickers themselves; memory for the panel is a fixed
+page, not a set, and on the 8 MB A1200 the panel must not cost more
+than a chat with photos does. Searching and adding sets
+(`messages.searchStickerSets`, `messages.installStickerSet`) come after
+the panel, and GIFs, which are videos, after Play.
 
 ## Letters outside Latin-1
 
