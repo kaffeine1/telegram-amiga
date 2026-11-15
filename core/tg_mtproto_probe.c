@@ -20128,6 +20128,7 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
 static int tg_gui_pins_join_self_test(void);
+static int tg_gui_follow_open_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
@@ -22359,7 +22360,8 @@ int tg_mtproto_probe_self_test(void)
     if (tg_gui_hidden_projection_self_test() != 0) {
         return 2;
     }
-    if (tg_gui_pins_self_test() != 0 || tg_gui_pins_join_self_test() != 0) {
+    if (tg_gui_pins_self_test() != 0 || tg_gui_pins_join_self_test() != 0 ||
+        tg_gui_follow_open_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)
@@ -26308,6 +26310,61 @@ int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream)
     return (rc == 0) ? 0 : -1;
 }
 
+/* The open chat is named by its number in the chat list file
+   (current_peer_index): sending, the history, the read marks and the rest
+   ask the file for the chat of that number. Dragging a chat in the sidebar
+   renumbers the chats between its old and its new place, so the number can
+   name another chat while the transcript still shows the open one (seen
+   2026-11-15: after a chat was dragged from above the open one to below
+   it, the number named the chat that followed, and the next message would
+   have gone there). After every change of the list the open chat is found
+   again by its peer and its number written again. A chat the file no
+   longer has gets no number: a message then fails instead of reaching
+   another chat. A file that cannot be read changes nothing. */
+static void tg_gui_session_follow_open_chat(void)
+{
+    FILE *file;
+    char line[512];
+    unsigned long found;
+    int read_any;
+
+    if (!tg_gui_session_state.open ||
+        tg_gui_session_state.peer_cache_file == 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0' ||
+        strcmp(tg_gui_session_state.current_peer_index, "self") == 0 ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return;
+    }
+    file = fopen(tg_gui_session_state.peer_cache_file, "r");
+    if (file == 0) {
+        return;
+    }
+    found = 0UL;
+    read_any = 0;
+    while (found == 0UL && fgets(line, sizeof(line), file) != 0) {
+        tg_mtproto_peer_line pl;
+
+        if (tg_mtproto_parse_peer_line(line, &pl) < 4) {
+            continue;
+        }
+        read_any = 1;
+        if (!pl.is_self && pl.index != 0UL &&
+            tg_mtproto_peer_constructor_from_name(pl.type) ==
+                tg_gui_session_state.open_peer_constructor &&
+            pl.id_hi == tg_gui_session_state.open_peer_id_hi &&
+            pl.id_lo == tg_gui_session_state.open_peer_id_lo) {
+            found = pl.index;
+        }
+    }
+    fclose(file);
+    if (found != 0UL) {
+        sprintf(tg_gui_session_state.current_peer_index, "%lu", found);
+    } else if (read_any) {
+        tg_gui_session_state.current_peer_index[0] = '\0';
+        tg_gui_log("open chat: not in the chat list any more");
+    }
+}
+
 /* Re-project the peer cache into the GUI sidebar (after it changed, e.g. a search
    result was added). Mirrors the projection in tg_gui_session_open. */
 /* After the sidebar is rebuilt (the driver resets selected_chat to 0), point
@@ -26350,6 +26407,9 @@ static void tg_gui_session_reload_chats(void)
     int count;
     int missing;
 
+    /* First of all, whatever is drawn: the list may have moved under the
+       open chat. */
+    tg_gui_session_follow_open_chat();
     if (tg_gui_session_state.driver.on_chat_list_changed == 0) {
         return;
     }
@@ -26638,6 +26698,91 @@ static int tg_gui_pins_join_self_test(void)
     return 0;
 #undef cache
 #undef fresh
+}
+
+/* The open chat keeps its number when the list moves under it: after a
+   drag renumbers it the number follows it, a chat with the same id but of
+   another kind is not it, a chat the list lost gets no number; Saved
+   Messages and a list that cannot be read change nothing. */
+static int tg_gui_follow_open_self_test(void)
+{
+#define cache tg_peer_work_a /* scratch: see tg_peer_work_a */
+    static const char path[] = "tg-follow-open-test.txt";
+    const char *saved_file = tg_gui_session_state.peer_cache_file;
+    int saved_open = tg_gui_session_state.open;
+    unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+    unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+    unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+    char saved_index[sizeof(tg_gui_session_state.current_peer_index)];
+    char *index = tg_gui_session_state.current_peer_index;
+    tg_mtproto_peer_cache_entry moved;
+    int ok;
+
+    memcpy(saved_index, index, sizeof(saved_index));
+    memset(&cache, 0, sizeof(cache));
+    cache.entries[0].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[0].id_lo = 1UL;
+    cache.entries[0].is_self = 1;
+    cache.entries[0].has_access_hash = 1;
+    cache.entries[1].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[1].id_lo = 10UL;
+    cache.entries[1].has_access_hash = 1;
+    cache.entries[2].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    cache.entries[2].id_lo = 20UL;
+    cache.entries[3].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[3].id_lo = 30UL;
+    cache.entries[3].has_access_hash = 1;
+    cache.count = 4UL;
+    tg_mtproto_recount_peer_cache(&cache);
+    if (tg_mtproto_save_peer_cache_file(path, &cache, 0, "chat cache") != 0) {
+        puts("probe self-test: no room for the chat list test file");
+        return 2;
+    }
+    tg_gui_session_state.open = 1;
+    tg_gui_session_state.peer_cache_file = path;
+    tg_gui_session_state.open_peer_constructor =
+        TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    tg_gui_session_state.open_peer_id_hi = 0UL;
+    tg_gui_session_state.open_peer_id_lo = 20UL;
+    strcpy(index, "2");
+    tg_gui_session_follow_open_chat();
+    ok = strcmp(index, "2") == 0;
+    /* The chat above the open one dragged below it. */
+    moved = cache.entries[1];
+    cache.entries[1] = cache.entries[2];
+    cache.entries[2] = moved;
+    ok = ok &&
+         tg_mtproto_save_peer_cache_file(path, &cache, 0, "chat cache") == 0;
+    tg_gui_session_follow_open_chat();
+    ok = ok && strcmp(index, "1") == 0;
+    /* A user with the open group's id in its place: not the open chat. */
+    cache.entries[1].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    cache.entries[1].has_access_hash = 1;
+    ok = ok &&
+         tg_mtproto_save_peer_cache_file(path, &cache, 0, "chat cache") == 0;
+    tg_gui_session_follow_open_chat();
+    ok = ok && index[0] == '\0';
+    strcpy(index, "self");
+    tg_gui_session_follow_open_chat();
+    ok = ok && strcmp(index, "self") == 0;
+    remove(path);
+    strcpy(index, "3");
+    tg_gui_session_follow_open_chat();
+    ok = ok && strcmp(index, "3") == 0;
+
+    memcpy(index, saved_index, sizeof(saved_index));
+    tg_gui_session_state.peer_cache_file = saved_file;
+    tg_gui_session_state.open = saved_open;
+    tg_gui_session_state.open_peer_constructor = saved_pc;
+    tg_gui_session_state.open_peer_id_hi = saved_hi;
+    tg_gui_session_state.open_peer_id_lo = saved_lo;
+    if (!ok) {
+        puts("probe self-test: the open chat loses its number when the list "
+             "moves");
+        return 2;
+    }
+    return 0;
+#undef cache
 }
 #endif
 

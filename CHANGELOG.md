@@ -79,6 +79,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   list it takes the place of a hidden chat, or else of the last one that
   is neither pinned nor open. A chat removed from the list here stays
   out, pinned or not.
+- After a chat was dragged to another place in the list, a message
+  written in the open chat could go to a different chat. The open chat
+  was known by its number in the list, and a drag from above it to below
+  it (or the other way round) renumbers it, while the transcript and the
+  highlighted row still showed the right one. The open chat is now found
+  again by who it is after every change of the list; if the list no
+  longer has it, a message fails rather than reach someone else.
 
 ## [0.5] - 2026-11-14
 
