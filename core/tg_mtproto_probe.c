@@ -20126,6 +20126,7 @@ static int tg_gui_pins_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
+static int tg_gui_presence_self_test(void);
 static int tg_gui_markdown_send_self_test(void);
 static int tg_gui_saved_self_test(void);
 static int tg_gui_batch_self_test(void);
@@ -22358,6 +22359,7 @@ int tg_mtproto_probe_self_test(void)
     }
 #if !defined(TG_NO_GUI)
     if (tg_gui_drafts_self_test() != 0 || tg_gui_mentions_self_test() != 0 ||
+        tg_gui_presence_self_test() != 0 ||
         tg_gui_markdown_send_self_test() != 0 ||
         tg_gui_saved_self_test() != 0 || tg_gui_batch_self_test() != 0 ||
         tg_gui_update_self_test() != 0 ||
@@ -28850,6 +28852,119 @@ int tg_gui_session_search_open(const char *query, FILE *stream)
     }
     return tg_gui_session_search_open_result(0, stream) == 0 ? 0 : 1;
 }
+
+#if !defined(TG_NO_GUI)
+/* Online while the window is in front. Telegram sends "is typing" only to an
+   account that is online (seen on the G5 on 2026-11-15: no typing at all
+   until the phone of the same account came online), and the official apps
+   mark the account online while they are in front and offline when they
+   leave it. The window says what it wants at its quiet moments; a request
+   goes when that changes, and again every TG_GUI_ONLINE_RENEW_SECONDS while
+   online, since Telegram lets an online status lapse after five minutes. A
+   request that failed waits TG_GUI_ONLINE_RETRY_SECONDS before the next. */
+#define TG_GUI_ONLINE_RENEW_SECONDS 180UL
+#define TG_GUI_ONLINE_RETRY_SECONDS 30UL
+static int tg_gui_presence_sent = -1; /* -1 nothing sent, 0 offline, 1 online */
+static unsigned long tg_gui_presence_at = 0UL;
+static unsigned long tg_gui_presence_failed_at = 0UL;
+
+/* Whether a request is due: 1 online, 0 offline, -1 none. */
+static int tg_gui_presence_due(int want, int sent, unsigned long last,
+                               unsigned long failed, unsigned long now)
+{
+    want = want != 0;
+    if (failed != 0UL && now >= failed &&
+        now - failed < TG_GUI_ONLINE_RETRY_SECONDS) {
+        return -1;
+    }
+    if (sent < 0) {
+        return want ? 1 : -1; /* offline is what Telegram already thinks */
+    }
+    if (want != sent) {
+        return want;
+    }
+    if (want && (now < last || now - last >= TG_GUI_ONLINE_RENEW_SECONDS)) {
+        return 1;
+    }
+    return -1;
+}
+
+int tg_gui_session_presence(int online, FILE *stream)
+{
+    unsigned char query[16];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    unsigned long now = (unsigned long)time(0);
+    unsigned long prev_timeout;
+    char emsg[48];
+    FILE *quiet;
+    int due;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    due = tg_gui_presence_due(online, tg_gui_presence_sent,
+                              tg_gui_presence_at, tg_gui_presence_failed_at,
+                              now);
+    if (due < 0) {
+        return 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_account_update_status(&writer, !due) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_gui_session_peer_request(query, writer.length, &result,
+                                     "mtproto account.updateStatus", emsg,
+                                     sizeof(emsg), quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 0) {
+        tg_gui_presence_sent = due;
+        tg_gui_presence_at = now;
+        tg_gui_presence_failed_at = 0UL;
+        tg_gui_log(due ? "presence: online" : "presence: offline");
+        return 0;
+    }
+    tg_gui_presence_failed_at = now != 0UL ? now : 1UL;
+    tg_gui_log("presence: not taken");
+    return 2;
+}
+
+int tg_gui_session_presence_online(void)
+{
+    return tg_gui_presence_sent == 1;
+}
+
+#if !defined(TG_NO_SELFTEST)
+static int tg_gui_presence_self_test(void)
+{
+    /* Online when the window comes to the front, again every three minutes
+       while it stays there, offline when it leaves, nothing at the start
+       while it is not in front, and a failure waits before the next try. */
+    if (tg_gui_presence_due(1, -1, 0UL, 0UL, 1000UL) != 1 ||
+        tg_gui_presence_due(0, -1, 0UL, 0UL, 1000UL) != -1 ||
+        tg_gui_presence_due(1, 1, 1000UL, 0UL, 1100UL) != -1 ||
+        tg_gui_presence_due(1, 1, 1000UL, 0UL,
+                            1000UL + TG_GUI_ONLINE_RENEW_SECONDS) != 1 ||
+        tg_gui_presence_due(1, 1, 1000UL, 0UL, 900UL) != 1 ||
+        tg_gui_presence_due(0, 1, 1000UL, 0UL, 1010UL) != 0 ||
+        tg_gui_presence_due(0, 0, 1000UL, 0UL, 5000UL) != -1 ||
+        tg_gui_presence_due(1, 0, 1000UL, 0UL, 1010UL) != 1 ||
+        tg_gui_presence_due(1, 0, 1000UL, 1005UL, 1010UL) != -1 ||
+        tg_gui_presence_due(1, 0, 1000UL, 1005UL,
+                            1005UL + TG_GUI_ONLINE_RETRY_SECONDS) != 1) {
+        puts("gui session self-test: online status timing");
+        return 2;
+    }
+    return 0;
+}
+#endif
+#endif /* !TG_NO_GUI */
 
 /* More parts of the same composer text still to go (issue #14). */
 static int tg_gui_send_more_parts = 0;

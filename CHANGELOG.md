@@ -47,6 +47,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - The MorphOS manual also said that the typing line of a group reads
   "someone is typing". Since 0.5 it names who is typing there too, as
   on the other systems: the members are fetched on MorphOS as well.
+- "Is typing" hardly ever showed. Telegram tells who is typing only to
+  an account that is online, and this client never said it was: the
+  line lit up only while another device of the same account was online
+  (seen on a G5 on 2026-11-15, where the typing came in the moment the
+  phone was opened). The account is now online while the window, or its
+  photo viewer, is in front, renewed every three minutes as Telegram
+  wants, and offline when the window goes behind, is iconified or
+  closes, as with the official apps.
 - The input line's recall with the arrow keys kept the first 255
   characters of a message sent, and ENTER sent them as if whole. It now
   recalls a message in full.

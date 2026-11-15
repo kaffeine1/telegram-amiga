@@ -489,6 +489,15 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
    messages, 1 while more parts follow: the names picked from the "@" list
    then wait for the last part instead of being forgotten after the first. */
 void tg_gui_session_send_more(int more);
+/* Online while the window is in front: 1 marks the account online
+   (account.updateStatus), 0 offline. Called at quiet moments; a request
+   goes only when the wish changes or an online status is due again (every
+   three minutes), so it is cheap to call often. 0 = nothing to do or done,
+   2 = not taken. tg_gui_session_presence_online says whether the last one
+   that went marked the account online. Telegram sends "is typing" only to
+   an online account. */
+int tg_gui_session_presence(int online, FILE *stream);
+int tg_gui_session_presence_online(void);
 
 /* Forwards one server-backed message from the open chat to a destination peer.
    TG_GUI_SAVED_PEER_INDEX selects Saved Messages. */

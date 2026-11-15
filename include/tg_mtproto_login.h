@@ -919,6 +919,10 @@ tg_mtproto_tl_status tg_mtproto_build_help_get_config(
 tg_mtproto_tl_status tg_mtproto_build_account_get_password(
     tg_mtproto_tl_writer *writer);
 
+/* account.updateStatus: offline 0 marks the account online, 1 offline. */
+tg_mtproto_tl_status tg_mtproto_build_account_update_status(
+    tg_mtproto_tl_writer *writer, int offline);
+
 tg_mtproto_tl_status tg_mtproto_build_users_get_self(
     tg_mtproto_tl_writer *writer);
 

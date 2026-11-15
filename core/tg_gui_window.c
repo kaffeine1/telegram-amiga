@@ -12927,6 +12927,13 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         ((tg_gui_state *)state)->today = today;
         tg_gui_window_session_changed(session_dirty, header_dirty);
     }
+    /* Online while the window (or its photo viewer) is in front, as the
+       official apps do: Telegram sends "is typing" only to an account that
+       is online. A request goes only when that changes or every three
+       minutes while it lasts. */
+    if (state->mode == TG_GUI_MODE_CHAT) {
+        (void)tg_gui_session_presence(!state->notify_away, stdout);
+    }
     /* The pinned bar of a chat just opened: asked here, a moment after the
        chat is on screen, not at the next poll some seconds away. */
     if (tg_gui_session_pinned_step(stdout)) {
@@ -18950,6 +18957,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         (void)tg_gui_session_transfer_end(0, 0UL);
     }
     tg_gui_window_sendq_close(); /* and the files still waiting their turn */
+    /* Quit or iconify: the account is no longer online from here. */
+    if (tg_gui_session_presence_online()) {
+        (void)tg_gui_session_presence(0, stdout);
+    }
     /* Detach + free the menu strip before the window goes away. */
     if (menu != 0) {
         ClearMenuStrip(ctx.window);

@@ -763,6 +763,22 @@ tg_mtproto_tl_status tg_mtproto_build_account_get_password(
     return tg_mtproto_tl_write_u32(writer, TG_ACCOUNT_GET_PASSWORD_CONSTRUCTOR);
 }
 
+/* account.updateStatus#6628562c offline:Bool = Bool (core.telegram.org,
+   layer 225, checked 2026-11-15): online with boolFalse, offline with
+   boolTrue. Telegram sends "is typing" only to an account that is online. */
+tg_mtproto_tl_status tg_mtproto_build_account_update_status(
+    tg_mtproto_tl_writer *writer, int offline)
+{
+    tg_mtproto_tl_status status;
+
+    status = tg_mtproto_tl_write_u32(writer, 0x6628562cUL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, offline ? 0x997275b5UL
+                                                         : 0xbc799737UL);
+    }
+    return status;
+}
+
 tg_mtproto_tl_status tg_mtproto_build_users_get_self(
     tg_mtproto_tl_writer *writer)
 {
@@ -13640,6 +13656,24 @@ static int tg_peer_notify_self_test(void)
              writer.length == 20UL && body[0] == 0x31U && body[1] == 0xadU &&
              body[2] == 0xb3U && body[3] == 0x12U && body[4] == 0x0cU &&
              body[8] == 0xb9U;
+    }
+    if (ok) {
+        /* Online and offline: the method, then boolFalse or boolTrue. */
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        ok = tg_mtproto_build_account_update_status(&writer, 0) ==
+                 TG_MTPROTO_TL_OK &&
+             writer.length == 8UL && body[0] == 0x2cU && body[1] == 0x56U &&
+             body[2] == 0x28U && body[3] == 0x66U && body[4] == 0x37U &&
+             body[5] == 0x97U && body[6] == 0x79U && body[7] == 0xbcU;
+        tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+        ok = ok && tg_mtproto_build_account_update_status(&writer, 1) ==
+                       TG_MTPROTO_TL_OK &&
+             writer.length == 8UL && body[4] == 0xb5U && body[5] == 0x75U &&
+             body[6] == 0x72U && body[7] == 0x99U;
+        if (!ok) {
+            puts("login self-test: account.updateStatus bytes");
+            return 2;
+        }
     }
     if (ok) {
         /* The answer to it, kept for the chat asked about. */

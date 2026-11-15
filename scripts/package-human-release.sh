@@ -645,7 +645,10 @@ Messages
   it opens a private chat with them. The chat joins the list if it was
   not there, and nothing is sent until you write.
 - One tick means sent, two blue ticks read.
-- In groups, "<name> is typing..." shows who is writing.
+- In groups, "<name> is typing..." shows who is writing. While the
+  window is in front your account shows as online, as with the official
+  apps (Telegram tells who is typing only to an account that is online);
+  iconified, behind other windows or closed, it no longer does.
 - To mention someone in a group, type @ in the input line: a list of
   people opens, those who wrote lately first; go on typing to narrow it
   by name or username (from three letters on Telegram is asked for the
@@ -931,7 +934,10 @@ Messaggi
   apre una chat privata con quella persona. La chat entra nell'elenco
   se non c'era, e non parte niente finche' non scrivi.
 - Una spunta vuol dire inviato, due spunte azzurre letto.
-- Nei gruppi "<nome> is typing..." dice chi sta scrivendo.
+- Nei gruppi "<nome> is typing..." dice chi sta scrivendo. Mentre la
+  finestra e' in primo piano il tuo account risulta online, come con le
+  app ufficiali (Telegram dice chi sta scrivendo solo a un account
+  online); iconificata, dietro altre finestre o chiusa, non piu'.
 - Per menzionare qualcuno in un gruppo scrivi @ nella riga di input: si
   apre un elenco di persone, per primo chi ha scritto da poco; continua
   a scrivere per restringerlo per nome o username (da tre lettere in su
