@@ -23777,6 +23777,7 @@ static void tg_gui_draft_leave(FILE *stream)
     const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
     const char *old;
     const char *text;
+    const char *draft;
     unsigned long pc;
     unsigned long ph;
     unsigned long pl;
@@ -23800,15 +23801,30 @@ static void tg_gui_draft_leave(FILE *stream)
               TG_MTPROTO_PEER_USER_CONSTRUCTOR;
     old = tg_gui_draft_lookup(is_user, tg_gui_session_state.open_peer_id_hi,
                               tg_gui_session_state.open_peer_id_lo);
-    if (strcmp(gst->input, old != 0 ? old : "") == 0) {
+    draft = gst->input;
+    if (strlen(gst->input) >= TG_GUI_MSG_TEXT_MAX) {
+        /* A text longer than one message (a long paste, issue #14): a draft
+           is one message, here and on Telegram, so it keeps the first part,
+           cut where it would be cut when sent. */
+        static char first[TG_GUI_MSG_TEXT_MAX];
+        unsigned long n = tg_gui_message_part(
+            gst->input, (unsigned long)strlen(gst->input),
+            sizeof(first) - 1UL, 0);
+
+        memcpy(first, gst->input, n);
+        first[n] = '\0';
+        draft = first;
+        tg_gui_log("draft: a long text keeps its first message");
+    }
+    if (strcmp(draft, old != 0 ? old : "") == 0) {
         return; /* nothing typed, or the draft as it came */
     }
-    if (gst->input[0] == '\0' && tg_gui_draft_keep) {
+    if (draft[0] == '\0' && tg_gui_draft_keep) {
         return; /* emptied by a send that failed, not by the user */
     }
-    text = gst->input;
+    text = draft;
 #if TG_MTPROTO_DISPLAY_LATIN1
-    if (tg_mtproto_latin1_to_utf8(gst->input, wire, sizeof(wire))) {
+    if (tg_mtproto_latin1_to_utf8(draft, wire, sizeof(wire))) {
         text = wire;
     }
 #endif
@@ -23843,13 +23859,12 @@ static void tg_gui_draft_leave(FILE *stream)
                 emsg[0] != '\0' ? emsg : "no answer");
         tg_gui_log(line);
     } else {
-        tg_gui_log(gst->input[0] != '\0' ? "draft: saved"
-                                         : "draft: deleted");
+        tg_gui_log(draft[0] != '\0' ? "draft: saved" : "draft: deleted");
     }
     tg_mtproto_send_set_styles(0, 0);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
-    if (tg_gui_draft_set(is_user, ph, pl, gst->input,
+    if (tg_gui_draft_set(is_user, ph, pl, draft,
                          tg_gui_session_server_time())) {
         tg_gui_drafts_changed = 1;
     }
@@ -28836,6 +28851,14 @@ int tg_gui_session_search_open(const char *query, FILE *stream)
     return tg_gui_session_search_open_result(0, stream) == 0 ? 0 : 1;
 }
 
+/* More parts of the same composer text still to go (issue #14). */
+static int tg_gui_send_more_parts = 0;
+
+void tg_gui_session_send_more(int more)
+{
+    tg_gui_send_more_parts = more != 0;
+}
+
 int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                         FILE *stream)
 {
@@ -30116,7 +30139,9 @@ static void tg_gui_mentions_sent(int sent)
                            ? "mention: by name, kept by Telegram"
                            : "mention: by name, not in Telegram's answer");
         }
-        tg_gui_named_count = 0; /* the next message starts clean */
+        if (!tg_gui_send_more_parts) {
+            tg_gui_named_count = 0; /* the next message starts clean */
+        }
     }
     tg_gui_mentions_riding = 0;
 }

@@ -624,6 +624,9 @@ Messages
 - Click the input line to write; a click inside the text moves the
   cursor. Enter sends, Shift+Enter starts a new line. A message that
   cannot be sent stays in the input line, and the status line says why.
+- A text longer than one message, a long paste for instance, goes as
+  several messages, each cut where a line or a word ends. If one of them
+  does not go, the rest stays in the input line.
 - Click a message to reply to it. The right mouse button on a message
   opens its menu: React..., Reply, Forward to Saved, Forward to..., and
   on your own messages Edit and Delete (for everyone).
@@ -906,6 +909,9 @@ Messaggi
   il cursore. Invio manda, Shift+Invio va a capo. Un messaggio che non
   si riesce a mandare resta nella riga di input, e la riga di stato
   dice perche'.
+- Un testo piu' lungo di un messaggio, per esempio un lungo incolla,
+  parte come piu' messaggi, ognuno tagliato dove finisce una riga o una
+  parola. Se uno non parte, il resto rimane nella riga di input.
 - Clicca un messaggio per rispondere. Il tasto destro su un messaggio
   apre il suo menu: React..., Reply, Forward to Saved, Forward to..., e
   sui tuoi messaggi Edit e Delete (per tutti).

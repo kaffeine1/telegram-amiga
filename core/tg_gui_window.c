@@ -6808,13 +6808,17 @@ static void tg_gui_window_copy(char *dest, unsigned long size, const char *src)
 
 /* Push a just-sent line into the composer recall ring (UP/DOWN). Skips empty and
    consecutive duplicates, shifts the ring when full, resets the recall cursor.
-   Mirrors the TUI's tg_chat_history_add. */
+   Mirrors the TUI's tg_chat_history_add. A text longer than a slot is left
+   out rather than kept cut short, where ENTER would send it as if whole:
+   the slots held 255 characters until 0.5, though they had room for a
+   message. */
 static void tg_gui_history_add(tg_gui_state *state, const char *text)
 {
     int i;
 
     state->history_pos = -1;
-    if (text == 0 || text[0] == '\0') {
+    if (text == 0 || text[0] == '\0' ||
+        strlen(text) >= sizeof(state->history[0])) {
         return;
     }
     if (state->history_count > 0 &&
@@ -6823,14 +6827,95 @@ static void tg_gui_history_add(tg_gui_state *state, const char *text)
     }
     if (state->history_count >= TG_GUI_HISTORY_MAX) {
         for (i = 1; i < TG_GUI_HISTORY_MAX; ++i) {
-            tg_gui_window_copy(state->history[i - 1], TG_GUI_TEXT_MAX,
+            tg_gui_window_copy(state->history[i - 1],
+                               sizeof(state->history[0]),
                                state->history[i]);
         }
         state->history_count = TG_GUI_HISTORY_MAX - 1;
     }
-    tg_gui_window_copy(state->history[state->history_count], TG_GUI_TEXT_MAX,
-                       text);
+    tg_gui_window_copy(state->history[state->history_count],
+                       sizeof(state->history[0]), text);
     ++state->history_count;
+}
+
+/* Sends what the composer holds: one message, or several when the text is
+   longer than one message holds (a long paste, issue #14), each part cut
+   where a line or a word ends, as the desktop client does. The parts go one
+   after another, the reply with the first, a name picked from the "@" list
+   with whichever part holds it. At the first part that does not go, the
+   parts still to go stay in the composer and the status line says why.
+   0 = all sent; otherwise tg_gui_session_send's answer. */
+static int tg_gui_window_send_input(tg_gui_state *state)
+{
+    static char part[TG_GUI_MSG_TEXT_MAX];
+    unsigned long total = (unsigned long)strlen(state->input);
+    unsigned long parts =
+        tg_gui_message_parts(state->input, sizeof(part) - 1UL);
+    unsigned long at = 0UL;
+    unsigned long done = 0UL;
+
+    if (total < sizeof(part)) {
+        /* one message, sent as it always was */
+        int sent = tg_gui_session_send(state->input, state->reply_to_id,
+                                       stdout);
+
+        if (sent != 0) {
+            char line[80];
+
+            tg_gui_send_failure_line(sent, tg_gui_session_send_refusal(),
+                                     line, sizeof(line));
+            tg_gui_window_copy(state->status, sizeof(state->status), line);
+            return sent;
+        }
+        state->reply_to_id = 0UL;
+        state->reply_sender[0] = '\0';
+        state->reply_snippet[0] = '\0';
+        tg_gui_history_add(state, state->input);
+        return 0;
+    }
+    while (at < total) {
+        unsigned long next;
+        unsigned long len = tg_gui_message_part(
+            state->input + at, total - at, sizeof(part) - 1UL, &next);
+        int sent;
+
+        if (tg_gui_message_part_blank(state->input + at, len)) {
+            at += next;
+            continue;
+        }
+        memcpy(part, state->input + at, len);
+        part[len] = '\0';
+        tg_gui_session_send_more(done + 1UL < parts);
+        sent = tg_gui_session_send(part,
+                                   done == 0UL ? state->reply_to_id : 0UL,
+                                   stdout);
+        if (sent != 0) {
+            char line[80];
+
+            tg_gui_session_send_more(0);
+            if (done > 0UL) {
+                /* what went is in the chat; the rest waits here */
+                memmove(state->input, state->input + at, total - at + 1UL);
+                state->input_caret = (int)strlen(state->input);
+                state->in_sel_active = 0;
+            }
+            tg_gui_send_failure_line(sent, tg_gui_session_send_refusal(),
+                                     line, sizeof(line));
+            tg_gui_window_copy(state->status, sizeof(state->status), line);
+            return sent;
+        }
+        if (done == 0UL) {
+            /* the reply went with the first part */
+            state->reply_to_id = 0UL;
+            state->reply_sender[0] = '\0';
+            state->reply_snippet[0] = '\0';
+        }
+        ++done;
+        at += next;
+    }
+    tg_gui_session_send_more(0);
+    tg_gui_history_add(state, state->input);
+    return 0;
 }
 
 /* Brings the window live after a successful login: opens the session over the
@@ -7129,43 +7214,46 @@ static void tg_gui_clip_close(struct IOClipReq *io, struct MsgPort *port)
 /* Writes `text` to clip unit 0 as FORM FTXT / CHRS. 1 = ok. */
 /* The clipboard gets plain text: emoji become emoticons and internal style
    markers are removed, which is what any other Amiga program can show. */
+/* A whole composer goes: a Cut that cleared the input line after copying
+   only one message's worth of it would lose the rest. 0 when the text,
+   its emoji spelled out, does not fit, so nothing is cut then. */
 static int tg_gui_clip_write_text_raw(const char *text);
 static int tg_gui_clip_write_text(const char *text)
 {
-    static char expanded[TG_GUI_MSG_TEXT_MAX + 64];
+    static char expanded[TG_GUI_INPUT_MAX + 512];
 
     if (text == 0) {
         return 0;
     }
     tg_gui_emoji_expand_pairs(expanded, sizeof(expanded), text);
+    if (strlen(expanded) + 1UL >= sizeof(expanded)) {
+        return 0; /* it may have been cut short */
+    }
     return tg_gui_clip_write_text_raw(expanded);
 }
 
+/* The header, the text and the pad byte go as three writes, as in the ROM
+   Kernel Manual's clipboard example: the device moves io_Offset on after
+   each one, and no second copy of the text is needed. */
 static int tg_gui_clip_write_text_raw(const char *text)
 {
-    static unsigned char iff[TG_GUI_MSG_TEXT_MAX + 24];
+    static char pad[1];
+    unsigned char head[20];
     struct MsgPort *port;
     struct IOClipReq *io;
     unsigned long tlen, even;
-    int ok = 0;
+    int ok;
 
     if (text == 0 || text[0] == '\0') {
         return 0;
     }
     tlen = (unsigned long)strlen(text);
-    if (tlen > (unsigned long)TG_GUI_MSG_TEXT_MAX) {
-        tlen = TG_GUI_MSG_TEXT_MAX;
-    }
     even = tlen + (tlen & 1UL);
-    memcpy(iff, "FORM", 4);
-    tg_gui_clip_u32be(iff + 4, 4UL + 8UL + even); /* FTXT + CHRS hdr + data */
-    memcpy(iff + 8, "FTXT", 4);
-    memcpy(iff + 12, "CHRS", 4);
-    tg_gui_clip_u32be(iff + 16, tlen);
-    memcpy(iff + 20, text, tlen);
-    if (tlen & 1UL) {
-        iff[20 + tlen] = 0; /* IFF pad byte */
-    }
+    memcpy(head, "FORM", 4);
+    tg_gui_clip_u32be(head + 4, 4UL + 8UL + even); /* FTXT + CHRS hdr + data */
+    memcpy(head + 8, "FTXT", 4);
+    memcpy(head + 12, "CHRS", 4);
+    tg_gui_clip_u32be(head + 16, tlen);
     io = tg_gui_clip_open(&port);
     if (io == 0) {
         return 0;
@@ -7173,15 +7261,33 @@ static int tg_gui_clip_write_text_raw(const char *text)
     io->io_Offset = 0;
     io->io_ClipID = 0;
     io->io_Command = CMD_WRITE;
-    io->io_Data = (STRPTR)iff;
-    io->io_Length = (LONG)(20UL + even);
-    if (DoIO((struct IORequest *)io) == 0) {
-        io->io_Command = CMD_UPDATE;
+    io->io_Data = (STRPTR)head;
+    io->io_Length = (LONG)sizeof(head);
+    ok = DoIO((struct IORequest *)io) == 0;
+    if (ok) {
+        io->io_Command = CMD_WRITE;
+        io->io_Data = (STRPTR)text;
+        io->io_Length = (LONG)tlen;
         ok = DoIO((struct IORequest *)io) == 0;
+    }
+    if (ok && (tlen & 1UL) != 0UL) {
+        io->io_Command = CMD_WRITE;
+        io->io_Data = (STRPTR)pad; /* IFF pad byte */
+        io->io_Length = 1;
+        ok = DoIO((struct IORequest *)io) == 0;
+    }
+    /* the update ends the write either way */
+    io->io_Command = CMD_UPDATE;
+    if (DoIO((struct IORequest *)io) != 0) {
+        ok = 0;
     }
     tg_gui_clip_close(io, port);
     return ok;
 }
+
+/* Copy, Cut and Paste of the menu take turns with this one buffer: a whole
+   composer, which is four messages. */
+static char tg_gui_window_clip_text[TG_GUI_INPUT_MAX];
 
 /* One positioned CMD_READ helper; the device advances io_Offset itself. */
 static long tg_gui_clip_read(struct IOClipReq *io, void *buf,
@@ -10625,6 +10731,9 @@ static int tg_gui_window_save_edit(tg_gui_state *state)
     static char before[TG_GUI_MSG_TEXT_MAX];
     int i;
 
+    if (strlen(state->input) >= sizeof(before)) {
+        return 0; /* an edit stays one message: Telegram would refuse it */
+    }
     for (i = 0; i < state->message_count; ++i) {
         if (state->messages[i].id == state->edit_to_id) {
             (void)tg_gui_edit_text(state, state->messages[i].text, before,
@@ -10636,6 +10745,14 @@ static int tg_gui_window_save_edit(tg_gui_state *state)
         }
     }
     return tg_gui_session_edit(state->input, state->edit_to_id, stdout) == 0;
+}
+
+/* What the status line says when an edit was not saved. */
+static const char *tg_gui_window_edit_refused(const tg_gui_state *state)
+{
+    return strlen(state->input) >= TG_GUI_MSG_TEXT_MAX
+               ? "Too long: an edit is one message"
+               : "Not saved - ENTER tries again, ESC gives up";
 }
 
 /* Stop poll: asked first, since a stopped poll stays stopped. */
@@ -10891,7 +11008,7 @@ static void tg_gui_window_mention_refresh(tg_gui_state *state)
    after the space; closes the popup. Bounded by the input buffer. */
 static void tg_gui_window_mention_complete(tg_gui_state *state)
 {
-    char out[TG_GUI_MSG_TEXT_MAX];
+    static char out[TG_GUI_INPUT_MAX]; /* the whole composer: off the stack */
     char ins[TG_GUI_MENTION_LEN];
     unsigned long o = 0UL;
     unsigned long caret;
@@ -15448,35 +15565,20 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (!tg_gui_window_save_edit(state)) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Not saved - ENTER tries again, ESC gives up");
+                                    tg_gui_window_edit_refused(state));
                                 tg_gui_window_paint(state, &backend);
                                 continue;
                             }
                             state->edit_to_id = 0UL;
                         } else {
-                            int sent = tg_gui_session_send(state->input,
-                                                           state->reply_to_id,
-                                                           stdout);
-
-                            if (sent != 0) {
-                                /* Not sent: the text stays in the composer
-                                   and the status line says why. */
-                                char line[80];
-
-                                tg_gui_send_failure_line(
-                                    sent, tg_gui_session_send_refusal(), line,
-                                    sizeof(line));
-                                tg_gui_window_copy(state->status,
-                                                   sizeof(state->status),
-                                                   line);
+                            if (tg_gui_window_send_input(state) != 0) {
+                                /* Not sent: the text, or what is left of a
+                                   long one, stays in the composer and the
+                                   status line says why. */
                                 tg_gui_window_paint(state, &backend);
                                 continue;
                             }
-                            tg_gui_history_add(state, state->input);
                             state->in_sel_active = 0;
-                            state->reply_to_id = 0UL; /* clear only on success */
-                            state->reply_sender[0] = '\0';
-                            state->reply_snippet[0] = '\0';
                             tg_gui_window_jump_to_bottom(state, &backend,
                                                          &older_exhausted,
                                                          &older_cooldown);
@@ -15962,7 +16064,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             /* Copy the highlighted message's text (issue #5).
                                Selection = the row the user last right-clicked
                                or picked; without one, say what to do. */
-                            static char selbuf[TG_GUI_MSG_TEXT_MAX];
+                            char *selbuf = tg_gui_window_clip_text;
                             int sel = state->selected_msg;
                             const char *src = 0;
 
@@ -15982,7 +16084,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 }
                                 if (hi > lo &&
                                     (unsigned long)(hi - lo) <
-                                        sizeof(selbuf)) {
+                                        sizeof(tg_gui_window_clip_text)) {
                                     memcpy(selbuf, state->input + lo,
                                            (unsigned long)(hi - lo));
                                     selbuf[hi - lo] = '\0';
@@ -15990,8 +16092,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 }
                             }
                             if (src == 0 &&
-                                tg_gui_selection_get(state, selbuf,
-                                                     sizeof(selbuf))) {
+                                tg_gui_selection_get(
+                                    state, selbuf,
+                                    sizeof(tg_gui_window_clip_text))) {
                                 src = selbuf; /* the dragged range wins */
                             } else if (src == 0 && sel >= 0 &&
                                        sel < state->message_count &&
@@ -16022,7 +16125,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (!state->search_active && state->composing &&
                                 state->in_sel_active) {
                                 /* cut ONLY the selected composer range */
-                                static char cutbuf[TG_GUI_MSG_TEXT_MAX];
+                                char *cutbuf = tg_gui_window_clip_text;
                                 long a = (long)state->in_sel_anchor;
                                 long b = (long)state->input_caret;
                                 long lo = a < b ? a : b;
@@ -16037,7 +16140,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 }
                                 if (hi > lo &&
                                     (unsigned long)(hi - lo) <
-                                        sizeof(cutbuf)) {
+                                        sizeof(tg_gui_window_clip_text)) {
                                     memcpy(cutbuf, state->input + lo,
                                            (unsigned long)(hi - lo));
                                     cutbuf[hi - lo] = '\0';
@@ -16096,9 +16199,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                become spaces, other control bytes are
                                dropped, and the single-line search box
                                flattens what is left below. */
-                            static char clip[TG_GUI_MSG_TEXT_MAX];
-                            unsigned long got =
-                                tg_gui_clip_read_text(clip, sizeof(clip));
+                            char *clip = tg_gui_window_clip_text;
+                            unsigned long got = tg_gui_clip_read_text(
+                                clip, sizeof(tg_gui_window_clip_text));
                             unsigned long src, dst = 0UL;
 
                             for (src = 0UL; src < got; ++src) {
@@ -16198,9 +16301,26 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                        sizeof(state->status),
                                                        cut);
                                 } else {
+                                    /* longer than one message: it will go
+                                       as several, and saying so now beats
+                                       a surprise after ENTER */
+                                    unsigned long parts =
+                                        tg_gui_message_parts(
+                                            state->input,
+                                            TG_GUI_MSG_TEXT_MAX - 1);
+                                    char note[48];
+
+                                    if (parts > 1UL) {
+                                        sprintf(note,
+                                                "Pasted - ENTER sends %lu "
+                                                "messages",
+                                                parts % 100UL);
+                                    } else {
+                                        strcpy(note, "Pasted");
+                                    }
                                     tg_gui_window_copy(state->status,
                                                        sizeof(state->status),
-                                                       "Pasted");
+                                                       note);
                                 }
                                 tg_gui_window_paint(state, &backend);
                             } else {
@@ -17924,33 +18044,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 if (!tg_gui_window_save_edit(state)) {
                                     tg_gui_window_copy(
                                         state->status, sizeof(state->status),
-                                        "Not saved - ENTER tries again, ESC gives up");
+                                        tg_gui_window_edit_refused(state));
                                     tg_gui_window_paint(state, &backend);
                                     continue;
                                 }
                                 state->edit_to_id = 0UL;
                             } else {
-                                int sent = tg_gui_session_send(
-                                    state->input, state->reply_to_id, stdout);
-
-                                if (sent != 0) {
-                                    /* Not sent: the text stays, and the
-                                       status line says why. */
-                                    char line[80];
-
-                                    tg_gui_send_failure_line(
-                                        sent, tg_gui_session_send_refusal(),
-                                        line, sizeof(line));
-                                    tg_gui_window_copy(state->status,
-                                                       sizeof(state->status),
-                                                       line);
+                                if (tg_gui_window_send_input(state) != 0) {
+                                    /* Not sent: the text, or what is left
+                                       of a long one, stays, and the status
+                                       line says why. */
                                     tg_gui_window_paint(state, &backend);
                                     continue;
                                 }
-                                tg_gui_history_add(state, state->input);
-                                state->reply_to_id = 0UL; /* clear on success */
-                                state->reply_sender[0] = '\0';
-                                state->reply_snippet[0] = '\0';
                                 tg_gui_window_jump_to_bottom(state, &backend,
                                                              &older_exhausted,
                                                              &older_cooldown);

@@ -173,6 +173,20 @@ int tg_gui_emoji_pair_at(const char *text, unsigned long len, unsigned long i,
                          unsigned long *index);
 /* Writes the two bytes for glyph `index` into out[2]; 0 when out of range. */
 int tg_gui_emoji_encode(unsigned long index, char *out);
+/* A composer text longer than one message goes as several (issue #14).
+   The part that goes first, out of text[0..len): all of it when it fits in
+   `limit` bytes, else up to the last line break within them, or the last
+   space when no line break falls in their second half; one long word is cut
+   at `limit`, before an emoji pair rather than inside it. Returns the part's
+   length, the line breaks and spaces it was cut on left out; *next is where
+   the following part begins, past them. */
+unsigned long tg_gui_message_part(const char *text, unsigned long len,
+                                  unsigned long limit, unsigned long *next);
+/* How many messages the composer text makes at `limit` bytes each, parts
+   of nothing but spaces and line breaks left out. */
+unsigned long tg_gui_message_parts(const char *text, unsigned long limit);
+/* 1 when text[0..len) holds nothing but spaces and line breaks. */
+int tg_gui_message_part_blank(const char *text, unsigned long len);
 /* Bytes of the text unit starting at text[i]: 2 for a pair, else 1. */
 unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
                                    unsigned long i);
@@ -235,6 +249,10 @@ void tg_gui_requester_text(char *dest, unsigned long size, const char *src,
 #define TG_GUI_MSG_TEXT_MAX 4096
 #endif
 #endif
+/* The composer holds four messages: a longer text, a long paste above all,
+   leaves as several messages, each cut where a line or a word ends
+   (tg_gui_message_part; issue #14). */
+#define TG_GUI_INPUT_MAX (TG_GUI_MSG_TEXT_MAX * 4)
 #define TG_GUI_HISTORY_MAX 16
 #define TG_GUI_TIME_MAX 8
 #define TG_GUI_DAY_SECONDS 86400UL /* tg_gui_message.day counts these */
@@ -547,7 +565,7 @@ typedef struct tg_gui_state {
     int drag_active;
     int drag_press_y;
     int drag_cur_y;
-    char input[TG_GUI_MSG_TEXT_MAX];
+    char input[TG_GUI_INPUT_MAX];
     char status[TG_GUI_NAME_MAX];
     /* Login screen: what to do about the line in status, under the field
        ("Type it with the country code, e.g. +39 3331234567"); "" = none. */
@@ -564,7 +582,7 @@ typedef struct tg_gui_state {
     char history[TG_GUI_HISTORY_MAX][TG_GUI_MSG_TEXT_MAX];
     int history_count;
     int history_pos;   /* -1 = not recalling; else index into history[] */
-    char history_draft[TG_GUI_MSG_TEXT_MAX]; /* live text stashed on first UP */
+    char history_draft[TG_GUI_INPUT_MAX]; /* live text stashed on first UP */
     /* Chat search (the sidebar "Search chats..." box). search_active = the box is
        focused (typing); in_search = the sidebar currently shows online search
        results instead of the cached chat list (ESC restores it). */

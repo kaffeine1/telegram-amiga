@@ -485,6 +485,10 @@ const char *tg_gui_session_send_refusal(void);
 
 int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                         FILE *stream);
+/* Set before each part while a long composer text goes as several
+   messages, 1 while more parts follow: the names picked from the "@" list
+   then wait for the last part instead of being forgotten after the first. */
+void tg_gui_session_send_more(int more);
 
 /* Forwards one server-backed message from the open chat to a destination peer.
    TG_GUI_SAVED_PEER_INDEX selects Saved Messages. */

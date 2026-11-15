@@ -8,6 +8,19 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Added
+- A text longer than one message goes as several messages, as the
+  official clients send it (issue #14). A 6 KB paste was cut to what
+  one message holds; the input line now holds four messages, 16 KB
+  (8 KB on 68k), and ENTER sends the text in parts, each cut at the last
+  line break that fits or, failing that, at the last space, with the
+  reply on the first part. Paste says how many messages the text will
+  make. If a part does not go, the parts sent stay in the chat and the
+  rest stays in the input line with the reason. An edit stays one
+  message and says so when it grows longer; a long text left in a chat
+  keeps its first message as the draft. In the text client a line still
+  holds one message, 4096 characters.
+
 ### Changed
 - The first menu is split in two (issue #20). It had grown to fifteen
   lines, most of them about the chats, and those now have a menu of
@@ -31,6 +44,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   and nothing else. It now says why.
 - The MorphOS manual still said that the "@" list of a group's members
   was off on MorphOS. It has opened there since 0.5.
+- The input line's recall with the arrow keys kept the first 255
+  characters of a message sent, and ENTER sent them as if whole. It now
+  recalls a message in full.
 
 ## [0.5] - 2026-11-14
 

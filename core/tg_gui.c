@@ -1435,6 +1435,107 @@ unsigned long tg_gui_text_unit_len(const char *text, unsigned long len,
     return tg_gui_emoji_pair_at(text, len, i, 0) ? 2UL : 1UL;
 }
 
+/* The desktop client splits a long text the same way: a line break first,
+   a space next, a hard cut only inside one endless word. The limit counts
+   bytes of the composer text, which are Telegram's characters but for the
+   emoji, two bytes here and mostly two UTF-16 units there; the markers of
+   **bold** and its kin only take characters away when they are sent. An
+   emoji's index byte is never a space or a line break, so a cut on one of
+   those never falls inside a pair. */
+unsigned long tg_gui_message_part(const char *text, unsigned long len,
+                                  unsigned long limit, unsigned long *next)
+{
+    unsigned long cut = 0UL;
+    unsigned long i;
+
+    if (next != 0) {
+        *next = len;
+    }
+    if (text == 0 || len == 0UL) {
+        return 0UL;
+    }
+    if (limit == 0UL || len <= limit) {
+        return len;
+    }
+    /* text[limit] is there: len > limit. A line break in the second half
+       of the room, else a space there, else either one anywhere. */
+    for (i = limit; i > limit / 2UL && cut == 0UL; --i) {
+        if (text[i] == '\n') {
+            cut = i;
+        }
+    }
+    for (i = limit; i > limit / 2UL && cut == 0UL; --i) {
+        if (text[i] == ' ') {
+            cut = i;
+        }
+    }
+    for (i = limit / 2UL; i > 0UL && cut == 0UL; --i) {
+        if (text[i] == '\n' || text[i] == ' ') {
+            cut = i;
+        }
+    }
+    if (cut == 0UL) {
+        /* one long word: cut at the room, keeping an emoji pair whole */
+        cut = limit;
+        if (cut > 1UL && tg_gui_emoji_pair_at(text, len, cut - 1UL, 0)) {
+            --cut;
+        }
+        i = cut;
+    } else {
+        /* the breaks it was cut on neither close this part nor open the
+           next one (a part of nothing but breaks comes back empty) */
+        i = cut;
+        while (i < len && (text[i] == '\n' || text[i] == ' ')) {
+            ++i;
+        }
+        while (cut > 0UL && (text[cut - 1UL] == '\n' || text[cut - 1UL] == ' ')) {
+            --cut;
+        }
+    }
+    if (next != 0) {
+        *next = i;
+    }
+    return cut;
+}
+
+int tg_gui_message_part_blank(const char *text, unsigned long len)
+{
+    unsigned long i;
+
+    for (i = 0UL; text != 0 && i < len; ++i) {
+        if (text[i] != ' ' && text[i] != '\n') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+unsigned long tg_gui_message_parts(const char *text, unsigned long limit)
+{
+    unsigned long len;
+    unsigned long at = 0UL;
+    unsigned long count = 0UL;
+
+    if (text == 0) {
+        return 0UL;
+    }
+    len = (unsigned long)strlen(text);
+    while (at < len) {
+        unsigned long next;
+        unsigned long part =
+            tg_gui_message_part(text + at, len - at, limit, &next);
+
+        if (!tg_gui_message_part_blank(text + at, part)) {
+            ++count;
+        }
+        if (next == 0UL) {
+            break; /* cannot happen; never loop on it */
+        }
+        at += next;
+    }
+    return count;
+}
+
 void tg_gui_strip_markers(char *dest, unsigned long size, const char *src)
 {
     unsigned long len;
@@ -4787,21 +4888,74 @@ static int tg_gui_input_text_w(const tg_gui_state *state, int width, int sidebar
    without it the caret stayed on the line above, one blank further right,
    and the box grew only at the next key). A message bubble keeps no such
    trailing line, so this stays the composer's own. */
+/* A composer holding a long text (a paste of several messages, issue #14)
+   is wrapped from near its end only. The box shows the last rows; the whole
+   text at every key would cost a slow machine dearly, and past
+   TG_GUI_WRAP_MAX_LINES the rows shown would come from the middle. The tail
+   starts at a line where it can, so its rows are the ones the whole text
+   gives. Returns the offset the wrap starts from. */
+#define TG_GUI_INPUT_WRAP_TAIL 1024UL
+#define TG_GUI_INPUT_WRAP_TAIL_LINES ((unsigned long)TG_GUI_WRAP_MAX_LINES / 4UL)
+
+static unsigned long tg_gui_input_wrap_base(const char *text,
+                                            unsigned long total)
+{
+    unsigned long base;
+    unsigned long i;
+    unsigned long breaks = 0UL;
+
+    if (total <= TG_GUI_INPUT_WRAP_TAIL) {
+        return 0UL;
+    }
+    base = total - TG_GUI_INPUT_WRAP_TAIL; /* >= 1 */
+    for (i = base; i < total && text[i - 1UL] != '\n'; ++i) {
+    }
+    if (i < total) {
+        base = i; /* the start of a line */
+    } else {
+        for (i = base; i < total && text[i - 1UL] != ' '; ++i) {
+        }
+        if (i < total) {
+            base = i; /* the start of a word */
+        } else if (tg_gui_emoji_pair_at(text, total, base - 1UL, 0)) {
+            ++base; /* not between an emoji's two bytes */
+        }
+    }
+    for (i = base; i < total; ++i) {
+        if (text[i] == '\n') {
+            ++breaks;
+        }
+    }
+    /* a run of short lines: fewer of them */
+    while (breaks > TG_GUI_INPUT_WRAP_TAIL_LINES && base < total) {
+        if (text[base] == '\n') {
+            --breaks;
+        }
+        ++base;
+    }
+    return base;
+}
+
 static int tg_gui_input_wrap(const tg_gui_state *state,
                              tg_gui_backend *backend, int width,
                              int sidebar_w, unsigned long *starts,
                              unsigned long *lengths)
 {
     unsigned long total = (unsigned long)strlen(state->input);
+    unsigned long base = tg_gui_input_wrap_base(state->input, total);
     int n;
+    int k;
 
-    n = tg_gui_wrap(backend, state->input,
+    n = tg_gui_wrap(backend, state->input + base,
                     tg_gui_input_text_w(state, width, sidebar_w), starts,
                     lengths, TG_GUI_WRAP_MAX_LINES);
     if (n < 1) {
         n = 1;
         starts[0] = 0UL;
-        lengths[0] = total;
+        lengths[0] = total - base;
+    }
+    for (k = 0; k < n; ++k) {
+        starts[k] += base;
     }
     if (total > 0UL && state->input[total - 1UL] == '\n' &&
         n < TG_GUI_WRAP_MAX_LINES) {
@@ -5622,7 +5776,9 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
                     break;
                 }
             }
-            if (line >= first && (line - first) < rows) {
+            /* a caret above the wrapped tail of a long text is out of view */
+            if (line >= first && (line - first) < rows &&
+                caret_off >= starts[line]) {
                 int caret_x;
 
                 caret_x = area_x +
@@ -13573,6 +13729,152 @@ int tg_gui_self_test(void)
             state.photo_h[1] <= 0 || hit != TG_GUI_HIT_PHOTO_BASE - 1) {
             puts("gui self-test: disabled inline photo did background work");
             return 2;
+        }
+
+        /* Issue #14: a text longer than one message goes as several. The
+           cut falls on the last line break of the room, else on its last
+           space, a line break in the first half losing to a space in the
+           second; a long word is cut at the room but never inside an emoji
+           pair; the breaks cut on do not open the next part; a blank part
+           is not counted. A composer holding four messages is wrapped from
+           a line near its end, and its rows end where the text ends; a
+           caret above that tail is not drawn from a wrong offset. */
+        {
+            static char big[TG_GUI_INPUT_MAX];
+            unsigned long starts[TG_GUI_WRAP_MAX_LINES];
+            unsigned long lengths[TG_GUI_WRAP_MAX_LINES];
+            unsigned long next = 99UL;
+            unsigned long total;
+            unsigned long i;
+            char pair[2];
+            int lines;
+            int l;
+
+            if (tg_gui_message_part("hello", 5UL, 10UL, &next) != 5UL ||
+                next != 5UL || tg_gui_message_parts("hello", 10UL) != 1UL ||
+                tg_gui_message_part("aaaaaa\nbbb ccc", 14UL, 10UL, &next) !=
+                    6UL || next != 7UL ||
+                tg_gui_message_part("aaaaaaa bbbbbbbb", 16UL, 10UL, &next) !=
+                    7UL || next != 8UL ||
+                tg_gui_message_part("aa\naaaaa bbbbbb", 15UL, 10UL, &next) !=
+                    8UL || next != 9UL ||
+                tg_gui_message_part("a bbbbbbbbbbbb", 14UL, 10UL, &next) !=
+                    1UL || next != 2UL ||
+                tg_gui_message_part("abcdefghijklmno", 15UL, 10UL, &next) !=
+                    10UL || next != 10UL ||
+                tg_gui_message_part("aaaaaaaa\n\n\n\nbbbbbb", 18UL, 10UL,
+                                    &next) != 8UL || next != 12UL ||
+                tg_gui_message_parts("aaaaaaaa\n\n\n\nbbbbbb", 10UL) != 2UL ||
+                tg_gui_message_parts("aaaaaaaaaa          ", 10UL) != 1UL ||
+                tg_gui_message_parts("          aaaa", 10UL) != 1UL ||
+                tg_gui_message_parts("", 10UL) != 0UL ||
+                !tg_gui_message_part_blank(" \n ", 3UL) ||
+                tg_gui_message_part_blank(" a", 2UL)) {
+                puts("gui self-test: long text cut in the wrong place");
+                return 2;
+            }
+            tg_gui_emoji_encode(7UL, pair);
+            memcpy(big, "abcdefghi", 9);
+            big[9] = pair[0];
+            big[10] = pair[1];
+            memcpy(big + 11, "xyz", 4);
+            if (tg_gui_message_part(big, 14UL, 10UL, &next) != 9UL ||
+                next != 9UL ||
+                !tg_gui_emoji_pair_at(big, 14UL, next, 0)) {
+                puts("gui self-test: long text cut inside an emoji pair");
+                return 2;
+            }
+            /* every part of a full composer within one message, and all of
+               the text in the parts */
+            for (i = 0UL; i + 1UL < sizeof(big); ++i) {
+                big[i] = (char)((i % 61UL) == 60UL ? '\n'
+                                : (i % 7UL) == 6UL ? ' ' : 'a' + (char)(i % 7UL));
+            }
+            big[sizeof(big) - 1UL] = '\0';
+            total = (unsigned long)strlen(big);
+            {
+                unsigned long at = 0UL;
+                unsigned long kept = 0UL;
+                unsigned long count = 0UL;
+
+                while (at < total) {
+                    unsigned long part = tg_gui_message_part(
+                        big + at, total - at, TG_GUI_MSG_TEXT_MAX - 1UL, &next);
+                    unsigned long b;
+
+                    if (part == 0UL || part > TG_GUI_MSG_TEXT_MAX - 1UL ||
+                        next < part) {
+                        puts("gui self-test: a long text part is too big");
+                        return 2;
+                    }
+                    for (b = part; b < next; ++b) {
+                        if (big[at + b] != ' ' && big[at + b] != '\n') {
+                            puts("gui self-test: a long text lost a letter");
+                            return 2;
+                        }
+                    }
+                    kept += part;
+                    at += next;
+                    ++count;
+                }
+                /* lines end on a line break, so four messages' worth of
+                   bytes can need a fifth for the last line or so */
+                if (count < 4UL || count > 5UL ||
+                    tg_gui_message_parts(big, TG_GUI_MSG_TEXT_MAX - 1UL) !=
+                        count ||
+                    kept + (4UL * count) < total) {
+                    puts("gui self-test: a full composer splits wrongly");
+                    return 2;
+                }
+            }
+            memcpy(state.input, big, total + 1UL);
+            lines = tg_gui_input_wrap(&state, &backend, 640,
+                                      tg_gui_sidebar_w(640), starts, lengths);
+            if (lines < 1 || lines >= TG_GUI_WRAP_MAX_LINES ||
+                starts[0] == 0UL || big[starts[0] - 1UL] != '\n' ||
+                starts[lines - 1] + lengths[lines - 1] != total) {
+                puts("gui self-test: a long composer is not wrapped from its end");
+                return 2;
+            }
+            for (l = 1; l < lines; ++l) {
+                if (starts[l] < starts[l - 1] + lengths[l - 1]) {
+                    puts("gui self-test: long composer rows out of order");
+                    return 2;
+                }
+            }
+            /* a run of one-letter lines: no more rows than the tail allows */
+            for (i = 0UL; i + 2UL < sizeof(big); i += 2UL) {
+                big[i] = 'x';
+                big[i + 1UL] = '\n';
+            }
+            big[i] = 'x';
+            big[i + 1UL] = '\0';
+            total = (unsigned long)strlen(big);
+            memcpy(state.input, big, total + 1UL);
+            lines = tg_gui_input_wrap(&state, &backend, 640,
+                                      tg_gui_sidebar_w(640), starts, lengths);
+            if (lines < 1 ||
+                (unsigned long)lines > TG_GUI_INPUT_WRAP_TAIL_LINES + 1UL ||
+                starts[lines - 1] + lengths[lines - 1] != total) {
+                puts("gui self-test: short lines overflow the composer wrap");
+                return 2;
+            }
+            {
+                int was_mode = state.mode;
+                int was_composing = state.composing;
+                int was_cursor = state.cursor_on;
+
+                state.mode = TG_GUI_MODE_CHAT;
+                state.composing = 1;
+                state.cursor_on = 1;
+                state.input_caret = 0; /* above the wrapped tail */
+                tg_gui_paint(&state, &backend);
+                state.mode = was_mode;
+                state.composing = was_composing;
+                state.cursor_on = was_cursor;
+            }
+            state.input[0] = '\0';
+            state.input_caret = 0;
         }
 
         /* 0.0.93: emoji pairs. Encode and decode round-trip every glyph index,
