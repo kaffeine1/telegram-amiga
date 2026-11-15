@@ -94,6 +94,7 @@ typedef struct tg_chat_message_row {
     unsigned long from_id_lo;
     int from_user;             /* the sender is a person, not a channel as itself */
     int has_document;          /* F9: message carries a downloadable document */
+    int is_video;              /* that document is a video or an animation */
     int has_photo;             /* 0.0.9: message carries an inline photo */
     int photo_ready;           /* its selected JPEG is present in photos/ */
     int photo_only;            /* text is the synthetic "[Photo]" fallback */

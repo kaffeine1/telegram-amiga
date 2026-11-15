@@ -15466,6 +15466,11 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.from_user = texts.messages[i].from_constructor ==
                                 TG_MTPROTO_PEER_USER_CONSTRUCTOR;
                 row.has_document = texts.messages[i].document.has_document;
+                row.is_video = row.has_document &&
+                               (texts.messages[i].document.kind ==
+                                    TG_MTPROTO_DOC_KIND_VIDEO ||
+                                texts.messages[i].document.kind ==
+                                    TG_MTPROTO_DOC_KIND_GIF);
                 row.has_photo = texts.messages[i].photo.has_photo;
                 row.photo_only = texts.messages[i].photo_only;
                 row.photo_is_link = texts.messages[i].photo_is_link;

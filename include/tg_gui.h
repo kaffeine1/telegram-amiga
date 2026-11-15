@@ -398,6 +398,9 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
    (tg_gui_graphics_preferences_resolve). A choice equal to the machine's
    own is saved as "auto", like the photos'. */
 #define TG_GUI_STICKERS_FILE "data/telegram-stickers.txt"
+/* "Video player..." of the settings: the program Play hands a video to,
+   one line with its path; no file or an empty line = the Workbench. */
+#define TG_GUI_PLAYER_FILE "data/telegram-player.txt"
 
 /* A chat's name for a requester's button ("For me and Anna"): '|' and '%'
    would break the requester apart and are replaced, a name longer than
@@ -448,6 +451,8 @@ typedef struct tg_gui_message {
     unsigned long from_id_lo;
     int from_user;                     /* the sender is a person: can be written to */
     int has_document;                  /* F9: a document is attached (Download) */
+    int is_video;                      /* the document is a video or an
+                                          animation: its menu offers Play */
     int has_photo;                     /* 0.0.9: inline photo metadata present */
     int photo_ready;                   /* cached JPEG is ready for the backend */
     int photo_only;                    /* hide the synthetic label once drawn */
@@ -532,6 +537,9 @@ typedef struct tg_gui_state {
     int notify_mode;       /* TG_GUI_NOTIFY_*, from data/telegram-notify.txt */
     int notify_beep;       /* sound on eligible news */
     char notify_sound[TG_NOTIFY_SOUND_MAX];
+    /* The program Play hands a video to ("" = the Workbench decides), kept
+       in TG_GUI_PLAYER_FILE. */
+    char video_player[TG_NOTIFY_SOUND_MAX];
     int notify_explicit;   /* the user picked the mode (else "auto") */
     int notify_default_resolved; /* hardware default sampled this run */
     tg_gui_notify_peer notify_peers[TG_GUI_NOTIFY_PEERS];
@@ -968,6 +976,15 @@ void tg_gui_emoji_preferences_load(const char *path, int *enabled,
                                    int *explicit_choice);
 int tg_gui_emoji_preferences_save(const char *path, int enabled);
 /* explicit_choice 0 writes "auto". */
+/* The video player's path from `path` into out ("" when none); writing ""
+   removes the file. Save returns 0 when done. */
+void tg_gui_player_load(const char *path, char *out, unsigned long size);
+int tg_gui_player_save(const char *path, const char *player);
+/* The command line that hands `file` to `player`: both quoted, as one line
+   for SystemTags. 0 when a name holds a quote or a line break (it could
+   end the quoting), or the line does not fit. */
+int tg_gui_player_command(char *out, unsigned long size, const char *player,
+                          const char *file);
 int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
                                          int explicit_choice);
 /* The avatar choice, in its own file with the same on/off/auto line. */
@@ -1135,6 +1152,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_SELECT 46 /* Select: start choosing several messages */
 #define TG_GUI_CTX_FILE_OPEN 47 /* Open the file a download saved */
 #define TG_GUI_CTX_FILE_SHOW 60 /* Show that file's drawer */
+#define TG_GUI_CTX_FILE_PLAY 17 /* Play a video: downloaded first if needed */
 #define TG_GUI_CTX_POLL_STOP 61 /* Stop poll: one's own, for good */
 #define TG_GUI_CTX_POLL_NEW 62 /* the paperclip's menu: Poll... */
 #define TG_GUI_CTX_MSG_SENDER 63 /* Message <name>: a chat with the sender */
@@ -1184,6 +1202,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_UPDATES 17     /* look for a newer version once a day */
 #define TG_GUI_SET_MARKDOWN 18    /* **bold** and its kin when sending */
 #define TG_GUI_SET_STICKERS 19    /* a sticker's picture, through a datatype */
+#define TG_GUI_SET_PLAYER 20      /* action: the program Play uses, or none */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2

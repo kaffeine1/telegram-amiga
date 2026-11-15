@@ -39,8 +39,10 @@ On 2026-11-15: 0.5, the second beta, is out in all seven packages
 (2026-11-14). Direct chats, groups, channels and the topics of forum
 groups work on the six systems; what each release brought is in
 CHANGELOG.md. On `main` for the next release: the Chats menu (issue
-#20), a picture sent as a photo whatever its name, and a long text sent
-as several messages (issue #14).
+#20), a picture sent as a photo whatever its name, a long text sent as
+several messages (issue #14), Play on a video with a player of one's
+choice, and the account online while the window is in front, without
+which Telegram sends no "is typing".
 
 Open, each in its section below:
 
@@ -50,8 +52,8 @@ Open, each in its section below:
   in the text client; albums of documents or videos, of more than ten
   photos, and several icons dropped at once; topics created, renamed or
   closed;
-- videos: the resolution in the details, and a player of the user's
-  choice;
+- videos: the resolution in the details, and playing while the video
+  still downloads;
 - sign-in by QR code, creating an account, the update fetched and
   installed (the notice is done), AmiUpdate on AmigaOS 4;
 - transfer speed, photo speed under AfA_OS, avatars on paletted
@@ -593,13 +595,21 @@ input surface:
 - The over-10-MiB fallback that sends a photo as a document carries the
   same caption.
 
-## Partly done: video messages, details and hand off to a player
+## Mostly done: video messages, details and hand off to a player
 
 Since 0.0.92 a video shows a frame, with its length and size beside it,
 and since 0.5 a downloaded file opens from its message through the
-Workbench, which hands it to the program the system has for it. Still
-open: the resolution in the details, and a player command of the user's
-own.
+Workbench. On `main` for the next release, at a user's request: Play at
+the top of a video's menu downloads the video when it is not here and
+then hands it to the player chosen in "Settings > Video player..."
+(MPlayer, say), or to the Workbench when none is chosen; the player runs
+as a process of its own, with the file's path as its argument. Still
+open: the resolution in the details, and playing while the video still
+downloads. That one would feed the player through a pipe (PIPE:) as the
+parts arrive, and only works for videos whose index comes first
+(Telegram marks them as streamable) and on a link faster than the video:
+at the 320 KB/s measured on MorphOS a phone video would stall, so it
+waits for "find out what caps transfer speed" below.
 
 A video arrives today as a plain `[File]` with its name and size, which
 tells the user nothing about what a slow line is about to spend minutes

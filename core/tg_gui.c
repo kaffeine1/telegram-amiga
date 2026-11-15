@@ -422,6 +422,96 @@ int tg_gui_emoji_preferences_save_choice(const char *path, int enabled,
     return 0;
 }
 
+void tg_gui_player_load(const char *path, char *out, unsigned long size)
+{
+    FILE *file;
+    unsigned long n;
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (path == 0 || (file = fopen(path, "rb")) == 0) {
+        return;
+    }
+    if (fgets(out, (int)size, file) == 0) {
+        out[0] = '\0';
+    }
+    fclose(file);
+    n = (unsigned long)strlen(out);
+    while (n > 0UL && (out[n - 1UL] == '\n' || out[n - 1UL] == '\r' ||
+                       out[n - 1UL] == ' ')) {
+        out[--n] = '\0';
+    }
+}
+
+int tg_gui_player_save(const char *path, const char *player)
+{
+    FILE *file;
+    int failed;
+
+    if (path == 0 || path[0] == '\0') {
+        return 1;
+    }
+    if (player == 0 || player[0] == '\0') {
+        (void)remove(path);
+        return 0;
+    }
+    file = tg_file_fopen_replace(path, "wb");
+    if (file == 0) {
+        return 1;
+    }
+    failed = fputs(player, file) == EOF || fputc('\n', file) == EOF;
+    if (fclose(file) != 0) {
+        failed = 1;
+    }
+    return failed;
+}
+
+int tg_gui_player_command(char *out, unsigned long size, const char *player,
+                          const char *file)
+{
+    const char *names[2];
+    unsigned long o = 0UL;
+    int k;
+
+    if (out == 0 || size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (player == 0 || player[0] == '\0' || file == 0 || file[0] == '\0') {
+        return 0;
+    }
+    names[0] = player;
+    names[1] = file;
+    for (k = 0; k < 2; ++k) {
+        const char *p;
+
+        if (o + 3UL >= size) {
+            out[0] = '\0';
+            return 0;
+        }
+        if (k == 1) {
+            out[o++] = ' ';
+        }
+        out[o++] = '"';
+        for (p = names[k]; *p != '\0'; ++p) {
+            if (*p == '"' || *p == '\n' || *p == '\r' || *p == '*') {
+                out[0] = '\0';
+                return 0; /* '*' is AmigaDOS's escape inside quotes */
+            }
+            if (o + 2UL >= size) {
+                out[0] = '\0';
+                return 0;
+            }
+            out[o++] = *p;
+        }
+        out[o++] = '"';
+    }
+    out[o] = '\0';
+    return 1;
+}
+
 unsigned int tg_gui_popup_font_size(unsigned int base, unsigned int height)
 {
     unsigned int want;
@@ -7701,12 +7791,22 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ids[n] = TG_GUI_CTX_DELETE;
             ++n;
         }
+        if (m->has_document && m->is_video) {
+            /* A video plays: downloaded first when it is not here yet,
+               then handed to the player of the settings, or to the
+               Workbench. It takes Open's place once the file is here. */
+            labels[n] = "Play";
+            ids[n] = TG_GUI_CTX_FILE_PLAY;
+            ++n;
+        }
         if (m->has_document && state->ctx_file_saved) {
             /* Already saved from here and still on disk: what one does
                with a file one has. */
-            labels[n] = "Open";
-            ids[n] = TG_GUI_CTX_FILE_OPEN;
-            ++n;
+            if (!m->is_video) {
+                labels[n] = "Open";
+                ids[n] = TG_GUI_CTX_FILE_OPEN;
+                ++n;
+            }
             labels[n] = "Show in drawer";
             ids[n] = TG_GUI_CTX_FILE_SHOW;
             ++n;
@@ -8685,6 +8785,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {"Window and files", 0},
     {"Use own screen", TG_GUI_SET_OWN_SCREEN},
     {"Download drawer...", TG_GUI_SET_DOWNLOAD},
+    {"Video player...", TG_GUI_SET_PLAYER},
     {"Check for updates", TG_GUI_SET_UPDATES},
     {"ARexx", 0},
     {"ARexx port", TG_GUI_SET_AREXX_PORT},
@@ -8721,6 +8822,7 @@ int tg_gui_settings_kind(int id)
     case TG_GUI_SET_CHIME:
     case TG_GUI_SET_CACHE_CLEAR:
     case TG_GUI_SET_DOWNLOAD:
+    case TG_GUI_SET_PLAYER:
         return TG_GUI_SET_KIND_ACTION;
     case 0:
         return TG_GUI_SET_KIND_HEADING;
@@ -8799,6 +8901,11 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
         break;
     case TG_GUI_SET_DOWNLOAD:
         text = state->settings_download;
+        break;
+    case TG_GUI_SET_PLAYER:
+        text = state->video_player[0] != '\0'
+                   ? tg_gui_settings_leaf(state->video_player)
+                   : "(the Workbench)";
         break;
     case TG_GUI_SET_BEEP: on = state->notify_beep; break;
     case TG_GUI_SET_INLINE: on = state->inline_photos; break;
@@ -12304,6 +12411,105 @@ int tg_gui_self_test(void)
             puts("gui self-test: forwarding context items missing");
             return 2;
         }
+        /* A video offers Play first: with Download while it is not here,
+           with Show in drawer once it is, Open left out (Play opens it),
+           and the menu no longer than the longest. */
+        {
+            int pass;
+
+            state.messages[0].id = 124UL;
+            state.messages[0].is_own = 1;
+            state.messages[0].has_document = 1;
+            state.messages[0].has_photo = 1; /* the frame */
+            state.messages[0].is_video = 1;
+            for (pass = 0; pass < 2; ++pass) {
+                int at_play = -1;
+                int saw_download = 0;
+                int saw_open = 0;
+                int saw_show = 0;
+
+                state.ctx_file_saved = pass;
+                count = tg_gui_context_items(&state, labels, ids);
+                for (i = 0; i < count; ++i) {
+                    if (ids[i] == TG_GUI_CTX_FILE_PLAY &&
+                        strcmp(labels[i], "Play") == 0 && at_play < 0) {
+                        at_play = i;
+                    }
+                    saw_download |= ids[i] == TG_GUI_CTX_DOWNLOAD;
+                    saw_open |= ids[i] == TG_GUI_CTX_FILE_OPEN;
+                    saw_show |= ids[i] == TG_GUI_CTX_FILE_SHOW;
+                }
+                if (at_play < 0 || saw_open || count > TG_GUI_CTX_MENU_ITEMS ||
+                    saw_download != !pass || saw_show != pass) {
+                    puts("gui self-test: a video's menu must offer Play");
+                    return 2;
+                }
+            }
+            state.ctx_file_saved = 0;
+            state.messages[0].id = 0UL;
+            state.messages[0].is_own = 0;
+            state.messages[0].has_document = 0;
+            state.messages[0].has_photo = 0;
+            state.messages[0].is_video = 0;
+        }
+        /* The player: its line in the settings, the command that hands a
+           file to it, and its file read back. */
+        {
+            static const char tmp_player[] = "tg-player-test.txt";
+            char cmd[64];
+            char value[48];
+            char back[TG_NOTIFY_SOUND_MAX];
+
+            state.video_player[0] = '\0';
+            tg_gui_settings_value(&state, TG_GUI_SET_PLAYER, value,
+                                  sizeof(value));
+            if (strcmp(value, "(the Workbench)") != 0 ||
+                tg_gui_settings_kind(TG_GUI_SET_PLAYER) !=
+                    TG_GUI_SET_KIND_ACTION) {
+                puts("gui self-test: video player settings line");
+                return 2;
+            }
+            tg_gui_copy(state.video_player, sizeof(state.video_player),
+                        "Work:Video/MPlayer");
+            tg_gui_settings_value(&state, TG_GUI_SET_PLAYER, value,
+                                  sizeof(value));
+            if (strcmp(value, "MPlayer") != 0 ||
+                !tg_gui_player_command(cmd, sizeof(cmd), state.video_player,
+                                       "Work:Down loads/clip.mp4") ||
+                strcmp(cmd, "\"Work:Video/MPlayer\" "
+                            "\"Work:Down loads/clip.mp4\"") != 0 ||
+                tg_gui_player_command(cmd, sizeof(cmd), "MPlayer",
+                                      "bad\"name.mp4") ||
+                tg_gui_player_command(cmd, sizeof(cmd), "MPlayer",
+                                      "bad*name.mp4") ||
+                tg_gui_player_command(cmd, sizeof(cmd), "MPlayer",
+                                      "line\nbreak.mp4") ||
+                tg_gui_player_command(cmd, sizeof(cmd), "", "clip.mp4") ||
+                tg_gui_player_command(cmd, 20UL, "MPlayer",
+                                      "a-name-far-too-long.mp4") ||
+                cmd[0] != '\0') {
+                puts("gui self-test: video player command line");
+                return 2;
+            }
+            if (tg_gui_player_save(tmp_player, state.video_player) != 0) {
+                puts("gui self-test: video player not saved");
+                return 2;
+            }
+            tg_gui_player_load(tmp_player, back, sizeof(back));
+            if (strcmp(back, "Work:Video/MPlayer") != 0 ||
+                tg_gui_player_save(tmp_player, "") != 0) {
+                (void)remove(tmp_player);
+                puts("gui self-test: video player not read back");
+                return 2;
+            }
+            tg_gui_player_load(tmp_player, back, sizeof(back));
+            state.video_player[0] = '\0';
+            if (back[0] != '\0') {
+                (void)remove(tmp_player);
+                puts("gui self-test: video player not cleared");
+                return 2;
+            }
+        }
     }
 
     /* A poll's message: Vote... right under React... while it can be
@@ -12932,7 +13138,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 24 && switches == 12 &&
+        ok_set = ok_set && lines == 25 && switches == 12 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&

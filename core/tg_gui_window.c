@@ -133,6 +133,7 @@ typedef struct timerequest tg_gui_timereq;
 #include <graphics/view.h>
 #include <utility/tagitem.h>
 #include <dos/dos.h>
+#include <dos/dostags.h>
 
 #include <proto/exec.h>
 #include <proto/intuition.h>
@@ -606,6 +607,8 @@ static int tg_gui_amiga_afa_text_compat(void)
 /* not in a menu: what the "Sticker pictures" line of the settings asks for
    on a system with no WEBP datatype */
 #define TG_MENU_WEBP_DT 41
+/* not in a menu either: the video player line of the settings */
+#define TG_MENU_PLAYER 42
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -8575,9 +8578,11 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
 }
 
 /* Reuse ASL's native path joining, and reject a long name rather than save
-   a truncated path that could name a different file. Cancel keeps the choice. */
-static int tg_gui_window_pick_sound(tg_gui_state *state, struct Window *win,
-                                     char *path, unsigned long size)
+   a truncated path that could name a different file. Cancel keeps the choice.
+   `title` names what is picked: a sound, or the video player. */
+static int tg_gui_window_pick_file(tg_gui_state *state, struct Window *win,
+                                   const char *title, char *path,
+                                   unsigned long size)
 {
     struct FileRequester *req;
     char chosen[TG_NOTIFY_SOUND_MAX];
@@ -8600,7 +8605,7 @@ static int tg_gui_window_pick_sound(tg_gui_state *state, struct Window *win,
 #endif
     req = (struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win), ASLFR_TitleText,
-        TG_GUI_TAG("Notification sound"), TAG_DONE);
+        TG_GUI_TAG(title), TAG_DONE);
     if (req != 0 && AslRequestTags(req, TAG_DONE) && req->fr_File != 0 &&
         req->fr_File[0] != '\0') {
         n = req->fr_Drawer != 0 ?
@@ -8618,7 +8623,7 @@ static int tg_gui_window_pick_sound(tg_gui_state *state, struct Window *win,
         }
         if (!selected) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Sound filename too long or invalid");
+                               "Name too long or invalid");
         }
     }
     if (req != 0) {
@@ -10687,6 +10692,102 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
         tg_gui_window_status_saved_in(state, path);
     }
     tg_gui_window_paint(state, backend);
+}
+
+/* The video waiting for its download to end before Play hands it on (its
+   message id; 0 = none). One transfer runs at a time, so the download that
+   ends is the one Play started. */
+static unsigned long tg_gui_play_after = 0UL;
+
+/* Hands `path` to the video player of the settings as a process of its own,
+   so the window goes on while it plays; what the player prints goes to
+   NIL:. 1 = it started. */
+static int tg_gui_window_run_player(const char *player, const char *path)
+{
+    char cmd[(2 * TG_NOTIFY_SOUND_MAX) + 16];
+    BPTR nil_in;
+    BPTR nil_out;
+    LONG rc;
+
+    if (!tg_gui_player_command(cmd, sizeof(cmd), player, path)) {
+        tg_gui_log("play: no command line for that player and file");
+        return 0;
+    }
+    nil_in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
+    nil_out = Open((CONST_STRPTR)"NIL:", MODE_NEWFILE);
+    if (nil_in == 0 || nil_out == 0) {
+        if (nil_in != 0) {
+            Close(nil_in);
+        }
+        if (nil_out != 0) {
+            Close(nil_out);
+        }
+        return 0;
+    }
+    /* Asynchronous: the system closes the two handles when the player
+       ends; only a start that failed leaves them to us. */
+    rc = SystemTags((STRPTR)cmd, SYS_Input, TG_GUI_TAG(nil_in), SYS_Output,
+                    TG_GUI_TAG(nil_out), SYS_Asynch, TG_GUI_TAG(TRUE),
+                    NP_StackSize, TG_GUI_TAG(262144L), TAG_DONE);
+    if (rc == -1) {
+        Close(nil_in);
+        Close(nil_out);
+        tg_gui_log("play: the player did not start");
+        return 0;
+    }
+    tg_gui_log("play: handed to the player");
+    return 1;
+}
+
+/* Play on a video that is here: to the player of the settings, or to the
+   Workbench, which opens it with what the system has for videos. A file
+   that is in fact a program is not run. */
+static void tg_gui_window_play_path(tg_gui_state *state,
+                                    tg_gui_backend *backend, const char *path)
+{
+    if (tg_gui_session_file_is_program(path)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "That file is a program, not a video");
+    } else if (state->video_player[0] != '\0') {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           tg_gui_window_run_player(state->video_player, path)
+                               ? "Handed to the video player"
+                               : "The video player did not start");
+    } else if (tg_gui_amiga_wb_open(path, 0)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Handed to the Workbench");
+    } else {
+        /* No Workbench that opens things (3.0, 3.1), or it refused. */
+        tg_gui_window_status_saved_in(state, path);
+    }
+    tg_gui_window_paint(state, backend);
+}
+
+/* Play on a video message: at once when its file is here, else after the
+   download it starts now. */
+static void tg_gui_window_video_play(tg_gui_state *state,
+                                     tg_gui_backend *backend,
+                                     unsigned long message_id)
+{
+    char path[200];
+    int drc;
+
+    if (tg_gui_session_saved_path(message_id, path, sizeof(path))) {
+        tg_gui_window_play_path(state, backend, path);
+    } else if (tg_gui_session_transfer_busy()) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "A transfer is already running");
+        tg_gui_window_paint(state, backend);
+    } else if ((drc = tg_gui_session_transfer_start_download(message_id,
+                                                             stdout)) == 0) {
+        tg_gui_play_after = message_id;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Downloading to play... (ESC cancels)");
+        tg_gui_window_paint(state, backend);
+    } else {
+        tg_gui_window_transfer_finished(state, backend, 1, drc,
+                                        tg_gui_session_last_transfer_error());
+    }
 }
 
 /* Sends the vote on the poll of message `m` of the open chat (the answers
@@ -14202,6 +14303,7 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
     case TG_GUI_SET_AVATARS: return (APTR)TG_MENU_AVATARS;
     case TG_GUI_SET_OWN_SCREEN: return (APTR)TG_MENU_OWNSCREEN;
     case TG_GUI_SET_DOWNLOAD: return (APTR)TG_MENU_DLDIR;
+    case TG_GUI_SET_PLAYER: return (APTR)TG_MENU_PLAYER;
     case TG_GUI_SET_UPDATES:
         /* Kept by the session, with what it knows of the channel. */
         state->update_check = !state->update_check;
@@ -16483,6 +16585,55 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         : "Inline photos disabled");
                             }
                             tg_gui_window_paint(state, &backend);
+                        } else if (ud == (APTR)TG_MENU_PLAYER) {
+                            /* The program Play hands a video to, or none:
+                               then the Workbench opens it with whatever
+                               the system has for it. With one chosen, the
+                               line asks which of the two. */
+                            int changed = 0;
+                            LONG pick = 1;
+
+                            if (state->video_player[0] != '\0') {
+                                struct EasyStruct es;
+                                char text[2 * TG_NOTIFY_SOUND_MAX + 32];
+                                char shown[2 * TG_NOTIFY_SOUND_MAX];
+
+                                /* the path as text, its '%' doubled: the
+                                   requester reads its text as a format */
+                                tg_gui_requester_text(shown, sizeof(shown),
+                                                      state->video_player, 2);
+                                sprintf(text, "Play hands videos to\n%s",
+                                        shown);
+                                es.es_StructSize = (ULONG)sizeof(es);
+                                es.es_Flags = 0UL;
+                                es.es_Title = (APTR)"Video player";
+                                es.es_TextFormat = (APTR)text;
+                                es.es_GadgetFormat =
+                                    (APTR)"Choose another...|Use the Workbench|Cancel";
+                                pick = tg_gui_amiga_easyreq_args(ctx.window,
+                                                                 &es);
+                            }
+                            if (pick == 2) {
+                                state->video_player[0] = '\0';
+                                changed = 1;
+                            } else if (pick == 1) {
+                                changed = tg_gui_window_pick_file(state,
+                                    ctx.window, "Video player",
+                                    state->video_player,
+                                    sizeof(state->video_player));
+                            }
+                            if (changed) {
+                                (void)mkdir("data", 0777);
+                                tg_gui_window_copy(state->status,
+                                    sizeof(state->status),
+                                    tg_gui_player_save(TG_GUI_PLAYER_FILE,
+                                        state->video_player) != 0
+                                        ? "Could not save the video player"
+                                        : state->video_player[0] != '\0'
+                                              ? "Play: videos go to that program"
+                                              : "Play: the Workbench opens videos");
+                            }
+                            tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_NOTIFY_SOUND ||
                                    ud == (APTR)TG_MENU_NOTIFY_CHIME) {
                             int changed;
@@ -16491,8 +16642,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (changed) {
                                 state->notify_sound[0] = '\0';
                             } else {
-                                changed = tg_gui_window_pick_sound(state,
-                                    ctx.window, state->notify_sound,
+                                changed = tg_gui_window_pick_file(state,
+                                    ctx.window, "Notification sound",
+                                    state->notify_sound,
                                     sizeof(state->notify_sound));
                             }
                             if (changed) {
@@ -17071,8 +17223,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             value.choice = value.choice == TG_GUI_NOTIFY_RING ?
                                 TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_RING;
                         } else if (it == TG_GUI_CTX_CHAT_SOUND) {
-                            changed = tg_gui_window_pick_sound(state,
-                                ctx.window, value.sound, sizeof(value.sound));
+                            changed = tg_gui_window_pick_file(state,
+                                ctx.window, "Notification sound", value.sound,
+                                sizeof(value.sound));
                         } else if (it == TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
                             value.sound[0] = '\0';
                         }
@@ -17087,6 +17240,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (changed && it == TG_GUI_CTX_CHAT_SOUND) {
                             tg_gui_notify_sound(value.sound);
                         }
+                    } else if (it == TG_GUI_CTX_FILE_PLAY && m != 0 &&
+                               m->has_document && m->is_video &&
+                               m->id != 0UL) {
+                        tg_gui_window_video_play(state, &backend, m->id);
                     } else if ((it == TG_GUI_CTX_FILE_OPEN ||
                                 it == TG_GUI_CTX_FILE_SHOW) &&
                                m != 0 && m->has_document && m->id != 0UL) {
@@ -18555,6 +18712,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     if (tdir == 2 && trc == 0) {
                         session_dirty = 1; /* the poll shows the sent file */
                     }
+                    if (tdir != 2 && tg_gui_play_after != 0UL) {
+                        /* the download Play started: now it plays */
+                        tg_gui_play_after = 0UL;
+                        if (trc == 0 && saved[0] != '\0') {
+                            tg_gui_window_play_path(state, &backend, saved);
+                        }
+                    }
                 }
             }
         }
@@ -18955,6 +19119,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     if (tg_gui_session_transfer_busy()) {
         tg_gui_session_transfer_cancel();
         (void)tg_gui_session_transfer_end(0, 0UL);
+        tg_gui_play_after = 0UL;
     }
     tg_gui_window_sendq_close(); /* and the files still waiting their turn */
     /* Quit or iconify: the account is no longer online from here. */
@@ -19418,6 +19583,8 @@ int tg_gui_run_window(tg_gui_state *state)
                                    &state->notify_explicit, state->notify_sound,
                                    sizeof(state->notify_sound));
     state->notify_default_resolved = 0;
+    tg_gui_player_load(TG_GUI_PLAYER_FILE, state->video_player,
+                       sizeof(state->video_player));
     if (state->photo_cache_limit_mb != TG_GUI_PHOTO_CACHE_UNLIMITED_MB &&
         state->photo_cache_limit_mb != 10UL &&
         state->photo_cache_limit_mb != 50UL &&
