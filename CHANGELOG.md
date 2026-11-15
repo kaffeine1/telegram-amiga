@@ -86,6 +86,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   highlighted row still showed the right one. The open chat is now found
   again by who it is after every change of the list; if the list no
   longer has it, a message fails rather than reach someone else.
+- Once the chat list was full (128 chats, 64 on the 68k), a chat that
+  became active afterwards never appeared, not even with Reload chat
+  list (seen on a G5 on 2026-11-15: two busy groups were missing,
+  neither hidden nor archived). Reload chat list only ever added to the
+  list. Telegram sends the chats most recent first, and now, when the
+  list is full, a chat it lacks takes the place of one that Reload did
+  not find among the more recent ones: a hidden chat first, then the
+  last chat in the list that is not pinned, open or archived. The other
+  chats keep their place and number, the Archive keeps its share, and a
+  chat removed from the list here stays out.
 
 ## [0.5] - 2026-11-14
 

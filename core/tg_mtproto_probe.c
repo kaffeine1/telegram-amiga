@@ -9440,6 +9440,13 @@ static struct {
     int has_access_hash;
 } tg_list_peers_cursor;
 
+/* Set while the GUI's Reload chat list pages through the dialogs: before a
+   page is merged into the list it makes room there for the chats the list
+   lacks, and takes out of the page those that are to stay out. Not set
+   anywhere else, where a full list takes no more. */
+static void (*tg_list_peers_make_room)(tg_mtproto_peer_cache *dest,
+                                       tg_mtproto_peer_cache *fresh) = 0;
+
 /* One page of the main dialog list merged into the peer cache file: the
    first page (next = 0), or the one after the page read last (next = 1;
    returns 3 when there is none to ask). */
@@ -9580,6 +9587,15 @@ static int tg_mtproto_list_peers_page(const char *host,
             last->peer_constructor, last->id_hi, last->id_lo,
             last->top_message);
         tg_list_peers_cursor.valid = tg_list_peers_cursor.date != 0UL;
+    }
+    if (tg_list_peers_make_room != 0) {
+        /* With no list yet, the page goes into an empty one, so every chat
+           it brings counts as read in this run. */
+        if (!has_existing_cache) {
+            memset(&existing_cache, 0, sizeof(existing_cache));
+            has_existing_cache = 1;
+        }
+        tg_list_peers_make_room(&existing_cache, &cache);
     }
     if (has_existing_cache) {
         tg_mtproto_merge_peer_cache(&existing_cache, &cache);
@@ -20129,6 +20145,7 @@ static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
 static int tg_gui_pins_join_self_test(void);
 static int tg_gui_follow_open_self_test(void);
+static int tg_gui_reload_room_self_test(void);
 #if !defined(TG_NO_GUI)
 static int tg_gui_drafts_self_test(void);
 static int tg_gui_mentions_self_test(void);
@@ -22361,7 +22378,8 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_gui_pins_self_test() != 0 || tg_gui_pins_join_self_test() != 0 ||
-        tg_gui_follow_open_self_test() != 0) {
+        tg_gui_follow_open_self_test() != 0 ||
+        tg_gui_reload_room_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)
@@ -26452,17 +26470,51 @@ static void tg_gui_session_reload_chats(void)
    one, else of the last chat of the main list that is neither pinned nor
    open: in place, so no other chat changes its number. */
 
-/* The entry of a full list a pinned chat may take, or -1. */
-static long tg_gui_pins_free_slot(const tg_mtproto_peer_cache *cache,
-                                  const char *hidden_path)
+/* Per entry of a list while chats look for a place in it: 1 where the
+   hidden file lists the chat, and 1 where the chat keeps its place (it
+   came in during this run, or Reload chat list has read it from Telegram
+   in this run, so it is more recent than what comes next). Shared by the
+   pins and Reload chat list, which never run one inside the other. */
+static unsigned char tg_gui_list_hidden_mark[TG_MTPROTO_PEER_CACHE_MAX];
+static unsigned char tg_gui_list_keep_mark[TG_MTPROTO_PEER_CACHE_MAX];
+
+/* Marks the entries of `cache` the hidden file lists, reading the file
+   once: read again for every entry, a full list would take long on an
+   Amiga. Keeps nothing yet. */
+static void tg_gui_list_marks_begin(const char *hidden_path,
+                                    const tg_mtproto_peer_cache *cache)
+{
+    FILE *f;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long k;
+
+    memset(tg_gui_list_hidden_mark, 0, sizeof(tg_gui_list_hidden_mark));
+    memset(tg_gui_list_keep_mark, 0, sizeof(tg_gui_list_keep_mark));
+    f = hidden_path != 0 ? fopen(hidden_path, "r") : 0;
+    if (f == 0) {
+        return;
+    }
+    while (fscanf(f, "%lx %lx", &hi, &lo) == 2) {
+        for (k = 0UL; k < cache->count; ++k) {
+            if (!cache->entries[k].is_self && cache->entries[k].id_hi == hi &&
+                cache->entries[k].id_lo == lo) {
+                tg_gui_list_hidden_mark[k] = 1U;
+            }
+        }
+    }
+    fclose(f);
+}
+
+/* The entry of a full list a chat may take, or -1: a hidden chat's, else
+   the last chat of the main list that is not pinned, not open and does not
+   keep its place. */
+static long tg_gui_list_free_slot(const tg_mtproto_peer_cache *cache)
 {
     long k;
 
     for (k = (long)cache->count - 1L; k >= 0L; --k) {
-        const tg_mtproto_peer_cache_entry *e = &cache->entries[k];
-
-        if (!e->is_self &&
-            tg_gui_hidden_contains_file(hidden_path, e->id_hi, e->id_lo)) {
+        if (tg_gui_list_hidden_mark[k] && !cache->entries[k].is_self) {
             return k;
         }
     }
@@ -26471,7 +26523,7 @@ static long tg_gui_pins_free_slot(const tg_mtproto_peer_cache *cache,
         int is_user = e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
         int p;
 
-        if (e->is_self ||
+        if (e->is_self || tg_gui_list_keep_mark[k] ||
             tg_gui_archived_find(is_user, e->id_hi, e->id_lo) >= 0 ||
             (e->peer_constructor ==
                  tg_gui_session_state.open_peer_constructor &&
@@ -26493,6 +26545,15 @@ static long tg_gui_pins_free_slot(const tg_mtproto_peer_cache *cache,
     return -1L;
 }
 
+/* Puts entry `e` into the place `slot` of `cache`, which it keeps. */
+static void tg_gui_list_put(tg_mtproto_peer_cache *cache, long slot,
+                            const tg_mtproto_peer_cache_entry *e)
+{
+    cache->entries[slot] = *e;
+    tg_gui_list_hidden_mark[slot] = 0U;
+    tg_gui_list_keep_mark[slot] = 1U;
+}
+
 /* Puts into `cache` the pinned chats of `fresh` (the answer of
    getPinnedDialogs, read as a chat list) that it does not have. The
    number of chats put in. */
@@ -26504,6 +26565,7 @@ static int tg_gui_pins_join_cache(tg_mtproto_peer_cache *cache,
     unsigned long k;
     int joined = 0;
 
+    tg_gui_list_marks_begin(hidden_path, cache);
     for (i = 0UL; i < fresh->count; ++i) {
         const tg_mtproto_peer_cache_entry *e = &fresh->entries[i];
         long slot;
@@ -26529,15 +26591,13 @@ static int tg_gui_pins_join_cache(tg_mtproto_peer_cache *cache,
         if (self) {
             continue;
         }
-        if (cache->count < TG_MTPROTO_PEER_CACHE_MAX) {
-            cache->entries[cache->count++] = *e;
-        } else {
-            slot = tg_gui_pins_free_slot(cache, hidden_path);
-            if (slot < 0L) {
-                continue;
-            }
-            cache->entries[slot] = *e;
+        slot = cache->count < TG_MTPROTO_PEER_CACHE_MAX
+                   ? (long)cache->count++
+                   : tg_gui_list_free_slot(cache);
+        if (slot < 0L) {
+            continue;
         }
+        tg_gui_list_put(cache, slot, e);
         ++joined;
     }
     if (joined > 0) {
@@ -26579,6 +26639,163 @@ static int tg_gui_pins_join_list(const tg_mtproto_rpc_result *result)
     return 1;
 #undef fresh
 #undef cache
+}
+
+/* --- Reload chat list with a full list ------------------------------------
+   The list kept here holds TG_MTPROTO_PEER_CACHE_MAX chats at most (128, 64
+   on the 68k), and Reload chat list only added to it: once it was full, a
+   chat that came alive afterwards never showed, Reload or not (seen on a G5
+   on 2026-11-15: two busy groups missing, neither hidden nor archived).
+   Telegram sends the dialogs most recent first. While Reload pages through
+   them, a chat the list lacks takes, when the list is full (or full but
+   for the Archive's share), the place of a chat this run has not read: a
+   hidden one first, else the last of the main list that is not pinned,
+   open or archived. In place, so no other chat changes its number; the
+   chats that come in with one page take the freed places in the order
+   Telegram sent them. A chat removed here stays out. When a chat finds no
+   place, the older ones after it would find none either: the paging
+   stops. */
+static tg_gui_archived_peer tg_gui_reload_seen[TG_MTPROTO_PEER_CACHE_MAX];
+static unsigned long tg_gui_reload_seen_n = 0UL;
+/* The places and the entries of a page are kept in bytes below. */
+typedef char tg_gui_reload_places_fit[TG_MTPROTO_PEER_CACHE_MAX <= 256U ? 1
+                                                                        : -1];
+static int tg_gui_reload_full = 0; /* a chat of this run found no place */
+
+static int tg_gui_reload_was_seen(const tg_mtproto_peer_cache_entry *e)
+{
+    int is_user = e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    unsigned long k;
+
+    for (k = 0UL; k < tg_gui_reload_seen_n; ++k) {
+        if (tg_gui_reload_seen[k].is_user == is_user &&
+            tg_gui_reload_seen[k].id_hi == e->id_hi &&
+            tg_gui_reload_seen[k].id_lo == e->id_lo) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void tg_gui_reload_remember(const tg_mtproto_peer_cache_entry *e)
+{
+    if (tg_gui_reload_seen_n < TG_MTPROTO_PEER_CACHE_MAX &&
+        !tg_gui_reload_was_seen(e)) {
+        tg_gui_reload_seen[tg_gui_reload_seen_n].is_user =
+            e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        tg_gui_reload_seen[tg_gui_reload_seen_n].id_hi = e->id_hi;
+        tg_gui_reload_seen[tg_gui_reload_seen_n].id_lo = e->id_lo;
+        ++tg_gui_reload_seen_n;
+    }
+}
+
+/* One page of dialogs (`fresh`) about to be merged into the list (`dest`):
+   the chats the list lacks are put in, where there is room or in a freed
+   place, and those that are to stay out (hidden here, or with no place)
+   leave the page, so the merge after only refreshes what the list has. */
+static void tg_gui_reload_make_room_in(tg_mtproto_peer_cache *dest,
+                                       tg_mtproto_peer_cache *fresh,
+                                       const char *hidden_path)
+{
+    /* Which entry of the page went to which place, and what leaves it. */
+    static unsigned char from[TG_MTPROTO_PEER_CACHE_MAX];
+    static unsigned char slots[TG_MTPROTO_PEER_CACHE_MAX];
+    static unsigned char leaves[TG_MTPROTO_PEER_CACHE_MAX];
+    unsigned long placed = 0UL;
+    unsigned long reserve;
+    unsigned long main_n = 0UL;
+    unsigned long out_n;
+    unsigned long i;
+    unsigned long k;
+
+    reserve = (unsigned long)tg_gui_session_archived_count();
+    if (reserve > TG_GUI_ARCHIVE_SHOWN_MAX) {
+        reserve = TG_GUI_ARCHIVE_SHOWN_MAX;
+    }
+    tg_gui_list_marks_begin(hidden_path, dest);
+    for (k = 0UL; k < dest->count; ++k) {
+        const tg_mtproto_peer_cache_entry *e = &dest->entries[k];
+
+        if (tg_gui_archived_find(e->peer_constructor ==
+                                     TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                 e->id_hi, e->id_lo) < 0) {
+            ++main_n;
+        }
+        tg_gui_list_keep_mark[k] = (unsigned char)tg_gui_reload_was_seen(e);
+    }
+    memset(leaves, 0, sizeof(leaves));
+    for (i = 0UL; i < fresh->count && i < TG_MTPROTO_PEER_CACHE_MAX; ++i) {
+        const tg_mtproto_peer_cache_entry *e = &fresh->entries[i];
+        tg_mtproto_peer_cache_entry *had;
+        long slot;
+
+        if (!e->from_dialog || e->is_self || e->folder_id == 1UL ||
+            !tg_mtproto_peer_cache_entry_is_openable(e)) {
+            continue; /* the merge does with it what it always did */
+        }
+        had = tg_mtproto_peer_cache_find_local(dest, e->peer_constructor,
+                                               e->id_hi, e->id_lo);
+        if (had != 0) {
+            tg_gui_list_keep_mark[had - dest->entries] = 1U;
+            tg_gui_reload_remember(e);
+            continue;
+        }
+        if (tg_gui_hidden_contains_file(hidden_path, e->id_hi, e->id_lo)) {
+            leaves[i] = 1U;
+            continue;
+        }
+        if (dest->count < TG_MTPROTO_PEER_CACHE_MAX &&
+            main_n + reserve < TG_MTPROTO_PEER_CACHE_MAX) {
+            slot = (long)dest->count++;
+            ++main_n;
+        } else {
+            slot = tg_gui_list_free_slot(dest);
+        }
+        if (slot < 0L) {
+            leaves[i] = 1U;
+            tg_gui_reload_full = 1;
+            dest->truncated = 1;
+            continue;
+        }
+        tg_gui_list_put(dest, slot, e);
+        tg_gui_reload_remember(e);
+        from[placed] = (unsigned char)i;
+        slots[placed] = (unsigned char)slot;
+        ++placed;
+    }
+    /* The places taken, top first, to the chats in Telegram's order. */
+    for (i = 1UL; i < placed; ++i) {
+        unsigned char s = slots[i];
+
+        for (k = i; k > 0UL && slots[k - 1UL] > s; --k) {
+            slots[k] = slots[k - 1UL];
+        }
+        slots[k] = s;
+    }
+    for (i = 0UL; i < placed; ++i) {
+        dest->entries[slots[i]] = fresh->entries[from[i]];
+    }
+    out_n = 0UL;
+    for (i = 0UL; i < fresh->count; ++i) {
+        if (i < TG_MTPROTO_PEER_CACHE_MAX && leaves[i]) {
+            continue;
+        }
+        if (out_n != i) {
+            fresh->entries[out_n] = fresh->entries[i];
+        }
+        ++out_n;
+    }
+    fresh->count = out_n;
+    if (placed > 0UL) {
+        tg_mtproto_recount_peer_cache(dest);
+    }
+    tg_mtproto_recount_peer_cache(fresh);
+}
+
+static void tg_gui_reload_make_room(tg_mtproto_peer_cache *dest,
+                                    tg_mtproto_peer_cache *fresh)
+{
+    tg_gui_reload_make_room_in(dest, fresh, TG_GUI_HIDDEN_FILE);
 }
 
 #if !defined(TG_NO_SELFTEST)
@@ -26697,6 +26914,176 @@ static int tg_gui_pins_join_self_test(void)
     }
     return 0;
 #undef cache
+#undef fresh
+}
+
+/* Reload chat list makes room in a full list: with room a new chat is
+   added and a hidden one is not; full, the new chats of a page take a
+   hidden chat's place, then the last places neither pinned nor open, in
+   Telegram's order from the top; a chat read earlier in the run keeps its
+   place; with nothing left to give the chat leaves the page and the run
+   stops; the Archive's share is not taken. */
+static int tg_gui_reload_room_self_test(void)
+{
+#define dest tg_peer_work_a /* scratch: see tg_peer_work_a */
+#define fresh tg_peer_work_b /* scratch: see tg_peer_work_a */
+    static const char hidden[] = "tg-reload-hidden-test.txt";
+    tg_gui_pin saved_pins[2];
+    int saved_pin_count = tg_gui_pin_count;
+    int saved_arch_n = tg_gui_archived_count;
+    int saved_arch_loaded = tg_gui_archived_loaded;
+    tg_gui_archived_peer saved_arch0 = tg_gui_archived[0];
+    unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+    unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+    unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+    unsigned long max = TG_MTPROTO_PEER_CACHE_MAX;
+    unsigned long k;
+    FILE *f;
+    int ok;
+
+    memcpy(saved_pins, tg_gui_pins, sizeof(saved_pins));
+    f = fopen(hidden, "w");
+    if (f == 0) {
+        puts("probe self-test: no room for the hidden-chats test file");
+        return 2;
+    }
+    fprintf(f, "%08lx %08lx\n%08lx %08lx\n", 0UL, 50UL, 0UL, 1005UL);
+    fclose(f);
+    tg_gui_archived_loaded = 1;
+    tg_gui_archived_count = 0;
+    tg_gui_pin_count = 0;
+    tg_gui_session_state.open_peer_constructor = 0UL;
+    tg_gui_reload_seen_n = 0UL;
+    tg_gui_reload_full = 0;
+
+    /* Room: the account and two chats; a known chat, a new user, a hidden
+       group, an archived channel. */
+    memset(&dest, 0, sizeof(dest));
+    dest.entries[0].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    dest.entries[0].id_lo = 1UL;
+    dest.entries[0].is_self = 1;
+    dest.entries[1].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    dest.entries[1].id_lo = 10UL;
+    dest.entries[2].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    dest.entries[2].id_lo = 20UL;
+    dest.count = 3UL;
+    memset(&fresh, 0, sizeof(fresh));
+    for (k = 0UL; k < 4UL; ++k) {
+        fresh.entries[k].from_dialog = 1;
+        fresh.entries[k].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    }
+    fresh.entries[0].id_lo = 20UL;                 /* known */
+    fresh.entries[1].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    fresh.entries[1].has_access_hash = 1;
+    fresh.entries[1].id_lo = 40UL;                 /* new */
+    fresh.entries[2].id_lo = 50UL;                 /* hidden */
+    fresh.entries[3].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    fresh.entries[3].has_access_hash = 1;
+    fresh.entries[3].id_lo = 60UL;                 /* in the Archive */
+    fresh.entries[3].folder_id = 1UL;
+    fresh.count = 4UL;
+    tg_gui_reload_make_room_in(&dest, &fresh, hidden);
+    ok = dest.count == 4UL && dest.entries[3].id_lo == 40UL &&
+         fresh.count == 3UL && fresh.entries[0].id_lo == 20UL &&
+         fresh.entries[1].id_lo == 40UL && fresh.entries[2].id_lo == 60UL &&
+         tg_gui_reload_seen_n == 2UL && !tg_gui_reload_full;
+
+    /* Full: the account, then groups 1001.. in order; 1005 hidden, the
+       last pinned, the one before it open. A page of a known group and
+       three new users. */
+    memset(&dest, 0, sizeof(dest));
+    dest.entries[0].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    dest.entries[0].id_lo = 1UL;
+    dest.entries[0].is_self = 1;
+    for (k = 1UL; k < max; ++k) {
+        dest.entries[k].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+        dest.entries[k].id_lo = 1000UL + k;
+    }
+    dest.count = max;
+    tg_gui_pin_count = 1;
+    tg_gui_pins[0].is_user = 0;
+    tg_gui_pins[0].id_hi = 0UL;
+    tg_gui_pins[0].id_lo = 1000UL + max - 1UL;
+    tg_gui_session_state.open_peer_constructor =
+        TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    tg_gui_session_state.open_peer_id_hi = 0UL;
+    tg_gui_session_state.open_peer_id_lo = 1000UL + max - 2UL;
+    tg_gui_reload_seen_n = 0UL;
+    memset(&fresh, 0, sizeof(fresh));
+    for (k = 0UL; k < 4UL; ++k) {
+        fresh.entries[k].from_dialog = 1;
+        fresh.entries[k].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        fresh.entries[k].has_access_hash = 1;
+        fresh.entries[k].id_lo = 30UL + k;
+    }
+    fresh.entries[0].peer_constructor = TG_MTPROTO_PEER_CHAT_CONSTRUCTOR;
+    fresh.entries[0].has_access_hash = 0;
+    fresh.entries[0].id_lo = 1000UL + max - 4UL;   /* known, near the end */
+    fresh.count = 4UL;
+    tg_gui_reload_make_room_in(&dest, &fresh, hidden);
+    /* 31 32 33 took 1005's place, then max-3 and max-5 (max-4 is the
+       known one), top first. */
+    ok = ok && dest.count == max && fresh.count == 4UL &&
+         dest.entries[5].id_lo == 31UL &&
+         dest.entries[max - 5UL].id_lo == 32UL &&
+         dest.entries[max - 3UL].id_lo == 33UL &&
+         dest.entries[max - 4UL].id_lo == 1000UL + max - 4UL &&
+         dest.entries[max - 2UL].id_lo == 1000UL + max - 2UL &&
+         dest.entries[max - 1UL].id_lo == 1000UL + max - 1UL &&
+         dest.entries[0].is_self && !tg_gui_reload_full;
+    /* The next page: what came in before keeps its place. */
+    fresh.entries[0] = fresh.entries[1];
+    fresh.entries[0].id_lo = 34UL;
+    fresh.count = 1UL;
+    tg_gui_reload_make_room_in(&dest, &fresh, hidden);
+    ok = ok && dest.entries[max - 6UL].id_lo == 34UL &&
+         dest.entries[max - 5UL].id_lo == 32UL &&
+         dest.entries[max - 3UL].id_lo == 33UL && !tg_gui_reload_full;
+    /* Everything read: no place is left, the chat leaves the page. */
+    for (k = 0UL; k < max; ++k) {
+        tg_gui_reload_remember(&dest.entries[k]);
+    }
+    fresh.entries[0].id_lo = 35UL;
+    fresh.count = 1UL;
+    tg_gui_reload_make_room_in(&dest, &fresh, hidden);
+    ok = ok && tg_gui_reload_full && fresh.count == 0UL &&
+         tg_mtproto_peer_cache_find_local(
+             &dest, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 35UL) == 0;
+
+    /* Room in the file but the Archive's share taken: a new chat takes a
+       place instead of adding one. */
+    remove(hidden);
+    tg_gui_reload_seen_n = 0UL;
+    tg_gui_reload_full = 0;
+    tg_gui_pin_count = 0;
+    tg_gui_session_state.open_peer_constructor = 0UL;
+    dest.count = max - 1UL;
+    tg_gui_archived_count = 1;
+    tg_gui_archived[0].is_user = 1;
+    tg_gui_archived[0].id_hi = 0UL;
+    tg_gui_archived[0].id_lo = 90000UL;
+    fresh.entries[0].id_lo = 36UL;
+    fresh.count = 1UL;
+    tg_gui_reload_make_room_in(&dest, &fresh, hidden);
+    ok = ok && dest.count == max - 1UL &&
+         dest.entries[max - 2UL].id_lo == 36UL && !tg_gui_reload_full;
+
+    memcpy(tg_gui_pins, saved_pins, sizeof(saved_pins));
+    tg_gui_pin_count = saved_pin_count;
+    tg_gui_archived[0] = saved_arch0;
+    tg_gui_archived_count = saved_arch_n;
+    tg_gui_archived_loaded = saved_arch_loaded;
+    tg_gui_session_state.open_peer_constructor = saved_pc;
+    tg_gui_session_state.open_peer_id_hi = saved_hi;
+    tg_gui_session_state.open_peer_id_lo = saved_lo;
+    tg_gui_reload_seen_n = 0UL;
+    tg_gui_reload_full = 0;
+    if (!ok) {
+        puts("probe self-test: Reload chat list makes no room in a full list");
+        return 2;
+    }
+    return 0;
+#undef dest
 #undef fresh
 }
 
@@ -27197,49 +27584,25 @@ int tg_gui_session_reload_chat_list(FILE *stream)
 
         q = tg_mtproto_open_quiet_stream(stream);
         /* Page after page until the end of the list, the page budget or a
-           full cache. A page of chats already known does not stop it: the
-           new ones may be further down. */
+           chat that finds no place (the list is full of chats more recent
+           than it, see tg_gui_reload_make_room_in; the Archive's share of
+           the list stays free for it). A page of chats already known does
+           not stop it: the new ones may be further down. */
+        tg_gui_reload_seen_n = 0UL;
+        tg_gui_reload_full = 0;
+        tg_list_peers_make_room = tg_gui_reload_make_room;
         for (iter = 0; iter < TG_GUI_RELOAD_PAGES; ++iter) {
             if (tg_mtproto_list_peers_paged(
                     iter, tg_gui_session_state.host,
                     tg_gui_session_state.api_file,
                     tg_gui_session_state.auth_file,
                     tg_gui_session_state.dc_id_text, TG_GUI_RELOAD_PAGE,
-                    tg_gui_session_state.peer_cache_file, q) != 0) {
+                    tg_gui_session_state.peer_cache_file, q) != 0 ||
+                tg_gui_reload_full) {
                 break; /* keep whatever pages landed */
             }
-            if (tg_mtproto_load_peer_cache_file(
-                    tg_gui_session_state.peer_cache_file,
-                    &tg_gui_probe_cache) != 0 ||
-                tg_gui_probe_cache.count >= TG_MTPROTO_PEER_CACHE_MAX) {
-                break;
-            }
-            /* The Archive's share of the cache stays free for it. */
-            {
-                unsigned long reserve =
-                    (unsigned long)tg_gui_session_archived_count();
-                unsigned long main_n = 0UL;
-                unsigned long k;
-
-                if (reserve > TG_GUI_ARCHIVE_SHOWN_MAX) {
-                    reserve = TG_GUI_ARCHIVE_SHOWN_MAX;
-                }
-                for (k = 0UL; k < tg_gui_probe_cache.count; ++k) {
-                    const tg_mtproto_peer_cache_entry *e =
-                        &tg_gui_probe_cache.entries[k];
-
-                    if (tg_gui_archived_find(
-                            e->peer_constructor ==
-                                TG_MTPROTO_PEER_USER_CONSTRUCTOR,
-                            e->id_hi, e->id_lo) < 0) {
-                        ++main_n;
-                    }
-                }
-                if (main_n + reserve >= TG_MTPROTO_PEER_CACHE_MAX) {
-                    break;
-                }
-            }
         }
+        tg_list_peers_make_room = 0;
         tg_mtproto_close_quiet_stream(q, stream);
         (void)tg_gui_session_fetch_pins(stream); /* pins changed elsewhere */
         (void)tg_gui_session_fetch_marks(stream); /* and the unread marks */
