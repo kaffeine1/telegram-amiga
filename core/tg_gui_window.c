@@ -14321,6 +14321,10 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
 
         tg_gui_set_stickers(state, tg_gui_stickers_pressed(state));
         if (state->stickers) {
+            /* Asked again, not remembered: a datatype installed from
+               outside since the last answer (Aminet, Easy2Install, its
+               Install script) is seen without restarting. */
+            tg_image_dt_forget_webp();
             state->sticker_can = tg_image_dt_reads_webp();
             /* no datatype: this program's own is offered, where it can be */
             offer = !state->sticker_can && tg_gui_window_webp_offer_ready();

@@ -359,6 +359,11 @@ int tg_image_dt_reads_webp(void)
     return tg_image_dt_webp_known;
 }
 
+void tg_image_dt_forget_webp(void)
+{
+    tg_image_dt_webp_known = -1;
+}
+
 int tg_image_dt_truecolor(void)
 {
     /* opened by its version alone: nothing of it is called from here */
@@ -421,6 +426,10 @@ int tg_image_dt_decode_rgb(const char *path, unsigned long background,
 int tg_image_dt_reads_webp(void)
 {
     return 0;
+}
+
+void tg_image_dt_forget_webp(void)
+{
 }
 
 int tg_image_dt_truecolor(void)

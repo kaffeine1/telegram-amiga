@@ -96,6 +96,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   last chat in the list that is not pinned, open or archived. The other
   chats keep their place and number, the Archive keeps its share, and a
   chat removed from the list here stays out.
+- A WEBP datatype installed from outside while Amigram was open (from
+  Aminet, with Easy2Install or its Install script) was not seen until
+  Amigram was started again. Amigram asked the system once whether it
+  reads WEBP and kept the answer, so turning "Sticker pictures" off and
+  on offered Amigram's own datatype again, whose Install then stopped
+  at "A file is already there". Turning the line on now asks the system
+  again. The datatype installed from the settings was already seen at
+  once, and still is.
 
 ## [0.5] - 2026-11-14
 

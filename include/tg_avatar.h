@@ -142,9 +142,12 @@ int tg_image_canonical_cache_read(const char *path,
 #define TG_IMAGE_DT_EDGE_MAX 1024
 int tg_image_dt_decode_rgb(const char *path, unsigned long background,
                            unsigned char **rgb_out, int *w_out, int *h_out);
-/* 1 when this machine has a datatype that reads WEBP. Asked once: a tiny
-   WEBP is written to data/ and opened. */
+/* 1 when this machine has a datatype that reads WEBP. Asked once, until
+   forgotten: a tiny WEBP is written to data/ and opened. */
 int tg_image_dt_reads_webp(void);
+/* Forgets what tg_image_dt_reads_webp() learned, so that it asks again:
+   a datatype may have been installed from outside since. */
+void tg_image_dt_forget_webp(void);
 /* 1 when the system's picture.datatype keeps true-colour pixels (V43 or
    later): without it no datatype can hand a picture to this program. */
 int tg_image_dt_truecolor(void);
