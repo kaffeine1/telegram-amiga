@@ -3,14 +3,16 @@ Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# Amigram - Unofficial Telegram Amiga Client
+# Amigram
 
-Called TelegramAmiga up to 0.0.99. A native Telegram client for AmigaOS 3,
-AmigaOS 4, MorphOS and AROS, written from scratch in C on Telegram's
-MTProto protocol. You log in with a normal Telegram account. It needs no
-MUI, no ixemul and no AmiSSL: the cryptography is built in.
+The first native Telegram client for the Amiga: AmigaOS 3, AmigaOS 4,
+MorphOS and AROS, written from scratch in C on Telegram's MTProto
+protocol. Called TelegramAmiga up to 0.0.99. You log in with a normal
+Telegram account. It needs no MUI, no ixemul and no AmiSSL: the
+cryptography is built in.
 
-It uses the Telegram API but is not made by Telegram.
+It uses the Telegram API and is part of the Telegram ecosystem, but it is
+not made by Telegram.
 
 One engine, two clients: a window drawn with Intuition and GadTools, and
 a text client for the Shell, which also runs on a plain 68000.

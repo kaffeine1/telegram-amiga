@@ -106,12 +106,18 @@ APP_NAME=Amigram
 PREV_NAME=${PREV_NAME:-Amigram}
 prev_lower=$(printf '%s' "$PREV_NAME" | tr 'A-Z' 'a-z')
 app_lower=$(printf '%s' "$APP_NAME" | tr 'A-Z' 'a-z')
-# The line that follows the name wherever we publish, so that whoever knew the
-# old name still recognises the program: "Amigram - Unofficial Telegram Amiga
-# Client". Telegram's terms (2.3) allow the word Telegram in a title only
-# after "Unofficial". Kept for the first releases after the rename; set it
-# empty to drop it, and every title falls back to the name alone.
-TAGLINE=${TAGLINE-Unofficial Telegram Amiga Client}
+# A line after the name in every title (readmes, manuals, Aminet Short,
+# OS4Depot and AROS Archives descriptions). Up to 0.5 it was "Unofficial
+# Telegram Amiga Client", so that whoever knew the old name still recognised
+# the program; by then the name was known and it went: empty, every title is
+# the name alone. Telegram's terms (2.3) allow the word Telegram in a title
+# only after "Unofficial", so a line set here again must say it.
+TAGLINE=${TAGLINE-}
+# What the program is, where the channels take one short line: Aminet's
+# Short: (at most 40 characters), the OS4Depot and AROS Archives
+# descriptions. The texts open with the long form, "The first native
+# Telegram client for the Amiga". Not a title, so the word Telegram is free.
+SHORT_DESC="First native Telegram client for Amiga"
 if [ -n "$TAGLINE" ]; then
     APP_TITLE="$APP_NAME - $TAGLINE"
 else
@@ -558,8 +564,9 @@ $APP_TITLE
 $(printf '%s' "$APP_TITLE" | tr -c '\n' '=')
 $2 - $CHANNEL $VERSION
 
-A native Telegram client, written from scratch. No MUI, no ixemul, no
-AmiSSL. It uses the Telegram API but is not made by Telegram.
+The first native Telegram client for the Amiga, written from scratch. No
+MUI, no ixemul, no AmiSSL. It uses the Telegram API and is part of the
+Telegram ecosystem, but it is not made by Telegram.
 
 $readme_programs
 
@@ -1193,10 +1200,11 @@ User manual
 Platform: $2
 Version: $VERSION   Build: $COMMIT_ID
 
-A native Telegram client written from scratch on Telegram's MTProto
-protocol. You log in with a normal Telegram account. It needs no MUI, no
-ixemul and no AmiSSL: the cryptography is built in. It uses the Telegram
-API but is not made by Telegram.
+The first native Telegram client for the Amiga, written from scratch on
+Telegram's MTProto protocol. You log in with a normal Telegram account.
+It needs no MUI, no ixemul and no AmiSSL: the cryptography is built in.
+It uses the Telegram API and is part of the Telegram ecosystem, but it is
+not made by Telegram.
 
 System requirements
 -------------------
@@ -1274,10 +1282,11 @@ Manuale
 Piattaforma: $2
 Versione: $VERSION   Build: $COMMIT_ID
 
-Un client Telegram nativo, scritto da zero sul protocollo MTProto di
-Telegram. Accedi con un normale account Telegram. Non servono MUI, ixemul
-o AmiSSL: la crittografia e' integrata. Usa le API di Telegram ma non e'
-fatto da Telegram.
+Il primo client Telegram nativo per Amiga, scritto da zero sul protocollo
+MTProto di Telegram. Accedi con un normale account Telegram. Non servono
+MUI, ixemul o AmiSSL: la crittografia e' integrata. Usa le API di
+Telegram e fa parte dell'ecosistema Telegram, ma non e' fatto da
+Telegram.
 
 Requisiti di sistema
 --------------------
@@ -1360,9 +1369,9 @@ EOF
 # still passed with them in September 2026).
 aminet_meta() {
     aminet_upload=1 # 0 = the lha is built for The AROS Archives only
-    # Short: is at most 40 characters: the tagline fits (32), the name is
-    # the archive's own file name anyway.
-    aminet_short=${TAGLINE:-Native Telegram chat client}
+    # Short: is at most 40 characters (SHORT_DESC is 38); the name is the
+    # archive's own file name anyway.
+    aminet_short=${TAGLINE:-$SHORT_DESC}
     aminet_kind=full
     case "$1" in
     amigaos3)    archtag="m68k-amigaos"; archval="m68k-amigaos >= 3.0.0"
@@ -1547,16 +1556,15 @@ Requires:     $requires
 
 WHAT IS THIS?
 -------------
-$APP_TITLE.
+$APP_NAME is the first native Telegram client for the Amiga, written
+from scratch on Telegram's own MTProto protocol: no gateway, no proxy, no
+web page. You sign in with your normal Telegram account. The
+cryptography (RSA, Diffie-Hellman, AES, SHA and the SRP login for 2FA) is
+built in, so it needs no MUI, no ixemul.library and no AmiSSL, only the
+system's bsdsocket stack.
 
-A native Telegram client for the Amiga, written from scratch on
-Telegram's own MTProto protocol: no gateway, no proxy, no web page. You
-sign in with your normal Telegram account. The cryptography (RSA,
-Diffie-Hellman, AES, SHA and the SRP login for 2FA) is built in, so it
-needs no MUI, no ixemul.library and no AmiSSL, only the system's
-bsdsocket stack.
-
-Unofficial: it uses the Telegram API but is not made by Telegram.
+It uses the Telegram API and is part of the Telegram ecosystem, but it is
+not made by Telegram.
 
 $aminet_programs
 
@@ -1852,7 +1860,7 @@ if [ "$AMINET" = "1" ] && [ -f "$AMINET_ROOT/$APP_NAME-OS4.lha" ]; then
     cp "$AMINET_ROOT/$APP_NAME-OS4.lha" "$OS4DEPOT_ROOT/$app_lower.lha"
     {
         printf 'name:%s\n' "$APP_NAME"
-        printf 'description:%s\n' "${TAGLINE:-Native MTProto Telegram chat client}"
+        printf 'description:%s\n' "${TAGLINE:-$SHORT_DESC}"
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'
@@ -1907,7 +1915,7 @@ write_arosarchives_pair() {
     cp "$aa_src" "$AROSARCHIVES_ROOT/$2.lha"
     {
         printf 'name:%s\n' "$APP_NAME"
-        printf 'description:%s\n' "${TAGLINE:-Native MTProto Telegram chat client}"
+        printf 'description:%s\n' "${TAGLINE:-$SHORT_DESC}"
         printf 'version:%s\n' "$VERSION"
         printf 'author:Michele Dipace\n'
         printf 'submitter:Michele Dipace\n'

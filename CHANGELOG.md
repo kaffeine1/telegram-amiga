@@ -40,6 +40,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   and Insert emoji... The Amigram menu keeps Iconify, Settings...,
   About..., Help..., Support development... and Quit. Every shortcut is
   the same as before.
+- The line "Unofficial Telegram Amiga Client" after the name is gone.
+  It was there for the first releases after the rename, for whoever knew
+  the old name. The About window, the login screen, the text client, the
+  readmes, the manuals and the archive descriptions now carry the name
+  alone. The descriptions open with what the program is: the first
+  native Telegram client for the Amiga. The sentence that it uses the
+  Telegram API and is part of the Telegram ecosystem, but is not made by
+  Telegram, stays.
 
 ### Fixed
 - A picture whose name does not end in .jpg or .png could not be sent

@@ -1972,6 +1972,13 @@ Archives descriptions, the GitHub release titles and the README; the
 packaging keeps it in one variable, TAGLINE, so dropping it later is one
 line.
 
+After 0.5 the line went: the new name was known by then. From the
+release after it every title is the name alone, and the descriptions
+open with what the program is, the first native Telegram client for the
+Amiga ("First native Telegram client for Amiga" where a channel takes a
+40-character line). That is a description, not a title, so the word
+Telegram needs no qualifier there. The sentence 2.2 asks for stays.
+
 One part is not in the code: the name Telegram's login notice and the
 active sessions list show ("TelegramAmiga 0.0.99 on MorphOS") is the
 title of the app registered with the api_id on my.telegram.org. It is

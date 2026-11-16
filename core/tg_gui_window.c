@@ -7579,12 +7579,12 @@ static void tg_gui_menu_set_photo_cache_limit(struct Menu *menu,
 }
 
 static const char tg_gui_about_text[] =
-    TG_APP_FULL_TITLE "\n"
+    TG_APP_TITLE "\n"
     TG_VERSION_CHANNEL " " TG_VERSION "  (built " __DATE__ ")\n\n"
-    "A native client for AmigaOS, MorphOS and AROS.\n"
-    "Unofficial: it uses the Telegram API and is\n"
-    "part of the Telegram ecosystem, but it is not\n"
-    "made by Telegram.\n\n"
+    "The first native Telegram client for AmigaOS,\n"
+    "MorphOS and AROS. It uses the Telegram API and\n"
+    "is part of the Telegram ecosystem, but it is\n"
+    "not made by Telegram.\n\n"
     "by Michele Dipace\n"
     "michele.dipace@kaffeine.net\n\n"
     "Contributions: Javier de las Rivas (javierdlr)\n"

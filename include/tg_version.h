@@ -33,16 +33,13 @@
 /* The name the program shows as its title: window, screen, About, the login
    screen, the text client. Telegram's API terms (2.3) let an app's title
    carry the word Telegram only after "Unofficial"; Amigram needs no
-   qualifier. The TUI title is also how the platform code finds its console
+   qualifier. Up to 0.5 the first releases under the new name showed it
+   with a line after it, "Unofficial Telegram Amiga Client", for whoever
+   knew the old name; by then the name was known, so it stands alone, and
+   the descriptions (About, readmes, manuals) open with what the program
+   is. The TUI title is also how the platform code finds its console
    window again, so both come from here. */
 #define TG_APP_TITLE TG_APP_NAME
-/* The line after the name for the first releases under it, so that whoever
-   knew the old name still recognises the program: About, the login screen
-   where it fits, the text client's banner. The terms (2.3) allow the word
-   Telegram in a title only after "Unofficial". The packaging writes the same
-   line in the readmes and manuals (TAGLINE in package-human-release.sh). */
-#define TG_APP_TAGLINE "Unofficial Telegram Amiga Client"
-#define TG_APP_FULL_TITLE TG_APP_NAME " - " TG_APP_TAGLINE
 #define TG_APP_TUI_TITLE TG_APP_TITLE " TUI"
 /* The public Telegram channels or groups where releases are announced:
    their usernames, with commas between them ("first,second"; an "@" in
