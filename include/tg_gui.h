@@ -817,6 +817,11 @@ typedef struct tg_gui_state {
     /* Emoji picker (see tg_gui_emoji_open). Recents hold sheet indexes. */
     int emoji_active;
     int emoji_sel;        /* highlighted cell: recents first, then the sheet */
+    /* The arrows have shown the highlight since the panel opened or since
+       the last pick: ENTER inserts that glyph. Otherwise no cell is
+       highlighted and ENTER sends, as in the official clients; a click
+       inserts without it. */
+    int emoji_keyed;
     int emoji_recent_count;
     unsigned short emoji_recent[12];
     int mention_start;

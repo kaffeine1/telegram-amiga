@@ -53,6 +53,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   colour of an incoming message, lined up with the messages, with the
   stripe a selected message has. On a four-colour screen it was black on
   black; the frame shows there too.
+- ENTER sends while the emoji panel is open, as in the official
+  clients. A click on a glyph puts it in the text; after that ENTER
+  inserted the same glyph again and the message only went with Send (a
+  tester reported it). Now no cell is highlighted until an arrow key
+  shows the highlight, and only then does ENTER insert that glyph. After
+  each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
 - A picture whose name does not end in .jpg or .png could not be sent

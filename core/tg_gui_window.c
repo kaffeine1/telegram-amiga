@@ -15612,12 +15612,26 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    cancels, BACKSPACE deletes. While the '@' mention popup is
                    up, RETURN/TAB insert the highlighted username instead (the
                    NEXT return sends) and ESC only closes the popup. */
+                if (state->emoji_active && !state->emoji_keyed &&
+                    (msg_code == 13 || msg_code == 10) &&
+                    (msg_qual &
+                     (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) == 0) {
+                    /* No cell highlighted (a click picks, or nothing was
+                       chosen yet): ENTER sends as usual, as in the official
+                       clients, and the panel goes away. It inserted the
+                       last glyph again before, and a tester took that for a
+                       send that did nothing. */
+                    tg_gui_emoji_close(state);
+                }
                 if (state->emoji_active &&
-                    (msg_code == 13 || msg_code == 10 || msg_code == 27)) {
-                    /* The emoji picker owns ENTER and ESC while it is up:
-                       ENTER inserts and keeps the panel open for the next
-                       one, ESC closes it. The arrows are raw keys and are
-                       taken in the raw key chain below. */
+                    (msg_code == 27 ||
+                     ((msg_code == 13 || msg_code == 10) &&
+                      state->emoji_keyed))) {
+                    /* The emoji picker owns ESC while it is up, and ENTER
+                       once the arrows have shown the highlight: ENTER
+                       inserts that glyph and keeps the panel open (the
+                       next ENTER sends), ESC closes it. The arrows are raw
+                       keys and are taken in the raw key chain below. */
                     if (msg_code == 27) {
                         tg_gui_emoji_close(state);
                     } else {

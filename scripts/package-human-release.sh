@@ -754,8 +754,10 @@ Messages
 
 Emoji
 - The smiley next to Send, or "Insert emoji..." (Amiga+E), opens the
-  panel: recent emoji first, then all of them. Arrows move, Enter
-  inserts, Esc closes; a click inserts too.
+  panel: recent emoji first, then all of them. A click inserts an
+  emoji, Enter sends the message, Esc closes. From the keyboard the
+  arrows show a highlight and move it, and Enter inserts the
+  highlighted emoji; after that Enter sends again.
 - With "Settings > Emoticons become emoji", a typed :) :D ;) :P :( :'(
   :O :* <3 or xD becomes its emoji after a space or on sending.
   Backspace right after undoes it.
@@ -1054,8 +1056,10 @@ Messaggi
 
 Emoji
 - La faccina accanto a Send, o "Insert emoji..." (Amiga+E), apre il
-  pannello: prima le emoji recenti, poi tutte. Le frecce si muovono,
-  Invio inserisce, Esc chiude; anche un click inserisce.
+  pannello: prima le emoji recenti, poi tutte. Un click inserisce
+  un'emoji, Invio manda il messaggio, Esc chiude. Da tastiera le
+  frecce mostrano un riquadro e lo spostano, e Invio inserisce l'emoji
+  nel riquadro; dopo, Invio torna a mandare.
 - Con "Settings > Emoticons become emoji", un :) :D ;) :P :( :'( :O :*
   <3 o xD scritto diventa la sua emoji dopo uno spazio o all'invio.
   Backspace subito dopo lo annulla.

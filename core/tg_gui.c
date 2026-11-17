@@ -5297,6 +5297,7 @@ void tg_gui_emoji_open(tg_gui_state *state)
     }
     state->emoji_active = 1;
     state->emoji_sel = 0;
+    state->emoji_keyed = 0;
     state->composing = 1;
     state->mention_active = 0;
     state->mention_count = 0;
@@ -5317,6 +5318,12 @@ void tg_gui_emoji_move(tg_gui_state *state, int dx, int dy)
     int target;
 
     if (state == 0 || !state->emoji_enabled || !state->emoji_active) {
+        return;
+    }
+    /* The first arrow shows the highlight where it is (the first cell, or
+       the glyph just picked) and moves nothing: from then on ENTER inserts. */
+    if (!state->emoji_keyed) {
+        state->emoji_keyed = 1;
         return;
     }
     /* Geometry for a nominal window: only cols matters for movement, and
@@ -5403,14 +5410,17 @@ int tg_gui_emoji_pick(tg_gui_state *state)
     tg_gui_emoji_recent_push(state, glyph);
     tg_gui_emoji_recent_save(state);
     /* The recents row may have grown by one cell, which shifts every sheet
-       cell right by one: keep the highlight on the glyph that was picked, so
-       a second ENTER (or click) repeats it instead of taking its neighbour.
-       A pick from the recents row moved that glyph to the front. */
+       cell right by one: keep the selection on the glyph that was picked, so
+       an arrow and ENTER repeat it instead of taking its neighbour. A pick
+       from the recents row moved that glyph to the front. */
     tg_gui_emoji_geometry(state, tg_gui_emoji_geom_w > 0 ? tg_gui_emoji_geom_w : 640,
                           tg_gui_emoji_geom_h > 0 ? tg_gui_emoji_geom_h : 256,
                           tg_gui_emoji_geom_lh > 0 ? tg_gui_emoji_geom_lh : 8,
                           &geo);
     state->emoji_sel = from_recents ? 0 : geo.recents + (int)glyph;
+    /* The next ENTER sends: it inserted the glyph again, and a tester took
+       it for a send that did nothing. */
+    state->emoji_keyed = 0;
     return 1;
 }
 
@@ -5549,7 +5559,8 @@ static void tg_gui_emoji_paint(const tg_gui_state *state,
         }
         cx = geo.x + 2 + col * geo.cell;
         cy = geo.y + 2 + row * geo.cell;
-        if (cell == state->emoji_sel) {
+        /* Highlighted only while ENTER would insert it. */
+        if (cell == state->emoji_sel && state->emoji_keyed) {
             backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
                                tg_gui_make_rect(cx, cy, geo.cell, geo.cell));
         }
@@ -14253,6 +14264,18 @@ int tg_gui_self_test(void)
                        em_record.min_y, em_record.max_y);
                 return 2;
             }
+            /* No highlight until an arrow shows it, and that first arrow
+               moves nothing: until then ENTER sends. */
+            if (state.emoji_keyed) {
+                puts("gui self-test: emoji panel opened with a highlight");
+                return 2;
+            }
+            tg_gui_emoji_move(&state, 1, 0);
+            if (!state.emoji_keyed || state.emoji_sel != 0) {
+                printf("gui self-test: first emoji arrow (keyed %d, sel %d)\n",
+                       state.emoji_keyed, state.emoji_sel);
+                return 2;
+            }
             tg_gui_emoji_move(&state, 1, 0);
             tg_gui_emoji_move(&state, 0, 1);
             before = state.emoji_sel;
@@ -14260,6 +14283,11 @@ int tg_gui_self_test(void)
                 strlen(state.input) != 2UL || state.emoji_recent_count != 1 ||
                 state.emoji_recent[0] != (unsigned short)before) {
                 puts("gui self-test: emoji pick / recents");
+                return 2;
+            }
+            /* a pick hides the highlight: the next ENTER sends */
+            if (state.emoji_keyed) {
+                puts("gui self-test: emoji highlight kept after a pick");
                 return 2;
             }
             /* the new recents row shifted the sheet by one cell: the
