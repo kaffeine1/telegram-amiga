@@ -6187,7 +6187,10 @@ static void tg_gui_paint_main(const tg_gui_state *state,
         unsigned long label_len;
         int bar_h = tg_gui_native_line_height(backend) + 8;
         int bar_x = sidebar_w + 6;
-        int bar_w = area_x + area_w - bar_x;
+        /* Out to the window's edge, over the scrollbar's column (the
+           scrollbar starts below the bar): the bar belongs to the window,
+           and it no longer lines up with the messages under it. */
+        int bar_w = width - 6 - bar_x;
 
         /* Several pins: which one this is, "Pinned 2/5: ". */
         if (state->pinned_count > 1 && state->pinned_index >= 1 &&
@@ -6202,24 +6205,40 @@ static void tg_gui_paint_main(const tg_gui_state *state,
         if (y + bar_h + 2 * lh < transcript_bottom && bar_w > 60) {
             int base = tg_gui_navigation_baseline(backend, y, bar_h);
             int label_w = backend->text_width(backend, label, label_len);
-            int tx = bar_x + 9;
+            int tx = bar_x + 10;
 
+            /* A frame of one-pixel lines round the fill, the accent stripe
+               inside it. Without the frame the bar was the incoming
+               bubble's colour, lined up with the messages, with the stripe
+               a selected message has, and it read as one more message in
+               the chat (a tester reported it). */
             backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                                tg_gui_make_rect(bar_x, y, bar_w, bar_h));
+            backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                               tg_gui_make_rect(bar_x, y, bar_w, 1));
+            backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                               tg_gui_make_rect(bar_x, y + bar_h - 1, bar_w,
+                                                1));
+            backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                               tg_gui_make_rect(bar_x, y, 1, bar_h));
+            backend->fill_rect(backend, TG_GUI_PEN_TEXT_DIM,
+                               tg_gui_make_rect(bar_x + bar_w - 1, y, 1,
+                                                bar_h));
             backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
-                               tg_gui_make_rect(bar_x, y, 3, bar_h));
+                               tg_gui_make_rect(bar_x + 1, y + 1, 3,
+                                                bar_h - 2));
             if (tx + label_w < bar_x + bar_w) {
                 backend->draw_text(backend, TG_GUI_PEN_LINK, tx, base, label,
                                    label_len);
                 tx += label_w;
             }
             tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT, tx, base,
-                                state->pinned_text, bar_x + bar_w - 6 - tx);
+                                state->pinned_text, bar_x + bar_w - 7 - tx);
             ((tg_gui_state *)state)->pin_x = bar_x;
             ((tg_gui_state *)state)->pin_y = y;
             ((tg_gui_state *)state)->pin_w = bar_w;
             ((tg_gui_state *)state)->pin_h = bar_h;
-            y += bar_h + 2;
+            y += bar_h + 4;
         }
     }
     transcript_top = y;
@@ -13671,6 +13690,7 @@ int tg_gui_self_test(void)
         int header_bottom;
         int lh_now;
         int ok_bar = 1;
+        int thin_without_bar;
 
         state.pinned_id = 0UL;
         state.pinned_text[0] = '\0';
@@ -13682,6 +13702,7 @@ int tg_gui_self_test(void)
         tg_gui_paint(&state, &b);
         header_bottom = tg_gui_header_h(&b);
         ok_bar = ok_bar && rec.watch_hits[0] == 0 && state.pin_h == 0;
+        thin_without_bar = rec.thin_dim_fills;
 
         state.pinned_id = 77UL;
         tg_gui_copy(state.pinned_text, sizeof(state.pinned_text),
@@ -13701,6 +13722,9 @@ int tg_gui_self_test(void)
                  state.pin_x >= tg_gui_sidebar_w(640) &&
                  rec.watch_y[0] > state.pin_y &&
                  rec.watch_y[0] <= state.pin_y + state.pin_h &&
+                 /* framed, and out to the window's edge */
+                 rec.thin_dim_fills == thin_without_bar + 4 &&
+                 state.pin_x + state.pin_w == 640 - 6 &&
                  tg_gui_hit_test(&state, 640, 480, lh_now,
                                  state.pin_x + 20,
                                  state.pin_y + state.pin_h / 2) ==

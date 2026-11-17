@@ -48,6 +48,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   native Telegram client for the Amiga. The sentence that it uses the
   Telegram API and is part of the Telegram ecosystem, but is not made by
   Telegram, stays.
+- The pinned message's bar has a frame and reaches the window's right
+  edge (a tester reported that it read as one more message). It was the
+  colour of an incoming message, lined up with the messages, with the
+  stripe a selected message has. On a four-colour screen it was black on
+  black; the frame shows there too.
 
 ### Fixed
 - A picture whose name does not end in .jpg or .png could not be sent
