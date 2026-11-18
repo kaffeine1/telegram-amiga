@@ -22930,6 +22930,17 @@ static int tg_gui_log_on = 0;
 void tg_platform_diag_memory(char *out, unsigned long out_size);
 #endif
 
+#if defined(TG_DIAG_FREEZE) && defined(__amigaos4__)
+/* The freeze build's watchdog writes to this file too (tg_gui_window.c). */
+void tg_gui_diag_log_lock(void);
+void tg_gui_diag_log_unlock(void);
+#define TG_GUI_LOG_LOCK() tg_gui_diag_log_lock()
+#define TG_GUI_LOG_UNLOCK() tg_gui_diag_log_unlock()
+#else
+#define TG_GUI_LOG_LOCK() ((void)0)
+#define TG_GUI_LOG_UNLOCK() ((void)0)
+#endif
+
 void tg_gui_log_enable(void)
 {
     tg_gui_log_on = 1;
@@ -22973,6 +22984,7 @@ void tg_gui_log(const char *msg)
        lands next to the program regardless of the launcher's current dir -- a
        relative name followed the CWD, which IconX/Ambient does not set to the
        program's drawer, so the file ended up unreachable. */
+    TG_GUI_LOG_LOCK();
 #if defined(__amigaos3__) || defined(__amigaos4__) || defined(__MORPHOS__) || \
     defined(__AROS__)
     f = fopen("PROGDIR:tg-gui-debug.log", "a");
@@ -23007,6 +23019,7 @@ void tg_gui_log(const char *msg)
         fflush(f);
         fclose(f);
     }
+    TG_GUI_LOG_UNLOCK();
 }
 
 /* --- Hidden chats ---------------------------------------------------------

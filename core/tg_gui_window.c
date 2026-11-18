@@ -192,6 +192,924 @@ struct GfxBase *GfxBase = 0;
 struct Library *GadToolsBase = 0;
 #endif
 
+#if defined(TG_DIAG_FREEZE)
+/* Freeze diagnostic build (an OS4 report, 2026-11-18): after hours the
+   window stopped answering, Ctrl-C included, and the log just ended. In this
+   build the log is always on and the loop leaves a trail: a ring of the
+   last phases it entered, each with its turn and time. On OS4 a watchdog
+   process reads it when the loop has not turned for a while, with the main
+   task's state, the layer locks, the input task and both stack traces, and
+   writes it all into the same log. Every normal build compiles none of it:
+   TG_GUI_PHASE() is nothing there. */
+#include <graphics/displayinfo.h>
+#include <graphics/clip.h>
+#include <graphics/layers.h>
+#include <utility/hooks.h>
+
+#define TG_GUI_DIAG_RING 32U
+#define TG_GUI_DIAG_ALIVE_SECONDS 300UL
+
+typedef struct tg_gui_diag_mark {
+    const char *phase;
+    unsigned long turn;
+    unsigned long secs; /* time(0), as the log's own stamps */
+} tg_gui_diag_mark;
+
+static tg_gui_diag_mark tg_gui_diag_ring[TG_GUI_DIAG_RING];
+static volatile unsigned int tg_gui_diag_pos = 0U;
+static volatile unsigned long tg_gui_diag_turns = 0UL;
+static volatile int tg_gui_diag_armed = 0; /* the window loop is running */
+static volatile unsigned long tg_gui_diag_class = 0UL; /* last IDCMP class */
+static volatile unsigned long tg_gui_diag_code = 0UL;  /* its code, 0 for keys */
+static struct Window *volatile tg_gui_diag_window = 0;
+static struct Window *volatile tg_gui_diag_popup = 0;
+static volatile int tg_gui_diag_sig_window = -1;
+static volatile int tg_gui_diag_sig_timer = -1;
+static unsigned long tg_gui_diag_beat = 0UL;
+static int tg_gui_diag_was_active = -1;
+
+static void tg_gui_diag_phase(const char *phase)
+{
+    unsigned int i = tg_gui_diag_pos % TG_GUI_DIAG_RING;
+
+    tg_gui_diag_ring[i].phase = 0; /* a reader skips a mark half written */
+    tg_gui_diag_ring[i].turn = tg_gui_diag_turns;
+    tg_gui_diag_ring[i].secs = (unsigned long)time(0);
+    tg_gui_diag_ring[i].phase = phase;
+    tg_gui_diag_pos = (i + 1U) % TG_GUI_DIAG_RING;
+}
+#define TG_GUI_PHASE(p) tg_gui_diag_phase(p)
+
+static unsigned long tg_gui_diag_lib_version(const char *name,
+                                             unsigned long *revision)
+{
+    struct Library *lib = OpenLibrary((CONST_STRPTR)name, 0);
+    unsigned long version = 0UL;
+
+    *revision = 0UL;
+    if (lib != 0) {
+        version = (unsigned long)lib->lib_Version;
+        *revision = (unsigned long)lib->lib_Revision;
+        CloseLibrary(lib);
+    }
+    return version;
+}
+
+/* Once, at the first window: the system the log comes from. */
+static void tg_gui_diag_system(void)
+{
+    static const char *const libs[] = {
+        "exec", "intuition", "graphics", "layers", "dos", "datatypes"
+    };
+    static int done;
+    char line[256];
+    unsigned int n = 0U;
+    unsigned int i;
+
+    if (done) {
+        return;
+    }
+    done = 1;
+    n = (unsigned int)sprintf(line, "diag: freeze build of %s %s (%s),",
+                              TG_APP_NAME, TG_VERSION, __DATE__);
+    for (i = 0U; i < sizeof(libs) / sizeof(libs[0]); ++i) {
+        char name[24];
+        unsigned long rev;
+        unsigned long ver;
+
+        sprintf(name, "%.10s.library", libs[i]);
+        ver = tg_gui_diag_lib_version(name, &rev);
+        n += (unsigned int)sprintf(line + n, " %.10s %lu.%lu", libs[i],
+                                   ver % 1000UL, rev % 100000UL);
+    }
+    tg_gui_log(line);
+    sprintf(line, "diag: free memory %lu KB, largest block %lu KB",
+            (unsigned long)AvailMem(MEMF_ANY) / 1024UL,
+            (unsigned long)AvailMem(MEMF_ANY | MEMF_LARGEST) / 1024UL);
+    tg_gui_log(line);
+}
+
+/* A screen as the log needs it: is it the Workbench, the default public
+   screen, how big, and how much of it the display shows (a screen larger
+   than the display scrolls, and a corner of it can be out of sight). */
+static void tg_gui_diag_screen(const char *who, struct Screen *scr, int own)
+{
+    char line[320];
+    struct Screen *wb;
+    struct Screen *def;
+    struct DimensionInfo dims;
+    ULONG mode;
+    int show_w = -1;
+    int show_h = -1;
+    unsigned long depth = 0UL;
+
+    if (scr == 0) {
+        return;
+    }
+    wb = LockPubScreen((CONST_STRPTR)"Workbench");
+    def = LockPubScreen(0);
+    mode = GetVPModeID(&scr->ViewPort);
+    if (mode != (ULONG)INVALID_ID &&
+        GetDisplayInfoData(0, (UBYTE *)&dims, sizeof(dims), DTAG_DIMS,
+                           mode) > 0) {
+        show_w = (int)dims.Nominal.MaxX - (int)dims.Nominal.MinX + 1;
+        show_h = (int)dims.Nominal.MaxY - (int)dims.Nominal.MinY + 1;
+    }
+    if (scr->RastPort.BitMap != 0) {
+        depth = (unsigned long)GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
+    }
+    sprintf(line,
+            "diag: %.16s screen %dx%d depth %lu at %d,%d, bar %d, %s%s%s, "
+            "mode 0x%08lx nominal %dx%d, viewport %dx%d offset %d,%d",
+            who, (int)scr->Width, (int)scr->Height, depth % 100UL,
+            (int)scr->LeftEdge, (int)scr->TopEdge, (int)scr->BarHeight,
+            scr == wb ? "the Workbench" : "not the Workbench",
+            scr == def ? ", default public" : ", NOT the default public",
+            own ? ", own screen" : "", (unsigned long)mode, show_w, show_h,
+            (int)scr->ViewPort.DWidth, (int)scr->ViewPort.DHeight,
+            (int)scr->ViewPort.DxOffset, (int)scr->ViewPort.DyOffset);
+    tg_gui_log(line);
+    if (def != 0 && def != scr) {
+        sprintf(line, "diag: the default public screen is another one, %dx%d",
+                (int)def->Width, (int)def->Height);
+        tg_gui_log(line);
+    }
+    if (def != 0) {
+        UnlockPubScreen(0, def);
+    }
+    if (wb != 0) {
+        UnlockPubScreen(0, wb);
+    }
+}
+
+static void tg_gui_diag_window_line(const char *who, struct Window *win)
+{
+    char line[200];
+
+    if (win == 0) {
+        return;
+    }
+    sprintf(line,
+            "diag: %.16s window at %d,%d size %dx%d, flags 0x%08lx, idcmp "
+            "0x%08lx, signal bit %d",
+            who, (int)win->LeftEdge, (int)win->TopEdge, (int)win->Width,
+            (int)win->Height, (unsigned long)win->Flags,
+            (unsigned long)win->IDCMPFlags,
+            win->UserPort != 0 ? (int)win->UserPort->mp_SigBit : -1);
+    tg_gui_log(line);
+}
+
+/* Every five minutes: memory, stack and signals, so a slow leak shows. */
+static void tg_gui_diag_alive(void)
+{
+    char line[200];
+    struct Task *me = FindTask(0);
+    unsigned long stack_free = 0UL;
+    char here;
+
+    if (me != 0 && me->tc_SPLower != 0 &&
+        (char *)&here > (char *)me->tc_SPLower) {
+        stack_free = (unsigned long)((char *)&here - (char *)me->tc_SPLower);
+    }
+    sprintf(line,
+            "diag: alive, turn %lu, free memory %lu KB (largest %lu KB), "
+            "stack free %lu, signals in use 0x%08lx",
+            tg_gui_diag_turns, (unsigned long)AvailMem(MEMF_ANY) / 1024UL,
+            (unsigned long)AvailMem(MEMF_ANY | MEMF_LARGEST) / 1024UL,
+            stack_free, me != 0 ? (unsigned long)me->tc_SigAlloc : 0UL);
+    tg_gui_log(line);
+}
+
+/* The top of each loop turn. */
+static void tg_gui_diag_turn(struct Window *win)
+{
+    time_t now = time(0);
+    int active;
+
+    tg_gui_diag_turns += 1UL;
+    tg_gui_diag_window = win;
+    tg_gui_diag_armed = 1;
+    TG_GUI_PHASE("turn");
+    active = win != 0 && (win->Flags & WFLG_WINDOWACTIVE) != 0UL;
+    if (active != tg_gui_diag_was_active) {
+        tg_gui_log(active ? "diag: window active" : "diag: window not active");
+        tg_gui_diag_was_active = active;
+    }
+    if (now != (time_t)-1 &&
+        (unsigned long)now - tg_gui_diag_beat >= TG_GUI_DIAG_ALIVE_SECONDS) {
+        tg_gui_diag_beat = (unsigned long)now;
+        tg_gui_diag_alive();
+    }
+}
+
+/* A stall on purpose, to see the watchdog's report: the ARexx command
+   DIAGSTALL (asleep in Delay), DIAGSTALL LAYER (asleep holding the window's
+   layer lock, as a paint stuck in its blit would) or DIAGSTALL SPIN (busy,
+   never waiting), each for a minute. Only in this build. */
+#define TG_GUI_DIAG_REXX_STALL 900
+#define TG_GUI_DIAG_REXX_POPUP 901 /* DIAGPOPUP: the pop-up, with the last news */
+
+static void tg_gui_diag_stall(const char *how, struct Window *win)
+{
+    int layer = how[0] == 'l' || how[0] == 'L';
+    int spin = how[0] == 's' || how[0] == 'S';
+    struct Layer *l = win != 0 ? win->WLayer : 0;
+
+    tg_gui_log(layer  ? "diag: test stall, 60 s holding the window layer"
+               : spin ? "diag: test stall, 60 s busy"
+                      : "diag: test stall, 60 s asleep");
+    TG_GUI_PHASE(layer  ? "test stall: layer locked"
+                 : spin ? "test stall: busy"
+                        : "test stall: asleep");
+    if (layer && l != 0) {
+        LockLayerRom(l);
+    }
+    if (spin) {
+        time_t end = time(0) + 60;
+        volatile unsigned long count = 0UL;
+
+        while (time(0) < end) {
+            ++count;
+        }
+    } else {
+        Delay(60 * TICKS_PER_SECOND);
+    }
+    if (layer && l != 0) {
+        UnlockLayerRom(l);
+    }
+    tg_gui_log("diag: test stall over");
+}
+
+/* The loop left: the window closes, or parks on its AppIcon. */
+static void tg_gui_diag_leave(void)
+{
+    tg_gui_diag_armed = 0;
+    tg_gui_diag_window = 0;
+    tg_gui_diag_was_active = -1;
+    TG_GUI_PHASE("loop left");
+}
+
+#if defined(__amigaos4__)
+#include <exec/debug.h>
+
+#define TG_GUI_DIAG_FIRST_HALVES 80UL /* first report after 40 s still */
+#define TG_GUI_DIAG_FRAMES 24U
+
+static struct Task *tg_gui_diag_main = 0;
+static volatile int tg_gui_diag_dog_quit = 0;
+static volatile int tg_gui_diag_dog_done = 1;
+static struct SignalSemaphore tg_gui_diag_sem;
+static int tg_gui_diag_sem_ready = 0;
+static char tg_gui_diag_log_path[320];
+static char tg_gui_diag_dog_path[320];
+static long tg_gui_diag_epoch = 0L; /* time(0) minus DateStamp seconds */
+
+/* tg_gui_log takes this around each line: the watchdog writes to the same
+   file and must not cut into a line, nor wait for a writer that hangs. */
+void tg_gui_diag_log_lock(void)
+{
+    if (tg_gui_diag_sem_ready) {
+        ObtainSemaphore(&tg_gui_diag_sem);
+    }
+}
+
+void tg_gui_diag_log_unlock(void)
+{
+    if (tg_gui_diag_sem_ready) {
+        ReleaseSemaphore(&tg_gui_diag_sem);
+    }
+}
+
+/* The watchdog's own text: no C library in that process, exec and dos
+   only, and a line it builds by hand. */
+typedef struct tg_gui_diag_buf {
+    char s[480];
+    unsigned int n;
+} tg_gui_diag_buf;
+
+static void tg_gui_diag_s(tg_gui_diag_buf *b, const char *t)
+{
+    while (t != 0 && *t != '\0' && b->n + 1U < sizeof(b->s)) {
+        b->s[b->n++] = *t++;
+    }
+    b->s[b->n] = '\0';
+}
+
+static void tg_gui_diag_u(tg_gui_diag_buf *b, unsigned long v)
+{
+    char d[12];
+    int i = 0;
+
+    do {
+        d[i++] = (char)('0' + (int)(v % 10UL));
+        v /= 10UL;
+    } while (v != 0UL && i < 11);
+    while (i > 0 && b->n + 1U < sizeof(b->s)) {
+        b->s[b->n++] = d[--i];
+    }
+    b->s[b->n] = '\0';
+}
+
+static void tg_gui_diag_i(tg_gui_diag_buf *b, long v)
+{
+    if (v < 0L) {
+        tg_gui_diag_s(b, "-");
+        tg_gui_diag_u(b, (unsigned long)(-v));
+    } else {
+        tg_gui_diag_u(b, (unsigned long)v);
+    }
+}
+
+static void tg_gui_diag_x(tg_gui_diag_buf *b, unsigned long v)
+{
+    static const char hex[] = "0123456789abcdef";
+    char d[11];
+    int i;
+
+    d[0] = '0';
+    d[1] = 'x';
+    for (i = 0; i < 8; ++i) {
+        d[2 + i] = hex[(v >> (28 - 4 * i)) & 15UL];
+    }
+    d[10] = '\0';
+    tg_gui_diag_s(b, d);
+}
+
+static void tg_gui_diag_reset(tg_gui_diag_buf *b)
+{
+    b->n = 0U;
+    b->s[0] = '\0';
+}
+
+static unsigned long tg_gui_diag_dog_secs(void)
+{
+    struct DateStamp ds;
+
+    DateStamp(&ds);
+    return (unsigned long)ds.ds_Days * 86400UL +
+           (unsigned long)ds.ds_Minute * 60UL +
+           (unsigned long)ds.ds_Tick / (unsigned long)TICKS_PER_SECOND;
+}
+
+/* One line into the log (the second file when the log is held: a writer
+   stuck in it is news too), and into the kernel debug buffer, which
+   DumpDebugBuffer shows even when no file can be written. */
+static void tg_gui_diag_dog_line(const char *text)
+{
+    tg_gui_diag_buf b;
+    unsigned long t = (unsigned long)((long)tg_gui_diag_dog_secs() +
+                                      tg_gui_diag_epoch) % 100000UL;
+    unsigned long div;
+    const char *path = tg_gui_diag_log_path;
+    int locked;
+    int tries;
+    BPTR fh;
+
+    tg_gui_diag_reset(&b);
+    tg_gui_diag_s(&b, "[");
+    for (div = 10000UL; div > 1UL && t < div; div /= 10UL) {
+        tg_gui_diag_s(&b, "0"); /* the log's [%05lu] */
+    }
+    tg_gui_diag_u(&b, t);
+    tg_gui_diag_s(&b, "] watchdog: ");
+    tg_gui_diag_s(&b, text);
+    tg_gui_diag_s(&b, "\n");
+    DebugPrintF("Amigram %s", b.s);
+    /* A line being written takes a moment; a writer still at it after a
+       second is stuck, and then the line goes to the second file. */
+    for (tries = 0, locked = 0; tg_gui_diag_sem_ready && !locked && tries < 10;
+         ++tries) {
+        locked = AttemptSemaphore(&tg_gui_diag_sem) != 0;
+        if (!locked) {
+            Delay(TICKS_PER_SECOND / 10);
+        }
+    }
+    if (!locked) {
+        path = tg_gui_diag_dog_path;
+    }
+    fh = Open((CONST_STRPTR)path, MODE_READWRITE);
+    if (fh != 0) {
+        (void)ChangeFilePosition(fh, 0, OFFSET_END);
+        (void)Write(fh, b.s, (LONG)b.n);
+        Close(fh);
+    }
+    if (locked) {
+        ReleaseSemaphore(&tg_gui_diag_sem);
+    }
+}
+
+static const char *tg_gui_diag_state_name(unsigned int state)
+{
+    switch (state) {
+    case TS_RUN:
+        return "running";
+    case TS_READY:
+        return "ready (busy, not waiting)";
+    case TS_WAIT:
+        return "waiting";
+    case TS_EXCEPT:
+        return "in an exception";
+    case TS_REMOVED:
+        return "removed";
+    case TS_CRASHED:
+        return "crashed";
+    case TS_SUSPENDED:
+        return "suspended";
+    default:
+        return "other";
+    }
+}
+
+/* Which signals a task waits for, by name where they have one. */
+static void tg_gui_diag_sigs(tg_gui_diag_buf *b, unsigned long sigs)
+{
+    tg_gui_diag_x(b, sigs);
+    if ((sigs & SIGF_SINGLE) != 0UL) {
+        tg_gui_diag_s(b, " semaphore/blitter");
+    }
+    if ((sigs & SIGF_INTUITION) != 0UL) {
+        tg_gui_diag_s(b, " intuition");
+    }
+    if ((sigs & SIGF_DOS) != 0UL) {
+        tg_gui_diag_s(b, " dos-packet");
+    }
+    if ((sigs & SIGF_NET) != 0UL) {
+        tg_gui_diag_s(b, " net");
+    }
+    if ((sigs & SIGBREAKF_CTRL_C) != 0UL) {
+        tg_gui_diag_s(b, " ctrl-c");
+    }
+    if (tg_gui_diag_sig_window >= 0 &&
+        (sigs & (1UL << tg_gui_diag_sig_window)) != 0UL) {
+        tg_gui_diag_s(b, " window");
+    }
+    if (tg_gui_diag_sig_timer >= 0 &&
+        (sigs & (1UL << tg_gui_diag_sig_timer)) != 0UL) {
+        tg_gui_diag_s(b, " timer");
+    }
+}
+
+/* Everything the report reads from shared structures, taken in one go
+   under Forbid() so that nothing moves or closes meanwhile. */
+typedef struct tg_gui_diag_lock_info {
+    int present;
+    char owner[48];
+    int nest;
+    int queue;
+} tg_gui_diag_lock_info;
+
+typedef struct tg_gui_diag_snap {
+    unsigned long turn;
+    tg_gui_diag_mark ring[TG_GUI_DIAG_RING];
+    unsigned int pos;
+    unsigned long cls;
+    unsigned long code;
+    unsigned int m_state;
+    unsigned long m_wait;
+    unsigned long m_recvd;
+    unsigned long m_alloc;
+    int m_pri;
+    int in_found;
+    unsigned int in_state;
+    unsigned long in_wait;
+    struct Task *input;
+    tg_gui_diag_lock_info win_lock;
+    tg_gui_diag_lock_info screen_lock;
+    tg_gui_diag_lock_info popup_lock;
+    int active;    /* 0 none, 1 ours, 2 our pop-up, 3 another program's */
+    int front;     /* 1 when the front screen is the window's */
+} tg_gui_diag_snap;
+
+static void tg_gui_diag_copy_name(char *out, unsigned int size,
+                                  const char *name)
+{
+    unsigned int i = 0U;
+
+    while (name != 0 && name[i] != '\0' && i + 1U < size) {
+        out[i] = name[i];
+        ++i;
+    }
+    out[i] = '\0';
+}
+
+static void tg_gui_diag_lock_take(tg_gui_diag_lock_info *info,
+                                  struct SignalSemaphore *sem,
+                                  struct Task *input)
+{
+    struct Task *owner = sem->ss_Owner;
+
+    info->present = 1;
+    info->nest = (int)sem->ss_NestCount;
+    info->queue = (int)sem->ss_QueueCount;
+    if (owner == 0) {
+        tg_gui_diag_copy_name(info->owner, sizeof(info->owner), "free");
+    } else if (owner == tg_gui_diag_main) {
+        tg_gui_diag_copy_name(info->owner, sizeof(info->owner),
+                              "held by Amigram");
+    } else if (owner == input) {
+        tg_gui_diag_copy_name(info->owner, sizeof(info->owner),
+                              "held by input.device");
+    } else {
+        tg_gui_diag_copy_name(info->owner, 9U, "held by ");
+        tg_gui_diag_copy_name(info->owner + 8, sizeof(info->owner) - 8U,
+                              owner->tc_Node.ln_Name);
+    }
+}
+
+static void tg_gui_diag_snapshot(tg_gui_diag_snap *s)
+{
+    struct Window *win;
+    struct Window *pop;
+    struct Window *act;
+    struct IntuitionBase *ib = (struct IntuitionBase *)IntuitionBase;
+    unsigned int i;
+
+    s->win_lock.present = 0;
+    s->screen_lock.present = 0;
+    s->popup_lock.present = 0;
+    Forbid();
+    s->turn = tg_gui_diag_turns;
+    for (i = 0U; i < TG_GUI_DIAG_RING; ++i) {
+        s->ring[i] = tg_gui_diag_ring[i];
+    }
+    s->pos = tg_gui_diag_pos;
+    s->cls = tg_gui_diag_class;
+    s->code = tg_gui_diag_code;
+    s->m_state = (unsigned int)tg_gui_diag_main->tc_State;
+    s->m_wait = (unsigned long)tg_gui_diag_main->tc_SigWait;
+    s->m_recvd = (unsigned long)tg_gui_diag_main->tc_SigRecvd;
+    s->m_alloc = (unsigned long)tg_gui_diag_main->tc_SigAlloc;
+    s->m_pri = (int)tg_gui_diag_main->tc_Node.ln_Pri;
+    s->input = FindTask((CONST_STRPTR)"input.device");
+    s->in_found = s->input != 0;
+    s->in_state = 0U;
+    s->in_wait = 0UL;
+    if (s->input != 0) {
+        s->in_state = (unsigned int)s->input->tc_State;
+        s->in_wait = (unsigned long)s->input->tc_SigWait;
+    }
+    win = tg_gui_diag_window;
+    pop = tg_gui_diag_popup;
+    if (win != 0 && tg_gui_diag_armed) {
+        if (win->WLayer != 0) {
+            tg_gui_diag_lock_take(&s->win_lock, &win->WLayer->Lock, s->input);
+        }
+        if (win->WScreen != 0) {
+            tg_gui_diag_lock_take(&s->screen_lock,
+                                  &win->WScreen->LayerInfo.Lock, s->input);
+        }
+    }
+    if (pop != 0 && pop->WLayer != 0) {
+        tg_gui_diag_lock_take(&s->popup_lock, &pop->WLayer->Lock, s->input);
+    }
+    act = ib != 0 ? ib->ActiveWindow : 0;
+    s->active = act == 0 ? 0 : act == win ? 1 : act == pop ? 2 : 3;
+    s->front = ib != 0 && win != 0 && ib->FirstScreen == win->WScreen;
+    Permit();
+}
+
+static void tg_gui_diag_lock_line(const char *what,
+                                  const tg_gui_diag_lock_info *info)
+{
+    tg_gui_diag_buf b;
+
+    if (!info->present) {
+        return;
+    }
+    tg_gui_diag_reset(&b);
+    tg_gui_diag_s(&b, what);
+    tg_gui_diag_s(&b, " lock ");
+    tg_gui_diag_s(&b, info->owner);
+    tg_gui_diag_s(&b, ", nest ");
+    tg_gui_diag_i(&b, (long)info->nest);
+    tg_gui_diag_s(&b, ", queue ");
+    tg_gui_diag_i(&b, (long)info->queue);
+    tg_gui_diag_dog_line(b.s);
+}
+
+/* The stack trace: return addresses gathered under Forbid() (the hook only
+   stores them), names looked up afterwards, when symbol loading may do
+   disk I/O. */
+typedef struct tg_gui_diag_frames {
+    CONST_APTR at[TG_GUI_DIAG_FRAMES];
+    unsigned int n;
+    unsigned int stopped; /* the walk's state when it gave up, 0 if not */
+} tg_gui_diag_frames;
+
+static uint32 tg_gui_diag_frame(struct Hook *hook, struct Task *task,
+                                struct StackFrameMsg *frame)
+{
+    tg_gui_diag_frames *f = (tg_gui_diag_frames *)hook->h_Data;
+
+    (void)task;
+    if (frame->State == STACK_FRAME_DECODED) {
+        if (f->n < TG_GUI_DIAG_FRAMES) {
+            f->at[f->n++] = frame->MemoryAddress;
+        }
+    } else {
+        f->stopped = (unsigned int)frame->State;
+    }
+    return 0;
+}
+
+static void tg_gui_diag_trace(struct DebugIFace *dbg, struct Task *task,
+                              const char *who)
+{
+    tg_gui_diag_frames fr;
+    struct Hook hook;
+    tg_gui_diag_buf b;
+    unsigned int i;
+
+    if (dbg == 0 || task == 0) {
+        return;
+    }
+    fr.n = 0U;
+    fr.stopped = 0U;
+    hook.h_MinNode.mln_Succ = 0;
+    hook.h_MinNode.mln_Pred = 0;
+    hook.h_Entry = (HOOKFUNC)tg_gui_diag_frame;
+    hook.h_SubEntry = 0;
+    hook.h_Data = &fr;
+    Forbid();
+    /* An OS4 interface call passes the interface itself; the brackets
+       keep a __USE_INLINE__ macro of the same name out of it. */
+    (void)(dbg->StackTrace)(task, &hook);
+    Permit();
+    for (i = 0U; i < fr.n; ++i) {
+        struct DebugSymbol *sym =
+            (dbg->ObtainDebugSymbol)(fr.at[i], 0);
+
+        tg_gui_diag_reset(&b);
+        tg_gui_diag_s(&b, who);
+        tg_gui_diag_s(&b, " #");
+        tg_gui_diag_u(&b, (unsigned long)i);
+        tg_gui_diag_s(&b, " ");
+        tg_gui_diag_x(&b, (unsigned long)fr.at[i]);
+        if (sym != 0) {
+            tg_gui_diag_s(&b, " ");
+            tg_gui_diag_s(&b, sym->Name != 0 ? (const char *)sym->Name : "?");
+            tg_gui_diag_s(&b, "+");
+            tg_gui_diag_x(&b, (unsigned long)sym->Offset);
+            tg_gui_diag_s(&b, " seg ");
+            tg_gui_diag_u(&b, (unsigned long)sym->SegmentNumber);
+            tg_gui_diag_s(&b, "+");
+            tg_gui_diag_x(&b, (unsigned long)sym->SegmentOffset);
+            if (sym->SourceFunctionName != 0) {
+                tg_gui_diag_s(&b, " ");
+                tg_gui_diag_s(&b, (const char *)sym->SourceFunctionName);
+            }
+            if (sym->SourceFileName != 0) {
+                tg_gui_diag_s(&b, " (");
+                tg_gui_diag_s(&b, (const char *)sym->SourceFileName);
+                tg_gui_diag_s(&b, ":");
+                tg_gui_diag_u(&b, (unsigned long)sym->SourceLineNumber);
+                tg_gui_diag_s(&b, ")");
+            }
+            (dbg->ReleaseDebugSymbol)(sym);
+        }
+        tg_gui_diag_dog_line(b.s);
+    }
+    tg_gui_diag_reset(&b);
+    tg_gui_diag_s(&b, who);
+    tg_gui_diag_s(&b, ": ");
+    tg_gui_diag_u(&b, (unsigned long)fr.n);
+    tg_gui_diag_s(&b, " frames");
+    if (fr.stopped != 0U) {
+        tg_gui_diag_s(&b, ", walk stopped with state ");
+        tg_gui_diag_u(&b, (unsigned long)fr.stopped);
+    }
+    tg_gui_diag_dog_line(b.s);
+}
+
+static void tg_gui_diag_report(struct DebugIFace *dbg, unsigned long still)
+{
+    tg_gui_diag_snap s;
+    tg_gui_diag_buf b;
+    unsigned long now = (unsigned long)((long)tg_gui_diag_dog_secs() +
+                                        tg_gui_diag_epoch);
+    unsigned int i;
+    unsigned int shown = 0U;
+
+    tg_gui_diag_snapshot(&s);
+    tg_gui_diag_reset(&b);
+    tg_gui_diag_s(&b, "no loop turn for ");
+    tg_gui_diag_u(&b, still);
+    tg_gui_diag_s(&b, " s, last turn ");
+    tg_gui_diag_u(&b, s.turn);
+    tg_gui_diag_s(&b, ", last event class ");
+    tg_gui_diag_x(&b, s.cls);
+    tg_gui_diag_s(&b, " code ");
+    tg_gui_diag_u(&b, s.code);
+    tg_gui_diag_dog_line(b.s);
+    /* The trail, oldest first, four marks a line. */
+    tg_gui_diag_reset(&b);
+    for (i = 0U; i < TG_GUI_DIAG_RING; ++i) {
+        const tg_gui_diag_mark *m = &s.ring[(s.pos + i) % TG_GUI_DIAG_RING];
+
+        if (m->phase == 0) {
+            continue;
+        }
+        if (b.n == 0U) {
+            tg_gui_diag_s(&b, "trail:");
+        }
+        tg_gui_diag_s(&b, " [");
+        tg_gui_diag_s(&b, m->phase);
+        tg_gui_diag_s(&b, " t");
+        tg_gui_diag_u(&b, m->turn);
+        tg_gui_diag_s(&b, " -");
+        tg_gui_diag_u(&b, now >= m->secs ? now - m->secs : 0UL);
+        tg_gui_diag_s(&b, "s]");
+        if (++shown % 4U == 0U) {
+            tg_gui_diag_dog_line(b.s);
+            tg_gui_diag_reset(&b);
+        }
+    }
+    if (b.n != 0U) {
+        tg_gui_diag_dog_line(b.s);
+    }
+    tg_gui_diag_reset(&b);
+    tg_gui_diag_s(&b, "main task ");
+    tg_gui_diag_s(&b, tg_gui_diag_state_name(s.m_state));
+    tg_gui_diag_s(&b, ", waits for ");
+    tg_gui_diag_sigs(&b, s.m_wait);
+    tg_gui_diag_s(&b, ", received ");
+    tg_gui_diag_x(&b, s.m_recvd);
+    tg_gui_diag_s(&b, ", in use ");
+    tg_gui_diag_x(&b, s.m_alloc);
+    tg_gui_diag_s(&b, ", priority ");
+    tg_gui_diag_i(&b, (long)s.m_pri);
+    tg_gui_diag_dog_line(b.s);
+    tg_gui_diag_reset(&b);
+    if (s.in_found) {
+        tg_gui_diag_s(&b, "input.device ");
+        tg_gui_diag_s(&b, tg_gui_diag_state_name(s.in_state));
+        tg_gui_diag_s(&b, ", waits for ");
+        tg_gui_diag_sigs(&b, s.in_wait);
+    } else {
+        tg_gui_diag_s(&b, "input.device task not found");
+    }
+    tg_gui_diag_dog_line(b.s);
+    tg_gui_diag_lock_line("window layer", &s.win_lock);
+    tg_gui_diag_lock_line("screen layers", &s.screen_lock);
+    tg_gui_diag_lock_line("pop-up layer", &s.popup_lock);
+    tg_gui_diag_reset(&b);
+    tg_gui_diag_s(&b, "active window: ");
+    tg_gui_diag_s(&b, s.active == 0   ? "none"
+                      : s.active == 1 ? "ours"
+                      : s.active == 2 ? "our pop-up"
+                                      : "another program's");
+    tg_gui_diag_s(&b, s.front ? ", our screen in front"
+                              : ", another screen in front");
+    tg_gui_diag_s(&b, ", free memory ");
+    tg_gui_diag_u(&b, (unsigned long)AvailMem(MEMF_ANY) / 1024UL);
+    tg_gui_diag_s(&b, " KB");
+    tg_gui_diag_dog_line(b.s);
+    tg_gui_diag_trace(dbg, tg_gui_diag_main, "main");
+    /* input.device only while it sleeps: if it runs, its stack moves under
+       the walk. */
+    if (s.in_found && s.in_state == TS_WAIT) {
+        tg_gui_diag_trace(dbg, s.input, "input");
+    }
+}
+
+static int32 tg_gui_diag_dog(STRPTR args, int32 length,
+                             struct ExecBase *sysbase)
+{
+    struct DebugIFace *dbg;
+    unsigned long last;
+    unsigned long still = 0UL;
+    unsigned long next = TG_GUI_DIAG_FIRST_HALVES;
+    unsigned long reports = 0UL;
+
+    (void)args;
+    (void)length;
+    dbg = (struct DebugIFace *)GetInterface(
+        (struct Library *)(sysbase != 0 ? (void *)sysbase
+                                        : (void *)IExec->Data.LibBase),
+        (CONST_STRPTR)"debug", 1, 0);
+    tg_gui_diag_dog_line(dbg != 0 ? "started, stack traces on"
+                                  : "started, no debug interface: no traces");
+    last = tg_gui_diag_turns;
+    while (!tg_gui_diag_dog_quit) {
+        Delay(TICKS_PER_SECOND / 2);
+        if (!tg_gui_diag_armed || tg_gui_diag_turns != last) {
+            if (reports != 0UL) {
+                tg_gui_diag_buf b;
+
+                tg_gui_diag_reset(&b);
+                tg_gui_diag_s(&b, tg_gui_diag_armed
+                                      ? "the loop turns again, after "
+                                      : "the loop left, after ");
+                tg_gui_diag_u(&b, still / 2UL);
+                tg_gui_diag_s(&b, " s");
+                tg_gui_diag_dog_line(b.s);
+            }
+            last = tg_gui_diag_turns;
+            still = 0UL;
+            next = TG_GUI_DIAG_FIRST_HALVES;
+            reports = 0UL;
+            continue;
+        }
+        ++still;
+        if (still >= next) {
+            tg_gui_diag_report(dbg, still / 2UL);
+            ++reports;
+            next *= 4UL; /* 40 s, then 160, 640, 2560: a few, not a flood */
+        }
+    }
+    if (dbg != 0) {
+        DropInterface((struct Interface *)dbg);
+    }
+    tg_gui_diag_dog_line("stopped");
+    Forbid(); /* broken only when this process is gone */
+    tg_gui_diag_dog_done = 1;
+    return 0;
+}
+
+static void tg_gui_diag_stop(void)
+{
+    int waited = 0;
+
+    if (tg_gui_diag_dog_done) {
+        return;
+    }
+    tg_gui_diag_armed = 0;
+    tg_gui_diag_dog_quit = 1;
+    /* Its code is in this program: it must be gone before we are. */
+    while (!tg_gui_diag_dog_done) {
+        Delay(TICKS_PER_SECOND / 10);
+        if (++waited == 200) {
+            tg_gui_log("diag: still waiting for the watchdog to stop");
+        }
+    }
+}
+
+static void tg_gui_diag_atexit(void)
+{
+    tg_gui_diag_stop();
+}
+
+static void tg_gui_diag_start(void)
+{
+    static int registered;
+    BPTR home = GetProgramDir();
+    struct Process *dog;
+    char dir[256];
+    char line[96];
+
+    if (!tg_gui_diag_dog_done) {
+        return;
+    }
+    tg_gui_diag_main = FindTask(0);
+    if (!tg_gui_diag_sem_ready) {
+        InitSemaphore(&tg_gui_diag_sem);
+        tg_gui_diag_sem_ready = 1;
+    }
+    tg_gui_diag_epoch = (long)time(0) - (long)tg_gui_diag_dog_secs();
+    strcpy(tg_gui_diag_log_path, "PROGDIR:tg-gui-debug.log");
+    strcpy(tg_gui_diag_dog_path, "PROGDIR:tg-gui-watchdog.log");
+    if (home != 0 && NameFromLock(home, (STRPTR)dir, (LONG)sizeof(dir)) != 0) {
+        strcpy(tg_gui_diag_log_path, dir);
+        strcpy(tg_gui_diag_dog_path, dir);
+        (void)AddPart((STRPTR)tg_gui_diag_log_path,
+                      (CONST_STRPTR)"tg-gui-debug.log",
+                      (ULONG)sizeof(tg_gui_diag_log_path));
+        (void)AddPart((STRPTR)tg_gui_diag_dog_path,
+                      (CONST_STRPTR)"tg-gui-watchdog.log",
+                      (ULONG)sizeof(tg_gui_diag_dog_path));
+    }
+    if (!registered) {
+        registered = atexit(tg_gui_diag_atexit) == 0;
+    }
+    tg_gui_diag_dog_quit = 0;
+    tg_gui_diag_dog_done = 0;
+    dog = CreateNewProcTags(
+        NP_Entry, (ULONG)tg_gui_diag_dog, NP_Name,
+        (ULONG)"Amigram watchdog", NP_Priority,
+        (LONG)tg_gui_diag_main->tc_Node.ln_Pri + 1L, NP_StackSize,
+        65536UL, TAG_END);
+    if (dog == 0) {
+        tg_gui_diag_dog_done = 1;
+    }
+    sprintf(line, "diag: watchdog %s, priority %d",
+            dog != 0 ? "started" : "DID NOT START",
+            (int)tg_gui_diag_main->tc_Node.ln_Pri + 1);
+    tg_gui_log(line);
+}
+#else
+/* Elsewhere the trail and the log lines only, no watchdog yet. */
+static void tg_gui_diag_start(void)
+{
+}
+
+static void tg_gui_diag_stop(void)
+{
+}
+#endif /* __amigaos4__ */
+#else
+#define TG_GUI_PHASE(p) ((void)0)
+#endif /* TG_DIAG_FREEZE */
+
 #if defined(TG_GUI_HAVE_CYBERGRAPHICS)
 struct Library *CyberGfxBase = 0;
 static int tg_gui_cgx_open_attempted;
@@ -6156,6 +7074,7 @@ static void tg_gui_window_paint_body(const tg_gui_state *state,
         c->origin_x = 0;
         c->origin_y = 0;
         c->popup_count = 0;
+        TG_GUI_PHASE("paint: render");
         tg_gui_paint(state, backend);
         if (profile_paint) {
             tg_gui_profile_active = 0;
@@ -6178,6 +7097,7 @@ static void tg_gui_window_paint_body(const tg_gui_state *state,
         if (!first_logged) {
             tg_gui_log("paint1: blit start");
         }
+        TG_GUI_PHASE("paint: blit, layer locked");
         if (layer != 0) {
             LockLayerRom(layer);
         }
@@ -6229,6 +7149,7 @@ static void tg_gui_window_paint_body(const tg_gui_state *state,
         }
         /* The renderer's own trail would write to disk INSIDE the lock: off. */
         tg_gui_paint_trail_off();
+        TG_GUI_PHASE("paint: direct, layer locked");
         if (layer != 0) {
             LockLayerRom(layer);
         }
@@ -6266,7 +7187,9 @@ static void tg_gui_window_paint(const tg_gui_state *state,
     tg_gui_paint_text_calls = 0UL;
     tg_gui_paint_text_chars = 0UL;
     start = tg_gui_photo_now_ms();
+    TG_GUI_PHASE("paint");
     tg_gui_window_paint_body(state, backend);
+    TG_GUI_PHASE("paint done");
     spent = tg_gui_photo_elapsed_ms(start, tg_gui_photo_now_ms());
     if (spent >= TG_GUI_SLOW_PAINT_MS && tg_gui_log_is_enabled() &&
         tg_gui_slow_paints_logged < 40) {
@@ -6314,6 +7237,7 @@ static void tg_gui_window_paint_area(const tg_gui_state *state,
         int saved_ox = c->origin_x;
         int saved_oy = c->origin_y;
 
+        TG_GUI_PHASE("paint area");
         WaitBlit(); /* the last copy may still be reading the buffer */
         c->rport = &c->buf_rp;
         c->origin_x = 0;
@@ -6343,6 +7267,7 @@ static void tg_gui_window_paint_area(const tg_gui_state *state,
         if (r.w <= 0 || r.h <= 0) {
             return;
         }
+        TG_GUI_PHASE("paint area: blit, layer locked");
         if (layer != 0) {
             LockLayerRom(layer);
         }
@@ -6351,7 +7276,9 @@ static void tg_gui_window_paint_area(const tg_gui_state *state,
         if (layer != 0) {
             UnlockLayerRom(layer);
         }
+        TG_GUI_PHASE("paint area done");
     } else {
+        TG_GUI_PHASE("paint area: direct, layer locked");
         if (layer != 0) {
             LockLayerRom(layer);
         }
@@ -6359,6 +7286,7 @@ static void tg_gui_window_paint_area(const tg_gui_state *state,
         if (layer != 0) {
             UnlockLayerRom(layer);
         }
+        TG_GUI_PHASE("paint area done");
         if (!ok) {
             tg_gui_window_paint(state, backend);
         }
@@ -7637,6 +8565,7 @@ static LONG tg_gui_amiga_easyreq_args(struct Window *win, struct EasyStruct *es)
     if ((saved & IDCMP_MENUVERIFY) != 0UL) {
         ModifyIDCMP(win, saved & ~(ULONG)IDCMP_MENUVERIFY);
     }
+    TG_GUI_PHASE("requester");
     result = EasyRequestArgs(win, es, 0, 0);
     if ((saved & IDCMP_MENUVERIFY) != 0UL) {
         ModifyIDCMP(win, saved);
@@ -7658,6 +8587,7 @@ static LONG tg_gui_amiga_easyreq_cancel_args(struct Window *win,
     if ((saved & IDCMP_MENUVERIFY) != 0UL) {
         ModifyIDCMP(win, saved & ~(ULONG)IDCMP_MENUVERIFY);
     }
+    TG_GUI_PHASE("requester");
     requester = BuildEasyRequestArgs(win, es, IDCMP_RAWKEY, 0);
     result = requester == (struct Window *)1 ? 1L : 0L;
     if (requester != 0 && requester != (struct Window *)1) {
@@ -8295,6 +9225,7 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
     while (!done) {
         struct IntuiMessage *msg;
 
+        TG_GUI_PHASE("dialog wait");
         Wait(1UL << ui.win->UserPort->mp_SigBit);
         while ((msg = (struct IntuiMessage *)GetMsg(ui.win->UserPort)) != 0) {
             ULONG cls = msg->Class;
@@ -10003,6 +10934,7 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
     while (!done) {
         struct IntuiMessage *msg;
 
+        TG_GUI_PHASE("panel wait");
         Wait(1UL << ui.base.win->UserPort->mp_SigBit);
         while ((msg = (struct IntuiMessage *)GetMsg(
                     ui.base.win->UserPort)) != 0) {
@@ -12892,6 +13824,10 @@ static void tg_gui_wbn_park(void)
     int open_seen = 0;
     int asking_said = 0;
 
+#if defined(TG_DIAG_FREEZE)
+    tg_gui_diag_leave(); /* parked: no loop turns to watch */
+#endif
+
     for (ticks = 0; ticks < 1200U && tg_gui_wbn_port != 0; ++ticks) {
         struct Message *m;
         int heard = 0;
@@ -13032,9 +13968,11 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
        official apps do: Telegram sends "is typing" only to an account that
        is online. A request goes only when that changes or every three
        minutes while it lasts. */
+    TG_GUI_PHASE("poll: presence");
     if (state->mode == TG_GUI_MODE_CHAT) {
         (void)tg_gui_session_presence(!state->notify_away, stdout);
     }
+    TG_GUI_PHASE("poll: pinned");
     /* The pinned bar of a chat just opened: asked here, a moment after the
        chat is on screen, not at the next poll some seconds away. */
     if (tg_gui_session_pinned_step(stdout)) {
@@ -13042,6 +13980,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
     }
     /* Which chats are muted, for their marks in the list: learnt a chat at
        a time while nothing else is going on, and not under an open menu. */
+    TG_GUI_PHASE("poll: mutes");
     if (!state->composing && !state->ctx_visible && !state->settings_open &&
         tg_gui_session_mutes_step(stdout)) {
         *session_dirty = 1;
@@ -13051,6 +13990,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
        opened a chat or touched the open one since the program started (the
        chat it opens by itself at start is not read behind the user's
        back). */
+    TG_GUI_PHASE("poll: read");
     if (tg_gui_chat_touched && !state->notify_away &&
         state->mode == TG_GUI_MODE_CHAT && state->transcript_scroll == 0 &&
         !state->newest_dropped && tg_gui_session_read_step(stdout)) {
@@ -13061,6 +14001,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
        round its channels once a day at most, one at each look; here it is
        only offered the chance now and then (soon again while channels wait
        their turn, sooner than usual when one could not be asked). */
+    TG_GUI_PHASE("poll: update");
     if (state->update_can && state->update_check && !state->composing &&
         !tg_gui_session_transfer_busy() && session_boot != (time_t)-1 &&
         now >= session_boot && (unsigned long)(now - session_boot) >= 60UL &&
@@ -13081,6 +14022,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         (unsigned long)(now - *last_receive_drain) >=
             TG_GUI_COMPOSE_RECEIVE_SECONDS) {
         *last_receive_drain = now;
+        TG_GUI_PHASE("poll: receive");
         if (tg_gui_session_receive_pending(stdout)) {
             (void)tg_gui_context_follow((tg_gui_state *)state);
             tg_gui_window_session_changed(session_dirty, header_dirty);
@@ -13102,6 +14044,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
          (unsigned long)(now - last_key_time) >=
              TG_GUI_COMPOSE_IDLE_POLL_SECONDS)) {
         *last_session_poll = now;
+        TG_GUI_PHASE("poll: tick");
         if (tg_gui_session_tick(stdout)) {
             /* New messages shift the transcript under an open menu. */
             (void)tg_gui_context_follow((tg_gui_state *)state);
@@ -13120,6 +14063,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
         }
         tg_gui_tick_after(last_session_poll, eff);
     }
+    TG_GUI_PHASE("poll: done");
 }
 
 /* Every window open starts fresh: no keyboard focus in the composer, no
@@ -13494,12 +14438,85 @@ static struct TextFont *tg_gui_popup_open_font(const struct TextFont *base,
     return font;
 }
 
+#if defined(TG_DIAG_FREEZE)
+/* Where a pop-up is and what covers it: the tester never saw one that the
+   log says opened. The layers in front of it are named by the task behind
+   their window (no window titles: they can carry a document's name). */
+static void tg_gui_diag_popup_line(const tg_gui_popup *popup, const char *what)
+{
+    struct Window *win = popup->window;
+    struct Layer *l;
+    char who[112];
+    char line[320];
+    unsigned int used = 0U;
+    int n = 0;
+    ULONG ilock;
+    time_t now = time(0);
+
+    if (win == 0) {
+        return;
+    }
+    who[0] = '\0';
+    ilock = LockIBase(0UL);
+    for (l = win->WLayer != 0 ? win->WLayer->front : 0; l != 0 && n < 3;
+         l = l->front, ++n) {
+        struct Window *w;
+        const char *name = "a layer without a window";
+        char task_name[48];
+
+        if (l == win->WScreen->BarLayer) {
+            name = "the screen title bar";
+        } else {
+            for (w = win->WScreen->FirstWindow; w != 0; w = w->NextWindow) {
+                if (w->WLayer == l) {
+                    struct Task *t = w->UserPort != 0
+                                         ? (struct Task *)w->UserPort->mp_SigTask
+                                         : 0;
+
+                    name = "a window without a port";
+                    if (t != 0 && t->tc_Node.ln_Name != 0) {
+                        sprintf(task_name, "a window of %.30s",
+                                t->tc_Node.ln_Name);
+                        name = task_name;
+                    }
+                    break;
+                }
+            }
+        }
+        if (used + strlen(name) + 3U < sizeof(who)) {
+            used += (unsigned int)sprintf(who + used, "%s%s",
+                                          n > 0 ? ", " : "", name);
+        }
+    }
+    UnlockIBase(ilock); /* before the log: no disk I/O under that lock */
+    sprintf(line,
+            "diag: pop-up %.12s at %d,%d size %dx%d, %s%s, pens bubble %ld "
+            "text %ld name %ld dim %ld%s, up %lu s",
+            what, (int)win->LeftEdge, (int)win->TopEdge, (int)win->Width,
+            (int)win->Height, n == 0 ? "in front of everything" : "behind ",
+            who, (long)popup->pens[TG_GUI_POPUP_BUBBLE],
+            (long)popup->pens[TG_GUI_POPUP_TEXT],
+            (long)popup->pens[TG_GUI_POPUP_NAME],
+            (long)popup->pens[TG_GUI_POPUP_DIM],
+            popup->exact ? ", exact colours" : "",
+            now != (time_t)-1 && now >= popup->shown
+                ? (unsigned long)(now - popup->shown) % 100000UL
+                : 0UL);
+    tg_gui_log(line);
+}
+#endif
+
 static void tg_gui_popup_close(tg_gui_popup *popup)
 {
     if (popup == 0) {
         return;
     }
     if (popup->window != 0) {
+        TG_GUI_PHASE("pop-up: close");
+#if defined(TG_DIAG_FREEZE)
+        tg_gui_diag_popup_line(popup, "closing");
+        tg_gui_diag_popup = 0;
+#endif
         TG_GUI_POPUP_DIAG(popup, "ReleasePen begin");
         tg_gui_popup_release_pens(popup); /* while its screen surely lives */
         TG_GUI_POPUP_DIAG(popup, "CloseWindow begin");
@@ -13632,6 +14649,7 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
         top = 0;
     }
     TG_GUI_POPUP_DIAG(popup, "corners begin");
+    TG_GUI_PHASE("pop-up: corners");
     popup->corners = tg_gui_popup_corners(screen, left, top, w, h);
     TG_GUI_POPUP_DIAG(popup, "corners end");
     i = 0;
@@ -13659,6 +14677,7 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     tags[i].ti_Tag = TAG_END;
     tags[i++].ti_Data = 0;
     TG_GUI_POPUP_DIAG(popup, "OpenWindow begin");
+    TG_GUI_PHASE("pop-up: OpenWindow");
     win = OpenWindowTagList(0, tags);
     TG_GUI_POPUP_TRACE("OpenWindow end");
     if (win == 0) {
@@ -13690,6 +14709,7 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
     tg_gui_popup_pen(popup, TG_GUI_POPUP_DIM, &tg_gui_popup_dim_rgb, light);
     tg_gui_popup_name_pen(popup);
     TG_GUI_POPUP_DIAG(popup, "paint begin");
+    TG_GUI_PHASE("pop-up: paint");
     tg_gui_popup_repaint(popup);
     TG_GUI_POPUP_DIAG(popup, "paint end");
     {
@@ -13700,6 +14720,18 @@ static int tg_gui_popup_open(tg_gui_popup *popup, struct Screen *screen,
                 popup->corners != 0 ? "" : ", square");
         tg_gui_log(line);
     }
+#if defined(TG_DIAG_FREEZE)
+    {
+        static struct Screen *said = 0;
+
+        tg_gui_diag_popup = win;
+        if (said != win->WScreen) {
+            said = win->WScreen;
+            tg_gui_diag_screen("pop-up", win->WScreen, 0);
+        }
+        tg_gui_diag_popup_line(popup, "opened");
+    }
+#endif
     return 0;
 }
 
@@ -13744,6 +14776,7 @@ static void tg_gui_popup_show(tg_gui_popup *popup, const tg_gui_state *state,
         tg_gui_popup_close(popup);
     }
     if (popup->window != 0) {
+        TG_GUI_PHASE("pop-up: repaint");
         TG_GUI_POPUP_DIAG(popup, "repaint begin");
         tg_gui_popup_name_pen(popup);
         tg_gui_popup_repaint(popup);
@@ -13847,6 +14880,7 @@ static void tg_gui_window_notify_title(struct Window *window,
         return; /* already showing it: no title bar redraw */
     }
     TG_GUI_POPUP_TRACE("title begin");
+    TG_GUI_PHASE("notify: SetWindowTitles");
     memcpy(tg_gui_notify_title_text, want, sizeof(want));
     SetWindowTitles(window, (CONST_STRPTR)tg_gui_notify_title_text,
                     (CONST_STRPTR)~0UL);
@@ -13896,12 +14930,14 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
     /* tg_notify_sound_play owns loading, playback and the fallback chime. */
     now = time(0);
     server_now = tg_gui_session_server_time();
+    TG_GUI_PHASE("notify: sound");
     while (tg_gui_notify_ring_take_sound(state, server_now,
                 now == (time_t)-1 ? 0UL : (unsigned long)now,
                 sound, sizeof(sound))) {
         tg_gui_notify_sound(sound);
     }
     if (away && state->notify_mode >= TG_GUI_NOTIFY_POPUP) {
+        TG_GUI_PHASE("notify: pop-up");
         tg_gui_popup_show(&ui->popup, state, popup_screen);
     }
     TG_GUI_POPUP_TRACE("news end");
@@ -13938,9 +14974,12 @@ static void tg_gui_window_notify_turn(tg_gui_notify_ui *ui,
     state->notify_away = !here;
     /* On its own screen the window is not where the user is: the beep goes
        to every screen and the pop-up to the Workbench. */
+    TG_GUI_PHASE("notify: news");
     tg_gui_notify_news(ui, state, !here,
                        own_screen ? 0 : window->WScreen);
+    TG_GUI_PHASE("notify: expire");
     tg_gui_popup_expire(&ui->popup, state);
+    TG_GUI_PHASE("notify: title");
     tg_gui_window_notify_title(window, state);
 }
 
@@ -14229,6 +15268,17 @@ static struct Message *tg_gui_rexx_get(int *code, char *arg,
         line[i] = text[i];
     }
     line[i] = '\0';
+#if defined(TG_DIAG_FREEZE)
+    if (strncmp(line, "DIAGSTALL", 9) == 0) {
+        rest = line + 9;
+        while (*rest == ' ') {
+            ++rest;
+        }
+        *code = TG_GUI_DIAG_REXX_STALL;
+    } else if (strncmp(line, "DIAGPOPUP", 9) == 0) {
+        *code = TG_GUI_DIAG_REXX_POPUP;
+    } else
+#endif
     *code = tg_gui_rexx_command(line, &rest);
     for (i = 0UL; i + 1UL < arg_size && rest[i] != '\0'; ++i) {
         arg[i] = rest[i];
@@ -14838,6 +15888,15 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     puts("gui window: close gadget, Amiga+Q or Ctrl-C to quit.");
     fflush(stdout);
     tg_gui_log("window: opened");
+#if defined(TG_DIAG_FREEZE)
+    tg_gui_diag_system();
+    tg_gui_diag_screen("window", ctx.window->WScreen, own_scr != 0);
+    tg_gui_diag_window_line("main", ctx.window);
+    tg_gui_diag_sig_window = ctx.window->UserPort != 0
+                                 ? (int)ctx.window->UserPort->mp_SigBit
+                                 : -1;
+#endif
+
     /* From here a stalled network wait gives way to a close or a Workbench
        reset warning (tg_gui_window_break_check), the first connect included. */
     tg_gui_break_window = ctx.window;
@@ -14950,6 +16009,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         OpenDevice((CONST_STRPTR)"timer.device", UNIT_VBLANK,
                    (struct IORequest *)timer_req, 0) == 0) {
         timer_ok = 1;
+#if defined(TG_DIAG_FREEZE)
+        tg_gui_diag_sig_timer = (int)timer_port->mp_SigBit;
+#endif
         tg_gui_timer_arm(timer_req, 0);
         timer_pending = 1;
     }
@@ -14988,6 +16050,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         viewer_save_requested = 0;
         tick_polled = 0;
         wake_signals = 0UL;
+#if defined(TG_DIAG_FREEZE)
+        tg_gui_diag_turn(ctx.window);
+#endif
         if (older_cooldown > 0) {
             older_cooldown -= 1;
         }
@@ -14997,6 +16062,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
            to here is on screen, so say what is coming and run it; it
            blocks like the login does, and the avatar shows once it is
            through. */
+        TG_GUI_PHASE("deferred contact?");
         if (tg_gui_session_deferred_contact() != 0UL) {
             char contact_saved[sizeof(state->status)];
 
@@ -15028,7 +16094,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                network RPC inside the step paces the loop, so this is not a
                busy spin. */
             if (!tg_gui_session_transfer_busy()) {
+                TG_GUI_PHASE("wait");
                 wake_signals = Wait(wait_mask);
+                TG_GUI_PHASE("woke");
             }
             /* INTUITICKS stop when a window is inactive. The existing VBLANK
                heartbeat must schedule photo work too, not only message polls. */
@@ -15037,6 +16105,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 photo_tick = 1;
             }
         }
+        TG_GUI_PHASE("arexx");
         /* ARexx commands, the window open. */
         {
             struct Message *rxm;
@@ -15048,6 +16117,20 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 long rx_rc = 0L;
                 int rx_sent = 0;
 
+#if defined(TG_DIAG_FREEZE)
+                if (rx_code == TG_GUI_DIAG_REXX_STALL) {
+                    tg_gui_rexx_reply(rxm, 0L); /* rx goes back at once */
+                    tg_gui_diag_stall(rx_arg, ctx.window);
+                    continue;
+                }
+                if (rx_code == TG_GUI_DIAG_REXX_POPUP) {
+                    tg_gui_rexx_reply(rxm, 0L);
+                    tg_gui_log("diag: test pop-up");
+                    tg_gui_popup_show(&notify_ui.popup, state,
+                                      own_scr != 0 ? 0 : ctx.window->WScreen);
+                    continue;
+                }
+#endif
                 if (tg_gui_rexx_common(state, rxm, rx_code, rx_arg,
                                        &rx_sent)) {
                     if (rx_sent) {
@@ -15102,6 +16185,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         if (wbn_mask != 0UL) {
             struct Message *wm;
 
+            TG_GUI_PHASE("wb notify");
             while ((wm = GetMsg(tg_gui_wbn_port)) != 0) {
                 if (tg_gui_wbn_kind(wm) == 1 && own_scr == 0 &&
                     wbn_close == 0 && done == 0) {
@@ -15130,6 +16214,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                and on a stalled link that kept the reset waiting minutes. */
             continue;
         }
+        TG_GUI_PHASE("viewer drain");
         tg_gui_photo_viewer_drain(&viewer, &photo_tick,
                                   &interactive_event,
                                   &viewer_save_requested);
@@ -15175,6 +16260,25 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             mouse_y = msg->MouseY;
             msg_secs = msg->Seconds;
             msg_micros = msg->Micros;
+#if defined(TG_DIAG_FREEZE)
+            /* The class always, the code only where it is not a key. */
+            tg_gui_diag_class = (unsigned long)msg_class;
+            tg_gui_diag_code = (msg_class == IDCMP_RAWKEY ||
+                                msg_class == IDCMP_VANILLAKEY)
+                                   ? 0UL
+                                   : (unsigned long)msg_code;
+            TG_GUI_PHASE("event");
+            if (msg_class == IDCMP_MOUSEBUTTONS ||
+                msg_class == IDCMP_CLOSEWINDOW ||
+                msg_class == IDCMP_NEWSIZE) {
+                char dline[80];
+
+                sprintf(dline, "diag: event 0x%08lx code 0x%04x at %d,%d",
+                        (unsigned long)msg_class, (unsigned int)msg_code,
+                        (int)mouse_x, (int)mouse_y);
+                tg_gui_log(dline);
+            }
+#endif
             if (msg_class == IDCMP_INTUITICKS) {
                 photo_tick = 1;
             } else {
@@ -16120,6 +17224,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                state->selected_chat, &backend);
                 }
             } else if (msg_class == IDCMP_MENUPICK || key_menu_action != 0) {
+                TG_GUI_PHASE("menu");
                 UWORD mnum;
 
                 tg_gui_log("menu: pick");
@@ -18519,6 +19624,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 }
             }
         }
+        TG_GUI_PHASE("after events");
         if (resize_pending && !done && photo_tick && !interactive_event &&
             !tg_gui_window_user_events_pending(&ctx, &viewer)) {
             if (resize_settle_ticks > 0) {
@@ -18651,6 +19757,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             unsigned long ttotal = 0UL;
 
             TG_XFER_STOP(TG_XFER_LOOP_US);
+            TG_GUI_PHASE("transfer step");
             if (tg_gui_session_transfer_step(&tdone, &ttotal)) {
                 TG_XFER_START(TG_XFER_LOOP_US);
                 /* Percentage WITHOUT overflowing 32 bits: bytes*100 wraps
@@ -18746,6 +19853,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
            unrelated repaint. m68k keeps its conservative input deferral;
            faster targets run a full bounded slice immediately even under a
            continuous VNC pointer stream. */
+        TG_GUI_PHASE("photo work");
         if (photo_tick) {
             int pending;
             int events_pending;
@@ -18998,7 +20106,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    off-screen (a scrollable transcript scrolled to the top); when
                    everything fits, the newest rows are visible -- never evict
                    them (would also lose their read-receipt state). */
-                int got = tg_gui_session_load_older(stdout, state->sb_tr_max > 0);
+                int got;
+
+                TG_GUI_PHASE("load older");
+                got = tg_gui_session_load_older(stdout, state->sb_tr_max > 0);
                 if (got > 0) {
                     scroll_dirty = 1;     /* new rows above -> repaint with them */
                     older_cooldown = 2;   /* breather before the next page */
@@ -19018,6 +20129,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
            This is what keeps reception alive while the window is
            inactive; when it is active the shared time guard prevents any
            double-polling. */
+        TG_GUI_PHASE("heartbeat");
         if (timer_ok && timer_pending &&
             CheckIO((struct IORequest *)timer_req) != 0) {
             (void)WaitIO((struct IORequest *)timer_req);
@@ -19048,6 +20160,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 typing_now = pnow != (time_t)-1 && pnow >= last_key_time &&
                              (unsigned long)(pnow - last_key_time) < pause;
             }
+            TG_GUI_PHASE("paint decide");
             if (session_dirty && !scroll_dirty && typing_now) {
                 paint_deferred = 1;
             } else if (session_dirty || scroll_dirty ||
@@ -19073,6 +20186,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
            chats, and the first of a run beeps while the window is behind. */
         tg_gui_window_notify_turn(&notify_ui, state, ctx.window,
                                   viewer.ctx.window, own_scr != 0);
+        TG_GUI_PHASE("turn end");
         /* A fits-window load left the older rows above the pinned-newest view: if
            it now overflows, scroll to the top to reveal them (the paint above
            refreshed sb_tr_max). If it still fits, they are already on screen. */
@@ -19118,6 +20232,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 timer_pending = 0;
             }
             if (!timer_pending) {
+                TG_GUI_PHASE("timer arm");
                 tg_gui_timer_arm(timer_req, want_fast_timer);
                 timer_pending = 1;
                 timer_fast = want_fast_timer;
@@ -19125,6 +20240,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         }
     }
 
+#if defined(TG_DIAG_FREEZE)
+    tg_gui_diag_leave();
+#endif
     tg_net_set_break_check(0); /* it looks at this window's queue */
     tg_gui_break_window = 0;
     tg_platform_gui_drop_disarm(); /* before the window goes away */
@@ -19618,6 +20736,9 @@ int tg_gui_run_window(tg_gui_state *state)
     }
     state->update_can = tg_gui_session_update_possible();
     state->update_check = tg_gui_session_update_enabled();
+#if defined(TG_DIAG_FREEZE)
+    tg_gui_diag_start();
+#endif
     for (;;) {
         int rc = tg_gui_run_window_once(state);
 
@@ -19627,11 +20748,17 @@ int tg_gui_run_window(tg_gui_state *state)
         if (rc != 2) {
             tg_gui_rexx_close();
             tg_gui_photo_cache_end();
+#if defined(TG_DIAG_FREEZE)
+            tg_gui_diag_stop();
+#endif
             return rc;
         }
         if (!tg_gui_window_iconify_wait(state)) {
             tg_gui_rexx_close();
             tg_gui_photo_cache_end();
+#if defined(TG_DIAG_FREEZE)
+            tg_gui_diag_stop();
+#endif
             return 0; /* AppIcon failed or Ctrl-C: a clean quit */
         }
         /* Double-click: fall through and reopen the window fresh. */

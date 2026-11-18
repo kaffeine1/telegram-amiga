@@ -158,6 +158,11 @@ static int tg_main_finish(int result)
 
 static int tg_main_body(int argc, char **argv)
 {
+#if defined(TG_DIAG_FREEZE)
+    /* Freeze diagnostic build: the log is on for every launch, the
+       double-click included, so the tester needs no Shell line. */
+    tg_gui_log_enable();
+#endif
 #if defined(TG_DIAG_TRACE)
     /* Diagnostic build: arm the crash-safe trail for EVERY launch, not just
        the Workbench one. A machine booted without its startup-sequence has no
