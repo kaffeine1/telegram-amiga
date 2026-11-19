@@ -408,6 +408,7 @@ static void tg_gui_diag_turn(struct Window *win)
    never waiting), each for a minute. Only in this build. */
 #define TG_GUI_DIAG_REXX_STALL 900
 #define TG_GUI_DIAG_REXX_POPUP 901 /* DIAGPOPUP: the pop-up, with the last news */
+#define TG_GUI_DIAG_REXX_CHIME 902 /* DIAGCHIME: the notification chime */
 
 static void tg_gui_diag_stall(const char *how, struct Window *win)
 {
@@ -14903,10 +14904,13 @@ static void tg_gui_notify_sound(const char *path)
                 path, tg_notify_sound_why(),
                 heard == TG_NOTIFY_HEARD_CHIME ? "chime through AHI or Paula"
                                                : "no sound device, DisplayBeep");
+    } else if (heard == TG_NOTIFY_HEARD_CHIME) {
+        sprintf(line, "notify: chime through AHI or Paula");
     } else {
-        sprintf(line, "notify: %s", heard == TG_NOTIFY_HEARD_CHIME
-                                       ? "chime through AHI or Paula"
-                                       : "no sound device, DisplayBeep");
+        const char *why = tg_notify_sound_why();
+
+        sprintf(line, "notify: no chime (%.64s), DisplayBeep",
+                why[0] != '\0' ? why : "no sound device");
     }
     tg_gui_log(line);
 }
@@ -14922,6 +14926,16 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
     char sound[TG_NOTIFY_SOUND_MAX];
 
     tg_notify_sound_poll();
+    {
+        const char *news = tg_notify_sound_news();
+
+        if (news != 0) {
+            char line[128];
+
+            sprintf(line, "notify: %.100s", news);
+            tg_gui_log(line);
+        }
+    }
     if (state->notify_seq == ui->seen_seq) {
         return;
     }
@@ -15277,6 +15291,8 @@ static struct Message *tg_gui_rexx_get(int *code, char *arg,
         *code = TG_GUI_DIAG_REXX_STALL;
     } else if (strncmp(line, "DIAGPOPUP", 9) == 0) {
         *code = TG_GUI_DIAG_REXX_POPUP;
+    } else if (strncmp(line, "DIAGCHIME", 9) == 0) {
+        *code = TG_GUI_DIAG_REXX_CHIME;
     } else
 #endif
     *code = tg_gui_rexx_command(line, &rest);
@@ -16128,6 +16144,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     tg_gui_log("diag: test pop-up");
                     tg_gui_popup_show(&notify_ui.popup, state,
                                       own_scr != 0 ? 0 : ctx.window->WScreen);
+                    continue;
+                }
+                if (rx_code == TG_GUI_DIAG_REXX_CHIME) {
+                    tg_gui_rexx_reply(rxm, 0L);
+                    tg_gui_log("diag: test chime");
+                    tg_gui_notify_sound("");
                     continue;
                 }
 #endif

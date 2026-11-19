@@ -61,6 +61,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- The window could stop answering for good after a few hours, Ctrl-C
+  included (a tester reported it on AmigaOS 4). The notification chime
+  waited for ahi.device to give its request back, and on that machine
+  the device once kept one: everything stopped there until a reboot. The
+  chime now goes without waiting, comes back on its own, and is aborted
+  after three seconds if the device still holds it; a chime the device
+  never returns no longer holds anything up, and the next message beeps
+  instead. On AmigaOS 3 the chime also no longer waits for a free Paula
+  channel, and on AROS a sound file is stopped without waiting for the
+  device either.
 - A picture whose name does not end in .jpg or .png could not be sent
   as a photo (a tester reported it). "Send photo..." did not list it,
   its icon dropped on the window left as a file without asking, and

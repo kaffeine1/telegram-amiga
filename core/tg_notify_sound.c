@@ -43,6 +43,9 @@
 #define TG_NOTIFY_TAG(p) ((ULONG)(p))
 #endif
 
+/* Why a file was not heard, or the chime, for the debug log. */
+static const char *tg_notify_sound_reason = "";
+
 /* Opened only while a sound file plays (tg_notify_sound_start/stop). */
 struct Library *DataTypesBase = 0;
 #if defined(__amigaos4__)
@@ -121,11 +124,112 @@ static void tg_notify_chime_request_free(struct IORequest *io)
 #endif
 }
 
+/* The chime is sent, never waited for. On an AmigaOS 4 machine ahi.device
+   once kept a chime for good, and the DoIO that played it froze the whole
+   window with it, Ctrl-C included, until the reboot (2026-11-19, found by
+   the freeze build's watchdog). Now the request is reaped by
+   tg_notify_sound_poll as soon as it is back; after a few seconds it is
+   aborted, and one the device never gives back is left to it rather than
+   waited for. */
+#define TG_NOTIFY_CHIME_GIVE_UP 150L /* ticks: three seconds at 50 Hz */
+
+typedef struct tg_notify_chime_io {
+    struct MsgPort *port;
+    struct IORequest *io; /* 0: no chime out */
+    signed char *wave;
+    int chip;             /* the wave is chip RAM from AllocMem (Paula) */
+    int aborted;
+    struct DateStamp sent;
+} tg_notify_chime_io;
+
+static tg_notify_chime_io tg_notify_chime_out;
+static const char *tg_notify_chime_news = 0; /* one line for the log */
+
+static long tg_notify_ticks_since(const struct DateStamp *then)
+{
+    struct DateStamp now;
+
+    DateStamp(&now);
+    return (now.ds_Days - then->ds_Days) * 24L * 60L * 60L *
+               TICKS_PER_SECOND +
+           (now.ds_Minute - then->ds_Minute) * 60L * TICKS_PER_SECOND +
+           (now.ds_Tick - then->ds_Tick);
+}
+
+static void tg_notify_chime_wave_free(signed char *wave, int chip)
+{
+    if (wave == 0) {
+        return;
+    }
+#if defined(__amigaos3__)
+    if (chip) {
+        FreeMem(wave, (ULONG)TG_NOTIFY_CHIME_LENGTH);
+        return;
+    }
+#else
+    (void)chip;
+#endif
+    FreeVec(wave);
+}
+
+/* The chime came back: the device, the request and the wave go. */
+static void tg_notify_chime_release(void)
+{
+    tg_notify_chime_io *c = &tg_notify_chime_out;
+
+    (void)WaitIO(c->io); /* already back: returns at once */
+    CloseDevice(c->io);
+    tg_notify_chime_request_free(c->io);
+    tg_notify_chime_port_free(c->port);
+    tg_notify_chime_wave_free(c->wave, c->chip);
+    memset(c, 0, sizeof(*c));
+}
+
+/* Collects a chime that is back, aborts one held too long. At the exit it
+   waits a second at most; a request still out after that stays with the
+   device, with its port, its wave and the device open: freeing them under
+   the device would be worse than the few bytes left behind, and the port
+   no longer signals this task, which is going. */
+static void tg_notify_chime_reap(int at_exit)
+{
+    tg_notify_chime_io *c = &tg_notify_chime_out;
+    int i;
+
+    if (c->io == 0) {
+        return;
+    }
+    if (CheckIO(c->io) != 0) {
+        tg_notify_chime_release();
+        return;
+    }
+    if (!c->aborted &&
+        (at_exit || tg_notify_ticks_since(&c->sent) >= TG_NOTIFY_CHIME_GIVE_UP ||
+         tg_notify_ticks_since(&c->sent) < 0L)) {
+        AbortIO(c->io);
+        c->aborted = 1;
+        tg_notify_chime_news =
+            "chime still with the sound device after 3 s: aborted, not "
+            "waited for";
+    }
+    if (!at_exit) {
+        return;
+    }
+    for (i = 0; i < 10 && CheckIO(c->io) == 0; ++i) {
+        Delay(TICKS_PER_SECOND / 10);
+    }
+    if (CheckIO(c->io) != 0) {
+        tg_notify_chime_release();
+        return;
+    }
+    c->port->mp_Flags = PA_IGNORE;
+    memset(c, 0, sizeof(*c));
+}
+
+/* 1 when the chime went to ahi.device; the request then owns the wave. */
 static int tg_notify_chime_ahi(signed char *wave)
 {
     struct MsgPort *port;
     struct AHIRequest *ahi;
-    int played = 0;
 
     port = tg_notify_chime_port();
     if (port == 0) {
@@ -133,36 +237,45 @@ static int tg_notify_chime_ahi(signed char *wave)
     }
     ahi = (struct AHIRequest *)tg_notify_chime_request(
         port, (ULONG)sizeof(struct AHIRequest));
-    if (ahi != 0) {
-        ahi->ahir_Version = 4;
-        if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT,
-                       (struct IORequest *)ahi, 0) == 0) {
-            ahi->ahir_Std.io_Command = CMD_WRITE;
-            ahi->ahir_Std.io_Data = (APTR)wave;
-            ahi->ahir_Std.io_Length = (ULONG)TG_NOTIFY_CHIME_LENGTH;
-            ahi->ahir_Std.io_Offset = 0;
-            ahi->ahir_Type = AHIST_M8S;
-            ahi->ahir_Frequency = (ULONG)TG_NOTIFY_CHIME_RATE;
-            ahi->ahir_Volume = 0xC000;   /* three quarters */
-            ahi->ahir_Position = 0x8000; /* centre */
-            ahi->ahir_Link = 0;
-            played = DoIO((struct IORequest *)ahi) == 0;
-            CloseDevice((struct IORequest *)ahi);
-        }
-        tg_notify_chime_request_free((struct IORequest *)ahi);
+    if (ahi == 0) {
+        tg_notify_chime_port_free(port);
+        return 0;
     }
-    tg_notify_chime_port_free(port);
-    return played;
+    ahi->ahir_Version = 4;
+    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT,
+                   (struct IORequest *)ahi, 0) != 0) {
+        tg_notify_chime_request_free((struct IORequest *)ahi);
+        tg_notify_chime_port_free(port);
+        return 0;
+    }
+    ahi->ahir_Std.io_Command = CMD_WRITE;
+    ahi->ahir_Std.io_Data = (APTR)wave;
+    ahi->ahir_Std.io_Length = (ULONG)TG_NOTIFY_CHIME_LENGTH;
+    ahi->ahir_Std.io_Offset = 0;
+    ahi->ahir_Type = AHIST_M8S;
+    ahi->ahir_Frequency = (ULONG)TG_NOTIFY_CHIME_RATE;
+    ahi->ahir_Volume = 0xC000;   /* three quarters */
+    ahi->ahir_Position = 0x8000; /* centre */
+    ahi->ahir_Link = 0;
+    SendIO((struct IORequest *)ahi);
+    tg_notify_chime_out.port = port;
+    tg_notify_chime_out.io = (struct IORequest *)ahi;
+    tg_notify_chime_out.wave = wave;
+    tg_notify_chime_out.chip = 0;
+    tg_notify_chime_out.aborted = 0;
+    DateStamp(&tg_notify_chime_out.sent);
+    return 1;
 }
 
 #if defined(__amigaos3__)
-/* Paula: one free channel of any side, the wave in chip RAM. */
+/* Paula: one free channel of any side, the wave in chip RAM. No waiting
+   for a channel either: with all four taken the open fails at once
+   (ADIOF_NOWAIT) and the caller beeps instead. */
 static int tg_notify_chime_paula(signed char *wave)
 {
     static UBYTE channels[] = { 1, 8, 2, 4 };
     struct MsgPort *port;
     struct IOAudio *audio;
-    int played = 0;
 
     port = tg_notify_chime_port();
     if (port == 0) {
@@ -170,57 +283,72 @@ static int tg_notify_chime_paula(signed char *wave)
     }
     audio = (struct IOAudio *)tg_notify_chime_request(
         port, (ULONG)sizeof(struct IOAudio));
-    if (audio != 0) {
-        audio->ioa_Request.io_Message.mn_Node.ln_Pri = 0;
-        audio->ioa_Data = channels; /* the open allocates a channel */
-        audio->ioa_Length = (ULONG)sizeof(channels);
-        if (OpenDevice((CONST_STRPTR)AUDIONAME, 0,
-                       (struct IORequest *)audio, 0) == 0) {
-            audio->ioa_Request.io_Command = CMD_WRITE;
-            audio->ioa_Request.io_Flags = ADIOF_PERVOL;
-            audio->ioa_Data = (UBYTE *)wave;
-            audio->ioa_Length = (ULONG)TG_NOTIFY_CHIME_LENGTH;
-            audio->ioa_Period = 161; /* 3546895 Hz / 161 = 22 kHz (PAL) */
-            audio->ioa_Volume = 48;
-            audio->ioa_Cycles = 1;
-            /* BeginIO, not DoIO: exec's DoIO sets io_Flags to IOF_QUICK,
-               and without ADIOF_PERVOL the channel keeps a period and a
-               volume of nought, silent though the request succeeds. */
-            BeginIO((struct IORequest *)audio);
-            played = WaitIO((struct IORequest *)audio) == 0;
-            CloseDevice((struct IORequest *)audio); /* frees the channel */
-        }
-        tg_notify_chime_request_free((struct IORequest *)audio);
+    if (audio == 0) {
+        tg_notify_chime_port_free(port);
+        return 0;
     }
-    tg_notify_chime_port_free(port);
-    return played;
+    audio->ioa_Request.io_Message.mn_Node.ln_Pri = 0;
+    audio->ioa_Request.io_Flags = ADIOF_NOWAIT;
+    audio->ioa_Data = channels; /* the open allocates a channel */
+    audio->ioa_Length = (ULONG)sizeof(channels);
+    if (OpenDevice((CONST_STRPTR)AUDIONAME, 0,
+                   (struct IORequest *)audio, 0) != 0) {
+        tg_notify_chime_request_free((struct IORequest *)audio);
+        tg_notify_chime_port_free(port);
+        return 0;
+    }
+    audio->ioa_Request.io_Command = CMD_WRITE;
+    audio->ioa_Request.io_Flags = ADIOF_PERVOL;
+    audio->ioa_Data = (UBYTE *)wave;
+    audio->ioa_Length = (ULONG)TG_NOTIFY_CHIME_LENGTH;
+    audio->ioa_Period = 161; /* 3546895 Hz / 161 = 22 kHz (PAL) */
+    audio->ioa_Volume = 48;
+    audio->ioa_Cycles = 1;
+    /* BeginIO, not DoIO or SendIO: those set io_Flags themselves, and
+       without ADIOF_PERVOL the channel keeps a period and a volume of
+       nought, silent though the request succeeds. */
+    BeginIO((struct IORequest *)audio);
+    tg_notify_chime_out.port = port;
+    tg_notify_chime_out.io = (struct IORequest *)audio;
+    tg_notify_chime_out.wave = wave;
+    tg_notify_chime_out.chip = 1;
+    tg_notify_chime_out.aborted = 0;
+    DateStamp(&tg_notify_chime_out.sent);
+    return 1;
 }
 #endif
 
-/* 1 when the chime played. */
+/* 1 when a chime is on its way. Two messages close together get one: a
+   chime still out covers the second. One the device has not given back
+   even after the abort means the device is stuck: the caller beeps. */
 static int tg_notify_chime_play(void)
 {
     signed char *wave;
-    int played = 0;
 
+    tg_notify_chime_reap(0);
+    if (tg_notify_chime_out.io != 0) {
+        if (!tg_notify_chime_out.aborted) {
+            return 1;
+        }
+        tg_notify_sound_reason = "the last chime is still with the sound device";
+        return 0;
+    }
     wave = (signed char *)AllocVec((ULONG)TG_NOTIFY_CHIME_LENGTH, MEMF_PUBLIC);
     if (wave != 0) {
         tg_notify_chime_render(wave);
-        played = tg_notify_chime_ahi(wave);
+        if (tg_notify_chime_ahi(wave)) {
+            return 1;
+        }
         FreeVec(wave);
-    }
-    if (played) {
-        return 1;
     }
 #if defined(__amigaos3__)
     wave = (signed char *)AllocMem((ULONG)TG_NOTIFY_CHIME_LENGTH, MEMF_CHIP);
     if (wave != 0) {
         tg_notify_chime_render(wave);
-        played = tg_notify_chime_paula(wave);
+        if (tg_notify_chime_paula(wave)) {
+            return 1;
+        }
         FreeMem(wave, (ULONG)TG_NOTIFY_CHIME_LENGTH);
-    }
-    if (played) {
-        return 1;
     }
 #endif
     return 0;
@@ -257,7 +385,6 @@ static int tg_notify_sound_file_small(const char *path)
    three seconds have passed. No second process: DOS packets and the C
    library stay with the one task that already owns them. */
 static Object *tg_notify_sound_object = 0;
-static const char *tg_notify_sound_reason = "";
 static BYTE tg_notify_sound_bit = -1;
 static struct DateStamp tg_notify_sound_started;
 
@@ -270,22 +397,40 @@ static struct DateStamp tg_notify_sound_started;
 static struct MsgPort *tg_notify_sound_port = 0;
 static struct AHIRequest *tg_notify_sound_ahi = 0;
 
-static void tg_notify_sound_ahi_stop(void)
+/* 0 when the request did not come back within a second of its abort: it
+   stays with the device, and so does the sample it is reading (the
+   caller must not dispose of the object that holds it), like a stuck
+   chime. */
+static int tg_notify_sound_ahi_stop(void)
 {
-    if (tg_notify_sound_ahi != 0) {
-        if (!CheckIO((struct IORequest *)tg_notify_sound_ahi)) {
-            AbortIO((struct IORequest *)tg_notify_sound_ahi);
+    struct IORequest *io = (struct IORequest *)tg_notify_sound_ahi;
+    int i;
+
+    if (io != 0) {
+        if (CheckIO(io) == 0) {
+            AbortIO(io);
         }
-        WaitIO((struct IORequest *)tg_notify_sound_ahi);
-        CloseDevice((struct IORequest *)tg_notify_sound_ahi);
-        tg_notify_chime_request_free(
-            (struct IORequest *)tg_notify_sound_ahi);
+        for (i = 0; i < 10 && CheckIO(io) == 0; ++i) {
+            Delay(TICKS_PER_SECOND / 10);
+        }
         tg_notify_sound_ahi = 0;
+        if (CheckIO(io) == 0) {
+            tg_notify_sound_port->mp_Flags = PA_IGNORE;
+            tg_notify_sound_port = 0;
+            tg_notify_chime_news =
+                "sound file still with the sound device after its abort: "
+                "left to it";
+            return 0;
+        }
+        (void)WaitIO(io);
+        CloseDevice(io);
+        tg_notify_chime_request_free(io);
     }
     if (tg_notify_sound_port != 0) {
         tg_notify_chime_port_free(tg_notify_sound_port);
         tg_notify_sound_port = 0;
     }
+    return 1;
 }
 
 /* 1 when the object's sample went to ahi.device. */
@@ -314,14 +459,14 @@ static int tg_notify_sound_ahi_start(Object *object)
     ahi = (struct AHIRequest *)tg_notify_chime_request(
         tg_notify_sound_port, (ULONG)sizeof(struct AHIRequest));
     if (ahi == 0) {
-        tg_notify_sound_ahi_stop();
+        (void)tg_notify_sound_ahi_stop();
         return 0;
     }
     ahi->ahir_Version = 4;
     if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT,
                    (struct IORequest *)ahi, 0) != 0) {
         tg_notify_chime_request_free((struct IORequest *)ahi);
-        tg_notify_sound_ahi_stop();
+        (void)tg_notify_sound_ahi_stop();
         return 0;
     }
     ahi->ahir_Std.io_Command = CMD_WRITE;
@@ -344,7 +489,11 @@ static void tg_notify_sound_stop(void)
     struct dtTrigger trigger;
 
 #if defined(__AROS__)
-    tg_notify_sound_ahi_stop(); /* before the object that owns the sample */
+    /* Before the object that owns the sample; a request the device kept
+       keeps the object too. */
+    if (!tg_notify_sound_ahi_stop()) {
+        tg_notify_sound_object = 0;
+    }
 #endif
     if (tg_notify_sound_object != 0) {
         trigger.MethodID = DTM_TRIGGER;
@@ -448,10 +597,10 @@ static int tg_notify_sound_start(const char *path)
 
 void tg_notify_sound_poll(void)
 {
-    struct DateStamp now;
     ULONG mask;
     long ticks;
 
+    tg_notify_chime_reap(0);
     if (tg_notify_sound_object == 0) {
         return;
     }
@@ -468,12 +617,7 @@ void tg_notify_sound_poll(void)
         tg_notify_sound_stop();
         return;
     }
-    DateStamp(&now);
-    ticks = (now.ds_Days - tg_notify_sound_started.ds_Days) * 24L * 60L *
-                TICKS_PER_SECOND * 60L +
-            (now.ds_Minute - tg_notify_sound_started.ds_Minute) * 60L *
-                TICKS_PER_SECOND +
-            (now.ds_Tick - tg_notify_sound_started.ds_Tick);
+    ticks = tg_notify_ticks_since(&tg_notify_sound_started);
     if (ticks < 0L || ticks >= (long)TG_NOTIFY_SOUND_TICKS) {
         tg_notify_sound_stop();
     }
@@ -501,9 +645,18 @@ const char *tg_notify_sound_why(void)
     return tg_notify_sound_reason;
 }
 
+const char *tg_notify_sound_news(void)
+{
+    const char *news = tg_notify_chime_news;
+
+    tg_notify_chime_news = 0;
+    return news;
+}
+
 void tg_notify_sound_shutdown(void)
 {
     tg_notify_sound_stop();
+    tg_notify_chime_reap(1);
 }
 
 #else
@@ -521,6 +674,11 @@ int tg_notify_sound_play(const char *path)
 const char *tg_notify_sound_why(void)
 {
     return "";
+}
+
+const char *tg_notify_sound_news(void)
+{
+    return 0;
 }
 
 void tg_notify_sound_poll(void)
