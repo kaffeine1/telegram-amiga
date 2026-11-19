@@ -207,6 +207,16 @@ dopo giro sul suo A600, la versione 68000 non sarebbe mai uscita.
         thanks68k_para_en=""
         thanks68k_line_it=""
     fi
+    # Every package thanks Enrico Vitale for his testing (Michele,
+    # 2026-11-19): wherever the credits thank anyone.
+    thanks_ev_line_en="Thanks to Enrico Vitale of ACube Systems for his tireless and fruitful
+testing.
+"
+    thanks_ev_para_en="$thanks_ev_line_en
+"
+    thanks_ev_line_it="Grazie a Enrico Vitale di ACube Systems per i suoi test incessanti e
+fruttuosi.
+"
     gui_entry_en="- Amigram: the window client (Intuition/GadTools). Double-click it.
 "
     gui_entry_it="- Amigram: il client a finestra (Intuition/GadTools). Doppio click.
@@ -578,7 +588,7 @@ Changes: CHANGELOG.txt.
 Never share telegram-auth.bin: after the first login it holds your
 Telegram session.
 
-${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system, put
+${thanks68k_para_en}${thanks_ev_para_en}The icon is our own design. Carlo Spadoni optimised it for each system, put
 it on a standard drawer for the drawer icon, and let me ship his versions.
 
 Version: $VERSION   Build: $COMMIT_ID
@@ -1255,7 +1265,7 @@ Contributions: Javier de las Rivas (javierdlr), and Bohun (bohunamiga),
 who took the build to AROS on ARM. The icon is our own design: Carlo
 Spadoni optimised it for each system, put it on a standard drawer for
 the drawer icon, and let me ship his versions.
-${thanks68k_line_en}Thanks to the testers who run it on real hardware and report what they
+${thanks68k_line_en}${thanks_ev_line_en}Thanks to the testers who run it on real hardware and report what they
 find.
 
 The emoji pictures are Noto Emoji glyphs (Google, SIL Open Font License
@@ -1340,7 +1350,7 @@ portato la build su AROS ARM. Il disegno dell'icona e' nostro: Carlo
 Spadoni l'ha ottimizzata per ogni sistema, l'ha messa su un cassetto
 standard per l'icona del cassetto e mi ha permesso di distribuire le sue
 versioni.
-${thanks68k_line_it}Grazie ai tester che lo provano su hardware vero e raccontano quello che
+${thanks68k_line_it}${thanks_ev_line_it}Grazie ai tester che lo provano su hardware vero e raccontano quello che
 trovano.
 
 Le immagini delle emoji sono glifi Noto Emoji (Google, SIL Open Font
@@ -1586,7 +1596,7 @@ Free software under the GNU GPL version 3 or later, and non-commercial.
 Bug reports and wishes are welcome: testers on real hardware are what
 moves this project forward.
 
-${thanks68k_para_en}The icon is our own design. Carlo Spadoni optimised it for each system,
+${thanks68k_para_en}${thanks_ev_para_en}The icon is our own design. Carlo Spadoni optimised it for each system,
 put it on a standard drawer for the drawer icon, and let me ship his
 versions.
 

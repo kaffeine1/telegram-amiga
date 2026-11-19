@@ -32,7 +32,8 @@ a settings panel and an update notice among them. The whole list is in
 [ROADMAP.md](ROADMAP.md).
 
 The plain-68000 package exists thanks to Paolo Arus (DaRkHoRaCe), who
-tested it on an A600 round after round.
+tested it on an A600 round after round. Thanks to Enrico Vitale of ACube
+Systems for his tireless and fruitful testing.
 
 License: GNU GPL version 3 or later (MIT up to the 0.1 beta, see
 [docs/LICENSE-MIT-up-to-0.1.txt](docs/LICENSE-MIT-up-to-0.1.txt)). A

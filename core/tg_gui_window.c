@@ -8520,6 +8520,8 @@ static const char tg_gui_about_text[] =
     "and Bohun (bohunamiga), who took the build to\n"
     "AROS on ARM.\n"
     "Icons optimised by Carlo Spadoni.\n\n"
+    "Thanks to Enrico Vitale of ACube Systems\n"
+    "for his tireless and fruitful testing.\n\n"
     "And thanks to the testers around the world\n"
     "who run this on real hardware and send back\n"
     "what they find. This client is what it is\n"
