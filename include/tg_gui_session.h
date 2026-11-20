@@ -232,13 +232,15 @@ int tg_gui_session_transfer_start_photo(const char *path,
                                         const char *caption, FILE *stream);
 /* Several files picked together. batch_begin reads the open chat, where all
    of them go whatever is open by then. Each file starts with
-   transfer_start_batch_photo (kept for the album; 7 = it cannot be a photo)
-   or transfer_start_batch_file (sent alone), and is pumped and ended like
-   any other transfer. batch_send_album makes ONE message out of the photos
-   that arrived (at most ten), the caption on the first; batch_end closes
-   the batch and drops the photos it still holds. */
+   transfer_start_batch_photo (kept for an album of photos; 7 = it cannot be
+   a photo), transfer_start_batch_doc (kept for an album of files) or
+   transfer_start_batch_file (sent alone), and is pumped and ended like any
+   other transfer. batch_send_album makes ONE message out of what arrived
+   (at most ten, photos or files, never both), the caption on the first;
+   batch_end closes the batch and drops what it still holds. */
 int tg_gui_session_batch_begin(FILE *stream);
 int tg_gui_session_transfer_start_batch_photo(const char *path, FILE *stream);
+int tg_gui_session_transfer_start_batch_doc(const char *path, FILE *stream);
 int tg_gui_session_transfer_start_batch_file(const char *path,
                                              const char *caption,
                                              FILE *stream);

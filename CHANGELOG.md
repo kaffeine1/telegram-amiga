@@ -55,6 +55,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   it loaded, else as a message further up. Saved Messages keeps a draft
   too, shown on its row like any chat's: Telegram names that chat by the
   account's own user, which the window now asks once at each start.
+- Albums of files, of more than ten photos, and of icons dropped
+  together. Files picked together (or photos sent as files) leave as an
+  album of files, one grouped message as the official clients send it,
+  instead of one message each. Up to thirty can be picked at once, and
+  more than ten leave as several albums of ten, the caption on the
+  first. Several icons dropped on the window together are taken as
+  files picked together: photos go through the photo dialog as an
+  album, anything else as an album of files. A video goes as a file
+  among them.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

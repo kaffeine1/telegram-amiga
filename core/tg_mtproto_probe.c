@@ -33218,6 +33218,7 @@ typedef struct tg_gui_ul_state {
     int as_photo;
     int photo_fallback;
     int album; /* the photo is kept for an album: uploadMedia, no sendMedia */
+    int doc_album; /* ...a file, for an album of files */
     int batch; /* one of several picked together: the batch's chat */
     int part_retry;
     unsigned long got;  /* bytes of the CURRENT part held in part_buf */
@@ -34052,16 +34053,19 @@ static int tg_mtproto_upload_begin(const tg_mtproto_file_ctx *fc,
         return 1;
     }
 #if !defined(TG_NO_GUI)
-    /* 2 = a photo for the batch's album, 3 = a file of the batch */
-    if (as_photo >= 2 && (!tg_gui_batch.open ||
-                          (as_photo == 2 &&
-                           tg_gui_batch.count >= TG_MTPROTO_ALBUM_MAX))) {
+    /* 2 = a photo for the batch's album, 3 = a file of the batch sent
+       alone, 4 = a file for the batch's album of files */
+    if (as_photo >= 2 &&
+        (!tg_gui_batch.open ||
+         ((as_photo == 2 || as_photo == 4) &&
+          tg_gui_batch.count >= TG_MTPROTO_ALBUM_MAX))) {
         return 1;
     }
 #endif
     memset(&tg_gui_ul, 0, sizeof(tg_gui_ul));
     tg_gui_ul.requested_photo = as_photo == 1 || as_photo == 2;
-    tg_gui_ul.album = as_photo == 2;
+    tg_gui_ul.album = as_photo == 2 || as_photo == 4;
+    tg_gui_ul.doc_album = as_photo == 4;
     tg_gui_ul.batch = as_photo >= 2;
     tg_gui_ul.fc = *fc;
     for (n = 0UL; fc->peer_index[n] != '\0' &&
@@ -34357,6 +34361,44 @@ static int tg_mtproto_upload_step(void)
         rand_hi = tg_mtproto_read_u32_le(rnd + 4U);
         tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
 #if !defined(TG_NO_GUI)
+        if (tg_gui_ul.doc_album) {
+            /* Kept for the album of files: the parts become a document of
+               ours that is in no chat, named when the album leaves. */
+            if (tg_gui_batch.count >= TG_MTPROTO_ALBUM_MAX ||
+                tg_mtproto_build_messages_upload_media_document(
+                    &writer, tg_gui_ul.pc, tg_gui_ul.ph, tg_gui_ul.pl,
+                    tg_gui_ul.ahh, tg_gui_ul.ahl, tg_gui_ul.hah,
+                    tg_gui_ul.file_id_hi, tg_gui_ul.file_id_lo,
+                    tg_gui_ul.parts, tg_gui_ul.big_file, tg_gui_ul.name,
+                    "application/octet-stream") != TG_MTPROTO_TL_OK) {
+                return 0; /* rc 1 */
+            }
+            memset(&result, 0, sizeof(result));
+            if (tg_mtproto_send_saved_query_on_context(
+                    tg_gui_ul.fc.host, tg_gui_ul.fc.port,
+                    tg_gui_ul.fc.api_id, tg_gui_ul.fc.auth_file,
+                    tg_gui_ul.fc.dc_id_text, tg_gui_ul.fc.context,
+                    query, writer.length, &result, tg_gui_ul.quiet,
+                    "mtproto uploadMedia(document)", 600U) != 0 ||
+                result.result_constructor ==
+                    TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+                tg_mtproto_keep_rpc_error(&result); /* why, for the window */
+                return 0; /* rc 1 */
+            }
+            if (tg_mtproto_unpack_gzip_result(
+                    &result, tg_gui_ul.quiet,
+                    "mtproto uploadMedia(document)") != 0 ||
+                tg_mtproto_read_uploaded_document(
+                    result.result_body - 4U, result.result_body_length + 4U,
+                    &tg_gui_batch.photos[tg_gui_batch.count]) !=
+                TG_MTPROTO_TL_OK) {
+                sprintf(tg_mtproto_query_fail, "no file came back");
+                return 0; /* rc 1 */
+            }
+            ++tg_gui_batch.count;
+            tg_gui_ul.rc = 0;
+            return 0;
+        }
         if (tg_gui_ul.album) {
             /* Kept for the album: the parts become a photo of ours that is
                in no chat, and the album names it when it leaves. */
@@ -36764,11 +36806,12 @@ int tg_gui_session_transfer_start_photo(const char *path,
 #if !defined(TG_NO_GUI)
 /* Several files picked together. batch_begin() reads the open chat, which
    is where all of them go whatever is open by then. Each file then starts
-   with transfer_start_batch_photo (kept for the album; 7 when it cannot be
-   a photo) or transfer_start_batch_file (sent alone), and is pumped and
+   with transfer_start_batch_photo (kept for an album of photos; 7 when it
+   cannot be a photo), transfer_start_batch_doc (kept for an album of
+   files) or transfer_start_batch_file (sent alone), and is pumped and
    ended like any other transfer. batch_send_album() makes one message out
-   of the photos that arrived, the caption on the first; batch_end() closes
-   the batch and drops what it still holds. */
+   of what arrived, the caption on the first; batch_end() closes the batch
+   and drops what it still holds. */
 int tg_gui_session_batch_begin(FILE *stream)
 {
     tg_mtproto_file_ctx fc;
@@ -36824,6 +36867,11 @@ int tg_gui_session_transfer_start_batch_file(const char *path,
                                              FILE *stream)
 {
     return tg_gui_session_transfer_start_batch(path, caption, stream, 3);
+}
+
+int tg_gui_session_transfer_start_batch_doc(const char *path, FILE *stream)
+{
+    return tg_gui_session_transfer_start_batch(path, 0, stream, 4);
 }
 
 int tg_gui_session_batch_photos(void)
@@ -36968,9 +37016,18 @@ static int tg_gui_batch_self_test(void)
          tg_gui_ul.as_photo && tg_gui_ul.pl == 22UL;
     tg_mtproto_upload_cancel();
     ok = ok && tg_mtproto_upload_end() == 6;
-    /* a full album takes no more photos; a file still goes */
+    /* a file for an album of files: kept, whatever it holds, no photo */
+    ok = ok && tg_mtproto_upload_begin(&fc, 0, path, stdout, 4) == 0 &&
+         tg_gui_ul.active && tg_gui_ul.batch && tg_gui_ul.album &&
+         tg_gui_ul.doc_album && !tg_gui_ul.as_photo &&
+         !tg_gui_ul.requested_photo && tg_gui_ul.pl == 22UL;
+    tg_mtproto_upload_cancel();
+    ok = ok && tg_mtproto_upload_end() == 6;
+    /* a full album takes no more photos nor files; a file still goes */
     tg_gui_batch.count = TG_MTPROTO_ALBUM_MAX;
     ok = ok && tg_mtproto_upload_begin(&fc, 0, path, stdout, 2) == 1 &&
+         !tg_gui_ul.active &&
+         tg_mtproto_upload_begin(&fc, 0, path, stdout, 4) == 1 &&
          !tg_gui_ul.active &&
          tg_mtproto_upload_begin(&fc, 0, path, stdout, 3) == 0;
     tg_mtproto_upload_cancel();

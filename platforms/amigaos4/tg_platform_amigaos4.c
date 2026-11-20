@@ -1962,6 +1962,60 @@ const char *tg_platform_console_drop_diag(void)
     return diag_buf;
 }
 
+/* The rest of a drop of several icons (tg_platform_console_drop_more):
+   their full paths, in the order Workbench gave them. The text client asks
+   for the first one only; the window takes them all. */
+#if defined(TG_NO_GUI)
+#define TG_DROP_MORE_MAX 1
+#else
+#define TG_DROP_MORE_MAX 29
+#endif
+#define TG_DROP_MORE_PATH 256
+static char tg_drop_more[TG_DROP_MORE_MAX][TG_DROP_MORE_PATH];
+static int tg_drop_more_count = 0;
+static int tg_drop_more_next = 0;
+
+/* One dropped icon's full path into out: 1 when it is whole (a path cut
+   short could name another file, so it is never given). */
+static int tg_drop_arg_path(struct WBArg *arg, char *out, unsigned long size)
+{
+    BPTR lock = arg->wa_Lock;
+    const char *name = (const char *)arg->wa_Name;
+
+    out[0] = '\0';
+    if (lock != 0 && NameFromLock(lock, (STRPTR)out, (LONG)size) != 0) {
+        if (name != 0 && name[0] != '\0' &&
+            !AddPart((STRPTR)out, (CONST_STRPTR)name, (ULONG)size)) {
+            out[0] = '\0';
+            return 0;
+        }
+        return out[0] != '\0';
+    }
+    if (name != 0 && name[0] != '\0' && strlen(name) < size) {
+        strcpy(out, name);
+        return 1;
+    }
+    out[0] = '\0';
+    return 0;
+}
+
+int tg_platform_console_drop_more(char *out, unsigned long out_size)
+{
+    if (out == 0 || out_size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    while (tg_drop_more_next < tg_drop_more_count) {
+        const char *p = tg_drop_more[tg_drop_more_next++];
+
+        if (strlen(p) < out_size) {
+            strcpy(out, p);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int tg_platform_console_drop_poll(char *out, unsigned long out_size)
 {
     struct AppMessage *am;
@@ -1975,25 +2029,26 @@ int tg_platform_console_drop_poll(char *out, unsigned long out_size)
         return 0;
     }
     ++tg_os4_drop_polls;
+    tg_drop_more_count = 0;
+    tg_drop_more_next = 0;
     while ((am = (struct AppMessage *)GetMsg(tg_os4_app_port)) != 0) {
         ++tg_os4_drop_msgs;
-        /* Take the FIRST dropped file only (one path per /sendfile); still
-           reply to every message so the sender is never left blocked. */
-        if (!got && am->am_NumArgs > 0 && am->am_ArgList != 0) {
-            BPTR lock = am->am_ArgList[0].wa_Lock;
-            const char *name = (const char *)am->am_ArgList[0].wa_Name;
+        /* Every icon of every message: the first is the answer, the rest
+           wait for tg_platform_console_drop_more. Each message is replied
+           to, so the sender is never left blocked. */
+        if (am->am_NumArgs > 0 && am->am_ArgList != 0) {
+            long k;
 
-            out[0] = '\0';
-            if (lock != 0 &&
-                NameFromLock(lock, (STRPTR)out, (LONG)out_size) != 0) {
-                if (name != 0 && name[0] != '\0') {
-                    AddPart((STRPTR)out, (CONST_STRPTR)name, (ULONG)out_size);
+            for (k = 0L; k < (long)am->am_NumArgs; ++k) {
+                if (!got) {
+                    got = tg_drop_arg_path(&am->am_ArgList[k], out, out_size);
+                } else if (tg_drop_more_count < TG_DROP_MORE_MAX &&
+                           tg_drop_arg_path(
+                               &am->am_ArgList[k],
+                               tg_drop_more[tg_drop_more_count],
+                               TG_DROP_MORE_PATH)) {
+                    ++tg_drop_more_count;
                 }
-                got = 1;
-            } else if (name != 0 && name[0] != '\0') {
-                strncpy(out, name, out_size - 1UL);
-                out[out_size - 1UL] = '\0';
-                got = 1;
             }
         }
         ReplyMsg((struct Message *)am);

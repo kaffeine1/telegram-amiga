@@ -839,11 +839,13 @@ Files
   Telegram may re-encode photos as JPEG: send a PNG as File to keep it
   as it is. A photo over 10 MiB goes as a file.
 - Several files at once: in the file requester hold Shift and click
-  more than one, ten at most. Photos picked together with "Send
-  photo..." leave as an album, one message: a small
-  window asks for the caption, which goes on the first photo, and
-  offers Album, Files or Cancel. Other files, or photos and other
-  files picked together, go one message each, one after the other.
+  more than one, thirty at most, or drop several icons on the window
+  together. Photos picked together with "Send photo..." leave as an
+  album: a small window asks for the caption, which goes on the first
+  photo, and offers Album, Files or Cancel. Other files, or photos and
+  other files together, leave as an album of files, grouped as the
+  official clients group them. An album holds ten at most: more leave
+  as several albums, the caption on the first.
   They all go to the chat that was open when you
   picked them, even if you open another one meanwhile. The status line
   says which one is going up (2/5), and Esc stops them all; a file
@@ -1161,11 +1163,13 @@ File
   foto in JPEG: manda un PNG come File per tenerlo com'e'. Una foto
   oltre 10 MiB parte come file.
 - Piu' file insieme: nel requester tieni premuto Shift e fai click su
-  piu' di uno, dieci al massimo. Le foto scelte insieme con "Send
-  photo..." partono come album, un solo messaggio:
-  una finestrella chiede la didascalia, che va sulla prima foto, e
-  offre Album, Files o Cancel. Gli altri file, o foto e altri file
-  scelti insieme, partono un messaggio ciascuno, uno dopo l'altro.
+  piu' di uno, trenta al massimo, oppure lascia piu' icone insieme
+  sulla finestra. Le foto scelte insieme con "Send photo..." partono
+  come album: una finestrella chiede la didascalia, che va sulla prima
+  foto, e offre Album, Files o Cancel. Gli altri file, o foto e altri
+  file insieme, partono come album di file, raggruppati come fanno i
+  client ufficiali. Un album ne tiene dieci al massimo: di piu'
+  partono come piu' album, la didascalia sul primo.
   Vanno tutti nella chat che era aperta
   quando li hai scelti, anche se nel frattempo ne apri un'altra. La
   riga di stato dice quale sta salendo (2/5), ed Esc li ferma tutti;

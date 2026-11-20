@@ -203,6 +203,11 @@ int tg_platform_wb_tui_mode(char **argv);
    every other build is a no-op that returns 0. */
 int tg_platform_console_drop_poll(char *out, unsigned long out_size);
 
+/* The other icons of the drop the last tg_platform_console_drop_poll gave
+   (several dropped together), one path a call: 1 with the next one in
+   `out`, 0 when there are no more. The next poll forgets them. */
+int tg_platform_console_drop_more(char *out, unsigned long out_size);
+
 /* One-line, human-readable status of the drag-and-drop arming ("ready", or
    which step bailed). Printed at console startup so a field report can say
    WHY drops are inactive without a debug build. */

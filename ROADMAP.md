@@ -44,15 +44,15 @@ several messages (issue #14), Play on a video, a voice message or an
 audio file with a player of one's choice, the account online while
 the window is in front, without which Telegram sends no "is typing",
 pins reordered by dragging, Saved Messages among them, the
-Archive's unread count on a line at the top of the chat list, and
-drafts with their reply, in Saved Messages too.
+Archive's unread count on a line at the top of the chat list,
+drafts with their reply, in Saved Messages too, and albums of files,
+of more than ten photos and of several icons dropped together.
 
 Open, each in its section below:
 
 - left over from the 0.5 list: more than the Archive's latest 32 chats;
-  drafts in topics and in the text client; albums of documents or
-  videos, of more than ten photos, and several icons dropped at once;
-  topics created, renamed or closed;
+  drafts in topics and in the text client; topics created, renamed or
+  closed;
 - videos: the resolution in the details, and playing while the video
   still downloads;
 - sign-in by QR code, creating an account, the update fetched and
@@ -404,10 +404,12 @@ Middle, more interface:
   one message each; all to the chat open when they were picked). An
   album, received or one's own, shows as one block: its parts close
   together under one name and over one time (`grouped_id` read behind
-  a photo or a file; a column, not a mosaic). Still missing from its
-  section: several icons dropped on the window at once, albums of
-  documents or videos, and more than ten photos split into several
-  albums;
+  a photo or a file; a column, not a mosaic). Done after 0.5: thirty at
+  most, in albums of ten (the caption on the first); albums of files,
+  for files picked together or photos sent as files (`messages.uploadMedia`
+  with `inputMediaUploadedDocument`, named as `inputMediaDocument` in
+  the `sendMultiMedia`; a video goes as a file among them); and several
+  icons dropped on the window at once, taken as files picked together;
 - select several messages: done (Select in the message's menu, click
   and Shift+click, a bar in the composer's place with Forward, Delete
   and Cancel; one `messages.forwardMessages` and one
