@@ -852,6 +852,9 @@ Notifications
   Enable ring in their menu. A chat muted in Telegram stays muted here.
   In the text client /ring on and /ring off do the same for the open
   chat.
+- "Settings > Pause between sounds" keeps a chat quiet for a while after
+  it rang: off (the default: every message rings), 5, 10 or 30 seconds,
+  or a minute. The text client follows the same setting.
 
 Settings
 - "Settings..." in the first menu (Amiga+T) opens the settings over the
@@ -1161,6 +1164,10 @@ Notifiche
   scegli Enable ring nel loro menu. Una chat silenziata in Telegram resta
   silenziata anche qui. Nel client testuale /ring on e /ring off fanno
   lo stesso per la chat aperta.
+- "Settings > Pause between sounds" fa tacere una chat per un po' dopo
+  che ha suonato: spenta (di serie: suona ogni messaggio), 5, 10 o 30
+  secondi, oppure un minuto. Il client testuale segue la stessa
+  impostazione.
 
 Impostazioni
 - "Settings..." nel primo menu (Amiga+T) apre le impostazioni sopra la

@@ -654,6 +654,8 @@ static void tg_mtproto_chat_show_prompt(FILE *stream,
                                         int raw);
 /* /bell changes the shared beep preference for this text session. */
 static int tg_chat_bell_enabled = 1;
+/* The pause after a ring, the window's setting (data/telegram-notify.txt). */
+static unsigned long tg_chat_ring_quiet = TG_NOTIFY_QUIET_DEFAULT;
 /* /ids: each message line starts with its server id, the number /react,
    /forward and /forwardto take. Off by default, the lines stay plain. */
 static int tg_chat_ids_shown = 0;
@@ -16096,7 +16098,7 @@ static int tg_mtproto_chat_ring_at(const tg_chat_notify_entry *entry,
             break;
         }
         if (slot < 0 && (tg_chat_ring_history[i][0] == 0 ||
-            (local_now >= t && local_now - t >= TG_NOTIFY_QUIET_SECONDS))) {
+            (local_now >= t && local_now - t >= tg_chat_ring_quiet))) {
             slot = i;
         }
     }
@@ -16106,7 +16108,8 @@ static int tg_mtproto_chat_ring_at(const tg_chat_notify_entry *entry,
                                entry->peer_id_lo, &settings);
     if (slot < 0 || !tg_notify_should_ring(entry->peer_constructor,
             settings.mute_until, settings.silent, value.choice, entry->silent,
-            entry->is_out, open_in_front, server_now, local_now, last)) {
+            entry->is_out, open_in_front, server_now, local_now, last,
+            tg_chat_ring_quiet)) {
         return 0;
     }
     memcpy(tg_chat_ring_history[slot], key, sizeof(key));
@@ -16397,11 +16400,14 @@ static int tg_mtproto_notify_ring_self_test(void)
     char sound[TG_NOTIFY_SOUND_MAX];
     unsigned long i;
     unsigned long j;
+    unsigned long saved_quiet;
     int saved_bell;
     int ok = 1;
 
     memcpy(saved, tg_chat_ring_history, sizeof(saved));
     saved_bell = tg_chat_bell_enabled;
+    saved_quiet = tg_chat_ring_quiet;
+    tg_chat_ring_quiet = 30UL; /* the pause the cases below measure */
     memset(&entry, 0, sizeof(entry));
     memset(&value, 0, sizeof(value));
     entry.peer_id_hi = 0x1234UL;
@@ -16521,9 +16527,23 @@ static int tg_mtproto_notify_ring_self_test(void)
                       TG_MTPROTO_PEER_SELF_CONSTRUCTOR, TG_NOTIFY_RING,
                       &settings, 1000UL, 1), "Saved", 5) == 0;
     }
+    /* With no pause set, a chat rings for each message. */
+    memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
+    tg_chat_ring_quiet = 0UL;
+    tg_chat_bell_enabled = 1;
+    entry.peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    entry.peer_id_hi = 0x55UL;
+    entry.peer_id_lo = 0x66UL;
+    entry.silent = 0;
+    entry.is_out = 0;
+    ok = ok && tg_mtproto_chat_ring_at(&entry, 0, 1000UL, 200UL, path,
+                                       "global", sound, sizeof(sound)) &&
+         tg_mtproto_chat_ring_at(&entry, 0, 1000UL, 200UL, path, "global",
+                                 sound, sizeof(sound));
     (void)remove(path);
     memcpy(tg_chat_ring_history, saved, sizeof(saved));
     tg_chat_bell_enabled = saved_bell;
+    tg_chat_ring_quiet = saved_quiet;
     if (!ok) {
         puts("probe self-test: console sound policy/choice failed");
         return 2;
@@ -17544,10 +17564,11 @@ int tg_mtproto_auth_chat_file(const char *host,
     memset(tg_chat_ring_history, 0, sizeof(tg_chat_ring_history));
     tg_notify_preferences_load(TG_NOTIFY_FILE, 0, &tg_chat_bell_enabled, 0,
 #if defined(TG_LOWMEM)
-                                0, 0UL);
+                                0, 0UL, &tg_chat_ring_quiet);
 #else
                                 tg_chat_notify_sound,
-                                sizeof(tg_chat_notify_sound));
+                                sizeof(tg_chat_notify_sound),
+                                &tg_chat_ring_quiet);
 #endif
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: chat engine init done");

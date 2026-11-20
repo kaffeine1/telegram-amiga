@@ -33,6 +33,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   player does it.
 
 ### Changed
+- A chat no longer stays quiet for half a minute after it rang (a tester
+  heard the first and third message of a quick exchange, not the
+  second). The pause is a setting now, "Pause between sounds" in the
+  settings panel: off by default, so every message rings, or 5, 10 or
+  30 seconds, or a minute, kept in data/telegram-notify.txt. The text
+  client follows it too.
 - The first menu is split in two (issue #20). It had grown to fifteen
   lines, most of them about the chats, and those now have a menu of
   their own, Chats, after Edit: Remove chat from list, Reload chat list

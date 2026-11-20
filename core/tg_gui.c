@@ -556,7 +556,7 @@ void tg_gui_notify_ring_note(tg_gui_state *state, unsigned long constructor,
         }
         if (free_slot < 0 && (slot->peer_constructor == 0UL ||
             (!slot->pending && now >= slot->last_ring &&
-             now - slot->last_ring >= TG_GUI_NOTIFY_QUIET_SECONDS))) {
+             now - slot->last_ring >= state->notify_quiet))) {
             free_slot = i;
         }
     }
@@ -599,7 +599,7 @@ int tg_gui_notify_ring_take_sound(tg_gui_state *state, unsigned long server_now,
         if (!slot->pending) {
             /* Reuse only expired history, never a recent chat's quiet spell. */
             if (slot->last_ring != 0UL && local_now >= slot->last_ring &&
-                local_now - slot->last_ring >= TG_GUI_NOTIFY_QUIET_SECONDS) {
+                local_now - slot->last_ring >= state->notify_quiet) {
                 memset(slot, 0, sizeof(*slot));
             }
             continue;
@@ -618,7 +618,8 @@ int tg_gui_notify_ring_take_sound(tg_gui_state *state, unsigned long server_now,
             tg_gui_notify_should_ring(slot->peer_constructor,
                                        settings.mute_until, settings.silent,
                                        value.choice, 0, 0, open_in_front,
-                                       server_now, local_now, slot->last_ring)) {
+                                       server_now, local_now, slot->last_ring,
+                                       state->notify_quiet)) {
             const char *path = tg_notify_sound_choice(1, value.sound,
                                                        state->notify_sound);
             unsigned long n = (unsigned long)strlen(path);
@@ -8791,6 +8792,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {"New messages", 0},
     {"Notifications", TG_GUI_SET_NOTIFY},
     {"Beep", TG_GUI_SET_BEEP},
+    {"Pause between sounds", TG_GUI_SET_QUIET},
     {"Sound file...", TG_GUI_SET_SOUND_FILE},
     {"Built-in chime", TG_GUI_SET_CHIME},
     {"Photos and emoji", 0},
@@ -8838,6 +8840,7 @@ int tg_gui_settings_kind(int id)
 {
     switch (id) {
     case TG_GUI_SET_NOTIFY:
+    case TG_GUI_SET_QUIET:
     case TG_GUI_SET_DITHER:
     case TG_GUI_SET_CACHE:
         return TG_GUI_SET_KIND_CHOICE;
@@ -8860,6 +8863,7 @@ int tg_gui_settings_disabled(const tg_gui_state *state, int id)
         return 1;
     }
     return (id == TG_GUI_SET_EMOTICONS && !state->emoji_enabled) ||
+           (id == TG_GUI_SET_QUIET && !state->notify_beep) ||
            (id == TG_GUI_SET_STICKERS && !state->inline_photos) ||
            (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port) ||
            (id == TG_GUI_SET_UPDATES && !state->update_can);
@@ -8883,6 +8887,7 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
                            unsigned long out_size)
 {
     const char *text = "";
+    char quiet_text[24];
     int on = -1;
 
     if (out == 0 || out_size == 0UL) {
@@ -8901,6 +8906,20 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
                          : state->notify_mode == TG_GUI_NOTIFY_POPUP
                                ? "< Count and pop-up >"
                                : "< Pop-up with the text >";
+        break;
+    case TG_GUI_SET_QUIET:
+        /* Any number the file holds, as it is; the line steps through
+           off, 5, 10, 30 seconds and a minute. */
+        if (state->notify_quiet == 0UL) {
+            text = "< Off >";
+        } else if (state->notify_quiet == 60UL) {
+            text = "< 1 minute >";
+        } else {
+            sprintf(quiet_text, "< %lu seconds >",
+                    state->notify_quiet > TG_NOTIFY_QUIET_MAX
+                        ? TG_NOTIFY_QUIET_MAX : state->notify_quiet);
+            text = quiet_text;
+        }
         break;
     case TG_GUI_SET_DITHER:
         text = state->photo_dither == TG_GUI_PHOTO_DITHER_LIGHT
@@ -10111,11 +10130,26 @@ static int tg_gui_notify_policy_self_test(void)
         if (tg_gui_notify_should_ring(cases[i].kind, cases[i].mute,
                 cases[i].peer_silent, cases[i].choice, cases[i].silent,
                 cases[i].out, cases[i].open, cases[i].server_now,
-                cases[i].local_now, cases[i].last) !=
+                cases[i].local_now, cases[i].last, 30UL) !=
             cases[i].ring) {
             printf("gui self-test: ring policy case %lu failed\n", i);
             return 2;
         }
+    }
+    /* The pause is the user's: none rings at once, five seconds waits
+       five, and a clock gone back still rings with no pause set. */
+    if (!tg_gui_notify_should_ring(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+            0, 0, 0, 0, 0, 100UL, 100UL, 100UL, 0UL) ||
+        !tg_gui_notify_should_ring(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+            0, 0, 0, 0, 0, 100UL, 90UL, 100UL, 0UL) ||
+        tg_gui_notify_should_ring(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+            0, 0, 0, 0, 0, 104UL, 104UL, 100UL, 5UL) ||
+        !tg_gui_notify_should_ring(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+            0, 0, 0, 0, 0, 105UL, 105UL, 100UL, 5UL) ||
+        tg_gui_notify_should_ring(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL,
+            0, 0, 0, 0, 0, 100UL, 100UL, 0UL, 0UL)) {
+        puts("gui self-test: ring pause setting not followed");
+        return 2;
     }
     return 0;
 }
@@ -10210,6 +10244,18 @@ static int tg_gui_notify_queue_self_test(void)
     state->notify_mode = TG_GUI_NOTIFY_TITLE;
     state->notify_beep = 1;
     state->notify_away = 1;
+    /* With no pause every message of a chat rings, one after another. */
+    state->notify_quiet = 0UL;
+    for (i = 0; i < 3; ++i) {
+        tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                 9UL, 1UL, 0, 0, 50UL);
+        if (!tg_gui_notify_ring_take(state, 50UL, 50UL)) {
+            puts("gui self-test: no pause set, a message did not ring");
+            return 2;
+        }
+    }
+    memset(state->notify_rings, 0, sizeof(state->notify_rings));
+    state->notify_quiet = 30UL; /* the cases below are of a 30 s pause */
     tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
                              2UL, 1UL, 0, 0, 100UL);
     tg_gui_notify_ring_note(state, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
@@ -11194,6 +11240,7 @@ static int tg_gui_notify_sound_preferences_self_test(void)
     const char *name = "Work:Notification Sounds/Small bell.8svx";
     char sound[TG_NOTIFY_SOUND_MAX];
     char longest[TG_NOTIFY_SOUND_MAX + 1];
+    unsigned long quiet;
     FILE *file;
     int mode;
     int beep;
@@ -11204,30 +11251,34 @@ static int tg_gui_notify_sound_preferences_self_test(void)
     (void)remove(path);
     strcpy(sound, "stale");
     tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
-                                sound, sizeof(sound));
+                                sound, sizeof(sound), &quiet);
     ok = sound[0] == '\0' && mode == TG_NOTIFY_TITLE && !beep && !explicit_mode;
-    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_POPUP_TEXT, 1, 0,
-                                           name) == 0;
+    ok = ok && quiet == 0UL &&
+         tg_notify_preferences_save(path, TG_NOTIFY_POPUP_TEXT, 1, 0,
+                                    name, 10UL) == 0;
     tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
-                                sound, sizeof(sound));
-    ok = ok && strcmp(sound, name) == 0 && beep == 1 && explicit_mode == 0;
+                                sound, sizeof(sound), &quiet);
+    ok = ok && strcmp(sound, name) == 0 && beep == 1 && explicit_mode == 0 &&
+         quiet == 10UL;
     /* A phase 1 file, including CRLF and an unknown setting. */
     file = tg_file_fopen_replace(path, "wb");
     if (file == 0) {
         ok = 0;
     } else {
         fputs("mode=PoPuP\r\nbeep=ON\r\nfuture=ignored\r\n", file);
+        /* a file from before the pause: none, every message rings */
         ok = fclose(file) == 0 && ok;
     }
     tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
-                                sound, sizeof(sound));
-    ok = ok && sound[0] == '\0' && mode == TG_NOTIFY_POPUP && beep && explicit_mode;
+                                sound, sizeof(sound), &quiet);
+    ok = ok && sound[0] == '\0' && mode == TG_NOTIFY_POPUP && beep &&
+         explicit_mode && quiet == 0UL;
     for (i = 0; i < TG_NOTIFY_SOUND_MAX - 1; ++i) {
         longest[i] = i % 11 == 7 ? ' ' : 'a';
     }
     longest[TG_NOTIFY_SOUND_MAX - 1] = '\0';
     ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_TITLE, 1, 1,
-                                           longest) == 0;
+                                           longest, 99999UL) == 0;
     /* An unknown physical line cannot be reinterpreted in small chunks. */
     file = fopen(path, "ab");
     if (file == 0) {
@@ -11240,20 +11291,33 @@ static int tg_gui_notify_sound_preferences_self_test(void)
         ok = fclose(file) == 0 && ok;
     }
     tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
-                                sound, sizeof(sound));
+                                sound, sizeof(sound), &quiet);
     ok = ok && strcmp(sound, longest) == 0 && mode == TG_NOTIFY_TITLE &&
-         beep && explicit_mode;
+         beep && explicit_mode && quiet == TG_NOTIFY_QUIET_MAX;
     longest[TG_NOTIFY_SOUND_MAX - 1] = 'x';
     longest[TG_NOTIFY_SOUND_MAX] = '\0';
     ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_OFF, 0, 1,
-                                           longest) != 0 &&
+                                           longest, 0UL) != 0 &&
          tg_notify_preferences_save(path, TG_NOTIFY_OFF, 0, 1,
-                                     "RAM:bell\nbeep=off") != 0;
-    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_TITLE, 1, 1, "") == 0;
+                                     "RAM:bell\nbeep=off", 0UL) != 0;
+    ok = ok && tg_notify_preferences_save(path, TG_NOTIFY_TITLE, 1, 1, "",
+                                           5UL) == 0;
     strcpy(sound, "stale");
     tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
-                                sound, sizeof(sound));
-    ok = ok && sound[0] == '\0' && mode == TG_NOTIFY_TITLE && beep;
+                                sound, sizeof(sound), &quiet);
+    ok = ok && sound[0] == '\0' && mode == TG_NOTIFY_TITLE && beep &&
+         quiet == 5UL;
+    /* A pause that is not a number keeps the default. */
+    file = tg_file_fopen_replace(path, "wb");
+    if (file == 0) {
+        ok = 0;
+    } else {
+        fputs("beep=on\nquiet=ten\n", file);
+        ok = fclose(file) == 0 && ok;
+    }
+    tg_notify_preferences_load(path, &mode, &beep, &explicit_mode,
+                                sound, sizeof(sound), &quiet);
+    ok = ok && beep && quiet == 0UL;
     (void)remove(path);
     if (!ok) {
         puts("gui self-test: sound preferences round trip/default/legacy failed");
@@ -11445,6 +11509,7 @@ static int tg_gui_notify_settings_self_test(void)
     state->notify_beep = 1;
     state->notify_mode = TG_GUI_NOTIFY_TITLE;
     state->notify_away = 1;
+    state->notify_quiet = 30UL; /* the pause these cases measure */
     for (pass = 0; pass < 2 && ok; ++pass) {
         tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
         for (i = 0UL; i < sizeof(words) / sizeof(words[0]); ++i) {
@@ -13162,9 +13227,11 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 25 && switches == 12 &&
+        ok_set = ok_set && lines == 26 && switches == 12 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
+                     TG_GUI_SET_KIND_CHOICE &&
+                 tg_gui_settings_kind(TG_GUI_SET_QUIET) ==
                      TG_GUI_SET_KIND_CHOICE &&
                  tg_gui_settings_kind(TG_GUI_SET_DOWNLOAD) ==
                      TG_GUI_SET_KIND_ACTION &&
@@ -13214,6 +13281,33 @@ int tg_gui_self_test(void)
         tg_gui_settings_value(&state, TG_GUI_SET_SOUND_FILE, value,
                               sizeof(value));
         ok_set = ok_set && strcmp(value, "(built-in chime)") == 0;
+        /* The pause between sounds: off unless set, any number from the
+           file shown as it is, and dim while Beep is off. */
+        {
+            unsigned long saved_quiet = state.notify_quiet;
+            int saved_beep = state.notify_beep;
+
+            state.notify_quiet = 0UL;
+            tg_gui_settings_value(&state, TG_GUI_SET_QUIET, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "< Off >") == 0;
+            state.notify_quiet = 60UL;
+            tg_gui_settings_value(&state, TG_GUI_SET_QUIET, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "< 1 minute >") == 0;
+            state.notify_quiet = 20UL;
+            tg_gui_settings_value(&state, TG_GUI_SET_QUIET, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "< 20 seconds >") == 0;
+            state.notify_beep = 0;
+            ok_set = ok_set &&
+                     tg_gui_settings_disabled(&state, TG_GUI_SET_QUIET);
+            state.notify_beep = 1;
+            ok_set = ok_set &&
+                     !tg_gui_settings_disabled(&state, TG_GUI_SET_QUIET);
+            state.notify_quiet = saved_quiet;
+            state.notify_beep = saved_beep;
+        }
         /* Emoticons need emoji, SEND needs the port, and the look for
            updates a build that has a channel to look at. */
         ok_set = ok_set &&
@@ -13288,6 +13382,8 @@ int tg_gui_self_test(void)
         ok_set = ok_set && tg_gui_settings_move(&state, -1) == 0 &&
                  tg_gui_settings_move(&state, 1) == 1 &&
                  tg_gui_settings_selected(&state) == TG_GUI_SET_BEEP &&
+                 tg_gui_settings_move(&state, 1) == 1 &&
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_QUIET &&
                  tg_gui_settings_move(&state, 1) == 1 &&
                  tg_gui_settings_move(&state, 1) == 1 &&
                  tg_gui_settings_selected(&state) == TG_GUI_SET_CHIME &&
@@ -15343,23 +15439,23 @@ int tg_gui_self_test(void)
             return 2;
         }
         if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT,
-                                           1, 1, "") != 0) {
+                                           1, 1, "", 0UL) != 0) {
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL, 0);
         if (mode != TG_GUI_NOTIFY_POPUP_TEXT || beep != 1 || i != 1) {
             (void)remove(path);
             puts("gui self-test: notify setting round trip failed");
             return 2;
         }
-        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0, 1, "") !=
+        if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_OFF, 0, 1, "", 0UL) !=
             0) {
             (void)remove(path);
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL, 0);
         if (mode != TG_GUI_NOTIFY_OFF || beep != 0 || i != 1) {
             (void)remove(path);
             puts("gui self-test: notify off round trip failed");
@@ -15367,18 +15463,18 @@ int tg_gui_self_test(void)
         }
         /* A beep toggled while the mode follows the machine keeps "auto". */
         if (tg_gui_notify_preferences_save(path, TG_GUI_NOTIFY_POPUP_TEXT, 1,
-                                           0, "") != 0) {
+                                           0, "", 0UL) != 0) {
             (void)remove(path);
             puts("gui self-test: notify setting save failed");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL, 0);
         (void)remove(path);
         if (beep != 1 || i != 0) {
             puts("gui self-test: notify auto mode did not stay auto");
             return 2;
         }
-        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL);
+        tg_gui_notify_preferences_load(path, &mode, &beep, &i, 0, 0UL, 0);
         if (mode != TG_GUI_NOTIFY_TITLE || beep != 0 || i != 0) {
             puts("gui self-test: notify defaults wrong");
             return 2;

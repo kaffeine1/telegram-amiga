@@ -15361,6 +15361,41 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
         }
         return (APTR)cache_ids[(at + (dir < 0 ? 3 : 1)) % 4];
     case TG_GUI_SET_BEEP: return (APTR)TG_MENU_NOTIFY_BEEP;
+    case TG_GUI_SET_QUIET: {
+        /* How long a chat that rang stays quiet. A number from the file
+           that is not on the list steps to its neighbour on the list. */
+        static const unsigned long pauses[5] = { 0UL, 5UL, 10UL, 30UL, 60UL };
+        static const char *const names[5] = {
+            "Pause between sounds: off, every message rings",
+            "Pause between sounds: 5 seconds",
+            "Pause between sounds: 10 seconds",
+            "Pause between sounds: 30 seconds",
+            "Pause between sounds: 1 minute"
+        };
+
+        at = 0;
+        for (k = 0; k < 5; ++k) {
+            if (pauses[k] <= state->notify_quiet) {
+                at = k;
+            }
+        }
+        if (dir < 0) {
+            at = pauses[at] < state->notify_quiet ? at : (at + 4) % 5;
+        } else {
+            at = (at + 1) % 5;
+        }
+        state->notify_quiet = pauses[at];
+        (void)mkdir("data", 0777);
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           tg_gui_notify_preferences_save(
+                               TG_NOTIFY_FILE, state->notify_mode,
+                               state->notify_beep, state->notify_explicit,
+                               state->notify_sound,
+                               state->notify_quiet) == 0
+                               ? names[at]
+                               : "Could not save the pause between sounds");
+        return 0;
+    }
     case TG_GUI_SET_SOUND_FILE: return (APTR)TG_MENU_NOTIFY_SOUND;
     case TG_GUI_SET_CHIME: return (APTR)TG_MENU_NOTIFY_CHIME;
     case TG_GUI_SET_INLINE: return (APTR)TG_MENU_INLINEPHOTOS;
@@ -17803,7 +17838,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         TG_NOTIFY_FILE, state->notify_mode,
                                         state->notify_beep,
                                         state->notify_explicit,
-                                        state->notify_sound) == 0 ?
+                                        state->notify_sound,
+                                        state->notify_quiet) == 0 ?
                                     "Notification sound saved" :
                                     "Could not save the notification sound");
                                 tg_gui_notify_sound(state->notify_sound);
@@ -17841,7 +17877,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     TG_NOTIFY_FILE,
                                     state->notify_mode, state->notify_beep,
                                     state->notify_explicit,
-                                    state->notify_sound) != 0) {
+                                    state->notify_sound,
+                                    state->notify_quiet) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     "Could not save the new-message setting");
@@ -20742,7 +20779,8 @@ int tg_gui_run_window(tg_gui_state *state)
     tg_gui_notify_preferences_load(TG_NOTIFY_FILE,
                                    &state->notify_mode, &state->notify_beep,
                                    &state->notify_explicit, state->notify_sound,
-                                   sizeof(state->notify_sound));
+                                   sizeof(state->notify_sound),
+                                   &state->notify_quiet);
     state->notify_default_resolved = 0;
     tg_gui_player_load(TG_GUI_PLAYER_FILE, state->video_player,
                        sizeof(state->video_player));

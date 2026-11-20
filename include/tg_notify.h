@@ -15,7 +15,11 @@
 #define TG_NOTIFY_MUTE 1
 #define TG_NOTIFY_RING 2
 #define TG_NOTIFY_SOUND_MAX 256 /* 255 bytes of path plus the terminator */
-#define TG_NOTIFY_QUIET_SECONDS 30UL
+/* How long a chat that rang stays quiet before it can ring again: the
+   user's choice in the settings ("quiet=" in the preferences file), in
+   seconds. 0, the default, lets every message ring. */
+#define TG_NOTIFY_QUIET_DEFAULT 0UL
+#define TG_NOTIFY_QUIET_MAX 3600UL
 #define TG_NOTIFY_FILE "data/telegram-notify.txt"
 #define TG_NOTIFY_OVERRIDE_FILE "data/telegram-chat-notify.txt"
 
@@ -34,9 +38,11 @@ typedef struct tg_notify_ring_peer {
 
 void tg_notify_preferences_load(const char *path, int *mode, int *beep,
                                 int *mode_explicit, char *sound,
-                                unsigned long sound_size);
+                                unsigned long sound_size,
+                                unsigned long *quiet);
 int tg_notify_preferences_save(const char *path, int mode, int beep,
-                               int mode_explicit, const char *sound);
+                               int mode_explicit, const char *sound,
+                               unsigned long quiet);
 void tg_notify_override_get(const char *path, unsigned long peer_hi,
                             unsigned long peer_lo, tg_notify_override *out);
 int tg_notify_override_set(const char *path, unsigned long peer_hi,
@@ -48,7 +54,8 @@ int tg_notify_should_ring(unsigned long peer_constructor,
                           unsigned long mute_until, int peer_silent,
                           int choice, int silent, int is_out,
                           int open_in_front, unsigned long server_now,
-                          unsigned long local_now, unsigned long last_ring);
+                          unsigned long local_now, unsigned long last_ring,
+                          unsigned long quiet);
 /* NULL means silence; an empty string means the built-in chime. */
 const char *tg_notify_sound_choice(int ring, const char *chat_sound,
                                    const char *global_sound);

@@ -118,11 +118,13 @@ void tg_notify_chime_render(signed char *out)
    ignore other unknown lines. Spaces in a path are data, not separators. */
 void tg_notify_preferences_load(const char *path, int *mode, int *beep,
                                  int *mode_explicit, char *sound,
-                                 unsigned long sound_size)
+                                 unsigned long sound_size,
+                                 unsigned long *quiet)
 {
     FILE *file;
     char value[320];
     unsigned long length;
+    unsigned long loaded_quiet;
     int loaded_mode;
     int loaded_beep;
     int loaded_explicit;
@@ -130,6 +132,7 @@ void tg_notify_preferences_load(const char *path, int *mode, int *beep,
     loaded_mode = TG_NOTIFY_TITLE; /* until the machine is known */
     loaded_beep = 0;
     loaded_explicit = 0;
+    loaded_quiet = TG_NOTIFY_QUIET_DEFAULT;
     if (sound != 0 && sound_size != 0UL) {
         sound[0] = '\0';
     }
@@ -151,6 +154,20 @@ void tg_notify_preferences_load(const char *path, int *mode, int *beep,
                 }
             } else if (strncmp(value, "beep=", 5UL) == 0) {
                 loaded_beep = tg_notify_pref_word(value + 5, "on");
+            } else if (strncmp(value, "quiet=", 6UL) == 0) {
+                /* Seconds, digits only; anything else keeps the default. */
+                const char *d = value + 6;
+                unsigned long n = 0UL;
+
+                while (*d >= '0' && *d <= '9' && n <= TG_NOTIFY_QUIET_MAX) {
+                    n = n * 10UL + (unsigned long)(*d - '0');
+                    ++d;
+                }
+                if (d != value + 6 && (*d == '\0' || *d == '\r' ||
+                                       *d == '\n' || *d == ' ')) {
+                    loaded_quiet = n > TG_NOTIFY_QUIET_MAX
+                                       ? TG_NOTIFY_QUIET_MAX : n;
+                }
             } else if (strncmp(value, "sound=", 6UL) == 0 &&
                        sound != 0 && sound_size != 0UL) {
                 length = (unsigned long)strcspn(value + 6, "\r\n");
@@ -172,11 +189,17 @@ void tg_notify_preferences_load(const char *path, int *mode, int *beep,
     if (mode_explicit != 0) {
         *mode_explicit = loaded_explicit;
     }
+    if (quiet != 0) {
+        *quiet = loaded_quiet;
+    }
 }
 
 int tg_notify_preferences_save(const char *path, int mode, int beep,
-                                int mode_explicit, const char *sound)
+                                int mode_explicit, const char *sound,
+                                unsigned long quiet)
 {
+    char quiet_line[24];
+
     FILE *file;
     char tmp[288];
     unsigned long length;
@@ -209,6 +232,11 @@ int tg_notify_preferences_save(const char *path, int mode, int beep,
     if (sound != 0 && sound[0] != '\0' &&
         (fputs("sound=", file) == EOF || fputs(sound, file) == EOF ||
          fputc('\n', file) == EOF)) {
+        failed = 1;
+    }
+    sprintf(quiet_line, "quiet=%lu\n",
+            quiet > TG_NOTIFY_QUIET_MAX ? TG_NOTIFY_QUIET_MAX : quiet);
+    if (fputs(quiet_line, file) == EOF) {
         failed = 1;
     }
     if (fclose(file) != 0) {
@@ -392,7 +420,8 @@ int tg_notify_should_ring(unsigned long peer_constructor,
                                int choice, int silent, int is_out,
                                int open_in_front, unsigned long server_now,
                                unsigned long local_now,
-                               unsigned long last_ring)
+                               unsigned long last_ring,
+                               unsigned long quiet)
 {
     if (silent || is_out || open_in_front || peer_silent ||
         choice == TG_NOTIFY_MUTE || mute_until > server_now ||
@@ -405,9 +434,10 @@ int tg_notify_should_ring(unsigned long peer_constructor,
           choice == TG_NOTIFY_RING)) {
         return 0;
     }
-    /* A clock moved backwards must not underflow into an immediate ring. */
-    if (last_ring != 0UL && (local_now < last_ring ||
-        local_now - last_ring < TG_NOTIFY_QUIET_SECONDS)) {
+    /* The pause after a ring, when the user set one. A clock moved
+       backwards must not underflow into an immediate ring. */
+    if (quiet != 0UL && last_ring != 0UL &&
+        (local_now < last_ring || local_now - last_ring < quiet)) {
         return 0;
     }
     return 1;

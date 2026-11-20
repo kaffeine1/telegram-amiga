@@ -280,7 +280,6 @@ void tg_gui_requester_text(char *dest, unsigned long size, const char *src,
 #define TG_GUI_NOTIFY_PEERS 32
 #define TG_GUI_RING_PEERS TG_GUI_MAX_CHATS
 #define TG_GUI_NOTIFY_TEXT_MAX 96
-#define TG_GUI_NOTIFY_QUIET_SECONDS TG_NOTIFY_QUIET_SECONDS
 #define TG_GUI_NOTIFY_OVERRIDE_FILE TG_NOTIFY_OVERRIDE_FILE
 #define TG_GUI_EMOTICON_FILE "data/telegram-emoticons.txt"
 #define TG_GUI_NOTIFY_DEFAULT TG_NOTIFY_DEFAULT
@@ -538,6 +537,7 @@ typedef struct tg_gui_state {
        chat with news this session, cleared when that chat is opened. */
     int notify_mode;       /* TG_GUI_NOTIFY_*, from data/telegram-notify.txt */
     int notify_beep;       /* sound on eligible news */
+    unsigned long notify_quiet; /* seconds a chat that rang stays quiet */
     char notify_sound[TG_NOTIFY_SOUND_MAX];
     /* The program Play hands media to ("" = the Workbench decides), kept
        in TG_GUI_PLAYER_FILE. */
@@ -1210,6 +1210,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_MARKDOWN 18    /* **bold** and its kin when sending */
 #define TG_GUI_SET_STICKERS 19    /* a sticker's picture, through a datatype */
 #define TG_GUI_SET_PLAYER 20      /* action: the program Play uses, or none */
+#define TG_GUI_SET_QUIET 21       /* choice: off, 5, 10, 30 s, 1 min */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2
