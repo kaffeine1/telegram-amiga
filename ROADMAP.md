@@ -41,17 +41,17 @@ groups work on the six systems; what each release brought is in
 CHANGELOG.md. On `main` for the next release: the Chats menu (issue
 #20), a picture sent as a photo whatever its name, a long text sent as
 several messages (issue #14), Play on a video, a voice message or an
-audio file with a player of one's choice, and the account online while
-the window is in front, without which Telegram sends no "is typing".
+audio file with a player of one's choice, the account online while
+the window is in front, without which Telegram sends no "is typing",
+and pins reordered by dragging, Saved Messages among them.
 
 Open, each in its section below:
 
-- what the 0.5 list still misses: pins reordered by dragging and Saved
-  Messages pinned; the Archive's unread count and more than its latest
-  32 chats; drafts with their reply, in topics, in Saved Messages and
-  in the text client; albums of documents or videos, of more than ten
-  photos, and several icons dropped at once; topics created, renamed or
-  closed;
+- what the 0.5 list still misses: the Archive's unread count and
+  more than its latest 32 chats; drafts with their reply, in topics, in
+  Saved Messages and in the text client; albums of documents or videos,
+  of more than ten photos, and several icons dropped at once; topics
+  created, renamed or closed;
 - videos: the resolution in the details, and playing while the video
   still downloads;
 - sign-in by QR code, creating an account, the update fetched and
@@ -316,9 +316,12 @@ it works today:
   and on Reload chat list, listed first with a pin mark, Pin and Unpin
   in the chat's menu (`messages.toggleDialogPin`), and pins changed on
   another device are read again while running (`updateDialogPinned`,
-  `updatePinnedDialogs`); still missing: Saved Messages pinned, the
-  order of the pins changed by dragging
-  (`messages.reorderPinnedDialogs`). Archive done on `main`:
+  `updatePinnedDialogs`). Done after 0.5: Saved Messages pinned (Pin
+  and Unpin in its menu, `inputPeerSelf`; the account's own user among
+  the pins moves its row up), and the order of the pins changed by
+  dragging a pinned row among the others
+  (`messages.reorderPinnedDialogs`, every pin in the new order; the
+  old order comes back if Telegram refuses). Archive done on `main`:
   Archived chats (Amiga+A) reads folder 1 with `messages.getDialogs`
   and lists it in place of the chat list, Archive and Unarchive in the
   chat's menu (`folders.editPeerFolders`), moves made elsewhere follow

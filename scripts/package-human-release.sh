@@ -611,11 +611,12 @@ Chats
   Enter, and adds it to the list.
 - Del, Right-Amiga+R or "Remove chat from list" removes a chat. Search
   still finds it, marked (hidden), and opening it puts it back. Drag
-  chats to reorder them.
+  chats to reorder them. Pinned chats stay at the top: drag one among
+  the others to change the order of your pins, on Telegram too.
 - The right mouse button on a chat in the list opens its menu: Pin,
   Archive, Mark as read or unread, Remove chat, Mute... or Unmute,
   Enable ring (groups and channels), Sound..., Show hidden messages,
-  and Leave... or Delete chat...
+  and Leave... or Delete chat... Saved Messages can be pinned too.
 - Mute... asks for how long: an hour, eight hours, or until you unmute.
   The mute goes to Telegram, so your other devices follow it.
 - The text client does the same for the open chat with /mute (for
@@ -908,11 +909,14 @@ Chat
   quando premi Invio, e la aggiunge alla lista.
 - Del, Amiga-destro+R o "Remove chat from list" toglie una chat. La
   ricerca la trova ancora, segnata (hidden), e aprirla la rimette in
-  lista. Trascina le chat per cambiarne l'ordine.
+  lista. Trascina le chat per cambiarne l'ordine. Le chat fissate
+  restano in cima: trascinane una fra le altre per cambiare l'ordine
+  dei pin, anche su Telegram.
 - Il tasto destro su una chat della lista apre il suo menu: Pin,
   Archive, Mark as read o unread, Remove chat, Mute... o Unmute, Enable
   ring (gruppi e canali), Sound..., Show hidden messages, e Leave... o
-  Delete chat...
+  Delete chat... Anche i Messaggi salvati (Saved Messages) si possono
+  fissare.
 - Mute... chiede per quanto: un'ora, otto ore, o finche' non togli il
   silenzioso. Il silenzioso va a Telegram, quindi lo seguono anche gli
   altri tuoi dispositivi.

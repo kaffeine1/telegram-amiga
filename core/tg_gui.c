@@ -6499,9 +6499,36 @@ static void tg_gui_paint_main(const tg_gui_state *state,
     tg_gui_paint_input_row(state, backend);
 }
 
+/* Where a dragged row may land, as insert-before targets [*lo, *hi]. The
+   pinned rows lead the list and keep to themselves: a pinned row moves among
+   the pins (its new place goes to Telegram), any other row stays below them,
+   and above Saved Messages when that row ends the list unpinned. */
+static void tg_gui_chat_drop_bounds(const tg_gui_state *state, int *lo,
+                                    int *hi)
+{
+    int pins = 0;
+
+    while (pins < state->chat_count && state->chats[pins].pinned) {
+        ++pins;
+    }
+    if (state->drag_src < pins) {
+        *lo = 0;
+        *hi = pins;
+        return;
+    }
+    *lo = pins;
+    *hi = state->chat_count;
+    if (state->chat_count > pins &&
+        state->chats[state->chat_count - 1].index == TG_GUI_SAVED_PEER_INDEX) {
+        *hi = state->chat_count - 1;
+    }
+}
+
 /* Cursor Y (inner-relative) -> drag-drop insert-before target in [0, chat_count].
    Mirrors tg_gui_paint_sidebar's search_h/row_h/chat_scroll, rounding to the
-   nearest inter-row gap so the drop lands where the insertion line is drawn. */
+   nearest inter-row gap so the drop lands where the insertion line is drawn.
+   During a drag the target keeps to the dragged row's part of the list
+   (tg_gui_chat_drop_bounds), so the line shows where the row will go. */
 int tg_gui_chat_drop_target(const tg_gui_state *state, int lh, int y)
 {
     int search_h;
@@ -6509,6 +6536,8 @@ int tg_gui_chat_drop_target(const tg_gui_state *state, int lh, int y)
     int rel;
     int slot;
     int target;
+    int lo;
+    int hi;
 
     if (state == 0) {
         return 0;
@@ -6530,6 +6559,16 @@ int tg_gui_chat_drop_target(const tg_gui_state *state, int lh, int y)
     }
     if (target > state->chat_count) {
         target = state->chat_count;
+    }
+    if (state->drag_active && state->drag_src >= 0 &&
+        state->drag_src < state->chat_count) {
+        tg_gui_chat_drop_bounds(state, &lo, &hi);
+        if (target < lo) {
+            target = lo;
+        }
+        if (target > hi) {
+            target = hi;
+        }
     }
     return target;
 }
@@ -7650,15 +7689,15 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         return n;
     }
     if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
+        /* Pins belong to the main list, Saved Messages included; the
+           Archive offers the way back instead. */
+        if (!state->archive_view) {
+            labels[n] = state->chats[state->ctx_chat - 1].pinned
+                            ? "Unpin" : "Pin";
+            ids[n++] = TG_GUI_CTX_CHAT_PIN;
+        }
         if (state->chats[state->ctx_chat - 1].index !=
             TG_GUI_SAVED_PEER_INDEX) {
-            /* Pins belong to the main list; the Archive offers the way
-               back instead. */
-            if (!state->archive_view) {
-                labels[n] = state->chats[state->ctx_chat - 1].pinned
-                                ? "Unpin" : "Pin";
-                ids[n++] = TG_GUI_CTX_CHAT_PIN;
-            }
             labels[n] = state->archive_view ? "Unarchive" : "Archive";
             ids[n++] = TG_GUI_CTX_CHAT_ARCHIVE;
             labels[n] = (state->chats[state->ctx_chat - 1].unread > 0 ||
@@ -10566,6 +10605,57 @@ static int tg_gui_poll_draft_self_test(void)
     return 0;
 }
 
+/* A dragged row lands within its part of the list: pins among the pins,
+   the rest below them and above an unpinned Saved Messages at the end;
+   with no drag on, the target is the plain row gap. */
+static int tg_gui_chat_drop_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    int lh = tg_gui_navigation_line_height(state, 8);
+    int search_h = lh + 10;
+    int row_h = (2 * lh) + 12;
+    int i;
+
+    /* rows: pinned 5, pinned Saved Messages, 7, 8, 9 */
+    state->chat_count = 5;
+    for (i = 0; i < 5; ++i) {
+        state->chats[i].index = (unsigned long)(5 + i);
+    }
+    state->chats[0].pinned = 1;
+    state->chats[1].pinned = 1;
+    state->chats[1].index = TG_GUI_SAVED_PEER_INDEX;
+    state->drag_src = 0;
+    state->drag_active = 0;
+    if (tg_gui_chat_drop_target(state, 8, search_h + 4 * row_h) != 4) {
+        puts("gui self-test: a drop target moved with no drag on");
+        return 2;
+    }
+    state->drag_active = 1;
+    if (tg_gui_chat_drop_target(state, 8, search_h + 4 * row_h) != 2 ||
+        tg_gui_chat_drop_target(state, 8, search_h + row_h) != 1 ||
+        tg_gui_chat_drop_target(state, 8, search_h) != 0) {
+        puts("gui self-test: a pin dragged out of the pins");
+        return 2;
+    }
+    state->drag_src = 3;
+    if (tg_gui_chat_drop_target(state, 8, search_h) != 2 ||
+        tg_gui_chat_drop_target(state, 8, search_h + 5 * row_h) != 5 ||
+        tg_gui_chat_drop_target(state, 8, search_h + 3 * row_h) != 3) {
+        puts("gui self-test: a chat dragged among the pins");
+        return 2;
+    }
+    /* Saved Messages unpinned at the end: nothing goes below it. */
+    state->chats[1].pinned = 0;
+    state->chats[1].index = 6UL;
+    state->chats[4].index = TG_GUI_SAVED_PEER_INDEX;
+    if (tg_gui_chat_drop_target(state, 8, search_h + 5 * row_h) != 4 ||
+        tg_gui_chat_drop_target(state, 8, search_h) != 1) {
+        puts("gui self-test: a chat dropped below Saved Messages");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_gui_notify_menu_self_test(void)
 {
     tg_gui_state *state = tg_gui_test_scratch_state();
@@ -10622,15 +10712,25 @@ static int tg_gui_notify_menu_self_test(void)
     state->archive_view = 0;
     state->chats[0].pinned = 0;
     state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
-    if (tg_gui_context_items(state, labels, ids) != 4 ||
-        ids[0] != TG_GUI_CTX_CHAT_REMOVE ||
-        ids[3] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
-        puts("gui self-test: Saved Messages offers no pin");
+    /* Saved Messages pins like any chat (inputPeerSelf), and has no
+       Archive, read mark or Leave. */
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
+        ids[1] != TG_GUI_CTX_CHAT_REMOVE ||
+        ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
+        puts("gui self-test: Saved Messages cannot be pinned");
         return 2;
     }
+    state->chats[0].pinned = 1;
+    if (tg_gui_context_items(state, labels, ids) != 5 ||
+        strcmp(labels[0], "Unpin") != 0) {
+        puts("gui self-test: pinned Saved Messages cannot be unpinned");
+        return 2;
+    }
+    state->chats[0].pinned = 0;
     /* Saved Messages is muted on this machine only, and nothing is asked:
        its item has no dots. */
-    if (ids[1] != TG_GUI_CTX_CHAT_MUTE || strcmp(labels[1], "Mute") != 0) {
+    if (ids[2] != TG_GUI_CTX_CHAT_MUTE || strcmp(labels[2], "Mute") != 0) {
         puts("gui self-test: Saved Messages' Mute promises a question");
         return 2;
     }
@@ -11898,6 +11998,7 @@ int tg_gui_self_test(void)
         tg_gui_notify_override_self_test() != 0 ||
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||
+        tg_gui_chat_drop_self_test() != 0 ||
         tg_gui_mute_mark_self_test() != 0 ||
         tg_gui_search_result_row_self_test() != 0 ||
         tg_gui_poll_draft_self_test() != 0 ||

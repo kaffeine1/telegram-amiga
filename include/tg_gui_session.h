@@ -457,6 +457,14 @@ int tg_gui_session_chat_pinned(unsigned long peer_id_hi,
 int tg_gui_session_set_pinned(unsigned long peer_index, int pinned,
                               FILE *stream);
 
+/* The pinned sidebar row src_row dropped at the place of the pinned row
+   dst_row: the pins take the new order and the list is drawn with it.
+   0 = moved, 1 = nothing to move, 2 = cannot be moved. Then
+   tg_gui_session_send_pins tells Telegram (messages.reorderPinnedDialogs);
+   refused, the old order comes back: 0 = sent, 2 = failed. */
+int tg_gui_session_move_pin(int src_row, int dst_row);
+int tg_gui_session_send_pins(FILE *stream);
+
 /* Sends `text` to the open chat and echoes it into the transcript. When
    reply_to_msg_id != 0 the message is sent as a reply to that message id.
    Returns 0 on success, non-zero on failure or when no chat is open. */

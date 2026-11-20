@@ -31,6 +31,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the window goes on; a file that is in fact a program is not run.
   Voice messages are Ogg Opus, which nothing in Amigram decodes yet: the
   player does it.
+- Pinned chats change their order by dragging, and Saved Messages can be
+  pinned. A pinned chat dragged among the others takes its new place at
+  once and the order goes to Telegram, so the other devices show it too;
+  if Telegram refuses, the old order comes back. A chat that is not
+  pinned stays below the pins, and the line the drag draws shows where
+  the chat will go. Pin and Unpin are now in the menu of Saved Messages
+  as well; pinned there or on another device, it moves up among the
+  pins in its place.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

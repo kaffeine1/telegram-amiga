@@ -19034,7 +19034,30 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (dest >= state->chat_count) {
                                 dest = state->chat_count - 1;
                             }
-                            if (dest != src &&
+                            if (dest != src && state->chats[src].pinned &&
+                                state->chats[dest].pinned &&
+                                !state->archive_view) {
+                                /* Among the pins (the drop target keeps a
+                                   pin there): the order is Telegram's. */
+                                int mrc = tg_gui_session_move_pin(src,
+                                                                  dest);
+
+                                state->nav_chat = -1;
+                                if (mrc == 0) {
+                                    /* the new order at once, then Telegram */
+                                    tg_gui_window_copy(state->status,
+                                                       sizeof(state->status),
+                                                       "Moving the pin...");
+                                    tg_gui_window_paint(state, &backend);
+                                    mrc = tg_gui_session_send_pins(stdout);
+                                }
+                                tg_gui_window_copy(
+                                    state->status, sizeof(state->status),
+                                    mrc == 2 ? "Could not move the pin"
+                                             : "Live - F1-F10 chats, Amiga+Q quits");
+                            } else if (dest != src &&
+                                !state->chats[src].pinned &&
+                                !state->chats[dest].pinned &&
                                 state->chats[src].index !=
                                     TG_GUI_SAVED_PEER_INDEX &&
                                 state->chats[dest].index !=

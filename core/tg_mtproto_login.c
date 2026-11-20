@@ -44,6 +44,7 @@
 #define TG_MESSAGES_SEARCH_GLOBAL_CONSTRUCTOR 0x4bc6589aUL
 #define TG_MESSAGES_GET_PINNED_DIALOGS_CONSTRUCTOR 0xd6b94df2UL
 #define TG_MESSAGES_TOGGLE_DIALOG_PIN_CONSTRUCTOR 0xa731e257UL
+#define TG_MESSAGES_REORDER_PINNED_DIALOGS_CONSTRUCTOR 0x3b1adf37UL
 #define TG_FOLDERS_EDIT_PEER_FOLDERS_CONSTRUCTOR 0x6847d0abUL
 #define TG_MESSAGES_READ_HISTORY_CONSTRUCTOR 0x0e306d3aUL
 #define TG_CHANNELS_READ_HISTORY_CONSTRUCTOR 0xcc104937UL
@@ -1328,6 +1329,63 @@ tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
         status = tg_mtproto_tl_write_u32(writer,
                                          TG_INPUT_DIALOG_PEER_CONSTRUCTOR);
     }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    return status;
+}
+
+/* messages.reorderPinnedDialogs#3b1adf37 flags:# force:flags.0?true
+   folder_id:int order:Vector<InputDialogPeer> = Bool (TDLib
+   telegram_api.tl, checked 2026-11-20). Writes the request up to the count
+   of the vector, without force (a pin left out of the order stays pinned);
+   tg_mtproto_build_input_dialog_peer then writes each of the `count`
+   peers, in their new order. */
+tg_mtproto_tl_status tg_mtproto_build_messages_reorder_pinned_dialogs(
+    tg_mtproto_tl_writer *writer, unsigned long folder_id,
+    unsigned long count)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(
+        writer, TG_MESSAGES_REORDER_PINNED_DIALOGS_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, folder_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, count);
+    }
+    return status;
+}
+
+/* inputDialogPeer#fcaafeb7 peer:InputPeer: one element of a vector of
+   InputDialogPeer (the self sentinel writes inputPeerSelf). */
+tg_mtproto_tl_status tg_mtproto_build_input_dialog_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, TG_INPUT_DIALOG_PEER_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
                                      peer_id_lo, access_hash_hi,
@@ -16066,6 +16124,37 @@ int tg_mtproto_login_self_test(void)
                 &pw, 0, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
                 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
             pin_query[4] != 0x00U) {
+            return 2;
+        }
+        /* reorderPinnedDialogs#3b1adf37, no flags, folder 0, a vector of
+           two: Saved Messages (inputDialogPeer + inputPeerSelf, 8 bytes),
+           then a basic group (inputDialogPeer + inputPeerChat, 16 bytes):
+           20 + 8 + 16 = 44 bytes. A user without its access hash cannot
+           be written. */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_reorder_pinned_dialogs(&pw, 0UL, 2UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_build_input_dialog_peer(
+                &pw, TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL,
+                0) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_build_input_dialog_peer(
+                &pw, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 44UL || pin_query[0] != 0x37U ||
+            pin_query[1] != 0xdfU || pin_query[2] != 0x1aU ||
+            pin_query[3] != 0x3bU || pin_query[4] != 0x00U ||
+            pin_query[8] != 0x00U || pin_query[12] != 0x15U ||
+            pin_query[16] != 0x02U || pin_query[20] != 0xb7U ||
+            pin_query[24] != 0xc9U || pin_query[25] != 0x7eU ||
+            pin_query[26] != 0xa0U || pin_query[27] != 0x7dU ||
+            pin_query[28] != 0xb7U || pin_query[36] != 0x08U ||
+            pin_query[40] != 0x04U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_input_dialog_peer(
+                &pw, TG_PEER_USER_CONSTRUCTOR, 0UL, 5UL, 0UL, 0UL, 0) ==
+            TG_MTPROTO_TL_OK) {
             return 2;
         }
         /* folders.editPeerFolders#6847d0ab, one inputFolderPeer#fbd2c296 of

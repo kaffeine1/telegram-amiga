@@ -20165,6 +20165,7 @@ int tg_mtproto_req_dh_probe(const char *host, const char *port,
 static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
 static int tg_gui_pins_join_self_test(void);
+static int tg_gui_pins_order_self_test(void);
 static int tg_gui_follow_open_self_test(void);
 static int tg_gui_reload_room_self_test(void);
 #if !defined(TG_NO_GUI)
@@ -22399,6 +22400,7 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_gui_pins_self_test() != 0 || tg_gui_pins_join_self_test() != 0 ||
+        tg_gui_pins_order_self_test() != 0 ||
         tg_gui_follow_open_self_test() != 0 ||
         tg_gui_reload_room_self_test() != 0) {
         return 2;
@@ -23481,13 +23483,25 @@ const char *tg_gui_session_open_error(void)
    not) when the session opens, on Reload chat list and after Pin/Unpin. The
    sidebar shows them first, in Telegram's order, with the pin mark; the rest
    keep the local order of the peer cache. In memory only: the list is read
-   again at every start. */
+   again at every start. Saved Messages pinned is the account's own user
+   among the pins (`self`, learnt from the users of the same answer); its
+   row moves up with the others. Dragging a pinned row among the pins
+   sends the new order (messages.reorderPinnedDialogs), for which each pin
+   keeps the input peer the answer gave it. */
 #define TG_GUI_PINS_MAX 16
 typedef struct tg_gui_pin {
     int is_user;
     unsigned long id_hi;
     unsigned long id_lo;
     unsigned long unread; /* the dialog's unread count when it was read */
+    /* The pins only: the peer as Telegram named it (user, chat, channel),
+       its access hash from the answer's users and chats, and 1 for the
+       account's own user, Saved Messages. */
+    unsigned long constructor;
+    unsigned long access_hash_hi;
+    unsigned long access_hash_lo;
+    int has_access_hash;
+    int self;
 } tg_gui_pin;
 static tg_gui_pin tg_gui_pins[TG_GUI_PINS_MAX];
 static int tg_gui_pin_count = 0;
@@ -23497,6 +23511,9 @@ static int tg_gui_pins_fresh = 0;
 
 static int tg_gui_pin_matches(const tg_gui_pin *pin, const tg_chat_list_row *row)
 {
+    if (pin->self) {
+        return row->index == TG_GUI_SAVED_PEER_INDEX;
+    }
     return row->index != TG_GUI_SAVED_PEER_INDEX &&
            row->peer_id_hi == pin->id_hi && row->peer_id_lo == pin->id_lo &&
            (row->is_user ? 1 : 0) == pin->is_user;
@@ -26640,7 +26657,34 @@ static int tg_gui_pins_join_cache(tg_mtproto_peer_cache *cache,
     return joined;
 }
 
-/* The pinned chats of the answer join the list file. 1 = it changed. */
+/* What the answer of getPinnedDialogs, read as a chat list (`fresh`), says
+   about each pin: its access hash, kept for reordering, and whether it is
+   the account's own user (the users' self flag), Saved Messages. */
+static void tg_gui_pins_learn(const tg_mtproto_peer_cache *fresh)
+{
+    unsigned long k;
+    int p;
+
+    for (p = 0; p < tg_gui_pin_count; ++p) {
+        tg_gui_pin *pin = &tg_gui_pins[p];
+
+        for (k = 0UL; k < fresh->count; ++k) {
+            const tg_mtproto_peer_cache_entry *e = &fresh->entries[k];
+
+            if (e->peer_constructor == pin->constructor &&
+                e->id_hi == pin->id_hi && e->id_lo == pin->id_lo) {
+                pin->access_hash_hi = e->access_hash_hi;
+                pin->access_hash_lo = e->access_hash_lo;
+                pin->has_access_hash = e->has_access_hash;
+                pin->self = pin->is_user && e->is_self;
+                break;
+            }
+        }
+    }
+}
+
+/* The pinned chats of the answer join the list file (and the pins learn
+   their peers from it, tg_gui_pins_learn). 1 = the list changed. */
 static int tg_gui_pins_join_list(const tg_mtproto_rpc_result *result)
 {
 #define fresh tg_peer_work_a /* scratch: see tg_peer_work_a */
@@ -26648,11 +26692,14 @@ static int tg_gui_pins_join_list(const tg_mtproto_rpc_result *result)
     const char *path = tg_gui_session_state.peer_cache_file;
     FILE *f;
 
-    if (path == 0 || path[0] == '\0' ||
-        tg_mtproto_parse_dialog_peer_cache(result->result_constructor,
+    if (tg_mtproto_parse_dialog_peer_cache(result->result_constructor,
                                            result->result_body,
                                            result->result_body_length,
                                            &fresh) != TG_MTPROTO_TL_OK) {
+        return 0;
+    }
+    tg_gui_pins_learn(&fresh);
+    if (path == 0 || path[0] == '\0') {
         return 0;
     }
     if (tg_mtproto_load_peer_cache_file(path, &cache) != 0) {
@@ -26904,6 +26951,14 @@ static int tg_gui_pins_join_self_test(void)
     /* Joined once, not twice. */
     ok = ok && tg_gui_pins_join_cache(&cache, &fresh, hidden) == 0 &&
          cache.count == 4UL;
+    /* The account as the list file keeps it, without its id: its self
+       flag in the answer keeps it out all the same (no entry of the
+       account is openable as a chat; Saved Messages has its own row). */
+    cache.entries[0].id_lo = 0UL;
+    fresh.entries[3].is_self = 1;
+    ok = ok && tg_gui_pins_join_cache(&cache, &fresh, hidden) == 0 &&
+         cache.count == 4UL;
+    cache.entries[0].id_lo = 1UL;
 
     /* A full list: the account, then groups 1001.. in order; 1005 is
        hidden, the last one pinned, the one before it open. */
@@ -27262,6 +27317,9 @@ static int tg_gui_session_fetch_pins(FILE *stream)
         if (pinned.peers[i].peer_constructor == 0UL) {
             continue;
         }
+        memset(&tg_gui_pins[tg_gui_pin_count], 0, sizeof(tg_gui_pins[0]));
+        tg_gui_pins[tg_gui_pin_count].constructor =
+            pinned.peers[i].peer_constructor;
         tg_gui_pins[tg_gui_pin_count].is_user =
             pinned.peers[i].peer_constructor ==
                     TG_MTPROTO_PEER_USER_CONSTRUCTOR
@@ -27466,10 +27524,256 @@ int tg_gui_session_set_pinned(unsigned long peer_index, int pinned,
     return 0;
 }
 
+/* The pin a sidebar row stands for, or -1. */
+static int tg_gui_pin_of_chat(const tg_gui_chat *chat)
+{
+    int p;
+
+    for (p = 0; p < tg_gui_pin_count; ++p) {
+        const tg_gui_pin *pin = &tg_gui_pins[p];
+
+        if (pin->self ? chat->index == TG_GUI_SAVED_PEER_INDEX
+                      : (chat->index != TG_GUI_SAVED_PEER_INDEX &&
+                         chat->peer_id_hi == pin->id_hi &&
+                         chat->peer_id_lo == pin->id_lo &&
+                         (chat->is_group ? 0 : 1) == pin->is_user)) {
+            return p;
+        }
+    }
+    return -1;
+}
+
+/* Moves pin `from` to the place of pin `to` in tg_gui_pins: after it when
+   it comes from above, before it when it comes from below, which is where
+   the row was dropped. */
+static void tg_gui_pins_move(int from, int to)
+{
+    tg_gui_pin moved = tg_gui_pins[from];
+
+    if (from < to) {
+        memmove(&tg_gui_pins[from], &tg_gui_pins[from + 1],
+                (size_t)(to - from) * sizeof(tg_gui_pins[0]));
+    } else if (from > to) {
+        memmove(&tg_gui_pins[to + 1], &tg_gui_pins[to],
+                (size_t)(from - to) * sizeof(tg_gui_pins[0]));
+    }
+    tg_gui_pins[to] = moved;
+}
+
+/* The pins as they were before a move, put back when Telegram refuses
+   the new order. */
+static tg_gui_pin tg_gui_pins_before[TG_GUI_PINS_MAX];
+static int tg_gui_pins_before_count = 0;
+
+/* Writes messages.reorderPinnedDialogs of the main list with every pin in
+   its present order, so none is unpinned (the ones this list does not show
+   included). 0 = written; non-zero = a pin cannot be named (the answer
+   that listed it did not carry its access hash) or no room. */
+static int tg_gui_pins_write_order(tg_mtproto_tl_writer *writer)
+{
+    int p;
+
+    if (tg_mtproto_build_messages_reorder_pinned_dialogs(
+            writer, 0UL, (unsigned long)tg_gui_pin_count) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    for (p = 0; p < tg_gui_pin_count; ++p) {
+        const tg_gui_pin *pin = &tg_gui_pins[p];
+
+        if (tg_mtproto_build_input_dialog_peer(
+                writer,
+                pin->self ? TG_MTPROTO_PEER_SELF_CONSTRUCTOR
+                          : pin->constructor,
+                pin->id_hi, pin->id_lo, pin->access_hash_hi,
+                pin->access_hash_lo, pin->has_access_hash) !=
+            TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+    }
+    return 0;
+}
+
+#define TG_GUI_PINS_ORDER_MAX (20 + TG_GUI_PINS_MAX * 24)
+
+/* Public: the pinned row `src_row` of the sidebar dropped at the place of
+   the pinned row `dst_row`. The pins take their new order here and the
+   list is drawn again with it; tg_gui_session_send_pins then tells
+   Telegram. 0 = moved, 1 = nothing to move, 2 = cannot be moved. */
+int tg_gui_session_move_pin(int src_row, int dst_row)
+{
+    unsigned char query[TG_GUI_PINS_ORDER_MAX];
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    tg_mtproto_tl_writer writer;
+    int from;
+    int to;
+
+    if (!tg_gui_session_state.open || gst == 0 || src_row < 0 ||
+        src_row >= gst->chat_count || dst_row < 0 ||
+        dst_row >= gst->chat_count) {
+        return 2;
+    }
+    from = tg_gui_pin_of_chat(&gst->chats[src_row]);
+    to = tg_gui_pin_of_chat(&gst->chats[dst_row]);
+    if (from < 0 || to < 0) {
+        return 2;
+    }
+    if (from == to) {
+        return 1;
+    }
+    memcpy(tg_gui_pins_before, tg_gui_pins, sizeof(tg_gui_pins_before));
+    tg_gui_pins_before_count = tg_gui_pin_count;
+    tg_gui_pins_move(from, to);
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_gui_pins_write_order(&writer) != 0) {
+        tg_gui_log("pins: reorder, a pin cannot be named");
+        memcpy(tg_gui_pins, tg_gui_pins_before, sizeof(tg_gui_pins));
+        return 2;
+    }
+    tg_gui_session_reload_chats();
+    return 0;
+}
+
+/* Public: sends the order tg_gui_session_move_pin made. Refused or failed,
+   the order before the move comes back and the list is drawn again.
+   0 = Telegram has it, 2 = failed. */
+int tg_gui_session_send_pins(FILE *stream)
+{
+    unsigned char query[TG_GUI_PINS_ORDER_MAX];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    static const char label[] = "mtproto messages.reorderPinnedDialogs";
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    rc = tg_gui_pins_write_order(&writer);
+    if (rc == 0) {
+        quiet = tg_mtproto_open_quiet_stream(stream);
+        memset(&result, 0, sizeof(result));
+        rc = tg_mtproto_send_saved_query_on_context(
+            tg_gui_session_state.host, tg_gui_session_state.port,
+            tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+            tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+            query, writer.length, &result, quiet, label, 4U);
+        if (rc == 0 &&
+            result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+            (void)tg_mtproto_print_rpc_error(label, &result, quiet);
+            rc = 1;
+        }
+        tg_mtproto_close_quiet_stream(quiet, stream);
+    }
+    if (rc != 0) {
+        tg_gui_log("pins: reorder refused or failed");
+        memcpy(tg_gui_pins, tg_gui_pins_before, sizeof(tg_gui_pins));
+        tg_gui_pin_count = tg_gui_pins_before_count;
+        tg_gui_session_reload_chats();
+        return 2;
+    }
+    tg_gui_log("pins: reordered");
+    return 0;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* Saved Messages pinned: the account's own user among the pins, learnt
+   from the users of the answer with each pin's access hash, takes the
+   Saved Messages row up in pin order. A pin dropped on another goes after
+   it coming from above and before it coming from below. The order written
+   names every pin, Saved Messages as inputPeerSelf; a pin without its
+   access hash cannot be written. */
+static int tg_gui_pins_order_self_test(void)
+{
+#define fresh tg_peer_work_a /* scratch: see tg_peer_work_a */
+    static tg_gui_pin saved_pins[TG_GUI_PINS_MAX];
+    int saved_pin_count = tg_gui_pin_count;
+    tg_chat_list_row rows[4];
+    unsigned char query[TG_GUI_PINS_ORDER_MAX];
+    tg_mtproto_tl_writer writer;
+    int ok;
+
+    memcpy(saved_pins, tg_gui_pins, sizeof(saved_pins));
+    memset(tg_gui_pins, 0, sizeof(tg_gui_pins));
+    tg_gui_pin_count = 3;
+    tg_gui_pins[0].constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    tg_gui_pins[0].is_user = 1;
+    tg_gui_pins[0].id_lo = 7UL;          /* a user */
+    tg_gui_pins[1].constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    tg_gui_pins[1].is_user = 1;
+    tg_gui_pins[1].id_lo = 1UL;          /* the account itself */
+    tg_gui_pins[2].constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    tg_gui_pins[2].id_lo = 9UL;          /* a channel */
+    memset(&fresh, 0, sizeof(fresh));
+    fresh.entries[0].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    fresh.entries[0].id_lo = 1UL;
+    fresh.entries[0].is_self = 1;
+    fresh.entries[0].has_access_hash = 1;
+    fresh.entries[0].access_hash_lo = 0x11UL;
+    fresh.entries[1].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    fresh.entries[1].id_lo = 9UL;
+    fresh.entries[1].has_access_hash = 1;
+    fresh.entries[1].access_hash_lo = 0x99UL;
+    fresh.entries[2].peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    fresh.entries[2].id_lo = 7UL;
+    fresh.entries[2].has_access_hash = 1;
+    fresh.entries[2].access_hash_lo = 0x77UL;
+    fresh.count = 3UL;
+    tg_gui_pins_learn(&fresh);
+    ok = !tg_gui_pins[0].self && tg_gui_pins[1].self &&
+         !tg_gui_pins[2].self && tg_gui_pins[0].has_access_hash &&
+         tg_gui_pins[0].access_hash_lo == 0x77UL &&
+         tg_gui_pins[2].access_hash_lo == 0x99UL;
+    /* rows: the channel, the user, another user, Saved Messages last */
+    memset(rows, 0, sizeof(rows));
+    rows[0].index = 1UL;
+    rows[0].peer_id_lo = 9UL;
+    rows[1].index = 2UL;
+    rows[1].peer_id_lo = 7UL;
+    rows[1].is_user = 1;
+    rows[2].index = 3UL;
+    rows[2].peer_id_lo = 5UL;
+    rows[2].is_user = 1;
+    rows[3].index = TG_GUI_SAVED_PEER_INDEX;
+    rows[3].is_user = 1;
+    tg_gui_pins_apply(rows, 4);
+    ok = ok && rows[0].index == 2UL && rows[0].pinned &&
+         rows[1].index == TG_GUI_SAVED_PEER_INDEX && rows[1].pinned &&
+         rows[2].index == 1UL && rows[2].pinned &&
+         rows[3].index == 3UL && !rows[3].pinned;
+    /* the user dropped on the channel, then back on itself's old place */
+    tg_gui_pins_move(0, 2);
+    ok = ok && tg_gui_pins[0].self && tg_gui_pins[1].id_lo == 9UL &&
+         tg_gui_pins[2].id_lo == 7UL;
+    tg_gui_pins_move(2, 0);
+    ok = ok && tg_gui_pins[0].id_lo == 7UL && tg_gui_pins[1].self &&
+         tg_gui_pins[2].id_lo == 9UL;
+    /* 20 + the user 24 + Saved Messages 8 + the channel 24 */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    ok = ok && tg_gui_pins_write_order(&writer) == 0 &&
+         writer.length == 76UL && query[16] == 3U && query[20] == 0xb7U &&
+         query[44] == 0xb7U && query[48] == 0xc9U && query[49] == 0x7eU &&
+         query[50] == 0xa0U && query[51] == 0x7dU && query[52] == 0xb7U;
+    tg_gui_pins[2].has_access_hash = 0;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    ok = ok && tg_gui_pins_write_order(&writer) != 0;
+    memcpy(tg_gui_pins, saved_pins, sizeof(saved_pins));
+    tg_gui_pin_count = saved_pin_count;
+    if (!ok) {
+        puts("probe self-test: pinned Saved Messages or the pin order wrong");
+        return 2;
+    }
+    return 0;
+#undef fresh
+}
+#endif
+
 /* F10: appends the pinned "Saved Messages" row (the self chat / cloud
-   archive) as the LAST sidebar row. Bottom placement is load-bearing: the
-   drag-reorder maps row positions straight to the file's public indexes, so
-   anything above the synthetic row keeps that mapping intact. */
+   archive) as the LAST sidebar row; pinned on Telegram, tg_gui_pins_apply
+   then moves it up among the pins. The drag-reorder names rows by their
+   cache index, so the synthetic row stays out of the file's order
+   wherever it is drawn. */
 void tg_gui_saved_messages_row(tg_chat_list_row *rows, int *count, int max)
 {
     tg_chat_list_row *row;

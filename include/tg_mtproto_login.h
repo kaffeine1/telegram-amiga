@@ -1138,6 +1138,24 @@ tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
     unsigned long access_hash_lo,
     int has_access_hash);
 
+/* messages.reorderPinnedDialogs#3b1adf37 flags:# force:flags.0?true
+   folder_id:int order:Vector<InputDialogPeer> -> Bool: the request up to
+   the vector's count (no force); then `count` calls of
+   tg_mtproto_build_input_dialog_peer, the pins in their new order. */
+tg_mtproto_tl_status tg_mtproto_build_messages_reorder_pinned_dialogs(
+    tg_mtproto_tl_writer *writer, unsigned long folder_id,
+    unsigned long count);
+
+/* inputDialogPeer#fcaafeb7 peer:InputPeer, one element of a vector. */
+tg_mtproto_tl_status tg_mtproto_build_input_dialog_peer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+
 /* folders.editPeerFolders for one chat: folder_id 1 archives it, 0 brings
    it back to the main list. */
 tg_mtproto_tl_status tg_mtproto_build_folders_edit_peer_folder(
