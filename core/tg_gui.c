@@ -3471,6 +3471,77 @@ int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat)
                                                       : TG_GUI_PEN_BADGE_TEXT;
 }
 
+/* Height of the "Archived chats" band under the search box, 0 when it
+   is not shown: only over the main list itself (not the Archive, a search,
+   the name filter, a forum's topics or the forward picker). nav_lh is the
+   navigation line height the list is laid out with. */
+static int tg_gui_archive_band_h(const tg_gui_state *state, int nav_lh)
+{
+    if (state == 0 || !state->archive_band || state->archive_view ||
+        state->in_search || state->in_filter || state->topic_view ||
+        state->forward_pick_active || state->mode != TG_GUI_MODE_CHAT) {
+        return 0;
+    }
+    return nav_lh + 6;
+}
+
+/* Where the chat rows start in the sidebar: under the search box and the
+   Archive's band. Shared by the painter, the clicks and the drops. */
+static int tg_gui_sidebar_list_top(const tg_gui_state *state, int nav_lh)
+{
+    return nav_lh + 10 + tg_gui_archive_band_h(state, nav_lh);
+}
+
+/* The band: "Archived chats" in the dim pen and, when something in the
+   Archive is unread, the number of such chats in a pill, grey while all
+   of them are muted (archived chats mostly are). */
+static void tg_gui_paint_archive_band(const tg_gui_state *state,
+                                      tg_gui_backend *backend, int y,
+                                      int band_h, int width, int lh)
+{
+    static const char label[] = "Archived chats";
+    char badge[8];
+    int badge_w = 0;
+    int base = tg_gui_navigation_baseline(backend, y, band_h);
+
+    backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                       tg_gui_make_rect(0, y, width, band_h));
+    if (state->archive_unread > 0UL) {
+        int badge_h = lh + 2;
+        int badge_x;
+        int badge_top = y + (band_h - badge_h) / 2;
+        int num_w;
+
+        sprintf(badge, "%lu",
+                state->archive_unread > 999UL ? 999UL : state->archive_unread);
+        num_w = backend->text_width(backend, badge,
+                                    (unsigned long)strlen(badge));
+        badge_w = num_w + 10;
+        if (badge_w < lh + 6) {
+            badge_w = lh + 6;
+        }
+        badge_x = width - 8 - badge_w;
+        tg_gui_fill_pill(backend,
+                         state->archive_unread_loud ? TG_GUI_PEN_BADGE
+                                                    : TG_GUI_PEN_TEXT_DIM,
+                         tg_gui_make_rect(badge_x, badge_top, badge_w,
+                                          badge_h));
+        backend->draw_text(backend,
+                           state->archive_unread_loud ? TG_GUI_PEN_BADGE_TEXT
+                                                      : TG_GUI_PEN_WINDOW,
+                           badge_x + (badge_w - num_w) / 2,
+                           tg_gui_navigation_baseline(backend, badge_top,
+                                                      badge_h),
+                           badge, (unsigned long)strlen(badge));
+        badge_w += 8;
+    }
+    tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT_DIM, 10, base, label,
+                        width - 10 - badge_w - 6);
+    /* a hairline under it: the band is no chat */
+    backend->fill_rect(backend, TG_GUI_PEN_SELECT,
+                       tg_gui_make_rect(0, y + band_h - 1, width, 1));
+}
+
 static void tg_gui_paint_sidebar(const tg_gui_state *state,
                                  tg_gui_backend *backend, int sidebar_w,
                                  int content_h, int lh)
@@ -3487,8 +3558,17 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
     backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                        tg_gui_make_rect(0, 0, sidebar_w, content_h));
 
-    search_h = lh + 10;
     tg_gui_paint_search_box(state, backend);
+    {
+        int band_h = tg_gui_archive_band_h(state, lh);
+
+        if (band_h > 0) {
+            tg_gui_paint_archive_band(state, backend, lh + 10, band_h,
+                                      sidebar_w, lh);
+        }
+    }
+    /* below the search box and the Archive's band: the chat rows */
+    search_h = tg_gui_sidebar_list_top(state, lh);
 
     row_h = (2 * lh) + 12;
     view_rows = (row_h > 0) ? ((content_h - search_h) / row_h) : 0;
@@ -6543,7 +6623,7 @@ int tg_gui_chat_drop_target(const tg_gui_state *state, int lh, int y)
         return 0;
     }
     lh = tg_gui_navigation_line_height(state, lh);
-    search_h = lh + 10;       /* keep in sync with tg_gui_paint_sidebar */
+    search_h = tg_gui_sidebar_list_top(state, lh); /* as the painter */
     row_h = (2 * lh) + 12;
     if (row_h < 1) {
         row_h = 1;
@@ -6972,8 +7052,11 @@ int tg_gui_hit_test(const tg_gui_state *state, int width, int height, int lh,
         int row_h;
         int nav_lh = tg_gui_navigation_line_height(state, lh);
 
-        search_h = nav_lh + 10;
+        search_h = tg_gui_sidebar_list_top(state, nav_lh);
         row_h = (2 * nav_lh) + 12;
+        if (y >= nav_lh + 10 && y < search_h) {
+            return TG_GUI_HIT_ARCHIVE; /* the Archive's band */
+        }
         if (y >= search_h) {
             int row;
 
@@ -10656,6 +10739,105 @@ static int tg_gui_chat_drop_self_test(void)
     return 0;
 }
 
+/* The Archive's band: drawn under the search box with its count, the
+   rows one band lower for the painter, the clicks and the drops alike, a
+   click on it is the Archive; not over the Archive itself or a filtered
+   list, and no badge when nothing in the Archive is unread. */
+static int tg_gui_archive_band_self_test(void)
+{
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_backend backend;
+    tg_gui_record record;
+    int nav;
+    int row_y;
+    int ok;
+    int k;
+
+    tg_gui_demo_state(state);
+    state->mode = TG_GUI_MODE_CHAT;
+    state->chat_scroll = 0;
+    tg_gui_copy(state->chats[2].name, sizeof(state->chats[2].name),
+                "Zeta row");
+    memset(&backend, 0, sizeof(backend));
+    memset(&record, 0, sizeof(record));
+    record.width = 640;
+    record.height = 480;
+    record.line_h = 18;
+    backend.context = &record;
+    backend.width = tg_gui_rec_width;
+    backend.height = tg_gui_rec_height;
+    backend.line_height = tg_gui_rec_line_height;
+    backend.text_width = tg_gui_rec_text_width;
+    backend.draw_text = tg_gui_rec_text;
+    backend.fill_rect = tg_gui_rec_fill;
+    backend.avatar_fill = tg_gui_rec_avatar;
+    record.watch_text[0] = "Archived chats";
+    record.watch_text[1] = "Zeta row";
+    record.watch_text[2] = "77";
+    state->archive_band = 0;
+    state->archive_unread = 77UL;
+    tg_gui_paint(state, &backend);
+    nav = state->nav_lh;
+    row_y = record.watch_y[1];
+    ok = nav > 0 && record.watch_hits[0] == 0 && record.watch_hits[1] == 1 &&
+         record.watch_hits[2] == 0 &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, nav + 10) == 0;
+    state->archive_band = 1;
+    for (k = 0; k < 5; ++k) {
+        record.watch_hits[k] = 0;
+    }
+    tg_gui_paint(state, &backend);
+    ok = ok && record.watch_hits[0] == 1 && record.watch_hits[1] == 1 &&
+         record.watch_hits[2] == 1 && record.watch_y[1] == row_y + nav + 6 &&
+         record.watch_y[0] < record.watch_y[1] &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, nav + 10) ==
+             TG_GUI_HIT_ARCHIVE &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, 2 * nav + 15) ==
+             TG_GUI_HIT_ARCHIVE &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, 2 * nav + 16) == 0 &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, nav + 9) ==
+             TG_GUI_HIT_SEARCH;
+    /* nothing unread: the band without a badge */
+    state->archive_unread = 0UL;
+    for (k = 0; k < 5; ++k) {
+        record.watch_hits[k] = 0;
+    }
+    tg_gui_paint(state, &backend);
+    ok = ok && record.watch_hits[0] == 1 && record.watch_hits[2] == 0;
+    /* a drag lands one band lower too: the gap above row 2 */
+    for (k = 0; k < state->chat_count; ++k) {
+        state->chats[k].pinned = 0;
+    }
+    state->drag_src = 3;
+    state->drag_active = 1;
+    ok = ok && state->chat_count > 3 &&
+         tg_gui_chat_drop_target(state, 18,
+                                 2 * nav + 16 + 2 * (2 * nav + 12)) == 2;
+    state->drag_src = -1;
+    state->drag_active = 0;
+    /* over the Archive itself, or a filtered list: no band */
+    state->archive_view = 1;
+    for (k = 0; k < 5; ++k) {
+        record.watch_hits[k] = 0;
+    }
+    tg_gui_paint(state, &backend);
+    ok = ok && record.watch_hits[0] == 0 &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, nav + 10) == 0;
+    state->archive_view = 0;
+    state->in_filter = 1;
+    for (k = 0; k < 5; ++k) {
+        record.watch_hits[k] = 0;
+    }
+    tg_gui_paint(state, &backend);
+    ok = ok && record.watch_hits[0] == 0;
+    state->in_filter = 0;
+    if (!ok) {
+        puts("gui self-test: the Archive's band is not where it should be");
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_gui_notify_menu_self_test(void)
 {
     tg_gui_state *state = tg_gui_test_scratch_state();
@@ -11999,6 +12181,7 @@ int tg_gui_self_test(void)
         tg_gui_notify_queue_self_test() != 0 ||
         tg_gui_notify_menu_self_test() != 0 ||
         tg_gui_chat_drop_self_test() != 0 ||
+        tg_gui_archive_band_self_test() != 0 ||
         tg_gui_mute_mark_self_test() != 0 ||
         tg_gui_search_result_row_self_test() != 0 ||
         tg_gui_poll_draft_self_test() != 0 ||

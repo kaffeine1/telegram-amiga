@@ -1138,6 +1138,13 @@ tg_mtproto_tl_status tg_mtproto_build_messages_toggle_dialog_pin(
     unsigned long access_hash_lo,
     int has_access_hash);
 
+/* The Archive's counts from the last dialogFolder a dialog list carried
+   (getPinnedDialogs, getDialogs): the archived chats with something
+   unread, muted and not. Returns a serial that grows with each reading
+   (0 = none read yet). Either pointer may be 0. */
+unsigned long tg_mtproto_archive_unread(unsigned long *muted,
+                                        unsigned long *unmuted);
+
 /* messages.reorderPinnedDialogs#3b1adf37 flags:# force:flags.0?true
    folder_id:int order:Vector<InputDialogPeer> -> Bool: the request up to
    the vector's count (no force); then `count` calls of

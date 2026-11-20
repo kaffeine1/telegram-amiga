@@ -617,6 +617,11 @@ Chats
   Archive, Mark as read or unread, Remove chat, Mute... or Unmute,
   Enable ring (groups and channels), Sound..., Show hidden messages,
   and Leave... or Delete chat... Saved Messages can be pinned too.
+- An archived chat leaves the list for the Archive, which Chats >
+  Archived chats (Amiga+A) shows, and so does a click on the line
+  "Archived chats" at the top of the list. That line says how many
+  archived chats have something unread, in grey while they are all
+  muted. ESC goes back to the chats.
 - Mute... asks for how long: an hour, eight hours, or until you unmute.
   The mute goes to Telegram, so your other devices follow it.
 - The text client does the same for the open chat with /mute (for
@@ -917,6 +922,11 @@ Chat
   ring (gruppi e canali), Sound..., Show hidden messages, e Leave... o
   Delete chat... Anche i Messaggi salvati (Saved Messages) si possono
   fissare.
+- Una chat archiviata lascia la lista per l'Archivio, che si apre da
+  Chats > Archived chats (Amiga+A) o con un clic sulla riga "Archived
+  chats" in cima alla lista. Quella riga dice quante chat archiviate
+  hanno qualcosa da leggere, in grigio se sono tutte silenziate. ESC
+  torna alle chat.
 - Mute... chiede per quanto: un'ora, otto ore, o finche' non togli il
   silenzioso. Il silenzioso va a Telegram, quindi lo seguono anche gli
   altri tuoi dispositivi.

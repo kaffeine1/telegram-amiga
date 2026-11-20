@@ -23203,6 +23203,20 @@ static int tg_gui_archive_view = 0; /* 1: the sidebar shows the Archive */
    when there is an Archive to show. */
 #define TG_GUI_ARCHIVE_SHOWN_MAX (TG_MTPROTO_PEER_CACHE_MAX / 4U)
 static int tg_gui_archive_partial = 0; /* the last fetch stopped before the end */
+/* The Archive's band over the main list counts its unread chats from
+   Telegram's own entry for the Archive (dialogFolder), which comes with
+   the pinned dialogs: 1 when the last getPinnedDialogs carried it. The
+   count is read again (the pins with it) when a message comes in an
+   archived chat, at most every TG_GUI_ARCHIVE_COUNT_SECONDS, and when the
+   Archive view is left or a chat moves in or out of it. */
+static int tg_gui_archive_folder_listed = 0;
+static int tg_gui_archive_counts_stale = 0;
+static unsigned long tg_gui_pins_read_at = 0UL;
+#if defined(__m68k__)
+#define TG_GUI_ARCHIVE_COUNT_SECONDS 60UL
+#else
+#define TG_GUI_ARCHIVE_COUNT_SECONDS 20UL
+#endif
 
 static void tg_gui_archived_load(void)
 {
@@ -23706,9 +23720,13 @@ static int tg_gui_offlist_news(const tg_chat_notify_entry *entry, char *name,
         return 0;
     }
     is_user = !entry->is_chat;
+    if (tg_gui_archived_find(is_user, entry->peer_id_hi,
+                             entry->peer_id_lo) >= 0) {
+        /* news in the Archive: the count on its band, read again soon */
+        tg_gui_archive_counts_stale = 1;
+        return 0;
+    }
     if (tg_gui_hidden_contains(entry->peer_id_hi, entry->peer_id_lo) ||
-        tg_gui_archived_find(is_user, entry->peer_id_hi,
-                             entry->peer_id_lo) >= 0 ||
         tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
                                         &tg_gui_probe_cache) != 0) {
         return 0;
@@ -25081,7 +25099,10 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
 #else
         drafts_ok = 0;
 #endif
-        if (pins_ok || marks_ok || drafts_ok) {
+        /* ...and the Archive's band, when there is an Archive. */
+        if (pins_ok || marks_ok || drafts_ok ||
+            tg_gui_archive_folder_listed ||
+            tg_gui_session_archived_count() > 0) {
             tg_gui_session_reload_chats();
         }
     }
@@ -26434,6 +26455,22 @@ static void tg_gui_session_follow_open_chat(void)
     }
 }
 
+/* The Archive's band over the main list: shown while the Archive has
+   chats (the archived set known here, or Telegram's entry for the Archive
+   among the pins), with the unread chats that entry counts; the number
+   only when the entry came with the last pins, else it may be old. */
+static void tg_gui_archive_band_set(tg_gui_state *g)
+{
+    unsigned long muted = 0UL;
+    unsigned long unmuted = 0UL;
+
+    (void)tg_mtproto_archive_unread(&muted, &unmuted);
+    g->archive_band = tg_gui_archive_folder_listed ||
+                      tg_gui_session_archived_count() > 0;
+    g->archive_unread = tg_gui_archive_folder_listed ? muted + unmuted : 0UL;
+    g->archive_unread_loud = tg_gui_archive_folder_listed && unmuted > 0UL;
+}
+
 /* Re-project the peer cache into the GUI sidebar (after it changed, e.g. a search
    result was added). Mirrors the projection in tg_gui_session_open. */
 /* After the sidebar is rebuilt (the driver resets selected_chat to 0), point
@@ -26505,6 +26542,7 @@ static void tg_gui_session_reload_chats(void)
     if (tg_gui_session_state.gui_driver.state != 0) {
         tg_gui_session_state.gui_driver.state->archive_view =
             tg_gui_archive_view;
+        tg_gui_archive_band_set(tg_gui_session_state.gui_driver.state);
     }
     tg_gui_session_reselect_open();
 }
@@ -27273,11 +27311,15 @@ static int tg_gui_session_fetch_pins(FILE *stream)
     static const char label[] = "mtproto messages.getPinnedDialogs";
     FILE *quiet;
     unsigned long i;
+    unsigned long folder_serial;
     int rc;
 
     if (!tg_gui_session_state.open || stream == 0) {
         return 2;
     }
+    tg_gui_pins_read_at = (unsigned long)time(0);
+    tg_gui_archive_counts_stale = 0;
+    folder_serial = tg_mtproto_archive_unread(0, 0);
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     if (tg_mtproto_build_messages_get_pinned_dialogs(&writer, 0UL) !=
         TG_MTPROTO_TL_OK) {
@@ -27310,6 +27352,9 @@ static int tg_gui_session_fetch_pins(FILE *stream)
         tg_gui_log("pins: fetch failed");
         return rc;
     }
+    /* The Archive's entry, with its counts, came with the pins or not. */
+    tg_gui_archive_folder_listed =
+        tg_mtproto_archive_unread(0, 0) != folder_serial;
     tg_gui_pin_count = 0;
     for (i = 0UL; i < pinned.count && tg_gui_pin_count < TG_GUI_PINS_MAX;
          ++i) {
@@ -29028,6 +29073,11 @@ int tg_gui_session_archive_view(void)
 /* Public: show the Archive (1) or the main list (0) in the sidebar. */
 void tg_gui_session_set_archive_view(int on)
 {
+    if (!on && tg_gui_archive_view) {
+        /* chats read in the Archive: its band's count, read again */
+        tg_gui_archive_counts_stale = 1;
+        tg_gui_pins_read_at = 0UL;
+    }
     tg_gui_archive_view = on ? 1 : 0;
     tg_gui_topics_shown = 0; /* the Archive or the chats, not the topics */
 #if !defined(TG_NO_GUI)
@@ -39148,6 +39198,7 @@ static int tg_gui_session_apply_folder_updates(void)
     }
     tg_gui_archived_save();
     tg_gui_log("archive: changed elsewhere");
+    tg_gui_archive_counts_stale = 1; /* the band's count with it */
     /* Redraw the list unless it shows something else (search results, the
        name filter, a forward picker): those put the list back themselves. */
     if (gst != 0 && !gst->in_search && !gst->in_filter &&
@@ -40089,6 +40140,13 @@ static int tg_gui_session_apply_list_mark_updates(FILE *stream)
 #else
     tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
 
+    /* The Archive's count goes with the pins: news in the Archive asks
+       for them again, not more often than every few seconds. */
+    if (tg_gui_archive_counts_stale &&
+        (unsigned long)time(0) - tg_gui_pins_read_at >=
+            TG_GUI_ARCHIVE_COUNT_SECONDS) {
+        tg_chat_pins_stale = 1;
+    }
     if ((!tg_chat_pins_stale && !tg_chat_marks_stale) || stream == 0 ||
         gst == 0 || gst->in_search || gst->in_filter ||
         gst->forward_pick_active || gst->ctx_visible) {

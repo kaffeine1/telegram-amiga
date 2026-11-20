@@ -5375,6 +5375,25 @@ static tg_mtproto_tl_status tg_skip_folder(tg_mtproto_tl_reader *reader)
     return TG_MTPROTO_TL_OK;
 }
 
+/* The counts of the last dialogFolder read (the Archive's entry in a
+   dialog list): how many archived chats have something unread, muted and
+   not, and a serial that grows with every reading. */
+static unsigned long tg_archive_unread_muted = 0UL;
+static unsigned long tg_archive_unread_unmuted = 0UL;
+static unsigned long tg_archive_unread_serial = 0UL;
+
+unsigned long tg_mtproto_archive_unread(unsigned long *muted,
+                                        unsigned long *unmuted)
+{
+    if (muted != 0) {
+        *muted = tg_archive_unread_muted;
+    }
+    if (unmuted != 0) {
+        *unmuted = tg_archive_unread_unmuted;
+    }
+    return tg_archive_unread_serial;
+}
+
 static tg_mtproto_tl_status tg_read_dialog_peer(
     tg_mtproto_tl_reader *reader,
     tg_mtproto_dialog_peer *peer, tg_mtproto_peer_notify_settings *notify)
@@ -5399,17 +5418,27 @@ static tg_mtproto_tl_status tg_read_dialog_peer(
            messages.getPinnedDialogs): the entry was never read whole, and
            only the search for the next dialog saved the ones after it. */
         tg_mtproto_dialog_peer folder_peer;
+        unsigned long muted_peers;
+        unsigned long unmuted_peers;
+
         memset(&folder_peer, 0, sizeof(folder_peer));
         if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
             tg_skip_folder(reader) != TG_MTPROTO_TL_OK ||
             tg_read_peer_ref(reader, &folder_peer) != TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
-            tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
-            tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &muted_peers) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &unmuted_peers) !=
+                TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
+        /* The Archive's own counts: the chats in it with something
+           unread, muted and not (kept for the window's Archive band). */
+        tg_archive_unread_muted = muted_peers;
+        tg_archive_unread_unmuted = unmuted_peers;
+        ++tg_archive_unread_serial;
         peer->peer_constructor = 0UL;
         return TG_MTPROTO_TL_OK;
     }
@@ -12888,7 +12917,7 @@ static void tg_topic_test_topic(tg_mtproto_tl_writer *w, unsigned long id,
    a message is in, and which channels are forums. */
 /* The Archive's own entry among the dialogs is read whole, to its last
    byte: its flags, the folder (with a photo or without), its peer and the
-   five numbers. */
+   five numbers, of which the unread chats, muted and not, are kept. */
 static int tg_dialog_folder_self_test(void)
 {
     unsigned char body[160];
@@ -12896,10 +12925,14 @@ static int tg_dialog_folder_self_test(void)
     tg_mtproto_tl_reader reader;
     tg_mtproto_dialog_peer peer;
     tg_mtproto_peer_notify_settings notify;
+    unsigned long serial;
+    unsigned long muted;
+    unsigned long unmuted;
     int with_photo;
     int k;
 
     for (with_photo = 0; with_photo < 2; ++with_photo) {
+        serial = tg_mtproto_archive_unread(0, 0);
         tg_mtproto_tl_writer_init(&w, body, sizeof(body));
         (void)tg_mtproto_tl_write_u32(&w, TG_DIALOG_FOLDER_CONSTRUCTOR);
         (void)tg_mtproto_tl_write_u32(&w, 4UL); /* pinned */
@@ -12924,6 +12957,12 @@ static int tg_dialog_folder_self_test(void)
             printf("login self-test: the Archive's entry is not read whole "
                    "(photo %d: stopped at %lu of %lu)\n", with_photo,
                    reader.offset, w.length);
+            return 2;
+        }
+        /* top message 1, then 2 muted and 3 unmuted chats unread */
+        if (tg_mtproto_archive_unread(&muted, &unmuted) != serial + 1UL ||
+            muted != 2UL || unmuted != 3UL) {
+            puts("login self-test: the Archive's unread chats are not kept");
             return 2;
         }
     }

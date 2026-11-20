@@ -39,6 +39,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the chat will go. Pin and Unpin are now in the menu of Saved Messages
   as well; pinned there or on another device, it moves up among the
   pins in its place.
+- The Archive shows on the chat list: a thin line "Archived chats" at the
+  top, above the pins, while the Archive has chats, with how many of them
+  have something unread, in grey while they are all muted, as archived
+  chats mostly are. A click on it opens the Archive, as Amiga+A does. The
+  number is Telegram's own, read with the pinned chats; it is read again
+  when a message comes in an archived chat (at most every 20 seconds,
+  every minute on 68k), when a chat moves in or out of the Archive and
+  when the Archive view is left. The line is no chat: F1 to F10 still
+  open the first ten chats.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

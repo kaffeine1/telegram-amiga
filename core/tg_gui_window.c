@@ -19383,6 +19383,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->drag_active = 0;
                         state->drag_press_y = hy;
                         state->drag_cur_y = hy;
+                    } else if (hit == TG_GUI_HIT_ARCHIVE) {
+                        /* The "Archived chats" band: the Archive, as
+                           Amiga+A opens it. */
+                        tg_gui_window_show_archive(state, &backend, 1);
+                        picked_secs = msg_secs; /* swallow the second click */
+                        picked_micros = msg_micros;
                     } else if (hit == TG_GUI_HIT_SEARCH &&
                                tg_gui_session_is_open()) {
                         /* Click the sidebar search box to focus it for typing;

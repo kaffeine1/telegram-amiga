@@ -43,15 +43,16 @@ CHANGELOG.md. On `main` for the next release: the Chats menu (issue
 several messages (issue #14), Play on a video, a voice message or an
 audio file with a player of one's choice, the account online while
 the window is in front, without which Telegram sends no "is typing",
-and pins reordered by dragging, Saved Messages among them.
+pins reordered by dragging, Saved Messages among them, and the
+Archive's unread count on a line at the top of the chat list.
 
 Open, each in its section below:
 
-- left over from the 0.5 list: the Archive's unread count and more
-  than its latest 32 chats; drafts with their reply, in topics, in
-  Saved Messages and in the text client; albums of documents or videos,
-  of more than ten photos, and several icons dropped at once; topics
-  created, renamed or closed;
+- left over from the 0.5 list: more than the Archive's latest 32
+  chats; drafts with their reply, in topics, in Saved Messages and in
+  the text client; albums of documents or videos, of more than ten
+  photos, and several icons dropped at once; topics created, renamed or
+  closed;
 - videos: the resolution in the details, and playing while the video
   still downloads;
 - sign-in by QR code, creating an account, the update fetched and
@@ -327,8 +328,12 @@ it works today:
   Archived chats (Amiga+A) reads folder 1 with `messages.getDialogs`
   and lists it in place of the chat list, Archive and Unarchive in the
   chat's menu (`folders.editPeerFolders`), moves made elsewhere follow
-  (`updateFolderPeers`); still missing: the unread count of the Archive
-  on the main list, and more than the most recent 32 chats (16 on 68k).
+  (`updateFolderPeers`). Done after 0.5: the unread count of the
+  Archive on the main list, a thin "Archived chats" line above the pins
+  that opens it (Telegram's own count from the `dialogFolder` that comes
+  with `messages.getPinnedDialogs`, read again after news in an
+  archived chat, a move in or out, or leaving the Archive). Still
+  missing: more than the most recent 32 chats (16 on 68k).
   Fixed on the way: Reload chat list asked its later pages without the
   date of the last dialog, so the server answered with the first page
   again and the list stopped at 30 chats plus the pinned ones (10 on

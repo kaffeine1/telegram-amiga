@@ -614,6 +614,15 @@ typedef struct tg_gui_state {
        the session whenever it projects the list). The open chat may then be
        in neither: selected_chat is -1 and no row is highlighted. */
     int archive_view;
+    /* The thin "Archived chats" band at the top of the main list, set by
+       the session when it projects the list: shown while the Archive has
+       chats, with how many of them have something unread and whether one
+       of those is not muted (then the badge has the unread colour, else
+       the muted grey). A click opens the Archive, as Amiga+A does. The
+       band is no row: F1-F10, clicks and drags count rows below it. */
+    int archive_band;
+    unsigned long archive_unread;
+    int archive_unread_loud;
     int focus_tint_unseen; /* the screen gave the row tint the background's
                               own pen (too few colours): the arrow focus gets
                               a frame, as the tint alone would not show */
@@ -932,6 +941,8 @@ int tg_gui_input_layout_height(const tg_gui_state *state,
 #define TG_GUI_HIT_PICK_FORWARD (-9)
 #define TG_GUI_HIT_PICK_DELETE (-10)
 #define TG_GUI_HIT_PICK_CANCEL (-11)
+/* The "Archived chats" band between the search box and the chat list. */
+#define TG_GUI_HIT_ARCHIVE (-12)
 /* Emoji picker cells: TG_GUI_HIT_EMOJI_BASE + cell. Positive on purpose: the
    message and photo ranges are negative and their dispatch tests "<=". */
 #define TG_GUI_HIT_EMOJI_BASE 1000
