@@ -47,8 +47,8 @@ and pins reordered by dragging, Saved Messages among them.
 
 Open, each in its section below:
 
-- what the 0.5 list still misses: the Archive's unread count and
-  more than its latest 32 chats; drafts with their reply, in topics, in
+- left over from the 0.5 list: the Archive's unread count and more
+  than its latest 32 chats; drafts with their reply, in topics, in
   Saved Messages and in the text client; albums of documents or videos,
   of more than ten photos, and several icons dropped at once; topics
   created, renamed or closed;
@@ -253,7 +253,8 @@ Features are therefore grouped by the work they share.
   MorphOS, AROS i386, x86_64 and aarch64 VMs.
 - **0.5, what a desktop user expects.** The first feature release after
   the beta, planned as 0.2 and numbered 0.5 once forum topics were in
-  (the section below keeps its name, "Planned for 0.2"). RELEASED
+  (its section below, "The 0.5 list", says what shipped and what is
+  left over). RELEASED
   2026-11-14. Tried during the cycle on a stock A1200, a Vampire, a
   PiStorm under AfA OS, a G5 under MorphOS and a Raspberry Pi 400. The
   builds that shipped were tried in emulation: an A1200 with a 68EC020
@@ -276,11 +277,12 @@ the renderer, stays late or waits for after the beta: that is the code
 that has hurt us under AfA_OS, and it is the last thing to introduce
 while trying to prove a quiet cycle.
 
-## Done in 0.5: what a desktop user expects
+## The 0.5 list: what shipped and what is left over
 
-Planned as 0.2 and shipped as 0.5 on 2026-11-14, together with the
-topics of forum groups, which earned the bigger number. What an item
-still misses is said in its line.
+What a desktop user expects. Planned as 0.2 and shipped as 0.5 on
+2026-11-14, together with the topics of forum groups, which earned the
+bigger number. What an item still misses is said in its line: those
+leftovers are for the releases after 0.5.
 
 In November 2026 a second native client appeared on Aminet, built on MUI
 and AmiSSL. Its manual and the API methods its binary calls make a
