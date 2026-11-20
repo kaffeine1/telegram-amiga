@@ -43,16 +43,16 @@ CHANGELOG.md. On `main` for the next release: the Chats menu (issue
 several messages (issue #14), Play on a video, a voice message or an
 audio file with a player of one's choice, the account online while
 the window is in front, without which Telegram sends no "is typing",
-pins reordered by dragging, Saved Messages among them, and the
-Archive's unread count on a line at the top of the chat list.
+pins reordered by dragging, Saved Messages among them, the
+Archive's unread count on a line at the top of the chat list, and
+drafts with their reply, in Saved Messages too.
 
 Open, each in its section below:
 
-- left over from the 0.5 list: more than the Archive's latest 32
-  chats; drafts with their reply, in topics, in Saved Messages and in
-  the text client; albums of documents or videos, of more than ten
-  photos, and several icons dropped at once; topics created, renamed or
-  closed;
+- left over from the 0.5 list: more than the Archive's latest 32 chats;
+  drafts in topics and in the text client; albums of documents or
+  videos, of more than ten photos, and several icons dropped at once;
+  topics created, renamed or closed;
 - videos: the resolution in the details, and playing while the video
   still downloads;
 - sign-in by QR code, creating an account, the update fetched and
@@ -359,8 +359,12 @@ it works today:
   on closing, `clear_draft` on the message sent). A draft keeps its
   formatting both ways: what is typed with markers is saved with its
   entities, and a draft with styles comes back as the markers that give
-  them again. Still missing: the reply of a draft, drafts in Saved
-  Messages and in forum topics, and the text client;
+  them again. Done after 0.5: a draft keeps the message it answers
+  (`reply_to` both ways: back into the composer's reply, named after the
+  message when it is loaded), and Saved Messages has its draft like any
+  chat (Telegram names it by the account's own user, asked once a
+  session with `users.getSelf`). Still missing: drafts in forum topics
+  and in the text client;
 - the pinned message under the chat header: done (`messages.search`
   with the pinned filter, asked after the chat opens and on
   `updatePinnedMessages`; a click jumps to it and walks through the

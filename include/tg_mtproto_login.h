@@ -1239,6 +1239,7 @@ tg_mtproto_tl_status tg_mtproto_parse_dialog_unread_marks(
 tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     tg_mtproto_tl_writer *writer,
     const char *message,
+    unsigned long reply_to, /* the message the draft answers, 0 = none */
     unsigned long peer_constructor,
     unsigned long peer_id_hi,
     unsigned long peer_id_lo,
@@ -1254,7 +1255,8 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     char *text,
     unsigned long text_size,
     int *was_cut,
-    unsigned long *date);
+    unsigned long *date,
+    unsigned long *reply_to); /* may be 0; 0 = no reply */
 /* account.updateNotifySettings for one chat's mute alone (mute_until: a
    Unix time, 0 unmutes, 0x7fffffff forever), and an updateNotifySettings
    read from the reader just past its constructor into the same table

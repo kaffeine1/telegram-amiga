@@ -622,6 +622,9 @@ Chats
   "Archived chats" at the top of the list. That line says how many
   archived chats have something unread, in grey while they are all
   muted. ESC goes back to the chats.
+- What you leave typed in a chat stays there as its draft, on Telegram
+  too, with the message it replies to, and the chat list shows it.
+  Saved Messages keeps one as well.
 - Mute... asks for how long: an hour, eight hours, or until you unmute.
   The mute goes to Telegram, so your other devices follow it.
 - The text client does the same for the open chat with /mute (for
@@ -927,6 +930,9 @@ Chat
   chats" in cima alla lista. Quella riga dice quante chat archiviate
   hanno qualcosa da leggere, in grigio se sono tutte silenziate. ESC
   torna alle chat.
+- Quello che lasci scritto in una chat resta come sua bozza, anche su
+  Telegram, con il messaggio a cui risponde, e la lista chat la mostra.
+  Anche i Messaggi salvati tengono la loro.
 - Mute... chiede per quanto: un'ora, otto ore, o finche' non togli il
   silenzioso. Il silenzioso va a Telegram, quindi lo seguono anche gli
   altri tuoi dispositivi.

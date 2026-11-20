@@ -987,10 +987,13 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         chat->pinned = rows[i].pinned ? 1 : 0;
         chat->unread_mark = rows[i].unread_mark ? 1 : 0;
         chat->muted = rows[i].muted ? 1 : 0;
-        if (gui->draft_text != 0 && rows[i].index != TG_GUI_SAVED_PEER_INDEX) {
-            const char *draft = gui->draft_text(rows[i].is_user ? 1 : 0,
-                                                rows[i].peer_id_hi,
-                                                rows[i].peer_id_lo);
+        /* Saved Messages asks as user 0 0: the session knows it so. */
+        if (gui->draft_text != 0) {
+            const char *draft =
+                rows[i].index == TG_GUI_SAVED_PEER_INDEX
+                    ? gui->draft_text(1, 0UL, 0UL)
+                    : gui->draft_text(rows[i].is_user ? 1 : 0,
+                                      rows[i].peer_id_hi, rows[i].peer_id_lo);
 
             if (draft != 0 && draft[0] != '\0') {
                 tg_gui_driver_draft_preview(chat->preview,

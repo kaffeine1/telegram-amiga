@@ -48,6 +48,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   every minute on 68k), when a chat moves in or out of the Archive and
   when the Archive view is left. The line is no chat: F1 to F10 still
   open the first ten chats.
+- A draft keeps the message it answers. Text left in a chat while
+  replying goes to Telegram as a draft with its reply, and a draft that
+  replies, written here or on another device, comes back into the input
+  line with the reply over it, named after the message when the chat has
+  it loaded, else as a message further up. Saved Messages keeps a draft
+  too, shown on its row like any chat's: Telegram names that chat by the
+  account's own user, which the window now asks once at each start.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

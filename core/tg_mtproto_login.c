@@ -1565,7 +1565,9 @@ static tg_mtproto_tl_status tg_read_peer_ref(tg_mtproto_tl_reader *reader,
    media:flags.5?InputMedia effect:flags.7?long
    suggested_post:flags.8?SuggestedPost = Bool;
    An empty message deletes the draft. The styles set for the text
-   (tg_mtproto_send_set_styles) go along as its entities, flags.3. */
+   (tg_mtproto_send_set_styles) go along as its entities, flags.3, and a
+   reply (reply_to != 0) as an inputReplyToMessage, flags.4, written as a
+   message's (tg_write_input_reply_to_message). */
 static int tg_send_styles_pending(void);
 static tg_mtproto_tl_status tg_write_send_styles_vector(
     tg_mtproto_tl_writer *writer);
@@ -1573,10 +1575,13 @@ static tg_mtproto_tl_status tg_read_draft_styles(tg_mtproto_tl_reader *reader,
                                                  char *text,
                                                  unsigned long text_size,
                                                  int cut);
+static tg_mtproto_tl_status tg_write_input_reply_to_message(
+    tg_mtproto_tl_writer *writer, unsigned long reply_to_msg_id);
 
 tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     tg_mtproto_tl_writer *writer,
     const char *message,
+    unsigned long reply_to,
     unsigned long peer_constructor,
     unsigned long peer_id_hi,
     unsigned long peer_id_lo,
@@ -1589,12 +1594,19 @@ tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     if (writer == 0 || message == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
+    if (message[0] == '\0') {
+        reply_to = 0UL; /* no text, no draft: its reply goes with it */
+    }
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(
-            writer, message[0] != '\0' && tg_send_styles_pending() ? 8UL
-                                                                   : 0UL);
+            writer, (message[0] != '\0' && tg_send_styles_pending() ? 8UL
+                                                                    : 0UL) |
+                        (reply_to != 0UL ? 16UL : 0UL));
+    }
+    if (status == TG_MTPROTO_TL_OK && reply_to != 0UL) {
+        status = tg_write_input_reply_to_message(writer, reply_to);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -1832,11 +1844,11 @@ tg_mtproto_tl_status tg_mtproto_build_account_get_notify_settings(
     return status;
 }
 
-/* The InputReplyTo of a draft, skipped: only what a plain reply or a reply
-   with an unformatted quote carries. Anything else fails, and the draft
-   with it. */
-static tg_mtproto_tl_status tg_skip_draft_reply_to(
-    tg_mtproto_tl_reader *reader)
+/* The InputReplyTo of a draft: the message it answers into *reply_to (the
+   rest skipped), for what a plain reply, one in a topic or one with an
+   unformatted quote carries. Anything else fails, and the draft with it. */
+static tg_mtproto_tl_status tg_read_draft_reply_to(
+    tg_mtproto_tl_reader *reader, unsigned long *reply_to)
 {
     unsigned long constructor;
     unsigned long flags;
@@ -1851,7 +1863,7 @@ static tg_mtproto_tl_status tg_skip_draft_reply_to(
         constructor != TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR ||
         tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
         (flags & ~(1UL | 4UL | 16UL)) != 0UL ||
-        tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_tl_read_u32(reader, reply_to) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 1UL) != 0UL &&
@@ -1868,13 +1880,23 @@ static tg_mtproto_tl_status tg_skip_draft_reply_to(
     return TG_MTPROTO_TL_OK;
 }
 
+/* The same, skipped (a topic's draft, which the window does not show). */
+static tg_mtproto_tl_status tg_skip_draft_reply_to(
+    tg_mtproto_tl_reader *reader)
+{
+    unsigned long reply_to;
+
+    return tg_read_draft_reply_to(reader, &reply_to);
+}
+
 /* updateDraftMessage#edfc111e flags:# peer:Peer top_msg_id:flags.0?int
    saved_peer_id:flags.1?Peer draft:DraftMessage, the reader just past the
    constructor. Gives the chat and the draft's text: *has_text is 0 when
    the draft was deleted (draftMessageEmpty, or an empty text). A draft of
-   a forum topic, one with a reply this client cannot skip, or anything
+   a forum topic, one with a reply this client cannot read, or anything
    that does not read as a draft, fails: the caller leaves it alone. The
-   date is 0 when formatting or media stand before it. */
+   date is 0 when formatting or media stand before it. *reply_to (when
+   not 0) gets the message the draft answers, 0 for none. */
 tg_mtproto_tl_status tg_mtproto_read_update_draft(
     tg_mtproto_tl_reader *reader,
     tg_mtproto_dialog_peer *peer,
@@ -1882,11 +1904,13 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     char *text,
     unsigned long text_size,
     int *was_cut,
-    unsigned long *date)
+    unsigned long *date,
+    unsigned long *reply_to)
 {
     unsigned long flags;
     unsigned long constructor;
     unsigned long scratch;
+    unsigned long reply = 0UL;
     int cut = 0;
 
     if (reader == 0 || peer == 0 || has_text == 0 || text == 0 ||
@@ -1895,6 +1919,9 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     }
     *has_text = 0;
     *date = 0UL;
+    if (reply_to != 0) {
+        *reply_to = 0UL;
+    }
     text[0] = '\0';
     if (was_cut != 0) {
         *was_cut = 0;
@@ -1922,8 +1949,11 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 16UL) != 0UL &&
-        tg_skip_draft_reply_to(reader) != TG_MTPROTO_TL_OK) {
+        tg_read_draft_reply_to(reader, &reply) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (reply_to != 0) {
+        *reply_to = reply;
     }
     if (tg_read_string_copy_cut(reader, text, text_size, &cut) !=
         TG_MTPROTO_TL_OK) {
@@ -16293,7 +16323,7 @@ int tg_mtproto_login_self_test(void)
            getAllDrafts, and the clear_draft bit of a message sent. */
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_save_draft(
-                &pw, "ciao", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                &pw, "ciao", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
                 0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
             pw.length != 28UL || pin_query[0] != 0x8eU ||
             pin_query[1] != 0x30U || pin_query[2] != 0xaeU ||
@@ -16304,9 +16334,30 @@ int tg_mtproto_login_self_test(void)
         }
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_save_draft(
-                &pw, "", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                &pw, "", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
                 0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
             pw.length != 24UL || pin_query[20] != 0x00U) {
+            return 2;
+        }
+        /* With a reply: flags.4 and, before the peer, inputReplyToMessage
+           with no flags and the message (12 bytes more); deleting the
+           draft drops the reply. */
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_save_draft(
+                &pw, "ciao", 321UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 40UL || pin_query[4] != 0x10U ||
+            pin_query[8] != 0x10U || pin_query[9] != 0xbeU ||
+            pin_query[10] != 0x9fU || pin_query[11] != 0x86U ||
+            pin_query[12] != 0x00U || pin_query[16] != 0x41U ||
+            pin_query[17] != 0x01U || pin_query[20] != 0xb9U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+        if (tg_mtproto_build_messages_save_draft(
+                &pw, "", 321UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+            pw.length != 24UL || pin_query[4] != 0x00U) {
             return 2;
         }
         {
@@ -16322,7 +16373,7 @@ int tg_mtproto_login_self_test(void)
             tg_mtproto_send_set_styles(&bold, 1);
             tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
             if (tg_mtproto_build_messages_save_draft(
-                    &pw, "ciao", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    &pw, "ciao", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
                     0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
                 pw.length != 48UL || pin_query[4] != 0x08U ||
                 pin_query[28] != 0x15U || pin_query[29] != 0xc4U ||
@@ -16335,7 +16386,7 @@ int tg_mtproto_login_self_test(void)
             }
             tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
             if (tg_mtproto_build_messages_save_draft(
-                    &pw, "", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    &pw, "", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
                     0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
                 pw.length != 24UL || pin_query[4] != 0x00U) {
                 tg_mtproto_send_set_styles(0, 0);
@@ -16345,7 +16396,7 @@ int tg_mtproto_login_self_test(void)
             tg_mtproto_send_set_styles(0, 0);
             tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
             if (tg_mtproto_build_messages_save_draft(
-                    &pw, "ciao", TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    &pw, "ciao", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
                     0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
                 pw.length != 28UL || pin_query[4] != 0x00U) {
                 return 2;
@@ -16611,6 +16662,7 @@ int tg_mtproto_login_self_test(void)
             int has = 0;
             int cut = 0;
             unsigned long when = 0UL;
+            unsigned long reply = 99UL;
 
             tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
             if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||
@@ -16627,10 +16679,10 @@ int tg_mtproto_login_self_test(void)
             }
             tg_mtproto_tl_reader_init(&ur, ub, uw.length);
             if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
-                                             &cut, &when) !=
+                                             &cut, &when, &reply) !=
                     TG_MTPROTO_TL_OK ||
                 !has || !cut || strcmp(ut, "ciao a ") != 0 ||
-                when != 1700000000UL ||
+                when != 1700000000UL || reply != 0UL ||
                 up.peer_constructor != TG_PEER_USER_CONSTRUCTOR ||
                 up.id_lo != 77UL) {
                 return 2;
@@ -16655,10 +16707,10 @@ int tg_mtproto_login_self_test(void)
             }
             tg_mtproto_tl_reader_init(&ur, ub, uw.length);
             if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
-                                             &cut, &when) !=
+                                             &cut, &when, &reply) !=
                     TG_MTPROTO_TL_OK ||
                 !has || cut || strcmp(ut, "si") != 0 || when != 0UL ||
-                up.id_lo != 78UL) {
+                up.id_lo != 78UL || reply != 55UL) {
                 return 2;
             }
             {
@@ -16692,7 +16744,7 @@ int tg_mtproto_login_self_test(void)
                 tg_mtproto_tl_reader_init(&ur, ub, uw.length);
                 if (tg_mtproto_read_update_draft(&ur, &up, &has, styled,
                                                  sizeof(styled), &cut,
-                                                 &when) != TG_MTPROTO_TL_OK ||
+                                                 &when, 0) != TG_MTPROTO_TL_OK ||
                     !has || cut ||
                     strcmp(styled, "ciao \034bold\034") != 0 ||
                     when != 1700000001UL || up.id_lo != 79UL) {
@@ -16701,7 +16753,7 @@ int tg_mtproto_login_self_test(void)
                 }
                 tg_mtproto_tl_reader_init(&ur, ub, uw.length);
                 if (tg_mtproto_read_update_draft(&ur, &up, &has, ut,
-                                                 sizeof(ut), &cut, &when) !=
+                                                 sizeof(ut), &cut, &when, 0) !=
                         TG_MTPROTO_TL_OK ||
                     !has || !cut || strcmp(ut, "ciao bo") != 0 ||
                     when != 1700000001UL) {
@@ -16724,7 +16776,7 @@ int tg_mtproto_login_self_test(void)
             tg_mtproto_tl_reader_init(&ur, ub, uw.length);
             has = 1;
             if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
-                                             &cut, &when) !=
+                                             &cut, &when, 0) !=
                     TG_MTPROTO_TL_OK ||
                 has || ut[0] != '\0' || when != 9UL) {
                 return 2;
@@ -16733,7 +16785,7 @@ int tg_mtproto_login_self_test(void)
             ub[0] = 0x01U;
             tg_mtproto_tl_reader_init(&ur, ub, uw.length);
             if (tg_mtproto_read_update_draft(&ur, &up, &has, ut, sizeof(ut),
-                                             &cut, &when) ==
+                                             &cut, &when, 0) ==
                 TG_MTPROTO_TL_OK) {
                 return 2;
             }
