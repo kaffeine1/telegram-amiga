@@ -23214,6 +23214,17 @@ static int tg_gui_archive_partial = 0; /* the last fetch stopped before the end 
 static int tg_gui_archive_folder_listed = 0;
 static int tg_gui_archive_counts_stale = 0;
 static unsigned long tg_gui_pins_read_at = 0UL;
+/* The Archive read again once, a little after the session opens, when there
+   is one: chats moved in or out of it on another device while this program
+   was closed (the list file keeps the last set it knew). The time to read
+   it, 0 when nothing is left to read, and the tries so far. */
+static unsigned long tg_gui_archive_check_at = 0UL;
+static int tg_gui_archive_check_tries = 0;
+#if defined(__m68k__)
+#define TG_GUI_ARCHIVE_CHECK_SECONDS 20UL
+#else
+#define TG_GUI_ARCHIVE_CHECK_SECONDS 8UL
+#endif
 #if defined(__m68k__)
 #define TG_GUI_ARCHIVE_COUNT_SECONDS 60UL
 #else
@@ -25361,6 +25372,14 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
             tg_gui_session_archived_count() > 0) {
             tg_gui_session_reload_chats();
         }
+        /* The Archive itself is read a little later, not to hold up the
+           window: what it holds may have changed while we were closed. */
+        tg_gui_archive_check_tries = 0;
+        tg_gui_archive_check_at =
+            tg_gui_archive_folder_listed ||
+                    tg_gui_session_archived_count() > 0
+                ? (unsigned long)time(0) + TG_GUI_ARCHIVE_CHECK_SECONDS
+                : 0UL;
     }
     tg_mtproto_avatar_store_load(); /* blurred previews from the last run */
     tg_gui_log("open: ready");
@@ -29582,6 +29601,7 @@ int tg_gui_session_archive_refresh(FILE *stream)
     }
     tg_gui_archived_save();
     tg_gui_search_results.count = 0UL;
+    tg_gui_archive_check_at = 0UL; /* read: nothing left for the check */
     tg_gui_log("archive: refresh done");
     return tg_gui_archived_count;
 }
@@ -40444,6 +40464,44 @@ static int tg_gui_session_apply_draft_updates(void)
 #endif
 }
 
+/* Once, a little after the session opened: the Archive read again from
+   Telegram, so a chat moved in or out of it while this program was closed
+   (or by a move whose update never came) shows where it is. Not while the
+   list shows something else in its place or under an open menu: the next
+   tick tries again. A read that fails is tried once more a minute later. */
+static int tg_gui_session_apply_archive_check(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    tg_gui_archive_check_at = 0UL;
+    return 0;
+#else
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    unsigned long now;
+
+    if (tg_gui_archive_check_at == 0UL || stream == 0 || gst == 0 ||
+        gst->in_search || gst->in_filter || gst->forward_pick_active ||
+        gst->ctx_visible || gst->archive_view || gst->topic_view) {
+        return 0;
+    }
+    now = (unsigned long)time(0);
+    if (now < tg_gui_archive_check_at) {
+        return 0;
+    }
+    tg_gui_log("archive: read again after the start");
+    if (tg_gui_session_archive_refresh(stream) < 0) {
+        ++tg_gui_archive_check_tries;
+        tg_gui_archive_check_at =
+            tg_gui_archive_check_tries < 2 ? now + 60UL : 0UL;
+        return 0;
+    }
+    tg_gui_archive_counts_stale = 1; /* the band's number with it */
+    tg_gui_pins_read_at = 0UL;
+    tg_gui_session_reload_chats();
+    return 1;
+#endif
+}
+
 /* The pinned chats or the unread marks changed on another device: they are
    read again from Telegram (two small requests at most) and the list is
    drawn again. Not while the list shows something else in its place or
@@ -40523,6 +40581,9 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
         dirty = 1;
     }
     if (tg_gui_session_apply_folder_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_archive_check(stream)) {
         dirty = 1;
     }
     if (tg_gui_session_apply_delete_updates()) {

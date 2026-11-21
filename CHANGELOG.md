@@ -172,6 +172,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   at "A file is already there". Turning the line on now asks the system
   again. The datatype installed from the settings was already seen at
   once, and still is.
+- A chat moved in or out of the Archive on another device while Amigram
+  was closed stayed where Amigram last knew it: hidden from the chat
+  list, or still in it, until the Archive was opened. When there is an
+  Archive, Amigram now reads it again from Telegram a few seconds after
+  it starts (8 seconds, 20 on 68k, once, so the window does not open
+  later) and puts the list right.
 
 ## [0.5] - 2026-11-14
 
