@@ -178,6 +178,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   Archive, Amigram now reads it again from Telegram a few seconds after
   it starts (8 seconds, 20 on 68k, once, so the window does not open
   later) and puts the list right.
+- An archived chat whose draft answers a message, or has bold or other
+  formatting in it (as Amigram and the phones save drafts now), could
+  show in the chat list instead of the Archive: the reader of the chat
+  list skipped such a draft only roughly and lost what Telegram sends
+  after it, the chat's folder among it. Both are now read exactly.
 
 ## [0.5] - 2026-11-14
 

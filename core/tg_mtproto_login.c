@@ -5395,6 +5395,9 @@ tg_mtproto_tl_status tg_mtproto_read_update_notify_settings(
     return TG_MTPROTO_TL_OK;
 }
 
+static tg_mtproto_tl_status tg_skip_message_entity_vector(
+    tg_mtproto_tl_reader *reader);
+
 static tg_mtproto_tl_status tg_skip_draft_message(
     tg_mtproto_tl_reader *reader)
 {
@@ -5423,11 +5426,17 @@ static tg_mtproto_tl_status tg_skip_draft_message(
            message:string entities:flags.3?Vector<MessageEntity>
            media:flags.5?InputMedia date:int effect:flags.7?long
            suggested_post:flags.8?SuggestedPost = DraftMessage;
-           Exact skip when bits 3, 4, 5, 8 (entities, reply_to, media,
-           suggested_post) are absent; otherwise let tg_dialog_resync recover. */
+           Exact skip of a reply (as tg_read_draft_reply_to reads one) and
+           of formatting, which drafts made here and on phones carry; with
+           media or a suggested post (bits 5, 8) tg_dialog_resync recovers,
+           and the dialog loses what follows its draft (its folder). */
         if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-            (flags & ~(2UL | 64UL | 128UL)) != 0UL ||
+            (flags & ~(2UL | 8UL | 16UL | 64UL | 128UL)) != 0UL ||
+            ((flags & 16UL) != 0UL &&
+             tg_skip_draft_reply_to(reader) != TG_MTPROTO_TL_OK) ||
             tg_skip_string(reader) != TG_MTPROTO_TL_OK ||
+            ((flags & 8UL) != 0UL &&
+             tg_skip_message_entity_vector(reader) != TG_MTPROTO_TL_OK) ||
             tg_mtproto_tl_read_u32(reader, &scratch) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
         }
@@ -17325,6 +17334,82 @@ int tg_mtproto_login_self_test(void)
         peer_cache.entries[2].id_lo != 0x33333333UL ||
         peer_cache.entries[2].top_message != 30UL ||
         peer_cache.entries[2].unread_count != 3UL) {
+        return 2;
+    }
+    /* Case 2b: a draft that answers a message and has formatting (as the
+       window and the phones save them) on dialog 0, an archived chat: the
+       draft is skipped exactly, so the folder after it is read (a resync
+       would lose it and show the chat out of the Archive), and the next
+       dialog follows. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 0: flags 2|16 (draft, folder_id) */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL | 16UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x44444444UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 40UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 38UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 39UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 4UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        /* draftMessage flags 8|16: reply_to, message, entities, date */
+        tg_mtproto_tl_write_u32(&writer, TG_DRAFT_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 8UL | 16UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 55UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)"bold reply",
+                                  10UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0xbd610bc9UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 4UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1700000000UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        /* Dialog 1: clean */
+        tg_mtproto_tl_write_u32(&writer, TG_DIALOG_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_CHAT_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x55555555UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 50UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 48UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 49UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 5UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                TG_PEER_NOTIFY_SETTINGS_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_dialog_peer_list(TG_MESSAGES_DIALOGS_CONSTRUCTOR,
+                                          peer_rpc, writer.length,
+                                          &peer_list) != TG_MTPROTO_TL_OK ||
+        peer_list.count != 2UL ||
+        peer_list.peers[0].id_lo != 0x44444444UL ||
+        peer_list.peers[0].folder_id != 1UL ||
+        peer_list.peers[0].unread_count != 4UL ||
+        peer_list.peers[1].id_lo != 0x55555555UL ||
+        peer_list.peers[1].top_message != 50UL ||
+        peer_list.peers[1].read_outbox_max_id != 49UL) {
         return 2;
     }
     /* Case 3: Draft on the LAST dialog (with unparseable media tail), followed
