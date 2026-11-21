@@ -191,6 +191,23 @@ fill_platform_text() {
   aspetta. Serve picture.datatype V43 o successivo."
         fi ;;
     esac
+    # Wanderer hands a window only the icon under the pointer, even with
+    # several selected (seen on AROS One i386, 2026-11-21): on AROS the
+    # requester is the way to send several files at once.
+    case "$1" in
+    "AROS"*)
+        drop_note_en="
+  On AROS, Wanderer gives the window only the icon you drag, even when
+  several are selected: to send several files at once, pick them in
+  the requester."
+        drop_note_it="
+  Su AROS Wanderer passa alla finestra solo l'icona che trascini, anche
+  se ne hai selezionate piu' di una: per mandare piu' file insieme
+  sceglili nel requester." ;;
+    *)
+        drop_note_en=""
+        drop_note_it="" ;;
+    esac
     # The plain-68000 package thanks the tester who made it possible. Empty
     # elsewhere.
     if [ "$1" = "AmigaOS 3.x (68000)" ]; then
@@ -845,7 +862,7 @@ Files
   photo, and offers Album, Files or Cancel. Other files, or photos and
   other files together, leave as an album of files, grouped as the
   official clients group them. An album holds ten at most: more leave
-  as several albums, the caption on the first.
+  as several albums, the caption on the first.$drop_note_en
   They all go to the chat that was open when you
   picked them, even if you open another one meanwhile. The status line
   says which one is going up (2/5), and Esc stops them all; a file
@@ -1169,7 +1186,7 @@ File
   foto, e offre Album, Files o Cancel. Gli altri file, o foto e altri
   file insieme, partono come album di file, raggruppati come fanno i
   client ufficiali. Un album ne tiene dieci al massimo: di piu'
-  partono come piu' album, la didascalia sul primo.
+  partono come piu' album, la didascalia sul primo.$drop_note_it
   Vanno tutti nella chat che era aperta
   quando li hai scelti, anche se nel frattempo ne apri un'altra. La
   riga di stato dice quale sta salendo (2/5), ed Esc li ferma tutti;

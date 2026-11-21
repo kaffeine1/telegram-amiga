@@ -19866,7 +19866,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                          sizeof(more_path))) {
                     /* Several icons dropped together: as if picked together
                        in the requester, photos as albums (after the photo
-                       dialog), anything else one message a file. */
+                       dialog), anything else as albums of files. */
                     int dn = tg_gui_window_drop_queue(dropped, more_path);
 
                     if (dn > TG_GUI_SENDQ_MAX) {
