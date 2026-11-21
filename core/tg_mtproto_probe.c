@@ -29645,6 +29645,11 @@ int tg_gui_session_set_archived(unsigned long peer_index, int archived,
                             archived)) {
         tg_gui_archived_save();
     }
+    /* The Archive's band: Telegram's entry for the Archive, and its count,
+       read again with the pins at the next turn. Without this the band of
+       a first archived chat stayed without its number until news came. */
+    tg_gui_archive_counts_stale = 1;
+    tg_gui_pins_read_at = 0UL;
     tg_gui_session_reload_chats();
     return 0;
 }

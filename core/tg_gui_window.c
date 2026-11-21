@@ -12765,15 +12765,17 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
             tg_gui_session_set_archive_view(1);
             /* A large Archive shows its most recent chats only. */
             if (!fresh) {
-                sprintf(line, "Archive (offline): %d chats - ESC goes back",
-                        state->chat_count % 10000);
+                sprintf(line, "Archive (offline): %d chat%s - ESC goes back",
+                        state->chat_count % 10000,
+                        state->chat_count == 1 ? "" : "s");
             } else if (tg_gui_session_archive_partial() ||
                        state->chat_count < n) {
                 sprintf(line, "Archive: newest %d chats - ESC goes back",
                         state->chat_count % 10000);
             } else {
-                sprintf(line, "Archive: %d chats - ESC goes back",
-                        state->chat_count % 10000);
+                sprintf(line, "Archive: %d chat%s - ESC goes back",
+                        state->chat_count % 10000,
+                        state->chat_count == 1 ? "" : "s");
             }
             tg_gui_window_copy(state->status, sizeof(state->status), line);
         }
