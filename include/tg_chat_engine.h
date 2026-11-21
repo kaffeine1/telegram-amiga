@@ -132,6 +132,9 @@ typedef struct tg_chat_topic_row {
     int pinned;
     int closed;             /* only admins may write in it */
     tg_chat_message_row last;
+    /* The topic's draft in the GUI's own text (Latin-1, emoji pairs), or 0:
+       the row shows it after "Draft:" in place of the newest message. */
+    const char *draft;
 } tg_chat_topic_row;
 
 /* One resolved chat-list row. The engine parses the peer cache into these

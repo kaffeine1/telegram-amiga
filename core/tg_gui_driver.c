@@ -1407,6 +1407,13 @@ void tg_gui_driver_show_topics(tg_gui_state *state,
         } else if (t->closed) {
             sprintf(row->preview, "%.47s", "Closed");
         }
+        /* A topic that holds a draft shows it, as a chat's row does; the
+           time stays the newest message's. */
+        if (t->draft != 0 && t->draft[0] != '\0') {
+            tg_gui_driver_draft_preview(row->preview, sizeof(row->preview),
+                                        t->draft);
+            row->draft = row->preview[0] != '\0';
+        }
         {
             /* one letter, past an emoji (its two-byte pair) or a blank */
             const unsigned char *p = (const unsigned char *)row->name;
@@ -2117,6 +2124,29 @@ static int tg_gui_driver_topics_self_test(void)
         printf("gui driver self-test: topic rows [%s] [%s] [%s] [%s]\n",
                state.chats[3].initials, state.chats[3].preview,
                state.chats[4].name, state.chats[4].preview);
+        return 0;
+    }
+    /* A topic holding a draft shows it in place of its newest message (a
+       closed one too), its time kept; an empty draft is none. */
+    rows[1].draft = "";
+    rows[2].draft = "half\ttyped";
+    tg_gui_driver_show_topics(&state, rows, 4);
+    rows[1].draft = 0;
+    rows[2].draft = 0;
+    if (state.chats[2].draft ||
+        strcmp(state.chats[2].preview, "You: mine") != 0 ||
+        !state.chats[3].draft ||
+        strcmp(state.chats[3].preview, "half typed") != 0 ||
+        state.chats[1].draft || state.chats[4].draft) {
+        printf("gui driver self-test: topic drafts [%s] %d [%s] %d\n",
+               state.chats[2].preview, state.chats[2].draft,
+               state.chats[3].preview, state.chats[3].draft);
+        return 0;
+    }
+    tg_gui_driver_show_topics(&state, rows, 4);
+    if (state.chats[3].draft ||
+        strcmp(state.chats[3].preview, "Closed") != 0) {
+        puts("gui driver self-test: a topic's draft outlives it");
         return 0;
     }
     /* the chats drawn again: no topic list any more */

@@ -750,11 +750,12 @@ Messages
   row renames it (Rename topic...) or closes it (Close topic, then only
   admins write in it; Reopen topic undoes it), as far as Telegram lets
   you. Text left in a topic stays as that topic's draft, here and on
-  the phone, and comes back when the topic opens again. In the text
-  client /topics lists them and /topic n reads only that one; /topic
-  alone shows every topic again. /topic new <name> makes a topic and
-  goes into it; /topic rename <name>, /topic close and /topic reopen
-  act on the topic chosen.
+  the phone: its row shows it after "Draft:", and it comes back when
+  the topic opens again. In the text client /topics lists them (a
+  topic with a draft says [draft]) and /topic n reads only that one;
+  /topic alone shows every topic again. /topic new <name> makes a
+  topic and goes into it; /topic rename <name>, /topic close and
+  /topic reopen act on the topic chosen.
 - To act on several messages together, choose Select in the menu of
   one of them: it is marked, and a click on any other message marks it
   or takes its mark away; Shift+click marks everything from the message
@@ -1074,11 +1075,12 @@ Messaggi
   un argomento lo rinomina (Rename topic...) o lo chiude (Close topic:
   poi ci scrivono solo gli admin; Reopen topic lo riapre), per quanto
   Telegram te lo consente. Il testo lasciato in un argomento resta come
-  sua bozza, qui e sul telefono, e torna quando l'argomento si riapre.
-  Nel client testuale /topics li elenca e /topic n legge solo quello;
-  /topic da solo torna a tutti. /topic new <nome> crea un argomento e
-  ci entra; /topic rename <nome>, /topic close e /topic reopen agiscono
-  sull'argomento scelto.
+  sua bozza, qui e sul telefono: la sua riga la mostra dopo "Draft:", e
+  torna quando l'argomento si riapre. Nel client testuale /topics li
+  elenca (un argomento con una bozza dice [draft]) e /topic n legge
+  solo quello; /topic da solo torna a tutti. /topic new <nome> crea un
+  argomento e ci entra; /topic rename <nome>, /topic close e /topic
+  reopen agiscono sull'argomento scelto.
 - Per agire su piu' messaggi insieme scegli Select nel menu di uno di
   loro: viene segnato, e un click su un altro messaggio lo segna o gli
   toglie il segno; Shift+click segna tutto dal messaggio cliccato per

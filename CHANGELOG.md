@@ -76,8 +76,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   draft, on Telegram too (it names the topic in top_msg_id, or Telegram
   files it as the whole group's), and comes back when the topic opens
   again, also after Amigram is started again; going to another topic
-  of the same group keeps it, as going to another chat does. In the
-  text client the "Draft:" line is the topic's chosen with /topic n.
+  of the same group keeps it, as going to another chat does. The
+  topic's row shows it after "Draft:", as a chat's row does (not the
+  topic open, whose draft is in the composer). In the text client the
+  "Draft:" line is the topic's chosen with /topic n, and /topics marks
+  the topics that hold one with [draft].
 - Drafts in the text client. Text typed and left unsent when F1 to F10
   change chat is no longer thrown away: it is kept as that chat's draft,
   on Telegram too. A chat with a draft, made here, in the window or on

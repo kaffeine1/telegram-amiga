@@ -17489,11 +17489,41 @@ static int tg_mtproto_chat_fetch_topics_on_context(
 }
 
 /* The list as /topics prints it: number, title, what is unread. */
-static void tg_mtproto_chat_print_topics(FILE *stream)
+/* Whether a topic of the chat holds a draft (General's is the chat's
+   own), for the "[draft]" mark of /topics. A chat not found (all 0) has
+   none: no draft is kept under constructor 0. */
+static int tg_chat_topic_has_draft(unsigned long pc, unsigned long ph,
+                                   unsigned long pl, unsigned long topic)
 {
-    FILE *cap = tg_console_tui_capture_begin(stream);
-    unsigned long k;
+    return tg_chat_draft_find_chat(pc, ph, pl,
+                                   topic > TG_MTPROTO_TOPIC_GENERAL ? topic
+                                                                    : 0UL) >= 0;
+}
 
+static void tg_mtproto_chat_print_topics(FILE *stream,
+                                         const char *peer_cache_file,
+                                         const char *peer_index)
+{
+    FILE *cap;
+    unsigned long k;
+    unsigned long pc = 0UL;
+    unsigned long ph = 0UL;
+    unsigned long pl = 0UL;
+
+    if (tg_chat_draft_count > 0 && peer_cache_file != 0 && peer_index != 0) {
+        FILE *quiet = tg_mtproto_open_quiet_stream(stream);
+        unsigned long ahh;
+        unsigned long ahl;
+        int hah;
+
+        if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc,
+                                            &ph, &pl, &ahh, &ahl, &hah, quiet,
+                                            "topics") != 0) {
+            pc = 0UL;
+        }
+        tg_mtproto_close_quiet_stream(quiet, stream);
+    }
+    cap = tg_console_tui_capture_begin(stream);
     fprintf(cap, "Topics (/topic n reads one):\n");
     for (k = 0UL; k < tg_chat_topics.count; ++k) {
         const tg_mtproto_forum_topic *t = &tg_chat_topics.topics[k];
@@ -17506,6 +17536,9 @@ static void tg_mtproto_chat_print_topics(FILE *stream)
         }
         if (t->closed) {
             fprintf(cap, "  [closed]");
+        }
+        if (tg_chat_topic_has_draft(pc, ph, pl, t->id)) {
+            fprintf(cap, "  [draft]");
         }
         if (t->id == tg_mtproto_history_topic_id) {
             fprintf(cap, "  <- reading");
@@ -18966,7 +18999,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                     tg_mtproto_chat_print_system_line(
                         stream, "Telegram did not give the topics. Try again.");
                 } else if (listing) {
-                    tg_mtproto_chat_print_topics(stream);
+                    tg_mtproto_chat_print_topics(stream, peer_cache_file,
+                                                 peer_index);
                 } else if (n > tg_chat_topics.count) {
                     tg_mtproto_chat_print_system_line(
                         stream, "No topic with that number: /topics lists "
@@ -25464,6 +25498,8 @@ static void tg_gui_session_reload_chats(void);
 /* The drafts kept for the window: set, replaced, deleted, the oldest one
    making room when the table is full, and one arriving as Telegram sends
    it (UTF-8) ending up as the composer writes it (Latin-1). */
+static const char *tg_gui_draft_for_topic_row(unsigned long topic);
+
 static int tg_gui_drafts_self_test(void)
 {
     tg_mtproto_dialog_peer peer;
@@ -25497,6 +25533,53 @@ static int tg_gui_drafts_self_test(void)
     ok = ok && got != 0 && strcmp(got, "chat") == 0;
     if (!ok) {
         puts("mtproto self-test: a topic's draft in the window's table");
+    }
+    {
+        /* A topic's row shows its draft and General's row the chat's, but
+           not the topic open in front of the user (its draft is in the
+           composer), and nothing outside the open forum. */
+        int saved_open = tg_gui_session_state.open;
+        unsigned long saved_pc = tg_gui_session_state.open_peer_constructor;
+        unsigned long saved_hi = tg_gui_session_state.open_peer_id_hi;
+        unsigned long saved_lo = tg_gui_session_state.open_peer_id_lo;
+        int saved_forum = tg_gui_forum;
+        unsigned long saved_topic = tg_gui_topic;
+        int row_ok;
+
+        tg_gui_session_state.open = 1;
+        tg_gui_session_state.open_peer_constructor =
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+        tg_gui_session_state.open_peer_id_hi = 0UL;
+        tg_gui_session_state.open_peer_id_lo = 9UL;
+        tg_gui_forum = 1;
+        tg_gui_topic = 0UL; /* none chosen yet: every draft on its row */
+        got = tg_gui_draft_for_topic_row(41UL);
+        row_ok = got != 0 && strcmp(got, "dal telefono") == 0;
+        got = tg_gui_draft_for_topic_row(TG_MTPROTO_TOPIC_GENERAL);
+        row_ok = row_ok && got != 0 && strcmp(got, "chat") == 0 &&
+                 tg_gui_draft_for_topic_row(40UL) == 0;
+        tg_gui_topic = 41UL;
+        row_ok = row_ok && tg_gui_draft_for_topic_row(41UL) == 0 &&
+                 tg_gui_draft_for_topic_row(TG_MTPROTO_TOPIC_GENERAL) != 0;
+        tg_gui_topic = TG_MTPROTO_TOPIC_GENERAL;
+        row_ok = row_ok &&
+                 tg_gui_draft_for_topic_row(TG_MTPROTO_TOPIC_GENERAL) == 0 &&
+                 tg_gui_draft_for_topic_row(41UL) != 0;
+        tg_gui_session_state.open_peer_id_lo = 8UL; /* another forum */
+        row_ok = row_ok && tg_gui_draft_for_topic_row(41UL) == 0;
+        tg_gui_session_state.open_peer_id_lo = 9UL;
+        tg_gui_forum = 0;
+        row_ok = row_ok && tg_gui_draft_for_topic_row(41UL) == 0;
+        tg_gui_session_state.open = saved_open;
+        tg_gui_session_state.open_peer_constructor = saved_pc;
+        tg_gui_session_state.open_peer_id_hi = saved_hi;
+        tg_gui_session_state.open_peer_id_lo = saved_lo;
+        tg_gui_forum = saved_forum;
+        tg_gui_topic = saved_topic;
+        if (!row_ok) {
+            puts("mtproto self-test: a topic's draft on its row");
+            ok = 0;
+        }
     }
     tg_gui_draft_count = 0;
     ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao", 0UL, 10UL) == 1;
@@ -26297,8 +26380,25 @@ static int tg_gui_topics_may_show(const tg_gui_state *gst)
            !gst->in_filter && !gst->in_search && !gst->search_active;
 }
 
+/* The draft a topic's row shows: the open forum's draft of that topic
+   (General's is the chat's own), except for the topic open in front of
+   the user, whose draft is in the composer, as a chat's row leaves out
+   the open chat's. 0 = none. */
+static const char *tg_gui_draft_for_topic_row(unsigned long topic)
+{
+    if (!tg_gui_forum || !tg_gui_session_state.open ||
+        tg_gui_session_state.open_peer_constructor == 0UL ||
+        (tg_gui_topic != 0UL &&
+         tg_gui_draft_topic_key(topic) == tg_gui_draft_open_topic())) {
+        return 0;
+    }
+    return tg_gui_draft_lookup_t(tg_gui_draft_open_is_user(),
+                                 tg_gui_session_state.open_peer_id_hi,
+                                 tg_gui_session_state.open_peer_id_lo, topic);
+}
+
 /* The topics into the sidebar again, as last read, the open one
-   highlighted. 1 = drawn. */
+   highlighted, each with its draft. 1 = drawn. */
 static int tg_gui_topics_project(void)
 {
     tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
@@ -26308,7 +26408,14 @@ static int tg_gui_topics_project(void)
         !tg_gui_topics_may_show(gst)) {
         return 0;
     }
+    for (i = 0; i < tg_gui_topic_row_count; ++i) {
+        tg_gui_topic_rows[i].draft =
+            tg_gui_draft_for_topic_row(tg_gui_topic_rows[i].id);
+    }
     tg_gui_driver_show_topics(gst, tg_gui_topic_rows, tg_gui_topic_row_count);
+    for (i = 0; i < tg_gui_topic_row_count; ++i) {
+        tg_gui_topic_rows[i].draft = 0; /* the table may change under it */
+    }
     gst->selected_chat = -1;
     for (i = 1; i < gst->chat_count; ++i) {
         if (tg_gui_topic != 0UL && gst->chats[i].index == tg_gui_topic) {
@@ -29120,6 +29227,19 @@ static int tg_chat_drafts_self_test(void)
     if (at < 0 || strcmp(tg_chat_drafts[at].text, "t") != 0 ||
         tg_chat_draft_topic_now() != 0UL) {
         fail = 16;
+    }
+    /* /topics marks the topics holding one: 40, General (the chat's),
+       not 41, nor anything of a chat not found */
+    if (!tg_chat_topic_has_draft(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                 5UL, 40UL) ||
+        !tg_chat_topic_has_draft(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                 5UL, TG_MTPROTO_TOPIC_GENERAL) ||
+        tg_chat_topic_has_draft(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                5UL, 41UL) ||
+        tg_chat_topic_has_draft(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                6UL, 40UL) ||
+        tg_chat_topic_has_draft(0UL, 0UL, 5UL, 40UL)) {
+        fail = 17;
     }
     tg_mtproto_history_topic_id = 0UL;
     tg_chat_draft_count = 0;
