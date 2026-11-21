@@ -13141,7 +13141,11 @@ static int tg_mtproto_chat_read_line_edit(char *line,
            is ignored (a literal tab inside a message helps nobody). */
         if (*line_length == 0UL && line_size > 6UL) {
             strcpy(line, "/swap");
-            fputc('\n', stream);
+            /* as a function key does: on the full screen the break would
+               leave the prompt of the chat left behind among the lines */
+            if (!tg_console_tui_active()) {
+                fputc('\n', stream);
+            }
             fflush(stream);
             return 1;
         }
@@ -20925,6 +20929,7 @@ static int tg_gui_batch_self_test(void);
 static int tg_gui_update_self_test(void);
 static int tg_gui_channel_install_self_test(void);
 static int tg_gui_unread_self_test(void);
+static int tg_gui_topic_change_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
 
@@ -23160,7 +23165,8 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_saved_self_test() != 0 || tg_gui_batch_self_test() != 0 ||
         tg_gui_update_self_test() != 0 ||
         tg_gui_channel_install_self_test() != 0 ||
-        tg_gui_unread_self_test() != 0) {
+        tg_gui_unread_self_test() != 0 ||
+        tg_gui_topic_change_self_test() != 0) {
         return 2;
     }
 #endif
@@ -26328,6 +26334,114 @@ static void tg_gui_topic_forget(void)
 }
 
 #if !defined(TG_NO_GUI)
+/* One's own change of a topic, written into the list read last: a list
+   asked right after the change can still show the topic as it was, and
+   what was just done is what it is. title (UTF-8) 0 = the name stays;
+   closed < 0 = open or closed as it was. Without the name a renamed
+   topic kept its old one on its row until the list was read again. */
+static void tg_gui_topic_list_note_change(unsigned long topic_id,
+                                          const char *title, int closed)
+{
+    unsigned long k;
+    size_t n;
+
+    for (k = 0UL; k < tg_gui_topic_list.count; ++k) {
+        tg_mtproto_forum_topic *t = &tg_gui_topic_list.topics[k];
+
+        if (t->id != topic_id) {
+            continue;
+        }
+        if (closed >= 0) {
+            t->closed = closed;
+        }
+        if (title != 0 && title[0] != '\0') {
+            n = strlen(title);
+            if (n >= sizeof(t->title)) {
+                n = sizeof(t->title) - 1U;
+                /* not in the middle of a character */
+                while (n > 0U && ((unsigned char)title[n] & 0xC0U) == 0x80U) {
+                    --n;
+                }
+            }
+            memcpy(t->title, title, n);
+            t->title[n] = '\0';
+        }
+    }
+}
+
+/* What a topic's row counts unread: Telegram's count, but nothing when
+   its newest message is one's own, as for a chat one has just written in.
+   Telegram counts one's own changes of a topic made from the list (closed,
+   opened again, renamed) as news: each one put a number on the row. */
+static unsigned long tg_gui_topic_row_unread(unsigned long unread_count,
+                                             int newest_is_own)
+{
+    return newest_is_own ? 0UL : unread_count;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* One's own changes in the list read last, and what a row counts. */
+static int tg_gui_topic_change_self_test(void)
+{
+    char longt[140];
+    tg_mtproto_forum_topic *a = &tg_gui_topic_list.topics[0];
+    tg_mtproto_forum_topic *b = &tg_gui_topic_list.topics[1];
+    int rc = 0;
+
+    memset(a, 0, sizeof(*a));
+    memset(b, 0, sizeof(*b));
+    a->id = 6UL;
+    strcpy(a->title, "Prova due");
+    b->id = 15UL;
+    strcpy(b->title, "Altro");
+    b->closed = 1;
+    tg_gui_topic_list.count = 2UL;
+    tg_gui_topic_list_note_change(6UL, "Prova due bis", -1);
+    if (strcmp(a->title, "Prova due bis") != 0 || a->closed != 0 ||
+        strcmp(b->title, "Altro") != 0 || b->closed != 1) {
+        puts("probe self-test: a renamed topic keeps its old name");
+        rc = 2;
+    }
+    tg_gui_topic_list_note_change(15UL, 0, 0);
+    tg_gui_topic_list_note_change(6UL, 0, 1);
+    if (b->closed != 0 || strcmp(b->title, "Altro") != 0 || a->closed != 1 ||
+        strcmp(a->title, "Prova due bis") != 0) {
+        puts("probe self-test: a topic closed or opened again");
+        rc = 2;
+    }
+    tg_gui_topic_list_note_change(99UL, "Altrove", 0);
+    if (strcmp(a->title, "Prova due bis") != 0 || a->closed != 1 ||
+        strcmp(b->title, "Altro") != 0) {
+        puts("probe self-test: a change of a topic not listed");
+        rc = 2;
+    }
+    /* longer than the list keeps: cut before the character that does not
+       fit whole (126 a, then an e acute in two bytes, then b) */
+    memset(longt, 'a', 126U);
+    longt[126] = (char)0xc3;
+    longt[127] = (char)0xa9;
+    longt[128] = 'b';
+    longt[129] = '\0';
+    tg_gui_topic_list_note_change(6UL, longt, -1);
+    if (strlen(a->title) != 126U || a->title[125] != 'a') {
+        puts("probe self-test: a long topic name cut inside a character");
+        rc = 2;
+    }
+    if (tg_gui_topic_row_unread(5UL, 1) != 0UL ||
+        tg_gui_topic_row_unread(5UL, 0) != 5UL ||
+        tg_gui_topic_row_unread(0UL, 0) != 0UL) {
+        puts("probe self-test: a topic whose newest message is one's own");
+        rc = 2;
+    }
+    memset(a, 0, sizeof(*a));
+    memset(b, 0, sizeof(*b));
+    tg_gui_topic_list.count = 0UL;
+    return rc;
+}
+#endif
+#endif
+
+#if !defined(TG_NO_GUI)
 static const tg_mtproto_forum_topic *tg_gui_topic_find(unsigned long id)
 {
     unsigned long k;
@@ -26643,9 +26757,8 @@ static int tg_gui_session_fetch_topics(FILE *stream)
                 row->last.local_epoch =
                     tg_mtproto_chat_local_epoch(m->date, display_delta);
             }
-            if (row->last.is_out && t->read_inbox_max_id == 0UL) {
-                row->unread = 0UL; /* never read, but its newest is one's own */
-            }
+            row->unread = tg_gui_topic_row_unread(row->unread,
+                                                  row->last.is_out);
             break;
         }
         ++n;
@@ -27132,16 +27245,11 @@ static int tg_gui_session_topic_change(int create, unsigned long topic_id,
         tg_gui_log(line);
     }
     if (rc == 0) {
-        unsigned long k;
-
         (void)tg_gui_session_fetch_topics(stream); /* the list as it is now */
-        /* A list asked right after the change can still show the topic as
-           it was: what was just done is what it is. */
-        for (k = 0UL; k < tg_gui_topic_list.count && !create && closed >= 0;
-             ++k) {
-            if (tg_gui_topic_list.topics[k].id == topic_id) {
-                tg_gui_topic_list.topics[k].closed = closed;
-            }
+        if (!create) {
+            tg_gui_topic_list_note_change(topic_id, title, closed);
+            (void)tg_gui_topics_project();
+            tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
         }
     }
     return rc;

@@ -124,6 +124,19 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- A forum group found with "Search Telegram..." opened on General with
+  the chat list beside it instead of its topics, until its row was
+  clicked again. The search was still on when the group opened, and
+  the sidebar keeps the hits of a search. It now ends first, as a click
+  on a result already did.
+- A topic whose newest message is one's own could show it as unread.
+  Telegram counts one's own changes of a topic made from the list
+  (closing it, opening it again, renaming it) as news in it, and each
+  one put a number on the row. A topic whose newest message is one's
+  own now counts nothing unread, as a chat does after one writes in it.
+- In the text client on the full screen, Tab back to the previous chat
+  left the prompt of the chat it left among the messages, as a line of
+  its own. A function key never did.
 - The window could stop answering for good after a few hours, Ctrl-C
   included (a tester reported it on AmigaOS 4). The notification chime
   waited for ahi.device to give its request back, and on that machine

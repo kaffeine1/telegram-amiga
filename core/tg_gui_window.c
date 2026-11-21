@@ -7657,11 +7657,15 @@ static void tg_gui_window_topic_new(tg_gui_state *state,
 }
 
 /* A topic row's menu: Rename topic... (close = 0, its name asked) or
-   Close topic / Reopen topic (close = 1). */
+   Close topic / Reopen topic (close = 1). shown_closed is what the menu
+   said when it opened (Reopen = 1): that is what is done, even if the
+   topic changed while the menu was up. Asking again here once closed a
+   topic picked as "Reopen topic": a late answer had opened it meanwhile. */
 static void tg_gui_window_topic_change(tg_gui_state *state,
                                        tg_gui_amiga_ctx *ctx,
                                        tg_gui_backend *backend,
-                                       unsigned long topic, int close)
+                                       unsigned long topic, int close,
+                                       int shown_closed)
 {
     char name[TG_GUI_TOPIC_NAME_MAX];
     char line[96];
@@ -7671,8 +7675,10 @@ static void tg_gui_window_topic_change(tg_gui_state *state,
 
     name[0] = '\0';
     if (close) {
-        closed = tg_gui_session_topic_closed(topic) == 1 ? 0 : 1;
+        closed = shown_closed ? 0 : 1;
     } else {
+        /* the menu off the window first: the box opens over the list */
+        tg_gui_window_paint(state, backend);
         for (k = 1; k < state->chat_count; ++k) {
             if (state->chats[k].index == topic) {
                 tg_gui_window_copy(name, sizeof(name), state->chats[k].name);
@@ -12869,11 +12875,14 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
             tg_gui_window_forward_online_result(state, backend, 0);
             return;
         } else {
-            (void)tg_gui_session_search_open_result(0, stdout);
+            /* Out of the search before the chat opens, as a click on a
+               result does: a forum found this way puts its topics in the
+               sidebar only once the sidebar no longer holds the hits. */
             state->in_search = 0;
             state->search_active = 0;
             state->msg_search_active = 0;
             state->search_query[0] = '\0';
+            (void)tg_gui_session_search_open_result(0, stdout);
             tg_gui_window_copy(state->status, sizeof(state->status),
                                "Live - F1-F10 chats, Amiga+Q quits");
         }
@@ -18612,7 +18621,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                          it == TG_GUI_CTX_TOPIC_CLOSE)) {
                         tg_gui_window_topic_change(state, &ctx, &backend,
                                                    menu_topic,
-                                                   it == TG_GUI_CTX_TOPIC_CLOSE);
+                                                   it == TG_GUI_CTX_TOPIC_CLOSE,
+                                                   state->ctx_topic_closed);
                     } else if (ci >= 0 && ci < state->chat_count &&
                         it == TG_GUI_CTX_CHAT_REMOVE) {
                         tg_gui_window_remove_chat(state, ctx.window, ci,
