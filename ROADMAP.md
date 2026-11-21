@@ -46,13 +46,14 @@ the window is in front, without which Telegram sends no "is typing",
 pins reordered by dragging, Saved Messages among them, the
 Archive's unread count on a line at the top of the chat list,
 drafts with their reply, in Saved Messages too, and albums of files,
-of more than ten photos and of several icons dropped together.
+of more than ten photos and of several icons dropped together; the
+Archive read again a few seconds after the start, and drafts in the
+text client.
 
 Open, each in its section below:
 
 - left over from the 0.5 list: more than the Archive's latest 32 chats;
-  drafts in topics and in the text client; topics created, renamed or
-  closed;
+  drafts in topics; topics created, renamed or closed;
 - videos: the resolution in the details, and playing while the video
   still downloads;
 - sign-in by QR code, creating an account, the update fetched and
@@ -363,8 +364,12 @@ it works today:
   (`reply_to` both ways: back into the composer's reply, named after the
   message when it is loaded), and Saved Messages has its draft like any
   chat (Telegram names it by the account's own user, asked once a
-  session with `users.getSelf`). Still missing: drafts in forum topics
-  and in the text client;
+  session with `users.getSelf`). The text client keeps them too (after
+  0.5): text left unsent when F1 to F10 change chat is saved as the
+  chat's draft, and a chat with a draft shows it as a "Draft:" line when
+  it opens (`messages.getAllDrafts` when the first chat opens, then the
+  updates); a message sent there deletes it (`clear_draft`). Still
+  missing: drafts in forum topics;
 - the pinned message under the chat header: done (`messages.search`
   with the pinned filter, asked after the chat opens and on
   `updatePinnedMessages`; a click jumps to it and walks through the

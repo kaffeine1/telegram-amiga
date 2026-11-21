@@ -1285,6 +1285,11 @@ the caption), then drop the file's icon on the console window, or on the
 itself. The path appears in the input line and Enter sends. Quit with
 /quit, Ctrl+C or the close gadget; the window stays open so you can read
 the last lines, and one more click on the gadget closes it.
+Drafts: text typed and left unsent when F1 to F10 change chat is kept
+as that chat's draft, on Telegram too, so the phone shows it. A chat
+with a draft, made here or elsewhere, shows it as a "Draft:" line under
+its messages when it opens; a message sent there deletes it. Drafts of
+forum topics are not kept yet.
 
 First start
 -----------
@@ -1368,6 +1373,11 @@ dove i drop sulle finestre li tiene il sistema. Il percorso compare nella
 riga di input e Invio lo manda. Per uscire: /quit, Ctrl+C o il gadget di
 chiusura; la finestra resta aperta per leggere le ultime righe, e un
 altro click sul gadget la chiude.
+Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
+come bozza di quella chat, anche su Telegram, e il telefono la mostra.
+Una chat con una bozza, fatta qui o altrove, la mostra in una riga
+"Draft:" sotto i messaggi quando si apre; un messaggio mandato li' la
+cancella. Le bozze dei topic dei forum non restano ancora.
 
 Primo avvio
 -----------

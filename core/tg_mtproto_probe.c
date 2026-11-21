@@ -4562,11 +4562,200 @@ static void tg_chat_pinned_parse_update(tg_mtproto_tl_reader *reader,
 #endif
 }
 
+/* The text client's drafts. It has no composer to fill, so a chat's draft
+   shows as a "Draft:" line when the chat opens: Telegram's own drafts
+   (messages.getAllDrafts when the first chat opens, then the updates) and
+   the half-typed line a function key leaves, which it used to throw away.
+   A message sent in the chat deletes its draft. Only the text, cut to the
+   buffer, under the chat it belongs to. Saved Messages comes as the
+   account's own user (asked once, users.getSelf, when it matters) or, for
+   a draft kept here before that was known, as the self chat. */
+#if defined(__m68k__)
+#define TG_CHAT_DRAFTS_MAX 6
+#define TG_CHAT_DRAFT_TEXT 160
+#define TG_CHAT_LEFT_MAX 1024U /* a half-typed line; longer ones are lost */
+#else
+#define TG_CHAT_DRAFTS_MAX 16
+#define TG_CHAT_DRAFT_TEXT 480
+#define TG_CHAT_LEFT_MAX TG_CONSOLE_TUI_MESSAGE_MAX
+#endif
+typedef struct tg_chat_draft {
+    unsigned long peer_constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    char text[TG_CHAT_DRAFT_TEXT]; /* UTF-8 */
+} tg_chat_draft;
+static tg_chat_draft tg_chat_drafts[TG_CHAT_DRAFTS_MAX];
+static int tg_chat_draft_count = 0;
+static int tg_chat_drafts_on = 0;      /* the text client runs */
+static int tg_chat_drafts_fetched = 0; /* getAllDrafts answered */
+static int tg_chat_self_known = 0;
+static unsigned long tg_chat_self_hi = 0UL;
+static unsigned long tg_chat_self_lo = 0UL;
+/* The half-typed line a function key left, in the display's encoding: the
+   next dispatch keeps it as the draft of the chat being left. */
+static char tg_chat_left_text[TG_CHAT_LEFT_MAX + 1U];
+
+static int tg_chat_draft_find(unsigned long peer_constructor,
+                              unsigned long id_hi, unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_chat_draft_count; ++i) {
+        if (tg_chat_drafts[i].peer_constructor == peer_constructor &&
+            tg_chat_drafts[i].id_hi == id_hi &&
+            tg_chat_drafts[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* A chat's draft (an empty text deletes it). A full table lets the oldest
+   go. The text is cut on a character, never inside one. */
+static void tg_chat_draft_set(unsigned long peer_constructor,
+                              unsigned long id_hi, unsigned long id_lo,
+                              const char *utf8)
+{
+    int at = tg_chat_draft_find(peer_constructor, id_hi, id_lo);
+    unsigned long n;
+
+    if (utf8 == 0 || utf8[0] == '\0') {
+        if (at >= 0) {
+            memmove(&tg_chat_drafts[at], &tg_chat_drafts[at + 1],
+                    (size_t)(tg_chat_draft_count - at - 1) *
+                        sizeof(tg_chat_drafts[0]));
+            --tg_chat_draft_count;
+        }
+        return;
+    }
+    if (at < 0) {
+        if (tg_chat_draft_count >= TG_CHAT_DRAFTS_MAX) {
+            memmove(&tg_chat_drafts[0], &tg_chat_drafts[1],
+                    (size_t)(TG_CHAT_DRAFTS_MAX - 1) *
+                        sizeof(tg_chat_drafts[0]));
+            --tg_chat_draft_count;
+        }
+        at = tg_chat_draft_count++;
+        tg_chat_drafts[at].peer_constructor = peer_constructor;
+        tg_chat_drafts[at].id_hi = id_hi;
+        tg_chat_drafts[at].id_lo = id_lo;
+    }
+    n = (unsigned long)strlen(utf8);
+    if (n >= sizeof(tg_chat_drafts[at].text)) {
+        n = sizeof(tg_chat_drafts[at].text) - 1UL;
+        /* back to the start of the character the cut fell in */
+        while (n > 0UL && (((unsigned char)utf8[n]) & 0xc0U) == 0x80U) {
+            --n;
+        }
+    }
+    memcpy(tg_chat_drafts[at].text, utf8, (size_t)n);
+    tg_chat_drafts[at].text[n] = '\0';
+}
+
+/* The draft of a chat as the text client names it: Saved Messages (the
+   self chat) under either of its two keys. -1 = none. */
+static int tg_chat_draft_find_chat(unsigned long peer_constructor,
+                                   unsigned long id_hi, unsigned long id_lo)
+{
+    int at;
+
+    if (peer_constructor != TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+        return tg_chat_draft_find(peer_constructor, id_hi, id_lo);
+    }
+    at = tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL);
+    if (at < 0 && tg_chat_self_known) {
+        at = tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                tg_chat_self_hi, tg_chat_self_lo);
+    }
+    return at;
+}
+
+/* A chat's draft set from here: Saved Messages under the own user when it
+   is known, its other key dropped. */
+static void tg_chat_draft_set_chat(unsigned long peer_constructor,
+                                   unsigned long id_hi, unsigned long id_lo,
+                                   const char *utf8)
+{
+    if (peer_constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+        if (tg_chat_self_known) {
+            tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "");
+            tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                              tg_chat_self_hi, tg_chat_self_lo, utf8);
+        } else {
+            tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL,
+                              utf8);
+        }
+        return;
+    }
+    tg_chat_draft_set(peer_constructor, id_hi, id_lo, utf8);
+}
+
+/* A text cut to a buffer may end inside a character: that character goes. */
+static void tg_chat_utf8_trim_partial(char *text)
+{
+    unsigned long n = (unsigned long)strlen(text);
+    unsigned long lead = n;
+    unsigned long want;
+    unsigned char c;
+
+    while (lead > 0UL &&
+           (((unsigned char)text[lead - 1UL]) & 0xc0U) == 0x80U) {
+        --lead; /* continuation bytes */
+    }
+    if (lead == 0UL) {
+        if (n > 0UL) {
+            text[0] = '\0'; /* nothing but continuation bytes */
+        }
+        return;
+    }
+    c = (unsigned char)text[lead - 1UL];
+    if ((c & 0x80U) == 0U) {
+        return; /* ends with a plain character, or after it */
+    }
+    want = (c & 0xe0U) == 0xc0U ? 2UL : (c & 0xf0U) == 0xe0U ? 3UL
+         : (c & 0xf8U) == 0xf0U ? 4UL : 1UL;
+    if (n - (lead - 1UL) < want) {
+        text[lead - 1UL] = '\0';
+    }
+}
+
+/* An updateDraftMessage (or one of getAllDrafts' answer) into the text
+   client's table. A topic's draft fails to read and is left out. */
+static void tg_chat_draft_take_update(tg_mtproto_tl_reader *reader)
+{
+    static char utf8[TG_CHAT_DRAFT_TEXT];
+    tg_mtproto_dialog_peer peer;
+    unsigned long date;
+    int has_text;
+    int cut;
+
+    if (tg_mtproto_read_update_draft(reader, &peer, &has_text, utf8,
+                                     sizeof(utf8), &cut, &date, 0) !=
+        TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if (cut) {
+        tg_chat_utf8_trim_partial(utf8); /* never half a character */
+    }
+    if (peer.peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+        tg_chat_self_known && peer.id_hi == tg_chat_self_hi &&
+        peer.id_lo == tg_chat_self_lo) {
+        tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "");
+    }
+    tg_chat_draft_set(peer.peer_constructor, peer.id_hi, peer.id_lo,
+                      has_text ? utf8 : "");
+}
+
 /* updateDraftMessage, the reader just past the constructor. The envelope
    scan offers any aligned match, so the update counts only when it reads
    as a draft from its flags to its text. */
 static void tg_chat_draft_parse_update(tg_mtproto_tl_reader *reader)
 {
+    if (tg_chat_drafts_on) {
+        tg_chat_draft_take_update(reader); /* the text client's table */
+        return;
+    }
 #if defined(TG_NO_GUI)
     (void)reader;
 #else
@@ -13059,11 +13248,26 @@ static int tg_mtproto_chat_read_line_edit(char *line,
             if (use_history && direction == '~' && fkey <= 19UL &&
                 line_size >= 16UL) {
                 /* Function key: jump straight to that chat by completing the
-                   line as a synthesized /peer command. Any half-typed text
-                   is discarded -- Fn is an explicit "go there now". */
+                   line as a synthesized /peer command. Half-typed text (not
+                   a command) is kept as the draft of the chat being left:
+                   the dispatch of the /peer line saves it there. */
                 if (!tg_console_tui_active()) {
                     for (i = 0UL; i < *line_length; ++i) {
                         fputs("\b \b", stream);
+                    }
+                }
+                if (tg_chat_drafts_on && *line_length > 0UL &&
+                    *line_length < sizeof(tg_chat_left_text) &&
+                    line[0] != '/') {
+                    unsigned long k;
+
+                    for (k = 0UL; k < *line_length && (line[k] == ' ' ||
+                                                       line[k] == '\t');
+                         ++k) {
+                    }
+                    if (k < *line_length) {
+                        memcpy(tg_chat_left_text, line, (size_t)*line_length);
+                        tg_chat_left_text[*line_length] = '\0';
                     }
                 }
                 sprintf(line, "/peer %lu", fkey + 1UL);
@@ -16750,6 +16954,7 @@ static const char *const tg_chat_help_lines[] = {
     "  text + Enter    send a message",
     "  Enter           read new messages now",
     "  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)",
+    "                  F1..F10 keep text typed as the draft of the chat left",
     "  0               Saved Messages, your cloud drawer",
     "  Tab             back to the previous chat",
     "  Shift+Up/Down   older messages, and back",
@@ -17490,6 +17695,247 @@ static int tg_mtproto_tui_apply_webpages(FILE *stream)
     return dirty;
 }
 
+/* messages.getAllDrafts on the text client's connection: the table from
+   the answer, which is the whole truth (a draft deleted elsewhere is not in
+   it). Asked when the first chat opens, not before the prompt. */
+static void tg_chat_drafts_fetch(const char *host, const char *port,
+                                 const char *api_id, const char *auth_file,
+                                 const char *dc_id_text,
+                                 tg_mtproto_auth_context *context,
+                                 FILE *quiet)
+{
+    unsigned char query[8];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_tl_reader reader;
+    unsigned long offset;
+    static const char label[] = "mtproto messages.getAllDrafts";
+
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_all_drafts(&writer) !=
+        TG_MTPROTO_TL_OK) {
+        return;
+    }
+    memset(&result, 0, sizeof(result));
+    if (tg_mtproto_send_saved_query_on_context(
+            host, port, api_id, auth_file, dc_id_text, context, query,
+            writer.length, &result, quiet, label, 16U) != 0 ||
+        result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
+        tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        return;
+    }
+    tg_chat_drafts_fetched = 1;
+    tg_chat_draft_count = 0;
+    for (offset = 0UL; offset + 8UL <= result.result_body_length;
+         offset += 4UL) {
+        if (tg_mtproto_read_u32_le(result.result_body + offset) ==
+            TG_MTPROTO_UPDATE_DRAFT_MESSAGE_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, result.result_body,
+                                      result.result_body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_draft_take_update(&reader);
+        }
+    }
+}
+
+/* users.getSelf, once: the user Telegram names Saved Messages' draft by. */
+static void tg_chat_learn_self(const char *host, const char *port,
+                               const char *api_id, const char *auth_file,
+                               const char *dc_id_text,
+                               tg_mtproto_auth_context *context, FILE *quiet)
+{
+    unsigned char query[32];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_user_summary user;
+    static const char label[] = "mtproto users.getSelf";
+
+    if (tg_chat_self_known) {
+        return;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_users_get_self(&writer) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    memset(&result, 0, sizeof(result));
+    if (tg_mtproto_send_saved_query_on_context(
+            host, port, api_id, auth_file, dc_id_text, context, query,
+            writer.length, &result, quiet, label, 4U) == 0 &&
+        result.result_constructor != TG_MTPROTO_RPC_ERROR_CONSTRUCTOR &&
+        tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0 &&
+        tg_mtproto_parse_user_vector_first(result.result_constructor,
+                                           result.result_body,
+                                           result.result_body_length,
+                                           &user) == TG_MTPROTO_TL_OK &&
+        user.is_self && (user.id_hi != 0UL || user.id_lo != 0UL)) {
+        int alias;
+
+        tg_chat_self_hi = user.id_hi;
+        tg_chat_self_lo = user.id_lo;
+        tg_chat_self_known = 1;
+        /* a draft kept here under the self chat moves to the own user */
+        alias = tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL,
+                                   0UL);
+        if (alias >= 0) {
+            static char text[TG_CHAT_DRAFT_TEXT];
+
+            strcpy(text, tg_chat_drafts[alias].text);
+            tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL,
+                                   text);
+        }
+    }
+}
+
+/* The half-typed line a function key left, kept as the draft of the chat
+   being left, on Telegram (messages.saveDraft) and here, with a line that
+   says so. Not in a forum topic, whose drafts are not kept yet. */
+static void tg_chat_draft_keep_left(const char *host, const char *port,
+                                    const char *api_id, const char *auth_file,
+                                    const char *dc_id_text,
+                                    tg_mtproto_auth_context *context,
+                                    const char *peer_cache_file,
+                                    const char *peer_index,
+                                    const char *peer_label, FILE *stream,
+                                    FILE *quiet)
+{
+    static unsigned char query[(TG_CHAT_LEFT_MAX * 2U) + 160U];
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char utf8[(TG_CHAT_LEFT_MAX * 2U) + 1U];
+#endif
+    const char *text = tg_chat_left_text;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    int ok;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *tui_cap;
+    static const char label[] = "mtproto messages.saveDraft";
+
+    if (tg_chat_left_text[0] == '\0') {
+        return;
+    }
+    if (peer_index == 0 || peer_index[0] == '\0' ||
+        tg_mtproto_history_topic_id != 0UL ||
+        tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc, &ph,
+                                        &pl, &ahh, &ahl, &hah, quiet,
+                                        label) != 0) {
+        tg_chat_left_text[0] = '\0';
+        return;
+    }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (tg_mtproto_latin1_to_utf8(tg_chat_left_text, utf8, sizeof(utf8))) {
+        text = utf8;
+    }
+#endif
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    ok = tg_mtproto_build_messages_save_draft(&writer, text, 0UL, pc, ph, pl,
+                                              ahh, ahl, hah) ==
+         TG_MTPROTO_TL_OK;
+    if (ok) {
+        memset(&result, 0, sizeof(result));
+        ok = tg_mtproto_send_saved_query_on_context(
+                 host, port, api_id, auth_file, dc_id_text, context, query,
+                 writer.length, &result, quiet, label, 16U) == 0 &&
+             result.result_constructor != TG_MTPROTO_RPC_ERROR_CONSTRUCTOR;
+    }
+    if (ok) {
+        tg_chat_draft_set_chat(pc, ph, pl, text);
+    }
+    tui_cap = tg_console_tui_capture_begin(stream);
+    tg_console_ui_role(tui_cap, TG_UI_ROLE_SYSTEM);
+    if (ok) {
+        fputs("Kept as a draft in ", tui_cap);
+        tg_mtproto_print_cache_text(tui_cap, peer_label);
+        fputc('.', tui_cap);
+    } else {
+        fputs("Could not keep the text as a draft (network?).", tui_cap);
+    }
+    tg_console_ui_reset(tui_cap);
+    fputc('\n', tui_cap);
+    tg_console_tui_capture_end(tui_cap, stream);
+    tg_chat_left_text[0] = '\0';
+}
+
+/* The open chat's draft, as a "Draft:" line under its messages. */
+static void tg_chat_draft_show(const char *host, const char *port,
+                               const char *api_id, const char *auth_file,
+                               const char *dc_id_text,
+                               tg_mtproto_auth_context *context,
+                               const char *peer_cache_file,
+                               const char *peer_index, FILE *stream,
+                               FILE *quiet)
+{
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    int at;
+    int i;
+    FILE *tui_cap;
+    static const char label[] = "draft";
+
+    if (!tg_chat_drafts_fetched) {
+        tg_chat_drafts_fetch(host, port, api_id, auth_file, dc_id_text,
+                             context, quiet);
+    }
+    if (tg_chat_draft_count == 0 || peer_index == 0 ||
+        peer_index[0] == '\0' || tg_mtproto_history_topic_id != 0UL ||
+        tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc, &ph,
+                                        &pl, &ahh, &ahl, &hah, quiet,
+                                        label) != 0) {
+        return;
+    }
+    if (pc == TG_MTPROTO_PEER_SELF_CONSTRUCTOR && !tg_chat_self_known) {
+        for (i = 0; i < tg_chat_draft_count; ++i) {
+            if (tg_chat_drafts[i].peer_constructor ==
+                TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+                /* one of these may be Saved Messages' */
+                tg_chat_learn_self(host, port, api_id, auth_file, dc_id_text,
+                                   context, quiet);
+                break;
+            }
+        }
+    }
+    at = tg_chat_draft_find_chat(pc, ph, pl);
+    if (at < 0) {
+        return;
+    }
+    tui_cap = tg_console_tui_capture_begin(stream);
+    tg_console_ui_role(tui_cap, TG_UI_ROLE_SYSTEM);
+    fputs("Draft: ", tui_cap);
+    tg_console_ui_reset(tui_cap);
+    tg_mtproto_print_message_text(tui_cap, tg_chat_drafts[at].text);
+    fputc('\n', tui_cap);
+    tg_console_tui_capture_end(tui_cap, stream);
+}
+
+/* Whether the chat at this index has a draft here: a message sent there
+   then deletes it on Telegram too (clear_draft). */
+static int tg_chat_draft_of_index(const char *peer_cache_file,
+                                  const char *peer_index, FILE *quiet,
+                                  unsigned long *pc, unsigned long *ph,
+                                  unsigned long *pl)
+{
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    static const char label[] = "draft";
+
+    if (tg_chat_draft_count == 0 || tg_mtproto_history_topic_id != 0UL ||
+        tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, pc, ph,
+                                        pl, &ahh, &ahl, &hah, quiet,
+                                        label) != 0) {
+        return 0;
+    }
+    return tg_chat_draft_find_chat(*pc, *ph, *pl) >= 0;
+}
+
 int tg_mtproto_auth_chat_file(const char *host,
                               const char *port,
                               const char *api_file,
@@ -17802,6 +18248,12 @@ int tg_mtproto_auth_chat_file(const char *host,
 #endif
     /* Heavy accounts must reach the prompt before any blocking history read. */
     peer_history_ready = 0;
+    /* Drafts: the table fills when the first chat opens (getAllDrafts) and
+       from the updates meanwhile. */
+    tg_chat_drafts_on = 1;
+    tg_chat_drafts_fetched = 0;
+    tg_chat_draft_count = 0;
+    tg_chat_left_text[0] = '\0';
     chat_last_poll = (time_t)0;
     chat_draft_key = (time_t)0;
     chat_draft_len = 0UL;
@@ -17859,6 +18311,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                 stream, chat_quiet, host, port, api_id, auth_file, dc_id_text,
                 &chat_context, peer_cache_file, peer_index, peer_label,
                 own_label, &last_seen_message_id);
+            tg_mtproto_reset_quiet_stream(chat_quiet, stream);
+            tg_chat_draft_show(host, port, api_id, auth_file, dc_id_text,
+                               &chat_context, peer_cache_file, peer_index,
+                               stream, chat_quiet);
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
         }
@@ -18056,6 +18512,15 @@ int tg_mtproto_auth_chat_file(const char *host,
         tg_mtproto_trim_line(line);
         line_length = (unsigned long)strlen(line);
         chat_line_consumed = 1; /* reset at the next loop top, after dispatch */
+        if (tg_chat_left_text[0] != '\0') {
+            /* a function key left half-typed text: the chat being left
+               keeps it as its draft, before the key's /peer moves on */
+            quiet = tg_mtproto_open_quiet_stream(stream);
+            tg_chat_draft_keep_left(host, port, api_id, auth_file, dc_id_text,
+                                    &chat_context, peer_cache_file,
+                                    peer_index, peer_label, stream, quiet);
+            tg_mtproto_close_quiet_stream(quiet, stream);
+        }
         if (strcmp(line, "/quit") == 0 || strcmp(line, "quit") == 0) {
             tg_mtproto_chat_print_system_line(stream, "Bye.");
             tg_mtproto_close_quiet_stream(chat_quiet, stream);
@@ -19449,10 +19914,25 @@ int tg_mtproto_auth_chat_file(const char *host,
                 send_text = send_line;
             }
 #endif
-            rc = tg_mtproto_auth_send_peer_on_context(
-                host, port, api_id, auth_file, dc_id_text, &chat_context,
-                peer_cache_file, peer_index, send_text, 0UL, &sent_message_id,
-                quiet);
+            {
+                unsigned long dpc = 0UL;
+                unsigned long dph = 0UL;
+                unsigned long dpl = 0UL;
+                int had_draft = tg_chat_draft_of_index(peer_cache_file,
+                                                       peer_index, quiet,
+                                                       &dpc, &dph, &dpl);
+
+                /* a chat with a draft: the message sent deletes it */
+                tg_mtproto_send_set_clear_draft(had_draft);
+                rc = tg_mtproto_auth_send_peer_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, send_text, 0UL,
+                    &sent_message_id, quiet);
+                tg_mtproto_send_set_clear_draft(0);
+                if (rc == 0 && had_draft) {
+                    tg_chat_draft_set_chat(dpc, dph, dpl, "");
+                }
+            }
         }
         if (rc == 0) {
             consecutive_failures = 0UL;
@@ -20168,6 +20648,7 @@ static int tg_gui_hidden_projection_self_test(void);
 static int tg_gui_pins_self_test(void);
 static int tg_gui_pins_join_self_test(void);
 static int tg_gui_pins_order_self_test(void);
+static int tg_chat_drafts_self_test(void);
 static int tg_gui_follow_open_self_test(void);
 static int tg_gui_reload_room_self_test(void);
 #if !defined(TG_NO_GUI)
@@ -22403,6 +22884,7 @@ int tg_mtproto_probe_self_test(void)
     }
     if (tg_gui_pins_self_test() != 0 || tg_gui_pins_join_self_test() != 0 ||
         tg_gui_pins_order_self_test() != 0 ||
+        tg_chat_drafts_self_test() != 0 ||
         tg_gui_follow_open_self_test() != 0 ||
         tg_gui_reload_room_self_test() != 0) {
         return 2;
@@ -28004,6 +28486,152 @@ int tg_gui_session_send_pins(FILE *stream)
    it coming from above and before it coming from below. The order written
    names every pin, Saved Messages as inputPeerSelf; a pin without its
    access hash cannot be written. */
+/* The text client's drafts: set, delete, a full table, a cut on a
+   character, an update read into the table, and Saved Messages under its
+   two keys. Leaves the table as it found it (empty, off). */
+static int tg_chat_drafts_self_test(void)
+{
+    unsigned char body[96];
+    tg_mtproto_tl_writer w;
+    tg_mtproto_tl_reader r;
+    char longer[TG_CHAT_DRAFT_TEXT + 8];
+    unsigned long i;
+    int at;
+    int fail = 0;
+
+    tg_chat_draft_count = 0;
+    tg_chat_self_known = 0;
+    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1UL, "uno");
+    tg_chat_draft_set(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 2UL, "due");
+    if (tg_chat_draft_count != 2 ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 2UL) != 1 ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 2UL) != -1) {
+        fail = 1;
+    }
+    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1UL, "");
+    if (tg_chat_draft_count != 1 ||
+        strcmp(tg_chat_drafts[0].text, "due") != 0) {
+        fail = 2;
+    }
+    /* a full table lets the oldest go */
+    tg_chat_draft_count = 0;
+    for (i = 0UL; i <= (unsigned long)TG_CHAT_DRAFTS_MAX; ++i) {
+        tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 100UL + i,
+                          "x");
+    }
+    if (tg_chat_draft_count != TG_CHAT_DRAFTS_MAX ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 100UL) !=
+            -1 ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+                           100UL + TG_CHAT_DRAFTS_MAX) < 0) {
+        fail = 3;
+    }
+    /* longer than the buffer, a two-byte character across the cut */
+    tg_chat_draft_count = 0;
+    memset(longer, 'a', sizeof(longer));
+    longer[TG_CHAT_DRAFT_TEXT - 2] = (char)0xc3;
+    longer[TG_CHAT_DRAFT_TEXT - 1] = (char)0xa8;
+    longer[sizeof(longer) - 1] = '\0';
+    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 3UL, longer);
+    if (tg_chat_draft_count != 1 ||
+        strlen(tg_chat_drafts[0].text) != (size_t)(TG_CHAT_DRAFT_TEXT - 2)) {
+        fail = 4;
+    }
+    {
+        char cut[8];
+
+        strcpy(cut, "ab\xc3");
+        tg_chat_utf8_trim_partial(cut);
+        if (strcmp(cut, "ab") != 0) {
+            fail = 5;
+        }
+        strcpy(cut, "ab\xc3\xa8");
+        tg_chat_utf8_trim_partial(cut);
+        if (strcmp(cut, "ab\xc3\xa8") != 0) {
+            fail = 6;
+        }
+        strcpy(cut, "a\xe2\x82");
+        tg_chat_utf8_trim_partial(cut);
+        if (strcmp(cut, "a") != 0) {
+            fail = 7;
+        }
+    }
+    /* updateDraftMessage (past its constructor): user 7, "ciao" */
+    tg_chat_draft_count = 0;
+    tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+    if (tg_mtproto_tl_write_u32(&w, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&w, TG_MTPROTO_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&w, 0UL, 7UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&w, 0x96eaa5ebUL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&w, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"ciao", 4UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&w, 1700000000UL) != TG_MTPROTO_TL_OK) {
+        fail = 8;
+    }
+    tg_mtproto_tl_reader_init(&r, body, w.length);
+    tg_chat_drafts_on = 1; /* as the updates reach it in the text client */
+    tg_chat_draft_parse_update(&r);
+    tg_chat_drafts_on = 0;
+    at = tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL);
+    if (at < 0 || strcmp(tg_chat_drafts[at].text, "ciao") != 0) {
+        fail = 9;
+    }
+    /* ...then draftMessageEmpty: deleted */
+    tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_MTPROTO_PEER_USER_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 7UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0x1b0c841aUL);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    tg_mtproto_tl_reader_init(&r, body, w.length);
+    tg_chat_draft_take_update(&r);
+    if (tg_chat_draft_count != 0) {
+        fail = 10;
+    }
+    /* Saved Messages: kept here before the own user was known, then the
+       own user's update replaces it under the one key */
+    tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "io");
+    if (tg_chat_draft_find_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL) <
+        0) {
+        fail = 11;
+    }
+    tg_chat_self_known = 1;
+    tg_chat_self_hi = 0UL;
+    tg_chat_self_lo = 9UL;
+    tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_MTPROTO_PEER_USER_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 9UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0x96eaa5ebUL);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"me", 2UL);
+    (void)tg_mtproto_tl_write_u32(&w, 1700000000UL);
+    tg_mtproto_tl_reader_init(&r, body, w.length);
+    tg_chat_draft_take_update(&r);
+    at = tg_chat_draft_find_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL);
+    if (tg_chat_draft_count != 1 || at < 0 ||
+        strcmp(tg_chat_drafts[at].text, "me") != 0 ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL) != -1) {
+        fail = 12;
+    }
+    /* a message sent in Saved Messages deletes its draft */
+    tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "");
+    if (tg_chat_draft_count != 0) {
+        fail = 13;
+    }
+    tg_chat_draft_count = 0;
+    tg_chat_self_known = 0;
+    tg_chat_self_hi = 0UL;
+    tg_chat_self_lo = 0UL;
+    if (fail != 0) {
+        fprintf(stderr, "chat drafts self-test: case %d\n", fail);
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_gui_pins_order_self_test(void)
 {
 #define fresh tg_peer_work_a /* scratch: see tg_peer_work_a */

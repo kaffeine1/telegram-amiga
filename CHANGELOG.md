@@ -64,6 +64,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   files picked together: photos go through the photo dialog as an
   album, anything else as an album of files. A video goes as a file
   among them.
+- Drafts in the text client. Text typed and left unsent when F1 to F10
+  change chat is no longer thrown away: it is kept as that chat's draft,
+  on Telegram too. A chat with a draft, made here, in the window or on
+  another device, shows it as a "Draft:" line under its messages when
+  it opens, and a message sent there deletes it. The drafts are asked
+  once when the first chat opens (one request), and the updates keep
+  them current.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester
