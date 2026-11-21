@@ -1528,6 +1528,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_WEBP_DT 41
 /* not in a menu either: the media player line of the settings */
 #define TG_MENU_PLAYER 42
+#define TG_MENU_TOPIC_NEW 43
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -7595,6 +7596,120 @@ static void tg_gui_window_topic_pick(tg_gui_state *state, int row,
     tg_gui_window_paint(state, backend);
 }
 
+static int tg_gui_window_text_dialog(tg_gui_amiga_ctx *main_ctx,
+                                     struct Window *parent, const char *title,
+                                     const char *info, const char *field,
+                                     const char *ok, char *text,
+                                     unsigned long text_size);
+/* A topic's name as typed: Telegram takes up to 128 characters. */
+#define TG_GUI_TOPIC_NAME_MAX 129
+
+/* Chats > New topic...: a topic made in the open forum, after its name is
+   asked, then opened. */
+static void tg_gui_window_topic_new(tg_gui_state *state,
+                                    tg_gui_amiga_ctx *ctx,
+                                    tg_gui_backend *backend)
+{
+    char name[TG_GUI_TOPIC_NAME_MAX];
+    char line[96];
+    unsigned long id = 0UL;
+    int rc;
+    int k;
+
+    if (!tg_gui_session_is_open() || !tg_gui_session_forum_open()) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Open a group with topics first");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    name[0] = '\0';
+    if (!tg_gui_window_text_dialog(ctx, ctx->window, "New topic",
+                                   "A new topic in this group",
+                                   "Topic name:", "Create", name,
+                                   sizeof(name)) ||
+        name[0] == '\0') {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Making the topic...");
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_topic_create(name, &id, stdout);
+    if (rc == 1) {
+        sprintf(line, "Telegram refused: %.48s",
+                tg_gui_session_topic_refusal());
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+    } else if (rc != 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not make the topic (network?)");
+    } else {
+        for (k = 1; k < state->chat_count && tg_gui_topics_listed(state);
+             ++k) {
+            if (state->chats[k].index == id) {
+                tg_gui_window_topic_pick(state, k, backend, 0);
+                break;
+            }
+        }
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Topic made - ENTER writes in it");
+    }
+    tg_gui_window_paint(state, backend);
+}
+
+/* A topic row's menu: Rename topic... (close = 0, its name asked) or
+   Close topic / Reopen topic (close = 1). */
+static void tg_gui_window_topic_change(tg_gui_state *state,
+                                       tg_gui_amiga_ctx *ctx,
+                                       tg_gui_backend *backend,
+                                       unsigned long topic, int close)
+{
+    char name[TG_GUI_TOPIC_NAME_MAX];
+    char line[96];
+    int closed = -1;
+    int rc;
+    int k;
+
+    name[0] = '\0';
+    if (close) {
+        closed = tg_gui_session_topic_closed(topic) == 1 ? 0 : 1;
+    } else {
+        for (k = 1; k < state->chat_count; ++k) {
+            if (state->chats[k].index == topic) {
+                tg_gui_window_copy(name, sizeof(name), state->chats[k].name);
+                break;
+            }
+        }
+        if (!tg_gui_window_text_dialog(ctx, ctx->window, "Rename topic",
+                                       "A new name for the topic",
+                                       "Topic name:", "Rename", name,
+                                       sizeof(name)) ||
+            name[0] == '\0') {
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       close ? (closed ? "Closing the topic..."
+                                       : "Opening the topic again...")
+                             : "Renaming the topic...");
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_topic_edit(topic, close ? 0 : name, closed, stdout);
+    if (rc == 1) {
+        sprintf(line, "Telegram refused: %.48s",
+                tg_gui_session_topic_refusal());
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+    } else if (rc != 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Could not change the topic (network?)");
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           !close ? "Topic renamed"
+                           : closed ? "Topic closed: only admins write in it"
+                                    : "Topic open again");
+    }
+    tg_gui_window_paint(state, backend);
+}
+
 /* A forum open with no topic chosen takes nothing to send: says so. 1 =
    stopped here. */
 static int tg_gui_window_topic_needed(tg_gui_state *state,
@@ -8348,6 +8463,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_RELOAD },
     { NM_ITEM,  (STRPTR)"Archived chats", (STRPTR)"A", 0, 0,
       (APTR)TG_MENU_ARCHIVE },
+    { NM_ITEM,  (STRPTR)"New topic...", 0, 0, 0,
+      (APTR)TG_MENU_TOPIC_NEW },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
     { NM_ITEM,  (STRPTR)"Send file...", (STRPTR)"F", 0, 0,
       (APTR)TG_MENU_SENDFILE },
@@ -8913,6 +9030,12 @@ typedef struct tg_gui_sendphoto_ui {
                                   the composer and the search box */
     int many;                  /* several photos picked together: the
                                   actions are Album / Files / Cancel */
+    /* The same box asking for a line of text (a topic's name): the info
+       line, the box's label and the buttons, when set. */
+    const char *info;          /* instead of the file's name and size */
+    const char *field;         /* "Caption:" when 0 */
+    const char *btn_label[3];  /* the photo's buttons when [0] is 0 */
+    int buttons;               /* 2 or 3 (3 when 0); the last is Cancel */
 } tg_gui_sendphoto_ui;
 
 
@@ -8991,16 +9114,25 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     struct RastPort *rp = ui->win->RPort;
     int lh = ui->main_ctx->line_h;
     static const char *labels[3];
+    int nb = ui->buttons == 2 ? 2 : 3;
     int i;
 
     labels[0] = ui->many ? "Album" : "Photo";
     labels[1] = ui->many ? "Files" : "File";
     labels[2] = "Cancel";
+    if (ui->btn_label[0] != 0) {
+        for (i = 0; i < nb; ++i) {
+            labels[i] = ui->btn_label[i];
+        }
+    }
     tg_gui_sendphoto_box(ui, TG_GUI_PEN_WINDOW, 0, 0, ui->iw, ui->ih);
     /* One info line: which file, how big. The pixel preview comes back once
        the decode path can feed it properly (see ROADMAP: send-photo dialog
        preview); a wrong picture was worse than none. */
-    {
+    if (ui->info != 0) {
+        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT, 8, 8 + lh, ui->info,
+                              (unsigned long)strlen(ui->info));
+    } else {
         char info[96];
         unsigned long nlen = (unsigned long)strlen(ui->name);
 
@@ -9012,14 +9144,18 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
         tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT, 8, 8 + lh,
                               info, (unsigned long)strlen(info));
     }
-    tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT_DIM, 8,
-                          ui->cap_y - 4, "Caption:", 8UL);
+    {
+        const char *field = ui->field != 0 ? ui->field : "Caption:";
+
+        tg_gui_sendphoto_text(ui, TG_GUI_PEN_TEXT_DIM, 8, ui->cap_y - 4,
+                              field, (unsigned long)strlen(field));
+    }
     tg_gui_sendphoto_caption_row(ui);
     /* Buttons, right-aligned: [Photo] [File] [Cancel]. */
     {
         int x = ui->iw - 8;
 
-        for (i = 2; i >= 0; --i) {
+        for (i = nb - 1; i >= 0; --i) {
             int tw = tg_gui_sendphoto_text_width(
                 ui, labels[i], (unsigned long)strlen(labels[i]));
 
@@ -9028,7 +9164,7 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
             ui->btn_x[i] = x;
             x -= 6;
         }
-        for (i = 0; i < 3; ++i) {
+        for (i = 0; i < nb; ++i) {
             int fill = (i == 0) ? TG_GUI_PEN_ACCENT : TG_GUI_PEN_SURFACE;
             int ink = (i == 0) ? TG_GUI_PEN_ACCENT_TEXT : TG_GUI_PEN_TEXT;
             int tw = ui->btn_w[i] - 16;
@@ -9045,81 +9181,30 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     }
 }
 
-/* count > 1: several photos picked together. The info line then says how
-   many and how big in all (total_bytes), and the answers mean 1 = one album,
-   2 = separate files. */
-static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
-                                            tg_gui_amiga_ctx *main_ctx,
-                                            struct Window *parent,
-                                            const char *path, int count,
-                                            unsigned long total_bytes,
-                                            char *caption,
-                                            unsigned long caption_size)
+/* The box of the photo dialog, opened over the window, until a button,
+   Return (1), Esc or the close gadget (0): the first button answers 1, the
+   second (of three) 2. ui holds what it shows and the text being typed. */
+static int tg_gui_window_box_dialog(tg_gui_sendphoto_ui *ui,
+                                    tg_gui_amiga_ctx *main_ctx,
+                                    struct Window *parent, const char *title)
 {
-    tg_gui_sendphoto_ui ui;
     struct TagItem tags[16];
     struct Screen *screen;
-    char many_name[24];
-    const char *name;
-    const char *pp;
     int lh;
     int i;
+    int nb = ui->buttons == 2 ? 2 : 3;
     int result = 0;
     int done = 0;
 
-    if (state == 0 || main_ctx == 0 || parent == 0 || path == 0 ||
-        caption == 0 || caption_size < 2UL) {
-        return 0;
-    }
-    memset(&ui, 0, sizeof(ui));
-    ui.main_ctx = main_ctx;
-    ui.caption = caption;
-    ui.caption_size = caption_size;
-    ui.cursor_on = 1;
-    /* Desktop behaviour: the composer draft moves into the caption box. */
-    caption[0] = '\0';
-    ui.caption_len = 0UL;
-    for (i = 0; state->input[i] != '\0' &&
-                ui.caption_len + 1UL < caption_size; ++i) {
-        caption[ui.caption_len++] = state->input[i];
-    }
-    caption[ui.caption_len] = '\0';
-    name = path;
-    for (pp = path; *pp != '\0'; ++pp) {
-        if (*pp == '/' || *pp == ':') {
-            name = pp + 1;
-        }
-    }
-    ui.name = name;
     lh = main_ctx->line_h;
     screen = parent->WScreen;
-    if (count > 1) {
-        sprintf(many_name, "%d photos", count);
-        ui.name = many_name;
-        ui.many = 1;
-        ui.bytes = total_bytes;
-    } else
-    /* Only the size is read from the file: the dialog shows name and KB
-       while the pixel preview waits for a decode path that deserves it. */
-    {
-        FILE *f = fopen(path, "rb");
-
-        if (f != 0) {
-            long fsz;
-
-            if (fseek(f, 0L, SEEK_END) == 0 && (fsz = ftell(f)) > 0L) {
-                ui.bytes = (unsigned long)fsz;
-            }
-            fclose(f);
-        }
+    ui->iw = 300;
+    if (screen != 0 && ui->iw > (int)screen->Width - 60) {
+        ui->iw = (int)screen->Width - 60;
     }
-    ui.iw = 300;
-    if (screen != 0 && ui.iw > (int)screen->Width - 60) {
-        ui.iw = (int)screen->Width - 60;
-    }
-    ui.cap_y = 8 + lh + 6 + lh + 2;
-    ui.btn_y = ui.cap_y + lh + 6 + 10;
-    ui.ih = ui.btn_y + lh + 8 + 8;
+    ui->cap_y = 8 + lh + 6 + lh + 2;
+    ui->btn_y = ui->cap_y + lh + 6 + 10;
+    ui->ih = ui->btn_y + lh + 8 + 8;
     {
         int bor_l = (screen != 0) ? (int)screen->WBorLeft
                                   : (int)parent->BorderLeft;
@@ -9131,8 +9216,8 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
             : (int)parent->BorderTop;
         int bor_b = (screen != 0) ? (int)screen->WBorBottom
                                   : (int)parent->BorderBottom;
-        int est_w = ui.iw + bor_l + bor_r;
-        int est_h = ui.ih + bor_t + bor_b;
+        int est_w = ui->iw + bor_l + bor_r;
+        int est_h = ui->ih + bor_t + bor_b;
         int init_l = (int)parent->LeftEdge + (((int)parent->Width - est_w) / 2);
         int init_t = (int)parent->TopEdge + (((int)parent->Height - est_h) / 2);
 
@@ -9152,12 +9237,11 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
         }
         i = 0;
         tags[i].ti_Tag = WA_Title;
-        tags[i++].ti_Data = TG_GUI_TAG(count > 1 ? "Send photos"
-                                                 : "Send photo");
+        tags[i++].ti_Data = TG_GUI_TAG(title);
         tags[i].ti_Tag = WA_InnerWidth;
-        tags[i++].ti_Data = (ULONG)ui.iw;
+        tags[i++].ti_Data = (ULONG)ui->iw;
         tags[i].ti_Tag = WA_InnerHeight;
-        tags[i++].ti_Data = (ULONG)ui.ih;
+        tags[i++].ti_Data = (ULONG)ui->ih;
         tags[i].ti_Tag = WA_Left;
         tags[i++].ti_Data = (ULONG)init_l;
         tags[i].ti_Tag = WA_Top;
@@ -9183,27 +9267,27 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
         tags[i].ti_Tag = TAG_END;
         tags[i++].ti_Data = 0;
     }
-    ui.win = OpenWindowTagList(0, tags);
-    if (ui.win == 0) {
+    ui->win = OpenWindowTagList(0, tags);
+    if (ui->win == 0) {
         return 0;
     }
     if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
-        SetFont(ui.win->RPort, main_ctx->rport->Font);
+        SetFont(ui->win->RPort, main_ctx->rport->Font);
     }
     /* Fine-adjust only if the dialog's border metrics differed from screen's. */
     {
-        struct Screen *scr = ui.win->WScreen;
+        struct Screen *scr = ui->win->WScreen;
         int nl = (int)parent->LeftEdge +
-                 (((int)parent->Width - (int)ui.win->Width) / 2);
+                 (((int)parent->Width - (int)ui->win->Width) / 2);
         int nt = (int)parent->TopEdge +
-                 (((int)parent->Height - (int)ui.win->Height) / 2);
+                 (((int)parent->Height - (int)ui->win->Height) / 2);
 
         if (scr != 0) {
-            if (nl + (int)ui.win->Width > (int)scr->Width) {
-                nl = (int)scr->Width - (int)ui.win->Width;
+            if (nl + (int)ui->win->Width > (int)scr->Width) {
+                nl = (int)scr->Width - (int)ui->win->Width;
             }
-            if (nt + (int)ui.win->Height > (int)scr->Height) {
-                nt = (int)scr->Height - (int)ui.win->Height;
+            if (nt + (int)ui->win->Height > (int)scr->Height) {
+                nt = (int)scr->Height - (int)ui->win->Height;
             }
         }
         if (nl < 0) {
@@ -9212,25 +9296,25 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
         if (nt < 0) {
             nt = 0;
         }
-        if (nl != (int)ui.win->LeftEdge || nt != (int)ui.win->TopEdge) {
-            MoveWindow(ui.win, (WORD)(nl - (int)ui.win->LeftEdge),
-                       (WORD)(nt - (int)ui.win->TopEdge));
+        if (nl != (int)ui->win->LeftEdge || nt != (int)ui->win->TopEdge) {
+            MoveWindow(ui->win, (WORD)(nl - (int)ui->win->LeftEdge),
+                       (WORD)(nt - (int)ui->win->TopEdge));
         }
     }
-    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-        LockLayerRom(ui.win->RPort->Layer);
+    if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+        LockLayerRom(ui->win->RPort->Layer);
     }
-    tg_gui_sendphoto_paint(&ui);
-    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-        UnlockLayerRom(ui.win->RPort->Layer);
+    tg_gui_sendphoto_paint(ui);
+    if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+        UnlockLayerRom(ui->win->RPort->Layer);
     }
-    ActivateWindow(ui.win);
+    ActivateWindow(ui->win);
     while (!done) {
         struct IntuiMessage *msg;
 
         TG_GUI_PHASE("dialog wait");
-        Wait(1UL << ui.win->UserPort->mp_SigBit);
-        while ((msg = (struct IntuiMessage *)GetMsg(ui.win->UserPort)) != 0) {
+        Wait(1UL << ui->win->UserPort->mp_SigBit);
+        while ((msg = (struct IntuiMessage *)GetMsg(ui->win->UserPort)) != 0) {
             ULONG cls = msg->Class;
             UWORD code = msg->Code;
             WORD mx = msg->MouseX;
@@ -9241,21 +9325,21 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
                 result = 0;
                 done = 1;
             } else if (cls == IDCMP_REFRESHWINDOW) {
-                BeginRefresh(ui.win);
-                tg_gui_sendphoto_paint(&ui);
-                EndRefresh(ui.win, TRUE);
+                BeginRefresh(ui->win);
+                tg_gui_sendphoto_paint(ui);
+                EndRefresh(ui->win, TRUE);
             } else if (cls == IDCMP_INTUITICKS) {
                 /* Same cadence as the composer and the search box: the
                    ticks come ~10 a second, the caret flips every fifth. */
-                if (++ui.tick_count >= 5) {
-                    ui.tick_count = 0;
-                    ui.cursor_on = !ui.cursor_on;
-                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-                        LockLayerRom(ui.win->RPort->Layer);
+                if (++ui->tick_count >= 5) {
+                    ui->tick_count = 0;
+                    ui->cursor_on = !ui->cursor_on;
+                    if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+                        LockLayerRom(ui->win->RPort->Layer);
                     }
-                    tg_gui_sendphoto_caption_row(&ui);
-                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-                        UnlockLayerRom(ui.win->RPort->Layer);
+                    tg_gui_sendphoto_caption_row(ui);
+                    if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+                        UnlockLayerRom(ui->win->RPort->Layer);
                     }
                 }
             } else if (cls == IDCMP_VANILLAKEY) {
@@ -9266,40 +9350,41 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
                     result = 0;
                     done = 1;
                 } else if (code == 8U) {
-                    if (ui.caption_len > 0UL) {
-                        --ui.caption_len;
-                        ui.caption[ui.caption_len] = '\0';
-                        ui.cursor_on = 1;
-                        if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-                            LockLayerRom(ui.win->RPort->Layer);
+                    if (ui->caption_len > 0UL) {
+                        --ui->caption_len;
+                        ui->caption[ui->caption_len] = '\0';
+                        ui->cursor_on = 1;
+                        if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+                            LockLayerRom(ui->win->RPort->Layer);
                         }
-                        tg_gui_sendphoto_caption_row(&ui);
-                        if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-                            UnlockLayerRom(ui.win->RPort->Layer);
+                        tg_gui_sendphoto_caption_row(ui);
+                        if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+                            UnlockLayerRom(ui->win->RPort->Layer);
                         }
                     }
                 } else if (code >= 32U && code != 127U &&
-                           ui.caption_len + 1UL < ui.caption_size) {
-                    ui.caption[ui.caption_len++] = (char)code;
-                    ui.caption[ui.caption_len] = '\0';
-                    ui.cursor_on = 1;
-                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-                        LockLayerRom(ui.win->RPort->Layer);
+                           ui->caption_len + 1UL < ui->caption_size) {
+                    ui->caption[ui->caption_len++] = (char)code;
+                    ui->caption[ui->caption_len] = '\0';
+                    ui->cursor_on = 1;
+                    if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+                        LockLayerRom(ui->win->RPort->Layer);
                     }
-                    tg_gui_sendphoto_caption_row(&ui);
-                    if (ui.win->RPort != 0 && ui.win->RPort->Layer != 0) {
-                        UnlockLayerRom(ui.win->RPort->Layer);
+                    tg_gui_sendphoto_caption_row(ui);
+                    if (ui->win->RPort != 0 && ui->win->RPort->Layer != 0) {
+                        UnlockLayerRom(ui->win->RPort->Layer);
                     }
                 }
             } else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
-                int ix = (int)mx - (int)ui.win->BorderLeft;
-                int iy = (int)my - (int)ui.win->BorderTop;
+                int ix = (int)mx - (int)ui->win->BorderLeft;
+                int iy = (int)my - (int)ui->win->BorderTop;
 
-                if (iy >= ui.btn_y && iy < ui.btn_y + lh + 8) {
-                    for (i = 0; i < 3; ++i) {
-                        if (ix >= ui.btn_x[i] &&
-                            ix < ui.btn_x[i] + ui.btn_w[i]) {
-                            result = (i == 0) ? 1 : ((i == 1) ? 2 : 0);
+                if (iy >= ui->btn_y && iy < ui->btn_y + lh + 8) {
+                    for (i = 0; i < nb; ++i) {
+                        if (ix >= ui->btn_x[i] &&
+                            ix < ui->btn_x[i] + ui->btn_w[i]) {
+                            /* the last button is Cancel */
+                            result = (i == nb - 1) ? 0 : i + 1;
                             done = 1;
                         }
                     }
@@ -9307,8 +9392,73 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
             }
         }
     }
-    CloseWindow(ui.win);
+    CloseWindow(ui->win);
     return result;
+}
+
+/* count > 1: several photos picked together. The info line then says how
+   many and how big in all (total_bytes), and the answers mean 1 = one album,
+   2 = separate files. */
+static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
+                                            tg_gui_amiga_ctx *main_ctx,
+                                            struct Window *parent,
+                                            const char *path, int count,
+                                            unsigned long total_bytes,
+                                            char *caption,
+                                            unsigned long caption_size)
+{
+    tg_gui_sendphoto_ui ui;
+    char many_name[24];
+    const char *name;
+    const char *pp;
+    int i;
+
+    if (state == 0 || main_ctx == 0 || parent == 0 || path == 0 ||
+        caption == 0 || caption_size < 2UL) {
+        return 0;
+    }
+    memset(&ui, 0, sizeof(ui));
+    ui.main_ctx = main_ctx;
+    ui.caption = caption;
+    ui.caption_size = caption_size;
+    ui.cursor_on = 1;
+    /* Desktop behaviour: the composer draft moves into the caption box. */
+    caption[0] = '\0';
+    ui.caption_len = 0UL;
+    for (i = 0; state->input[i] != '\0' &&
+                ui.caption_len + 1UL < caption_size; ++i) {
+        caption[ui.caption_len++] = state->input[i];
+    }
+    caption[ui.caption_len] = '\0';
+    name = path;
+    for (pp = path; *pp != '\0'; ++pp) {
+        if (*pp == '/' || *pp == ':') {
+            name = pp + 1;
+        }
+    }
+    ui.name = name;
+    if (count > 1) {
+        sprintf(many_name, "%d photos", count);
+        ui.name = many_name;
+        ui.many = 1;
+        ui.bytes = total_bytes;
+    } else
+    /* Only the size is read from the file: the dialog shows name and KB
+       while the pixel preview waits for a decode path that deserves it. */
+    {
+        FILE *f = fopen(path, "rb");
+
+        if (f != 0) {
+            long fsz;
+
+            if (fseek(f, 0L, SEEK_END) == 0 && (fsz = ftell(f)) > 0L) {
+                ui.bytes = (unsigned long)fsz;
+            }
+            fclose(f);
+        }
+    }
+    return tg_gui_window_box_dialog(&ui, main_ctx, parent,
+                                    count > 1 ? "Send photos" : "Send photo");
 }
 
 static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
@@ -9319,6 +9469,37 @@ static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
 {
     return tg_gui_window_send_photos_dialog(state, main_ctx, parent, path, 1,
                                             0UL, caption, caption_size);
+}
+
+/* The same box asking for one line of text: info is the line over the
+   box, field its label, ok the first button (Cancel the other). text comes
+   in with what the box starts with and goes out with what was typed.
+   1 = ok (Return or the button), 0 = cancelled. */
+static int tg_gui_window_text_dialog(tg_gui_amiga_ctx *main_ctx,
+                                     struct Window *parent, const char *title,
+                                     const char *info, const char *field,
+                                     const char *ok, char *text,
+                                     unsigned long text_size)
+{
+    tg_gui_sendphoto_ui ui;
+
+    if (main_ctx == 0 || parent == 0 || text == 0 || text_size < 2UL) {
+        return 0;
+    }
+    memset(&ui, 0, sizeof(ui));
+    ui.main_ctx = main_ctx;
+    ui.caption = text;
+    ui.caption_size = text_size;
+    text[text_size - 1UL] = '\0';
+    ui.caption_len = (unsigned long)strlen(text);
+    ui.cursor_on = 1;
+    ui.name = "";
+    ui.info = info != 0 ? info : "";
+    ui.field = field;
+    ui.btn_label[0] = ok;
+    ui.btn_label[1] = "Cancel";
+    ui.buttons = 2;
+    return tg_gui_window_box_dialog(&ui, main_ctx, parent, title);
 }
 
 /* Dynamic right-button trap: over a chat row or real transcript bubble the
@@ -17431,6 +17612,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else if (ud == (APTR)TG_MENU_ARCHIVE) {
                             tg_gui_window_show_archive(
                                 state, &backend, !state->archive_view);
+                        } else if (ud == (APTR)TG_MENU_TOPIC_NEW) {
+                            tg_gui_window_topic_new(state, &ctx, &backend);
                         } else if (ud == (APTR)TG_MENU_SENDFILE) {
                             tg_gui_window_send_file(state, ctx.window,
                                                     &backend);
@@ -18258,6 +18441,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->ctx_react = 0;
                         state->ctx_poll = 0;
                         state->ctx_attach = 0;
+                        state->ctx_topic = 0UL;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
                         state->ctx_muted =
@@ -18267,6 +18451,28 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             ? tg_gui_session_hidden_count(chat->peer_id_hi,
                                                           chat->peer_id_lo)
                             : 0UL;
+                        state->ctx_msg = -1;
+                        state->ctx_msg_id = 0UL;
+                        state->ctx_visible = 1;
+                        state->ctx_x = hx;
+                        state->ctx_y = hy;
+                        state->ctx_hover = -1;
+                        state->ctx_w = tg_gui_context_menu_measure(state,
+                                                                   &backend);
+                        tg_gui_window_paint(state, &backend);
+                    } else if (hit >= 1 && hit < state->chat_count &&
+                               !state->in_search && !state->in_filter &&
+                               tg_gui_topics_listed(state)) {
+                        /* A forum topic's row: its own menu, to rename it
+                           and to close or reopen it. */
+                        state->ctx_react = 0;
+                        state->ctx_poll = 0;
+                        state->ctx_attach = 0;
+                        state->ctx_chat = 0;
+                        state->ctx_topic = state->chats[hit].index;
+                        state->ctx_topic_closed =
+                            tg_gui_session_topic_closed(state->ctx_topic) ==
+                            1;
                         state->ctx_msg = -1;
                         state->ctx_msg_id = 0UL;
                         state->ctx_visible = 1;
@@ -18293,6 +18499,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->ctx_poll = 0;
                             state->ctx_attach = 0;
                             state->ctx_chat = 0;
+                            state->ctx_topic = 0UL;
                             state->ctx_msg = mi;
                             state->ctx_msg_id = state->messages[mi].id;
                             /* "Message <name>", where there is someone. */
@@ -18394,11 +18601,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     /* The menu listed a poll's answers (it is closed, or
                        opened again, below). */
                     int was_poll = state->ctx_poll;
+                    unsigned long menu_topic = state->ctx_topic;
 
                     state->ctx_visible = 0;
                     state->ctx_poll = 0;
                     state->ctx_attach = 0;
-                    if (ci >= 0 && ci < state->chat_count &&
+                    state->ctx_topic = 0UL;
+                    if (menu_topic != 0UL &&
+                        (it == TG_GUI_CTX_TOPIC_RENAME ||
+                         it == TG_GUI_CTX_TOPIC_CLOSE)) {
+                        tg_gui_window_topic_change(state, &ctx, &backend,
+                                                   menu_topic,
+                                                   it == TG_GUI_CTX_TOPIC_CLOSE);
+                    } else if (ci >= 0 && ci < state->chat_count &&
                         it == TG_GUI_CTX_CHAT_REMOVE) {
                         tg_gui_window_remove_chat(state, ctx.window, ci,
                                                        &backend);

@@ -7771,6 +7771,16 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         }
         return n;
     }
+    if (state->ctx_topic != 0UL && state->ctx_chat == 0 &&
+        state->ctx_msg < 0) {
+        /* A forum topic's row: its name and whether it takes messages
+           (Telegram says whether this account may change them). */
+        labels[n] = "Rename topic...";
+        ids[n++] = TG_GUI_CTX_TOPIC_RENAME;
+        labels[n] = state->ctx_topic_closed ? "Reopen topic" : "Close topic";
+        ids[n++] = TG_GUI_CTX_TOPIC_CLOSE;
+        return n;
+    }
     if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
         /* Pins belong to the main list, Saved Messages included; the
            Archive offers the way back instead. */
@@ -10843,6 +10853,38 @@ static int tg_gui_notify_menu_self_test(void)
     tg_gui_state *state = tg_gui_test_scratch_state();
     const char *labels[TG_GUI_CTX_ITEMS_MAX];
     int ids[TG_GUI_CTX_ITEMS_MAX];
+
+    /* A forum topic's row: rename, and close or reopen; the topic's id
+       does not turn a message's menu or a chat's into a topic's. */
+    state->ctx_topic = 7UL;
+    state->ctx_topic_closed = 0;
+    state->ctx_chat = 0;
+    state->ctx_msg = -1;
+    if (tg_gui_context_items(state, labels, ids) != 2 ||
+        ids[0] != TG_GUI_CTX_TOPIC_RENAME ||
+        strcmp(labels[0], "Rename topic...") != 0 ||
+        ids[1] != TG_GUI_CTX_TOPIC_CLOSE ||
+        strcmp(labels[1], "Close topic") != 0) {
+        puts("gui self-test: a topic's menu");
+        return 2;
+    }
+    state->ctx_topic_closed = 1;
+    if (tg_gui_context_items(state, labels, ids) != 2 ||
+        strcmp(labels[1], "Reopen topic") != 0) {
+        puts("gui self-test: a closed topic's menu");
+        return 2;
+    }
+    state->chat_count = 1;
+    state->ctx_chat = 1;
+    state->chats[0].index = 5UL;
+    if (tg_gui_context_items(state, labels, ids) < 3 ||
+        ids[0] == TG_GUI_CTX_TOPIC_RENAME) {
+        puts("gui self-test: a chat's menu became a topic's");
+        return 2;
+    }
+    state->ctx_topic = 0UL;
+    state->ctx_topic_closed = 0;
+    state->ctx_msg = -1;
 
     state->chat_count = 1;
     state->ctx_chat = 1;

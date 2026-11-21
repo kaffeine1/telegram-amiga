@@ -64,6 +64,20 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   files picked together: photos go through the photo dialog as an
   album, anything else as an album of files. A video goes as a file
   among them.
+- Topics of forum groups made, renamed and closed. Chats > New topic...
+  asks for a name, makes the topic in the open group and opens it; the
+  right button on a topic's row offers Rename topic... and Close topic
+  (Reopen topic when it is closed). Telegram decides who may: what it
+  refuses is said in the status line. The text client has /topic new
+  <name>, and /topic rename <name>, /topic close and /topic reopen for
+  the topic chosen. The service lines now say "closed the topic" and
+  "reopened the topic" instead of "edited the topic".
+- Drafts in forum topics. Text left in a topic stays as that topic's
+  draft, on Telegram too (it names the topic in top_msg_id, or Telegram
+  files it as the whole group's), and comes back when the topic opens
+  again, also after Amigram is started again; going to another topic
+  of the same group keeps it, as going to another chat does. In the
+  text client the "Draft:" line is the topic's chosen with /topic n.
 - Drafts in the text client. Text typed and left unsent when F1 to F10
   change chat is no longer thrown away: it is kept as that chat's draft,
   on Telegram too. A chat with a draft, made here, in the window or on

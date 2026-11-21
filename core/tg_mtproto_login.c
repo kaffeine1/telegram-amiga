@@ -1577,6 +1577,7 @@ static tg_mtproto_tl_status tg_read_draft_styles(tg_mtproto_tl_reader *reader,
                                                  int cut);
 static tg_mtproto_tl_status tg_write_input_reply_to_message(
     tg_mtproto_tl_writer *writer, unsigned long reply_to_msg_id);
+static unsigned long tg_send_topic_top(void);
 
 tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     tg_mtproto_tl_writer *writer,
@@ -1590,6 +1591,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     int has_access_hash)
 {
     tg_mtproto_tl_status status;
+    int in_topic = tg_send_topic_top() != 0UL;
 
     if (writer == 0 || message == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
@@ -1599,13 +1601,34 @@ tg_mtproto_tl_status tg_mtproto_build_messages_save_draft(
     }
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_MESSAGES_SAVE_DRAFT_CONSTRUCTOR);
+    /* In a forum topic the draft names the topic, as a message sent there
+       does: saved, or deleted (an empty text), it is that topic's. */
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(
             writer, (message[0] != '\0' && tg_send_styles_pending() ? 8UL
                                                                     : 0UL) |
-                        (reply_to != 0UL ? 16UL : 0UL));
+                        (reply_to != 0UL || in_topic ? 16UL : 0UL));
     }
-    if (status == TG_MTPROTO_TL_OK && reply_to != 0UL) {
+    if (status == TG_MTPROTO_TL_OK && in_topic) {
+        /* a topic's draft: Telegram files it under the topic only when
+           top_msg_id names it (seen live: a reply_to_msg_id of the topic
+           alone made it the chat's draft, answering the topic's first
+           message) */
+        unsigned long top = tg_send_topic_top();
+
+        status = tg_mtproto_tl_write_u32(
+            writer, TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, 1UL);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer,
+                                             reply_to != 0UL ? reply_to : top);
+        }
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, top);
+        }
+    } else if (status == TG_MTPROTO_TL_OK && reply_to != 0UL) {
         status = tg_write_input_reply_to_message(writer, reply_to);
     }
     if (status == TG_MTPROTO_TL_OK) {
@@ -1907,18 +1930,44 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     unsigned long *date,
     unsigned long *reply_to)
 {
+    unsigned long topic = 0UL;
+    tg_mtproto_tl_status status = tg_mtproto_read_update_draft_topic(
+        reader, peer, has_text, text, text_size, was_cut, date, reply_to,
+        &topic);
+
+    /* this reader's callers keep a whole chat's drafts only */
+    return status == TG_MTPROTO_TL_OK && topic != 0UL
+               ? TG_MTPROTO_TL_INVALID_DATA : status;
+}
+
+/* The same, a forum topic's draft too: *topic_id gets its topic
+   (top_msg_id, flags.0), 0 for a whole chat's. A Saved Messages
+   sub-chat's draft (saved_peer_id, flags.1) still fails. */
+tg_mtproto_tl_status tg_mtproto_read_update_draft_topic(
+    tg_mtproto_tl_reader *reader,
+    tg_mtproto_dialog_peer *peer,
+    int *has_text,
+    char *text,
+    unsigned long text_size,
+    int *was_cut,
+    unsigned long *date,
+    unsigned long *reply_to,
+    unsigned long *topic_id)
+{
     unsigned long flags;
     unsigned long constructor;
     unsigned long scratch;
     unsigned long reply = 0UL;
+    unsigned long top = 0UL;
     int cut = 0;
 
     if (reader == 0 || peer == 0 || has_text == 0 || text == 0 ||
-        text_size == 0UL || date == 0) {
+        text_size == 0UL || date == 0 || topic_id == 0) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     *has_text = 0;
     *date = 0UL;
+    *topic_id = 0UL;
     if (reply_to != 0) {
         *reply_to = 0UL;
     }
@@ -1928,12 +1977,16 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     }
     memset(peer, 0, sizeof(*peer));
     if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-        flags != 0UL || /* a topic's or a Saved Messages sub-chat's draft */
+        (flags & ~1UL) != 0UL || /* a Saved Messages sub-chat's draft */
         tg_read_peer_ref(reader, peer) != TG_MTPROTO_TL_OK ||
+        ((flags & 1UL) != 0UL &&
+         (tg_mtproto_tl_read_u32(reader, &top) != TG_MTPROTO_TL_OK ||
+          top == 0UL)) ||
         tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    *topic_id = top;
     if (constructor == TG_DRAFT_MESSAGE_EMPTY_CONSTRUCTOR) {
         if ((flags & ~1UL) != 0UL) {
             return TG_MTPROTO_TL_INVALID_DATA;
@@ -7427,6 +7480,106 @@ tg_mtproto_tl_status tg_mtproto_build_channels_get_forum_topics(
     return status;
 }
 
+/* channels.createForumTopic#f40c0224 flags:# channel:InputChannel
+   title:string icon_color:flags.0?int icon_emoji_id:flags.3?long
+   random_id:long send_as:flags.2?InputPeer = Updates (layer 214): a new
+   topic with Telegram's own colour. The answer's updateMessageID names the
+   message that opens it, whose id is the topic's. */
+#define TG_CHANNELS_CREATE_FORUM_TOPIC_CONSTRUCTOR 0xf40c0224UL
+/* channels.editForumTopic#f4dfa185 flags:# channel:InputChannel
+   topic_id:int title:flags.0?string icon_emoji_id:flags.1?long
+   closed:flags.2?Bool hidden:flags.3?Bool = Updates (layer 214). */
+#define TG_CHANNELS_EDIT_FORUM_TOPIC_CONSTRUCTOR 0xf4dfa185UL
+
+tg_mtproto_tl_status tg_mtproto_build_channels_create_forum_topic(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const char *title,
+    unsigned long random_hi,
+    unsigned long random_lo)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || title == 0 || title[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_CHANNELS_CREATE_FORUM_TOPIC_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* flags */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_CHANNEL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, channel_id_hi, channel_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi, access_hash_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, title);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, random_hi, random_lo);
+    }
+    return status;
+}
+
+/* title 0 keeps the name; closed -1 keeps the state, 0 opens, 1 closes. */
+tg_mtproto_tl_status tg_mtproto_build_channels_edit_forum_topic(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long topic_id,
+    const char *title,
+    int closed)
+{
+    tg_mtproto_tl_status status;
+    unsigned long flags = 0UL;
+
+    if (writer == 0 || topic_id == 0UL ||
+        (title != 0 && title[0] == '\0') || (title == 0 && closed < 0)) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    if (title != 0) {
+        flags |= 1UL;
+    }
+    if (closed >= 0) {
+        flags |= 4UL;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_CHANNELS_EDIT_FORUM_TOPIC_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, flags);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_CHANNEL_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, channel_id_hi, channel_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi, access_hash_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, topic_id);
+    }
+    if (status == TG_MTPROTO_TL_OK && title != 0) {
+        status = tg_write_string(writer, title);
+    }
+    if (status == TG_MTPROTO_TL_OK && closed >= 0) {
+        status = tg_mtproto_tl_write_u32(writer, closed ? 0x997275b5UL
+                                                        : 0xbc799737UL);
+    }
+    return status;
+}
+
 tg_mtproto_tl_status tg_mtproto_build_messages_get_replies_peer_at(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -8250,6 +8403,7 @@ static tg_mtproto_tl_status tg_read_message_action(
     case TG_ACTION_TOPIC_EDIT:
         /* flags:# title:flags.0?string icon_emoji_id:flags.1?long
            closed:flags.2?Bool hidden:flags.3?Bool */
+        out->service_value = 0UL;
         status = tg_mtproto_tl_read_u32(reader, &out->service_flags);
         if (status == TG_MTPROTO_TL_OK && (out->service_flags & 1UL) != 0UL) {
             status = tg_read_string_copy(reader, out->text, sizeof(out->text));
@@ -8257,11 +8411,18 @@ static tg_mtproto_tl_status tg_read_message_action(
         if (status == TG_MTPROTO_TL_OK && (out->service_flags & 2UL) != 0UL) {
             status = tg_mtproto_tl_read_u64(reader, &hi, &lo);
         }
+        /* service_value: 1 closed, 2 open again; 4 hidden, 8 shown */
         if (status == TG_MTPROTO_TL_OK && (out->service_flags & 4UL) != 0UL) {
-            status = tg_skip_bool(reader);
+            status = tg_mtproto_tl_read_u32(reader, &scratch);
+            if (status == TG_MTPROTO_TL_OK) {
+                out->service_value |= scratch == 0x997275b5UL ? 1UL : 2UL;
+            }
         }
         if (status == TG_MTPROTO_TL_OK && (out->service_flags & 8UL) != 0UL) {
-            status = tg_skip_bool(reader);
+            status = tg_mtproto_tl_read_u32(reader, &scratch);
+            if (status == TG_MTPROTO_TL_OK) {
+                out->service_value |= scratch == 0x997275b5UL ? 4UL : 8UL;
+            }
         }
         break;
     case TG_ACTION_BOOST_APPLY:
@@ -11273,6 +11434,14 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
             TG_SERVICE_PUT(" renamed the topic to \"");
             TG_SERVICE_PUT(message->text);
             TG_SERVICE_PUT("\"");
+        } else if ((message->service_value & 1UL) != 0UL) {
+            TG_SERVICE_PUT(" closed the topic");
+        } else if ((message->service_value & 2UL) != 0UL) {
+            TG_SERVICE_PUT(" reopened the topic");
+        } else if ((message->service_value & 4UL) != 0UL) {
+            TG_SERVICE_PUT(" hid the topic");
+        } else if ((message->service_value & 8UL) != 0UL) {
+            TG_SERVICE_PUT(" showed the topic again");
         } else {
             TG_SERVICE_PUT(" edited the topic");
         }
@@ -11847,6 +12016,40 @@ static int tg_service_message_self_test(void)
         !tg_service_line_case(&list.messages[3], 0, 0, 0,
                               "Someone sent a gift")) {
         return 2;
+    }
+    /* A topic closed and opened again: the action's Bool is read, and the
+       line says which (it used to say "edited the topic" for both). */
+    {
+        unsigned char act[16];
+        tg_mtproto_tl_writer aw;
+        tg_mtproto_tl_reader ar;
+        int complete = 0;
+
+        memset(&m, 0, sizeof(m));
+        tg_mtproto_tl_writer_init(&aw, act, sizeof(act));
+        (void)tg_mtproto_tl_write_u32(&aw, TG_ACTION_TOPIC_EDIT);
+        (void)tg_mtproto_tl_write_u32(&aw, 4UL);
+        (void)tg_mtproto_tl_write_u32(&aw, 0x997275b5UL);
+        tg_mtproto_tl_reader_init(&ar, act, aw.length);
+        if (tg_read_message_action(&ar, &m, &complete) != TG_MTPROTO_TL_OK ||
+            m.service_value != 1UL || ar.offset != aw.length ||
+            !tg_service_line_case(&m, "Anna", 0, 0,
+                                  "Anna closed the topic")) {
+            puts("login self-test: a closed topic's line");
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&aw, act, sizeof(act));
+        (void)tg_mtproto_tl_write_u32(&aw, TG_ACTION_TOPIC_EDIT);
+        (void)tg_mtproto_tl_write_u32(&aw, 4UL);
+        (void)tg_mtproto_tl_write_u32(&aw, 0xbc799737UL);
+        tg_mtproto_tl_reader_init(&ar, act, aw.length);
+        if (tg_read_message_action(&ar, &m, &complete) != TG_MTPROTO_TL_OK ||
+            m.service_value != 2UL ||
+            !tg_service_line_case(&m, "Anna", 0, 0,
+                                  "Anna reopened the topic")) {
+            puts("login self-test: a reopened topic's line");
+            return 2;
+        }
     }
     memset(&m, 0, sizeof(m));
     m.from_constructor = TG_PEER_USER_CONSTRUCTOR;
@@ -13211,6 +13414,63 @@ static int tg_forum_self_test(void)
         w.length != 44UL || memcmp(rpc, want_topics, sizeof(want_topics)) != 0 ||
         tg_read_u32_le(rpc + 40) != 30UL || tg_read_u32_le(rpc + 28) != 0UL) {
         puts("login self-test: channels.getForumTopics layout");
+        return 2;
+    }
+    /* channels.createForumTopic: flags 0, the channel, the title, the
+       random id; and an empty title is refused */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_channels_create_forum_topic(
+            &w, 0UL, 0x1234UL, 0UL, 0x5678UL, "Tre", 0x11UL, 0x22UL) !=
+            TG_MTPROTO_TL_OK ||
+        w.length != 40UL || tg_read_u32_le(rpc) != 0xf40c0224UL ||
+        tg_read_u32_le(rpc + 4) != 0UL ||
+        tg_read_u32_le(rpc + 8) != TG_INPUT_CHANNEL_CONSTRUCTOR ||
+        tg_read_u32_le(rpc + 12) != 0x1234UL ||
+        tg_read_u32_le(rpc + 20) != 0x5678UL || rpc[28] != 3U ||
+        memcmp(rpc + 29, "Tre", 3U) != 0 ||
+        tg_read_u32_le(rpc + 32) != 0x22UL ||
+        tg_read_u32_le(rpc + 36) != 0x11UL) {
+        puts("login self-test: channels.createForumTopic layout");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_channels_create_forum_topic(
+            &w, 0UL, 0x1234UL, 0UL, 0x5678UL, "", 1UL, 2UL) ==
+        TG_MTPROTO_TL_OK) {
+        puts("login self-test: a topic without a name was built");
+        return 2;
+    }
+    /* channels.editForumTopic: a new name (flags.0), then closing only
+       (flags.2, boolTrue), then reopening (boolFalse) */
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_channels_edit_forum_topic(
+            &w, 0UL, 0x1234UL, 0UL, 0x5678UL, 77UL, "Nuovo", -1) !=
+            TG_MTPROTO_TL_OK ||
+        w.length != 40UL || tg_read_u32_le(rpc) != 0xf4dfa185UL ||
+        tg_read_u32_le(rpc + 4) != 1UL ||
+        tg_read_u32_le(rpc + 28) != 77UL || rpc[32] != 5U ||
+        memcmp(rpc + 33, "Nuovo", 5U) != 0) {
+        puts("login self-test: channels.editForumTopic rename layout");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_channels_edit_forum_topic(
+            &w, 0UL, 0x1234UL, 0UL, 0x5678UL, 77UL, 0, 1) !=
+            TG_MTPROTO_TL_OK ||
+        w.length != 36UL || tg_read_u32_le(rpc + 4) != 4UL ||
+        tg_read_u32_le(rpc + 32) != 0x997275b5UL) {
+        puts("login self-test: channels.editForumTopic close layout");
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&w, rpc, sizeof(rpc));
+    if (tg_mtproto_build_channels_edit_forum_topic(
+            &w, 0UL, 0x1234UL, 0UL, 0x5678UL, 77UL, 0, 0) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(rpc + 32) != 0xbc799737UL ||
+        tg_mtproto_build_channels_edit_forum_topic(
+            &w, 0UL, 0x1234UL, 0UL, 0x5678UL, 77UL, 0, -1) ==
+            TG_MTPROTO_TL_OK) {
+        puts("login self-test: channels.editForumTopic reopen layout");
         return 2;
     }
     /* messages.getReplies: the topic, then getHistory's fields */
@@ -16621,6 +16881,59 @@ int tg_mtproto_login_self_test(void)
                 pw.length != 28UL || pin_query[4] != 0x00U) {
                 return 2;
             }
+            /* In forum topic 40: a draft names the topic in top_msg_id
+               (flags.4, then inputReplyToMessage flags.0: reply_to_msg_id
+               40, top_msg_id 40); one that answers message 55 there names
+               55 and the topic; a deleted one still names the topic.
+               General (1) is the whole chat. */
+            tg_mtproto_send_set_topic(40UL);
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "ciao", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                pw.length != 44UL || tg_read_u32_le(pin_query + 4) != 16UL ||
+                tg_read_u32_le(pin_query + 8) !=
+                    TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR ||
+                tg_read_u32_le(pin_query + 12) != 1UL ||
+                tg_read_u32_le(pin_query + 16) != 40UL ||
+                tg_read_u32_le(pin_query + 20) != 40UL) {
+                tg_mtproto_send_set_topic(0UL);
+                puts("login self-test: a topic's draft");
+                return 2;
+            }
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "ciao", 55UL, TG_PEER_CHAT_CONSTRUCTOR,
+                    0x01020304UL, 0x05060708UL, 0UL, 0UL, 0) !=
+                    TG_MTPROTO_TL_OK ||
+                pw.length != 44UL || tg_read_u32_le(pin_query + 12) != 1UL ||
+                tg_read_u32_le(pin_query + 16) != 55UL ||
+                tg_read_u32_le(pin_query + 20) != 40UL) {
+                tg_mtproto_send_set_topic(0UL);
+                puts("login self-test: a topic's draft that replies");
+                return 2;
+            }
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "", 55UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                tg_read_u32_le(pin_query + 4) != 16UL ||
+                tg_read_u32_le(pin_query + 20) != 40UL) {
+                tg_mtproto_send_set_topic(0UL);
+                puts("login self-test: a topic's draft deleted");
+                return 2;
+            }
+            tg_mtproto_send_set_topic(1UL);
+            tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
+            if (tg_mtproto_build_messages_save_draft(
+                    &pw, "ciao", 0UL, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL,
+                    0x05060708UL, 0UL, 0UL, 0) != TG_MTPROTO_TL_OK ||
+                pw.length != 28UL || pin_query[4] != 0x00U) {
+                tg_mtproto_send_set_topic(0UL);
+                puts("login self-test: General's draft named a topic");
+                return 2;
+            }
+            tg_mtproto_send_set_topic(0UL);
         }
         tg_mtproto_tl_writer_init(&pw, pin_query, sizeof(pin_query));
         if (tg_mtproto_build_messages_get_all_drafts(&pw) !=
@@ -16906,6 +17219,41 @@ int tg_mtproto_login_self_test(void)
                 up.peer_constructor != TG_PEER_USER_CONSTRUCTOR ||
                 up.id_lo != 77UL) {
                 return 2;
+            }
+            /* A forum topic's draft (flags.0, top_msg_id 40): the topic
+               reader gives the topic, the plain reader leaves it alone. */
+            {
+                unsigned long topic = 0UL;
+
+                tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
+                (void)tg_mtproto_tl_write_u32(&uw, 1UL);
+                (void)tg_mtproto_tl_write_u32(&uw,
+                                              TG_PEER_CHANNEL_CONSTRUCTOR);
+                (void)tg_mtproto_tl_write_u64(&uw, 0UL, 88UL);
+                (void)tg_mtproto_tl_write_u32(&uw, 40UL);
+                (void)tg_mtproto_tl_write_u32(&uw,
+                                              TG_DRAFT_MESSAGE_CONSTRUCTOR);
+                (void)tg_mtproto_tl_write_u32(&uw, 0UL);
+                (void)tg_write_string(&uw, "nel topic");
+                (void)tg_mtproto_tl_write_u32(&uw, 1700000000UL);
+                tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+                if (tg_mtproto_read_update_draft_topic(
+                        &ur, &up, &has, ut, sizeof(ut), &cut, &when, &reply,
+                        &topic) != TG_MTPROTO_TL_OK ||
+                    topic != 40UL || !has || up.id_lo != 88UL ||
+                    strncmp(ut, "nel top", 7U) != 0) {
+                    puts("login self-test: a topic's draft read");
+                    return 2;
+                }
+                tg_mtproto_tl_reader_init(&ur, ub, uw.length);
+                if (tg_mtproto_read_update_draft(&ur, &up, &has, ut,
+                                                 sizeof(ut), &cut, &when,
+                                                 &reply) ==
+                    TG_MTPROTO_TL_OK) {
+                    puts("login self-test: a topic's draft taken as the "
+                         "chat's");
+                    return 2;
+                }
             }
             tg_mtproto_tl_writer_init(&uw, ub, sizeof(ub));
             if (tg_mtproto_tl_write_u32(&uw, 0UL) != TG_MTPROTO_TL_OK ||

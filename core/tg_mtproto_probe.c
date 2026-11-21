@@ -577,9 +577,9 @@ static int tg_chat_sent_named_mention = 0;
 /* A draft written, changed or deleted on another device: the window's
    session keeps it (defined with the drafts, further down). */
 #if !defined(TG_NO_GUI)
-static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
-                                const char *utf8, unsigned long date,
-                                unsigned long reply_to);
+static void tg_gui_draft_ingest_t(const tg_mtproto_dialog_peer *peer,
+                                  const char *utf8, unsigned long date,
+                                  unsigned long reply_to, unsigned long topic);
 /* A message was pinned or unpinned in this chat: the window's session asks
    again what the chat's pinned message is (defined with it, further down). */
 static void tg_gui_pinned_note_update(unsigned long peer_constructor,
@@ -4583,6 +4583,7 @@ typedef struct tg_chat_draft {
     unsigned long peer_constructor;
     unsigned long id_hi;
     unsigned long id_lo;
+    unsigned long topic; /* a forum topic's (not General), 0 = the chat */
     char text[TG_CHAT_DRAFT_TEXT]; /* UTF-8 */
 } tg_chat_draft;
 static tg_chat_draft tg_chat_drafts[TG_CHAT_DRAFTS_MAX];
@@ -4596,15 +4597,25 @@ static unsigned long tg_chat_self_lo = 0UL;
    next dispatch keeps it as the draft of the chat being left. */
 static char tg_chat_left_text[TG_CHAT_LEFT_MAX + 1U];
 
+/* The key of the text client's open chat: the forum topic chosen with
+   /topic n, General and none being the chat itself. */
+static unsigned long tg_chat_draft_topic_now(void)
+{
+    return tg_mtproto_history_topic_id > TG_MTPROTO_TOPIC_GENERAL
+               ? tg_mtproto_history_topic_id : 0UL;
+}
+
 static int tg_chat_draft_find(unsigned long peer_constructor,
-                              unsigned long id_hi, unsigned long id_lo)
+                              unsigned long id_hi, unsigned long id_lo,
+                              unsigned long topic)
 {
     int i;
 
     for (i = 0; i < tg_chat_draft_count; ++i) {
         if (tg_chat_drafts[i].peer_constructor == peer_constructor &&
             tg_chat_drafts[i].id_hi == id_hi &&
-            tg_chat_drafts[i].id_lo == id_lo) {
+            tg_chat_drafts[i].id_lo == id_lo &&
+            tg_chat_drafts[i].topic == topic) {
             return i;
         }
     }
@@ -4615,9 +4626,9 @@ static int tg_chat_draft_find(unsigned long peer_constructor,
    go. The text is cut on a character, never inside one. */
 static void tg_chat_draft_set(unsigned long peer_constructor,
                               unsigned long id_hi, unsigned long id_lo,
-                              const char *utf8)
+                              unsigned long topic, const char *utf8)
 {
-    int at = tg_chat_draft_find(peer_constructor, id_hi, id_lo);
+    int at = tg_chat_draft_find(peer_constructor, id_hi, id_lo, topic);
     unsigned long n;
 
     if (utf8 == 0 || utf8[0] == '\0') {
@@ -4640,6 +4651,7 @@ static void tg_chat_draft_set(unsigned long peer_constructor,
         tg_chat_drafts[at].peer_constructor = peer_constructor;
         tg_chat_drafts[at].id_hi = id_hi;
         tg_chat_drafts[at].id_lo = id_lo;
+        tg_chat_drafts[at].topic = topic;
     }
     n = (unsigned long)strlen(utf8);
     if (n >= sizeof(tg_chat_drafts[at].text)) {
@@ -4656,17 +4668,18 @@ static void tg_chat_draft_set(unsigned long peer_constructor,
 /* The draft of a chat as the text client names it: Saved Messages (the
    self chat) under either of its two keys. -1 = none. */
 static int tg_chat_draft_find_chat(unsigned long peer_constructor,
-                                   unsigned long id_hi, unsigned long id_lo)
+                                   unsigned long id_hi, unsigned long id_lo,
+                                   unsigned long topic)
 {
     int at;
 
     if (peer_constructor != TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
-        return tg_chat_draft_find(peer_constructor, id_hi, id_lo);
+        return tg_chat_draft_find(peer_constructor, id_hi, id_lo, topic);
     }
-    at = tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL);
+    at = tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, topic);
     if (at < 0 && tg_chat_self_known) {
         at = tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
-                                tg_chat_self_hi, tg_chat_self_lo);
+                                tg_chat_self_hi, tg_chat_self_lo, topic);
     }
     return at;
 }
@@ -4675,20 +4688,20 @@ static int tg_chat_draft_find_chat(unsigned long peer_constructor,
    is known, its other key dropped. */
 static void tg_chat_draft_set_chat(unsigned long peer_constructor,
                                    unsigned long id_hi, unsigned long id_lo,
-                                   const char *utf8)
+                                   unsigned long topic, const char *utf8)
 {
     if (peer_constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
         if (tg_chat_self_known) {
-            tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "");
+            tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, topic, "");
             tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR,
-                              tg_chat_self_hi, tg_chat_self_lo, utf8);
+                              tg_chat_self_hi, tg_chat_self_lo, topic, utf8);
         } else {
-            tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL,
+            tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, topic,
                               utf8);
         }
         return;
     }
-    tg_chat_draft_set(peer_constructor, id_hi, id_lo, utf8);
+    tg_chat_draft_set(peer_constructor, id_hi, id_lo, topic, utf8);
 }
 
 /* A text cut to a buffer may end inside a character: that character goes. */
@@ -4727,13 +4740,17 @@ static void tg_chat_draft_take_update(tg_mtproto_tl_reader *reader)
     static char utf8[TG_CHAT_DRAFT_TEXT];
     tg_mtproto_dialog_peer peer;
     unsigned long date;
+    unsigned long topic;
     int has_text;
     int cut;
 
-    if (tg_mtproto_read_update_draft(reader, &peer, &has_text, utf8,
-                                     sizeof(utf8), &cut, &date, 0) !=
-        TG_MTPROTO_TL_OK) {
+    if (tg_mtproto_read_update_draft_topic(reader, &peer, &has_text, utf8,
+                                           sizeof(utf8), &cut, &date, 0,
+                                           &topic) != TG_MTPROTO_TL_OK) {
         return;
+    }
+    if (topic <= TG_MTPROTO_TOPIC_GENERAL) {
+        topic = 0UL; /* General's draft is the chat's */
     }
     if (cut) {
         tg_chat_utf8_trim_partial(utf8); /* never half a character */
@@ -4741,9 +4758,9 @@ static void tg_chat_draft_take_update(tg_mtproto_tl_reader *reader)
     if (peer.peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
         tg_chat_self_known && peer.id_hi == tg_chat_self_hi &&
         peer.id_lo == tg_chat_self_lo) {
-        tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "");
+        tg_chat_draft_set(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, topic, "");
     }
-    tg_chat_draft_set(peer.peer_constructor, peer.id_hi, peer.id_lo,
+    tg_chat_draft_set(peer.peer_constructor, peer.id_hi, peer.id_lo, topic,
                       has_text ? utf8 : "");
 }
 
@@ -4765,17 +4782,19 @@ static void tg_chat_draft_parse_update(tg_mtproto_tl_reader *reader)
     tg_mtproto_dialog_peer peer;
     unsigned long date;
     unsigned long reply_to;
+    unsigned long topic;
     int has_text;
 
     if (tg_chat_delete_target == 0) {
         return; /* no window session: nobody shows a draft */
     }
-    if (tg_mtproto_read_update_draft(reader, &peer, &has_text, utf8,
-                                     sizeof(utf8), 0, &date, &reply_to) !=
-        TG_MTPROTO_TL_OK) {
+    if (tg_mtproto_read_update_draft_topic(reader, &peer, &has_text, utf8,
+                                           sizeof(utf8), 0, &date, &reply_to,
+                                           &topic) != TG_MTPROTO_TL_OK) {
         return;
     }
-    tg_gui_draft_ingest(&peer, has_text ? utf8 : "", date, reply_to);
+    tg_gui_draft_ingest_t(&peer, has_text ? utf8 : "", date, reply_to,
+                          topic);
 #endif
 }
 
@@ -16995,6 +17014,7 @@ static const char *const tg_chat_help_lines[] = {
     "  /voters         who voted in that poll, when its votes are public",
     "  /topics         the topics of this group, when it is a forum",
     "  /topic n        only topic n of that list; /topic alone: all again",
+    "  /topic new x    a new topic x; rename x, close, reopen: the chosen one",
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
     "Support my work on Patreon: www.patreon.com/c/kaffeine1",
@@ -17695,6 +17715,206 @@ static int tg_mtproto_tui_apply_webpages(FILE *stream)
     return dirty;
 }
 
+/* A forum topic made (create, title in UTF-8) or changed (title 0 keeps
+   the name; closed -1 keeps the state, 0 opens, 1 closes) on Telegram,
+   on the given connection, for the window and the text client alike.
+   0 = done (*new_id the topic made, from the answer's updateMessageID),
+   1 = Telegram refused (its reason in why), 2 = no answer. */
+static int tg_forum_topic_request(const char *host, const char *port,
+                                  const char *api_id, const char *auth_file,
+                                  const char *dc_id_text,
+                                  tg_mtproto_auth_context *context,
+                                  unsigned long ph, unsigned long pl,
+                                  unsigned long ahh, unsigned long ahl,
+                                  int create, unsigned long topic_id,
+                                  const char *title, int closed,
+                                  unsigned long *new_id, char *why,
+                                  unsigned long why_size, FILE *quiet)
+{
+    unsigned char query[640];
+    unsigned char random_id[8];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    static const char label[] = "mtproto forum topic";
+
+    if (new_id != 0) {
+        *new_id = 0UL;
+    }
+    if (why != 0 && why_size > 0UL) {
+        why[0] = '\0';
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (create) {
+        tg_mtproto_saved_session_random(random_id, sizeof(random_id));
+        if (tg_mtproto_build_channels_create_forum_topic(
+                &writer, ph, pl, ahh, ahl, title,
+                tg_mtproto_read_u32_le(random_id + 4U),
+                tg_mtproto_read_u32_le(random_id)) != TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+    } else if (tg_mtproto_build_channels_edit_forum_topic(
+                   &writer, ph, pl, ahh, ahl, topic_id, title, closed) !=
+               TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    if (tg_mtproto_send_saved_query_on_context(
+            host, port, api_id, auth_file, dc_id_text, context, query,
+            writer.length, &result, quiet, label, 200U) != 0) {
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+        char text[48];
+
+        text[0] = '\0';
+        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                         result.result_body_length + 4U,
+                                         &ecode, text, sizeof(text));
+        if (why != 0 && why_size > 0UL) {
+            sprintf(why, "%.*s", (int)(why_size - 1UL), text);
+        }
+        return 1;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        return create ? 2 : 0; /* edited, even if the answer is unread */
+    }
+    if (create && new_id != 0) {
+        tg_mtproto_updates_summary summary;
+
+        if (tg_mtproto_parse_updates_summary(result.result_constructor,
+                                             result.result_body,
+                                             result.result_body_length,
+                                             &summary) == TG_MTPROTO_TL_OK &&
+            summary.has_sent_message) {
+            *new_id = summary.id;
+        }
+    }
+    return 0;
+}
+
+/* /topic new <name>, /topic rename <name>, /topic close, /topic reopen in
+   the text client: the open forum's topics made and changed. rename,
+   close and reopen act on the topic chosen with /topic n; new makes one
+   and goes into it. Returns 1 when the argument was one of these (done or
+   refused, and said), 0 when it is something else (a topic number). */
+static int tg_chat_topic_command(const char *arg, const char *host,
+                                 const char *port, const char *api_id,
+                                 const char *auth_file, const char *dc_id_text,
+                                 tg_mtproto_auth_context *context,
+                                 const char *peer_cache_file,
+                                 const char *peer_index, FILE *stream)
+{
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char utf8[(TG_MTPROTO_TOPIC_TITLE_MAX * 2U) + 1U];
+#endif
+    const char *title = 0;
+    int create = 0;
+    int closed = -1;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long new_id = 0UL;
+    unsigned long k;
+    int hah;
+    int rc;
+    char why[48];
+    char line[160];
+    FILE *quiet;
+
+    if (arg == 0) {
+        return 0;
+    }
+    if (strncmp(arg, "new", 3) == 0 && (arg[3] == ' ' || arg[3] == '\0')) {
+        create = 1;
+        title = arg + 3;
+    } else if (strncmp(arg, "rename", 6) == 0 &&
+               (arg[6] == ' ' || arg[6] == '\0')) {
+        title = arg + 6;
+    } else if (strcmp(arg, "close") == 0) {
+        closed = 1;
+    } else if (strcmp(arg, "reopen") == 0) {
+        closed = 0;
+    } else {
+        return 0;
+    }
+    if (title != 0) {
+        while (*title == ' ' || *title == '\t') {
+            ++title;
+        }
+        if (title[0] == '\0') {
+            tg_mtproto_chat_print_system_line(
+                stream, create ? "Usage: /topic new <name>"
+                               : "Usage: /topic rename <name>");
+            return 1;
+        }
+    }
+    if (!create && (tg_mtproto_history_topic_id == 0UL ||
+                    strcmp(tg_chat_topic_peer, peer_index) != 0)) {
+        tg_mtproto_chat_print_system_line(
+            stream, "Choose the topic first with /topic and its number.");
+        return 1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc, &ph,
+                                        &pl, &ahh, &ahl, &hah, quiet,
+                                        "topic") != 0 ||
+        pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR || !hah) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        tg_mtproto_chat_print_system_line(stream, "This chat has no topics.");
+        return 1;
+    }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (title != 0 && tg_mtproto_latin1_to_utf8(title, utf8, sizeof(utf8))) {
+        title = utf8;
+    }
+#endif
+    rc = tg_forum_topic_request(host, port, api_id, auth_file, dc_id_text,
+                                context, ph, pl, ahh, ahl, create,
+                                tg_mtproto_history_topic_id, title, closed,
+                                &new_id, why, sizeof(why), quiet);
+    if (rc == 0) {
+        /* the list again: the new name, the closed mark, the new topic */
+        (void)tg_mtproto_chat_fetch_topics_on_context(
+            host, port, api_id, auth_file, dc_id_text, context,
+            peer_cache_file, peer_index, quiet);
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 1) {
+        sprintf(line, "Telegram refused: %.48s", why);
+        tg_mtproto_chat_print_system_line(stream, line);
+        return 1;
+    }
+    if (rc != 0) {
+        tg_mtproto_chat_print_system_line(
+            stream, "No answer from Telegram. Try again.");
+        return 1;
+    }
+    if (create) {
+        if (new_id != 0UL) {
+            tg_mtproto_history_topic_id = new_id;
+            tg_mtproto_send_set_topic(new_id);
+        }
+        for (k = 0UL; k < tg_chat_topics.count; ++k) {
+            if (tg_chat_topics.topics[k].id == new_id) {
+                sprintf(line, "Topic made, number %lu: what you write goes "
+                              "there.", k + 1UL);
+                tg_mtproto_chat_print_system_line(stream, line);
+                return 1;
+            }
+        }
+        tg_mtproto_chat_print_system_line(stream, "Topic made.");
+        return 1;
+    }
+    tg_mtproto_chat_print_system_line(
+        stream, title != 0 ? "Topic renamed."
+                : closed ? "Topic closed: only admins can write in it."
+                         : "Topic open again.");
+    return 1;
+}
+
 /* messages.getAllDrafts on the text client's connection: the table from
    the answer, which is the whole truth (a draft deleted elsewhere is not in
    it). Asked when the first chat opens, not before the prompt. */
@@ -17775,12 +17995,12 @@ static void tg_chat_learn_self(const char *host, const char *port,
         tg_chat_self_known = 1;
         /* a draft kept here under the self chat moves to the own user */
         alias = tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL,
-                                   0UL);
+                                   0UL, 0UL);
         if (alias >= 0) {
             static char text[TG_CHAT_DRAFT_TEXT];
 
             strcpy(text, tg_chat_drafts[alias].text);
-            tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL,
+            tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL,
                                    text);
         }
     }
@@ -17788,7 +18008,8 @@ static void tg_chat_learn_self(const char *host, const char *port,
 
 /* The half-typed line a function key left, kept as the draft of the chat
    being left, on Telegram (messages.saveDraft) and here, with a line that
-   says so. Not in a forum topic, whose drafts are not kept yet. */
+   says so. In a forum topic the draft is that topic's: saveDraft names the
+   topic sends go to, the one chosen with /topic n. */
 static void tg_chat_draft_keep_left(const char *host, const char *port,
                                     const char *api_id, const char *auth_file,
                                     const char *dc_id_text,
@@ -17819,7 +18040,6 @@ static void tg_chat_draft_keep_left(const char *host, const char *port,
         return;
     }
     if (peer_index == 0 || peer_index[0] == '\0' ||
-        tg_mtproto_history_topic_id != 0UL ||
         tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc, &ph,
                                         &pl, &ahh, &ahl, &hah, quiet,
                                         label) != 0) {
@@ -17843,7 +18063,7 @@ static void tg_chat_draft_keep_left(const char *host, const char *port,
              result.result_constructor != TG_MTPROTO_RPC_ERROR_CONSTRUCTOR;
     }
     if (ok) {
-        tg_chat_draft_set_chat(pc, ph, pl, text);
+        tg_chat_draft_set_chat(pc, ph, pl, tg_chat_draft_topic_now(), text);
     }
     tui_cap = tg_console_tui_capture_begin(stream);
     tg_console_ui_role(tui_cap, TG_UI_ROLE_SYSTEM);
@@ -17885,7 +18105,7 @@ static void tg_chat_draft_show(const char *host, const char *port,
                              context, quiet);
     }
     if (tg_chat_draft_count == 0 || peer_index == 0 ||
-        peer_index[0] == '\0' || tg_mtproto_history_topic_id != 0UL ||
+        peer_index[0] == '\0' ||
         tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, &pc, &ph,
                                         &pl, &ahh, &ahl, &hah, quiet,
                                         label) != 0) {
@@ -17902,7 +18122,7 @@ static void tg_chat_draft_show(const char *host, const char *port,
             }
         }
     }
-    at = tg_chat_draft_find_chat(pc, ph, pl);
+    at = tg_chat_draft_find_chat(pc, ph, pl, tg_chat_draft_topic_now());
     if (at < 0) {
         return;
     }
@@ -17927,13 +18147,13 @@ static int tg_chat_draft_of_index(const char *peer_cache_file,
     int hah;
     static const char label[] = "draft";
 
-    if (tg_chat_draft_count == 0 || tg_mtproto_history_topic_id != 0UL ||
+    if (tg_chat_draft_count == 0 ||
         tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index, pc, ph,
                                         pl, &ahh, &ahl, &hah, quiet,
                                         label) != 0) {
         return 0;
     }
-    return tg_chat_draft_find_chat(*pc, *ph, *pl) >= 0;
+    return tg_chat_draft_find_chat(*pc, *ph, *pl, tg_chat_draft_topic_now()) >= 0;
 }
 
 int tg_mtproto_auth_chat_file(const char *host,
@@ -18715,6 +18935,16 @@ int tg_mtproto_auth_chat_file(const char *host,
                 tg_mtproto_send_set_topic(0UL);
                 tg_mtproto_chat_print_system_line(
                     stream, "Every topic again: /history shows them.");
+            } else if (!listing && tg_chat_topic_command(
+                                       cmd_arg, host, port, api_id, auth_file,
+                                       dc_id_text, &chat_context,
+                                       peer_cache_file, peer_index, stream)) {
+                /* /topic new, rename, close or reopen: done and said */
+                if (tg_mtproto_history_topic_id != 0UL &&
+                    strcmp(tg_chat_topic_peer, peer_index) == 0) {
+                    last_seen_message_id = 0UL;
+                    peer_history_ready = 0; /* the topic, from the top */
+                }
             } else if (!listing &&
                        (tg_mtproto_parse_ulong_arg(cmd_arg, &n) != 0 ||
                         n == 0UL)) {
@@ -19930,7 +20160,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     &sent_message_id, quiet);
                 tg_mtproto_send_set_clear_draft(0);
                 if (rc == 0 && had_draft) {
-                    tg_chat_draft_set_chat(dpc, dph, dpl, "");
+                    tg_chat_draft_set_chat(dpc, dph, dpl, tg_chat_draft_topic_now(), "");
                 }
             }
         }
@@ -24098,6 +24328,7 @@ typedef struct tg_gui_draft {
     unsigned long id_lo;
     unsigned long date;
     unsigned long reply_to; /* the message it answers, 0 = none */
+    unsigned long topic;    /* a forum topic's (not General), 0 = the chat */
     char text[TG_GUI_MSG_TEXT_MAX];
 } tg_gui_draft;
 static tg_gui_draft tg_gui_drafts[TG_GUI_DRAFTS_MAX];
@@ -24131,55 +24362,84 @@ static void tg_gui_draft_norm(int *is_user, unsigned long *id_hi,
     }
 }
 
-static int tg_gui_draft_find(int is_user, unsigned long id_hi,
-                             unsigned long id_lo)
+/* A forum topic's drafts are kept apart from the chat's, under the
+   topic; General's are the chat's own, as Telegram keeps them. */
+static unsigned long tg_gui_draft_topic_key(unsigned long topic)
+{
+    return topic > TG_MTPROTO_TOPIC_GENERAL ? topic : 0UL;
+}
+
+static int tg_gui_draft_find_t(int is_user, unsigned long id_hi,
+                               unsigned long id_lo, unsigned long topic)
 {
     int i;
 
     is_user = is_user ? 1 : 0;
+    topic = tg_gui_draft_topic_key(topic);
     tg_gui_draft_norm(&is_user, &id_hi, &id_lo);
     for (i = 0; i < tg_gui_draft_count; ++i) {
         if (tg_gui_drafts[i].is_user == (is_user ? 1 : 0) &&
             tg_gui_drafts[i].id_hi == id_hi &&
-            tg_gui_drafts[i].id_lo == id_lo) {
+            tg_gui_drafts[i].id_lo == id_lo &&
+            tg_gui_drafts[i].topic == topic) {
             return i;
         }
     }
     return -1;
 }
 
-/* The chat's draft, or 0 when it has none. */
-static const char *tg_gui_draft_lookup(int is_user, unsigned long id_hi,
-                                       unsigned long id_lo)
+/* The chat's (or the topic's) draft, or 0 when it has none. */
+static const char *tg_gui_draft_lookup_t(int is_user, unsigned long id_hi,
+                                         unsigned long id_lo,
+                                         unsigned long topic)
 {
-    int at = tg_gui_draft_find(is_user, id_hi, id_lo);
+    int at = tg_gui_draft_find_t(is_user, id_hi, id_lo, topic);
 
     return at >= 0 ? tg_gui_drafts[at].text : 0;
 }
 
-/* The message the chat's draft answers, 0 for none. */
-static unsigned long tg_gui_draft_lookup_reply(int is_user,
-                                               unsigned long id_hi,
-                                               unsigned long id_lo)
+static const char *tg_gui_draft_lookup(int is_user, unsigned long id_hi,
+                                       unsigned long id_lo)
 {
-    int at = tg_gui_draft_find(is_user, id_hi, id_lo);
+    return tg_gui_draft_lookup_t(is_user, id_hi, id_lo, 0UL);
+}
+
+/* The message the chat's (or the topic's) draft answers, 0 for none. */
+static unsigned long tg_gui_draft_lookup_reply_t(int is_user,
+                                                 unsigned long id_hi,
+                                                 unsigned long id_lo,
+                                                 unsigned long topic)
+{
+    int at = tg_gui_draft_find_t(is_user, id_hi, id_lo, topic);
 
     return at >= 0 ? tg_gui_drafts[at].reply_to : 0UL;
 }
 
+#if !defined(TG_NO_SELFTEST)
+/* The chat's own (topic 0) as the self-tests ask for it. */
+static unsigned long tg_gui_draft_lookup_reply(int is_user,
+                                               unsigned long id_hi,
+                                               unsigned long id_lo)
+{
+    return tg_gui_draft_lookup_reply_t(is_user, id_hi, id_lo, 0UL);
+}
+#endif
+
 /* Keeps the chat's draft, or forgets it when the text is empty. When the
    table is full the oldest draft makes room: it stays on Telegram, it is
    only not shown here. 1 = something changed. */
-static int tg_gui_draft_set(int is_user, unsigned long id_hi,
-                            unsigned long id_lo, const char *text,
-                            unsigned long reply_to, unsigned long date)
+static int tg_gui_draft_set_t(int is_user, unsigned long id_hi,
+                              unsigned long id_lo, unsigned long topic,
+                              const char *text, unsigned long reply_to,
+                              unsigned long date)
 {
     int at;
     unsigned long i;
 
     is_user = is_user ? 1 : 0;
+    topic = tg_gui_draft_topic_key(topic);
     tg_gui_draft_norm(&is_user, &id_hi, &id_lo);
-    at = tg_gui_draft_find(is_user, id_hi, id_lo);
+    at = tg_gui_draft_find_t(is_user, id_hi, id_lo, topic);
     if (text == 0 || text[0] == '\0') {
         if (at < 0) {
             return 0;
@@ -24213,6 +24473,7 @@ static int tg_gui_draft_set(int is_user, unsigned long id_hi,
         tg_gui_drafts[at].is_user = is_user ? 1 : 0;
         tg_gui_drafts[at].id_hi = id_hi;
         tg_gui_drafts[at].id_lo = id_lo;
+        tg_gui_drafts[at].topic = topic;
     }
     for (i = 0UL; i + 1UL < sizeof(tg_gui_drafts[at].text) &&
                   text[i] != '\0'; ++i) {
@@ -24222,6 +24483,22 @@ static int tg_gui_draft_set(int is_user, unsigned long id_hi,
     tg_gui_drafts[at].date = date;
     tg_gui_drafts[at].reply_to = reply_to;
     return 1;
+}
+
+#if !defined(TG_NO_SELFTEST)
+static int tg_gui_draft_set(int is_user, unsigned long id_hi,
+                            unsigned long id_lo, const char *text,
+                            unsigned long reply_to, unsigned long date)
+{
+    return tg_gui_draft_set_t(is_user, id_hi, id_lo, 0UL, text, reply_to,
+                              date);
+}
+#endif
+
+/* The key of the open chat's composer: the topic open in a forum. */
+static unsigned long tg_gui_draft_open_topic(void)
+{
+    return tg_gui_forum ? tg_gui_draft_topic_key(tg_gui_topic) : 0UL;
 }
 
 /* Whether the open chat is a user's (Saved Messages, the self chat, is the
@@ -24342,9 +24619,9 @@ static int tg_gui_draft_composer_free(const tg_gui_state *gst)
            gst->edit_to_id == 0UL;
 }
 
-static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
-                                const char *utf8, unsigned long date,
-                                unsigned long reply_to)
+static void tg_gui_draft_ingest_t(const tg_mtproto_dialog_peer *peer,
+                                  const char *utf8, unsigned long date,
+                                  unsigned long reply_to, unsigned long topic)
 {
     static char shown[TG_GUI_MSG_TEXT_MAX];
     const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
@@ -24353,6 +24630,9 @@ static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
 
     if (peer == 0) {
         return;
+    }
+    if (topic != 0UL && reply_to == topic) {
+        reply_to = 0UL; /* a topic's draft names the topic: no reply */
     }
     is_user = peer->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
     shown[0] = '\0';
@@ -24379,25 +24659,36 @@ static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
        read now: this may run inside a send, which still needs it. */
     if (tg_gui_draft_is_open_peer(peer->peer_constructor, peer->id_hi,
                                   peer->id_lo) &&
+        tg_gui_draft_topic_key(topic) == tg_gui_draft_open_topic() &&
         tg_gui_draft_composer_free(gst)) {
-        const char *old = tg_gui_draft_lookup(is_user, peer->id_hi,
-                                              peer->id_lo);
+        const char *old = tg_gui_draft_lookup_t(is_user, peer->id_hi,
+                                                peer->id_lo, topic);
 
         follows = strcmp(gst->input, old != 0 ? old : "") == 0 &&
-                  gst->reply_to_id == tg_gui_draft_lookup_reply(
-                                          is_user, peer->id_hi, peer->id_lo);
+                  gst->reply_to_id ==
+                      tg_gui_draft_lookup_reply_t(is_user, peer->id_hi,
+                                                  peer->id_lo, topic);
     }
     if (shown[0] == '\0') {
         reply_to = 0UL;
     }
-    if (tg_gui_draft_set(is_user, peer->id_hi, peer->id_lo, shown, reply_to,
-                         date)) {
+    if (tg_gui_draft_set_t(is_user, peer->id_hi, peer->id_lo, topic, shown,
+                           reply_to, date)) {
         tg_gui_drafts_changed = 1;
         if (follows) {
             tg_gui_draft_follow = 1;
         }
     }
 }
+
+#if !defined(TG_NO_SELFTEST)
+static void tg_gui_draft_ingest(const tg_mtproto_dialog_peer *peer,
+                                const char *utf8, unsigned long date,
+                                unsigned long reply_to)
+{
+    tg_gui_draft_ingest_t(peer, utf8, date, reply_to, 0UL);
+}
+#endif
 
 /* The composer's reply goes to message `id` of the open chat (0: none),
    named as the Reply item of a message's menu names it when the message
@@ -24490,13 +24781,16 @@ static void tg_gui_draft_enter(void)
         return;
     }
     text = 0;
-    if (tg_gui_session_state.open_peer_constructor != 0UL && !tg_gui_forum) {
-        text = tg_gui_draft_lookup(tg_gui_draft_open_is_user(),
-                                   tg_gui_session_state.open_peer_id_hi,
-                                   tg_gui_session_state.open_peer_id_lo);
-        reply = tg_gui_draft_lookup_reply(
+    /* A forum takes no text before a topic is chosen. */
+    if (tg_gui_session_state.open_peer_constructor != 0UL &&
+        !(tg_gui_forum && tg_gui_topic == 0UL)) {
+        text = tg_gui_draft_lookup_t(tg_gui_draft_open_is_user(),
+                                     tg_gui_session_state.open_peer_id_hi,
+                                     tg_gui_session_state.open_peer_id_lo,
+                                     tg_gui_draft_open_topic());
+        reply = tg_gui_draft_lookup_reply_t(
             tg_gui_draft_open_is_user(), tg_gui_session_state.open_peer_id_hi,
-            tg_gui_session_state.open_peer_id_lo);
+            tg_gui_session_state.open_peer_id_lo, tg_gui_draft_open_topic());
     }
     if (text == 0) {
         text = "";
@@ -24544,15 +24838,18 @@ static void tg_gui_draft_leave(FILE *stream)
     if (!tg_gui_session_state.open || stream == 0 ||
         tg_gui_session_state.open_peer_constructor == 0UL ||
         !tg_gui_draft_composer_free(gst) ||
-        tg_gui_forum) { /* a topic's text is no draft of the whole chat */
+        (tg_gui_forum && tg_gui_topic == 0UL)) { /* no topic chosen */
         return;
     }
+    /* In a forum the draft is the open topic's: saveDraft names it (the
+       topic sends go to is still the one being left). */
     is_user = tg_gui_draft_open_is_user();
-    old = tg_gui_draft_lookup(is_user, tg_gui_session_state.open_peer_id_hi,
-                              tg_gui_session_state.open_peer_id_lo);
-    old_reply = tg_gui_draft_lookup_reply(
+    old = tg_gui_draft_lookup_t(is_user, tg_gui_session_state.open_peer_id_hi,
+                                tg_gui_session_state.open_peer_id_lo,
+                                tg_gui_draft_open_topic());
+    old_reply = tg_gui_draft_lookup_reply_t(
         is_user, tg_gui_session_state.open_peer_id_hi,
-        tg_gui_session_state.open_peer_id_lo);
+        tg_gui_session_state.open_peer_id_lo, tg_gui_draft_open_topic());
     draft = gst->input;
     if (strlen(gst->input) >= TG_GUI_MSG_TEXT_MAX) {
         /* A text longer than one message (a long paste, issue #14): a draft
@@ -24619,8 +24916,8 @@ static void tg_gui_draft_leave(FILE *stream)
     tg_mtproto_send_set_styles(0, 0);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
-    if (tg_gui_draft_set(is_user, ph, pl, draft, reply,
-                         tg_gui_session_server_time())) {
+    if (tg_gui_draft_set_t(is_user, ph, pl, tg_gui_draft_open_topic(), draft,
+                           reply, tg_gui_session_server_time())) {
         tg_gui_drafts_changed = 1;
     }
 }
@@ -24632,9 +24929,10 @@ static int tg_gui_draft_send_begin(void)
     int has;
 
     has = tg_gui_session_state.open_peer_constructor != 0UL &&
-          tg_gui_draft_find(tg_gui_draft_open_is_user(),
-                            tg_gui_session_state.open_peer_id_hi,
-                            tg_gui_session_state.open_peer_id_lo) >= 0;
+          tg_gui_draft_find_t(tg_gui_draft_open_is_user(),
+                              tg_gui_session_state.open_peer_id_hi,
+                              tg_gui_session_state.open_peer_id_lo,
+                              tg_gui_draft_open_topic()) >= 0;
     tg_mtproto_send_set_clear_draft(has);
     return has;
 }
@@ -24647,10 +24945,10 @@ static void tg_gui_draft_send_end(int had, int sent)
         return;
     }
     if (had &&
-        tg_gui_draft_set(tg_gui_draft_open_is_user(),
-                         tg_gui_session_state.open_peer_id_hi,
-                         tg_gui_session_state.open_peer_id_lo, "", 0UL,
-                         0UL)) {
+        tg_gui_draft_set_t(tg_gui_draft_open_is_user(),
+                           tg_gui_session_state.open_peer_id_hi,
+                           tg_gui_session_state.open_peer_id_lo,
+                           tg_gui_draft_open_topic(), "", 0UL, 0UL)) {
         tg_gui_drafts_changed = 1;
     }
 }
@@ -25175,6 +25473,31 @@ static int tg_gui_drafts_self_test(void)
     int ok = 1;
     int i;
 
+    tg_gui_draft_count = 0;
+    /* A forum topic's draft is kept apart from its chat's; General's is
+       the chat's own; one that comes from another device lands under its
+       topic, and a deleted topic draft leaves the chat's alone. */
+    ok = ok && tg_gui_draft_set_t(0, 0UL, 9UL, 40UL, "topic", 0UL, 1UL) == 1;
+    ok = ok && tg_gui_draft_set_t(0, 0UL, 9UL, 0UL, "chat", 0UL, 2UL) == 1;
+    got = tg_gui_draft_lookup_t(0, 0UL, 9UL, 40UL);
+    ok = ok && got != 0 && strcmp(got, "topic") == 0;
+    got = tg_gui_draft_lookup_t(0, 0UL, 9UL, TG_MTPROTO_TOPIC_GENERAL);
+    ok = ok && got != 0 && strcmp(got, "chat") == 0;
+    ok = ok && tg_gui_draft_lookup_t(0, 0UL, 9UL, 41UL) == 0;
+    memset(&peer, 0, sizeof(peer));
+    peer.peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    peer.id_lo = 9UL;
+    tg_gui_draft_ingest_t(&peer, "dal telefono", 3UL, 41UL, 41UL);
+    got = tg_gui_draft_lookup_t(0, 0UL, 9UL, 41UL);
+    ok = ok && got != 0 && strcmp(got, "dal telefono") == 0 &&
+         tg_gui_draft_lookup_reply_t(0, 0UL, 9UL, 41UL) == 0UL;
+    ok = ok && tg_gui_draft_set_t(0, 0UL, 9UL, 40UL, "", 0UL, 0UL) == 1 &&
+         tg_gui_draft_lookup_t(0, 0UL, 9UL, 40UL) == 0;
+    got = tg_gui_draft_lookup(0, 0UL, 9UL);
+    ok = ok && got != 0 && strcmp(got, "chat") == 0;
+    if (!ok) {
+        puts("mtproto self-test: a topic's draft in the window's table");
+    }
     tg_gui_draft_count = 0;
     ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao", 0UL, 10UL) == 1;
     ok = ok && tg_gui_draft_set(1, 0UL, 7UL, "ciao", 0UL, 11UL) == 0;
@@ -26290,6 +26613,7 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     const char *history_limit;
     char next_index[sizeof(tg_gui_session_state.current_peer_index)];
     int other_chat;
+    int other_topic = 0; /* another topic of the same forum */
 
     if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL) {
         return 0;
@@ -26309,11 +26633,17 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
         tg_gui_topic_forget(); /* another chat: its topics are not this one's */
     }
     {
-        /* A topic chosen in the list opens through here (the same chat). */
+        /* A topic chosen in the list opens through here (the same chat):
+           what the composer holds stays behind as the draft of the topic
+           being left, while the session still describes that topic. */
         unsigned long wanted = tg_gui_topic_wanted;
 
         tg_gui_topic_wanted = 0UL;
         if (wanted != 0UL) {
+            if (!other_chat && tg_gui_forum && wanted != tg_gui_topic) {
+                tg_gui_draft_leave(stream);
+                other_topic = 1;
+            }
             tg_gui_topic = wanted;
         }
     }
@@ -26557,7 +26887,10 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     tg_gui_session_fetch_open_avatar(quiet);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
-    /* The composer takes this chat's draft, or starts empty. */
+    /* The composer takes this chat's (or topic's) draft, or starts empty. */
+    if (other_topic) {
+        tg_gui_draft_enter();
+    }
     if (other_chat) {
         tg_gui_draft_enter();
 #if !defined(TG_NO_GUI)
@@ -26603,6 +26936,130 @@ unsigned long tg_gui_session_topic(void)
 
 /* Public: opens a topic of the open forum in the transcript (its id, as
    the topic list gives it). 1 = opened, -1 = no forum is open. */
+/* Public: the open forum's topics made and changed from the window
+   (channels.createForumTopic, channels.editForumTopic), then its topic
+   list read again. title is the window's text (Latin-1 on the Amigas).
+   0 = done, 1 = Telegram refused (tg_gui_session_topic_refusal says why),
+   2 = not sent or no answer. */
+static char tg_gui_topic_why[48];
+
+const char *tg_gui_session_topic_refusal(void)
+{
+    return tg_gui_topic_why;
+}
+
+int tg_gui_session_topic_closed(unsigned long topic_id)
+{
+    unsigned long k;
+
+    for (k = 0UL; k < tg_gui_topic_list.count; ++k) {
+        if (tg_gui_topic_list.topics[k].id == topic_id) {
+            return tg_gui_topic_list.topics[k].closed ? 1 : 0;
+        }
+    }
+    return -1;
+}
+
+static int tg_gui_session_topic_change(int create, unsigned long topic_id,
+                                       const char *title, int closed,
+                                       unsigned long *new_id, FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)create;
+    (void)topic_id;
+    (void)title;
+    (void)closed;
+    (void)new_id;
+    (void)stream;
+    return 2;
+#else
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char utf8[(TG_MTPROTO_TOPIC_TITLE_MAX * 2U) + 1U];
+#endif
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    tg_gui_topic_why[0] = '\0';
+    if (new_id != 0) {
+        *new_id = 0UL;
+    }
+    if (!tg_gui_session_state.open || stream == 0 || !tg_gui_forum) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "topic change") != 0 ||
+        pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR || !hah) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (title != 0 && tg_mtproto_latin1_to_utf8(title, utf8, sizeof(utf8))) {
+        title = utf8;
+    }
+#endif
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_forum_topic_request(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, ph,
+        pl, ahh, ahl, create, topic_id, title, closed, new_id,
+        tg_gui_topic_why, sizeof(tg_gui_topic_why), quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    {
+        char line[80];
+
+        sprintf(line, "topics: %s rc=%d %.40s",
+                create ? "made" : "changed", rc, tg_gui_topic_why);
+        tg_gui_log(line);
+    }
+    if (rc == 0) {
+        unsigned long k;
+
+        (void)tg_gui_session_fetch_topics(stream); /* the list as it is now */
+        /* A list asked right after the change can still show the topic as
+           it was: what was just done is what it is. */
+        for (k = 0UL; k < tg_gui_topic_list.count && !create && closed >= 0;
+             ++k) {
+            if (tg_gui_topic_list.topics[k].id == topic_id) {
+                tg_gui_topic_list.topics[k].closed = closed;
+            }
+        }
+    }
+    return rc;
+#endif
+}
+
+int tg_gui_session_topic_create(const char *title, unsigned long *new_id,
+                                FILE *stream)
+{
+    if (title == 0 || title[0] == '\0') {
+        return 2;
+    }
+    return tg_gui_session_topic_change(1, 0UL, title, -1, new_id, stream);
+}
+
+int tg_gui_session_topic_edit(unsigned long topic_id, const char *title,
+                              int closed, FILE *stream)
+{
+    if (topic_id == 0UL || (title != 0 && title[0] == '\0') ||
+        (title == 0 && closed < 0)) {
+        return 2;
+    }
+    return tg_gui_session_topic_change(0, topic_id, title, closed, 0, stream);
+}
+
 int tg_gui_session_topic_open(unsigned long topic_id, FILE *stream)
 {
     unsigned long index;
@@ -28501,14 +28958,14 @@ static int tg_chat_drafts_self_test(void)
 
     tg_chat_draft_count = 0;
     tg_chat_self_known = 0;
-    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1UL, "uno");
-    tg_chat_draft_set(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 2UL, "due");
+    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1UL, 0UL, "uno");
+    tg_chat_draft_set(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 2UL, 0UL, "due");
     if (tg_chat_draft_count != 2 ||
-        tg_chat_draft_find(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 2UL) != 1 ||
-        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 2UL) != -1) {
+        tg_chat_draft_find(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 2UL, 0UL) != 1 ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 2UL, 0UL) != -1) {
         fail = 1;
     }
-    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1UL, "");
+    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 1UL, 0UL, "");
     if (tg_chat_draft_count != 1 ||
         strcmp(tg_chat_drafts[0].text, "due") != 0) {
         fail = 2;
@@ -28516,14 +28973,14 @@ static int tg_chat_drafts_self_test(void)
     /* a full table lets the oldest go */
     tg_chat_draft_count = 0;
     for (i = 0UL; i <= (unsigned long)TG_CHAT_DRAFTS_MAX; ++i) {
-        tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 100UL + i,
+        tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 100UL + i, 0UL,
                           "x");
     }
     if (tg_chat_draft_count != TG_CHAT_DRAFTS_MAX ||
-        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 100UL) !=
+        tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 100UL, 0UL) !=
             -1 ||
         tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
-                           100UL + TG_CHAT_DRAFTS_MAX) < 0) {
+                           100UL + TG_CHAT_DRAFTS_MAX, 0UL) < 0) {
         fail = 3;
     }
     /* longer than the buffer, a two-byte character across the cut */
@@ -28532,7 +28989,7 @@ static int tg_chat_drafts_self_test(void)
     longer[TG_CHAT_DRAFT_TEXT - 2] = (char)0xc3;
     longer[TG_CHAT_DRAFT_TEXT - 1] = (char)0xa8;
     longer[sizeof(longer) - 1] = '\0';
-    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 3UL, longer);
+    tg_chat_draft_set(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 3UL, 0UL, longer);
     if (tg_chat_draft_count != 1 ||
         strlen(tg_chat_drafts[0].text) != (size_t)(TG_CHAT_DRAFT_TEXT - 2)) {
         fail = 4;
@@ -28574,7 +29031,7 @@ static int tg_chat_drafts_self_test(void)
     tg_chat_drafts_on = 1; /* as the updates reach it in the text client */
     tg_chat_draft_parse_update(&r);
     tg_chat_drafts_on = 0;
-    at = tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL);
+    at = tg_chat_draft_find(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 0UL);
     if (at < 0 || strcmp(tg_chat_drafts[at].text, "ciao") != 0) {
         fail = 9;
     }
@@ -28592,8 +29049,8 @@ static int tg_chat_drafts_self_test(void)
     }
     /* Saved Messages: kept here before the own user was known, then the
        own user's update replaces it under the one key */
-    tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "io");
-    if (tg_chat_draft_find_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL) <
+    tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, "io");
+    if (tg_chat_draft_find_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL) <
         0) {
         fail = 11;
     }
@@ -28610,17 +29067,61 @@ static int tg_chat_drafts_self_test(void)
     (void)tg_mtproto_tl_write_u32(&w, 1700000000UL);
     tg_mtproto_tl_reader_init(&r, body, w.length);
     tg_chat_draft_take_update(&r);
-    at = tg_chat_draft_find_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL);
+    at = tg_chat_draft_find_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL);
     if (tg_chat_draft_count != 1 || at < 0 ||
         strcmp(tg_chat_drafts[at].text, "me") != 0 ||
-        tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL) != -1) {
+        tg_chat_draft_find(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL) != -1) {
         fail = 12;
     }
     /* a message sent in Saved Messages deletes its draft */
-    tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, "");
+    tg_chat_draft_set_chat(TG_MTPROTO_PEER_SELF_CONSTRUCTOR, 0UL, 0UL, 0UL, "");
     if (tg_chat_draft_count != 0) {
         fail = 13;
     }
+    /* a forum topic's draft (top_msg_id 40) lands under its topic, apart
+       from the chat's; one for General (1) is the chat's */
+    tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 5UL);
+    (void)tg_mtproto_tl_write_u32(&w, 40UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0x96eaa5ebUL);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"t", 1UL);
+    (void)tg_mtproto_tl_write_u32(&w, 1700000000UL);
+    tg_mtproto_tl_reader_init(&r, body, w.length);
+    tg_chat_draft_take_update(&r);
+    if (tg_chat_draft_find(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 5UL,
+                           40UL) < 0 ||
+        tg_chat_draft_find(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 5UL,
+                           0UL) != -1) {
+        fail = 14;
+    }
+    tg_mtproto_tl_writer_init(&w, body, sizeof(body));
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);
+    (void)tg_mtproto_tl_write_u32(&w, TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR);
+    (void)tg_mtproto_tl_write_u64(&w, 0UL, 5UL);
+    (void)tg_mtproto_tl_write_u32(&w, 1UL);
+    (void)tg_mtproto_tl_write_u32(&w, 0x96eaa5ebUL);
+    (void)tg_mtproto_tl_write_u32(&w, 0UL);
+    (void)tg_mtproto_tl_write_bytes(&w, (const unsigned char *)"g", 1UL);
+    (void)tg_mtproto_tl_write_u32(&w, 1700000000UL);
+    tg_mtproto_tl_reader_init(&r, body, w.length);
+    tg_chat_draft_take_update(&r);
+    if (tg_chat_draft_find(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 5UL,
+                           0UL) < 0 || tg_chat_draft_count != 2) {
+        fail = 15;
+    }
+    /* the topic open in the text client picks which one is shown */
+    tg_mtproto_history_topic_id = 40UL;
+    at = tg_chat_draft_find_chat(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL,
+                                 5UL, tg_chat_draft_topic_now());
+    tg_mtproto_history_topic_id = TG_MTPROTO_TOPIC_GENERAL;
+    if (at < 0 || strcmp(tg_chat_drafts[at].text, "t") != 0 ||
+        tg_chat_draft_topic_now() != 0UL) {
+        fail = 16;
+    }
+    tg_mtproto_history_topic_id = 0UL;
     tg_chat_draft_count = 0;
     tg_chat_self_known = 0;
     tg_chat_self_hi = 0UL;

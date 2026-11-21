@@ -47,13 +47,13 @@ pins reordered by dragging, Saved Messages among them, the
 Archive's unread count on a line at the top of the chat list,
 drafts with their reply, in Saved Messages too, and albums of files,
 of more than ten photos and of several icons dropped together; the
-Archive read again a few seconds after the start, and drafts in the
-text client.
+Archive read again a few seconds after the start, drafts in the text
+client, and the topics of forum groups made, renamed and closed, with
+their own drafts.
 
 Open, each in its section below:
 
 - left over from the 0.5 list: more than the Archive's latest 32 chats;
-  drafts in topics; topics created, renamed or closed;
 - videos: the resolution in the details, and playing while the video
   still downloads;
 - sign-in by QR code, creating an account, the update fetched and
@@ -368,8 +368,10 @@ it works today:
   0.5): text left unsent when F1 to F10 change chat is saved as the
   chat's draft, and a chat with a draft shows it as a "Draft:" line when
   it opens (`messages.getAllDrafts` when the first chat opens, then the
-  updates); a message sent there deletes it (`clear_draft`). Still
-  missing: drafts in forum topics;
+  updates); a message sent there deletes it (`clear_draft`). Drafts in
+  forum topics too (after 0.5): saved with `top_msg_id`, read from
+  `updateDraftMessage` with its topic, kept per topic in the window and
+  in the text client;
 - the pinned message under the chat header: done (`messages.search`
   with the pinned filter, asked after the chat opens and on
   `updatePinnedMessages`; a click jumps to it and walks through the
@@ -1689,9 +1691,12 @@ sum of its topics' counts, the open one aside, so the chat list is
 right when it comes back without waiting for the next reading of the
 dialogs.
 
-Left for later: creating, renaming, closing and pinning topics; the
-pinned message of a topic (the bar stays off in a forum rather than
-show another topic's); the "@" count of a topic; a draft per topic.
+Done after 0.5: creating, renaming, closing and reopening topics
+(Chats > New topic..., a topic row's right-button menu, /topic new,
+rename, close and reopen in the text client; `channels.createForumTopic`
+and `channels.editForumTopic`), and a draft per topic. Left for later:
+pinning topics; the pinned message of a topic (the bar stays off in a
+forum rather than show another topic's); the "@" count of a topic.
 
 ## Done for 0.2: select several messages, then delete or forward them
 

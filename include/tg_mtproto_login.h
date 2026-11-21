@@ -1075,6 +1075,27 @@ tg_mtproto_tl_status tg_mtproto_build_channels_get_forum_topics(
    chats:Vector<Chat> users:Vector<User> pts:int. forumTopicDeleted is
    left out; a topic the reader cannot walk to its end (a draft it does
    not know) is kept and the walk goes on from the next topic. */
+/* channels.createForumTopic#f40c0224 (a topic named title, random_id the
+   pair given) and channels.editForumTopic#f4dfa185 (title 0 keeps the
+   name; closed -1 keeps the state, 0 opens the topic, 1 closes it). */
+tg_mtproto_tl_status tg_mtproto_build_channels_create_forum_topic(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const char *title,
+    unsigned long random_hi,
+    unsigned long random_lo);
+tg_mtproto_tl_status tg_mtproto_build_channels_edit_forum_topic(
+    tg_mtproto_tl_writer *writer,
+    unsigned long channel_id_hi,
+    unsigned long channel_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    unsigned long topic_id,
+    const char *title,
+    int closed);
 tg_mtproto_tl_status tg_mtproto_parse_forum_topics(
     unsigned long constructor,
     const unsigned char *body,
@@ -1280,7 +1301,19 @@ tg_mtproto_tl_status tg_mtproto_read_update_draft(
     unsigned long text_size,
     int *was_cut,
     unsigned long *date,
-    unsigned long *reply_to); /* may be 0; 0 = no reply */
+    unsigned long *reply_to);
+/* The same, a forum topic's draft too: *topic_id its topic (top_msg_id),
+   0 for a whole chat's. The reader above fails on a topic's draft. */
+tg_mtproto_tl_status tg_mtproto_read_update_draft_topic(
+    tg_mtproto_tl_reader *reader,
+    tg_mtproto_dialog_peer *peer,
+    int *has_text,
+    char *text,
+    unsigned long text_size,
+    int *was_cut,
+    unsigned long *date,
+    unsigned long *reply_to,
+    unsigned long *topic_id); /* may be 0; 0 = no reply */
 /* account.updateNotifySettings for one chat's mute alone (mute_until: a
    Unix time, 0 unmutes, 0x7fffffff forever), and an updateNotifySettings
    read from the reader just past its constructor into the same table

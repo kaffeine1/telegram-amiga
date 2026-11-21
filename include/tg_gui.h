@@ -739,6 +739,10 @@ typedef struct tg_gui_state {
        found again by this id before the menu acts (tg_gui_context_follow). */
     unsigned long ctx_msg_id;
     int ctx_chat;  /* sidebar target + 1, 0 for a transcript menu */
+    /* A forum topic's row: its menu is about that topic (its id), and
+       says Reopen when the topic is closed. 0 for any other menu. */
+    unsigned long ctx_topic;
+    int ctx_topic_closed;
     int ctx_notify_choice;
     /* ARexx: the port is open, and SEND is allowed through it. */
     int arexx_port;
@@ -1171,6 +1175,8 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_FILE_OPEN 47 /* Open the file a download saved */
 #define TG_GUI_CTX_FILE_SHOW 60 /* Show that file's drawer */
 #define TG_GUI_CTX_FILE_PLAY 17 /* Play a video: downloaded first if needed */
+#define TG_GUI_CTX_TOPIC_RENAME 18 /* a forum topic's row: Rename topic... */
+#define TG_GUI_CTX_TOPIC_CLOSE 19 /* ...and Close topic, or Reopen topic */
 #define TG_GUI_CTX_POLL_STOP 61 /* Stop poll: one's own, for good */
 #define TG_GUI_CTX_POLL_NEW 62 /* the paperclip's menu: Poll... */
 #define TG_GUI_CTX_MSG_SENDER 63 /* Message <name>: a chat with the sender */

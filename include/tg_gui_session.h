@@ -315,6 +315,18 @@ int tg_gui_session_topic_open(unsigned long topic_id, FILE *stream);
 void tg_gui_session_topics_leave(void);
 /* The open forum's row clicked again: its topics back in the sidebar. */
 int tg_gui_session_topics_show(FILE *stream);
+/* The open forum's topics made (topic_create: *new_id the new topic) and
+   changed (topic_edit: title 0 keeps the name; closed -1 keeps the state,
+   0 opens, 1 closes), then its list read again. title is the window's
+   text. 0 = done, 1 = Telegram refused (topic_refusal: its reason, as
+   Telegram words it), 2 = not sent or no answer. topic_closed: 1 closed,
+   0 open, -1 not in the list. */
+int tg_gui_session_topic_create(const char *title, unsigned long *new_id,
+                                FILE *stream);
+int tg_gui_session_topic_edit(unsigned long topic_id, const char *title,
+                              int closed, FILE *stream);
+const char *tg_gui_session_topic_refusal(void);
+int tg_gui_session_topic_closed(unsigned long topic_id);
 
 /* Pages OLDER history at the top of the open chat: fetches the getHistory page
    just below the oldest message currently shown and PREPENDS it to the transcript.

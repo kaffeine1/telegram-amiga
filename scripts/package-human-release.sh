@@ -745,9 +745,16 @@ Messages
   and what is unread. A click, Enter or an F-key opens another topic:
   the header says which is open, and what you write, attach or poll
   goes into it. Esc or All chats brings the chats back; a click on the
-  group's row shows its topics again. In the text client /topics lists
-  them and /topic n reads only that one; /topic alone shows every topic
-  again.
+  group's row shows its topics again. Chats > New topic... makes a
+  topic in the open group and opens it; the right button on a topic's
+  row renames it (Rename topic...) or closes it (Close topic, then only
+  admins write in it; Reopen topic undoes it), as far as Telegram lets
+  you. Text left in a topic stays as that topic's draft, here and on
+  the phone, and comes back when the topic opens again. In the text
+  client /topics lists them and /topic n reads only that one; /topic
+  alone shows every topic again. /topic new <name> makes a topic and
+  goes into it; /topic rename <name>, /topic close and /topic reopen
+  act on the topic chosen.
 - To act on several messages together, choose Select in the menu of
   one of them: it is marked, and a click on any other message marks it
   or takes its mark away; Shift+click marks everything from the message
@@ -1062,8 +1069,16 @@ Messaggi
   Invio o un tasto F apre un altro argomento: l'intestazione dice quale
   e' aperto, e cio' che scrivi, alleghi o proponi come sondaggio va
   li'. Esc o All chats riporta le chat; un click sulla riga del gruppo
-  mostra di nuovo i suoi argomenti. Nel client testuale /topics li
-  elenca e /topic n legge solo quello; /topic da solo torna a tutti.
+  mostra di nuovo i suoi argomenti. Chats > New topic... crea un
+  argomento nel gruppo aperto e lo apre; il tasto destro sulla riga di
+  un argomento lo rinomina (Rename topic...) o lo chiude (Close topic:
+  poi ci scrivono solo gli admin; Reopen topic lo riapre), per quanto
+  Telegram te lo consente. Il testo lasciato in un argomento resta come
+  sua bozza, qui e sul telefono, e torna quando l'argomento si riapre.
+  Nel client testuale /topics li elenca e /topic n legge solo quello;
+  /topic da solo torna a tutti. /topic new <nome> crea un argomento e
+  ci entra; /topic rename <nome>, /topic close e /topic reopen agiscono
+  sull'argomento scelto.
 - Per agire su piu' messaggi insieme scegli Select nel menu di uno di
   loro: viene segnato, e un click su un altro messaggio lo segna o gli
   toglie il segno; Shift+click segna tutto dal messaggio cliccato per
@@ -1288,8 +1303,8 @@ the last lines, and one more click on the gadget closes it.
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
-its messages when it opens; a message sent there deletes it. Drafts of
-forum topics are not kept yet.
+its messages when it opens; a message sent there deletes it. In a
+forum, the draft is the topic's chosen with /topic n.
 
 First start
 -----------
@@ -1377,7 +1392,7 @@ Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga
 "Draft:" sotto i messaggi quando si apre; un messaggio mandato li' la
-cancella. Le bozze dei topic dei forum non restano ancora.
+cancella. In un forum la bozza e' dell'argomento scelto con /topic n.
 
 Primo avvio
 -----------
