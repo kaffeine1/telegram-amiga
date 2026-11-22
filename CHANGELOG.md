@@ -98,13 +98,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   does: the bar with Forward, Delete and Cancel comes up, and the next
   clicks choose the others. For one's own messages, which stand on the
   right, that is all the room beside them.
-- Show in drawer selects the file's icon in the drawer it opens, where
-  the Workbench can (AmigaOS 3.5 and later, AmigaOS 4; MorphOS and AROS
-  as far as theirs does it). A downloaded file has no icon of its own,
-  so from 3.9 the drawer opens showing all its files. On a Workbench
-  that cannot open files for a program (3.0, 3.1), Open hands to
-  MultiView what a datatype can show, instead of only saying where the
-  file is.
+- Show in drawer selects the file's icon in the drawer it opens, on
+  AmigaOS 3.5 and later and AmigaOS 4. The Workbench of MorphOS
+  (Ambient) and of AROS (Wanderer) answers no to that request, so there
+  the drawer opens without a selection, and without waiting for one.
+  A downloaded file has no icon of its own, so from 3.9 the drawer
+  opens showing all its files. On a Workbench that cannot open files
+  for a program (3.0, 3.1), Open hands to MultiView what a datatype can
+  show, instead of only saying where the file is.
 - Underlined words, as the phone sends them, show underlined here too,
   in the text's own colour (a link's words stay in the link's colour).
   ++words++ in the composer underline them, and an edit writes an

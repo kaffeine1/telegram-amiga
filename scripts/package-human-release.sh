@@ -847,8 +847,9 @@ Files
 - Once a file is downloaded, its message's menu offers Open and Show in
   drawer in place of Download. Open hands the file to the Workbench, as
   a double click on its icon would; Show in drawer opens the drawer it
-  is in with the file's icon selected, where the Workbench can do that
-  (all its files shown when the file has no icon, from 3.9). A program
+  is in, with the file's icon selected on AmigaOS 3.5 and later and on
+  AmigaOS 4 (all its files shown when the file has no icon, from 3.9;
+  MorphOS and AROS open the drawer without selecting). A program
   is run only after you confirm it: run one only if you trust who sent
   it. On a Workbench that cannot open files for a program (3.0, 3.1)
   Open hands what MultiView can show to MultiView, and otherwise the
@@ -1184,9 +1185,10 @@ File
 - Quando un file e' stato scaricato, il menu del suo messaggio offre
   Open e Show in drawer al posto di Download. Open passa il file al
   Workbench, come un doppio click sulla sua icona; Show in drawer apre
-  il cassetto in cui si trova con l'icona del file selezionata, dove il
-  Workbench lo sa fare (con tutti i file in vista quando il file non ha
-  un'icona, dalla 3.9). Un programma viene avviato solo dopo la tua
+  il cassetto in cui si trova, con l'icona del file selezionata su
+  AmigaOS 3.5 e successivi e su AmigaOS 4 (con tutti i file in vista
+  quando il file non ha un'icona, dalla 3.9; MorphOS e AROS aprono il
+  cassetto senza selezionare). Un programma viene avviato solo dopo la tua
   conferma: avvialo solo se ti fidi di chi l'ha mandato. Su un Workbench
   che non sa aprire i file per conto di un programma (3.0, 3.1) Open
   passa a MultiView quello che MultiView sa mostrare, e altrimenti la

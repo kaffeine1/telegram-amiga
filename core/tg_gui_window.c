@@ -93,10 +93,7 @@
 #include <proto/icon.h>
 #include <proto/asl.h>
 #include <proto/diskfont.h>
-#if defined(__MORPHOS__)
-#include <emul/emulinterface.h>
-#include <emul/emulregs.h>
-#elif defined(__amigaos3__)
+#if defined(__amigaos3__)
 #include <clib/alib_protos.h>
 #include <datatypes/datatypes.h>
 #include <proto/datatypes.h>
@@ -11800,6 +11797,16 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
     }
 }
 
+/* The file's icon selected in the drawer that opens: AmigaOS 3.5 and
+   later and AmigaOS 4. The workbench.library of MorphOS (Ambient, 51.2)
+   and of AROS (Wanderer) has ChangeWorkbenchSelectionA, but it only
+   answers FALSE, even for a drawer already open: there the drawer opens
+   as it is, without the wait for an answer that never comes. */
+#if !defined(__MORPHOS__) && !defined(__AROS__)
+#define TG_GUI_WB_SELECTS 1
+#endif
+
+#if defined(TG_GUI_WB_SELECTS)
 /* Two names of the same file, as the file system takes them: letters in
    either case. */
 static int tg_gui_wb_same_name(const char *a, const char *b)
@@ -11821,19 +11828,11 @@ static int tg_gui_wb_same_name(const char *a, const char *b)
     return *a == *b;
 }
 
-/* What a hook gives back: IPTR on AROS, where it is as wide as a pointer
-   (64 bits on x86_64 and aarch64), ULONG on the others. */
-#if defined(__AROS__)
-typedef IPTR tg_gui_hook_result;
-#else
-typedef ULONG tg_gui_hook_result;
-#endif
-
 /* ChangeWorkbenchSelectionA asks this for every icon of the drawer: the
    file's (its name in h_Data) is selected, the others are not, as the
    desktop clients leave a folder they open on a file. */
-static tg_gui_hook_result tg_gui_wb_pick(struct Hook *hook, APTR reserved,
-                                         struct IconSelectMsg *ism)
+static ULONG tg_gui_wb_pick(struct Hook *hook, APTR reserved,
+                            struct IconSelectMsg *ism)
 {
     const char *want = hook != 0 ? (const char *)hook->h_Data : 0;
 
@@ -11846,19 +11845,6 @@ static tg_gui_hook_result tg_gui_wb_pick(struct Hook *hook, APTR reserved,
                : ISMACTION_Unselect;
 }
 
-#if defined(__MORPHOS__)
-/* MorphOS calls a hook as 68k code: the gate takes the registers. */
-static ULONG tg_gui_wb_pick_gate(void)
-{
-    return tg_gui_wb_pick((struct Hook *)REG_A0, (APTR)REG_A2,
-                          (struct IconSelectMsg *)REG_A1);
-}
-
-static struct EmulLibEntry tg_gui_wb_pick_entry = {
-    TRAP_LIB, 0, (void (*)(void))tg_gui_wb_pick_gate
-};
-#endif
-
 /* The file's icon selected in its drawer, which the Workbench has just
    been asked to open (ChangeWorkbenchSelectionA, workbench.library 44).
    The window may take a moment to come: a few tries, a fifth of a second
@@ -11870,25 +11856,23 @@ static void tg_gui_amiga_wb_select(const char *drawer, const char *name)
     int ok = 0;
 
     memset(&hook, 0, sizeof(hook));
-#if defined(__MORPHOS__)
-    hook.h_Entry = (HOOKFUNC)&tg_gui_wb_pick_entry;
-#elif defined(__amigaos3__)
+#if defined(__amigaos3__)
     hook.h_Entry = (HOOKFUNC)HookEntry; /* registers in, C arguments out */
     hook.h_SubEntry = (HOOKFUNC)tg_gui_wb_pick;
 #else
-    hook.h_Entry = (HOOKFUNC)tg_gui_wb_pick; /* OS4 and AROS: a C call */
+    hook.h_Entry = (HOOKFUNC)tg_gui_wb_pick; /* OS4: a C call */
 #endif
     hook.h_Data = (APTR)name;
     for (tries = 0; tries < 5 && !ok; ++tries) {
         if (tries > 0) {
             Delay(10L);
         }
-        /* STRPTR: the AROS and MorphOS prototypes take it so */
         ok = ChangeWorkbenchSelectionA((STRPTR)drawer, &hook, 0) ? 1 : 0;
     }
     tg_gui_log(ok ? "wb open: the file's icon selected"
                   : "wb open: no selection in the drawer");
 }
+#endif
 
 #if defined(__amigaos3__)
 /* What MultiView can show, for a Workbench too old to open files (3.0 and
@@ -11925,10 +11909,10 @@ static int tg_gui_amiga_multiview_shows(const char *path)
 #endif
 
 /* Hands a file to the Workbench as a double click on its icon would, or
-   with `parent` its drawer, which opens as a window with the file's icon
-   selected (workbench.library 44, OpenWorkbenchObjectA and
-   ChangeWorkbenchSelectionA: AmigaOS 3.5 and later, AmigaOS 4, MorphOS,
-   AROS, as far as each Workbench does them).
+   with `parent` its drawer, which opens as a window (workbench.library
+   44, OpenWorkbenchObjectA: AmigaOS 3.5 and later, AmigaOS 4, MorphOS,
+   AROS) with the file's icon selected where the Workbench does that
+   (ChangeWorkbenchSelectionA: AmigaOS 3.5 and later, AmigaOS 4).
    The name goes as an absolute path: the Workbench does not share this
    program's current directory. The library base is the one this file
    shares with the drop support and the iconified wait: used as it is when
@@ -12018,9 +12002,11 @@ static int tg_gui_amiga_wb_open(const char *path, int parent)
         }
 #else
         ok = OpenWorkbenchObjectA((APTR)full, show_all) ? 1 : 0;
+#if defined(TG_GUI_WB_SELECTS)
         if (ok && parent && name[0] != '\0') {
             tg_gui_amiga_wb_select(full, name);
         }
+#endif
 #endif
         tg_gui_log(ok ? "wb open: the Workbench took it"
                       : "wb open: the Workbench refused");

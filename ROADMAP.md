@@ -437,10 +437,13 @@ Middle, more interface:
   in drawer in the menu of a message whose file was saved,
   `OpenWorkbenchObjectA`, the record in `data/telegram-saved.txt`, a
   confirmation before a program is run). Done after 0.5: the file's
-  icon selected in the drawer (`ChangeWorkbenchSelectionA`, the drawer
-  opened with all its files shown when the file has no icon,
-  `WBOPENA_Show`), and on 3.0/3.1 Open hands to MultiView a file a
-  datatype knows (not a program or plain binary);
+  icon selected in the drawer (`ChangeWorkbenchSelectionA`, AmigaOS
+  3.5+ and 4 only: on MorphOS 3.20, Ambient's workbench.library 51.2,
+  and on AROS it answers FALSE even for an open drawer, the AROS
+  source is a stub, so it is not called there; the drawer opened with
+  all its files shown when the file has no icon, `WBOPENA_Show`), and
+  on 3.0/3.1 Open hands to MultiView a file a datatype knows (not a
+  program or plain binary);
 - polls shown and voted: done (`messageMediaPoll` written out as the
   message's text, `messages.sendVote` from the message's menu, the
   answers in the menu's place, `updateMessagePoll` followed while the
@@ -1751,11 +1754,12 @@ the download drawer by hand.
 
 The right-click popup on a message whose file is already on disk gets two
 entries. "Open" hands the file to the Workbench as a double-click would
-(OpenWorkbenchObjectA, workbench.library 44: AmigaOS 3.5 and later and
-AmigaOS 4, and on MorphOS and AROS as far as their Workbench implements
-it, to be checked there). "Show in drawer" opens the drawer window and
-selects the file's icon (ChangeWorkbenchSelectionA) where the Workbench
-can do that. On a Workbench too old for either, a plain 3.0 or 3.1,
+(OpenWorkbenchObjectA, workbench.library 44: AmigaOS 3.5 and later,
+AmigaOS 4, MorphOS and AROS). "Show in drawer" opens the drawer window
+and, on AmigaOS 3.5 and later and AmigaOS 4, selects the file's icon
+(ChangeWorkbenchSelectionA; Ambient and Wanderer only answer FALSE to
+it, so it is not called there). On a Workbench too old for either, a
+plain 3.0 or 3.1,
 "Open" falls back to MultiView for what it can show, and otherwise the
 entry says where the file is instead of failing in silence.
 
