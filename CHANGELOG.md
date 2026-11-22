@@ -161,6 +161,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- On MorphOS a first login opens on the chat list. It showed only the
+  pinned chats and Saved Messages until "Reload chat list": the list was
+  not fetched there at all since June, when fetching it froze the
+  machine. That freeze was cured two days later, and on a G5 with
+  MorphOS 3.20 the list now comes at once, as on the other systems.
 - A login left half way no longer leaves telegram-auth.bin behind. The
   key a login makes was saved there as soon as Telegram sent the code,
   so a closed window or a Ctrl+C at the code prompt left a key nobody

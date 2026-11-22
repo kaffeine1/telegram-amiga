@@ -10640,16 +10640,12 @@ int tg_mtproto_gui_refresh_peer_cache(const char *api_file,
     if (tg_mtproto_peer_cache_available(peer_cache_file)) {
         return 0;
     }
-#if defined(__MORPHOS__) || defined(__MORPHOS)
-    /* MorphOS: messages.getDialogs hard-freezes the machine on a real (heavy)
-       account even at limit 1 -- the same dialogs payload class as the read-
-       receipt getPeerDialogs already suppressed here (f14daa1). With no cache yet
-       we open with an empty sidebar instead of freezing; the chat list is
-       populated from the staged telegram-peers.txt cache. */
-    (void)host;
-    (void)dc_id_text;
-    return 2;
-#else
+    /* MorphOS used to skip this (June 2026): messages.getDialogs froze the
+       machine then, and a first login opened on the pinned chats and Saved
+       Messages only. The freeze was the repaint racing the layer build,
+       cured two days later by the LockLayerRom bracket; on a G5 with
+       MorphOS 3.20 a reload of twenty chats now runs clean, so a first
+       login fills the list here too. */
     {
         FILE *quiet;
         int rc;
@@ -10668,7 +10664,6 @@ int tg_mtproto_gui_refresh_peer_cache(const char *api_file,
         }
         return rc;
     }
-#endif
 }
 
 /* Defined with the archived-chats set, further down. */
