@@ -191,8 +191,10 @@ static void tg_qr_view_draw(const tg_qr_code *code)
 }
 
 /* How much taller than wide the screen's pixels are, times ten (20 on a
-   hires screen without interlace), from the display database; 10 when it
-   says nothing usable. */
+   hires screen without interlace), from the display database, for the
+   chipset's own modes only (the monitors up to DblPAL): an RTG driver
+   reckons for a 4:3 monitor whatever the panel, and its pixels are
+   square, so anything else is 10. */
 static int tg_qr_view_ratio(struct Screen *scr)
 {
     struct DisplayInfo info;
@@ -200,6 +202,7 @@ static int tg_qr_view_ratio(struct Screen *scr)
     long ratio = 10L;
 
     if (mode != (ULONG)INVALID_ID &&
+        (mode & 0xFFFF1000UL) <= 0x000A1000UL && /* PAL, NTSC ... DblPAL */
         GetDisplayInfoData(0, (UBYTE *)&info, sizeof(info), DTAG_DISP,
                            mode) > 0 &&
         info.Resolution.x > 0 && info.Resolution.y > 0) {

@@ -26,7 +26,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   screen whose pixels are taller than wide (a PAL or NTSC hires screen
   without interlace, such as 640x256) the code is drawn with lower
   modules, from the display database's own figures, so that it shows
-  square on the monitor, and bigger than before.
+  square on the monitor, and bigger than before; graphics card screens,
+  whose pixels are square, keep square modules.
 - Log out, in the Amigram menu. After a requester it ends the session
   at Telegram, removes what Amigram keeps of the account on this
   computer (telegram-auth.bin and the other keys, the chat list and its

@@ -1120,9 +1120,14 @@ static void tg_gui_diag_stop(void)
 
 /* How much taller than wide the screen's pixels are, times ten, from the
    display database (ticks per pixel): 20 for hires without interlace
-   (22x44), 40 for super-hires, 10 when it says nothing usable (an RTG
-   mode may not), kept within 5..40. The QR code of the login screen draws
-   its modules that much lower. */
+   (22x44), 40 for super-hires, kept within 5..40. Only for the chipset's
+   own modes (the monitors up to DblPAL): an RTG driver works the figure
+   out for a 4:3 monitor whatever the panel (an OS4 1920x1080 screen said
+   14/10, and the code came out squashed), and its pixels are square, so
+   anything else is 10. The QR code of the login screen draws its modules
+   that much lower. */
+static ULONG tg_gui_window_mode_id = 0UL;
+
 static int tg_gui_window_pixel_ratio(struct Screen *scr)
 {
     struct DisplayInfo info;
@@ -1133,7 +1138,9 @@ static int tg_gui_window_pixel_ratio(struct Screen *scr)
         return 10;
     }
     mode = GetVPModeID(&scr->ViewPort);
+    tg_gui_window_mode_id = mode;
     if (mode != (ULONG)INVALID_ID &&
+        (mode & 0xFFFF1000UL) <= 0x000A1000UL && /* PAL, NTSC ... DblPAL */
         GetDisplayInfoData(0, (UBYTE *)&info, sizeof(info), DTAG_DISP,
                            mode) > 0 &&
         info.Resolution.x > 0 && info.Resolution.y > 0) {
@@ -16536,9 +16543,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     ctx.rport = ctx.window->RPort;
     state->pixel_ratio10 = tg_gui_window_pixel_ratio(ctx.window->WScreen);
     if (tg_gui_log_is_enabled()) {
-        char line[48];
+        char line[64];
 
-        sprintf(line, "window: pixel ratio %d/10", state->pixel_ratio10);
+        sprintf(line, "window: mode %08lx, pixel ratio %d/10",
+                (unsigned long)tg_gui_window_mode_id, state->pixel_ratio10);
         tg_gui_log(line);
     }
     tg_gui_window_resolve_graphics_defaults(state, ctx.window);

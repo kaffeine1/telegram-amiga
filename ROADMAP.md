@@ -1412,7 +1412,12 @@ text client's QR window does; on the 3.1 bench (PAL hires) the log said
 "pixel ratio 20/10", the code came out 2:1 in pixels and was read back
 stretched to the monitor's shape, sharp or blurred. Also seen on the
 AROS i386 VM: the window's code and the text client's QR window, both
-read back.
+read back. The same evening the OS4 VM showed the catch: its RTG screen
+(mode 50041100, 1920x1080) said 14/10, the driver reckoning for a 4:3
+monitor, and the code came out squashed. The ratio is now trusted only
+for the chipset's own modes (monitor IDs up to DblPAL, 0x000A1000);
+anything else is square: OS4 RTG 10/10, AROS (mode 00100000) 10/10,
+both codes square and read back.
 
 Next to it, the same day, the future auth tokens of
 core.telegram.org/api/auth: every `auth.authorization` (signIn,
