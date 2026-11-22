@@ -210,7 +210,7 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   edit with "Not saved". Now no request goes out with that key any more,
   and a requester explains what happened and offers Log in again, which
   puts the old file aside as telegram-auth-closed.bin and quits, so the
-  next start asks for the phone number. The manuals now say to use
+  next start shows the login. The manuals now say to use
   telegram-auth.bin on one computer at a time.
 - A message that mentions you and came in while its chat was open stayed
   an unread mention on Telegram: the "@" button then offered it, on the
