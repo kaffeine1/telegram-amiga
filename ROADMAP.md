@@ -381,9 +381,12 @@ it works today:
   the members in a group or a channel, `silent`), and a jump to the
   next unread
   mention, the "@" button (`messages.getUnreadMentions`, the count from
-  the chat's dialog, `readMessageContents`). Still missing: a mention
-  that arrives while the chat is open is not marked as read until the
-  button is used;
+  the chat's dialog, `readMessageContents`). Done after 0.5: a mention
+  that comes in while the chat is open is read with the chat (its
+  `mentioned` and `media_unread` flags kept on the message, and
+  `readMessageContents` for the ones newer than the newest message when
+  the chat opened, sent with the chat's read); the older ones still
+  wait for the button;
 - Mute in the chat's menu sent to Telegram: done
   (`account.updateNotifySettings`, the mute alone, for good;
   `updateNotifySettings` followed live; `account.getNotifySettings` the

@@ -1465,6 +1465,15 @@ tg_mtproto_tl_status tg_mtproto_build_read_message_contents(
     unsigned long access_hash_hi,
     unsigned long access_hash_lo,
     unsigned long message_id);
+tg_mtproto_tl_status tg_mtproto_build_read_message_contents_list(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const unsigned long *message_ids,
+    unsigned long count);
 
 /* messages.updatePinnedMessage: pin or unpin one message; one_side keeps
    a private chat's pin to this account alone, silent pins without
@@ -1887,6 +1896,10 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
                              const char *actor, int actor_is_self,
                              const char *target, char *out,
                              unsigned long out_size);
+
+/* 1 = an incoming message whose mention of this account Telegram still
+   counts as unread (mentioned and media_unread). */
+int tg_mtproto_message_mention_unread(const tg_mtproto_message_text *message);
 
 /*
  * Extracts users/chats/channels referenced by a messages.* response into a peer

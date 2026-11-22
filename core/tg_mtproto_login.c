@@ -1808,10 +1808,32 @@ tg_mtproto_tl_status tg_mtproto_build_read_message_contents(
     unsigned long access_hash_lo,
     unsigned long message_id)
 {
-    tg_mtproto_tl_status status;
+    return tg_mtproto_build_read_message_contents_list(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, &message_id, 1UL);
+}
 
-    if (writer == 0 || message_id == 0UL) {
+/* The same for several messages at once (count of them, none zero). */
+tg_mtproto_tl_status tg_mtproto_build_read_message_contents_list(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    const unsigned long *message_ids,
+    unsigned long count)
+{
+    tg_mtproto_tl_status status;
+    unsigned long i;
+
+    if (writer == 0 || message_ids == 0 || count == 0UL) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    for (i = 0UL; i < count; ++i) {
+        if (message_ids[i] == 0UL) {
+            return TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
     }
     if (peer_constructor == TG_PEER_CHANNEL_CONSTRUCTOR) {
         status = tg_mtproto_tl_write_u32(
@@ -1828,12 +1850,21 @@ tg_mtproto_tl_status tg_mtproto_build_read_message_contents(
         status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 1UL);
+        status = tg_mtproto_tl_write_u32(writer, count);
     }
-    if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, message_id);
+    for (i = 0UL; i < count && status == TG_MTPROTO_TL_OK; ++i) {
+        status = tg_mtproto_tl_write_u32(writer, message_ids[i]);
     }
     return status;
+}
+
+/* message#9815cec8: an incoming message whose mention of this account is
+   not read yet, mentioned:flags.4 and media_unread:flags.5 together. */
+int tg_mtproto_message_mention_unread(const tg_mtproto_message_text *message)
+{
+    return message != 0 && !message->is_out &&
+           (message->flags & (1UL << 4)) != 0UL &&
+           (message->flags & (1UL << 5)) != 0UL;
 }
 
 /* account.getNotifySettings#12b3ad31 peer:InputNotifyPeer =
@@ -15967,6 +15998,51 @@ int tg_mtproto_login_self_test(void)
         query[2] != 0xb5U || query[3] != 0xeaU ||
         query[24] != 0x15U || query[28] != 0x01U || query[32] != 77U) {
         return 2;
+    }
+    /* Three at once, and none for a list with a zero or no ids. */
+    {
+        static const unsigned long ids[3] = { 77UL, 300UL, 78UL };
+        static const unsigned long bad[2] = { 77UL, 0UL };
+        static tg_mtproto_message_text m; /* large: not on the stack */
+
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_read_message_contents_list(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, ids,
+                3UL) != TG_MTPROTO_TL_OK ||
+            writer.length != 24UL || query[8] != 0x03U ||
+            query[12] != 77U || query[16] != 0x2cU || query[17] != 0x01U ||
+            query[20] != 78U) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_read_message_contents_list(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, bad,
+                2UL) == TG_MTPROTO_TL_OK ||
+            tg_mtproto_build_read_message_contents_list(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0UL, 0UL, 0UL, ids,
+                0UL) == TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        /* mentioned (bit 4) and media_unread (bit 5), incoming */
+        memset(&m, 0, sizeof(m));
+        m.flags = (1UL << 4) | (1UL << 5);
+        if (!tg_mtproto_message_mention_unread(&m)) {
+            return 2;
+        }
+        m.is_out = 1;
+        if (tg_mtproto_message_mention_unread(&m)) {
+            return 2;
+        }
+        m.is_out = 0;
+        m.flags = 1UL << 4; /* read already */
+        if (tg_mtproto_message_mention_unread(&m)) {
+            return 2;
+        }
+        m.flags = 1UL << 5; /* an unread voice message, no mention */
+        if (tg_mtproto_message_mention_unread(&m) ||
+            tg_mtproto_message_mention_unread(0)) {
+            return 2;
+        }
     }
     /* Pin message 77 in that group, silently, then unpin it: 24 bytes. */
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));

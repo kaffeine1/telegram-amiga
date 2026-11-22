@@ -317,6 +317,11 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                     tg_gui_driver_set_time(m, row);
                     state->msg_gen++;
                 }
+                /* the mention as Telegram has it now: read elsewhere, the
+                   mark goes */
+                m->mention_unread =
+                    row->mention_unread && !row->is_out && !m->is_own ? 1U
+                                                                      : 0U;
                 return; /* already shown (server id match) */
             }
             if (row->is_out && !row->is_service && m->is_own &&
@@ -472,6 +477,8 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     message->from_id_hi = row->from_id_hi;
     message->from_id_lo = row->from_id_lo;
     message->from_user = row->from_user;
+    message->mention_unread = row->mention_unread && !message->is_own ? 1U
+                                                                      : 0U;
     if (message->is_own) {
         message->read_state =
             (message->id != 0UL &&
@@ -1946,6 +1953,34 @@ static int tg_gui_driver_reactions_self_test(void)
     ok = ok && tg_gui_driver_update_reactions(&gui, 42UL, &reactions) &&
          state->messages[0].reactions.count == 0;
     if (!ok) puts("gui driver self-test: reaction projection/update failed");
+    if (ok) {
+        /* Telegram's unread mention mark comes along, never on one's own,
+           and a re-fetch that no longer has it takes it away. */
+        row.mention_unread = 1;
+        driver.on_message(driver.ctx, &row);
+        ok = state->messages[0].mention_unread == 1U;
+        row.is_out = 1;
+        driver.on_message(driver.ctx, &row);
+        ok = ok && state->messages[0].mention_unread == 0U;
+        row.is_out = 0;
+        row.mention_unread = 0;
+        driver.on_message(driver.ctx, &row);
+        ok = ok && state->messages[0].mention_unread == 0U;
+        /* a new message that comes with it, and one's own that cannot */
+        row.id = 43UL;
+        row.mention_unread = 1;
+        driver.on_message(driver.ctx, &row);
+        row.id = 44UL;
+        row.is_out = 1;
+        driver.on_message(driver.ctx, &row);
+        ok = ok && state->message_count == 3 &&
+             state->messages[1].mention_unread == 1U &&
+             state->messages[2].mention_unread == 0U;
+        row.id = 42UL;
+        row.is_out = 0;
+        row.mention_unread = 0;
+        if (!ok) puts("gui driver self-test: the unread mention mark");
+    }
     {
         /* The poll's choice: own rows, rows without reactions and rows
            scrolled out below the view stay out; newest first, capped. */

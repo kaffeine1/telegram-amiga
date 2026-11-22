@@ -117,6 +117,9 @@ typedef struct tg_chat_message_row {
     /* The reader stopped short of the reactions field (a media, a keyboard):
        reactions is 0 and the message's reactions are still to be asked. */
     int reactions_unknown;
+    /* Telegram's own mark: this incoming message mentions the account and
+       the mention is not read yet (mentioned and media_unread). */
+    int mention_unread;
 } tg_chat_message_row;
 
 /* One topic of a forum group, as its list shows it (0.5): the topic is

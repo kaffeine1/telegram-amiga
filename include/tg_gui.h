@@ -476,6 +476,9 @@ typedef struct tg_gui_message {
     /* Chosen while several messages are being selected (pick_mode). */
     unsigned char picked;
     unsigned char spoiler_open; /* its hidden text was clicked open */
+    /* It mentions this account and Telegram still counts the mention as
+       unread (tg_chat_message_row.mention_unread); cleared once read. */
+    unsigned char mention_unread;
     /* The renderer's own: the height it worked out for this message and a
        key of everything that height depends on (0 = none yet). */
     unsigned long layout_key;

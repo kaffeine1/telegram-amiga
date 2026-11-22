@@ -124,6 +124,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- A message that mentions you and came in while its chat was open stayed
+  an unread mention on Telegram: the "@" button then offered it, on the
+  other devices too, although it had been read in front of you. Reading
+  the history does not read a mention. Such mentions are now read with
+  the chat (`readMessageContents`); the ones already there when the chat
+  opened still wait for the "@" button.
 - A forum group found with "Search Telegram..." opened on General with
   the chat list beside it instead of its topics, until its row was
   clicked again. The search was still on when the group opened, and

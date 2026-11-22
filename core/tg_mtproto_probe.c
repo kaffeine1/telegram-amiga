@@ -15710,6 +15710,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                     row.webpage_channel_lo = peer_id_lo;
                 }
                 row.id = texts.messages[i].id;
+                row.mention_unread =
+                    tg_mtproto_message_mention_unread(&texts.messages[i]);
                 row.from_id_hi = texts.messages[i].from_id_hi;
                 row.from_id_lo = texts.messages[i].from_id_lo;
                 row.from_user = texts.messages[i].from_constructor ==
@@ -25377,13 +25379,49 @@ static unsigned long tg_gui_read_sent_id = 0UL;
 /* Asking failed for this message: wait for a newer one, do not ask ten
    times a second. */
 static unsigned long tg_gui_read_failed_id = 0UL;
+/* The newest message when the chat (or a topic of it) opened: a mention
+   newer than that came in while the chat was open in front of the user,
+   and is read with the chat (tg_gui_session_read_step). The older ones
+   wait for the "@" button, as before. */
+static unsigned long tg_gui_mention_floor = 0UL;
 
 static void tg_gui_read_chat_opened(int other_chat)
 {
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int k;
+
     if (other_chat) {
         tg_gui_read_sent_id = 0UL;
         tg_gui_read_failed_id = 0UL;
     }
+    tg_gui_mention_floor = 0UL;
+    for (k = 0; gst != 0 && k < gst->message_count; ++k) {
+        if (gst->messages[k].id > tg_gui_mention_floor) {
+            tg_gui_mention_floor = gst->messages[k].id;
+        }
+    }
+}
+
+/* The messages among these whose mention of this account came in after
+   message after and is shown now (up to target): their ids into ids, max
+   of them. How many. */
+#define TG_GUI_MENTIONS_READ_MAX 16
+static unsigned long tg_gui_mentions_arrived(const tg_gui_message *messages,
+                                             int count, unsigned long after,
+                                             unsigned long target,
+                                             unsigned long *ids,
+                                             unsigned long max)
+{
+    unsigned long n = 0UL;
+    int k;
+
+    for (k = 0; k < count && n < max; ++k) {
+        if (messages[k].mention_unread && !messages[k].is_own &&
+            messages[k].id > after && messages[k].id <= target) {
+            ids[n++] = messages[k].id;
+        }
+    }
+    return n;
 }
 
 /* --- unread mentions -----------------------------------------------------
@@ -33114,6 +33152,36 @@ static void tg_gui_mentions_sent(int sent)
 static int tg_gui_mentions_self_test(void)
 {
     int ok;
+
+    /* The mentions read with the chat: incoming, still unread, newer than
+       the newest message when the chat opened, and shown already. */
+    {
+        static tg_gui_message msgs[5];
+        unsigned long ids[TG_GUI_MENTIONS_READ_MAX];
+
+        memset(msgs, 0, sizeof(msgs));
+        msgs[0].id = 90UL; /* there at the open: the "@" button's */
+        msgs[0].mention_unread = 1U;
+        msgs[1].id = 101UL;
+        msgs[1].mention_unread = 1U;
+        msgs[2].id = 102UL; /* no mention */
+        msgs[3].id = 103UL; /* one's own */
+        msgs[3].mention_unread = 1U;
+        msgs[3].is_own = 1;
+        msgs[4].id = 110UL; /* past what is shown */
+        msgs[4].mention_unread = 1U;
+        if (tg_gui_mentions_arrived(msgs, 5, 100UL, 105UL, ids,
+                                    TG_GUI_MENTIONS_READ_MAX) != 1UL ||
+            ids[0] != 101UL ||
+            tg_gui_mentions_arrived(msgs, 5, 100UL, 110UL, ids,
+                                    TG_GUI_MENTIONS_READ_MAX) != 2UL ||
+            ids[1] != 110UL ||
+            tg_gui_mentions_arrived(msgs, 5, 0UL, 110UL, ids, 1UL) != 1UL ||
+            ids[0] != 90UL) {
+            puts("probe self-test: the mentions read with the chat");
+            return 2;
+        }
+    }
 
     /* Who an "@" can mention: the people noted (not this account, not a
        chat, nobody twice), found by the start of their username or of any
@@ -41477,6 +41545,47 @@ int tg_gui_session_read_step(FILE *stream)
         tg_gui_read_failed_id = target;
         tg_gui_log("read: could not tell Telegram");
         return 0;
+    }
+    {
+        /* A mention that came in while the chat was open is read with it
+           (readMessageContents): reading the history does not read the
+           mention, and the "@" button then offered what the user had just
+           seen, on the other devices too. */
+        static unsigned char mquery[160];
+        unsigned long ids[TG_GUI_MENTIONS_READ_MAX];
+        unsigned long n;
+        unsigned long i;
+        tg_gui_state *mst = tg_gui_session_state.gui_driver.state;
+
+        n = tg_gui_mentions_arrived(mst->messages, mst->message_count,
+                                    tg_gui_mention_floor, target, ids,
+                                    TG_GUI_MENTIONS_READ_MAX);
+        if (n > 0UL) {
+            tg_mtproto_tl_writer_init(&writer, mquery, sizeof(mquery));
+            if (tg_mtproto_build_read_message_contents_list(
+                    &writer, pc, ph, pl, ahh, ahl, ids, n) ==
+                    TG_MTPROTO_TL_OK &&
+                tg_gui_session_peer_request(mquery, writer.length, &result,
+                                            "mtproto readMessageContents", 0,
+                                            0UL, quiet) == 0) {
+                for (k = 0; k < mst->message_count; ++k) {
+                    for (i = 0UL; i < n; ++i) {
+                        if (mst->messages[k].id == ids[i]) {
+                            mst->messages[k].mention_unread = 0U;
+                        }
+                    }
+                }
+                tg_chat_dialog_unread_mentions =
+                    tg_chat_dialog_unread_mentions > n
+                        ? tg_chat_dialog_unread_mentions - n : 0UL;
+                if (tg_gui_mentions_show()) {
+                    tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
+                }
+                tg_gui_log("mention: read with the chat");
+            } else {
+                tg_gui_log("mention: could not mark the new ones read");
+            }
+        }
     }
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
