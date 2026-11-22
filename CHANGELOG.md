@@ -94,6 +94,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   30 on 68k), and the same row at the end of a part goes on with the
   next. A click on one opens it, and it joins the Archive's view; ESC
   goes back to the Archive.
+- A click left of a message's bubble selects it, as Select in its menu
+  does: the bar with Forward, Delete and Cancel comes up, and the next
+  clicks choose the others. For one's own messages, which stand on the
+  right, that is all the room beside them.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

@@ -430,8 +430,9 @@ Middle, more interface:
   `messages.deleteMessages` or `channels.deleteMessages` for the lot).
   In a chat with one person the question is whether they go for both
   sides or for this account only (`revoke`), and the same question is
-  on Delete in the menu of any single message there. Still missing
-  from its section: the click in the gutter left of a bubble;
+  on Delete in the menu of any single message there. Done after 0.5:
+  a click in the gutter left of a bubble starts it too (the bubble's
+  left edge kept by the paint, `msg_left`);
 - open a downloaded file or show it in its drawer: done (Open and Show
   in drawer in the menu of a message whose file was saved,
   `OpenWorkbenchObjectA`, the record in `data/telegram-saved.txt`, a

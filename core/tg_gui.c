@@ -4619,7 +4619,8 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
                                const tg_gui_message *message, int area_x,
                                int area_w, int y, int lh, int top, int bottom,
                                long sel_lo, long sel_hi, int inline_photos,
-                               int grouped, tg_gui_rect *out_photo)
+                               int grouped, tg_gui_rect *out_photo,
+                               int *out_x)
 {
     int style;
     unsigned long starts[TG_GUI_WRAP_MAX_LINES];
@@ -4674,6 +4675,9 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
         status_h = geo.status_h;
         bottom_pad = geo.bottom_pad;
         bubble_x = geo.bubble_x;
+    }
+    if (out_x != 0) {
+        *out_x = bubble_x;
     }
     content_y = y + header_h + top_pad; /* reply, photo and text start here */
     has_time = (message->time[0] != '\0');
@@ -6487,6 +6491,7 @@ static void tg_gui_paint_main(const tg_gui_state *state,
     for (i = 0; i < TG_GUI_MAX_MESSAGES; ++i) {
         ((tg_gui_state *)state)->photo_w[i] = 0;
         ((tg_gui_state *)state)->photo_h[i] = 0;
+        ((tg_gui_state *)state)->msg_left[i] = 0;
     }
     for (i = 0; i < state->message_count; ++i) {
         const tg_gui_message *message;
@@ -6564,7 +6569,8 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                 (void)tg_gui_paint_bubble(
                     backend, message, area_x, area_w, y, lh, transcript_top,
                     transcript_bottom, sel_lo, sel_hi, state->inline_photos,
-                    tg_gui_message_grouped(state, i), &photo_rect);
+                    tg_gui_message_grouped(state, i), &photo_rect,
+                    &st->msg_left[i]);
                 if (photo_rect.w > 0 && photo_rect.h > 0) {
                     st->photo_x[i] = photo_rect.x;
                     st->photo_y[i] = photo_rect.y;
@@ -7429,6 +7435,16 @@ void tg_gui_pick_begin(tg_gui_state *state, int mi)
     state->composing = 0;
     state->reply_to_id = 0UL;
     state->selected_msg = -1;
+}
+
+int tg_gui_pick_gutter(const tg_gui_state *state, int mi, int x)
+{
+    if (state == 0 || mi < 0 || mi >= state->message_count ||
+        mi >= state->msg_cached || !tg_gui_pick_can(&state->messages[mi])) {
+        return 0;
+    }
+    /* msg_left 0 (not drawn, a service line) leaves no gutter */
+    return x >= state->tr_area_x - 8 && x < state->msg_left[mi];
 }
 
 int tg_gui_pick_toggle(tg_gui_state *state, int mi, int extend)
@@ -11935,7 +11951,7 @@ static int tg_gui_reactions_self_test(void)
     record.watch_text[0] = label;
     record.watch_text[1] = "* 4";
     painted = tg_gui_paint_bubble(&backend, message, 0, 300, 20, 18,
-                                  0, 300, -1L, -1L, 0, 0, 0);
+                                  0, 300, -1L, -1L, 0, 0, 0, 0);
     ok = ok && painted == wide && record.watch_hits[0] == 1 &&
          record.watch_hits[1] == 1 && record.watch_y[0] > 20 + base - 6;
     /* Very narrow chips use a plain mark; clipping may omit a whole row but
@@ -13100,6 +13116,33 @@ int tg_gui_self_test(void)
         state.composing = 1;
         state.reply_to_id = 55UL;
         ok_pick = saw_select && tg_gui_pick_count(&state) == 0;
+        {
+            /* The gutter left of a bubble, as the last paint drew it: from
+               the transcript's edge up to the bubble, not the bubble, not a
+               service line, not a row the paint did not draw. */
+            int saved_cached = state.msg_cached;
+            int saved_area = state.tr_area_x;
+
+            state.msg_cached = 4;
+            state.tr_area_x = 240;
+            state.msg_left[0] = 240; /* incoming: the bubble at the edge */
+            state.msg_left[1] = 400; /* one's own: a wide gutter */
+            state.msg_left[2] = 0;   /* a service line */
+            state.msg_left[3] = 0;   /* not drawn */
+            ok_pick = ok_pick && tg_gui_pick_gutter(&state, 0, 234) &&
+                      !tg_gui_pick_gutter(&state, 0, 240) &&
+                      !tg_gui_pick_gutter(&state, 0, 200) &&
+                      tg_gui_pick_gutter(&state, 1, 300) &&
+                      !tg_gui_pick_gutter(&state, 1, 420) &&
+                      !tg_gui_pick_gutter(&state, 2, 236) &&
+                      !tg_gui_pick_gutter(&state, 3, 236) &&
+                      !tg_gui_pick_gutter(&state, 4, 236);
+            state.msg_left[3] = 400; /* drawn, but by an older paint */
+            state.msg_cached = 2;
+            ok_pick = ok_pick && !tg_gui_pick_gutter(&state, 3, 300);
+            state.msg_cached = saved_cached;
+            state.tr_area_x = saved_area;
+        }
         tg_gui_pick_begin(&state, 2); /* a service line: not a start */
         ok_pick = ok_pick && !state.pick_mode;
         tg_gui_pick_begin(&state, 0);
@@ -14969,7 +15012,7 @@ int tg_gui_self_test(void)
                 rec.watch_hits[0] = 0;
                 ret = tg_gui_paint_bubble(&bb, &draft->messages[0], 10, 480,
                                           10, rec.line_h, 0, 200, 0, 0, 1, 0,
-                                          0);
+                                          0, 0);
                 rec.watch_text[0] = 0;
                 rec.font_h = 0;
                 text_top = rec.first_text_y - 6;
@@ -15002,7 +15045,8 @@ int tg_gui_self_test(void)
                 draft->tr_area_w = 480;
                 rec.texts = 0;
                 (void)tg_gui_paint_bubble(&b, &draft->messages[0], 10, 480,
-                                          10, rec.line_h, 0, 200, 0, 0, 1, 0, 0);
+                                          10, rec.line_h, 0, 200, 0, 0, 1, 0, 0,
+                                          0);
                 glyph_bottom = rec.first_text_y - rec.ascent + 15;
                 if (tg_gui_transcript_char_at(draft, &b, rec.line_h, 0,
                                                rec.first_text_x + 6,
@@ -15014,7 +15058,8 @@ int tg_gui_self_test(void)
                 draft->messages[0].reply_text[2] = '\0';
                 rec.texts = 0;
                 (void)tg_gui_paint_bubble(&b, &draft->messages[0], 10, 480,
-                                          10, rec.line_h, 0, 200, 0, 0, 1, 0, 0);
+                                          10, rec.line_h, 0, 200, 0, 0, 1, 0, 0,
+                                          0);
                 {
                     tg_gui_bubble_geom rgeo;
 

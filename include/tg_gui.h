@@ -696,6 +696,9 @@ typedef struct tg_gui_state {
     int photo_y[TG_GUI_MAX_MESSAGES];
     int photo_w[TG_GUI_MAX_MESSAGES];
     int photo_h[TG_GUI_MAX_MESSAGES];
+    /* Where each bubble starts, x of the last paint (0 = not painted, or a
+       service line): a click left of it, in its gutter, selects it. */
+    int msg_left[TG_GUI_MAX_MESSAGES];
     /* transcript area of the last paint (for the char-level hit test) */
     int tr_area_x;
     int tr_area_w;
@@ -1381,6 +1384,9 @@ int tg_gui_open_chat_is_self(const tg_gui_state *state);
 int tg_gui_message_is_sticker_still(const tg_gui_message *message);
 #define TG_GUI_STICKER_MAX_W 160 /* as wide as a sticker is drawn */
 
+/* 1 when a click at x on message mi falls in the gutter left of its bubble,
+   as the last paint drew it: what Select does from the menu, at once. */
+int tg_gui_pick_gutter(const tg_gui_state *state, int mi, int x);
 
 /* Selecting several messages. begin: the mode starts with message `mi`
    chosen (a reply or an edit under way is dropped). toggle: a click on

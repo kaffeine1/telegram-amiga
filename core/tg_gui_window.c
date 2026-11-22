@@ -19927,7 +19927,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                            on SELECTUP -- same defer pattern as the sidebar. */
                         int mi = TG_GUI_HIT_MESSAGE_BASE - hit;
 
-                        if (mi >= 0 && mi < state->message_count) {
+                        if (mi >= 0 && mi < state->message_count &&
+                            tg_gui_pick_gutter(state, mi, hx)) {
+                            /* In the gutter left of the bubble: Select, as
+                               from the message's menu. */
+                            state->sel_active = 0;
+                            state->sel_press_armed = 0;
+                            tg_gui_pick_begin(state, mi);
+                            tg_gui_window_copy(state->status,
+                                sizeof(state->status),
+                                "Click to select, Shift+click a range, "
+                                "ESC ends");
+                            tg_gui_window_paint(state, &backend);
+                        } else if (mi >= 0 && mi < state->message_count) {
                             const tg_gui_message *m = &state->messages[mi];
 
                             if (!m->is_system && m->id != 0UL) {

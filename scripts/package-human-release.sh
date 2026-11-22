@@ -759,7 +759,8 @@ Messages
   topic and goes into it; /topic rename <name>, /topic close and
   /topic reopen act on the topic chosen.
 - To act on several messages together, choose Select in the menu of
-  one of them: it is marked, and a click on any other message marks it
+  one of them, or click left of its bubble: it is marked, and a click
+  on any other message marks it
   or takes its mark away; Shift+click marks everything from the message
   last clicked to that one. The input line gives way to a bar that says
   how many are selected, with Forward, Delete and Cancel; Esc cancels
@@ -1086,7 +1087,8 @@ Messaggi
   argomento e ci entra; /topic rename <nome>, /topic close e /topic
   reopen agiscono sull'argomento scelto.
 - Per agire su piu' messaggi insieme scegli Select nel menu di uno di
-  loro: viene segnato, e un click su un altro messaggio lo segna o gli
+  loro, o fai click a sinistra della sua bolla: viene segnato, e un
+  click su un altro messaggio lo segna o gli
   toglie il segno; Shift+click segna tutto dal messaggio cliccato per
   ultimo fino a quello. La riga di input lascia il posto a una barra
   che dice quanti sono selezionati, con Forward, Delete e Cancel; anche
