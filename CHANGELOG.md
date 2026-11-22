@@ -17,8 +17,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   so a new user could be left unable to sign in. A cloud password is
   asked for afterwards, an account that lives on another datacenter is
   followed there, and the code is renewed every thirty seconds. P turns
-  to the phone number and the code, as before; the text client keeps
-  that way. The QR encoder is our own, written from the standard, and
+  to the phone number and the code, as before. The text client starts
+  on the QR code too: a console of a 256-line Workbench cannot hold one,
+  so the code goes in a small window of its own on the Workbench screen,
+  which never takes the keyboard, and P with Return turns to the number
+  there. The QR encoder is our own, written from the standard, and
   every code it makes was read back by the Mac's own QR reader.
 - A text longer than one message goes as several messages, as the
   official clients send it (issue #14). A 6 KB paste was cut to what

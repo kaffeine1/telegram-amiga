@@ -30,6 +30,7 @@
 #include "tg_chat_engine.h"
 #include "tg_mtproto_message_id.h"
 #include "tg_mtproto_probe.h"
+#include "tg_qr.h"
 #include "tg_emoji_sheet.h"
 #include "tg_mtproto_rsa.h"
 #include "tg_mtproto_session.h"
@@ -7221,6 +7222,138 @@ static void tg_mtproto_print_login_failure(FILE *stream)
     fflush(stream);
 }
 
+/* The QR login of the text client, before the phone number: the code in
+   its window (tg_qr_view), Telegram asked every five seconds, the console
+   watched in between for P. Returns 0 once signed in,
+   TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED when the cloud password is next (on
+   *out_host / *out_dc_id_text, where the account lives), 1 when the user
+   asked for the phone number or no code came in ten minutes, 2 when the
+   QR way did not work (the phone number then too). */
+static int tg_mtproto_login_qr_console(const char *host,
+                                       const char *port,
+                                       const char *dc_id_text,
+                                       const char *api_file,
+                                       const char *auth_file,
+                                       const char **out_host,
+                                       const char **out_dc_id_text,
+                                       FILE *stream)
+{
+    static tg_qr_code code;
+    char api_id[32];
+    char api_hash[96];
+    char link[256];
+    char line[16];
+    unsigned char shown[TG_MTPROTO_LOGIN_TOKEN_MAX];
+    unsigned long shown_length = 0UL;
+    tg_mtproto_login_token lt;
+    const char *cur_host = host;
+    const char *cur_dc = dc_id_text;
+    int rc;
+    int asks;
+    static const char label[] = "mtproto qr login";
+
+    if (tg_mtproto_load_api_credentials(api_file, api_id, sizeof(api_id),
+                                        api_hash, sizeof(api_hash), stream,
+                                        label) != 0) {
+        return 2;
+    }
+    fprintf(stream, "Getting a QR code from Telegram.\n");
+    fflush(stream);
+    rc = tg_mtproto_auth_qr_step(cur_host, port, cur_dc, api_id, api_hash,
+                                 auth_file, 1, 0, 0UL, &lt, stream);
+    fputc('\n', stream); /* after the key exchange's dots */
+    for (asks = 0; rc == TG_MTPROTO_QR_TOKEN; ++asks) {
+        if (lt.token_length != shown_length ||
+            memcmp(lt.token, shown, (size_t)lt.token_length) != 0) {
+            if (tg_mtproto_login_token_url(lt.token, lt.token_length, link,
+                                           sizeof(link)) != 0 ||
+                tg_qr_encode((const unsigned char *)link,
+                             (unsigned long)strlen(link), -1, &code) != 0 ||
+                tg_qr_view_show(&code, stream) != 0) {
+                fprintf(stream, "The QR code cannot be shown here.\n");
+                tg_qr_view_close();
+                tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
+                return 2;
+            }
+            if (shown_length == 0UL) {
+                fprintf(stream,
+                        "Scan the QR code with Telegram on your phone: "
+                        "Settings > Devices > Link Desktop Device.\n"
+                        "It is renewed every 30 seconds. Type P and press "
+                        "Return to use your phone number instead.\n");
+                fflush(stream);
+            }
+            memcpy(shown, lt.token, (size_t)lt.token_length);
+            shown_length = lt.token_length;
+        }
+        if (asks >= 120) {
+            fprintf(stream, "No scan in ten minutes.\n");
+            rc = 1;
+            break;
+        }
+        if (tg_platform_stdin_readable(5UL)) {
+            if (tg_mtproto_prompt_line("", line, sizeof(line), 0, stream,
+                                       label) != 0) {
+                rc = 2;
+                break;
+            }
+            if (line[0] == 'p' || line[0] == 'P') {
+                rc = 1;
+                break;
+            }
+        }
+        {
+            /* The asks print nothing: their connection dots, one line of
+               them every few minutes, went on filling the console. A
+               failure still says why, from the shared reason. */
+            FILE *quiet = tg_mtproto_open_quiet_stream(stream);
+
+            rc = tg_mtproto_auth_qr_step(cur_host, port, cur_dc, api_id,
+                                         api_hash, auth_file, 0, 0, 0UL, &lt,
+                                         quiet);
+            tg_mtproto_close_quiet_stream(quiet, stream);
+        }
+        if (rc == TG_MTPROTO_QR_MIGRATE) {
+            const char *migrate_host;
+            const char *migrate_dc;
+            unsigned char token[TG_MTPROTO_LOGIN_TOKEN_MAX];
+            unsigned long token_length = lt.token_length;
+
+            if (tg_mtproto_production_endpoint_for_dc(lt.dc_id, &migrate_host,
+                                                      &migrate_dc) != 0) {
+                rc = 2;
+                break;
+            }
+            fprintf(stream, "Scanned. Your account lives on Telegram DC %s.\n",
+                    migrate_dc);
+            fflush(stream);
+            memcpy(token, lt.token, (size_t)token_length);
+            cur_host = migrate_host;
+            cur_dc = migrate_dc;
+            rc = tg_mtproto_auth_qr_step(cur_host, port, cur_dc, api_id,
+                                         api_hash, auth_file, 1, token,
+                                         token_length, &lt, stream);
+            fputc('\n', stream);
+        }
+    }
+    tg_qr_view_close();
+    tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
+    *out_host = cur_host;
+    *out_dc_id_text = cur_dc;
+    if (rc == TG_MTPROTO_QR_SIGNED_IN) {
+        fprintf(stream, "Signed in with the QR code.\n");
+        return 0;
+    }
+    if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        fprintf(stream, "Scanned.\n");
+        return rc;
+    }
+    if (rc == 2) {
+        tg_mtproto_print_login_failure(stream);
+    }
+    return rc == 1 ? 1 : 2;
+}
+
 int tg_mtproto_auth_login_wizard_file(const char *host,
                                       const char *port,
                                       const char *dc_id_text,
@@ -7264,6 +7397,26 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             TG_MTPROTO_LOGIN_NETWORK_TIMEOUT_SECONDS);
         restore_timeout = 1;
     }
+    /* The QR code first, as in the window: no login code has to arrive,
+       which Telegram has begun to hold back from clients like this one.
+       P (or a QR way that does not work) leads to the phone number. */
+    phone[0] = '\0';
+    rc = tg_mtproto_login_qr_console(host, port, dc_id_text, api_file,
+                                     auth_file, &current_host,
+                                     &current_dc_id_text, stream);
+    if (rc == 0) {
+        if (restore_timeout) {
+            tg_net_set_connect_timeout_seconds(saved_timeout);
+        }
+        return 0;
+    }
+    if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        if (restore_timeout) {
+            tg_net_set_connect_timeout_seconds(saved_timeout);
+        }
+        goto password_step;
+    }
+    fprintf(stream, "\n");
     /* Telegram rejecting the number (format slip, stray glyph from an odd
        console path) re-prompts like a wrong code does, instead of dumping
        the user back to the shell to start over. */
@@ -7427,6 +7580,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                     "message and try again.\n");
         }
     }
+password_step:
     if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
         fprintf(stream,
                 "2FA password required.\n"

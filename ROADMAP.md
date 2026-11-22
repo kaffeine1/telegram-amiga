@@ -1396,8 +1396,11 @@ base64url without padding, the same call every five seconds (Telegram
 gives the same token back until it expires after thirty seconds, then a
 new one), `auth.loginTokenMigrateTo` followed with `auth.importLoginToken`
 on the named datacenter, SESSION_PASSWORD_NEEDED into the existing cloud
-password step. P turns to the phone number; the text client keeps the
-number only (Michele, 2026-11-22). The key of any login waits in
+password step. P turns to the phone number. The text client got the QR
+code the same evening (Michele, after a user on OS4 reported the same
+silence): core/tg_qr_view.c draws it in a small window of its own on
+the Workbench screen, which never activates, so the console keeps P;
+the host build prints it in the terminal. The key of any login waits in
 data/telegram-login.bin and becomes telegram-auth.bin only once signed
 in. Still open: on a screen with non-square pixels (a PAL 640x256
 Workbench) the code is drawn square in pixels, so it shows taller than

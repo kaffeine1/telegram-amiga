@@ -242,12 +242,13 @@ fruttuosi.
 first with the official app on a phone."
     account_it="Ti serve un account Telegram. Il client non sa crearne uno: fallo
 prima con l'app ufficiale su un telefono."
-    login_steps_en="2. The window shows a QR code. On your phone open Telegram, go to
-   Settings > Devices > Link Desktop Device and point the phone at the
-   code: the login goes through by itself, with no code to wait for.
-   It needs Telegram signed in on that phone. Press P to use your phone
-   number instead (the text client always does): enter it in
-   international form (for example +39 333 1234567), then the code
+    login_steps_en="2. The window shows a QR code (the text client shows it in a small
+   window of its own on the Workbench screen). On your phone open
+   Telegram, go to Settings > Devices > Link Desktop Device and point the
+   phone at the code: the login goes through by itself, with no code to
+   wait for. It needs Telegram signed in on that phone. Press P to use
+   your phone number instead (in the text client P and Return): enter it
+   in international form (for example +39 333 1234567), then the code
    Telegram sends. If you are signed in to Telegram elsewhere, the code
    arrives there, in the Telegram service chat, not by SMS; the client
    says where it went. If nothing comes, wait until the code screen
@@ -256,11 +257,13 @@ prima con l'app ufficiale su un telefono."
    Enter.
 4. The client saves the login in telegram-auth.bin, in this drawer, and
    does not ask again."
-    login_steps_it="2. La finestra mostra un codice QR. Sul telefono apri Telegram, vai in
-   Impostazioni > Dispositivi > Collega dispositivo desktop (Link
-   Desktop Device) e inquadra il codice: l'accesso si completa da solo, senza aspettare nessun codice.
-   Serve Telegram collegato su quel telefono. Premi P per usare invece il
-   numero di telefono (il client testuale fa sempre cosi'): scrivilo in
+    login_steps_it="2. La finestra mostra un codice QR (il client testuale lo mostra in
+   una piccola finestra sua sullo schermo del Workbench). Sul telefono
+   apri Telegram, vai in Impostazioni > Dispositivi > Collega dispositivo
+   desktop (Link Desktop Device) e inquadra il codice: l'accesso si
+   completa da solo, senza aspettare nessun codice. Serve Telegram
+   collegato su quel telefono. Premi P per usare invece il numero di
+   telefono (nel client testuale P e Invio): scrivilo in
    formato internazionale (per esempio +39 333 1234567), poi il codice
    che Telegram ti manda. Se sei collegato a Telegram altrove, il codice
    arriva li', nella chat di servizio di Telegram, non via SMS; il client
@@ -295,9 +298,8 @@ $login_steps_it"
         readme_programs="  Amigram      the window client
   Amigram-TUI  the text client"
         readme_start="Copy this drawer to a writable volume and double-click Amigram
-(or Amigram-TUI). The first run signs you in: the window with a QR
-code that Telegram on your phone scans (P for phone number and code),
-the text client with phone number and code."
+(or Amigram-TUI). The first run signs you in with a QR code that
+Telegram on your phone scans, or with phone number and code (P)."
         aminet_programs="Two clients share one engine and one login:
 
   Amigram      the window client (Intuition/GadTools): chat list

@@ -6,6 +6,8 @@
 #ifndef TG_QR_H
 #define TG_QR_H
 
+#include <stdio.h>
+
 /* A QR Code (ISO/IEC 18004) for the login screen: byte mode, error
    correction level M, versions 1 to 10, so up to 213 bytes of text. The
    login link Telegram hands out (tg://login?token=...) needs version 4 to
@@ -31,6 +33,13 @@ int tg_qr_encode(const unsigned char *data, unsigned long length, int mask,
 /* 1 when the module at column x, row y is dark; 0 outside the code, which
    is the light quiet zone around it. */
 int tg_qr_dark(const tg_qr_code *code, int x, int y);
+
+/* The text client's login code: a small window on the Workbench screen
+   that never takes the keyboard (Amiga), the terminal (the host build).
+   Each call with a new code redraws it; close takes it away. 0 = shown,
+   2 = no window could open (an OS older than 3.0, no public screen). */
+int tg_qr_view_show(const tg_qr_code *code, FILE *stream);
+void tg_qr_view_close(void);
 
 int tg_qr_self_test(void);
 
