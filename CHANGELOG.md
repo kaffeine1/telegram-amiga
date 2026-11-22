@@ -9,6 +9,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 ## [Unreleased]
 
 ### Added
+- Logging in with a QR code, the way Telegram Desktop does. The window
+  starts on a code; Telegram on a phone that is signed in scans it
+  (Settings > Devices > Link Desktop Device) and the login goes through
+  by itself, with no login code to wait for. Telegram had begun to hold
+  those codes back from this client for some accounts, on every system,
+  so a new user could be left unable to sign in. A cloud password is
+  asked for afterwards, an account that lives on another datacenter is
+  followed there, and the code is renewed every thirty seconds. P turns
+  to the phone number and the code, as before; the text client keeps
+  that way. The QR encoder is our own, written from the standard, and
+  every code it makes was read back by the Mac's own QR reader.
 - A text longer than one message goes as several messages, as the
   official clients send it (issue #14). A 6 KB paste was cut to what
   one message holds; the input line now holds four messages, 16 KB
@@ -150,6 +161,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- A login left half way no longer leaves telegram-auth.bin behind. The
+  key a login makes was saved there as soon as Telegram sent the code,
+  so a closed window or a Ctrl+C at the code prompt left a key nobody
+  had signed in, and the next start took it for a saved login and could
+  not get in. The key now waits in data/telegram-login.bin and becomes
+  telegram-auth.bin only once Telegram has signed it in, in the window
+  and in the text client alike.
 - A session that Telegram has closed for good is said so, instead of
   being asked again every two seconds in silence. Telegram closes a
   session when the same telegram-auth.bin is used in two places at once

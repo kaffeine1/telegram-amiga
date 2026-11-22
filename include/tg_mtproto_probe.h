@@ -11,6 +11,13 @@
 #include "tg_chat_engine.h"
 #include "tg_mtproto_tl.h"
 
+/* Where a login keeps its key until Telegram has signed it in: only then
+   does it become the saved login (telegram-auth.bin). A login left half
+   way, closed window or Ctrl+C alike, used to leave telegram-auth.bin
+   behind with a key nobody had signed in, and the next start took it for
+   a saved login. Both the window and the text client use it. */
+#define TG_MTPROTO_LOGIN_KEY_FILE "data/telegram-login.bin"
+
 tg_mtproto_tl_status tg_mtproto_build_req_pq_multi(
     tg_mtproto_tl_writer *writer,
     unsigned long message_id_hi,
@@ -46,6 +53,21 @@ int tg_mtproto_auth_sign_in(const char *host,
                             const char *code_hash_file,
                             const char *phone_code,
                             const char *dc_id_text,
+                            FILE *stream);
+struct tg_mtproto_login_token;
+/* One step of the QR login (auth.exportLoginToken, or importLoginToken
+   with a token after a migration) on the key in auth_file, a new one first
+   with `fresh`. See TG_MTPROTO_QR_* in tg_mtproto_probe.c. */
+int tg_mtproto_auth_qr_step(const char *host,
+                            const char *port,
+                            const char *dc_id_text,
+                            const char *api_id_text,
+                            const char *api_hash,
+                            const char *auth_file,
+                            int fresh,
+                            const unsigned char *import_token,
+                            unsigned long import_length,
+                            struct tg_mtproto_login_token *out,
                             FILE *stream);
 int tg_mtproto_auth_sign_in_file(const char *host,
                                  const char *port,

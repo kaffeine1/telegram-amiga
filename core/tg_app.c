@@ -217,6 +217,19 @@ static int tg_run_mtproto_peer_cache_exists(const char *peer_cache_file)
     return length > 0UL;
 }
 
+/* A login's key becomes the saved login only once Telegram has signed it
+   in (TG_MTPROTO_LOGIN_KEY_FILE until then). 0 = done. */
+static int tg_app_login_key_to_auth(const char *auth_file)
+{
+    (void)remove(auth_file);
+    if (rename(TG_MTPROTO_LOGIN_KEY_FILE, auth_file) != 0) {
+        printf("Signed in, but %s could not be written: rename %s to it.\n",
+               auth_file, TG_MTPROTO_LOGIN_KEY_FILE);
+        return 2;
+    }
+    return 0;
+}
+
 static int tg_run_mtproto_start_file(const char *api_file,
                                      const char *auth_file,
                                      const char *code_hash_file,
@@ -287,7 +300,8 @@ static int tg_run_mtproto_start_file(const char *api_file,
             puts(" 3. Start this program again: it reuses that login and");
             puts("    goes straight to the chats.");
             puts("");
-            puts("The same account works from both machines at once.");
+            puts("The login then works on both machines, one at a time:");
+            puts("Telegram closes a login it sees in two places at once.");
             puts("");
             puts("Press RETURN to attempt the login here anyway,");
             puts("or Ctrl+C to quit and follow the steps above.");
@@ -302,8 +316,11 @@ static int tg_run_mtproto_start_file(const char *api_file,
         tg_gui_log("diag: entering login wizard (network + DH)");
 #endif
         rc = tg_mtproto_auth_login_wizard_file(
-            "149.154.167.91", "443", "4", api_file, auth_file,
-            code_hash_file, stdout);
+            "149.154.167.91", "443", "4", api_file,
+            TG_MTPROTO_LOGIN_KEY_FILE, code_hash_file, stdout);
+        if (rc == 0) {
+            rc = tg_app_login_key_to_auth(auth_file);
+        }
 #ifdef TG_DIAG_TRACE
         tg_gui_log(rc == 0 ? "diag: login wizard OK"
                            : "diag: login wizard FAILED");
@@ -4596,9 +4613,11 @@ int tg_app_run(int argc, char **argv)
             tg_gui_session_login_begin(config.mtproto_auth_api_file,
                                        config.mtproto_auth_file,
                                        config.gui_chats_cache_file);
-            gui->mode = TG_GUI_MODE_LOGIN_PHONE;
+            /* The QR code first: a phone already signed in scans it and
+               no login code has to arrive. P turns to the number. */
+            gui->mode = TG_GUI_MODE_LOGIN_QR;
             strcpy(gui->title, TG_APP_TITLE);
-            strcpy(gui->status, "Enter your phone number (+...)");
+            strcpy(gui->status, "Getting a code from Telegram...");
         } else {
             fclose(auth_probe);
             (void)tg_gui_session_project_cached(config.gui_chats_cache_file,
@@ -5039,17 +5058,18 @@ int tg_app_run(int argc, char **argv)
                 wizard_rc = tg_mtproto_auth_login_wizard_file(
                     config.mtproto_auth_host, config.mtproto_auth_port,
                     config.mtproto_auth_dc_id, config.mtproto_auth_api_file,
-                    config.mtproto_auth_file,
+                    TG_MTPROTO_LOGIN_KEY_FILE,
                     config.mtproto_auth_code_hash_file != 0
                         ? config.mtproto_auth_code_hash_file
                         : "data/phone-code-hash.txt",
                     stdout);
+                if (wizard_rc == 0) {
+                    wizard_rc =
+                        tg_app_login_key_to_auth(config.mtproto_auth_file);
+                }
                 if (wizard_rc != 0) {
-                    /* A wizard aborted after sendCode leaves a transport-only
-                       key behind; the next start would then skip the wizard
-                       and open an unauthorized chat session. The file did
-                       not exist when we started, so removing it is safe. */
-                    remove(config.mtproto_auth_file);
+                    /* The key of a login left half way stays in its own
+                       file, never in telegram-auth.bin. */
                     return wizard_rc;
                 }
             }

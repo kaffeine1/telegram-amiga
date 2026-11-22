@@ -189,6 +189,13 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
  * login. Naive callers still see this as a plain non-zero failure.
  */
 #define TG_MTPROTO_CHECK_PASSWORD_INVALID 6
+/* auth.exportLoginToken / auth.importLoginToken outcomes
+   (tg_mtproto_auth_qr_step): signed in, a token to show, or the datacenter
+   to import the token on. TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED comes from it
+   too. */
+#define TG_MTPROTO_QR_SIGNED_IN 0
+#define TG_MTPROTO_QR_TOKEN 7
+#define TG_MTPROTO_QR_MIGRATE 8
 
 /*
  * Raw chat input gives Up/Down command-history recall. It requires every
@@ -6130,6 +6137,155 @@ int tg_mtproto_auth_sign_in(const char *host,
     fprintf(stream, "%s: auth state updated\n", label);
 #endif
     return 0;
+}
+
+/* One step of the login with a QR code, on the key in auth_file: with
+   `fresh`, a new key first (the slow key exchange) on the datacenter of
+   host/dc_id_text, saved in auth_file before anything else. With a token,
+   auth.importLoginToken (the account lives on another datacenter, which the
+   last answer named), otherwise auth.exportLoginToken. The answer is in
+   *out. Returns TG_MTPROTO_QR_SIGNED_IN (0) once the phone has accepted the
+   code, TG_MTPROTO_QR_TOKEN with a token to show, TG_MTPROTO_QR_MIGRATE
+   with the datacenter and the token to import there,
+   TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED when the account has a cloud password
+   still to give, 2 on any failure (the reason in tg_mtproto_query_fail). */
+int tg_mtproto_auth_qr_step(const char *host,
+                            const char *port,
+                            const char *dc_id_text,
+                            const char *api_id_text,
+                            const char *api_hash,
+                            const char *auth_file,
+                            int fresh,
+                            const unsigned char *import_token,
+                            unsigned long import_length,
+                            tg_mtproto_login_token *out,
+                            FILE *stream)
+{
+    unsigned char query[320];
+    unsigned char initialized_query[480];
+    unsigned char wrapped_query[600];
+    unsigned long api_id;
+    unsigned long query_length;
+    tg_mtproto_auth_context context;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_session_status session_status;
+    tg_mtproto_tl_writer writer;
+    long dc_id;
+    static const char label[] = "mtproto auth.loginToken";
+
+    if (stream == 0 || host == 0 || port == 0 || api_id_text == 0 ||
+        auth_file == 0 || out == 0 ||
+        (import_token == 0 && (api_hash == 0 || api_hash[0] == '\0')) ||
+        tg_mtproto_parse_dc_id(dc_id_text, &dc_id) != 0 ||
+        tg_mtproto_parse_ulong_arg(api_id_text, &api_id) != 0) {
+        if (stream != 0) {
+            fputs("mtproto auth.loginToken: invalid-arguments\n", stream);
+        }
+        return 2;
+    }
+    memset(out, 0, sizeof(*out));
+    if (fresh) {
+        if (tg_mtproto_open_auth_context(host, port, dc_id_text, &context,
+                                         stream, label) != 0) {
+            return 2;
+        }
+    } else if (tg_mtproto_load_auth_context(host, port, auth_file, &context,
+                                            stream, label) != 0) {
+        return 2;
+    }
+    context.session.dc_id = (unsigned long)dc_id;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if ((import_token != 0
+             ? tg_mtproto_build_auth_import_login_token(&writer, import_token,
+                                                        import_length)
+             : tg_mtproto_build_auth_export_login_token(&writer, api_id,
+                                                        api_hash)) !=
+        TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_auth_context(&context);
+        fprintf(stream, "%s: query-build-failed\n", label);
+        return 2;
+    }
+    query_length = writer.length;
+    tg_mtproto_tl_writer_init(&writer, initialized_query,
+                              sizeof(initialized_query));
+    if (tg_mtproto_build_init_connection(&writer, api_id,
+                                         TG_MTPROTO_DEVICE_MODEL,
+                                         TG_MTPROTO_SYSTEM_VERSION,
+                                         TG_VERSION, "en", query,
+                                         query_length) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_auth_context(&context);
+        fprintf(stream, "%s: init-connection-build-failed\n", label);
+        return 2;
+    }
+    query_length = writer.length;
+    tg_mtproto_tl_writer_init(&writer, wrapped_query, sizeof(wrapped_query));
+    if (tg_mtproto_build_invoke_with_layer(&writer, 214UL, initialized_query,
+                                           query_length) !=
+        TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_auth_context(&context);
+        fprintf(stream, "%s: invoke-layer-build-failed\n", label);
+        return 2;
+    }
+    tg_mtproto_login_phase(stream, "auth.loginToken send");
+    if (tg_mtproto_send_encrypted_query_login(
+            &context, wrapped_query, writer.length, &result, stream,
+            label) != 0) {
+        tg_mtproto_close_auth_context(&context);
+        return 2;
+    }
+    tg_mtproto_login_phase(stream, "auth.loginToken response");
+    tg_mtproto_skip_auth_context_close(&context, stream, label);
+    /* The key is the one the phone signs in: kept from the first answer on,
+       whatever it says. */
+    session_status = tg_mtproto_session_save_authorization(
+        auth_file, &context.session, context.auth_key, 1);
+    if (session_status != TG_MTPROTO_SESSION_OK) {
+        fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                tg_mtproto_session_status_name(session_status));
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        char error_text[64];
+        long error_code;
+
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        if (tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                       result.result_body_length + 4U,
+                                       &error_code, error_text,
+                                       sizeof(error_text)) ==
+                TG_MTPROTO_TL_OK &&
+            (strcmp(error_text, "SESSION_PASSWORD_NEEDED") == 0 ||
+             strcmp(error_text, "PHONE_PASSWORD_PROTECTED") == 0)) {
+            return TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED;
+        }
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
+        return 2;
+    }
+    if (tg_mtproto_parse_login_token(result.result_constructor,
+                                     result.result_body,
+                                     result.result_body_length, out) !=
+        TG_MTPROTO_TL_OK) {
+        sprintf(tg_mtproto_query_fail, "unexpected answer %08lx",
+                result.result_constructor);
+        fprintf(stream, "%s: unexpected-result 0x%08lx\n", label,
+                result.result_constructor);
+        return 2;
+    }
+    if (out->constructor == TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR) {
+        return TG_MTPROTO_QR_TOKEN;
+    }
+    if (out->constructor == TG_MTPROTO_LOGIN_TOKEN_MIGRATE_CONSTRUCTOR) {
+        return TG_MTPROTO_QR_MIGRATE;
+    }
+    if (out->authorization == 0x44747e9aUL) {
+        /* auth.authorizationSignUpRequired: no account behind that phone,
+           which a QR login cannot be (the phone is signed in). */
+        strcpy(tg_mtproto_query_fail, "SIGN_UP_REQUIRED");
+        return 2;
+    }
+    return TG_MTPROTO_QR_SIGNED_IN;
 }
 
 int tg_mtproto_auth_sign_in_file(const char *host,
@@ -23921,6 +24077,13 @@ static struct {
                                        (no console: stdout is NIL: on a WB launch) */
         char last_hint[96];         /* ...and what to do about it */
         char phone_shown[66];       /* "+" and the digits, for the field */
+        /* The key every step uses until the login is done: only then does
+           it become auth_file. An abandoned login used to leave
+           telegram-auth.bin behind with a key nobody had signed in, and the
+           next start took it for a saved login. */
+        char key_file[48];
+        int qr_started;             /* the QR login has a key and a token */
+        char qr_link[256];          /* tg://login?token=... on screen */
     } login;
 } tg_gui_session_state;
 
@@ -43106,6 +43269,9 @@ void tg_gui_session_login_begin(const char *api_file, const char *auth_file,
     tg_gui_login_copy(tg_gui_session_state.login.code_hash_file,
                       sizeof(tg_gui_session_state.login.code_hash_file),
                       "data/phone-code-hash.txt");
+    tg_gui_login_copy(tg_gui_session_state.login.key_file,
+                      sizeof(tg_gui_session_state.login.key_file),
+                      TG_MTPROTO_LOGIN_KEY_FILE);
 }
 
 /* The line that answers "where did the code go, and what comes next" from a
@@ -43176,7 +43342,7 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
     rc = tg_mtproto_auth_send_code(tg_gui_session_state.login.host, "443",
                                    tg_gui_session_state.login.dc_id_text, api_id,
                                    api_hash, tg_gui_session_state.login.phone,
-                                   tg_gui_session_state.login.auth_file,
+                                   tg_gui_session_state.login.key_file,
                                    tg_gui_session_state.login.code_hash_file,
                                    quiet);
     if (rc > TG_MTPROTO_PHONE_MIGRATE_RC_BASE) {
@@ -43193,7 +43359,7 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
             rc = tg_mtproto_auth_send_code(
                 migrate_host, "443", migrate_dc_text, api_id, api_hash,
                 tg_gui_session_state.login.phone,
-                tg_gui_session_state.login.auth_file,
+                tg_gui_session_state.login.key_file,
                 tg_gui_session_state.login.code_hash_file, quiet);
         }
     }
@@ -43228,7 +43394,7 @@ int tg_gui_session_login_resend_code(FILE *stream)
     tg_gui_log("login: resend_code start");
     rc = tg_mtproto_auth_resend_code(tg_gui_session_state.login.host, "443",
                                      tg_gui_session_state.login.api_id,
-                                     tg_gui_session_state.login.auth_file,
+                                     tg_gui_session_state.login.key_file,
                                      tg_gui_session_state.login.phone,
                                      tg_gui_session_state.login.code_hash_file,
                                      tg_gui_session_state.login.dc_id_text,
@@ -43244,6 +43410,105 @@ int tg_gui_session_login_resend_code(FILE *stream)
         return TG_GUI_LOGIN_CODE_EXPIRED;
     }
     return (rc == 0) ? TG_GUI_LOGIN_OK : TG_GUI_LOGIN_ERROR;
+}
+
+/* The QR login, one step per call: the first makes the key (the slow key
+   exchange, about a minute on a 14 MHz 68030) and gets a code to show; the
+   later ones ask whether the phone has scanned it, which Telegram answers
+   with the same token until it expires (30 seconds) and then a new one. A
+   scan that names another datacenter moves the login there at once. */
+int tg_gui_session_login_qr_step(FILE *stream)
+{
+    char api_id[32];
+    char api_hash[96];
+    tg_mtproto_login_token lt;
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int fresh;
+    int rc;
+    int result;
+    static const char label[] = "gui auth.exportLoginToken";
+
+    if (!tg_gui_session_state.login.active || stream == 0) {
+        return TG_GUI_LOGIN_ERROR;
+    }
+    tg_gui_login_step_begin();
+    if (tg_mtproto_load_api_credentials(tg_gui_session_state.login.api_file,
+                                        api_id, sizeof(api_id), api_hash,
+                                        sizeof(api_hash), stream, label) != 0) {
+        tg_gui_login_copy(tg_gui_session_state.login.last_error,
+                          sizeof(tg_gui_session_state.login.last_error),
+                          "This program's key file is missing");
+        tg_gui_login_copy(tg_gui_session_state.login.last_hint,
+                          sizeof(tg_gui_session_state.login.last_hint),
+                          "Put your api_id and api_hash in "
+                          "data/telegram-api.txt");
+        return TG_GUI_LOGIN_ERROR;
+    }
+    tg_gui_login_copy(tg_gui_session_state.login.api_id,
+                      sizeof(tg_gui_session_state.login.api_id), api_id);
+    fresh = !tg_gui_session_state.login.qr_started;
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(45UL); /* DH handshake is slow on m68k */
+    /* The quiet stream of the other steps: no console output during network
+       I/O (the MorphOS freeze), and the reason is read back from it. */
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    tg_gui_log(fresh ? "login: qr start" : "login: qr ask");
+    rc = tg_mtproto_auth_qr_step(tg_gui_session_state.login.host, "443",
+                                 tg_gui_session_state.login.dc_id_text,
+                                 api_id, api_hash,
+                                 tg_gui_session_state.login.key_file, fresh,
+                                 0, 0UL, &lt, quiet);
+    if (rc == TG_MTPROTO_QR_MIGRATE) {
+        const char *migrate_host;
+        const char *migrate_dc_text;
+
+        tg_gui_log("login: qr scanned, the account lives elsewhere");
+        if (tg_mtproto_production_endpoint_for_dc(lt.dc_id, &migrate_host,
+                                                  &migrate_dc_text) == 0) {
+            unsigned char token[TG_MTPROTO_LOGIN_TOKEN_MAX];
+            unsigned long token_length = lt.token_length;
+
+            memcpy(token, lt.token, (size_t)token_length);
+            /* The password step, if one follows, runs there too. */
+            tg_gui_session_state.login.host = migrate_host;
+            tg_gui_session_state.login.dc_id_text = migrate_dc_text;
+            rc = tg_mtproto_auth_qr_step(
+                migrate_host, "443", migrate_dc_text, api_id, api_hash,
+                tg_gui_session_state.login.key_file, 1, token, token_length,
+                &lt, quiet);
+        } else {
+            rc = 2;
+        }
+    }
+    if (rc == TG_MTPROTO_QR_TOKEN) {
+        tg_gui_session_state.login.qr_started = 1;
+        if (tg_mtproto_login_token_url(
+                lt.token, lt.token_length,
+                tg_gui_session_state.login.qr_link,
+                sizeof(tg_gui_session_state.login.qr_link)) != 0) {
+            tg_gui_session_state.login.qr_link[0] = '\0';
+        }
+        result = TG_GUI_LOGIN_QR_WAIT;
+    } else if (rc == TG_MTPROTO_QR_SIGNED_IN) {
+        tg_gui_log("login: qr signed in");
+        result = TG_GUI_LOGIN_OK;
+    } else if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        tg_gui_log("login: qr scanned, cloud password next");
+        result = TG_GUI_LOGIN_NEED_2FA;
+    } else {
+        tg_gui_login_step_failed(quiet, stream);
+        result = TG_GUI_LOGIN_ERROR;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
+    return result;
+}
+
+const char *tg_gui_session_login_qr_link(void)
+{
+    return tg_gui_session_state.login.qr_link;
 }
 
 int tg_gui_session_login_sign_in(const char *code, FILE *stream)
@@ -43263,7 +43528,7 @@ int tg_gui_session_login_sign_in(const char *code, FILE *stream)
     tg_gui_log("login: sign_in start");
     rc = tg_mtproto_auth_sign_in(tg_gui_session_state.login.host, "443",
                                  tg_gui_session_state.login.api_id,
-                                 tg_gui_session_state.login.auth_file,
+                                 tg_gui_session_state.login.key_file,
                                  tg_gui_session_state.login.phone,
                                  tg_gui_session_state.login.code_hash_file, code,
                                  tg_gui_session_state.login.dc_id_text, quiet);
@@ -43328,7 +43593,7 @@ int tg_gui_session_login_check_password(const char *password, FILE *stream)
     tg_gui_log("login: check_password start");
     rc = tg_mtproto_auth_check_password_text(
         tg_gui_session_state.login.host, "443",
-        tg_gui_session_state.login.api_id, tg_gui_session_state.login.auth_file,
+        tg_gui_session_state.login.api_id, tg_gui_session_state.login.key_file,
         tg_gui_session_state.login.dc_id_text, password, quiet);
     tg_gui_log("login: check_password done");
     if (rc != 0) {
@@ -43360,6 +43625,14 @@ int tg_gui_session_login_activate(tg_gui_state *state, FILE *stream)
     api_file = tg_gui_session_state.login.api_file;
     auth_file = tg_gui_session_state.login.auth_file;
     cache_file = tg_gui_session_state.login.cache_file;
+    /* The signed-in key becomes the saved login only now. */
+    if (tg_gui_session_state.login.key_file[0] != '\0') {
+        (void)remove(auth_file);
+        if (rename(tg_gui_session_state.login.key_file, auth_file) != 0) {
+            tg_gui_log("login: the key could not become the saved login");
+            return 2;
+        }
+    }
     /* Pull the fresh peer list, then open the live session over the auth.bin the
        login just wrote (session_open reloads everything from the file). */
     (void)tg_mtproto_gui_refresh_peer_cache(api_file, auth_file, cache_file,

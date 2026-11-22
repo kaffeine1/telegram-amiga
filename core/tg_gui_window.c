@@ -8056,6 +8056,66 @@ static void tg_gui_window_login_code_expired(tg_gui_state *state)
                        tg_gui_session_login_phone());
 }
 
+/* The QR screen asks Telegram every few seconds whether the phone has
+   scanned the code: the same token comes back until it expires, then a new
+   one, which is drawn at once. The first ask makes the key, the slow part
+   on a 68k, under a line that says so. */
+static time_t tg_gui_window_qr_next;
+
+static void tg_gui_window_login_qr_poll(tg_gui_state *state,
+                                        tg_gui_backend *backend)
+{
+    time_t now = time(0);
+    const char *link;
+    int first;
+    int rc;
+
+    if (now == (time_t)-1 || now < tg_gui_window_qr_next) {
+        return;
+    }
+    first = tg_gui_session_login_qr_link()[0] == '\0';
+    if (first) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Getting a code from Telegram...");
+        state->status_hint[0] = '\0';
+        tg_gui_window_paint(state, backend);
+    }
+    rc = tg_gui_session_login_qr_step(stdout);
+    now = time(0);
+    tg_gui_window_qr_next = now + (rc == TG_GUI_LOGIN_QR_WAIT ? 5 : 10);
+    if (rc == TG_GUI_LOGIN_QR_WAIT) {
+        link = tg_gui_session_login_qr_link();
+        if (first || strcmp(link, state->login_qr) != 0) {
+            tg_gui_window_copy(state->login_qr, sizeof(state->login_qr),
+                               link);
+            state->status_hint[0] = '\0';
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Scan it with Telegram on your phone");
+            tg_gui_window_paint(state, backend);
+        }
+    } else if (rc == TG_GUI_LOGIN_OK) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Signed in - opening your chats...");
+        tg_gui_window_paint(state, backend);
+        tg_gui_window_login_finish(state);
+        tg_gui_window_paint(state, backend);
+    } else if (rc == TG_GUI_LOGIN_NEED_2FA) {
+        state->mode = TG_GUI_MODE_LOGIN_2FA;
+        state->input[0] = '\0';
+        state->input_masked = 1;
+        state->status_hint[0] = '\0';
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Scanned - now your cloud password");
+        state->cursor_on = 1;
+        tg_gui_window_paint(state, backend);
+    } else {
+        /* The code stays (or the screen keeps waiting for one) and the
+           next ask comes in a few seconds. */
+        tg_gui_window_login_failed(state, "No answer from Telegram");
+        tg_gui_window_paint(state, backend);
+    }
+}
+
 static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
                                     tg_gui_backend *backend, int *done,
                                     int *caret_ticks)
@@ -8064,6 +8124,21 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         memset(state->input, 0, sizeof(state->input)); /* wipe any typed secret */
         state->input_masked = 0;
         *done = 1;
+        return;
+    }
+    if (state->mode == TG_GUI_MODE_LOGIN_QR) {
+        /* The code is on screen; P turns to the number and the code
+           Telegram sends, the way that does not need a phone signed in. */
+        if (code == 'p' || code == 'P') {
+            state->mode = TG_GUI_MODE_LOGIN_PHONE;
+            state->input[0] = '\0';
+            state->status_hint[0] = '\0';
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Enter your phone number (+...)");
+            state->cursor_on = 1;
+            *caret_ticks = 0;
+            tg_gui_window_paint(state, backend);
+        }
         return;
     }
     if (code == 8 || code == 127) { /* BACKSPACE */
@@ -18656,7 +18731,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 EndRefresh(ctx.window, TRUE);
                 tg_gui_photo_direct_report(&ctx);
             } else if (msg_class == IDCMP_INTUITICKS) {
-                if (state->mode != TG_GUI_MODE_CHAT) {
+                if (state->mode == TG_GUI_MODE_LOGIN_QR) {
+                    tg_gui_window_login_qr_poll(state, &backend);
+                } else if (state->mode != TG_GUI_MODE_CHAT) {
                     /* A login screen owns the keyboard: blink the caret (~2 Hz);
                        no network poll until the session opens. */
                     if (++caret_ticks >= 5) {

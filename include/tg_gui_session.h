@@ -262,6 +262,16 @@ int tg_gui_session_update_enabled(void);
 void tg_gui_session_update_set_enabled(int on);
 const char *tg_gui_session_update_newer(void);
 
+/* The QR login (auth.exportLoginToken): the first call makes the key and
+   gets a code, the next ones ask whether the phone has scanned it.
+   TG_GUI_LOGIN_QR_WAIT = keep showing tg_gui_session_login_qr_link() and
+   ask again in a few seconds; TG_GUI_LOGIN_OK = signed in (activate);
+   TG_GUI_LOGIN_NEED_2FA = the cloud password next; TG_GUI_LOGIN_ERROR = the
+   reason in tg_gui_session_login_last_error(). */
+int tg_gui_session_login_qr_step(FILE *stream);
+/* tg://login?token=... for the QR code, "" before the first step. */
+const char *tg_gui_session_login_qr_link(void);
+
 /* Telegram's word when it has closed this session for good
    (AUTH_KEY_DUPLICATED: the same key in two places at once,
    SESSION_REVOKED, AUTH_KEY_UNREGISTERED...), "" while the session lives.
@@ -825,6 +835,7 @@ void tg_gui_session_close(void);
 #define TG_GUI_LOGIN_BAD_PHONE    4 /* the number was rejected -- re-prompt */
 #define TG_GUI_LOGIN_ERROR        5 /* network/other error -- retry */
 #define TG_GUI_LOGIN_CODE_EXPIRED 6 /* the code expired -- ask for a new one */
+#define TG_GUI_LOGIN_QR_WAIT      7 /* a QR code is on screen -- ask again soon */
 
 /* Stores the file paths the login + the eventual session need. Call once before
    entering a login screen (paths must outlive the session). */

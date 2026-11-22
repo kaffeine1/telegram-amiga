@@ -11803,6 +11803,159 @@ tg_mtproto_tl_status tg_mtproto_parse_update_read_history_outbox(
                                                       out_max_id);
 }
 
+/* Login with a QR code (core.telegram.org/api/qr-login), constructors as in
+   layer 214:
+     auth.exportLoginToken#b7e085fe api_id:int api_hash:string
+                                    except_ids:Vector<long> = auth.LoginToken;
+     auth.importLoginToken#95ac5ce4 token:bytes = auth.LoginToken;
+     auth.loginToken#629f1980 expires:int token:bytes
+     auth.loginTokenMigrateTo#68e9916 dc_id:int token:bytes
+     auth.loginTokenSuccess#390d5c5e authorization:auth.Authorization
+   The phone of a signed-in account scans tg://login?token=<base64url>,
+   Telegram accepts it, and the next auth.exportLoginToken on the same key
+   answers with the authorization. */
+#define TG_AUTH_EXPORT_LOGIN_TOKEN_CONSTRUCTOR 0xb7e085feUL
+#define TG_AUTH_IMPORT_LOGIN_TOKEN_CONSTRUCTOR 0x95ac5ce4UL
+
+tg_mtproto_tl_status tg_mtproto_build_auth_export_login_token(
+    tg_mtproto_tl_writer *writer,
+    unsigned long api_id,
+    const char *api_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || api_hash == 0 || api_hash[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_AUTH_EXPORT_LOGIN_TOKEN_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, api_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, api_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* no except_ids */
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_auth_import_login_token(
+    tg_mtproto_tl_writer *writer,
+    const unsigned char *token,
+    unsigned long token_length)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || token == 0 || token_length == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     TG_AUTH_IMPORT_LOGIN_TOKEN_CONSTRUCTOR);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_bytes(writer, token, token_length);
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_parse_login_token(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_login_token *out)
+{
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_tl_status status;
+    const unsigned char *bytes;
+    unsigned long length;
+    unsigned long value;
+
+    if (body == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(out, 0, sizeof(*out));
+    out->constructor = constructor;
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (constructor == TG_MTPROTO_LOGIN_TOKEN_SUCCESS_CONSTRUCTOR) {
+        status = tg_mtproto_tl_read_u32(&reader, &out->authorization);
+        if (status == TG_MTPROTO_TL_OK &&
+            !tg_mtproto_is_auth_authorization_constructor(
+                out->authorization)) {
+            status = TG_MTPROTO_TL_INVALID_ARGUMENT;
+        }
+        return status;
+    }
+    if (constructor != TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR &&
+        constructor != TG_MTPROTO_LOGIN_TOKEN_MIGRATE_CONSTRUCTOR) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_read_u32(&reader, &value);
+    if (status != TG_MTPROTO_TL_OK) {
+        return status;
+    }
+    if (constructor == TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR) {
+        out->expires = value;
+    } else {
+        out->dc_id = value;
+    }
+    status = tg_mtproto_tl_read_bytes(&reader, &bytes, &length);
+    if (status != TG_MTPROTO_TL_OK) {
+        return status;
+    }
+    if (length == 0UL || length > TG_MTPROTO_LOGIN_TOKEN_MAX) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memcpy(out->token, bytes, (size_t)length);
+    out->token_length = length;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* tg://login?token= and the token in base64url, without the trailing
+   '=', as Telegram Desktop writes it. 0 = done. */
+int tg_mtproto_login_token_url(const unsigned char *token,
+                               unsigned long token_length, char *out,
+                               unsigned long out_size)
+{
+    static const char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    static const char prefix[] = "tg://login?token=";
+    unsigned long need = (unsigned long)sizeof(prefix) - 1UL +
+                         (token_length * 4UL + 2UL) / 3UL + 1UL;
+    unsigned long i;
+    unsigned long o;
+
+    if (token == 0 || out == 0 || token_length == 0UL || out_size < need) {
+        return 2;
+    }
+    strcpy(out, prefix);
+    o = (unsigned long)sizeof(prefix) - 1UL;
+    for (i = 0UL; i < token_length; i += 3UL) {
+        unsigned long n = (unsigned long)token[i] << 16;
+        unsigned long left = token_length - i;
+
+        if (left > 1UL) {
+            n |= (unsigned long)token[i + 1UL] << 8;
+        }
+        if (left > 2UL) {
+            n |= (unsigned long)token[i + 2UL];
+        }
+        out[o++] = alphabet[(n >> 18) & 63UL];
+        out[o++] = alphabet[(n >> 12) & 63UL];
+        if (left > 1UL) {
+            out[o++] = alphabet[(n >> 6) & 63UL];
+        }
+        if (left > 2UL) {
+            out[o++] = alphabet[n & 63UL];
+        }
+    }
+    out[o] = '\0';
+    return 0;
+}
+
 int tg_mtproto_is_auth_authorization_constructor(unsigned long constructor)
 {
     return constructor == TG_AUTH_AUTHORIZATION_CONSTRUCTOR ||
@@ -16253,6 +16406,120 @@ int tg_mtproto_login_self_test(void)
         tg_mtproto_rpc_error_ends_session(0)) {
         puts("mtproto self-test: session-closing errors misread");
         return 2;
+    }
+    /* QR login: the two requests byte for byte, the three answers, and the
+       link the phone scans. */
+    {
+        static const unsigned char export_want[20] = {
+            0xfe, 0x85, 0xe0, 0xb7, 0x39, 0x30, 0x00, 0x00, 0x03, 'a', 'b',
+            'c', 0x15, 0xc4, 0xb5, 0x1c, 0x00, 0x00, 0x00, 0x00
+        };
+        static const unsigned char import_want[8] = {
+            0xe4, 0x5c, 0xac, 0x95, 0x03, 0x01, 0x02, 0x03
+        };
+        static const unsigned char token_body[12] = {
+            0x10, 0x20, 0x30, 0x40, 0x03, 0xfb, 0xff, 0xfe, 0, 0, 0, 0
+        };
+        static const unsigned char migrate_body[12] = {
+            0x02, 0x00, 0x00, 0x00, 0x02, 0xfb, 0xff, 0x00, 0, 0, 0, 0
+        };
+        static const unsigned char success_body[8] = {
+            0xd4, 0xc0, 0xa2, 0x2e, 0x00, 0x00, 0x00, 0x00
+        };
+        static const unsigned char bad_success[8] = {
+            0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00
+        };
+        unsigned char tok32[32];
+        unsigned char three[3] = { 0x01, 0x02, 0x03 };
+        tg_mtproto_login_token lt;
+        char url[96];
+        unsigned int k;
+
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_auth_export_login_token(&writer, 12345UL,
+                                                     "abc") !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != sizeof(export_want) ||
+            memcmp(query, export_want, sizeof(export_want)) != 0) {
+            puts("mtproto self-test: exportLoginToken bytes wrong");
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_auth_import_login_token(&writer, three, 3UL) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != sizeof(import_want) ||
+            memcmp(query, import_want, sizeof(import_want)) != 0 ||
+            tg_mtproto_build_auth_import_login_token(&writer, three, 0UL) ==
+                TG_MTPROTO_TL_OK) {
+            puts("mtproto self-test: importLoginToken bytes wrong");
+            return 2;
+        }
+        if (tg_mtproto_parse_login_token(TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR,
+                                         token_body, sizeof(token_body),
+                                         &lt) != TG_MTPROTO_TL_OK ||
+            lt.expires != 0x40302010UL || lt.token_length != 3UL ||
+            lt.token[0] != 0xfbU || lt.token[2] != 0xfeU ||
+            tg_mtproto_login_token_url(lt.token, lt.token_length, url,
+                                       sizeof(url)) != 0 ||
+            strcmp(url, "tg://login?token=-__-") != 0) {
+            puts("mtproto self-test: auth.loginToken misread");
+            return 2;
+        }
+        if (tg_mtproto_parse_login_token(
+                TG_MTPROTO_LOGIN_TOKEN_MIGRATE_CONSTRUCTOR, migrate_body,
+                sizeof(migrate_body), &lt) != TG_MTPROTO_TL_OK ||
+            lt.dc_id != 2UL || lt.token_length != 2UL ||
+            tg_mtproto_login_token_url(lt.token, lt.token_length, url,
+                                       sizeof(url)) != 0 ||
+            strcmp(url, "tg://login?token=-_8") != 0) {
+            puts("mtproto self-test: auth.loginTokenMigrateTo misread");
+            return 2;
+        }
+        if (tg_mtproto_parse_login_token(
+                TG_MTPROTO_LOGIN_TOKEN_SUCCESS_CONSTRUCTOR, success_body,
+                sizeof(success_body), &lt) != TG_MTPROTO_TL_OK ||
+            lt.authorization != 0x2ea2c0d4UL ||
+            tg_mtproto_parse_login_token(
+                TG_MTPROTO_LOGIN_TOKEN_SUCCESS_CONSTRUCTOR, bad_success,
+                sizeof(bad_success), &lt) == TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_login_token(0x12345678UL, token_body,
+                                         sizeof(token_body), &lt) ==
+                TG_MTPROTO_TL_OK) {
+            puts("mtproto self-test: auth.loginTokenSuccess misread");
+            return 2;
+        }
+        {
+            /* A token longer than the buffer is refused, not copied. */
+            static unsigned char longer[8 + 148];
+
+            memset(longer, 0, sizeof(longer));
+            longer[4] = 0xfeU; /* long form: 145 bytes */
+            longer[5] = 145U;
+            if (tg_mtproto_parse_login_token(
+                    TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR, longer,
+                    sizeof(longer), &lt) == TG_MTPROTO_TL_OK) {
+                puts("mtproto self-test: an over-long login token taken");
+                return 2;
+            }
+            longer[5] = 144U; /* the longest that fits is fine */
+            if (tg_mtproto_parse_login_token(
+                    TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR, longer,
+                    sizeof(longer), &lt) != TG_MTPROTO_TL_OK ||
+                lt.token_length != 144UL) {
+                puts("mtproto self-test: the longest login token refused");
+                return 2;
+            }
+        }
+        for (k = 0U; k < 32U; ++k) {
+            tok32[k] = (unsigned char)(k + 1U);
+        }
+        if (tg_mtproto_login_token_url(tok32, 32UL, url, sizeof(url)) != 0 ||
+            strcmp(url, "tg://login?token="
+                        "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA") != 0 ||
+            tg_mtproto_login_token_url(tok32, 32UL, url, 60UL) != 2) {
+            puts("mtproto self-test: login link wrong");
+            return 2;
+        }
     }
     /* Pin message 77 in that group, silently, then unpin it: 24 bytes. */
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));

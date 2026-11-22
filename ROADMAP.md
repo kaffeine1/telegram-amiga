@@ -1383,6 +1383,26 @@ a username is mentioned by first name with an
 of a basic group (`messages.getFullChat`), so in one of those only who
 wrote lately is offered.
 
+## Done after 0.5: login with a QR code
+
+On 2026-11-22 the login code stopped coming for the test account, on
+the Mac and on the G5 alike, while Telegram Desktop signed in with its
+QR code. The window now starts on a QR code (core/tg_qr.c, our own
+encoder: byte mode, level M, versions 1-10, written from ISO/IEC 18004
+and read back by macOS CoreImage on every version, mask and length from
+1 to 213 bytes, a few codes pinned in the GUI self-test). The flow:
+`auth.exportLoginToken` on a fresh key, the link `tg://login?token=` in
+base64url without padding, the same call every five seconds (Telegram
+gives the same token back until it expires after thirty seconds, then a
+new one), `auth.loginTokenMigrateTo` followed with `auth.importLoginToken`
+on the named datacenter, SESSION_PASSWORD_NEEDED into the existing cloud
+password step. P turns to the phone number; the text client keeps the
+number only (Michele, 2026-11-22). The key of any login waits in
+data/telegram-login.bin and becomes telegram-auth.bin only once signed
+in. Still open: on a screen with non-square pixels (a PAL 640x256
+Workbench) the code is drawn square in pixels, so it shows taller than
+wide; phones read some stretch, to be checked there.
+
 ## Done after 0.5: a session closed by Telegram
 
 Seen on 2026-11-22 with the test account: the same telegram-auth.bin in

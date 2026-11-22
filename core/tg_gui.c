@@ -10,6 +10,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_qr.h"
 #include "tg_avatar.h"
 #include "tg_version.h"
 #include "tg_file.h"
@@ -7259,6 +7260,134 @@ void tg_gui_paint_trail_off(void)
     tg_gui_first_paint_logged = 1;
 }
 
+/* The QR login screen: the code to scan, dark modules on a white field
+   with its quiet margin, as large as the window allows, the three steps on
+   the phone under it, and how to log in with the number instead. The code
+   is encoded once per link (a few hundred thousand steps on a 68000), and
+   each row's dark modules go out as runs, not one fill per module. */
+static tg_qr_code tg_gui_qr;
+static char tg_gui_qr_for[sizeof(((tg_gui_state *)0)->login_qr)];
+static int tg_gui_qr_ready;
+
+static void tg_gui_paint_login_qr(const tg_gui_state *state,
+                                  tg_gui_backend *backend)
+{
+    static const char *const steps[3] = {
+        "1. Open Telegram on your phone",
+        "2. Settings > Devices > Link Desktop Device",
+        "3. Point the phone at this code"
+    };
+    int width = backend->width(backend);
+    int height = backend->height(backend);
+    int lh = backend->line_height(backend);
+    int quiet = 4;
+    int cells;
+    int module;
+    int side;
+    int text_h;
+    int top;
+    int x0;
+    int y0;
+    int y;
+    int i;
+
+    if (width <= 0 || height <= 0 || lh <= 0) {
+        return;
+    }
+    if (tg_gui_clear_background) {
+        backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
+                           tg_gui_make_rect(0, 0, width, height));
+    }
+    if (strcmp(tg_gui_qr_for, state->login_qr) != 0) {
+        tg_gui_copy(tg_gui_qr_for, sizeof(tg_gui_qr_for), state->login_qr);
+        tg_gui_qr_ready =
+            state->login_qr[0] != '\0' &&
+            tg_qr_encode((const unsigned char *)state->login_qr,
+                         (unsigned long)strlen(state->login_qr), -1,
+                         &tg_gui_qr) == 0;
+    }
+    /* title, three steps, status, keys: six lines and their gaps */
+    text_h = 6 * lh + 28;
+    cells = (tg_gui_qr_ready ? tg_gui_qr.size : 37) + 2 * quiet;
+    module = (height - text_h - 8) / cells;
+    if (module > (width - 8) / cells) {
+        module = (width - 8) / cells;
+    }
+    if (module < 3) {
+        /* A small window: half the margin, which phones still read, for
+           bigger modules. */
+        quiet = 2;
+        cells -= 4;
+        module = (height - text_h - 8) / cells;
+        if (module > (width - 8) / cells) {
+            module = (width - 8) / cells;
+        }
+    }
+    if (module > 6) {
+        module = 6;
+    }
+    if (module < 1) {
+        module = 1;
+    }
+    side = module * cells;
+    top = (height - (text_h + side)) / 2;
+    if (top < 2) {
+        top = 2;
+    }
+    tg_gui_draw_centered(backend, TG_GUI_PEN_ACCENT, width, top + lh,
+                         TG_APP_TITLE);
+    y0 = top + lh + 8;
+    x0 = (width - side) / 2;
+    if (tg_gui_qr_ready) {
+        /* BADGE_TEXT is pure white and WINDOW nearly black on every lane:
+           the strongest contrast the palette has. */
+        backend->fill_rect(backend, TG_GUI_PEN_BADGE_TEXT,
+                           tg_gui_make_rect(x0, y0, side, side));
+        for (y = 0; y < tg_gui_qr.size; ++y) {
+            int x = 0;
+
+            while (x < tg_gui_qr.size) {
+                int run = 0;
+
+                while (x + run < tg_gui_qr.size &&
+                       tg_qr_dark(&tg_gui_qr, x + run, y)) {
+                    ++run;
+                }
+                if (run > 0) {
+                    backend->fill_rect(
+                        backend, TG_GUI_PEN_WINDOW,
+                        tg_gui_make_rect(x0 + (x + quiet) * module,
+                                         y0 + (y + quiet) * module,
+                                         run * module, module));
+                    x += run;
+                } else {
+                    ++x;
+                }
+            }
+        }
+    } else {
+        backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
+                           tg_gui_make_rect(x0, y0, side, side));
+    }
+    y = y0 + side + 6 + lh;
+    for (i = 0; i < 3; ++i) {
+        tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT, width, y, steps[i]);
+        y += lh + 2;
+    }
+    y += 4;
+    tg_gui_draw_centered(backend, TG_GUI_PEN_ACCENT, width, y,
+                         state->status_hint[0] != '\0' ? state->status_hint
+                                                       : state->status);
+    if (state->status_hint[0] != '\0') {
+        /* a failure: its reason above, what to do instead of the keys */
+        tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, y - lh - 2,
+                             state->status);
+    }
+    y += lh + 6;
+    tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, y,
+                         "P: log in with your phone number   ESC quits");
+}
+
 static void tg_gui_paint_login(const tg_gui_state *state,
                                tg_gui_backend *backend)
 {
@@ -7267,6 +7396,12 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     int lh;
     int mid;
     int footer;
+
+    if (state->mode == TG_GUI_MODE_LOGIN_QR) {
+        tg_gui_paint_login_qr(state, backend);
+        tg_gui_first_paint_logged = 1;
+        return;
+    }
 
     width = backend->width(backend);
     height = backend->height(backend);
@@ -7348,6 +7483,9 @@ void tg_gui_paint_caret(const tg_gui_state *state, tg_gui_backend *backend)
 {
     if (state == 0 || backend == 0) {
         return;
+    }
+    if (state->mode == TG_GUI_MODE_LOGIN_QR) {
+        return; /* no field and no caret on the QR screen */
     }
     if (state->mode != TG_GUI_MODE_CHAT) {
         tg_gui_paint_login_input(state, backend);
@@ -16804,6 +16942,81 @@ int tg_gui_self_test(void)
             return 2;
         }
         draft->status_hint[0] = '\0';
+    }
+    /* The QR code the login screen draws. */
+    if (tg_qr_self_test() != 0) {
+        return 2;
+    }
+    /* The QR login screen in the smallest window: the code as runs of dark
+       fills, all inside, the title over it, the steps under it, the keys
+       last; and no caret, which would draw a field over the code. */
+    {
+        tg_gui_state *draft = tg_gui_test_scratch_state();
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        static const char step2[] =
+            "2. Settings > Devices > Link Desktop Device";
+        static const char qkeys[] =
+            "P: log in with your phone number   ESC quits";
+        int before;
+
+        draft->mode = TG_GUI_MODE_LOGIN_QR;
+        tg_gui_copy(draft->login_qr, sizeof(draft->login_qr),
+                    "tg://login?token="
+                    "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA");
+        tg_gui_copy(draft->status, sizeof(draft->status),
+                    "Scan it with Telegram on your phone");
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 480;
+        rec.height = 320;
+        rec.min_x = rec.width;
+        rec.min_y = rec.height;
+        rec.watch_text[0] = TG_APP_TITLE;
+        rec.watch_text[1] = step2;
+        rec.watch_text[2] = qkeys;
+        b.context = &rec;
+        tg_gui_paint(draft, &b);
+        if (rec.watch_hits[0] != 1 || rec.watch_hits[1] != 1 ||
+            rec.watch_hits[2] != 1 || rec.watch_y[0] >= rec.watch_y[1] ||
+            rec.watch_y[1] >= rec.watch_y[2] || rec.watch_y[2] > rec.height ||
+            rec.fills < 60 || rec.min_x < 0 || rec.min_y < 0 ||
+            rec.max_x > rec.width || rec.max_y > rec.height) {
+            printf("gui self-test: QR screen wrong (title %d, steps %d, "
+                   "keys %d, %d fills, x %d..%d, y %d..%d)\n",
+                   rec.watch_y[0], rec.watch_y[1], rec.watch_y[2], rec.fills,
+                   rec.min_x, rec.max_x, rec.min_y, rec.max_y);
+            return 2;
+        }
+        before = rec.fills;
+        tg_gui_paint_caret(draft, &b);
+        if (rec.fills != before) {
+            puts("gui self-test: a caret drawn on the QR screen");
+            return 2;
+        }
+        /* A narrow window: the code shrinks to its width. */
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 240;
+        rec.height = 480;
+        rec.min_x = rec.width;
+        rec.min_y = rec.height;
+        tg_gui_paint(draft, &b);
+        if (rec.fills < 60 || rec.min_x < 0 || rec.max_x > rec.width) {
+            printf("gui self-test: QR in a narrow window: x %d..%d\n",
+                   rec.min_x, rec.max_x);
+            return 2;
+        }
+        /* Before the first code: a grey field, the keys still there. */
+        draft->login_qr[0] = '\0';
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 480;
+        rec.height = 320;
+        rec.watch_text[2] = qkeys;
+        tg_gui_paint(draft, &b);
+        if (rec.watch_hits[2] != 1 || rec.fills > 4) {
+            printf("gui self-test: QR screen before the code: %d fills\n",
+                   rec.fills);
+            return 2;
+        }
     }
 
     printf("gui self-test: ok (%d chats, %d msgs, %d fills, %d avatars, "

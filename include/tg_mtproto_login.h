@@ -1957,6 +1957,41 @@ tg_mtproto_tl_status tg_mtproto_read_update_read_history_outbox(
 
 int tg_mtproto_is_auth_authorization_constructor(unsigned long constructor);
 
+/* QR login (auth.exportLoginToken / auth.importLoginToken). A token at most
+   144 bytes long keeps the link inside a version 10 QR code. */
+#define TG_MTPROTO_LOGIN_TOKEN_CONSTRUCTOR 0x629f1980UL
+#define TG_MTPROTO_LOGIN_TOKEN_MIGRATE_CONSTRUCTOR 0x068e9916UL
+#define TG_MTPROTO_LOGIN_TOKEN_SUCCESS_CONSTRUCTOR 0x390d5c5eUL
+#define TG_MTPROTO_UPDATE_LOGIN_TOKEN_CONSTRUCTOR 0x564fe691UL
+#define TG_MTPROTO_LOGIN_TOKEN_MAX 144UL
+
+typedef struct tg_mtproto_login_token {
+    unsigned long constructor;   /* which of the three answers */
+    unsigned long expires;       /* auth.loginToken: unix time */
+    unsigned long dc_id;         /* auth.loginTokenMigrateTo */
+    unsigned long authorization; /* auth.loginTokenSuccess: its constructor */
+    unsigned long token_length;
+    unsigned char token[TG_MTPROTO_LOGIN_TOKEN_MAX];
+} tg_mtproto_login_token;
+
+tg_mtproto_tl_status tg_mtproto_build_auth_export_login_token(
+    tg_mtproto_tl_writer *writer,
+    unsigned long api_id,
+    const char *api_hash);
+tg_mtproto_tl_status tg_mtproto_build_auth_import_login_token(
+    tg_mtproto_tl_writer *writer,
+    const unsigned char *token,
+    unsigned long token_length);
+tg_mtproto_tl_status tg_mtproto_parse_login_token(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_login_token *out);
+/* tg://login?token=<base64url, no padding>: 0 = done, 2 = no room. */
+int tg_mtproto_login_token_url(const unsigned char *token,
+                               unsigned long token_length, char *out,
+                               unsigned long out_size);
+
 int tg_mtproto_login_self_test(void);
 
 #endif

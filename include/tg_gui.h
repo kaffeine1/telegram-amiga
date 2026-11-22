@@ -437,6 +437,7 @@ int tg_gui_mute_mark_width(int lh);
 #define TG_GUI_MODE_LOGIN_PHONE 1 /* enter phone number */
 #define TG_GUI_MODE_LOGIN_CODE  2 /* enter the login code */
 #define TG_GUI_MODE_LOGIN_2FA   3 /* enter the 2FA password (masked) */
+#define TG_GUI_MODE_LOGIN_QR    4 /* scan a QR code with the phone */
 
 /* Outgoing read state for the receipt mark; 0/none on incoming messages. */
 #define TG_GUI_READ_NONE 0
@@ -600,6 +601,7 @@ typedef struct tg_gui_state {
     char typing[TG_GUI_NAME_MAX]; /* "...sta scrivendo" for the open chat; "" = none */
     int mode;          /* TG_GUI_MODE_* (chat vs a first-login screen) */
     int input_masked;  /* render `input` as '*' (the 2FA password field) */
+    char login_qr[256]; /* the link the login QR code carries, "" = none yet */
     /* Sent-message history for UP/DOWN recall in the composer (like the TUI). */
     char history[TG_GUI_HISTORY_MAX][TG_GUI_MSG_TEXT_MAX];
     int history_count;
