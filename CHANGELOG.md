@@ -161,6 +161,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- On AmiKit (AfA OS, with Directory Opus as the Workbench) the first
+  download into a drawer that had no icon yet froze the program, and
+  icon.library with it for every other program, until a reboot. The
+  drawer's icon was written, and then the notice to the Workbench that
+  icon.library sends after it never came back. The icon is now written
+  without that notice (icon.library 44 and later); the drawer shows its
+  icon the next time its parent window is opened or refreshed. Each
+  step of a download is also named in the debug log.
 - On MorphOS a first login opens on the chat list. It showed only the
   pinned chats and Saved Messages until "Reload chat list": the list was
   not fetched there at all since June, when fetching it froze the

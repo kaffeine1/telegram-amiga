@@ -1663,6 +1663,9 @@ void tg_platform_display_beep(void)
 #endif
 }
 
+/* The window's debug log (tg_mtproto_probe.c): a line per step below. */
+void tg_gui_log(const char *msg);
+
 void tg_platform_ensure_drawer_icon(const char *drawer)
 {
     struct Library *IconBase;
@@ -1675,23 +1678,43 @@ void tg_platform_ensure_drawer_icon(const char *drawer)
     if (IconBase == 0) {
         return;
     }
-    {
-
-        dobj = GetDiskObject((STRPTR)drawer);
+    tg_gui_log("icon: looking for the drawer's icon");
+    dobj = GetDiskObject((STRPTR)drawer);
+    if (dobj != 0) {
+        FreeDiskObject(dobj); /* the drawer already has an icon */
+    } else {
+        tg_gui_log("icon: the default drawer icon");
+        dobj = GetDefDiskObject(WBDRAWER);
         if (dobj != 0) {
-            FreeDiskObject(dobj); /* the drawer already has an icon */
-        } else {
-            dobj = GetDefDiskObject(WBDRAWER);
-            if (dobj != 0) {
-                dobj->do_CurrentX = NO_ICON_POSITION;
-                dobj->do_CurrentY = NO_ICON_POSITION;
-                (void)PutDiskObject((STRPTR)drawer, dobj);
-                FreeDiskObject(dobj);
-            }
-        }
+            dobj->do_CurrentX = NO_ICON_POSITION;
+            dobj->do_CurrentY = NO_ICON_POSITION;
+            tg_gui_log("icon: writing it");
+#if defined(ICONPUTA_NotifyWorkbench)
+            /* From icon.library 44 a new icon is announced to the
+               Workbench once written. On AmiKit (AfA OS, Directory Opus as
+               the Workbench) the write was done and the call never came
+               back while this window was open, which held icon.library for
+               every program until a reboot. Without the notice the
+               drawer's icon shows when its parent is opened or refreshed. */
+            if (IconBase->lib_Version >= 44) {
+                struct TagItem quiet[2];
 
+                quiet[0].ti_Tag = ICONPUTA_NotifyWorkbench;
+                quiet[0].ti_Data = FALSE;
+                quiet[1].ti_Tag = TAG_DONE;
+                quiet[1].ti_Data = 0;
+                (void)PutIconTagList((CONST_STRPTR)drawer, dobj, quiet);
+            } else
+#endif
+            {
+                (void)PutDiskObject((STRPTR)drawer, dobj);
+            }
+            tg_gui_log("icon: written");
+            FreeDiskObject(dobj);
+        }
     }
     CloseLibrary(IconBase);
+    tg_gui_log("icon: done");
 }
 
 static void tg_wb_drop_arm(void);

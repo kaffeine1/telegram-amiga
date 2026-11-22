@@ -37338,7 +37338,12 @@ static int tg_mtproto_download_begin_at(const tg_mtproto_file_ctx *fc,
 
         (void)mkdir(dir, 0777); /* EEXIST is the norm; volume roots fail
                                    harmlessly and are used as they are */
+        /* Each step named in the log: on AfA OS a first download once
+           stopped between the request and the first chunk, with the
+           icon library held, and the log could not say where. */
+        tg_gui_log("download: drawer icon");
         tg_platform_ensure_drawer_icon(dir); /* visible on Workbench */
+        tg_gui_log("download: room on the volume");
         tg_gui_dl_join_path(tg_gui_dl.path, sizeof(tg_gui_dl.path), dir, safe);
         /* Judge the room before the first byte: a 4 MB file into RAM: on a
            stock A1200 with the window open stopped at 2.3 MB, minutes in,
@@ -37361,6 +37366,7 @@ static int tg_mtproto_download_begin_at(const tg_mtproto_file_ctx *fc,
             }
         }
     }
+    tg_gui_log("download: opening the file");
     tg_gui_dl.f = tg_file_fopen_replace(tg_gui_dl.path, "wb");
     if (tg_gui_dl.f != 0) {
         /* One big write buffer instead of the runtime's default: a tester on
