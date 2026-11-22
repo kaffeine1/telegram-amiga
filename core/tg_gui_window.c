@@ -93,6 +93,14 @@
 #include <proto/icon.h>
 #include <proto/asl.h>
 #include <proto/diskfont.h>
+#if defined(__MORPHOS__)
+#include <emul/emulinterface.h>
+#include <emul/emulregs.h>
+#elif defined(__amigaos3__)
+#include <clib/alib_protos.h>
+#include <datatypes/datatypes.h>
+#include <proto/datatypes.h>
+#endif
 
 /* asl.library is opened lazily around the file requester (Send file...) so
    startup stays untouched and a system without it just skips the feature. */
@@ -11792,24 +11800,175 @@ static void tg_gui_window_save_geom(int w, int h, int x, int y, int own)
     }
 }
 
+/* Two names of the same file, as the file system takes them: letters in
+   either case. */
+static int tg_gui_wb_same_name(const char *a, const char *b)
+{
+    for (; *a != '\0' && *b != '\0'; ++a, ++b) {
+        char x = *a;
+        char y = *b;
+
+        if (x >= 'A' && x <= 'Z') {
+            x = (char)(x + 32);
+        }
+        if (y >= 'A' && y <= 'Z') {
+            y = (char)(y + 32);
+        }
+        if (x != y) {
+            return 0;
+        }
+    }
+    return *a == *b;
+}
+
+/* What a hook gives back: IPTR on AROS, where it is as wide as a pointer
+   (64 bits on x86_64 and aarch64), ULONG on the others. */
+#if defined(__AROS__)
+typedef IPTR tg_gui_hook_result;
+#else
+typedef ULONG tg_gui_hook_result;
+#endif
+
+/* ChangeWorkbenchSelectionA asks this for every icon of the drawer: the
+   file's (its name in h_Data) is selected, the others are not, as the
+   desktop clients leave a folder they open on a file. */
+static tg_gui_hook_result tg_gui_wb_pick(struct Hook *hook, APTR reserved,
+                                         struct IconSelectMsg *ism)
+{
+    const char *want = hook != 0 ? (const char *)hook->h_Data : 0;
+
+    (void)reserved;
+    if (want == 0 || ism == 0 || ism->ism_Name == 0) {
+        return ISMACTION_Ignore;
+    }
+    return tg_gui_wb_same_name((const char *)ism->ism_Name, want)
+               ? ISMACTION_Select
+               : ISMACTION_Unselect;
+}
+
+#if defined(__MORPHOS__)
+/* MorphOS calls a hook as 68k code: the gate takes the registers. */
+static ULONG tg_gui_wb_pick_gate(void)
+{
+    return tg_gui_wb_pick((struct Hook *)REG_A0, (APTR)REG_A2,
+                          (struct IconSelectMsg *)REG_A1);
+}
+
+static struct EmulLibEntry tg_gui_wb_pick_entry = {
+    TRAP_LIB, 0, (void (*)(void))tg_gui_wb_pick_gate
+};
+#endif
+
+/* The file's icon selected in its drawer, which the Workbench has just
+   been asked to open (ChangeWorkbenchSelectionA, workbench.library 44).
+   The window may take a moment to come: a few tries, a fifth of a second
+   apart. A Workbench that cannot do it leaves the drawer open as it is. */
+static void tg_gui_amiga_wb_select(const char *drawer, const char *name)
+{
+    struct Hook hook;
+    int tries;
+    int ok = 0;
+
+    memset(&hook, 0, sizeof(hook));
+#if defined(__MORPHOS__)
+    hook.h_Entry = (HOOKFUNC)&tg_gui_wb_pick_entry;
+#elif defined(__amigaos3__)
+    hook.h_Entry = (HOOKFUNC)HookEntry; /* registers in, C arguments out */
+    hook.h_SubEntry = (HOOKFUNC)tg_gui_wb_pick;
+#else
+    hook.h_Entry = (HOOKFUNC)tg_gui_wb_pick; /* OS4 and AROS: a C call */
+#endif
+    hook.h_Data = (APTR)name;
+    for (tries = 0; tries < 5 && !ok; ++tries) {
+        if (tries > 0) {
+            Delay(10L);
+        }
+        /* STRPTR: the AROS and MorphOS prototypes take it so */
+        ok = ChangeWorkbenchSelectionA((STRPTR)drawer, &hook, 0) ? 1 : 0;
+    }
+    tg_gui_log(ok ? "wb open: the file's icon selected"
+                  : "wb open: no selection in the drawer");
+}
+
+#if defined(__amigaos3__)
+/* What MultiView can show, for a Workbench too old to open files (3.0 and
+   3.1): a file a datatype knows, other than a program or plain binary. */
+static int tg_gui_amiga_multiview_shows(const char *path)
+{
+    struct DataType *dt;
+    BPTR lock;
+    int opened = 0;
+    int shows = 0;
+
+    if (DataTypesBase == 0) {
+        DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39L);
+        opened = DataTypesBase != 0;
+    }
+    if (DataTypesBase == 0) {
+        return 0;
+    }
+    lock = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (lock != 0) {
+        dt = ObtainDataTypeA(DTST_FILE, (APTR)lock, 0);
+        if (dt != 0) {
+            shows = dt->dtn_Header->dth_GroupID != GID_SYSTEM;
+            ReleaseDataType(dt);
+        }
+        UnLock(lock);
+    }
+    if (opened) {
+        CloseLibrary(DataTypesBase);
+        DataTypesBase = 0;
+    }
+    return shows;
+}
+#endif
+
 /* Hands a file to the Workbench as a double click on its icon would, or
-   with `parent` its drawer, which opens as a window (workbench.library 44,
-   OpenWorkbenchObjectA: AmigaOS 3.5 and later, AmigaOS 4, MorphOS, AROS).
+   with `parent` its drawer, which opens as a window with the file's icon
+   selected (workbench.library 44, OpenWorkbenchObjectA and
+   ChangeWorkbenchSelectionA: AmigaOS 3.5 and later, AmigaOS 4, MorphOS,
+   AROS, as far as each Workbench does them).
    The name goes as an absolute path: the Workbench does not share this
    program's current directory. The library base is the one this file
    shares with the drop support and the iconified wait: used as it is when
    one of them holds it, opened and closed here when not. 1 = the
-   Workbench took it; the log says where it stopped when not. */
+   Workbench took it, -1 = a Workbench older than 44 (3.0, 3.1), 0 = it
+   refused; the log says where it stopped. */
 static int tg_gui_amiga_wb_open(const char *path, int parent)
 {
     char full[256];
+    char name[108];
     BPTR lock;
     int opened = 0;
     int ok = 0;
+    /* A file without an icon shows only in a drawer that shows all its
+       files (WBOPENA_Show, workbench.library 45; ignored before). */
+    struct TagItem show_all[2];
 
     if (path == 0 || path[0] == '\0') {
         return 0;
     }
+    tg_gui_window_copy(name, sizeof(name), (const char *)FilePart(
+                                               (CONST_STRPTR)path));
+    show_all[0].ti_Tag = TAG_DONE;
+    show_all[0].ti_Data = 0;
+    show_all[1].ti_Tag = TAG_DONE;
+    show_all[1].ti_Data = 0;
+#if defined(WBOPENA_Show) && defined(DDFLAGS_SHOWALL)
+    if (parent && strlen(path) + 6U < sizeof(full)) {
+        BPTR icon;
+
+        sprintf(full, "%s.info", path);
+        icon = Lock((CONST_STRPTR)full, ACCESS_READ);
+        if (icon != 0) {
+            UnLock(icon);
+        } else {
+            show_all[0].ti_Tag = WBOPENA_Show;
+            show_all[0].ti_Data = DDFLAGS_SHOWALL;
+        }
+    }
+#endif
     lock = Lock((CONST_STRPTR)path, ACCESS_READ);
     if (lock == 0) {
         tg_gui_log("wb open: no lock on the file");
@@ -11837,6 +11996,7 @@ static int tg_gui_amiga_wb_open(const char *path, int parent)
     }
     if (WorkbenchBase == 0 || WorkbenchBase->lib_Version < 44) {
         tg_gui_log("wb open: workbench.library older than 44");
+        ok = -1;
     } else {
 #if defined(__amigaos4__)
         int got = 0;
@@ -11847,14 +12007,20 @@ static int tg_gui_amiga_wb_open(const char *path, int parent)
             got = IWorkbench != 0;
         }
         if (IWorkbench != 0) {
-            ok = OpenWorkbenchObjectA((APTR)full, 0) ? 1 : 0;
+            ok = OpenWorkbenchObjectA((APTR)full, show_all) ? 1 : 0;
+            if (ok && parent && name[0] != '\0') {
+                tg_gui_amiga_wb_select(full, name);
+            }
         }
         if (got) {
             DropInterface((struct Interface *)IWorkbench);
             IWorkbench = 0;
         }
 #else
-        ok = OpenWorkbenchObjectA((APTR)full, 0) ? 1 : 0;
+        ok = OpenWorkbenchObjectA((APTR)full, show_all) ? 1 : 0;
+        if (ok && parent && name[0] != '\0') {
+            tg_gui_amiga_wb_select(full, name);
+        }
 #endif
         tg_gui_log(ok ? "wb open: the Workbench took it"
                       : "wb open: the Workbench refused");
@@ -11879,6 +12045,22 @@ static void tg_gui_window_status_saved_in(tg_gui_state *state,
     tg_gui_window_copy(state->status, sizeof(state->status), line);
 }
 
+static int tg_gui_window_run_player(const char *player, const char *path);
+
+/* A file to open on a Workbench older than 44 (3.0, 3.1), which cannot open
+   things for us: MultiView takes what a datatype shows. 1 = it started. */
+static int tg_gui_window_multiview(const char *path)
+{
+#if defined(__amigaos3__)
+    if (tg_gui_amiga_multiview_shows(path)) {
+        return tg_gui_window_run_player("SYS:Utilities/MultiView", path);
+    }
+#else
+    (void)path;
+#endif
+    return 0;
+}
+
 /* Open, or Show in drawer, on a message whose file a download from here
    saved. Opening runs a program, so one is opened only after asking; a
    Workbench that cannot open things for us gets told where the file is. */
@@ -11887,6 +12069,7 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
                                     unsigned long message_id, int show)
 {
     char path[200];
+    int rc;
 
     if (!tg_gui_session_saved_path(message_id, path, sizeof(path))) {
         tg_gui_window_copy(state->status, sizeof(state->status),
@@ -11912,12 +12095,17 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
         }
         show = pick == 2;
     }
-    if (tg_gui_amiga_wb_open(path, show)) {
+    rc = tg_gui_amiga_wb_open(path, show);
+    if (rc == 1) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            show ? "Its drawer is open on the Workbench"
                                 : "Handed to the Workbench");
+    } else if (rc < 0 && !show && tg_gui_window_multiview(path)) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Handed to MultiView");
     } else {
-        /* No Workbench that opens things (3.0, 3.1), or it refused. */
+        /* No Workbench that opens things (3.0, 3.1) and nothing MultiView
+           shows, or the Workbench refused. */
         tg_gui_window_status_saved_in(state, path);
     }
     tg_gui_window_paint(state, backend);
@@ -11982,12 +12170,20 @@ static void tg_gui_window_play_path(tg_gui_state *state,
                            tg_gui_window_run_player(state->video_player, path)
                                ? "Handed to the media player"
                                : "The media player did not start");
-    } else if (tg_gui_amiga_wb_open(path, 0)) {
-        tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Handed to the Workbench");
     } else {
-        /* No Workbench that opens things (3.0, 3.1), or it refused. */
-        tg_gui_window_status_saved_in(state, path);
+        int rc = tg_gui_amiga_wb_open(path, 0);
+
+        if (rc == 1) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Handed to the Workbench");
+        } else if (rc < 0 && tg_gui_window_multiview(path)) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "Handed to MultiView");
+        } else {
+            /* No Workbench that opens things (3.0, 3.1) and nothing
+               MultiView shows, or the Workbench refused. */
+            tg_gui_window_status_saved_in(state, path);
+        }
     }
     tg_gui_window_paint(state, backend);
 }

@@ -436,9 +436,11 @@ Middle, more interface:
 - open a downloaded file or show it in its drawer: done (Open and Show
   in drawer in the menu of a message whose file was saved,
   `OpenWorkbenchObjectA`, the record in `data/telegram-saved.txt`, a
-  confirmation before a program is run). Still missing from its
-  section: the file's icon selected in the drawer
-  (`ChangeWorkbenchSelectionA`) and the MultiView fallback on 3.0/3.1;
+  confirmation before a program is run). Done after 0.5: the file's
+  icon selected in the drawer (`ChangeWorkbenchSelectionA`, the drawer
+  opened with all its files shown when the file has no icon,
+  `WBOPENA_Show`), and on 3.0/3.1 Open hands to MultiView a file a
+  datatype knows (not a program or plain binary);
 - polls shown and voted: done (`messageMediaPoll` written out as the
   message's text, `messages.sendVote` from the message's menu, the
   answers in the menu's place, `updateMessagePoll` followed while the

@@ -98,6 +98,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   does: the bar with Forward, Delete and Cancel comes up, and the next
   clicks choose the others. For one's own messages, which stand on the
   right, that is all the room beside them.
+- Show in drawer selects the file's icon in the drawer it opens, where
+  the Workbench can (AmigaOS 3.5 and later, AmigaOS 4; MorphOS and AROS
+  as far as theirs does it). A downloaded file has no icon of its own,
+  so from 3.9 the drawer opens showing all its files. On a Workbench
+  that cannot open files for a program (3.0, 3.1), Open hands to
+  MultiView what a datatype can show, instead of only saying where the
+  file is.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester
