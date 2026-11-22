@@ -32498,9 +32498,11 @@ int tg_gui_session_edit(const char *text, unsigned long message_id, FILE *stream
     }
 #endif
     /* The markers of the composer become the styles of the edited
-       message, as for a new one. */
+       message, as for a new one; then the people named in it, given to the
+       composer when the edit began, as a new message's mentions. */
     styled_text = tg_gui_markdown_for_send(edit_text);
     styled = styled_text != edit_text;
+    styled_text = tg_gui_mentions_for_send(styled_text);
     rc = tg_mtproto_auth_edit_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
@@ -32508,6 +32510,7 @@ int tg_gui_session_edit(const char *text, unsigned long message_id, FILE *stream
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, message_id, styled_text,
         quiet);
+    tg_gui_mentions_sent(rc == 0);
     tg_mtproto_send_set_styles(0, 0);
 #if !defined(TG_NO_GUI)
     if (rc == 0 && styled) {
@@ -33143,6 +33146,134 @@ void tg_gui_session_mentions_forget(void)
     tg_gui_named_count = 0;
 }
 
+/* The people a message names by name, as the composer holds the names:
+   given to the named mentions, as if each had been picked from the "@"
+   list, when the access hash that a mention needs is known. How many. */
+static int tg_gui_named_from_message(const tg_mtproto_mention_name *list,
+                                     int count)
+{
+    int added = 0;
+    int k;
+    int j;
+
+    for (k = 0; k < count && tg_gui_named_count < TG_MTPROTO_SEND_MENTIONS_MAX;
+         ++k) {
+        tg_gui_named_mention *slot;
+        unsigned long i;
+        int held = 0;
+        int found = 0;
+        unsigned long ahh = 0UL;
+        unsigned long ahl = 0UL;
+
+        for (j = 0; j < tg_gui_named_count; ++j) {
+            if (tg_gui_named[j].id_hi == list[k].user_hi &&
+                tg_gui_named[j].id_lo == list[k].user_lo) {
+                held = 1;
+            }
+        }
+        for (i = 0UL; i < tg_chat_sender_cache.count && !found; ++i) {
+            const tg_mtproto_peer_cache_entry *e =
+                &tg_chat_sender_cache.entries[i];
+
+            if (e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+                e->id_hi == list[k].user_hi && e->id_lo == list[k].user_lo &&
+                e->has_access_hash) {
+                ahh = e->access_hash_hi;
+                ahl = e->access_hash_lo;
+                found = 1;
+            }
+        }
+        if (held || !found) {
+            continue; /* without the hash the name stays a plain word */
+        }
+        slot = &tg_gui_named[tg_gui_named_count];
+        tg_gui_driver_text_from_utf8(slot->name, sizeof(slot->name),
+                                     list[k].name);
+        if (slot->name[0] == '\0') {
+            continue;
+        }
+        slot->id_hi = list[k].user_hi;
+        slot->id_lo = list[k].user_lo;
+        slot->access_hash_hi = ahh;
+        slot->access_hash_lo = ahl;
+        ++tg_gui_named_count;
+        ++added;
+    }
+    return added;
+}
+
+int tg_gui_session_edit_begin(unsigned long message_id, FILE *stream)
+{
+    unsigned char query[96];
+    static const char label[] = "gui edit message";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    const tg_mtproto_mention_name *list = 0;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int rc;
+    int count = 0;
+    FILE *quiet;
+
+    tg_gui_named_count = 0; /* the composer gets the message's text */
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        tg_shared_message_texts_busy ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "edit peer") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    /* The message itself: the one before offset_id + 1, a page of one. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (tg_mtproto_build_messages_get_history_peer(
+              &writer, pc, ph, pl, ahh, ahl, hah, message_id + 1UL, 1UL) ==
+              TG_MTPROTO_TL_OK &&
+          tg_gui_session_peer_request(query, writer.length, &result, label,
+                                      0, 0UL, quiet) == 0 &&
+          tg_mtproto_unpack_gzip_result(&result, quiet, label) == 0)
+             ? 0 : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("edit: could not read the message");
+        return -1;
+    }
+    tg_shared_message_texts_busy = 1;
+    memset(&tg_shared_message_texts, 0, sizeof(tg_shared_message_texts));
+    tg_mtproto_mention_capture(1);
+    rc = tg_mtproto_parse_message_text_list(
+        result.result_constructor, result.result_body,
+        result.result_body_length, &tg_shared_message_texts) ==
+         TG_MTPROTO_TL_OK;
+    tg_mtproto_mention_capture(0);
+    if (rc && tg_shared_message_texts.count >= 1UL &&
+        tg_shared_message_texts.messages[0].id == message_id) {
+        /* the people named, with their access hashes */
+        tg_mtproto_parse_message_peers(result.result_body,
+                                       result.result_body_length,
+                                       &tg_chat_sender_cache);
+        count = tg_mtproto_mention_names(&list);
+        count = tg_gui_named_from_message(list, count);
+    }
+    tg_shared_message_texts_busy = 0;
+    tg_gui_log(count > 0 ? "edit: its mentions by name kept"
+                         : "edit: no mention by name to keep");
+    return count;
+}
+
 /* A byte that belongs to a word: a name found inside a longer word is not
    that person's. */
 static int tg_gui_mention_word_byte(unsigned char c)
@@ -33285,6 +33416,7 @@ static const char *tg_gui_markdown_for_send(const char *utf8)
         case TG_GUI_MD_STRIKE: kind = TG_MTPROTO_STYLE_STRIKE; break;
         case TG_GUI_MD_SPOILER: kind = TG_MTPROTO_STYLE_SPOILER; break;
         case TG_GUI_MD_LINK: kind = TG_MTPROTO_STYLE_LINK; break;
+        case TG_GUI_MD_UNDERLINE: kind = TG_MTPROTO_STYLE_UNDERLINE; break;
         default: break;
         }
         if (kind == 0UL || spans[k].to <= spans[k].from) {
@@ -33355,6 +33487,45 @@ static int tg_gui_mentions_self_test(void)
             puts("probe self-test: the mentions read with the chat");
             return 2;
         }
+    }
+    /* The people an edited message names by name go to the composer as
+       its mentions: once each, only when their access hash is known, the
+       name as the composer holds it. */
+    {
+        static tg_mtproto_mention_name names[3];
+        static char want[TG_GUI_MENTION_LEN];
+        unsigned long saved_count = tg_chat_sender_cache.count;
+        tg_mtproto_peer_cache_entry saved_entry = tg_chat_sender_cache.entries[0];
+        int added;
+
+        memset(names, 0, sizeof(names));
+        names[0].user_lo = 77UL;
+        strcpy(names[0].name, "\xC3\x89lodie");
+        names[1].user_lo = 78UL; /* nobody knows how to reach */
+        strcpy(names[1].name, "Ugo");
+        names[2] = names[0];     /* the same one again */
+        memset(&tg_chat_sender_cache.entries[0], 0,
+               sizeof(tg_chat_sender_cache.entries[0]));
+        tg_chat_sender_cache.entries[0].peer_constructor =
+            TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        tg_chat_sender_cache.entries[0].id_lo = 77UL;
+        tg_chat_sender_cache.entries[0].has_access_hash = 1;
+        tg_chat_sender_cache.entries[0].access_hash_lo = 0x99UL;
+        tg_chat_sender_cache.count = 1UL;
+        tg_gui_named_count = 0;
+        added = tg_gui_named_from_message(names, 3);
+        tg_gui_driver_text_from_utf8(want, sizeof(want), "\xC3\x89lodie");
+        tg_chat_sender_cache.entries[0] = saved_entry;
+        tg_chat_sender_cache.count = saved_count;
+        if (added != 1 || tg_gui_named_count != 1 ||
+            tg_gui_named[0].id_lo != 77UL ||
+            tg_gui_named[0].access_hash_lo != 0x99UL ||
+            strcmp(tg_gui_named[0].name, want) != 0) {
+            tg_gui_named_count = 0;
+            puts("probe self-test: an edited message's mentions by name");
+            return 2;
+        }
+        tg_gui_named_count = 0;
     }
 
     /* Who an "@" can mention: the people noted (not this account, not a

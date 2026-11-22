@@ -2756,7 +2756,7 @@ static int tg_gui_md_word(unsigned char c)
 
 static int tg_gui_md_mark_char(unsigned char c)
 {
-    return c == '*' || c == '_' || c == '~' || c == '|';
+    return c == '*' || c == '_' || c == '~' || c == '|' || c == '+';
 }
 
 /* What may stand before an opening marker at in[i]. */
@@ -2947,10 +2947,12 @@ static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
         { TG_GUI_MD_PRE, "```", 3UL }, { TG_GUI_MD_CODE, "`", 1UL },
         { TG_GUI_MD_BOLD, "**", 2UL }, { TG_GUI_MD_ITALIC, "__", 2UL },
         { TG_GUI_MD_STRIKE, "~~", 2UL }, { TG_GUI_MD_SPOILER, "||", 2UL },
+        { TG_GUI_MD_UNDERLINE, "++", 2UL },
     };
-    unsigned long close_at[TG_GUI_MD_SPOILER + 1];
-    unsigned long close_len[TG_GUI_MD_SPOILER + 1];
-    int span_of[TG_GUI_MD_SPOILER + 1];
+    /* by kind; the link's place stays empty, links are read apart */
+    unsigned long close_at[TG_GUI_MD_UNDERLINE + 1];
+    unsigned long close_len[TG_GUI_MD_UNDERLINE + 1];
+    int span_of[TG_GUI_MD_UNDERLINE + 1];
     unsigned long len;
     unsigned long i = 0UL;
     unsigned long n = 0UL;
@@ -2966,7 +2968,7 @@ static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
         ++in;
     }
     len = (unsigned long)strlen(in);
-    for (k = 0; k <= TG_GUI_MD_SPOILER; ++k) {
+    for (k = 0; k <= TG_GUI_MD_UNDERLINE; ++k) {
         close_at[k] = TG_GUI_MD_NONE;
         close_len[k] = 0UL;
         span_of[k] = -1;
@@ -2976,7 +2978,7 @@ static int tg_gui_md_parse(const char *in, char *out, unsigned long size,
         unsigned long m;
         int done = 0;
 
-        for (k = 1; k <= TG_GUI_MD_SPOILER && !done; ++k) {
+        for (k = 1; k <= TG_GUI_MD_UNDERLINE && !done; ++k) {
             if (close_at[k] == i) { /* a style ends here */
                 spans[span_of[k]].to = n;
                 i += close_len[k];
@@ -3105,6 +3107,7 @@ static char tg_gui_md_marker(int kind)
     case TG_GUI_MD_STRIKE: return TG_TEXT_MARKER_STRIKE;
     case TG_GUI_MD_SPOILER: return TG_TEXT_MARKER_SPOILER;
     case TG_GUI_MD_LINK: return TG_TEXT_MARKER_LINK;
+    case TG_GUI_MD_UNDERLINE: return TG_TEXT_MARKER_UNDERLINE;
     default: return 0;
     }
 }
@@ -3333,6 +3336,8 @@ int tg_gui_edit_text(const tg_gui_state *state, const char *shown, char *out,
                 mark = "__";
             } else if (shown[i] == TG_TEXT_MARKER_SPOILER) {
                 mark = "||";
+            } else if (shown[i] == TG_TEXT_MARKER_UNDERLINE) {
+                mark = "++";
             } else {
                 mark = "~~";
             }
@@ -3956,6 +3961,10 @@ static int tg_gui_spoilers_shown = 0;
    one. */
 static int tg_gui_markup_style(int style)
 {
+    if ((style & TG_GUI_STYLE_ULINE) != 0) {
+        /* underlined words: the backend's underline, in the text's pen */
+        style = (style & ~TG_GUI_STYLE_ULINE) | TG_GUI_STYLE_UNDERLINE;
+    }
     return tg_gui_spoilers_shown ? (style & ~TG_GUI_STYLE_SPOILER) : style;
 }
 
@@ -3987,6 +3996,9 @@ static void tg_gui_draw_markup(tg_gui_backend *backend, int pen, int link_pen,
                 break;
             case TG_TEXT_MARKER_STRIKE:
                 toggle = TG_GUI_STYLE_STRIKE;
+                break;
+            case TG_TEXT_MARKER_UNDERLINE:
+                toggle = TG_GUI_STYLE_ULINE;
                 break;
             case TG_TEXT_MARKER_SPOILER:
                 toggle = TG_GUI_STYLE_SPOILER;
@@ -9915,6 +9927,7 @@ static int tg_gui_wrap_test_width(tg_gui_backend *backend, const char *text,
 typedef struct tg_gui_markup_record {
     char text[128];
     int styles[128];
+    int pens[128];
     unsigned long length;
     int style;
 } tg_gui_markup_record;
@@ -9933,12 +9946,12 @@ static void tg_gui_markup_test_draw(tg_gui_backend *backend, int pen, int x,
     tg_gui_markup_record *record = (tg_gui_markup_record *)backend->context;
     unsigned long i;
 
-    (void)pen;
     (void)x;
     (void)baseline;
     for (i = 0UL; i < length && record->length + 1UL < sizeof(record->text);
          ++i) {
         record->styles[record->length] = record->style;
+        record->pens[record->length] = pen;
         record->text[record->length++] = text[i];
     }
     record->text[record->length] = '\0';
@@ -10098,6 +10111,20 @@ static int tg_gui_markup_self_test(void)
                 puts("gui self-test: linked words are not drawn as a link");
                 return 2;
             }
+            /* underlined words: underlined, in the text's pen, not the
+               link's (pens 5 and 9 here) */
+            memset(&record, 0, sizeof(record));
+            style = 0;
+            tg_gui_draw_markup(&backend, 5, 9, 0, 0, "a \027un\027 b", 0UL,
+                               8UL, &style);
+            if (strcmp(record.text, "a un b") != 0 || record.styles[0] != 0 ||
+                record.styles[2] != TG_GUI_STYLE_UNDERLINE ||
+                record.styles[3] != TG_GUI_STYLE_UNDERLINE ||
+                record.styles[5] != 0 || record.pens[2] != 5 ||
+                record.pens[3] != 5 || style != 0) {
+                puts("gui self-test: underlined words drawn wrong");
+                return 2;
+            }
         }
         /* The text client and the plain copies print it between bars. */
         if (TG_TEXT_MARKER_ASCII(TG_TEXT_MARKER_SPOILER) != '|' ||
@@ -10110,7 +10137,9 @@ static int tg_gui_markup_self_test(void)
             !TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_NOTE) ||
             TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_SPOILER) ||
             TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_BOLD) ||
-            TG_TEXT_IS_MARKER('\033') || TG_TEXT_IS_MARKER('\027') ||
+            !TG_TEXT_IS_MARKER(TG_TEXT_MARKER_UNDERLINE) ||
+            !TG_TEXT_MARKER_SILENT(TG_TEXT_MARKER_UNDERLINE) ||
+            TG_TEXT_IS_MARKER('\033') || TG_TEXT_IS_MARKER('\026') ||
             TG_TEXT_IS_MARKER(' ')) {
             puts("gui self-test: the spoiler's marker is not one");
             return 2;
@@ -11413,6 +11442,34 @@ static int tg_gui_notify_menu_self_test(void)
             spans[2].to != 7UL) {
             puts("gui self-test: markdown stretches are in the wrong place");
             return 2;
+        }
+        /* ++words++ underline them; "C++" and "i++ ++j" do not (the
+           closing mark wants no blank before it, the opening one no letter
+           before it). The mark shows as the transcript's, and an edit
+           writes it back as ++. */
+        n = tg_gui_markdown_parse("a ++un++ b", shown, sizeof(shown), spans,
+                                  TG_GUI_MD_SPANS_MAX);
+        if (n != 1 || strcmp(shown, "a un b") != 0 ||
+            spans[0].kind != TG_GUI_MD_UNDERLINE || spans[0].from != 2UL ||
+            spans[0].to != 4UL ||
+            tg_gui_markdown_parse("C++ and i++ ++j", shown, sizeof(shown),
+                                  spans, TG_GUI_MD_SPANS_MAX) != 0) {
+            puts("gui self-test: ++underline++ read wrong");
+            return 2;
+        }
+        {
+            static char back[64];
+            static tg_gui_state ed;
+
+            ed.markdown = 1;
+            if (!tg_gui_markdown_display("a ++un++ b", back, sizeof(back)) ||
+                strcmp(back, "a \027un\027 b") != 0 ||
+                !tg_gui_edit_text(&ed, "a \027un\027 b", back,
+                                  sizeof(back)) ||
+                strcmp(back, "a ++un++ b") != 0) {
+                puts("gui self-test: an underline shown, or edited, wrong");
+                return 2;
+            }
         }
         n = tg_gui_markdown_parse("**\xc3\xa8** ```\nx\n```", shown,
                                   sizeof(shown), spans, TG_GUI_MD_SPANS_MAX);

@@ -2631,6 +2631,7 @@ static unsigned long tg_send_style_constructor(unsigned long kind)
     case TG_MTPROTO_STYLE_STRIKE: return 0xbf0693d4UL;
     case TG_MTPROTO_STYLE_SPOILER: return 0x32ca960fUL;
     case TG_MTPROTO_STYLE_LINK: return 0x76a6d327UL;
+    case TG_MTPROTO_STYLE_UNDERLINE: return 0x9c4e7e8bUL;
     default: return 0UL;
     }
 }
@@ -3058,7 +3059,8 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
            old formatting away, as Telegram defines it. */
         status = tg_mtproto_tl_write_u32(
             writer, TG_MESSAGES_EDIT_MESSAGE_FLAG_MESSAGE |
-                        (tg_send_style_count > 0 ? 8UL : 0UL));
+                        (tg_send_style_count + tg_send_mention_count > 0
+                             ? 8UL : 0UL));
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
@@ -3071,19 +3073,29 @@ tg_mtproto_tl_status tg_mtproto_build_messages_edit_message(
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_write_string(writer, message);
     }
-    if (tg_send_style_count > 0) {
-        int s;
+    if (tg_send_style_count + tg_send_mention_count > 0) {
+        /* the styles and the people named, merged in the order of the
+           text, as a new message has them */
+        int s = 0;
+        int m = 0;
 
         if (status == TG_MTPROTO_TL_OK) {
             status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
         }
         if (status == TG_MTPROTO_TL_OK) {
             status = tg_mtproto_tl_write_u32(
-                writer, (unsigned long)tg_send_style_count);
+                writer,
+                (unsigned long)(tg_send_style_count + tg_send_mention_count));
         }
-        for (s = 0; s < tg_send_style_count && status == TG_MTPROTO_TL_OK;
-             ++s) {
-            status = tg_write_send_style(writer, &tg_send_styles[s]);
+        while ((s < tg_send_style_count || m < tg_send_mention_count) &&
+               status == TG_MTPROTO_TL_OK) {
+            if (m >= tg_send_mention_count ||
+                (s < tg_send_style_count &&
+                 tg_send_styles[s].offset <= tg_send_mentions[m].offset)) {
+                status = tg_write_send_style(writer, &tg_send_styles[s++]);
+            } else {
+                status = tg_write_send_mention(writer, &tg_send_mentions[m++]);
+            }
         }
     }
     return status;
@@ -6866,6 +6878,8 @@ static tg_mtproto_tl_status tg_read_peer_cache_chat(
 #define TG_MSG_ENT_STRIKE 4UL
 #define TG_MSG_ENT_SPOILER 5UL
 #define TG_MSG_ENT_LINK 6UL /* words that are a link: the address is in url */
+#define TG_MSG_ENT_UNDERLINE 7UL
+#define TG_MSG_ENT_MENTION_NAME 8UL /* a person by name: user in user_hi/lo */
 #define TG_MSG_LINK_NOTES_MAX 9 /* the addresses written out under a text */
 #define TG_MSG_LINK_URL_MAX 255UL
 #define TG_MSG_ENTITY_MAX 24
@@ -6876,6 +6890,8 @@ typedef struct tg_msg_entity {
     unsigned long len;  /* UTF-16 code units */
     const unsigned char *url; /* TG_MSG_ENT_LINK: the address, as it came; */
     unsigned long url_len;    /* TG_MSG_ENT_CODE: a block's language */
+    unsigned long user_hi;    /* TG_MSG_ENT_MENTION_NAME: whose name */
+    unsigned long user_lo;
 } tg_msg_entity;
 
 /* 1 when a block's language can stand as its first line: a short word of
@@ -6917,6 +6933,8 @@ static char tg_msg_entity_marker(unsigned long type)
         return TG_TEXT_MARKER_SPOILER;
     case TG_MSG_ENT_LINK:
         return TG_TEXT_MARKER_LINK;
+    case TG_MSG_ENT_UNDERLINE:
+        return TG_TEXT_MARKER_UNDERLINE;
     default:
         return 0;
     }
@@ -7085,6 +7103,88 @@ static void tg_msg_number_links(const char *text, unsigned long size,
    reaches past the end of the body. A link with a text of its own gets its
    marks around the words, "[n]" after them, and its address on a line
    after the text. */
+/* The people a message names (messageEntityMentionName), gathered while
+   armed: an edit asks for its message once and gives them back to the
+   composer, so that the names it sends again still say whose they are. */
+static int tg_msg_mention_capture = 0;
+static tg_mtproto_mention_name
+    tg_msg_mention_names[TG_MTPROTO_SEND_MENTIONS_MAX];
+static int tg_msg_mention_name_count = 0;
+
+void tg_mtproto_mention_capture(int on)
+{
+    tg_msg_mention_capture = on != 0;
+    if (on) {
+        tg_msg_mention_name_count = 0;
+    }
+}
+
+int tg_mtproto_mention_names(const tg_mtproto_mention_name **list)
+{
+    if (list != 0) {
+        *list = tg_msg_mention_names;
+    }
+    return tg_msg_mention_name_count;
+}
+
+/* The byte of a UTF-8 text where its UTF-16 unit `units` starts (the end
+   when it is past it). */
+static unsigned long tg_msg_byte_of_unit(const char *text,
+                                         unsigned long units)
+{
+    unsigned long b = 0UL;
+    unsigned long u = 0UL;
+
+    while (text[b] != '\0' && u < units) {
+        unsigned long step_units;
+        unsigned long step = tg_utf8_step((const unsigned char *)text + b,
+                                          &step_units);
+
+        b += step;
+        u += step_units;
+    }
+    return b;
+}
+
+/* The names the entities give, out of the text as it came (UTF-8). */
+static void tg_msg_mention_gather(const char *text, const tg_msg_entity *ents,
+                                  int count)
+{
+    int e;
+
+    for (e = 0; e < count && e < TG_MSG_ENTITY_MAX &&
+                tg_msg_mention_name_count < TG_MTPROTO_SEND_MENTIONS_MAX;
+         ++e) {
+        tg_mtproto_mention_name *slot;
+        unsigned long from;
+        unsigned long to;
+        unsigned long n;
+
+        if (ents[e].type != TG_MSG_ENT_MENTION_NAME) {
+            continue;
+        }
+        from = tg_msg_byte_of_unit(text, ents[e].off);
+        to = tg_msg_byte_of_unit(text, ents[e].off + ents[e].len);
+        if (to <= from) {
+            continue;
+        }
+        slot = &tg_msg_mention_names[tg_msg_mention_name_count];
+        n = to - from;
+        if (n >= sizeof(slot->name)) {
+            n = sizeof(slot->name) - 1UL;
+            while (n > 0UL &&
+                   ((unsigned char)text[from + n] & 0xC0U) == 0x80U) {
+                --n; /* not inside a character */
+            }
+        }
+        memcpy(slot->name, text + from, (size_t)n);
+        slot->name[n] = '\0';
+        slot->user_hi = ents[e].user_hi;
+        slot->user_lo = ents[e].user_lo;
+        ++tg_msg_mention_name_count;
+    }
+}
+
 static void tg_apply_entity_markers(char *text, unsigned long size,
                                     const tg_msg_entity *ents, int count)
 {
@@ -7096,6 +7196,9 @@ static void tg_apply_entity_markers(char *text, unsigned long size,
     unsigned long u16 = 0UL; /* UTF-16 position in the body */
     int e;
 
+    if (tg_msg_mention_capture) {
+        tg_msg_mention_gather(text, ents, count);
+    }
     tg_msg_sanitize_markers(text);
     for (e = 0; e < count && e < TG_MSG_ENTITY_MAX; ++e) {
         opened[e] = 0;
@@ -7235,6 +7338,9 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
         const unsigned char *url = 0;
         unsigned long url_len = 0UL;
 
+        scratch_hi = 0UL;
+        scratch_lo = 0UL;
+
         if (tg_mtproto_tl_read_u32(reader, &constructor) !=
                 TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
@@ -7267,12 +7373,24 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
             }
             type = TG_MSG_ENT_LINK;
             break;
-        case 0xdc7b1140UL: /* messageEntityMentionName */
+        case 0xdc7b1140UL: /* messageEntityMentionName user_id:long */
+            if (tg_mtproto_tl_read_u64(reader, &scratch_hi, &scratch_lo) !=
+                TG_MTPROTO_TL_OK) {
+                return TG_MTPROTO_TL_INVALID_DATA;
+            }
+            /* kept only while an edit gathers the names: otherwise it
+               would take the place of a style in a full list */
+            type = tg_msg_mention_capture ? TG_MSG_ENT_MENTION_NAME
+                                          : TG_MSG_ENT_NONE;
+            break;
         case 0xc8cf05f8UL: /* messageEntityCustomEmoji */
             if (tg_mtproto_tl_read_u64(reader, &scratch_hi, &scratch_lo) !=
                 TG_MTPROTO_TL_OK) {
                 return TG_MTPROTO_TL_INVALID_DATA;
             }
+            break;
+        case 0x9c4e7e8bUL: /* messageEntityUnderline */
+            type = TG_MSG_ENT_UNDERLINE;
             break;
         case 0xbd610bc9UL: /* messageEntityBold */
             type = TG_MSG_ENT_BOLD;
@@ -7294,7 +7412,6 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
         case 0x64e475c2UL: /* messageEntityEmail */
         case 0x9b69e34bUL: /* messageEntityPhone */
         case 0x4c4e743fUL: /* messageEntityCashtag */
-        case 0x9c4e7e8bUL: /* messageEntityUnderline */
         case 0x20df5d0UL:  /* messageEntityBlockquote, before its flags */
         case 0xf1ccaaacUL: /* messageEntityBlockquote */
         case 0x761e6af4UL: /* messageEntityBankCard */
@@ -7312,6 +7429,10 @@ static tg_mtproto_tl_status tg_read_message_entity_vector(
             ents[*count].len = len;
             ents[*count].url = url;
             ents[*count].url_len = url_len;
+            ents[*count].user_hi =
+                type == TG_MSG_ENT_MENTION_NAME ? scratch_hi : 0UL;
+            ents[*count].user_lo =
+                type == TG_MSG_ENT_MENTION_NAME ? scratch_lo : 0UL;
             ++(*count);
         }
     }
@@ -13959,6 +14080,54 @@ static int tg_entity_marker_self_test(void)
         puts("login self-test: a spoiler's mark, or a typed one");
         return 2;
     }
+    /* An underline has its mark, and the byte of it typed as text does
+       not; a mention by name has none, and while armed its words and
+       whose they are are gathered. */
+    e[0].type = TG_MSG_ENT_UNDERLINE;
+    e[0].off = 2UL;
+    e[0].len = 3UL;
+    if (!tg_entity_marker_case("a und b", e, 1, "a \027und\027 b") ||
+        !tg_entity_marker_case("x\027y", e, 0, "x y")) {
+        puts("login self-test: an underline's mark");
+        return 2;
+    }
+    {
+        const tg_mtproto_mention_name *names = 0;
+
+        memset(e, 0, sizeof(e));
+        e[0].type = TG_MSG_ENT_MENTION_NAME;
+        e[0].off = 5UL; /* "\xC3\x89lodie": 6 UTF-16 units, 7 bytes */
+        e[0].len = 6UL;
+        e[0].user_lo = 77UL;
+        tg_mtproto_mention_capture(1);
+        if (!tg_entity_marker_case("ciao \xC3\x89lodie!", e, 1,
+                                   "ciao \xC3\x89lodie!")) {
+            tg_mtproto_mention_capture(0);
+            puts("login self-test: a mention by name changed the text");
+            return 2;
+        }
+        tg_mtproto_mention_capture(0);
+        if (tg_mtproto_mention_names(&names) != 1 || names == 0 ||
+            names[0].user_lo != 77UL ||
+            strcmp(names[0].name, "\xC3\x89lodie") != 0) {
+            puts("login self-test: the words of a mention by name");
+            return 2;
+        }
+        /* not armed: nothing gathered, and arming empties the list */
+        if (!tg_entity_marker_case("ciao \xC3\x89lodie!", e, 1,
+                                   "ciao \xC3\x89lodie!") ||
+            tg_mtproto_mention_names(0) != 1) {
+            puts("login self-test: a mention gathered while not armed");
+            return 2;
+        }
+        tg_mtproto_mention_capture(1);
+        tg_mtproto_mention_capture(0);
+        if (tg_mtproto_mention_names(0) != 0) {
+            puts("login self-test: arming kept the old names");
+            return 2;
+        }
+        memset(e, 0, sizeof(e));
+    }
     /* Links with a text of their own: marks around the words, a number
        after them, the addresses on lines after the text. A link whose
        address the text already shows stays plain words; a style inside
@@ -16455,6 +16624,57 @@ int tg_mtproto_login_self_test(void)
             puts("login self-test: formatting outlived its edit");
             return 2;
         }
+    }
+    /* An edit that names someone, and underlines a word before the name:
+       "ab Cd", underline on "ab" (12 bytes), then the mention of "Cd"
+       (inputMessageEntityMentionName with its inputUser, 32 bytes), in
+       the order of the text, flags.3 set. A mention alone sets it too. */
+    {
+        tg_mtproto_send_style under;
+        tg_mtproto_send_mention who;
+
+        memset(&under, 0, sizeof(under));
+        under.kind = TG_MTPROTO_STYLE_UNDERLINE;
+        under.offset = 0UL;
+        under.length = 2UL;
+        memset(&who, 0, sizeof(who));
+        who.offset = 3UL;
+        who.length = 2UL;
+        who.user_id_lo = 0x77UL;
+        who.access_hash_lo = 0x99UL;
+        tg_mtproto_send_set_styles(&under, 1);
+        tg_mtproto_send_set_mentions(&who, 1);
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_edit_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0, 0x0A0B0C0DUL, "ab Cd") != TG_MTPROTO_TL_OK ||
+            writer.length != 32UL + 8UL + 12UL + 32UL ||
+            query[4] != 0x08U || query[5] != 0x08U ||        /* flags 0x808 */
+            query[32] != 0x15U || query[36] != 0x02U ||      /* vector of 2 */
+            query[40] != 0x8bU || query[41] != 0x7eU ||
+            query[42] != 0x4eU || query[43] != 0x9cU ||      /* underline */
+            query[44] != 0x00U || query[48] != 0x02U ||
+            query[52] != 0xc9U || query[53] != 0x68U ||
+            query[54] != 0x8eU || query[55] != 0x20U ||      /* mention */
+            query[56] != 0x03U || query[60] != 0x02U ||
+            query[68] != 0x77U || query[76] != 0x99U) {
+            tg_mtproto_send_set_styles(0, 0);
+            tg_mtproto_send_set_mentions(0, 0);
+            puts("login self-test: an edit with a mention built wrong");
+            return 2;
+        }
+        tg_mtproto_send_set_styles(0, 0);
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_messages_edit_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+                0UL, 0UL, 0, 0x0A0B0C0DUL, "ab Cd") != TG_MTPROTO_TL_OK ||
+            query[4] != 0x08U || query[5] != 0x08U ||
+            query[36] != 0x01U || query[40] != 0xc9U) {
+            tg_mtproto_send_set_mentions(0, 0);
+            puts("login self-test: an edit with a mention alone");
+            return 2;
+        }
+        tg_mtproto_send_set_mentions(0, 0);
     }
     /* DELETE (peer): messages.deleteMessages#e58e95d2 revoke=1 id=[hi] ->
        ctor + flags + vector + count + id = 20 bytes. */

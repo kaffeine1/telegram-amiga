@@ -1365,6 +1365,18 @@ typedef struct tg_mtproto_send_mention {
 void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
                                   int count);
 
+/* The people the messages read while armed name by name
+   (messageEntityMentionName): whose, and the words that name them, UTF-8
+   as they came. Arming empties the list; an edit arms it around the
+   reading of its message. */
+typedef struct tg_mtproto_mention_name {
+    unsigned long user_hi;
+    unsigned long user_lo;
+    char name[64];
+} tg_mtproto_mention_name;
+void tg_mtproto_mention_capture(int on);
+int tg_mtproto_mention_names(const tg_mtproto_mention_name **list);
+
 /* The formatting the next messages.sendMessage built carries: where each
    styled stretch is in its text (UTF-16 units), in the order of the text.
    None (0, 0) takes it away again. A block (PRE) may name its language
@@ -1378,6 +1390,7 @@ void tg_mtproto_send_set_mentions(const tg_mtproto_send_mention *list,
 #define TG_MTPROTO_STYLE_STRIKE 5UL  /* messageEntityStrike#bf0693d4 */
 #define TG_MTPROTO_STYLE_SPOILER 6UL /* messageEntitySpoiler#32ca960f */
 #define TG_MTPROTO_STYLE_LINK 7UL    /* messageEntityTextUrl#76a6d327 */
+#define TG_MTPROTO_STYLE_UNDERLINE 8UL /* messageEntityUnderline#9c4e7e8b */
 typedef struct tg_mtproto_send_style {
     unsigned long kind; /* TG_MTPROTO_STYLE_* */
     unsigned long offset;

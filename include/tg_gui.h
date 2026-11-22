@@ -75,6 +75,9 @@ typedef struct tg_gui_rect {
 #define TG_GUI_STYLE_UNDERLINE 16 /* clickable URLs (0.0.8) */
 #define TG_GUI_STYLE_SPOILER 32 /* hidden text: a bar until it is clicked */
 #define TG_GUI_STYLE_NOTE 64 /* the addresses after the text: drawn as text */
+#define TG_GUI_STYLE_ULINE 128 /* underlined words, not a link: the backend
+                                  draws them as TG_GUI_STYLE_UNDERLINE in the
+                                  text's own pen */
 
 /* Per-platform drawing shim. The portable renderer owns all layout and only
    calls these. The host build supplies a recording backend for the self-test. */
@@ -364,6 +367,7 @@ int tg_gui_poll_draft_tidy(tg_gui_poll_draft *draft);
 #define TG_GUI_MD_STRIKE 5
 #define TG_GUI_MD_SPOILER 6
 #define TG_GUI_MD_LINK 7 /* [words](http://address): the words are a link */
+#define TG_GUI_MD_UNDERLINE 8 /* ++words++ */
 #define TG_GUI_MD_SPANS_MAX 16
 #define TG_GUI_MD_LANG_MAX 20
 #define TG_GUI_MD_URL_MAX 255

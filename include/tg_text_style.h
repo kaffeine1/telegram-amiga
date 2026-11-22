@@ -10,6 +10,7 @@
    console's ESC (the spoiler's is the one below it); GUI emoji pairs use
    the separate 0x80/0x81 prefixes. Incoming text must replace these bytes
    before adding entity markers. */
+#define TG_TEXT_MARKER_UNDERLINE '\027' /* underlined words, not a link */
 #define TG_TEXT_MARKER_LINK   '\030' /* around words that are a link */
 #define TG_TEXT_MARKER_NOTE   '\031' /* before the addresses of such links */
 #define TG_TEXT_MARKER_SPOILER '\032'
@@ -22,14 +23,16 @@
                               (unsigned long)(c) <= \
                               (unsigned long)TG_TEXT_MARKER_STRIKE) || \
                              ((unsigned long)(c) >= \
-                              (unsigned long)TG_TEXT_MARKER_LINK && \
+                              (unsigned long)TG_TEXT_MARKER_UNDERLINE && \
                               (unsigned long)(c) <= \
                               (unsigned long)TG_TEXT_MARKER_SPOILER))
 /* The two marks of a link with a text of its own print nothing: the "[1]"
-   after the words and the line with the address say it all. */
+   after the words and the line with the address say it all. An underline
+   has no sign of its own on the console either. */
 #define TG_TEXT_MARKER_SILENT(c) \
     ((unsigned long)(c) == (unsigned long)TG_TEXT_MARKER_LINK || \
-     (unsigned long)(c) == (unsigned long)TG_TEXT_MARKER_NOTE)
+     (unsigned long)(c) == (unsigned long)TG_TEXT_MARKER_NOTE || \
+     (unsigned long)(c) == (unsigned long)TG_TEXT_MARKER_UNDERLINE)
 /* Only call for a marker that is not silent. The console keeps its
    historical visible output; a spoiler stands between two bars there. */
 #define TG_TEXT_MARKER_ASCII(c) \

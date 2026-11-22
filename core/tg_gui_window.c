@@ -19204,7 +19204,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_open_chat_is_self(state)) &&
                                m->id != 0UL) {
                         /* Edit mode: pre-fill the composer with the message text;
-                           the next ENTER routes to editMessage (edit_to_id). */
+                           the next ENTER routes to editMessage (edit_to_id).
+                           The people it names by name are read first, so
+                           that the edit names them again as theirs. */
+                        (void)tg_gui_session_edit_begin(m->id, stdout);
                         state->edit_to_id = m->id;
                         state->reply_to_id = 0UL;
                         state->reply_sender[0] = '\0';

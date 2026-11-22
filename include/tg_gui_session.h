@@ -558,6 +558,12 @@ int tg_gui_session_allowed_reactions(tg_reactions_allowed *out, FILE *stream);
 int tg_gui_session_edit(const char *text, unsigned long message_id,
                         FILE *stream);
 
+/* An edit begins: the message is read once more from Telegram, and the
+   people it names by name (who has no username) are given to the composer,
+   so that the edit sends their names again as theirs. How many, -1 when it
+   could not be read (the edit then goes on without them). */
+int tg_gui_session_edit_begin(unsigned long message_id, FILE *stream);
+
 /* Deletes a message for everyone (messages./channels.deleteMessages by peer
    type), and on success removes it from the transcript. Returns 0 ok. */
 int tg_gui_session_delete(unsigned long message_id, FILE *stream);

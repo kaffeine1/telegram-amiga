@@ -105,6 +105,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   that cannot open files for a program (3.0, 3.1), Open hands to
   MultiView what a datatype can show, instead of only saying where the
   file is.
+- Underlined words, as the phone sends them, show underlined here too,
+  in the text's own colour (a link's words stay in the link's colour).
+  ++words++ in the composer underline them, and an edit writes an
+  underline back that way, so it is no longer lost.
+- An edit keeps the people its message names by name (someone without a
+  username, picked from the "@" list): the message is read once more
+  when the edit begins, and the names in the edited text go out as
+  theirs again. Before, the edit turned them into plain words.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

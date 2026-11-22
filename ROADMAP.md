@@ -465,8 +465,12 @@ Middle, more interface:
   line) and words can be a link (`[words](https://address)`,
   `messageEntityTextUrl`; received, the words are underlined and
   numbered and the address stands under the text), both kept by an
-  edit. Still missing: an edit keeping a mention by name and an
-  underline, which the transcript does not hold;
+  edit. Done after 0.5: an underline is held (its own mark in the
+  transcript, drawn underlined in the text's pen, `++words++` in the
+  composer, `messageEntityUnderline`), and an edit keeps the mentions by
+  name (the message read once more when the edit begins, the names it
+  gives handed to the composer's named mentions, and the edit's
+  entities carry them, `inputMessageEntityMentionName`);
 - the update notice (its section): step 1 is done. The client looks
   public channels and groups up by name, searches their posts for
   "Amigram" and a version (`contacts.resolveUsername`,

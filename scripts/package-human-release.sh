@@ -703,10 +703,10 @@ Messages
   @username; someone without is written by first name, and the message
   still reaches them as a mention as long as the name is left as it was
   inserted.
-- Formatting can be typed: **bold**, __italic__, \`code\`,
-  ~~strike~~, ||spoiler||, and three backticks before and after a block
-  of code. When the message is sent the markers leave the text and the
-  other clients show the styles. A spoiler, sent or received, is
+- Formatting can be typed: **bold**, __italic__, ++underline++,
+  \`code\`, ~~strike~~, ||spoiler||, and three backticks before and
+  after a block of code. When the message is sent the markers leave the
+  text and the other clients show the styles. A spoiler, sent or received, is
   covered by a bar until its message is clicked. Words become a link
   with [words](https://address), and a block of code names its
   language right after its opening marker (\`\`\`c, the code from the
@@ -1031,8 +1031,8 @@ Messaggi
   col nome, e il messaggio gli arriva lo stesso come menzione finche' il
   nome resta com'e' stato inserito.
 - La formattazione si puo' scrivere: **grassetto**, __corsivo__,
-  \`codice\`, ~~barrato~~, ||spoiler||, e tre accenti gravi prima e
-  dopo un blocco di codice. Quando il messaggio parte i marcatori
+  ++sottolineato++, \`codice\`, ~~barrato~~, ||spoiler||, e tre accenti
+  gravi prima e dopo un blocco di codice. Quando il messaggio parte i marcatori
   escono dal testo e gli altri client mostrano gli stili. Uno spoiler,
   mandato o ricevuto, e' coperto da una barra finche' non si fa click
   sul suo messaggio. Delle parole diventano un link con
