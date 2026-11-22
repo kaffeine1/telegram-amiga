@@ -7269,6 +7269,29 @@ static tg_qr_code tg_gui_qr;
 static char tg_gui_qr_for[sizeof(((tg_gui_state *)0)->login_qr)];
 static int tg_gui_qr_ready;
 
+/* The size of a module on screen: as wide as fits, up to 6 pixels, and as
+   tall as that shows on a screen whose pixels are ratio/10 times taller
+   than wide (a hires screen without interlace has half the lines, so half
+   the height), so that the code looks square. One pixel at least. */
+static void tg_gui_qr_module_size(int room_w, int room_h, int cells,
+                                  int ratio, int *mw, int *mh)
+{
+    int w;
+    int h = 1;
+
+    for (w = 6; w >= 1; --w) {
+        h = (w * 10 + ratio / 2) / ratio;
+        if (h < 1) {
+            h = 1;
+        }
+        if (w == 1 || (w * cells <= room_w && h * cells <= room_h)) {
+            break;
+        }
+    }
+    *mw = w;
+    *mh = h;
+}
+
 static void tg_gui_paint_login_qr(const tg_gui_state *state,
                                   tg_gui_backend *backend)
 {
@@ -7282,8 +7305,11 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
     int lh = backend->line_height(backend);
     int quiet = 4;
     int cells;
-    int module;
-    int side;
+    int ratio;
+    int mw;
+    int mh;
+    int side_w;
+    int side_h;
     int text_h;
     int top;
     int x0;
@@ -7309,40 +7335,34 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
     /* title, three steps, status, keys: six lines and their gaps */
     text_h = 6 * lh + 28;
     cells = (tg_gui_qr_ready ? tg_gui_qr.size : 37) + 2 * quiet;
-    module = (height - text_h - 8) / cells;
-    if (module > (width - 8) / cells) {
-        module = (width - 8) / cells;
-    }
-    if (module < 3) {
+    ratio = (state->pixel_ratio10 >= 5 && state->pixel_ratio10 <= 40)
+                ? state->pixel_ratio10
+                : 10;
+    tg_gui_qr_module_size(width - 8, height - text_h - 8, cells, ratio, &mw,
+                          &mh);
+    if (mw < 3) {
         /* A small window: half the margin, which phones still read, for
            bigger modules. */
         quiet = 2;
         cells -= 4;
-        module = (height - text_h - 8) / cells;
-        if (module > (width - 8) / cells) {
-            module = (width - 8) / cells;
-        }
+        tg_gui_qr_module_size(width - 8, height - text_h - 8, cells, ratio,
+                              &mw, &mh);
     }
-    if (module > 6) {
-        module = 6;
-    }
-    if (module < 1) {
-        module = 1;
-    }
-    side = module * cells;
-    top = (height - (text_h + side)) / 2;
+    side_w = mw * cells;
+    side_h = mh * cells;
+    top = (height - (text_h + side_h)) / 2;
     if (top < 2) {
         top = 2;
     }
     tg_gui_draw_centered(backend, TG_GUI_PEN_ACCENT, width, top + lh,
                          TG_APP_TITLE);
     y0 = top + lh + 8;
-    x0 = (width - side) / 2;
+    x0 = (width - side_w) / 2;
     if (tg_gui_qr_ready) {
         /* BADGE_TEXT is pure white and WINDOW nearly black on every lane:
            the strongest contrast the palette has. */
         backend->fill_rect(backend, TG_GUI_PEN_BADGE_TEXT,
-                           tg_gui_make_rect(x0, y0, side, side));
+                           tg_gui_make_rect(x0, y0, side_w, side_h));
         for (y = 0; y < tg_gui_qr.size; ++y) {
             int x = 0;
 
@@ -7356,9 +7376,9 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
                 if (run > 0) {
                     backend->fill_rect(
                         backend, TG_GUI_PEN_WINDOW,
-                        tg_gui_make_rect(x0 + (x + quiet) * module,
-                                         y0 + (y + quiet) * module,
-                                         run * module, module));
+                        tg_gui_make_rect(x0 + (x + quiet) * mw,
+                                         y0 + (y + quiet) * mh,
+                                         run * mw, mh));
                     x += run;
                 } else {
                     ++x;
@@ -7367,9 +7387,9 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
         }
     } else {
         backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
-                           tg_gui_make_rect(x0, y0, side, side));
+                           tg_gui_make_rect(x0, y0, side_w, side_h));
     }
-    y = y0 + side + 6 + lh;
+    y = y0 + side_h + 6 + lh;
     for (i = 0; i < 3; ++i) {
         tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT, width, y, steps[i]);
         y += lh + 2;
@@ -9614,6 +9634,7 @@ typedef struct tg_gui_record {
     int watch_x[5];
     int watch_hits[5];
     tg_gui_rect last_surface;     /* the latest fill in the bubble pen */
+    tg_gui_rect last_white;       /* the latest fill in the BADGE_TEXT pen */
     tg_gui_rect watch_surface[5]; /* ...as it stood when the text was drawn */
     const tg_gui_state *link_state;
     const char *link_text;
@@ -9755,6 +9776,9 @@ static void tg_gui_rec_fill(tg_gui_backend *backend, int pen, tg_gui_rect rect)
        just set the flag idempotently). */
     if (pen == TG_GUI_PEN_READ) {
         record->read_marks = 1;
+    }
+    if (pen == TG_GUI_PEN_BADGE_TEXT) {
+        record->last_white = rect;
     }
     if (pen == TG_GUI_PEN_TEXT_DIM && (rect.w == 1 || rect.h == 1)) {
         record->thin_dim_fills += 1;
@@ -17005,6 +17029,24 @@ int tg_gui_self_test(void)
                    rec.min_x, rec.max_x);
             return 2;
         }
+        /* A hires screen without interlace (PAL 640x256, pixels twice as
+           tall as wide): the code half as high as wide in pixels, so it
+           shows square, and bigger than with square modules there. */
+        draft->pixel_ratio10 = 20;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 632;
+        rec.height = 230;
+        rec.min_x = rec.width;
+        rec.min_y = rec.height;
+        tg_gui_paint(draft, &b);
+        if (rec.last_white.w * 10 < rec.last_white.h * 16 ||
+            rec.last_white.w * 10 > rec.last_white.h * 24 ||
+            rec.last_white.w < 150 || rec.max_y > rec.height) {
+            printf("gui self-test: QR on a hires screen %dx%d\n",
+                   rec.last_white.w, rec.last_white.h);
+            return 2;
+        }
+        draft->pixel_ratio10 = 0;
         /* Before the first code: a grey field, the keys still there. */
         draft->login_qr[0] = '\0';
         memset(&rec, 0, sizeof(rec));

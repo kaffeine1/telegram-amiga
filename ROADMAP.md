@@ -1402,9 +1402,17 @@ silence): core/tg_qr_view.c draws it in a small window of its own on
 the Workbench screen, which never activates, so the console keeps P;
 the host build prints it in the terminal. The key of any login waits in
 data/telegram-login.bin and becomes telegram-auth.bin only once signed
-in. Still open: on a screen with non-square pixels (a PAL 640x256
-Workbench) the code is drawn square in pixels, so it shows taller than
-wide; phones read some stretch, to be checked there.
+in. Non-square pixels, done the same day: a PAL 640x256 Workbench has
+pixels about twice as tall as wide, and a code square in pixels showed
+1.9 to 2 times taller than wide, right at the edge of what CoreImage
+read (2.0 yes, 2.2 no). The window now reads the screen's DisplayInfo
+(DTAG_DISP Resolution, ticks per pixel: 22x44 for hires) into
+pixel_ratio10 and the painter draws modules that much lower, as the
+text client's QR window does; on the 3.1 bench (PAL hires) the log said
+"pixel ratio 20/10", the code came out 2:1 in pixels and was read back
+stretched to the monitor's shape, sharp or blurred. Also seen on the
+AROS i386 VM: the window's code and the text client's QR window, both
+read back.
 
 Next to it, the same day, the future auth tokens of
 core.telegram.org/api/auth: every `auth.authorization` (signIn,

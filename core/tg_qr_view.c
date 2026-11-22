@@ -32,6 +32,8 @@
 #include <intuition/screens.h>
 #include <graphics/gfx.h>
 #include <graphics/view.h>
+#include <graphics/displayinfo.h>
+#include <graphics/modeid.h>
 #include <utility/tagitem.h>
 #include <proto/exec.h>
 #include <proto/intuition.h>
@@ -66,7 +68,8 @@ static struct ColorMap *tg_qr_view_cmap;
 static LONG tg_qr_view_pen_dark = -1;
 static LONG tg_qr_view_pen_light = -1;
 static int tg_qr_view_size;
-static int tg_qr_view_module;
+static int tg_qr_view_module_w;
+static int tg_qr_view_module_h;
 static int tg_qr_view_quiet;
 static int tg_qr_view_own_intuition;
 static int tg_qr_view_own_gfx;
@@ -154,16 +157,18 @@ static LONG tg_qr_view_pen(ULONG level)
 static void tg_qr_view_draw(const tg_qr_code *code)
 {
     struct RastPort *rp = tg_qr_view_win->RPort;
-    int m = tg_qr_view_module;
+    int mw = tg_qr_view_module_w;
+    int mh = tg_qr_view_module_h;
     int q = tg_qr_view_quiet;
     int ox = tg_qr_view_win->BorderLeft;
     int oy = tg_qr_view_win->BorderTop;
-    int side = m * (code->size + 2 * q);
+    int side_w = mw * (code->size + 2 * q);
+    int side_h = mh * (code->size + 2 * q);
     int x;
     int y;
 
     SetAPen(rp, (ULONG)(tg_qr_view_pen_light >= 0 ? tg_qr_view_pen_light : 2));
-    RectFill(rp, ox, oy, ox + side - 1, oy + side - 1);
+    RectFill(rp, ox, oy, ox + side_w - 1, oy + side_h - 1);
     SetAPen(rp, (ULONG)(tg_qr_view_pen_dark >= 0 ? tg_qr_view_pen_dark : 1));
     for (y = 0; y < code->size; ++y) {
         x = 0;
@@ -174,8 +179,9 @@ static void tg_qr_view_draw(const tg_qr_code *code)
                 ++run;
             }
             if (run > 0) {
-                RectFill(rp, ox + (x + q) * m, oy + (y + q) * m,
-                         ox + (x + run + q) * m - 1, oy + (y + q + 1) * m - 1);
+                RectFill(rp, ox + (x + q) * mw, oy + (y + q) * mh,
+                         ox + (x + run + q) * mw - 1,
+                         oy + (y + q + 1) * mh - 1);
                 x += run;
             } else {
                 ++x;
@@ -184,42 +190,82 @@ static void tg_qr_view_draw(const tg_qr_code *code)
     }
 }
 
+/* How much taller than wide the screen's pixels are, times ten (20 on a
+   hires screen without interlace), from the display database; 10 when it
+   says nothing usable. */
+static int tg_qr_view_ratio(struct Screen *scr)
+{
+    struct DisplayInfo info;
+    ULONG mode = GetVPModeID(&scr->ViewPort);
+    long ratio = 10L;
+
+    if (mode != (ULONG)INVALID_ID &&
+        GetDisplayInfoData(0, (UBYTE *)&info, sizeof(info), DTAG_DISP,
+                           mode) > 0 &&
+        info.Resolution.x > 0 && info.Resolution.y > 0) {
+        ratio = (10L * (long)info.Resolution.y + (long)info.Resolution.x / 2L) /
+                (long)info.Resolution.x;
+    }
+    return ratio < 5L ? 5 : ratio > 40L ? 40 : (int)ratio;
+}
+
+/* The module's width and height in pixels for a code of `cells` a side in
+   half the screen: as wide as fits, 2 to 6, and as tall as that shows. */
+static void tg_qr_view_modules(struct Screen *scr, int cells, int ratio,
+                               int *mw, int *mh)
+{
+    int w;
+    int h = 1;
+
+    for (w = 6; w >= 2; --w) {
+        h = (w * 10 + ratio / 2) / ratio;
+        if (h < 1) {
+            h = 1;
+        }
+        if (w == 2 || (w * cells <= scr->Width / 2 &&
+                       h * cells <= scr->Height / 2)) {
+            break;
+        }
+    }
+    *mw = w;
+    *mh = h;
+}
+
 static int tg_qr_view_open(int size)
 {
     struct Screen *scr;
     struct TagItem tags[13];
-    int module;
-    int side;
+    int ratio;
+    int mw;
+    int mh;
+    int side_w;
+    int side_h;
     int n = 0;
 
     scr = LockPubScreen(0);
     if (scr == 0) {
         return 2;
     }
+    ratio = tg_qr_view_ratio(scr);
     tg_qr_view_quiet = 4;
-    module = (scr->Height / 2) / (size + 8);
-    if (module < 3) {
+    tg_qr_view_modules(scr, size + 8, ratio, &mw, &mh);
+    if (mw < 3) {
         tg_qr_view_quiet = 2; /* a small screen: half the margin */
-        module = (scr->Height / 2) / (size + 4);
+        tg_qr_view_modules(scr, size + 4, ratio, &mw, &mh);
     }
-    if (module > 6) {
-        module = 6;
-    }
-    if (module < 2) {
-        module = 2;
-    }
-    side = module * (size + 2 * tg_qr_view_quiet);
+    side_w = mw * (size + 2 * tg_qr_view_quiet);
+    side_h = mh * (size + 2 * tg_qr_view_quiet);
     tags[n].ti_Tag = WA_PubScreen;
     tags[n++].ti_Data = TG_QR_TAG(scr);
     tags[n].ti_Tag = WA_Left;
-    tags[n++].ti_Data = TG_QR_TAG(scr->Width > side + 40
-                                      ? scr->Width - side - 40 : 0);
+    tags[n++].ti_Data = TG_QR_TAG(scr->Width > side_w + 40
+                                      ? scr->Width - side_w - 40 : 0);
     tags[n].ti_Tag = WA_Top;
     tags[n++].ti_Data = TG_QR_TAG(scr->BarHeight + 8);
     tags[n].ti_Tag = WA_InnerWidth;
-    tags[n++].ti_Data = TG_QR_TAG(side);
+    tags[n++].ti_Data = TG_QR_TAG(side_w);
     tags[n].ti_Tag = WA_InnerHeight;
-    tags[n++].ti_Data = TG_QR_TAG(side);
+    tags[n++].ti_Data = TG_QR_TAG(side_h);
     tags[n].ti_Tag = WA_Title;
     tags[n++].ti_Data = TG_QR_TAG("Amigram: scan with Telegram");
     tags[n].ti_Tag = WA_DragBar;
@@ -242,7 +288,8 @@ static int tg_qr_view_open(int size)
         tg_qr_view_pen_dark = tg_qr_view_pen(0x00000000UL);
         tg_qr_view_pen_light = tg_qr_view_pen(0xffffffffUL);
         tg_qr_view_size = size;
-        tg_qr_view_module = module;
+        tg_qr_view_module_w = mw;
+        tg_qr_view_module_h = mh;
     }
     UnlockPubScreen(0, scr);
     return tg_qr_view_win != 0 ? 0 : 2;

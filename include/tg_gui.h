@@ -602,6 +602,10 @@ typedef struct tg_gui_state {
     int mode;          /* TG_GUI_MODE_* (chat vs a first-login screen) */
     int input_masked;  /* render `input` as '*' (the 2FA password field) */
     char login_qr[256]; /* the link the login QR code carries, "" = none yet */
+    /* How much taller than wide the screen's pixels are, times ten: 20 on a
+       hires screen without interlace (PAL 640x256), 10 or 0 = square. The
+       QR code draws its modules that much lower, so it shows square. */
+    int pixel_ratio10;
     /* Sent-message history for UP/DOWN recall in the composer (like the TUI). */
     char history[TG_GUI_HISTORY_MAX][TG_GUI_MSG_TEXT_MAX];
     int history_count;

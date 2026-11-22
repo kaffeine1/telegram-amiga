@@ -22,7 +22,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   so the code goes in a small window of its own on the Workbench screen,
   which never takes the keyboard, and P with Return turns to the number
   there. The QR encoder is our own, written from the standard, and
-  every code it makes was read back by the Mac's own QR reader.
+  every code it makes was read back by the Mac's own QR reader. On a
+  screen whose pixels are taller than wide (a PAL or NTSC hires screen
+  without interlace, such as 640x256) the code is drawn with lower
+  modules, from the display database's own figures, so that it shows
+  square on the monitor, and bigger than before.
 - Log out, in the Amigram menu. After a requester it ends the session
   at Telegram, removes what Amigram keeps of the account on this
   computer (telegram-auth.bin and the other keys, the chat list and its

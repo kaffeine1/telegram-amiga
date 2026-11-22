@@ -1116,6 +1116,39 @@ static void tg_gui_diag_stop(void)
 #define TG_GUI_PHASE(p) ((void)0)
 #endif /* TG_DIAG_FREEZE */
 
+#include <graphics/displayinfo.h>
+
+/* How much taller than wide the screen's pixels are, times ten, from the
+   display database (ticks per pixel): 20 for hires without interlace
+   (22x44), 40 for super-hires, 10 when it says nothing usable (an RTG
+   mode may not), kept within 5..40. The QR code of the login screen draws
+   its modules that much lower. */
+static int tg_gui_window_pixel_ratio(struct Screen *scr)
+{
+    struct DisplayInfo info;
+    ULONG mode;
+    long ratio = 10L;
+
+    if (scr == 0) {
+        return 10;
+    }
+    mode = GetVPModeID(&scr->ViewPort);
+    if (mode != (ULONG)INVALID_ID &&
+        GetDisplayInfoData(0, (UBYTE *)&info, sizeof(info), DTAG_DISP,
+                           mode) > 0 &&
+        info.Resolution.x > 0 && info.Resolution.y > 0) {
+        ratio = (10L * (long)info.Resolution.y + (long)info.Resolution.x / 2L) /
+                (long)info.Resolution.x;
+    }
+    if (ratio < 5L) {
+        ratio = 5L;
+    }
+    if (ratio > 40L) {
+        ratio = 40L;
+    }
+    return (int)ratio;
+}
+
 #if defined(TG_GUI_HAVE_CYBERGRAPHICS)
 struct Library *CyberGfxBase = 0;
 static int tg_gui_cgx_open_attempted;
@@ -16501,6 +16534,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
 
     ctx.rport = ctx.window->RPort;
+    state->pixel_ratio10 = tg_gui_window_pixel_ratio(ctx.window->WScreen);
+    if (tg_gui_log_is_enabled()) {
+        char line[48];
+
+        sprintf(line, "window: pixel ratio %d/10", state->pixel_ratio10);
+        tg_gui_log(line);
+    }
     tg_gui_window_resolve_graphics_defaults(state, ctx.window);
     tg_gui_session_set_avatars(state->avatars_enabled);
     if (own_scr != 0 && own_scr->RastPort.Font != 0) {
