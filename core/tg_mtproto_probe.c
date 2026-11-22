@@ -197,9 +197,6 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_QR_SIGNED_IN 0
 #define TG_MTPROTO_QR_TOKEN 7
 #define TG_MTPROTO_QR_MIGRATE 8
-/* auth.sendCode outcome: a future auth token was known and signed the key
-   in without a code (auth.sentCodeSuccess). */
-#define TG_MTPROTO_SEND_CODE_SIGNED_IN 9
 
 /*
  * Raw chat input gives Up/Down command-history recall. It requires every
@@ -275,6 +272,7 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_AUTH_SENT_CODE_SUCCESS_CONSTRUCTOR 0x2390fe44UL
 #define TG_MTPROTO_AUTH_AUTHORIZATION_CONSTRUCTOR 0x2ea2c0d4UL
 #define TG_MTPROTO_AUTH_LOGGED_OUT_CONSTRUCTOR 0xc3a2835fUL
+#define TG_MTPROTO_AUTH_SIGNUP_REQUIRED_CONSTRUCTOR 0x44747e9aUL
 #define TG_MTPROTO_AUTH_SENT_CODE_PAYMENT_REQUIRED_CONSTRUCTOR 0xd7a2fcf9UL
 #define TG_MTPROTO_CONFIG_CONSTRUCTOR 0xcc1a241eUL
 #define TG_MTPROTO_ACCOUNT_PASSWORD_CONSTRUCTOR 0x957b50fbUL
@@ -6235,7 +6233,7 @@ static int tg_mtproto_auth_send_code_run(const char *host,
                                   ? tg_mtproto_read_u32_le(result.result_body)
                                   : 0UL;
 
-        if (inner == 0x44747e9aUL) {
+        if (inner == TG_MTPROTO_AUTH_SIGNUP_REQUIRED_CONSTRUCTOR) {
             strcpy(tg_mtproto_query_fail, "SIGN_UP_REQUIRED");
             fprintf(stream, "%s: signup-required\n", label);
             return 2;
@@ -6260,9 +6258,7 @@ static int tg_mtproto_auth_send_code_run(const char *host,
     }
     if (result.result_constructor != TG_MTPROTO_AUTH_SENT_CODE_CONSTRUCTOR &&
         result.result_constructor !=
-            TG_MTPROTO_AUTH_SENT_CODE_PAYMENT_REQUIRED_CONSTRUCTOR &&
-        result.result_constructor !=
-            TG_MTPROTO_AUTH_SENT_CODE_SUCCESS_CONSTRUCTOR) {
+            TG_MTPROTO_AUTH_SENT_CODE_PAYMENT_REQUIRED_CONSTRUCTOR) {
         fprintf(stream, "%s: unexpected-result 0x%08lx\n", label,
                 result.result_constructor);
         return 2;
@@ -7675,6 +7671,7 @@ static int tg_mtproto_login_qr_console(const char *host,
                 tg_qr_view_show(&code, stream) != 0) {
                 fprintf(stream, "The QR code cannot be shown here.\n");
                 tg_qr_view_close();
+                tg_platform_break_return();
                 tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
                 return 2;
             }
@@ -7747,13 +7744,20 @@ static int tg_mtproto_login_qr_console(const char *host,
     tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
     *out_host = cur_host;
     *out_dc_id_text = cur_dc;
-    if (rc == 3 || (rc == 2 && tg_platform_break_pending())) {
+    if (rc == 3 ||
+        (rc != TG_MTPROTO_QR_SIGNED_IN && tg_platform_break_pending())) {
+        /* Ctrl+C stays ours, and pending: the program ends by its own way
+           out, not by the C library's break inside some stdio call. */
         fprintf(stream, "Stopped.\n");
         fflush(stream);
-        tg_platform_break_return();
         return 3;
     }
-    tg_platform_break_return();
+    if (!tg_platform_break_pending()) {
+        tg_platform_break_return();
+    }
+    /* Otherwise signed in with a Ctrl+C on the way: the break stays ours,
+       so the login is kept (the key becomes telegram-auth.bin) and the
+       chat that follows ends at its first prompt. */
     if (rc == TG_MTPROTO_QR_SIGNED_IN) {
         fprintf(stream, "Signed in with the QR code.\n");
         return 0;

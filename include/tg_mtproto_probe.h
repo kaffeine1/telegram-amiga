@@ -17,6 +17,9 @@
    behind with a key nobody had signed in, and the next start took it for
    a saved login. Both the window and the text client use it. */
 #define TG_MTPROTO_LOGIN_KEY_FILE "data/telegram-login.bin"
+/* tg_mtproto_auth_send_code: a future auth token was known and signed the
+   key in without a code (auth.sentCodeSuccess). */
+#define TG_MTPROTO_SEND_CODE_SIGNED_IN 9
 
 tg_mtproto_tl_status tg_mtproto_build_req_pq_multi(
     tg_mtproto_tl_writer *writer,

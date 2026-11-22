@@ -7269,29 +7269,6 @@ static tg_qr_code tg_gui_qr;
 static char tg_gui_qr_for[sizeof(((tg_gui_state *)0)->login_qr)];
 static int tg_gui_qr_ready;
 
-/* The size of a module on screen: as wide as fits, up to 6 pixels, and as
-   tall as that shows on a screen whose pixels are ratio/10 times taller
-   than wide (a hires screen without interlace has half the lines, so half
-   the height), so that the code looks square. One pixel at least. */
-static void tg_gui_qr_module_size(int room_w, int room_h, int cells,
-                                  int ratio, int *mw, int *mh)
-{
-    int w;
-    int h = 1;
-
-    for (w = 6; w >= 1; --w) {
-        h = (w * 10 + ratio / 2) / ratio;
-        if (h < 1) {
-            h = 1;
-        }
-        if (w == 1 || (w * cells <= room_w && h * cells <= room_h)) {
-            break;
-        }
-    }
-    *mw = w;
-    *mh = h;
-}
-
 static void tg_gui_paint_login_qr(const tg_gui_state *state,
                                   tg_gui_backend *backend)
 {
@@ -7338,15 +7315,15 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
     ratio = (state->pixel_ratio10 >= 5 && state->pixel_ratio10 <= 40)
                 ? state->pixel_ratio10
                 : 10;
-    tg_gui_qr_module_size(width - 8, height - text_h - 8, cells, ratio, &mw,
-                          &mh);
+    tg_qr_module_size(width - 8, height - text_h - 8, cells, ratio, 1, &mw,
+                      &mh);
     if (mw < 3) {
         /* A small window: half the margin, which phones still read, for
            bigger modules. */
         quiet = 2;
         cells -= 4;
-        tg_gui_qr_module_size(width - 8, height - text_h - 8, cells, ratio,
-                              &mw, &mh);
+        tg_qr_module_size(width - 8, height - text_h - 8, cells, ratio, 1,
+                          &mw, &mh);
     }
     side_w = mw * cells;
     side_h = mh * cells;
@@ -17039,8 +17016,8 @@ int tg_gui_self_test(void)
         rec.min_x = rec.width;
         rec.min_y = rec.height;
         tg_gui_paint(draft, &b);
-        if (rec.last_white.w * 10 < rec.last_white.h * 16 ||
-            rec.last_white.w * 10 > rec.last_white.h * 24 ||
+        if (rec.last_white.w * 10 < rec.last_white.h * 19 ||
+            rec.last_white.w * 10 > rec.last_white.h * 21 ||
             rec.last_white.w < 150 || rec.max_y > rec.height) {
             printf("gui self-test: QR on a hires screen %dx%d\n",
                    rec.last_white.w, rec.last_white.h);

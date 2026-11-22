@@ -41,6 +41,24 @@ int tg_qr_dark(const tg_qr_code *code, int x, int y);
 int tg_qr_view_show(const tg_qr_code *code, FILE *stream);
 void tg_qr_view_close(void);
 
+/* The size of a module on screen for a code of `cells` modules a side
+   (quiet zone in) in room_w x room_h pixels: min_w to 6 pixels wide, and
+   as tall as that shows on a screen whose pixels are ratio/10 times
+   taller than wide (20 on a hires screen without interlace), so the code
+   looks square. A width whose height cannot match within 15% (5x3 on such
+   a screen would show 20% too tall) is passed over while a smaller one
+   fits; only when none does is the nearest taken. */
+void tg_qr_module_size(int room_w, int room_h, int cells, int ratio,
+                       int min_w, int *mw, int *mh);
+
+/* How much taller than wide the pixels of `screen` (a struct Screen *)
+   are, times ten, from the display database, for the chipset's own modes
+   only (the monitors up to DblPAL): an RTG driver reckons for a 4:3
+   monitor whatever the panel (an OS4 1920x1080 screen said 14/10) and its
+   pixels are square, so anything else is 10. *mode, when given, gets the
+   screen's mode ID. 10 off the Amiga. */
+int tg_qr_screen_ratio(void *screen, unsigned long *mode);
+
 int tg_qr_self_test(void);
 
 #endif

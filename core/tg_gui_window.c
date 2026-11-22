@@ -15,6 +15,7 @@
  */
 
 #include "tg_gui.h"
+#include "tg_qr.h"
 #include "tg_file.h"
 #include "tg_gui_session.h"
 #if defined(TG_DIAG_XFER)
@@ -1115,46 +1116,6 @@ static void tg_gui_diag_stop(void)
 #else
 #define TG_GUI_PHASE(p) ((void)0)
 #endif /* TG_DIAG_FREEZE */
-
-#include <graphics/displayinfo.h>
-
-/* How much taller than wide the screen's pixels are, times ten, from the
-   display database (ticks per pixel): 20 for hires without interlace
-   (22x44), 40 for super-hires, kept within 5..40. Only for the chipset's
-   own modes (the monitors up to DblPAL): an RTG driver works the figure
-   out for a 4:3 monitor whatever the panel (an OS4 1920x1080 screen said
-   14/10, and the code came out squashed), and its pixels are square, so
-   anything else is 10. The QR code of the login screen draws its modules
-   that much lower. */
-static ULONG tg_gui_window_mode_id = 0UL;
-
-static int tg_gui_window_pixel_ratio(struct Screen *scr)
-{
-    struct DisplayInfo info;
-    ULONG mode;
-    long ratio = 10L;
-
-    if (scr == 0) {
-        return 10;
-    }
-    mode = GetVPModeID(&scr->ViewPort);
-    tg_gui_window_mode_id = mode;
-    if (mode != (ULONG)INVALID_ID &&
-        (mode & 0xFFFF1000UL) <= 0x000A1000UL && /* PAL, NTSC ... DblPAL */
-        GetDisplayInfoData(0, (UBYTE *)&info, sizeof(info), DTAG_DISP,
-                           mode) > 0 &&
-        info.Resolution.x > 0 && info.Resolution.y > 0) {
-        ratio = (10L * (long)info.Resolution.y + (long)info.Resolution.x / 2L) /
-                (long)info.Resolution.x;
-    }
-    if (ratio < 5L) {
-        ratio = 5L;
-    }
-    if (ratio > 40L) {
-        ratio = 40L;
-    }
-    return (int)ratio;
-}
 
 #if defined(TG_GUI_HAVE_CYBERGRAPHICS)
 struct Library *CyberGfxBase = 0;
@@ -3862,13 +3823,15 @@ static void tg_gui_photo_cache_begin(unsigned long limit_mb)
 
 /* Log out: the files of a cache drawer removed, the drawer kept. The names
    are gathered a batch at a time and deleted after the scan, since a
-   directory is not to change under ExNext; a batch that deletes nothing
-   (protected files) ends it. */
+   directory is not to change under ExNext; files that would not go
+   (protected, in use) are passed over in the next scans, which go on to
+   the rest. */
 void tg_gui_window_clear_drawer(const char *drawer)
 {
     static char names[16][120];
     struct FileInfoBlock *fib;
     int rounds;
+    int skip = 0;
 
     if (drawer == 0 || drawer[0] == '\0' || strlen(drawer) > 8U) {
         return;
@@ -3887,8 +3850,10 @@ void tg_gui_window_clear_drawer(const char *drawer)
             break;
         }
         if (TG_GUI_DOS_EXAMINE(lock, fib) && fib->fib_DirEntryType >= 0) {
+            int seen = 0;
+
             while (count < 16 && TG_GUI_DOS_EXNEXT(lock, fib)) {
-                if (fib->fib_DirEntryType < 0) {
+                if (fib->fib_DirEntryType < 0 && seen++ >= skip) {
                     sprintf(names[count++], "%s/%.107s", drawer,
                             (const char *)fib->fib_FileName);
                 }
@@ -3900,7 +3865,8 @@ void tg_gui_window_clear_drawer(const char *drawer)
                 ++deleted;
             }
         }
-        if (count < 16 || deleted == 0) {
+        skip += count - deleted; /* those stay first in the next scans */
+        if (count < 16) {
             break;
         }
     }
@@ -16541,13 +16507,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     }
 
     ctx.rport = ctx.window->RPort;
-    state->pixel_ratio10 = tg_gui_window_pixel_ratio(ctx.window->WScreen);
-    if (tg_gui_log_is_enabled()) {
-        char line[64];
+    {
+        unsigned long mode = 0UL;
 
-        sprintf(line, "window: mode %08lx, pixel ratio %d/10",
-                (unsigned long)tg_gui_window_mode_id, state->pixel_ratio10);
-        tg_gui_log(line);
+        state->pixel_ratio10 = tg_qr_screen_ratio(ctx.window->WScreen, &mode);
+        if (tg_gui_log_is_enabled()) {
+            char line[64];
+
+            sprintf(line, "window: mode %08lx, pixel ratio %d/10", mode,
+                    state->pixel_ratio10);
+            tg_gui_log(line);
+        }
     }
     tg_gui_window_resolve_graphics_defaults(state, ctx.window);
     tg_gui_session_set_avatars(state->avatars_enabled);

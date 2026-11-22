@@ -555,6 +555,48 @@ int tg_qr_dark(const tg_qr_code *code, int x, int y)
     return code->modules[y * code->size + x] != 0;
 }
 
+void tg_qr_module_size(int room_w, int room_h, int cells, int ratio,
+                       int min_w, int *mw, int *mh)
+{
+    int pass;
+    int w;
+    int h;
+
+    if (ratio < 5 || ratio > 40) {
+        ratio = 10;
+    }
+    if (min_w < 1) {
+        min_w = 1;
+    }
+    for (pass = 0; pass < 2; ++pass) {
+        for (w = 6; w >= min_w; --w) {
+            long shown;
+            long square;
+
+            h = (w * 10 + ratio / 2) / ratio;
+            if (h < 1) {
+                h = 1;
+            }
+            shown = (long)h * (long)ratio * 100L; /* its height on screen */
+            square = (long)w * 1000L;
+            if (pass == 0 &&
+                (shown * 100L > square * 115L || shown * 100L < square * 85L)) {
+                continue;
+            }
+            if (w * cells <= room_w && h * cells <= room_h) {
+                *mw = w;
+                *mh = h;
+                return;
+            }
+        }
+    }
+    *mw = min_w;
+    *mh = (min_w * 10 + ratio / 2) / ratio;
+    if (*mh < 1) {
+        *mh = 1;
+    }
+}
+
 #if !defined(TG_NO_SELFTEST)
 /* FNV-1a over the modules, row by row. */
 static unsigned long tg_qr_hash(const tg_qr_code *code)
@@ -573,8 +615,49 @@ static unsigned long tg_qr_hash(const tg_qr_code *code)
    were pinned here: a lane that encodes otherwise fails. They cover one
    block (version 1), two equal blocks (4), blocks of two lengths and the
    version bits (8), and the longest text, 213 bytes (10). */
+static int tg_qr_module_size_self_test(void);
+
+/* Square pixels: as wide as tall. A hires screen without interlace: 6x3,
+   and where 6 does not fit 4x2, never 5x3; super-hires 4x1; nothing fits:
+   the smallest. */
+static int tg_qr_module_size_self_test(void)
+{
+    int w;
+    int h;
+
+    tg_qr_module_size(1000, 1000, 41, 10, 1, &w, &h);
+    if (w != 6 || h != 6) {
+        return 2;
+    }
+    tg_qr_module_size(1000, 1000, 41, 20, 1, &w, &h);
+    if (w != 6 || h != 3) {
+        return 2;
+    }
+    tg_qr_module_size(41 * 5, 1000, 41, 20, 1, &w, &h);
+    if (w != 4 || h != 2) {
+        return 2;
+    }
+    tg_qr_module_size(41 * 3, 1000, 41, 20, 2, &w, &h);
+    if (w != 2 || h != 1) {
+        return 2;
+    }
+    tg_qr_module_size(1000, 1000, 41, 40, 1, &w, &h);
+    if (w != 4 || h != 1) {
+        return 2;
+    }
+    tg_qr_module_size(10, 10, 41, 10, 2, &w, &h);
+    if (w != 2 || h != 2) {
+        return 2;
+    }
+    return 0;
+}
+
 int tg_qr_self_test(void)
 {
+    if (tg_qr_module_size_self_test() != 0) {
+        puts("qr self-test: module size wrong");
+        return 2;
+    }
     static tg_qr_code code;
     static unsigned char long_text[TG_QR_MAX_BYTES + 1];
     static const struct {

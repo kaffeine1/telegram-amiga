@@ -190,17 +190,23 @@ static void tg_qr_view_draw(const tg_qr_code *code)
     }
 }
 
-/* How much taller than wide the screen's pixels are, times ten (20 on a
-   hires screen without interlace), from the display database, for the
-   chipset's own modes only (the monitors up to DblPAL): an RTG driver
-   reckons for a 4:3 monitor whatever the panel, and its pixels are
-   square, so anything else is 10. */
-static int tg_qr_view_ratio(struct Screen *scr)
+int tg_qr_screen_ratio(void *screen, unsigned long *mode_out)
 {
+    struct Screen *scr = (struct Screen *)screen;
     struct DisplayInfo info;
-    ULONG mode = GetVPModeID(&scr->ViewPort);
+    ULONG mode;
     long ratio = 10L;
 
+    if (mode_out != 0) {
+        *mode_out = 0UL;
+    }
+    if (scr == 0) {
+        return 10;
+    }
+    mode = GetVPModeID(&scr->ViewPort);
+    if (mode_out != 0) {
+        *mode_out = (unsigned long)mode;
+    }
     if (mode != (ULONG)INVALID_ID &&
         (mode & 0xFFFF1000UL) <= 0x000A1000UL && /* PAL, NTSC ... DblPAL */
         GetDisplayInfoData(0, (UBYTE *)&info, sizeof(info), DTAG_DISP,
@@ -210,28 +216,6 @@ static int tg_qr_view_ratio(struct Screen *scr)
                 (long)info.Resolution.x;
     }
     return ratio < 5L ? 5 : ratio > 40L ? 40 : (int)ratio;
-}
-
-/* The module's width and height in pixels for a code of `cells` a side in
-   half the screen: as wide as fits, 2 to 6, and as tall as that shows. */
-static void tg_qr_view_modules(struct Screen *scr, int cells, int ratio,
-                               int *mw, int *mh)
-{
-    int w;
-    int h = 1;
-
-    for (w = 6; w >= 2; --w) {
-        h = (w * 10 + ratio / 2) / ratio;
-        if (h < 1) {
-            h = 1;
-        }
-        if (w == 2 || (w * cells <= scr->Width / 2 &&
-                       h * cells <= scr->Height / 2)) {
-            break;
-        }
-    }
-    *mw = w;
-    *mh = h;
 }
 
 static int tg_qr_view_open(int size)
@@ -249,12 +233,14 @@ static int tg_qr_view_open(int size)
     if (scr == 0) {
         return 2;
     }
-    ratio = tg_qr_view_ratio(scr);
+    ratio = tg_qr_screen_ratio(scr, 0);
     tg_qr_view_quiet = 4;
-    tg_qr_view_modules(scr, size + 8, ratio, &mw, &mh);
+    tg_qr_module_size(scr->Width / 2, scr->Height / 2, size + 8, ratio, 2,
+                      &mw, &mh);
     if (mw < 3) {
         tg_qr_view_quiet = 2; /* a small screen: half the margin */
-        tg_qr_view_modules(scr, size + 4, ratio, &mw, &mh);
+        tg_qr_module_size(scr->Width / 2, scr->Height / 2, size + 4, ratio,
+                          2, &mw, &mh);
     }
     side_w = mw * (size + 2 * tg_qr_view_quiet);
     side_h = mh * (size + 2 * tg_qr_view_quiet);
@@ -366,6 +352,15 @@ int tg_qr_view_show(const tg_qr_code *code, FILE *stream)
 
 void tg_qr_view_close(void)
 {
+}
+
+int tg_qr_screen_ratio(void *screen, unsigned long *mode)
+{
+    (void)screen;
+    if (mode != 0) {
+        *mode = 0UL;
+    }
+    return 10; /* a terminal's pixels: square enough */
 }
 
 #endif

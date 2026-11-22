@@ -4769,27 +4769,29 @@ int tg_app_run(int argc, char **argv)
                                        config.mtproto_probe_dc_id, stdout);
     }
 
+    /* Signed in by a future auth token is a success at the Shell too. */
     if (config.run_mtproto_auth_send_code) {
-        return tg_mtproto_auth_send_code(config.mtproto_auth_host,
-                                         config.mtproto_auth_port,
-                                         config.mtproto_auth_dc_id,
-                                         config.mtproto_auth_api_id,
-                                         config.mtproto_auth_api_hash,
-                                         config.mtproto_auth_phone,
-                                         config.mtproto_auth_file,
-                                         config.mtproto_auth_code_hash_file,
-                                         stdout);
+        int rc = tg_mtproto_auth_send_code(config.mtproto_auth_host,
+                                           config.mtproto_auth_port,
+                                           config.mtproto_auth_dc_id,
+                                           config.mtproto_auth_api_id,
+                                           config.mtproto_auth_api_hash,
+                                           config.mtproto_auth_phone,
+                                           config.mtproto_auth_file,
+                                           config.mtproto_auth_code_hash_file,
+                                           stdout);
+
+        return rc == TG_MTPROTO_SEND_CODE_SIGNED_IN ? 0 : rc;
     }
 
     if (config.run_mtproto_auth_send_code_file) {
-        return tg_mtproto_auth_send_code_file(config.mtproto_auth_host,
-                                              config.mtproto_auth_port,
-                                              config.mtproto_auth_dc_id,
-                                              config.mtproto_auth_api_file,
-                                              config.mtproto_auth_phone,
-                                              config.mtproto_auth_file,
-                                              config.mtproto_auth_code_hash_file,
-                                              stdout);
+        int rc = tg_mtproto_auth_send_code_file(
+            config.mtproto_auth_host, config.mtproto_auth_port,
+            config.mtproto_auth_dc_id, config.mtproto_auth_api_file,
+            config.mtproto_auth_phone, config.mtproto_auth_file,
+            config.mtproto_auth_code_hash_file, stdout);
+
+        return rc == TG_MTPROTO_SEND_CODE_SIGNED_IN ? 0 : rc;
     }
 
     if (config.run_mtproto_auth_sign_in) {
