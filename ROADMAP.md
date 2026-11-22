@@ -1420,8 +1420,14 @@ documentation names `auth.logOut` as where they come from ("may
 return"), the login answer only as a maybe. So Amigram got a Log out
 (Amigram menu): `auth.logOut#3e72ba19`, the token of `auth.loggedOut`
 (flags.0) kept, then the account's files removed when the session has
-closed, after its last write, and the window quits. To see live: Log
-out, then a login by number on the same computer.
+closed, after its last write, and the window quits. Seen live on the
+Vampire the same afternoon, with the flags and the length of the token
+in the window's log (never the token): the QR login's
+`auth.authorization` had flags 0, and the log out a few minutes later
+answered `auth.loggedOut` with flags 0. Telegram issues no token to
+this client, or not to a session that young; the code stays, harmless,
+for the day it does. The log out itself works on 68k: the files went,
+the next start showed the QR code.
 
 ## Done after 0.5: a session closed by Telegram
 

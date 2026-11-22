@@ -661,6 +661,7 @@ tg_mtproto_tl_status tg_mtproto_parse_future_auth_token(
         return status;
     }
     if (length == 0UL || length > out_size) {
+        *out_length = length; /* how long it was, for the log */
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     memcpy(out, bytes, (size_t)length);
@@ -705,6 +706,7 @@ tg_mtproto_tl_status tg_mtproto_parse_logged_out_token(
         return status;
     }
     if (length == 0UL || length > out_size) {
+        *out_length = length; /* how long it was, for the log */
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     memcpy(out, bytes, (size_t)length);

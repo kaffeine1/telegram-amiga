@@ -5960,17 +5960,25 @@ static void tg_mtproto_future_token_note(const unsigned char *body,
 {
     unsigned char token[TG_MTPROTO_FUTURE_TOKEN_BYTES];
     unsigned long token_length = 0UL;
+    tg_mtproto_tl_status status = TG_MTPROTO_TL_INVALID_ARGUMENT;
+    char line[80];
 
-    if (body != 0 &&
-        tg_mtproto_parse_future_auth_token(body, body_length, token,
-                                           sizeof(token), &token_length) ==
-            TG_MTPROTO_TL_OK &&
-        token_length > 0UL) {
-        tg_mtproto_future_token_keep(token, token_length);
-        tg_gui_log("login: future auth token kept");
-    } else {
-        tg_gui_log("login: no future auth token in the answer");
+    if (body != 0) {
+        status = tg_mtproto_parse_future_auth_token(
+            body, body_length, token, sizeof(token), &token_length);
     }
+    if (status == TG_MTPROTO_TL_OK && token_length > 0UL) {
+        tg_mtproto_future_token_keep(token, token_length);
+    }
+    /* Flags and length only: never the token. */
+    sprintf(line, "login: authorization flags %lx, token %lu bytes%s",
+            body != 0 && body_length >= 4UL ? tg_mtproto_read_u32_le(body)
+                                            : 0UL,
+            token_length,
+            status == TG_MTPROTO_TL_OK
+                ? (token_length > 0UL ? ", kept" : "")
+                : ", not kept");
+    tg_gui_log(line);
     tg_mtproto_secure_zero(token, sizeof(token));
 }
 
@@ -43776,17 +43784,24 @@ int tg_gui_session_log_out(FILE *stream)
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (rc == 0 &&
         result.result_constructor == TG_MTPROTO_AUTH_LOGGED_OUT_CONSTRUCTOR) {
-        if (tg_mtproto_parse_logged_out_token(result.result_body,
-                                              result.result_body_length,
-                                              token, sizeof(token),
-                                              &token_length) ==
-                TG_MTPROTO_TL_OK &&
-            token_length > 0UL) {
+        tg_mtproto_tl_status status = tg_mtproto_parse_logged_out_token(
+            result.result_body, result.result_body_length, token,
+            sizeof(token), &token_length);
+        char line[80];
+
+        if (status == TG_MTPROTO_TL_OK && token_length > 0UL) {
             tg_mtproto_future_token_keep(token, token_length);
-            tg_gui_log("logout: future auth token kept");
-        } else {
-            tg_gui_log("logout: no future auth token in the answer");
         }
+        /* Flags and length only: never the token. */
+        sprintf(line, "logout: answer flags %lx, token %lu bytes%s",
+                result.result_body_length >= 4UL
+                    ? tg_mtproto_read_u32_le(result.result_body)
+                    : 0UL,
+                token_length,
+                status == TG_MTPROTO_TL_OK
+                    ? (token_length > 0UL ? ", kept" : "")
+                    : ", not kept");
+        tg_gui_log(line);
     } else if (rc == 1 && tg_mtproto_rpc_error_ends_session(emsg)) {
         tg_gui_log("logout: Telegram had closed the session already");
     } else {

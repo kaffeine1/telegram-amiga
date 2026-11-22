@@ -29,14 +29,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   archive, hidden chats and messages, chat notification choices,
   avatars and cached photos; downloads and settings stay) and quits;
   the next start shows the login.
-- Logging in again by number without a code. Telegram hands out a
-  "future auth token" when a session logs out (and sometimes at login):
-  Amigram keeps them in data/telegram-future-tokens.txt (twenty at most,
-  never shown), and the next request for a login code on the same
-  computer presents them, as Telegram's documentation asks. When
-  Telegram recognises one, the login goes through at once, or straight
-  to the cloud password, and no code has to arrive. Keep that file with
-  telegram-auth.bin, and as private.
+- Future auth tokens, as Telegram's documentation describes them: when
+  Telegram hands one out, at a log out or a login, Amigram keeps it in
+  data/telegram-future-tokens.txt (twenty at most, never shown), and the
+  next request for a login code on the same computer presents them. A
+  token Telegram recognises lets the login go through at once, or
+  straight to the cloud password, with no code to wait for. In our tests
+  Telegram gave none, neither at a QR login nor at a log out minutes
+  later, so the QR code stays the way in when codes do not arrive.
 - A text longer than one message goes as several messages, as the
   official clients send it (issue #14). A 6 KB paste was cut to what
   one message holds; the input line now holds four messages, 16 KB
