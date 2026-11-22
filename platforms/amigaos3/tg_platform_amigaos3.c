@@ -1539,6 +1539,13 @@ void tg_platform_break_own(void)
 #endif
 }
 
+void tg_platform_break_return(void)
+{
+#if defined(__CLIB2__)
+    __check_abort_enabled = TRUE;
+#endif
+}
+
 #if defined(__amigaos3__)
 #include <proto/intuition.h>
 

@@ -7620,7 +7620,8 @@ static void tg_mtproto_print_login_failure(FILE *stream)
    TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED when the cloud password is next (on
    *out_host / *out_dc_id_text, where the account lives), 1 when the user
    asked for the phone number or no code came in ten minutes, 2 when the
-   QR way did not work (the phone number then too). */
+   QR way did not work (the phone number then too), 3 when Ctrl+C stopped
+   it (the login ends there). */
 static int tg_mtproto_login_qr_console(const char *host,
                                        const char *port,
                                        const char *dc_id_text,
@@ -7651,10 +7652,20 @@ static int tg_mtproto_login_qr_console(const char *host,
     }
     fprintf(stream, "Getting a QR code from Telegram.\n");
     fflush(stream);
+    /* Ctrl+C is ours while the code's window is open: the C library would
+       otherwise end the program inside a stdio call and leave the window
+       on the Workbench with nobody behind it (seen on AmigaOS 4). The loop
+       sees the break, closes the window and stops the login; afterwards
+       the library has it back for the prompts that follow. */
+    tg_platform_break_own();
     rc = tg_mtproto_auth_qr_step(cur_host, port, cur_dc, api_id, api_hash,
                                  auth_file, 1, 0, 0UL, &lt, stream);
     fputc('\n', stream); /* after the key exchange's dots */
     for (asks = 0; rc == TG_MTPROTO_QR_TOKEN; ++asks) {
+        if (tg_platform_break_pending()) {
+            rc = 3;
+            break;
+        }
         if (lt.token_length != shown_length ||
             memcmp(lt.token, shown, (size_t)lt.token_length) != 0) {
             if (tg_mtproto_login_token_url(lt.token, lt.token_length, link,
@@ -7684,6 +7695,10 @@ static int tg_mtproto_login_qr_console(const char *host,
             break;
         }
         if (tg_platform_stdin_readable(5UL)) {
+            if (tg_platform_break_pending()) {
+                rc = 3;
+                break;
+            }
             if (tg_mtproto_prompt_line("", line, sizeof(line), 0, stream,
                                        label) != 0) {
                 rc = 2;
@@ -7732,6 +7747,13 @@ static int tg_mtproto_login_qr_console(const char *host,
     tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
     *out_host = cur_host;
     *out_dc_id_text = cur_dc;
+    if (rc == 3 || (rc == 2 && tg_platform_break_pending())) {
+        fprintf(stream, "Stopped.\n");
+        fflush(stream);
+        tg_platform_break_return();
+        return 3;
+    }
+    tg_platform_break_return();
     if (rc == TG_MTPROTO_QR_SIGNED_IN) {
         fprintf(stream, "Signed in with the QR code.\n");
         return 0;
@@ -7807,6 +7829,12 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             tg_net_set_connect_timeout_seconds(saved_timeout);
         }
         goto password_step;
+    }
+    if (rc == 3) {
+        if (restore_timeout) {
+            tg_net_set_connect_timeout_seconds(saved_timeout);
+        }
+        return 2;
     }
     fprintf(stream, "\n");
     /* Telegram rejecting the number (format slip, stray glyph from an odd

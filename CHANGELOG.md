@@ -21,7 +21,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   on the QR code too: a console of a 256-line Workbench cannot hold one,
   so the code goes in a small window of its own on the Workbench screen,
   which never takes the keyboard, and P with Return turns to the number
-  there. The QR encoder is our own, written from the standard, and
+  there; Ctrl+C there closes that window before the program ends. The
+  QR encoder is our own, written from the standard, and
   every code it makes was read back by the Mac's own QR reader. On a
   screen whose pixels are taller than wide (a PAL or NTSC hires screen
   without interlace, such as 640x256) the code is drawn with lower

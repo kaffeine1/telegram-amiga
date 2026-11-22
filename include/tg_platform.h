@@ -246,6 +246,13 @@ int tg_platform_break_pending(void);
 void tg_platform_break_own(void);
 
 /*
+ * Gives Ctrl+C back to the C library after tg_platform_break_own(), for a
+ * stretch that owned it only while a window of its own was open (the text
+ * client's QR code). A break still pending is then the library's to take.
+ */
+void tg_platform_break_return(void);
+
+/*
  * Flashes the display (Intuition DisplayBeep): the user-visible "bell" that
  * never touches the console byte stream. Console handlers disagree wildly
  * about the BEL byte -- AmiKit's replacement console reacts by clearing the

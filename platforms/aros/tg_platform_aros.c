@@ -1437,6 +1437,10 @@ void tg_platform_break_own(void)
        for the caller. */
 }
 
+void tg_platform_break_return(void)
+{
+}
+
 #if defined(__AROS__)
 #include <proto/intuition.h>
 

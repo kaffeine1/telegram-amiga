@@ -1325,6 +1325,11 @@ void tg_platform_break_own(void)
     tg_morphos_break_owned = 1;
 }
 
+void tg_platform_break_return(void)
+{
+    tg_morphos_break_owned = 0;
+}
+
 #include <proto/intuition.h>
 
 struct IntuitionBase *IntuitionBase = 0;

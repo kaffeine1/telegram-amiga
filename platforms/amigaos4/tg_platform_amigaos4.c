@@ -1446,6 +1446,13 @@ void tg_platform_break_own(void)
 #endif
 }
 
+void tg_platform_break_return(void)
+{
+#if defined(__amigaos4__)
+    (void)signal(SIGINT, SIG_DFL);
+#endif
+}
+
 #if defined(__amigaos4__)
 #include <proto/intuition.h>
 
