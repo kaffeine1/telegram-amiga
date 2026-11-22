@@ -82,10 +82,13 @@ native image for the Raspberry Pi 4, 400 and 5 dated 2026-08-22 or later.
 2. Double-click **Amigram** (**TelegramAmiga** up to 0.0.99). On
    AmigaOS 3, **Amigram-TUI** opens the text client; elsewhere the manual
    gives its Shell command.
-3. The first run asks for your phone number, the code Telegram sends and
-   your 2FA password if you have one. The session is saved in
-   `telegram-auth.bin` and later runs open on your chats. The client
-   cannot create an account: make one first with the official app.
+3. The first run shows a QR code: scan it with Telegram on your phone
+   (Settings > Devices > Link Desktop Device) and the login goes through
+   by itself, then asks your 2FA password if you have one. P turns to
+   your phone number and the code Telegram sends instead. The session is
+   saved in `telegram-auth.bin` and later runs open on your chats;
+   "Log out..." in the Amigram menu ends it. The client cannot create an
+   account: make one first with the official app.
 
 Coming from TelegramAmiga: copy `telegram-auth.bin` and the `data`
 drawer from the old drawer into the new one, and `avatars`, `photos` and
