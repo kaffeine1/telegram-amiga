@@ -8257,6 +8257,18 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
                another device is signed in, and someone waiting for an SMS
                concludes this client is broken (field question). */
             tg_gui_window_login_code_prompt(state);
+        } else if (rc == TG_GUI_LOGIN_SIGNED_IN) {
+            /* An earlier login on this computer left a future auth token,
+               and Telegram took it instead of a code. */
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "No code needed - opening your chats...");
+            tg_gui_window_paint(state, backend);
+            tg_gui_window_login_finish(state);
+        } else if (rc == TG_GUI_LOGIN_NEED_2FA) {
+            state->mode = TG_GUI_MODE_LOGIN_2FA;
+            state->input_masked = 1;
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               "No code needed - your cloud password");
         } else {
             tg_gui_window_login_failed(state, "That number was not accepted");
         }

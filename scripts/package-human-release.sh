@@ -256,7 +256,9 @@ prima con l'app ufficiale su un telefono."
 3. If your account has a cloud password (2FA), type it. If not, press
    Enter.
 4. The client saves the login in telegram-auth.bin, in this drawer, and
-   does not ask again."
+   does not ask again. It also keeps data/telegram-future-tokens.txt:
+   with it a later login by number on this computer can go through
+   without waiting for a code."
     login_steps_it="2. La finestra mostra un codice QR (il client testuale lo mostra in
    una piccola finestra sua sullo schermo del Workbench). Sul telefono
    apri Telegram, vai in Impostazioni > Dispositivi > Collega dispositivo
@@ -273,7 +275,9 @@ prima con l'app ufficiale su un telefono."
 3. Se il tuo account ha una password cloud (2FA), scrivila. Se no, premi
    Invio.
 4. Il client salva l'accesso in telegram-auth.bin, in questo cassetto, e
-   non te lo chiede piu'."
+   non te lo chiede piu'. Tiene anche data/telegram-future-tokens.txt:
+   con quello un accesso successivo col numero, su questo computer, puo'
+   passare senza aspettare il codice."
     shell_cmd="      Amigram --mtproto-start-file data/telegram-api.txt
         telegram-auth.bin data/phone-code-hash.txt data/telegram-peers.txt"
     if [ "$tui_icon" = "1" ]; then
@@ -1356,8 +1360,8 @@ telegram-auth.bin is your logged-in session: never share it, and never
 use someone else's. Use it on one computer at a time: Telegram closes
 for good a session it sees in two places at once, and Amigram then
 offers a new login (the old file is kept as telegram-auth-closed.bin).
-In screenshots hide phone numbers, codes, passwords and private
-messages.
+data/telegram-future-tokens.txt is just as private. In screenshots
+hide phone numbers, codes, passwords and private messages.
 
 The client carries its own Telegram api credentials. To use yours, put
 them in data/telegram-api.txt: two lines, api_id then api_hash.
@@ -1448,7 +1452,8 @@ telegram-auth.bin e' la tua sessione: non condividerlo mai e non usare
 quello di qualcun altro. Usalo su un computer alla volta: Telegram chiude
 per sempre una sessione che vede in due posti insieme, e allora Amigram
 propone un nuovo accesso (il vecchio file resta come
-telegram-auth-closed.bin). Negli screenshot nascondi numeri di telefono,
+telegram-auth-closed.bin). Anche data/telegram-future-tokens.txt e'
+privato allo stesso modo. Negli screenshot nascondi numeri di telefono,
 codici, password e messaggi privati.
 
 Il client ha le sue credenziali api di Telegram. Per usare le tue,

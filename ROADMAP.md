@@ -1406,6 +1406,18 @@ in. Still open: on a screen with non-square pixels (a PAL 640x256
 Workbench) the code is drawn square in pixels, so it shows taller than
 wide; phones read some stretch, to be checked there.
 
+Next to it, the same day, the future auth tokens of
+core.telegram.org/api/auth: every `auth.authorization` (signIn,
+checkPassword, signUp, `auth.loginTokenSuccess`, `auth.sentCodeSuccess`)
+may carry `future_auth_token` (flags.2); it is kept in
+data/telegram-future-tokens.txt, hex lines newest first, twenty at most,
+and `auth.sendCode` sends them in `codeSettings.logout_tokens` (flags.6,
+at most 2 KB of them in one query). The answer can then be
+`auth.sentCodeSuccess` (signed in, no code) or SESSION_PASSWORD_NEEDED
+(the cloud password step on the same key), both handled in the window
+and in the text client. Not seen live yet: it needs a login that leaves
+a token, then a login by number on the same computer.
+
 ## Done after 0.5: a session closed by Telegram
 
 Seen on 2026-11-22 with the test account: the same telegram-auth.bin in

@@ -896,6 +896,23 @@ tg_mtproto_tl_status tg_mtproto_build_auth_send_code(
     const char *phone_number,
     unsigned long api_id,
     const char *api_hash);
+/* auth.sendCode with future auth tokens in codeSettings.logout_tokens. */
+tg_mtproto_tl_status tg_mtproto_build_auth_send_code_tokens(
+    tg_mtproto_tl_writer *writer,
+    const char *phone_number,
+    unsigned long api_id,
+    const char *api_hash,
+    const unsigned char *const *tokens,
+    const unsigned long *token_lengths,
+    unsigned long token_count);
+/* The future_auth_token of an auth.authorization (body from just after
+   its constructor); *out_length 0 when Telegram gave none. */
+tg_mtproto_tl_status tg_mtproto_parse_future_auth_token(
+    const unsigned char *body,
+    unsigned long body_length,
+    unsigned char *out,
+    unsigned long out_size,
+    unsigned long *out_length);
 
 tg_mtproto_tl_status tg_mtproto_build_auth_sign_in(
     tg_mtproto_tl_writer *writer,

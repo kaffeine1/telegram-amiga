@@ -197,6 +197,9 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_QR_SIGNED_IN 0
 #define TG_MTPROTO_QR_TOKEN 7
 #define TG_MTPROTO_QR_MIGRATE 8
+/* auth.sendCode outcome: a future auth token was known and signed the key
+   in without a code (auth.sentCodeSuccess). */
+#define TG_MTPROTO_SEND_CODE_SIGNED_IN 9
 
 /*
  * Raw chat input gives Up/Down command-history recall. It requires every
@@ -270,6 +273,7 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_UPDATES_TOO_LONG_CONSTRUCTOR 0xe317af7eUL
 #define TG_MTPROTO_AUTH_SENT_CODE_CONSTRUCTOR 0x5e002502UL
 #define TG_MTPROTO_AUTH_SENT_CODE_SUCCESS_CONSTRUCTOR 0x2390fe44UL
+#define TG_MTPROTO_AUTH_AUTHORIZATION_CONSTRUCTOR 0x2ea2c0d4UL
 #define TG_MTPROTO_AUTH_SENT_CODE_PAYMENT_REQUIRED_CONSTRUCTOR 0xd7a2fcf9UL
 #define TG_MTPROTO_CONFIG_CONSTRUCTOR 0xcc1a241eUL
 #define TG_MTPROTO_ACCOUNT_PASSWORD_CONSTRUCTOR 0x957b50fbUL
@@ -5813,19 +5817,290 @@ unsigned long tg_mtproto_sent_code_resend_wait(void)
     return ready - now;
 }
 
-int tg_mtproto_auth_send_code(const char *host,
-                              const char *port,
-                              const char *dc_id_text,
-                              const char *api_id_text,
-                              const char *api_hash,
-                              const char *phone_number,
-                              const char *auth_file,
-                              const char *code_hash_file,
-                              FILE *stream)
+/* Future auth tokens (core.telegram.org/api/auth): every login hands one
+   out, and an auth.sendCode that presents it again lets Telegram sign the
+   same computer back in without a code, or ask only for the cloud
+   password. With login codes that stopped arriving for some accounts in
+   the autumn of 2026, they are what still gets a user back in by number
+   after a lost or closed session. They live in
+   data/telegram-future-tokens.txt, one hex line each, newest first, twenty
+   at most as the documentation asks; as private as the key, never
+   printed. */
+#define TG_MTPROTO_FUTURE_TOKENS_FILE "data/telegram-future-tokens.txt"
+#define TG_MTPROTO_FUTURE_TOKENS_MAX 20
+#define TG_MTPROTO_FUTURE_TOKEN_BYTES 255
+/* what one auth.sendCode carries of them, length bytes and padding in */
+#define TG_MTPROTO_FUTURE_TOKENS_ROOM 2048UL
+
+static char tg_mtproto_future_tokens_path[96] = TG_MTPROTO_FUTURE_TOKENS_FILE;
+static unsigned char tg_mtproto_future_tokens[TG_MTPROTO_FUTURE_TOKENS_MAX]
+                                             [TG_MTPROTO_FUTURE_TOKEN_BYTES];
+static unsigned long
+    tg_mtproto_future_token_lengths[TG_MTPROTO_FUTURE_TOKENS_MAX];
+
+static int tg_mtproto_future_hex(int c)
 {
-    unsigned char query[512];
-    unsigned char initialized_query[640];
-    unsigned char wrapped_query[760];
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
+static void tg_mtproto_future_tokens_forget(void)
+{
+    tg_mtproto_secure_zero(tg_mtproto_future_tokens,
+                           sizeof(tg_mtproto_future_tokens));
+    memset(tg_mtproto_future_token_lengths, 0,
+           sizeof(tg_mtproto_future_token_lengths));
+}
+
+/* Reads the stored tokens into the table above and says how many. A line
+   that is not whole hex of 1 to 255 bytes is skipped. */
+static unsigned long tg_mtproto_future_tokens_load(void)
+{
+    char line[2 * TG_MTPROTO_FUTURE_TOKEN_BYTES + 4];
+    unsigned long count = 0UL;
+    FILE *file;
+
+    file = fopen(tg_mtproto_future_tokens_path, "rb");
+    if (file == 0) {
+        return 0UL;
+    }
+    while (count < TG_MTPROTO_FUTURE_TOKENS_MAX &&
+           fgets(line, (int)sizeof(line), file) != 0) {
+        unsigned long length = 0UL;
+        unsigned long at = 0UL;
+        int whole = 1;
+
+        if (strchr(line, '\n') == 0 && !feof(file)) {
+            int c;
+
+            do { /* longer than any token: the rest of it goes too */
+                c = fgetc(file);
+            } while (c != EOF && c != '\n');
+            continue;
+        }
+        while (line[at] != '\0' && line[at] != '\n' && line[at] != '\r') {
+            int hi = tg_mtproto_future_hex((unsigned char)line[at]);
+            int lo = hi < 0 ? -1
+                            : tg_mtproto_future_hex(
+                                  (unsigned char)line[at + 1UL]);
+
+            if (lo < 0 || length >= TG_MTPROTO_FUTURE_TOKEN_BYTES) {
+                whole = 0;
+                break;
+            }
+            tg_mtproto_future_tokens[count][length++] =
+                (unsigned char)(hi * 16 + lo);
+            at += 2UL;
+        }
+        if (whole && length > 0UL) {
+            tg_mtproto_future_token_lengths[count++] = length;
+        }
+    }
+    fclose(file);
+    tg_mtproto_secure_zero(line, sizeof(line));
+    return count;
+}
+
+static void tg_mtproto_future_token_put(FILE *file,
+                                        const unsigned char *token,
+                                        unsigned long length)
+{
+    static const char hex[] = "0123456789abcdef";
+    unsigned long i;
+
+    for (i = 0UL; i < length; ++i) {
+        fputc(hex[token[i] >> 4], file);
+        fputc(hex[token[i] & 15U], file);
+    }
+    fputc('\n', file);
+}
+
+/* Keeps the future auth token of an auth.authorization (body from just
+   after its constructor), if it carries one: first in the file, an older
+   copy of it dropped, the twenty-first left out. */
+static void tg_mtproto_future_token_note(const unsigned char *body,
+                                         unsigned long body_length)
+{
+    unsigned char token[TG_MTPROTO_FUTURE_TOKEN_BYTES];
+    unsigned long token_length = 0UL;
+    unsigned long count;
+    unsigned long kept = 1UL;
+    unsigned long i;
+    FILE *file;
+
+    if (body == 0 ||
+        tg_mtproto_parse_future_auth_token(body, body_length, token,
+                                           sizeof(token), &token_length) !=
+            TG_MTPROTO_TL_OK ||
+        token_length == 0UL) {
+        tg_mtproto_secure_zero(token, sizeof(token));
+        return;
+    }
+    count = tg_mtproto_future_tokens_load();
+    file = tg_file_fopen_replace(tg_mtproto_future_tokens_path, "wb");
+    if (file != 0) {
+        tg_mtproto_future_token_put(file, token, token_length);
+        for (i = 0UL; i < count && kept < TG_MTPROTO_FUTURE_TOKENS_MAX; ++i) {
+            if (tg_mtproto_future_token_lengths[i] == token_length &&
+                memcmp(tg_mtproto_future_tokens[i], token, token_length) ==
+                    0) {
+                continue;
+            }
+            tg_mtproto_future_token_put(file, tg_mtproto_future_tokens[i],
+                                        tg_mtproto_future_token_lengths[i]);
+            ++kept;
+        }
+        fclose(file);
+    }
+    tg_mtproto_future_tokens_forget();
+    tg_mtproto_secure_zero(token, sizeof(token));
+}
+
+/* The newest of the loaded tokens that fit in one auth.sendCode: pointers
+   and lengths for the query builder, and how many. */
+static unsigned long tg_mtproto_future_tokens_pick(
+    unsigned long count, const unsigned char **tokens, unsigned long *lengths)
+{
+    unsigned long used = 0UL;
+    unsigned long picked = 0UL;
+
+    while (picked < count) {
+        unsigned long length = tg_mtproto_future_token_lengths[picked];
+        unsigned long size = (length < 254UL ? 1UL : 4UL) + length;
+
+        size = (size + 3UL) & ~3UL;
+        if (used + size > TG_MTPROTO_FUTURE_TOKENS_ROOM) {
+            break;
+        }
+        used += size;
+        tokens[picked] = tg_mtproto_future_tokens[picked];
+        lengths[picked] = length;
+        ++picked;
+    }
+    return picked;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* Kept newest first, a token given again moved to the top, twenty at most,
+   broken lines skipped, and no more of them in one auth.sendCode than its
+   room takes; in a file of the test's own. */
+static int tg_mtproto_future_tokens_self_test(void)
+{
+    static const unsigned char with_token[] = {
+        0x04, 0x00, 0x00, 0x00, 0x02, 0xaa, 0xbb, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    static const unsigned char again[] = {
+        0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    static const unsigned char none[] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    const unsigned char *tokens[TG_MTPROTO_FUTURE_TOKENS_MAX];
+    unsigned long lengths[TG_MTPROTO_FUTURE_TOKENS_MAX];
+    char saved[sizeof(tg_mtproto_future_tokens_path)];
+    unsigned long count;
+    FILE *f;
+    int ok = 1;
+    int i;
+    int j;
+
+    strcpy(saved, tg_mtproto_future_tokens_path);
+    strcpy(tg_mtproto_future_tokens_path, "tg-future-test.txt");
+    f = fopen(tg_mtproto_future_tokens_path, "wb");
+    if (f == 0) {
+        strcpy(tg_mtproto_future_tokens_path, saved);
+        return 2;
+    }
+    fputs("zz\nabc\n", f);
+    for (i = 0; i < 25; ++i) {
+        fprintf(f, "%02x01\n", i);
+    }
+    fclose(f);
+    tg_mtproto_future_token_note(with_token, sizeof(with_token));
+    f = fopen(tg_mtproto_future_tokens_path, "rb");
+    j = 0;
+    if (f != 0) {
+        while ((i = fgetc(f)) != EOF) {
+            j += i == '\n';
+        }
+        fclose(f);
+    }
+    ok = ok && j == TG_MTPROTO_FUTURE_TOKENS_MAX;
+    count = tg_mtproto_future_tokens_load();
+    ok = ok && count == 20UL && tg_mtproto_future_token_lengths[0] == 2UL &&
+         tg_mtproto_future_tokens[0][0] == 0xaaU &&
+         tg_mtproto_future_tokens[0][1] == 0xbbU &&
+         tg_mtproto_future_tokens[1][0] == 0x00U &&
+         tg_mtproto_future_tokens[1][1] == 0x01U &&
+         tg_mtproto_future_tokens[19][0] == 0x12U &&
+         tg_mtproto_future_tokens_pick(count, tokens, lengths) == 20UL;
+    tg_mtproto_future_token_note(again, sizeof(again));
+    tg_mtproto_future_token_note(none, sizeof(none));
+    count = tg_mtproto_future_tokens_load();
+    ok = ok && count == 20UL && tg_mtproto_future_tokens[0][0] == 0x00U &&
+         tg_mtproto_future_tokens[0][1] == 0x01U &&
+         tg_mtproto_future_tokens[1][0] == 0xaaU &&
+         tg_mtproto_future_tokens[2][0] == 0x01U;
+
+    /* Ten of the longest: seven fill the room of one query. */
+    f = fopen(tg_mtproto_future_tokens_path, "wb");
+    if (f != 0) {
+        for (i = 0; i < 10; ++i) {
+            for (j = 0; j < TG_MTPROTO_FUTURE_TOKEN_BYTES; ++j) {
+                fputs("5a", f);
+            }
+            fputc('\n', f);
+        }
+        fclose(f);
+    }
+    count = tg_mtproto_future_tokens_load();
+    ok = ok && f != 0 && count == 10UL &&
+         tg_mtproto_future_token_lengths[9] == 255UL &&
+         tg_mtproto_future_tokens_pick(count, tokens, lengths) == 7UL &&
+         lengths[6] == 255UL && tokens[6][254] == 0x5aU;
+    tg_mtproto_future_tokens_forget();
+    (void)remove(tg_mtproto_future_tokens_path);
+    strcpy(tg_mtproto_future_tokens_path, saved);
+    if (!ok) {
+        puts("future auth token store self-test: failed");
+    }
+    return ok ? 0 : 2;
+}
+#endif
+
+/* auth.sendCode's buffers grow by the tokens' room; static, and wiped
+   after each call with the phone number and api_hash they held. */
+static unsigned char tg_mtproto_send_code_query[512 +
+                                                TG_MTPROTO_FUTURE_TOKENS_ROOM];
+static unsigned char
+    tg_mtproto_send_code_init[640 + TG_MTPROTO_FUTURE_TOKENS_ROOM];
+static unsigned char
+    tg_mtproto_send_code_wrapped[760 + TG_MTPROTO_FUTURE_TOKENS_ROOM];
+
+static int tg_mtproto_auth_send_code_run(const char *host,
+                                         const char *port,
+                                         const char *dc_id_text,
+                                         const char *api_id_text,
+                                         const char *api_hash,
+                                         const char *phone_number,
+                                         const char *auth_file,
+                                         const char *code_hash_file,
+                                         FILE *stream)
+{
+    unsigned char *query = tg_mtproto_send_code_query;
+    unsigned char *initialized_query = tg_mtproto_send_code_init;
+    unsigned char *wrapped_query = tg_mtproto_send_code_wrapped;
+    const unsigned char *tokens[TG_MTPROTO_FUTURE_TOKENS_MAX];
+    unsigned long token_lengths[TG_MTPROTO_FUTURE_TOKENS_MAX];
+    unsigned long token_count;
     unsigned long api_id;
     unsigned long query_length;
     tg_file_status file_status;
@@ -5852,16 +6127,20 @@ int tg_mtproto_auth_send_code(const char *host,
     }
 
     tg_mtproto_login_phase(stream, "auth.sendCode build");
-    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-    if (tg_mtproto_build_auth_send_code(&writer, phone_number, api_id,
-                                        api_hash) != TG_MTPROTO_TL_OK) {
+    token_count = tg_mtproto_future_tokens_pick(
+        tg_mtproto_future_tokens_load(), tokens, token_lengths);
+    tg_mtproto_tl_writer_init(&writer, query,
+                              sizeof(tg_mtproto_send_code_query));
+    if (tg_mtproto_build_auth_send_code_tokens(
+            &writer, phone_number, api_id, api_hash, tokens, token_lengths,
+            token_count) != TG_MTPROTO_TL_OK) {
         tg_mtproto_close_auth_context(&context);
         fprintf(stream, "%s: query-build-failed\n", label);
         return 2;
     }
     query_length = writer.length;
     tg_mtproto_tl_writer_init(&writer, initialized_query,
-                              sizeof(initialized_query));
+                              sizeof(tg_mtproto_send_code_init));
     if (tg_mtproto_build_init_connection(&writer, api_id,
                                          TG_MTPROTO_DEVICE_MODEL,
                                          TG_MTPROTO_SYSTEM_VERSION,
@@ -5872,7 +6151,8 @@ int tg_mtproto_auth_send_code(const char *host,
         return 2;
     }
     query_length = writer.length;
-    tg_mtproto_tl_writer_init(&writer, wrapped_query, sizeof(wrapped_query));
+    tg_mtproto_tl_writer_init(&writer, wrapped_query,
+                              sizeof(tg_mtproto_send_code_wrapped));
     if (tg_mtproto_build_invoke_with_layer(&writer, 214UL, initialized_query,
                                            query_length) !=
         TG_MTPROTO_TL_OK) {
@@ -5893,10 +6173,33 @@ int tg_mtproto_auth_send_code(const char *host,
 
     if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
         unsigned long migrate_dc;
+        char send_error[64];
+        long send_error_code;
+
         if (tg_mtproto_rpc_phone_migrate_dc(&result, &migrate_dc)) {
             if (migrate_dc <= 215UL) {
                 return TG_MTPROTO_PHONE_MIGRATE_RC_BASE + (int)migrate_dc;
             }
+        }
+        if (token_count > 0UL &&
+            tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                       result.result_body_length + 4U,
+                                       &send_error_code, send_error,
+                                       sizeof(send_error)) ==
+                TG_MTPROTO_TL_OK &&
+            strcmp(send_error, "SESSION_PASSWORD_NEEDED") == 0) {
+            /* Telegram knew one of the tokens: no code, only the cloud
+               password, given on this same key. */
+            session_status = tg_mtproto_session_save_authorization(
+                auth_file, &context.session, context.auth_key, 1);
+            if (session_status != TG_MTPROTO_SESSION_OK) {
+                fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                        tg_mtproto_session_status_name(session_status));
+                return 2;
+            }
+            fprintf(stream, "Telegram knows this computer: no code needed.\n");
+            fflush(stream);
+            return TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED;
         }
         if (!tg_mtproto_print_rpc_error(label, &result, stream)) {
             fprintf(stream, "%s: rpc-error-parse-failed\n", label);
@@ -5905,6 +6208,37 @@ int tg_mtproto_auth_send_code(const char *host,
     }
     if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
         return 2;
+    }
+    if (result.result_constructor ==
+        TG_MTPROTO_AUTH_SENT_CODE_SUCCESS_CONSTRUCTOR) {
+        /* Telegram knew one of the tokens and signed this key in at once:
+           the answer carries the auth.authorization, and a new token. */
+        unsigned long inner = result.result_body_length >= 4UL
+                                  ? tg_mtproto_read_u32_le(result.result_body)
+                                  : 0UL;
+
+        if (inner == 0x44747e9aUL) {
+            strcpy(tg_mtproto_query_fail, "SIGN_UP_REQUIRED");
+            fprintf(stream, "%s: signup-required\n", label);
+            return 2;
+        }
+        if (inner != TG_MTPROTO_AUTH_AUTHORIZATION_CONSTRUCTOR) {
+            fprintf(stream, "%s: unexpected-result 0x%08lx\n", label, inner);
+            return 2;
+        }
+        session_status = tg_mtproto_session_save_authorization(
+            auth_file, &context.session, context.auth_key, 1);
+        if (session_status != TG_MTPROTO_SESSION_OK) {
+            fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                    tg_mtproto_session_status_name(session_status));
+            return 2;
+        }
+        tg_mtproto_future_token_note(result.result_body + 4U,
+                                     result.result_body_length - 4UL);
+        fprintf(stream, "Telegram knows this computer: signed in without "
+                        "a code.\n");
+        fflush(stream);
+        return TG_MTPROTO_SEND_CODE_SIGNED_IN;
     }
     if (result.result_constructor != TG_MTPROTO_AUTH_SENT_CODE_CONSTRUCTOR &&
         result.result_constructor !=
@@ -5953,6 +6287,35 @@ int tg_mtproto_auth_send_code(const char *host,
     tg_mtproto_print_login_code_hint(stream, sent_code.type_constructor);
     fflush(stream);
     return 0;
+}
+
+/* 0 = a code is on its way, TG_MTPROTO_SEND_CODE_SIGNED_IN = a future auth
+   token signed this key in without one, TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED
+   = the same but the cloud password is still to give,
+   TG_MTPROTO_PHONE_MIGRATE_RC_BASE + dc = ask that datacenter, 2 = failed. */
+int tg_mtproto_auth_send_code(const char *host,
+                              const char *port,
+                              const char *dc_id_text,
+                              const char *api_id_text,
+                              const char *api_hash,
+                              const char *phone_number,
+                              const char *auth_file,
+                              const char *code_hash_file,
+                              FILE *stream)
+{
+    int rc = tg_mtproto_auth_send_code_run(host, port, dc_id_text,
+                                           api_id_text, api_hash,
+                                           phone_number, auth_file,
+                                           code_hash_file, stream);
+
+    tg_mtproto_future_tokens_forget();
+    tg_mtproto_secure_zero(tg_mtproto_send_code_query,
+                           sizeof(tg_mtproto_send_code_query));
+    tg_mtproto_secure_zero(tg_mtproto_send_code_init,
+                           sizeof(tg_mtproto_send_code_init));
+    tg_mtproto_secure_zero(tg_mtproto_send_code_wrapped,
+                           sizeof(tg_mtproto_send_code_wrapped));
+    return rc;
 }
 
 int tg_mtproto_auth_send_code_file(const char *host,
@@ -6132,6 +6495,8 @@ int tg_mtproto_auth_sign_in(const char *host,
                 label);
         return 2;
     }
+    tg_mtproto_future_token_note(result.result_body,
+                                 result.result_body_length);
 
 #ifdef TG_MTPROTO_DIAG
     fprintf(stream, "%s: signed in\n", label);
@@ -6285,6 +6650,11 @@ int tg_mtproto_auth_qr_step(const char *host,
            which a QR login cannot be (the phone is signed in). */
         strcpy(tg_mtproto_query_fail, "SIGN_UP_REQUIRED");
         return 2;
+    }
+    if (out->authorization == TG_MTPROTO_AUTH_AUTHORIZATION_CONSTRUCTOR &&
+        result.result_body_length > 4UL) {
+        tg_mtproto_future_token_note(result.result_body + 4U,
+                                     result.result_body_length - 4UL);
     }
     return TG_MTPROTO_QR_SIGNED_IN;
 }
@@ -6639,6 +7009,8 @@ int tg_mtproto_auth_sign_up(const char *host,
         fprintf(stream, "%s: signup-still-required\n", label);
         return 2;
     }
+    tg_mtproto_future_token_note(result.result_body,
+                                 result.result_body_length);
 
     fprintf(stream, "%s: signed up\n", label);
     fprintf(stream, "%s: auth state updated\n", label);
@@ -7145,6 +7517,8 @@ static int tg_mtproto_auth_check_password_text(const char *host,
         fprintf(stream, "%s: signup-required\n", label);
         return 2;
     }
+    tg_mtproto_future_token_note(result.result_body,
+                                 result.result_body_length);
 
 #ifdef TG_MTPROTO_DIAG
     fprintf(stream, "%s: signed in\n", label);
@@ -7483,7 +7857,8 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                                                         stream);
                 }
             }
-            if (rc == 0) {
+            if (rc == 0 || rc == TG_MTPROTO_SEND_CODE_SIGNED_IN ||
+                rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
                 break;
             }
             /* What went wrong in words: it used to say "did not accept that
@@ -7497,6 +7872,15 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
     }
     if (restore_timeout) {
         tg_net_set_connect_timeout_seconds(saved_timeout);
+    }
+    /* A future auth token from an earlier login on this computer: signed
+       in already, or only the cloud password to give. */
+    if (rc == TG_MTPROTO_SEND_CODE_SIGNED_IN) {
+        rc = 0;
+        goto password_step;
+    }
+    if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        goto password_step;
     }
     if (rc != 0) {
         tg_mtproto_secure_zero(phone, sizeof(phone));
@@ -7565,14 +7949,23 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                             "new one.\n");
             fflush(stream);
             tg_mtproto_query_fail[0] = '\0';
-            if (tg_mtproto_auth_send_code_file(current_host, port,
-                                               current_dc_id_text, api_file,
-                                               phone, auth_file,
-                                               code_hash_file, stream) != 0) {
+            rc = tg_mtproto_auth_send_code_file(current_host, port,
+                                                current_dc_id_text, api_file,
+                                                phone, auth_file,
+                                                code_hash_file, stream);
+            if (rc == TG_MTPROTO_SEND_CODE_SIGNED_IN) {
+                rc = 0;
+                break;
+            }
+            if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+                break;
+            }
+            if (rc != 0) {
                 tg_mtproto_print_login_failure(stream);
                 tg_mtproto_secure_zero(phone, sizeof(phone));
                 return 2;
             }
+            rc = TG_MTPROTO_SIGN_IN_CODE_INVALID;
             fprintf(stream, "\nTelegram login code received.\n");
         } else if (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID) {
             fprintf(stream,
@@ -24057,6 +24450,9 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_gui_closed_self_test() != 0) {
+        return 2;
+    }
+    if (tg_mtproto_future_tokens_self_test() != 0) {
         return 2;
     }
     if (tg_mtproto_display_text_self_test() != 0) {
@@ -43520,12 +43916,22 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
     }
     tg_gui_log("login: send_code done");
     tg_gui_log_sent_code_route();
-    if (rc != 0) {
+    if (rc == TG_MTPROTO_SEND_CODE_SIGNED_IN) {
+        tg_gui_log("login: signed in by a future auth token");
+    } else if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        tg_gui_log("login: future auth token, cloud password next");
+    } else if (rc != 0) {
         tg_gui_login_step_failed(quiet, stream);
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
+    if (rc == TG_MTPROTO_SEND_CODE_SIGNED_IN) {
+        return TG_GUI_LOGIN_SIGNED_IN;
+    }
+    if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
+        return TG_GUI_LOGIN_NEED_2FA;
+    }
     return (rc == 0) ? TG_GUI_LOGIN_OK : TG_GUI_LOGIN_BAD_PHONE;
 }
 

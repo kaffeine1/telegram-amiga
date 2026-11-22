@@ -565,10 +565,31 @@ tg_mtproto_tl_status tg_mtproto_build_auth_send_code(
     unsigned long api_id,
     const char *api_hash)
 {
+    return tg_mtproto_build_auth_send_code_tokens(writer, phone_number,
+                                                  api_id, api_hash, 0, 0,
+                                                  0UL);
+}
+
+/* auth.sendCode with the future auth tokens this computer was given
+   (codeSettings#ad253d78, logout_tokens:flags.6?Vector<bytes>). A token
+   that matches the account lets Telegram answer auth.sentCodeSuccess, or
+   SESSION_PASSWORD_NEEDED with a cloud password, and send no code at all
+   (core.telegram.org/api/auth, "future auth tokens"). */
+tg_mtproto_tl_status tg_mtproto_build_auth_send_code_tokens(
+    tg_mtproto_tl_writer *writer,
+    const char *phone_number,
+    unsigned long api_id,
+    const char *api_hash,
+    const unsigned char *const *tokens,
+    const unsigned long *token_lengths,
+    unsigned long token_count)
+{
     tg_mtproto_tl_status status;
+    unsigned long i;
 
     if (writer == 0 || phone_number == 0 || api_hash == 0 ||
-        phone_number[0] == '\0' || api_hash[0] == '\0') {
+        phone_number[0] == '\0' || api_hash[0] == '\0' ||
+        (token_count > 0UL && (tokens == 0 || token_lengths == 0))) {
         return TG_MTPROTO_TL_INVALID_ARGUMENT;
     }
     status = tg_mtproto_tl_write_u32(writer, TG_AUTH_SEND_CODE_CONSTRUCTOR);
@@ -585,9 +606,65 @@ tg_mtproto_tl_status tg_mtproto_build_auth_send_code(
         status = tg_mtproto_tl_write_u32(writer, TG_CODE_SETTINGS_CONSTRUCTOR);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL);
+        status = tg_mtproto_tl_write_u32(writer,
+                                         token_count > 0UL ? (1UL << 6) : 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK && token_count > 0UL) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+        if (status == TG_MTPROTO_TL_OK) {
+            status = tg_mtproto_tl_write_u32(writer, token_count);
+        }
+        for (i = 0UL; i < token_count && status == TG_MTPROTO_TL_OK; ++i) {
+            status = tg_mtproto_tl_write_bytes(writer, tokens[i],
+                                               token_lengths[i]);
+        }
     }
     return status;
+}
+
+/* auth.authorization#2ea2c0d4 flags:# setup_password_required:flags.1?true
+   otherwise_relogin_days:flags.1?int tmp_sessions:flags.0?int
+   future_auth_token:flags.2?bytes user:User, read from just after its
+   constructor: the token, when Telegram gave one, else a length of 0. */
+tg_mtproto_tl_status tg_mtproto_parse_future_auth_token(
+    const unsigned char *body,
+    unsigned long body_length,
+    unsigned char *out,
+    unsigned long out_size,
+    unsigned long *out_length)
+{
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_tl_status status;
+    unsigned long flags;
+    unsigned long skip;
+    const unsigned char *bytes;
+    unsigned long length;
+
+    if (body == 0 || out == 0 || out_length == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    *out_length = 0UL;
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    status = tg_mtproto_tl_read_u32(&reader, &flags);
+    if (status == TG_MTPROTO_TL_OK && (flags & (1UL << 1)) != 0UL) {
+        status = tg_mtproto_tl_read_u32(&reader, &skip); /* relogin days */
+    }
+    if (status == TG_MTPROTO_TL_OK && (flags & 1UL) != 0UL) {
+        status = tg_mtproto_tl_read_u32(&reader, &skip); /* tmp_sessions */
+    }
+    if (status != TG_MTPROTO_TL_OK || (flags & (1UL << 2)) == 0UL) {
+        return status;
+    }
+    status = tg_mtproto_tl_read_bytes(&reader, &bytes, &length);
+    if (status != TG_MTPROTO_TL_OK) {
+        return status;
+    }
+    if (length == 0UL || length > out_size) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memcpy(out, bytes, (size_t)length);
+    *out_length = length;
+    return TG_MTPROTO_TL_OK;
 }
 
 /* auth.resendCode#cae47523 flags:# phone_number:string phone_code_hash:string
@@ -16518,6 +16595,56 @@ int tg_mtproto_login_self_test(void)
                         "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA") != 0 ||
             tg_mtproto_login_token_url(tok32, 32UL, url, 60UL) != 2) {
             puts("mtproto self-test: login link wrong");
+            return 2;
+        }
+    }
+    /* Future auth tokens: auth.sendCode carries them in codeSettings, and
+       auth.authorization hands one out (flags.2, after the two optional
+       ints). */
+    {
+        static const unsigned char want[] = {
+            0x4f, 0x24, 0x77, 0xa6, 0x02, '+', '1', 0x00, 0x2a, 0x00, 0x00,
+            0x00, 0x01, 'h', 0x00, 0x00, 0x78, 0x3d, 0x25, 0xad, 0x40, 0x00,
+            0x00, 0x00, 0x15, 0xc4, 0xb5, 0x1c, 0x01, 0x00, 0x00, 0x00, 0x02,
+            0xaa, 0xbb, 0x00
+        };
+        static const unsigned char auth_all[] = {
+            0x07, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00,
+            0x00, 0x03, 0x11, 0x22, 0x33, 0x00, 0x00, 0x00, 0x00
+        };
+        static const unsigned char auth_none[] = {
+            0x01, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00
+        };
+        static const unsigned char tok[2] = { 0xaaU, 0xbbU };
+        const unsigned char *toks[1];
+        unsigned long tok_lens[1];
+        unsigned char got[8];
+        unsigned long got_len = 9UL;
+
+        toks[0] = tok;
+        tok_lens[0] = 2UL;
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        if (tg_mtproto_build_auth_send_code_tokens(&writer, "+1", 42UL, "h",
+                                                   toks, tok_lens, 1UL) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != sizeof(want) ||
+            memcmp(query, want, sizeof(want)) != 0) {
+            puts("mtproto self-test: sendCode with a future token wrong");
+            return 2;
+        }
+        if (tg_mtproto_parse_future_auth_token(auth_all, sizeof(auth_all),
+                                               got, sizeof(got), &got_len) !=
+                TG_MTPROTO_TL_OK ||
+            got_len != 3UL || got[0] != 0x11U || got[2] != 0x33U ||
+            tg_mtproto_parse_future_auth_token(auth_none, sizeof(auth_none),
+                                               got, sizeof(got), &got_len) !=
+                TG_MTPROTO_TL_OK ||
+            got_len != 0UL ||
+            tg_mtproto_parse_future_auth_token(auth_all, sizeof(auth_all),
+                                               got, 2UL, &got_len) ==
+                TG_MTPROTO_TL_OK) {
+            puts("mtproto self-test: future auth token misread");
             return 2;
         }
     }

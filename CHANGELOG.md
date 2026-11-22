@@ -23,6 +23,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   which never takes the keyboard, and P with Return turns to the number
   there. The QR encoder is our own, written from the standard, and
   every code it makes was read back by the Mac's own QR reader.
+- Logging in again by number without a code. Each login now keeps the
+  "future auth token" Telegram hands out, in
+  data/telegram-future-tokens.txt (twenty at most, never shown), and the
+  next request for a login code on the same computer presents them, as
+  Telegram's documentation asks. When Telegram recognises one, the login
+  goes through at once, or straight to the cloud password, and no code
+  has to arrive. Keep that file with telegram-auth.bin, and as private.
 - A text longer than one message goes as several messages, as the
   official clients send it (issue #14). A 6 KB paste was cut to what
   one message holds; the input line now holds four messages, 16 KB

@@ -14,6 +14,8 @@ telegram-code.txt
 telegram-login-code.txt
 mtproto-api.txt
 telegram-auth*.bin
+telegram-login*.bin
+telegram-future-tokens*.txt
 telegram-session*.bin
 phone-code-hash*.txt
 telegram-peers*.txt
