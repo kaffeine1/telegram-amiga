@@ -150,6 +150,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   each insertion the next ENTER sends again and closes the panel.
 
 ### Fixed
+- A session that Telegram has closed for good is said so, instead of
+  being asked again every two seconds in silence. Telegram closes a
+  session when the same telegram-auth.bin is used in two places at once
+  (AUTH_KEY_DUPLICATED), or when it is ended from another device. The
+  window had kept its chats on screen, loaded nothing and answered an
+  edit with "Not saved". Now no request goes out with that key any more,
+  and a requester explains what happened and offers Log in again, which
+  puts the old file aside as telegram-auth-closed.bin and quits, so the
+  next start asks for the phone number. The manuals now say to use
+  telegram-auth.bin on one computer at a time.
 - A message that mentions you and came in while its chat was open stayed
   an unread mention on Telegram: the "@" button then offered it, on the
   other devices too, although it had been read in front of you. Reading

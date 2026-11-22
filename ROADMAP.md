@@ -1383,6 +1383,23 @@ a username is mentioned by first name with an
 of a basic group (`messages.getFullChat`), so in one of those only who
 wrote lately is offered.
 
+## Done after 0.5: a session closed by Telegram
+
+Seen on 2026-11-22 with the test account: the same telegram-auth.bin in
+use at once on a G5 at home and in a VM on a Mac whose traffic went out
+through a VPN, two addresses for one key. Telegram answered
+`406 AUTH_KEY_DUPLICATED` to every request from then on, on every copy,
+and the window went on asking every two seconds, showed the chats it
+had and answered an edit with "Not saved". Now an answer that closes a
+session for good (`tg_mtproto_rpc_error_ends_session`: AUTH_KEY_DUPLICATED,
+AUTH_KEY_UNREGISTERED, AUTH_KEY_INVALID, SESSION_REVOKED,
+SESSION_EXPIRED) on the window's key stops every later request with that
+key before a connection, and the window says it once with a requester:
+Log in again puts the file aside as telegram-auth-closed.bin and quits,
+so the next start runs the login. Keys of other datacenters are not
+watched (each run imports the account again). The text client does not
+watch yet: it still asks again and prints Telegram's word.
+
 ## Done after 0.5: a long text goes as several messages
 
 A 6 KB pasted text could not go whole (issue #14). The ceiling is

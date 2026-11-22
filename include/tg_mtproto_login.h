@@ -1916,6 +1916,11 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
    counts as unread (mentioned and media_unread). */
 int tg_mtproto_message_mention_unread(const tg_mtproto_message_text *message);
 
+/* 1 = an rpc_error with which Telegram has closed the session for good
+   (AUTH_KEY_DUPLICATED, AUTH_KEY_UNREGISTERED, AUTH_KEY_INVALID,
+   SESSION_REVOKED, SESSION_EXPIRED): only a new login helps. */
+int tg_mtproto_rpc_error_ends_session(const char *error_message);
+
 /*
  * Extracts users/chats/channels referenced by a messages.* response into a peer
  * cache, so a group history can resolve each message's from_id to a name.

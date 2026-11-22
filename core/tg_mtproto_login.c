@@ -1867,6 +1867,31 @@ int tg_mtproto_message_mention_unread(const tg_mtproto_message_text *message)
            (message->flags & (1UL << 5)) != 0UL;
 }
 
+/* The answers with which Telegram closes a session for good: the key was
+   seen in two places at once (AUTH_KEY_DUPLICATED, 406), the session was
+   ended from another device (SESSION_REVOKED), or the server no longer
+   knows the key (AUTH_KEY_UNREGISTERED, AUTH_KEY_INVALID, SESSION_EXPIRED,
+   401). Asking again only brings the same answer: a new login is needed.
+   USER_DEACTIVATED is not here: the account itself is gone. */
+int tg_mtproto_rpc_error_ends_session(const char *error_message)
+{
+    static const char *const words[] = {
+        "AUTH_KEY_DUPLICATED", "AUTH_KEY_UNREGISTERED", "AUTH_KEY_INVALID",
+        "SESSION_REVOKED", "SESSION_EXPIRED"
+    };
+    unsigned int i;
+
+    if (error_message == 0) {
+        return 0;
+    }
+    for (i = 0U; i < sizeof(words) / sizeof(words[0]); ++i) {
+        if (strcmp(error_message, words[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* account.getNotifySettings#12b3ad31 peer:InputNotifyPeer =
    PeerNotifySettings, for one chat: a small answer, where the chat list
    that also carries it is a large one. */
@@ -16212,6 +16237,22 @@ int tg_mtproto_login_self_test(void)
             tg_mtproto_message_mention_unread(0)) {
             return 2;
         }
+    }
+    /* The answers that close a session, and some that look alike but do
+       not: a flood wait, a password still to give, a deleted account. */
+    if (!tg_mtproto_rpc_error_ends_session("AUTH_KEY_DUPLICATED") ||
+        !tg_mtproto_rpc_error_ends_session("AUTH_KEY_UNREGISTERED") ||
+        !tg_mtproto_rpc_error_ends_session("AUTH_KEY_INVALID") ||
+        !tg_mtproto_rpc_error_ends_session("SESSION_REVOKED") ||
+        !tg_mtproto_rpc_error_ends_session("SESSION_EXPIRED") ||
+        tg_mtproto_rpc_error_ends_session("FLOOD_WAIT_30") ||
+        tg_mtproto_rpc_error_ends_session("SESSION_PASSWORD_NEEDED") ||
+        tg_mtproto_rpc_error_ends_session("USER_DEACTIVATED") ||
+        tg_mtproto_rpc_error_ends_session("AUTH_KEY_DUPLICATED_X") ||
+        tg_mtproto_rpc_error_ends_session("") ||
+        tg_mtproto_rpc_error_ends_session(0)) {
+        puts("mtproto self-test: session-closing errors misread");
+        return 2;
     }
     /* Pin message 77 in that group, silently, then unpin it: 24 bytes. */
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));

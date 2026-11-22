@@ -334,7 +334,9 @@ exchange), so it is made elsewhere:
    Amigram-TUI, and data/telegram-peers.txt too if you want the
    chat list ready. Never share telegram-auth.bin.
 3. Copy this drawer to a writable volume and double-click
-   Amigram-TUI. The account stays usable on both machines.
+   Amigram-TUI. The account stays usable on both machines, one at a
+   time: Telegram closes for good a session it sees in two places at
+   once.
 
 With a cloud password (2FA), checking it takes about 35 minutes on a
 stock A1200 and much less on faster machines. The dots show it working,
@@ -354,7 +356,8 @@ Diffie-Hellman), quindi si fa altrove:
    chat gia' pronta. Non condividere mai telegram-auth.bin.
 3. Copia questo cassetto su un volume scrivibile e fai doppio click su
    Amigram-TUI. L'account resta usabile su tutte e due le
-   macchine.
+   macchine, una alla volta: Telegram chiude per sempre una sessione
+   che vede in due posti insieme.
 
 Con una password cloud (2FA), il controllo richiede circa 35 minuti su
 un A1200 liscio e molto meno sulle macchine piu' veloci. I puntini
@@ -1337,8 +1340,11 @@ $notes_en
 Privacy
 -------
 telegram-auth.bin is your logged-in session: never share it, and never
-use someone else's. In screenshots hide phone numbers, codes, passwords
-and private messages.
+use someone else's. Use it on one computer at a time: Telegram closes
+for good a session it sees in two places at once, and Amigram then
+offers a new login (the old file is kept as telegram-auth-closed.bin).
+In screenshots hide phone numbers, codes, passwords and private
+messages.
 
 The client carries its own Telegram api credentials. To use yours, put
 them in data/telegram-api.txt: two lines, api_id then api_hash.
@@ -1426,7 +1432,10 @@ $notes_it
 Privacy
 -------
 telegram-auth.bin e' la tua sessione: non condividerlo mai e non usare
-quello di qualcun altro. Negli screenshot nascondi numeri di telefono,
+quello di qualcun altro. Usalo su un computer alla volta: Telegram chiude
+per sempre una sessione che vede in due posti insieme, e allora Amigram
+propone un nuovo accesso (il vecchio file resta come
+telegram-auth-closed.bin). Negli screenshot nascondi numeri di telefono,
 codici, password e messaggi privati.
 
 Il client ha le sue credenziali api di Telegram. Per usare le tue,
@@ -1611,7 +1620,8 @@ GETTING STARTED
    emulator: the login's key exchange is too much for a 68000.
 2. Copy this drawer to a writable volume of the 68000 machine, then copy
    telegram-auth.bin and the data drawer from the other setup into it.
-3. Double-click Amigram-TUI. The account stays usable on both.
+3. Double-click Amigram-TUI. The account stays usable on both, one
+   at a time: Telegram closes a session seen in two places at once.
 
 telegram-auth.bin holds your login. Never share it: whoever has it is in
 your Telegram account. The archive has full manuals in English and

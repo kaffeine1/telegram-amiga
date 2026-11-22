@@ -14471,6 +14471,46 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
 /* When the update notice is next offered a look (0 = at the first chance). */
 static time_t tg_gui_update_next = (time_t)0;
 
+/* Telegram has closed the session for good (tg_gui_session_closed_reason):
+   once, a requester says so and offers the new login, which puts the auth
+   file aside and quits, so the next start asks for the phone number.
+   "Later" (or ESC) leaves the file where it is; the next start asks again
+   at its first request. 1 = quit now. */
+static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
+{
+    static char body[480];
+    struct EasyStruct es;
+    LONG pick;
+
+    sprintf(body,
+            "Telegram has closed this session (%.31s).\n\n"
+            "That happens when the same telegram-auth.bin is used on two\n"
+            "computers at the same time, or when the session is ended\n"
+            "from another device. Telegram does not open it again: a new\n"
+            "login is needed.\n\n"
+            "Log in again puts the old file aside as\n"
+            "telegram-auth-closed.bin and quits: the next start asks\n"
+            "for your phone number.",
+            tg_gui_session_closed_reason());
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    es.es_Title = (APTR)"Session closed";
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)"Log in again|Later";
+    pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
+    if (pick == 1L) {
+        if (tg_gui_session_closed_put_aside() == 0) {
+            return 1;
+        }
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Move telegram-auth.bin away to log in");
+        return 0;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Session closed: restart Amigram to log in");
+    return 0;
+}
+
 static void tg_gui_window_poll_session(const tg_gui_state *state,
                                        time_t session_boot,
                                        unsigned long watch_seconds,
@@ -16052,6 +16092,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     int timer_pending = 0;
     int timer_fast = 0;
     int caret_ticks;
+    int closed_asked = 0; /* the session-closed requester came once */
     time_t xfer_mark;          /* rate window start (transfer progress) */
     unsigned long xfer_bytes;  /* bytes at xfer_mark */
     unsigned long xfer_kbs;    /* last computed KB/s, 0 = not yet known */
@@ -20846,6 +20887,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     watch_boot_seconds, watch_boot_grace,
                     last_key_time, &last_receive_drain,
                     &last_session_poll, &session_dirty, &header_dirty);
+            }
+        }
+        /* Telegram closed the session for good: said once, with the new
+           login on offer. */
+        if (!done && !closed_asked && state->mode == TG_GUI_MODE_CHAT &&
+            tg_gui_session_closed_reason()[0] != '\0') {
+            closed_asked = 1;
+            if (tg_gui_window_session_closed(ctx.window, state)) {
+                done = 1;
+            } else {
+                session_dirty = 1;
             }
         }
         /* While keys are flowing, a slow network-driven repaint waits for a

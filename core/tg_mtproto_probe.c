@@ -5443,6 +5443,50 @@ static int tg_mtproto_ensure_saved_auth_context(
     return 0;
 }
 
+/* A session Telegram has closed for good (tg_mtproto_rpc_error_ends_session):
+   the window's auth file, watched while the window's session is open, and
+   the word Telegram used once it came. From then on a request with that
+   key stops here, without a connection: the same answer came back every
+   two seconds for as long as the window stayed open, and the window said
+   nothing. Keys of other datacenters (data/telegram-auth-dc<N>.bin) are
+   not watched: theirs is a different story, told on every run again. */
+static char tg_gui_closed_auth_file[96];
+static char tg_gui_closed_reason[32];
+
+static int tg_gui_closed_watches(const char *auth_file)
+{
+    return auth_file != 0 && tg_gui_closed_auth_file[0] != '\0' &&
+           strcmp(auth_file, tg_gui_closed_auth_file) == 0;
+}
+
+/* Every answer that came with the watched key passes here. */
+static void tg_gui_closed_note(const char *auth_file,
+                               const tg_mtproto_rpc_result *result)
+{
+    char message[48];
+    long code = 0L;
+
+    if (result == 0 || tg_gui_closed_reason[0] != '\0' ||
+        result->result_constructor != TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
+        !tg_gui_closed_watches(auth_file)) {
+        return;
+    }
+    message[0] = '\0';
+    if (tg_mtproto_parse_rpc_error(result->result_body - 4U,
+                                   result->result_body_length + 4U, &code,
+                                   message, sizeof(message)) !=
+        TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if (tg_mtproto_rpc_error_ends_session(message)) {
+        char line[64];
+
+        sprintf(tg_gui_closed_reason, "%.31s", message);
+        sprintf(line, "session: closed by Telegram (%.31s)", message);
+        tg_gui_log(line);
+    }
+}
+
 static int tg_mtproto_send_saved_query_on_context(
     const char *host,
     const char *port,
@@ -5474,6 +5518,10 @@ static int tg_mtproto_send_saved_query_on_context(
         }
         return 2;
     }
+    if (tg_gui_closed_reason[0] != '\0' && tg_gui_closed_watches(auth_file)) {
+        sprintf(tg_mtproto_query_fail, "%.31s", tg_gui_closed_reason);
+        return 2;
+    }
     if (tg_mtproto_ensure_saved_auth_context(host, port, auth_file,
                                              dc_id_text, context, stream,
                                              label) != 0) {
@@ -5502,6 +5550,7 @@ static int tg_mtproto_send_saved_query_on_context(
         return qrc == TG_MTPROTO_QUERY_SOFT_FAIL ?
             TG_MTPROTO_QUERY_SOFT_FAIL : 2;
     }
+    tg_gui_closed_note(auth_file, result);
     /* Only rewrite the authorization file if server_salt changed (after
        bad_server_salt). session_id/seq_no/last_msg_id are refreshed on every
        context load anyway. */
@@ -5517,6 +5566,179 @@ static int tg_mtproto_send_saved_query_on_context(
     }
     return 0;
 }
+
+/* What the window shows when Telegram has closed the session: the word it
+   used, "" while the session lives. */
+const char *tg_gui_session_closed_reason(void)
+{
+    return tg_gui_closed_reason;
+}
+
+/* The closed session's auth file goes aside as telegram-auth-closed.bin,
+   next to it (an older one of that name is replaced), so the next start
+   asks for the phone number. Nothing is deleted. 0 = done. */
+int tg_gui_session_closed_put_aside(void)
+{
+    char target[sizeof(tg_gui_closed_auth_file) + 32];
+    const char *file = tg_gui_closed_auth_file;
+    const char *name = file;
+    const char *p;
+
+    if (file[0] == '\0' || tg_gui_closed_reason[0] == '\0') {
+        return 2;
+    }
+    for (p = file; *p != '\0'; ++p) {
+        if (*p == '/' || *p == ':') {
+            name = p + 1;
+        }
+    }
+    sprintf(target, "%.*stelegram-auth-closed.bin", (int)(name - file), file);
+    if (strcmp(target, file) == 0) {
+        return 2;
+    }
+    (void)remove(target);
+    if (rename(file, target) != 0) {
+        return 2;
+    }
+    tg_gui_log("session: auth file put aside");
+    return 0;
+}
+
+#if !defined(TG_NO_SELFTEST)
+/* An rpc_error as it comes off the wire: constructor, code, message. */
+static unsigned long tg_gui_closed_test_error(unsigned char *buf, long code,
+                                              const char *message)
+{
+    unsigned long n = (unsigned long)strlen(message);
+    unsigned long len;
+
+    buf[0] = 0x19U;
+    buf[1] = 0xcaU;
+    buf[2] = 0x44U;
+    buf[3] = 0x21U;
+    buf[4] = (unsigned char)(code & 0xff);
+    buf[5] = (unsigned char)((code >> 8) & 0xff);
+    buf[6] = 0U;
+    buf[7] = 0U;
+    buf[8] = (unsigned char)n;
+    memcpy(buf + 9, message, (size_t)n);
+    len = 9UL + n;
+    while ((len & 3UL) != 0UL) {
+        buf[len++] = 0U;
+    }
+    return len;
+}
+
+/* The closed session: a flood wait and a key of another datacenter leave
+   it open; AUTH_KEY_DUPLICATED on the window's key closes it, and the next
+   request then stops before any connection, with Telegram's word where a
+   status line looks for it. A second closing word does not replace the
+   first. Then the file goes aside under its new name, in the drawer of
+   the watched file. */
+static int tg_gui_closed_self_test(void)
+{
+    static tg_mtproto_auth_context ctx;
+    unsigned char buf[64];
+    unsigned char query[4] = { 1U, 2U, 3U, 4U };
+    tg_mtproto_rpc_result result;
+    char saved_file[sizeof(tg_gui_closed_auth_file)];
+    char saved_reason[sizeof(tg_gui_closed_reason)];
+    FILE *f;
+    int ok = 1;
+    int rc;
+
+    strcpy(saved_file, tg_gui_closed_auth_file);
+    strcpy(saved_reason, tg_gui_closed_reason);
+    strcpy(tg_gui_closed_auth_file, "tg-closed-test-auth.bin");
+    tg_gui_closed_reason[0] = '\0';
+    memset(&result, 0, sizeof(result));
+    result.result_constructor = TG_MTPROTO_RPC_ERROR_CONSTRUCTOR;
+    result.result_body = buf + 4;
+
+    result.result_body_length =
+        tg_gui_closed_test_error(buf, 420L, "FLOOD_WAIT_5") - 4UL;
+    tg_gui_closed_note("tg-closed-test-auth.bin", &result);
+    ok = ok && tg_gui_closed_reason[0] == '\0';
+    result.result_body_length =
+        tg_gui_closed_test_error(buf, 406L, "AUTH_KEY_DUPLICATED") - 4UL;
+    tg_gui_closed_note("data/telegram-auth-dc2.bin", &result);
+    ok = ok && tg_gui_closed_reason[0] == '\0';
+    tg_gui_closed_note("tg-closed-test-auth.bin", &result);
+    ok = ok && strcmp(tg_gui_closed_reason, "AUTH_KEY_DUPLICATED") == 0;
+    result.result_body_length =
+        tg_gui_closed_test_error(buf, 401L, "SESSION_REVOKED") - 4UL;
+    tg_gui_closed_note("tg-closed-test-auth.bin", &result);
+    ok = ok && strcmp(tg_gui_closed_reason, "AUTH_KEY_DUPLICATED") == 0;
+
+    memset(&ctx, 0, sizeof(ctx));
+    tg_mtproto_query_fail[0] = '\0';
+    rc = tg_mtproto_send_saved_query_on_context(
+        "127.0.0.1", "1", "1", "tg-closed-test-auth.bin", "4", &ctx, query,
+        sizeof(query), &result, stdout, "closed self-test", 1U);
+    ok = ok && rc == 2 && !ctx.connection_open &&
+         strcmp(tg_mtproto_query_fail, "AUTH_KEY_DUPLICATED") == 0;
+    tg_mtproto_query_fail[0] = '\0';
+    ok = ok && strcmp(tg_gui_session_closed_reason(),
+                      "AUTH_KEY_DUPLICATED") == 0;
+
+    /* Aside, in a drawer of its own so that no real file of the current
+       one is touched: the file renamed, an older closed one replaced. */
+    (void)mkdir("tg-closed-test", 0777);
+    strcpy(tg_gui_closed_auth_file, "tg-closed-test/auth.bin");
+    f = fopen("tg-closed-test/telegram-auth-closed.bin", "wb");
+    if (f != 0) {
+        fputs("old", f);
+        fclose(f);
+    }
+    f = fopen("tg-closed-test/auth.bin", "wb");
+    if (f != 0) {
+        fputs("key", f);
+        fclose(f);
+    }
+    ok = ok && f != 0 && tg_gui_session_closed_put_aside() == 0;
+    f = fopen("tg-closed-test/auth.bin", "rb");
+    if (f != 0) {
+        fclose(f);
+        ok = 0;
+    }
+    f = fopen("tg-closed-test/telegram-auth-closed.bin", "rb");
+    if (f == 0) {
+        ok = 0;
+    } else {
+        char got[8];
+        size_t n = fread(got, 1, sizeof(got) - 1, f);
+
+        got[n] = '\0';
+        fclose(f);
+        ok = ok && strcmp(got, "key") == 0;
+    }
+    (void)remove("tg-closed-test/telegram-auth-closed.bin");
+    f = fopen("tg-closed-test/auth.bin", "wb");
+    if (f != 0) {
+        fputs("key", f);
+        fclose(f);
+    }
+    /* Nothing goes aside while the session is not closed. */
+    tg_gui_closed_reason[0] = '\0';
+    ok = ok && tg_gui_session_closed_put_aside() == 2;
+    f = fopen("tg-closed-test/auth.bin", "rb");
+    if (f == 0) {
+        ok = 0;
+    } else {
+        fclose(f);
+    }
+    (void)remove("tg-closed-test/auth.bin");
+    (void)remove("tg-closed-test");
+
+    strcpy(tg_gui_closed_auth_file, saved_file);
+    strcpy(tg_gui_closed_reason, saved_reason);
+    if (!ok) {
+        puts("probe self-test: closed session not handled");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 static int tg_mtproto_send_saved_query(const char *host,
                                        const char *port,
@@ -23529,6 +23751,9 @@ int tg_mtproto_probe_self_test(void)
     if (tg_mtproto_first_contact_self_test() != 0) {
         return 2;
     }
+    if (tg_gui_closed_self_test() != 0) {
+        return 2;
+    }
     if (tg_mtproto_display_text_self_test() != 0) {
         return 2;
     }
@@ -26148,6 +26373,13 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
     tg_gui_session_state.port = "443";
     tg_gui_session_state.dc_id_text = dc_id_text;
     tg_gui_session_state.auth_file = auth_file;
+    /* A new session, a new watch: the window's key is the one to tell
+       closed for good, nothing is closed yet. */
+    tg_gui_closed_reason[0] = '\0';
+    tg_gui_closed_auth_file[0] = '\0';
+    if (strlen(auth_file) < sizeof(tg_gui_closed_auth_file)) {
+        strcpy(tg_gui_closed_auth_file, auth_file);
+    }
     tg_gui_session_state.api_file = api_file;
     tg_gui_session_state.peer_cache_file = peer_cache_file;
 
@@ -42760,6 +42992,8 @@ void tg_gui_session_close(void)
         tg_gui_draft_leave(stdout);
     }
     tg_gui_session_link_failed = 0UL;
+    tg_gui_closed_auth_file[0] = '\0';
+    tg_gui_closed_reason[0] = '\0';
     tg_mtproto_avatar_store_save(); /* keep the previews for next run */
     tg_gui_photo_queue_reset();
     tg_gui_topic_forget(); /* no topic outlives the session */

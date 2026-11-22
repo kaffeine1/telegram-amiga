@@ -261,6 +261,16 @@ int tg_gui_session_update_possible(void);
 int tg_gui_session_update_enabled(void);
 void tg_gui_session_update_set_enabled(int on);
 const char *tg_gui_session_update_newer(void);
+
+/* Telegram's word when it has closed this session for good
+   (AUTH_KEY_DUPLICATED: the same key in two places at once,
+   SESSION_REVOKED, AUTH_KEY_UNREGISTERED...), "" while the session lives.
+   Once closed, no request with the window's key leaves any more. */
+const char *tg_gui_session_closed_reason(void);
+/* Puts the closed session's auth file aside as telegram-auth-closed.bin
+   in the same drawer, so the next start asks for the phone number again.
+   0 = done, 2 = nothing closed or the rename failed. */
+int tg_gui_session_closed_put_aside(void);
 int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream);
 /* Describe the current/last upload choice, including a failed start. */
 int tg_gui_session_transfer_requested_photo(void);
