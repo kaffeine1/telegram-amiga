@@ -7734,6 +7734,9 @@ static int tg_gui_window_topic_needed(tg_gui_state *state,
    fetch the history. The instant first paint keeps the switch responsive on a
    slow link instead of the window appearing frozen on the old chat until the
    load finishes. */
+static void tg_gui_window_archive_more(tg_gui_state *state,
+                                       tg_gui_backend *backend, int next);
+
 static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
                                          tg_gui_backend *backend)
 {
@@ -7747,6 +7750,11 @@ static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
     if (tg_gui_topics_listed(state)) {
         /* the rows are a forum's topics, not chats */
         tg_gui_window_topic_pick(state, sel, backend, 1);
+        return;
+    }
+    if (state->chats[sel].index == TG_GUI_ARCHIVE_MORE_INDEX) {
+        /* the last row of a large Archive: the rest of it */
+        tg_gui_window_archive_more(state, backend, 0);
         return;
     }
     tg_gui_chat_touched = 1; /* a chat opened on purpose is one to read */
@@ -12978,6 +12986,54 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
     tg_gui_window_paint(state, backend);
 }
 
+/* The rest of an Archive larger than its view ("More archived chats...",
+   next = 0), or the chats after the ones listed (the same row at the end of
+   that list, next = 1): read from Telegram and listed like the results of
+   an online search, the search box focused, so a click or ENTER opens one
+   and ESC goes back to the Archive. */
+static void tg_gui_window_archive_more(tg_gui_state *state,
+                                       tg_gui_backend *backend, int next)
+{
+    char line[TG_GUI_NAME_MAX];
+    int n;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Reading the archive...");
+    tg_gui_window_paint(state, backend);
+    n = tg_gui_session_archive_more(next, stdout);
+    if (n <= 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           n < 0 ? "Could not read the archive (network?)"
+                                 : "No more archived chats");
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    state->search_active = 1; /* ESC goes back, as from a search */
+    state->msg_search_active = 0;
+    state->search_query[0] = '\0';
+    state->search_caret = 0;
+    tg_gui_window_load_search_results(state);
+    if (tg_gui_session_archive_more_left() &&
+        state->chat_count < TG_GUI_MAX_CHATS) {
+        tg_gui_chat *row = &state->chats[state->chat_count];
+
+        memset(row, 0, sizeof(*row));
+        tg_gui_window_copy(row->name, sizeof(row->name),
+                           "More archived chats...");
+        row->initials[0] = '>';
+        row->initials[1] = '\0';
+        row->index = TG_GUI_ARCHIVE_MORE_INDEX;
+        state->chat_count += 1;
+    }
+    state->nav_chat = -1;
+    state->chat_scroll = 0;
+    state->chat_scroll_to_sel = 1;
+    sprintf(line, "Archive: %d chat%s - click one, ESC goes back",
+            n % 10000, n == 1 ? "" : "s");
+    tg_gui_window_copy(state->status, sizeof(state->status), line);
+    tg_gui_window_paint(state, backend);
+}
+
 /* --- Find in chat (messages.search) ----------------------------------- */
 
 /* Find in chat: the sidebar search box searches the open chat's messages.
@@ -16948,7 +17004,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         }
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Amiga+Q quits");
+                                           state->archive_view
+                                               ? "Archive - ESC goes back"
+                                               : "Live - F1-F10 chats, "
+                                                 "Amiga+Q quits");
                     }
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 8) { /* BACKSPACE: delete BEFORE the caret */
@@ -16991,7 +17050,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         /* The online picker already contains concrete results:
                            ENTER chooses the highlighted row instead of rerunning
                            the same network search. */
-                        if (state->forward_pick_active) {
+                        if (state->chats[state->selected_chat].index ==
+                            TG_GUI_ARCHIVE_MORE_INDEX) {
+                            tg_gui_window_archive_more(state, &backend, 1);
+                        } else if (state->forward_pick_active) {
                             tg_gui_window_forward_online_result(
                                 state, &backend, state->selected_chat);
                         } else {
@@ -18441,7 +18503,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                     if (hit >= 0 && hit < state->chat_count &&
                         !state->in_search && !state->in_filter &&
-                        !tg_gui_topics_listed(state)) {
+                        !tg_gui_topics_listed(state) &&
+                        state->chats[hit].index !=
+                            TG_GUI_ARCHIVE_MORE_INDEX) {
                         tg_gui_notify_override value;
                         const tg_gui_chat *chat = &state->chats[hit];
 
@@ -19387,7 +19451,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->chats[src].index !=
                                     TG_GUI_SAVED_PEER_INDEX &&
                                 state->chats[dest].index !=
-                                    TG_GUI_SAVED_PEER_INDEX) {
+                                    TG_GUI_SAVED_PEER_INDEX &&
+                                state->chats[src].index !=
+                                    TG_GUI_ARCHIVE_MORE_INDEX &&
+                                state->chats[dest].index !=
+                                    TG_GUI_ARCHIVE_MORE_INDEX) {
                                 /* Hidden rows are absent from the sidebar, so
                                    use each visible row's stable cache index. */
                                 (void)tg_gui_session_reorder_chat(
@@ -19660,7 +19728,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (hit >= 0 && state->in_search) {
                         /* Picker: a normal search opens the result; forwarding
                            caches it as a destination without opening/unhiding. */
-                        if (state->forward_pick_active) {
+                        if (hit < state->chat_count &&
+                            state->chats[hit].index ==
+                                TG_GUI_ARCHIVE_MORE_INDEX) {
+                            tg_gui_window_archive_more(state, &backend, 1);
+                        } else if (state->forward_pick_active) {
                             tg_gui_window_forward_online_result(state, &backend,
                                                                 hit);
                         } else {

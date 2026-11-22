@@ -271,6 +271,11 @@ void tg_gui_requester_text(char *dest, unsigned long size, const char *src,
    Messages is "outgoing", yet everything there is yours to edit/delete). */
 #define TG_GUI_SAVED_PEER_INDEX 0xfffffffeUL
 
+/* Sidebar row index of "More archived chats...", the last row of the Archive
+   view when the Archive is larger than the view: not a chat, a click lists
+   the rest (tg_gui_session_archive_more). */
+#define TG_GUI_ARCHIVE_MORE_INDEX 0xfffffffdUL
+
 /* New-message notifications: what tells the user about a message in a chat
    other than the open one. Each mode includes the ones before it. */
 #define TG_GUI_NOTIFY_OFF TG_NOTIFY_OFF
@@ -1375,6 +1380,7 @@ int tg_gui_open_chat_is_self(const tg_gui_state *state);
    background, with no bubble around it. */
 int tg_gui_message_is_sticker_still(const tg_gui_message *message);
 #define TG_GUI_STICKER_MAX_W 160 /* as wide as a sticker is drawn */
+
 
 /* Selecting several messages. begin: the mode starts with message `mi`
    chosen (a reply or an edit under way is dropped). toggle: a click on

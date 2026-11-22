@@ -638,7 +638,9 @@ Chats
   Archived chats (Amiga+A) shows, and so does a click on the line
   "Archived chats" at the top of the list. That line says how many
   archived chats have something unread, in grey while they are all
-  muted. ESC goes back to the chats.
+  muted. ESC goes back to the chats. A large Archive shows its most
+  recent chats and ends with "More archived chats...": a click lists
+  the rest, a click on one opens it, ESC goes back to the Archive.
 - What you leave typed in a chat stays there as its draft, on Telegram
   too, with the message it replies to, and the chat list shows it.
   Saved Messages keeps one as well.
@@ -956,7 +958,9 @@ Chat
   Chats > Archived chats (Amiga+A) o con un clic sulla riga "Archived
   chats" in cima alla lista. Quella riga dice quante chat archiviate
   hanno qualcosa da leggere, in grigio se sono tutte silenziate. ESC
-  torna alle chat.
+  torna alle chat. Un Archivio grande mostra le chat piu' recenti e
+  finisce con "More archived chats...": un clic elenca le altre, un clic
+  su una la apre, ESC torna all'Archivio.
 - Quello che lasci scritto in una chat resta come sua bozza, anche su
   Telegram, con il messaggio a cui risponde, e la lista chat la mostra.
   Anche i Messaggi salvati tengono la loro.

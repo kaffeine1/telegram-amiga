@@ -384,6 +384,14 @@ int tg_gui_session_archive_partial(void);    /* 1: the last read was cut short *
    number of archived chats known, -1 when the fetch failed. No redraw. */
 int tg_gui_session_archive_refresh(FILE *stream);
 
+/* An Archive larger than its view: as much of it as the online picker holds,
+   from its newest chat, or (next = 1) the chats after the ones read last;
+   listed like the results of an online search (tg_gui_session_search_name,
+   tg_gui_session_search_open_result). How many, 0 = none more, -1 = could
+   not read. more_left: 1 when there are still more after those. */
+int tg_gui_session_archive_more(int next, FILE *stream);
+int tg_gui_session_archive_more_left(void);
+
 /* Archives (1) or brings back to the main list (0) the chat at this 1-based
    cache index, on Telegram, then redraws the list. 0 = done, 2 = failed. */
 int tg_gui_session_set_archived(unsigned long peer_index, int archived,

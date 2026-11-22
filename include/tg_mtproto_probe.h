@@ -275,6 +275,9 @@ int tg_mtproto_chat_list_parse(const char *path, unsigned long current_index,
 /* F10: append the pinned "Saved Messages" row (self chat) as the last row. */
 void tg_gui_saved_messages_row(tg_chat_list_row *rows, int *count, int max);
 
+/* The "More archived chats..." row at the end of the Archive view. */
+void tg_gui_archive_more_row(tg_chat_list_row *rows, int *count, int max);
+
 /* Golden parity check for the chat-list renderer: parses a fixed peer cache and
    asserts the grouped console output byte-for-byte. Host/CI runnable. */
 int tg_mtproto_chat_list_self_test(void);

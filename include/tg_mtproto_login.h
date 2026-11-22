@@ -499,10 +499,12 @@ typedef struct tg_mtproto_dialog_peer_list {
 /* Persisted chat-cache capacity (telegram-peers.txt). Raised so the first-login
    dialog sweep can keep more of a congested account; m68k stays lower for RAM
    (each entry ~248 bytes, and several static caches are sized by this). */
+#ifndef TG_MTPROTO_PEER_CACHE_MAX /* overridable for live checks */
 #if defined(__m68k__)
 #define TG_MTPROTO_PEER_CACHE_MAX 64U
 #else
 #define TG_MTPROTO_PEER_CACHE_MAX 128U
+#endif
 #endif
 
 typedef struct tg_mtproto_peer_cache_entry {

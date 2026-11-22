@@ -88,6 +88,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   it opens, and a message sent there deletes it. The drafts are asked
   once when the first chat opens (one request), and the updates keep
   them current.
+- More than the most recent chats of a large Archive. Its view shows
+  the 32 most recent (16 on 68k) and then ends with "More archived
+  chats...": a click lists the rest a part at a time (about 90 chats,
+  30 on 68k), and the same row at the end of a part goes on with the
+  next. A click on one opens it, and it joins the Archive's view; ESC
+  goes back to the Archive.
 
 ### Changed
 - A chat no longer stays quiet for half a minute after it rang (a tester

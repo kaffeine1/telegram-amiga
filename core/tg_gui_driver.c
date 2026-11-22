@@ -984,6 +984,11 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         tg_gui_driver_copy_latin1(chat->name, sizeof(chat->name), display);
         tg_gui_driver_initials(chat->initials, sizeof(chat->initials),
                                chat->name);
+        if (rows[i].index == TG_GUI_ARCHIVE_MORE_INDEX) {
+            /* not a chat: the mark of the rows that go further */
+            chat->initials[0] = '>';
+            chat->initials[1] = '\0';
+        }
         chat->avatar_color = tg_gui_driver_color_for(chat->name);
         chat->unread = (rows[i].unread > 0UL) ? (int)rows[i].unread : 0;
         chat->index = rows[i].index;

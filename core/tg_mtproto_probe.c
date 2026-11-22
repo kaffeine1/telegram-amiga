@@ -24198,6 +24198,30 @@ static int tg_gui_hidden_projection_self_test(void)
         }
     }
     if (ok) {
+        /* A larger Archive than its view ends with the row to the rest;
+           in a full list the last chat makes room for it. */
+        static tg_chat_list_row more[3];
+        int n = 2;
+
+        memset(more, 0, sizeof(more));
+        more[0].index = 1UL;
+        more[1].index = 2UL;
+        tg_gui_archive_more_row(more, &n, 3);
+        if (n != 3 || more[2].index != TG_GUI_ARCHIVE_MORE_INDEX ||
+            strcmp(more[2].name, "More archived chats...") != 0 ||
+            more[1].index != 2UL) {
+            puts("probe self-test: the Archive's row to the rest");
+            ok = 0;
+        }
+        more[2].index = 3UL;
+        tg_gui_archive_more_row(more, &n, 3);
+        if (n != 3 || more[2].index != TG_GUI_ARCHIVE_MORE_INDEX ||
+            more[1].index != 2UL) {
+            puts("probe self-test: the Archive's row to the rest, list full");
+            ok = 0;
+        }
+    }
+    if (ok) {
         count = tg_gui_chat_list_project(cache_path, hidden_path, 0UL, rows,
                                          4, &missing, 1, 1);
         if (missing || count != 3 || rows[1].index != 2UL ||
@@ -28001,6 +28025,10 @@ static void tg_gui_session_reload_chats(void)
         tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
     }
     tg_gui_pins_apply(rows, count);
+    if (tg_gui_archive_view && tg_gui_archive_partial) {
+        /* A larger Archive than its view: the rest one click away. */
+        tg_gui_archive_more_row(rows, &count, TG_CHAT_LIST_MAX);
+    }
     /* ALWAYS fire, even with count 0: skipping the callback on an emptied
        list left the window's chat_count stale, and the remove flow then
        opened a neighbour from rows that no longer existed (stuck UI). */
@@ -29510,6 +29538,25 @@ void tg_gui_saved_messages_row(tg_chat_list_row *rows, int *count, int max)
     *count += 1;
 }
 
+/* The last row of the Archive view when the Archive holds more than the
+   view: "More archived chats...", not a chat (TG_GUI_ARCHIVE_MORE_INDEX). */
+void tg_gui_archive_more_row(tg_chat_list_row *rows, int *count, int max)
+{
+    tg_chat_list_row *row;
+
+    if (rows == 0 || count == 0 || *count < 0 || max <= 0) {
+        return;
+    }
+    if (*count >= max) {
+        *count = max - 1; /* the row stays: it leads to the others */
+    }
+    row = &rows[*count];
+    memset(row, 0, sizeof(*row));
+    row->index = TG_GUI_ARCHIVE_MORE_INDEX;
+    strcpy(row->name, "More archived chats...");
+    *count += 1;
+}
+
 /* Public: rebuild the sidebar from the cached chat list (peer-cache file, no
    network) -- used to restore the real list after cancelling the search picker. */
 void tg_gui_session_refresh_chats(void)
@@ -29618,12 +29665,15 @@ int tg_gui_session_remove_chat(unsigned long peer_index, FILE *stream)
    the deep dialogs parse overflowed. Small getHistory replies always worked
    there, which fits that reading exactly. So the reload runs on MorphOS
    too, with the smallest pages of any lane to keep each reply modest. */
+#ifndef TG_GUI_RELOAD_PAGE /* overridable: a live check of the paging with
+                              tiny pages on the test account */
 #if defined(__MORPHOS__) || defined(__MORPHOS)
 #define TG_GUI_RELOAD_PAGE "10"
 #define TG_GUI_RELOAD_PAGES 12
 #else
 #define TG_GUI_RELOAD_PAGE "30"
 #define TG_GUI_RELOAD_PAGES 8
+#endif
 #endif
 
 int tg_gui_session_reload_chat_list(FILE *stream)
@@ -30779,13 +30829,31 @@ int tg_gui_session_archive_partial(void)
    seen are added to the set and the others are left as they were. Returns
    the number of archived chats known, or -1 when the fetch failed (the set
    then stays as it was). Does not redraw the list. */
-int tg_gui_session_archive_refresh(FILE *stream)
+/* Where the next page of the Archive starts: the dialog after the last
+   one read, kept from one reading to the next "More archived chats...". */
+static unsigned long tg_gui_archive_next_date = 0UL;
+static unsigned long tg_gui_archive_next_id = 0UL;
+static unsigned long tg_gui_archive_next_pc = 0UL;
+static unsigned long tg_gui_archive_next_hi = 0UL;
+static unsigned long tg_gui_archive_next_lo = 0UL;
+static unsigned long tg_gui_archive_next_ahh = 0UL;
+static unsigned long tg_gui_archive_next_ahl = 0UL;
+static int tg_gui_archive_next_hah = 0;
+/* The last "More archived chats..." stopped before the end of the Archive. */
+static int tg_gui_archive_more_left = 0;
+
+/* Reads pages of the Archive (folder 1 of the dialog list) into
+   tg_gui_search_results, emptied first: from its newest dialog, or with
+   resume from where the last reading stopped, until want archived dialogs
+   came, the list is full or the Archive ends (*complete = 1). Each page is
+   parsed in tg_gui_probe_cache, which the caller reads back. How many
+   pages came (0 = the first one failed). */
+static int tg_gui_archive_fetch(unsigned long want, int resume,
+                                int *complete, FILE *quiet)
 {
     unsigned char query[128];
     tg_mtproto_rpc_result result;
     tg_mtproto_tl_writer writer;
-    FILE *quiet;
-    unsigned long prev_timeout;
     unsigned long page;
     unsigned long offset_date;
     unsigned long offset_id;
@@ -30799,19 +30867,12 @@ int tg_gui_session_archive_refresh(FILE *stream)
     int offset_hah;
     int iter;
     int pages;
-    int complete;
-    int cache_changed;
     static const char label[] = "gui messages.getDialogs archive";
 
-    if (!tg_gui_session_state.open || stream == 0 ||
-        tg_mtproto_parse_ulong_arg(TG_GUI_RELOAD_PAGE, &page) != 0) {
-        return -1;
+    *complete = 0;
+    if (tg_mtproto_parse_ulong_arg(TG_GUI_RELOAD_PAGE, &page) != 0) {
+        return 0;
     }
-    tg_gui_archived_load();
-    tg_gui_log("archive: refresh start");
-    quiet = tg_mtproto_open_quiet_stream(stream);
-    prev_timeout = tg_net_connect_timeout_seconds();
-    tg_net_set_connect_timeout_seconds(12UL);
     /* The pages gather in tg_gui_search_results (the online picker's list is
        replaced), each one parsed in tg_gui_probe_cache first. */
     tg_gui_search_openable_n = 0;
@@ -30821,16 +30882,15 @@ int tg_gui_session_archive_refresh(FILE *stream)
        or fewer than asked: only then is a chat missing from the fetch out
        of the Archive. A fetch that stops on a failure, on the page budget
        or on a full list is partial. */
-    complete = 0;
     gathered = 0UL;
-    offset_date = 0UL;
-    offset_id = 0UL;
-    offset_pc = 0UL;
-    offset_hi = 0UL;
-    offset_lo = 0UL;
-    offset_ahh = 0UL;
-    offset_ahl = 0UL;
-    offset_hah = 0;
+    offset_date = resume ? tg_gui_archive_next_date : 0UL;
+    offset_id = resume ? tg_gui_archive_next_id : 0UL;
+    offset_pc = resume ? tg_gui_archive_next_pc : 0UL;
+    offset_hi = resume ? tg_gui_archive_next_hi : 0UL;
+    offset_lo = resume ? tg_gui_archive_next_lo : 0UL;
+    offset_ahh = resume ? tg_gui_archive_next_ahh : 0UL;
+    offset_ahl = resume ? tg_gui_archive_next_ahl : 0UL;
+    offset_hah = resume ? tg_gui_archive_next_hah : 0;
     for (iter = 0; iter < TG_GUI_RELOAD_PAGES; ++iter) {
         const tg_mtproto_peer_cache_entry *last = 0;
         unsigned long in_page = 0UL;
@@ -30838,16 +30898,23 @@ int tg_gui_session_archive_refresh(FILE *stream)
         int rc;
         char line[96];
 
-        if (gathered >= TG_GUI_ARCHIVE_SHOWN_MAX) {
+        if (gathered >= want) {
             break; /* as many as the list will take */
+        }
+        if (tg_gui_search_results.count + page + 8UL >
+            TG_MTPROTO_PEER_CACHE_MAX) {
+            /* A page that would not fit whole: merged, its end would be
+               cut, and the next reading would go on after chats it never
+               held. It is the first of the next reading instead. */
+            break;
         }
 
         tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
         /* The pinned dialogs come with the first page only. */
         if (tg_mtproto_build_messages_get_dialogs_folder_page(
-                &writer, 1UL, pages > 0, page, offset_date, offset_id,
-                offset_pc, offset_hi, offset_lo, offset_ahh, offset_ahl,
-                offset_hah) != TG_MTPROTO_TL_OK) {
+                &writer, 1UL, pages > 0 || resume, page, offset_date,
+                offset_id, offset_pc, offset_hi, offset_lo, offset_ahh,
+                offset_ahl, offset_hah) != TG_MTPROTO_TL_OK) {
             break;
         }
         memset(&result, 0, sizeof(result));
@@ -30914,7 +30981,7 @@ int tg_gui_session_archive_refresh(FILE *stream)
                 tg_gui_search_results.count % 100000UL, offset_date != 0UL);
         tg_gui_log(line);
         if (fresh == 0UL || in_page < page) {
-            complete = 1;
+            *complete = 1;
             break;
         }
         if (offset_date == 0UL ||
@@ -30922,6 +30989,37 @@ int tg_gui_session_archive_refresh(FILE *stream)
             break; /* no way to ask the next page, or the list is full */
         }
     }
+    /* the next "More archived chats..." goes on from here */
+    tg_gui_archive_next_date = offset_date;
+    tg_gui_archive_next_id = offset_id;
+    tg_gui_archive_next_pc = offset_pc;
+    tg_gui_archive_next_hi = offset_hi;
+    tg_gui_archive_next_lo = offset_lo;
+    tg_gui_archive_next_ahh = offset_ahh;
+    tg_gui_archive_next_ahl = offset_ahl;
+    tg_gui_archive_next_hah = offset_hah;
+    return pages;
+}
+
+int tg_gui_session_archive_refresh(FILE *stream)
+{
+    FILE *quiet;
+    unsigned long prev_timeout;
+    unsigned long i;
+    int pages;
+    int complete;
+    int cache_changed;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return -1;
+    }
+    tg_gui_archived_load();
+    tg_gui_log("archive: refresh start");
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(12UL);
+    pages = tg_gui_archive_fetch(TG_GUI_ARCHIVE_SHOWN_MAX, 0, &complete,
+                                 quiet);
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (pages == 0) {
@@ -30999,6 +31097,82 @@ int tg_gui_session_archive_refresh(FILE *stream)
     tg_gui_archive_check_at = 0UL; /* read: nothing left for the check */
     tg_gui_log("archive: refresh done");
     return tg_gui_archived_count;
+}
+
+/* Public: the Archive whole, as much of it as the online list holds
+   (TG_MTPROTO_PEER_CACHE_MAX chats), from its newest chat, or with next
+   the chats after the ones the last call read. For an Archive larger
+   than its view, which shows the most recent TG_GUI_ARCHIVE_SHOWN_MAX:
+   the chats come as the results of an online search, the window lists
+   them, and a click opens one (tg_gui_session_search_open_result), which
+   then joins the view. How many, 0 = none more, -1 = could not read. */
+int tg_gui_session_archive_more(int next, FILE *stream)
+{
+    FILE *quiet;
+    unsigned long prev_timeout;
+    unsigned long i;
+    int pages;
+    int complete;
+    char line[64];
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return -1;
+    }
+    if (next && !tg_gui_archive_more_left) {
+        return 0;
+    }
+    tg_gui_archived_load();
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(12UL);
+    pages = tg_gui_archive_fetch(TG_MTPROTO_PEER_CACHE_MAX, next, &complete,
+                                 quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    /* The probe cache was scratch space: back to the real list. */
+    (void)tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
+                                          &tg_gui_probe_cache);
+    if (pages == 0) {
+        tg_gui_search_results.count = 0UL;
+        tg_gui_search_openable_n = 0;
+        tg_gui_log("archive: more failed");
+        return -1;
+    }
+    tg_gui_archive_more_left = !complete && tg_gui_archive_next_date != 0UL;
+    tg_gui_search_openable_n = 0;
+    for (i = 0UL; i < tg_gui_search_results.count &&
+                  tg_gui_search_openable_n <
+                      (int)(sizeof(tg_gui_search_openable_idx) /
+                            sizeof(tg_gui_search_openable_idx[0]));
+         ++i) {
+        tg_mtproto_peer_cache_entry *e = &tg_gui_search_results.entries[i];
+
+        if (!e->from_dialog || e->folder_id != 1UL || e->is_self ||
+            !tg_mtproto_peer_cache_entry_is_openable(e)) {
+            continue; /* the main list's pins come with the first page */
+        }
+        tg_gui_search_openable_idx[tg_gui_search_openable_n] = (int)i;
+        ++tg_gui_search_openable_n;
+        /* As the Archive's chats in the list: no top message, so a chat
+           opened from here stays out of the paging of the main list. */
+        tg_gui_search_results.entries[i].top_message = 0UL;
+        /* archived: opened, it goes to the Archive view, not the chats */
+        (void)tg_gui_archived_set(
+            e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR, e->id_hi,
+            e->id_lo, 1);
+    }
+    tg_gui_archived_save();
+    sprintf(line, "archive: more %d chats, more left %d",
+            tg_gui_search_openable_n % 100000, tg_gui_archive_more_left);
+    tg_gui_log(line);
+    return tg_gui_search_openable_n;
+}
+
+/* 1 when the last tg_gui_session_archive_more stopped before the end of the
+   Archive: the list it gave ends with a row for the next ones. */
+int tg_gui_session_archive_more_left(void)
+{
+    return tg_gui_archive_more_left;
 }
 
 /* Public: archive (archived = 1) or bring back (0) the chat at this 1-based

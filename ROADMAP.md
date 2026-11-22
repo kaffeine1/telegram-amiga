@@ -333,8 +333,12 @@ it works today:
   Archive on the main list, a thin "Archived chats" line above the pins
   that opens it (Telegram's own count from the `dialogFolder` that comes
   with `messages.getPinnedDialogs`, read again after news in an
-  archived chat, a move in or out, or leaving the Archive). Still
-  missing: more than the most recent 32 chats (16 on 68k).
+  archived chat, a move in or out, or leaving the Archive). Done after
+  0.5: more than the most recent 32 chats (16 on 68k), the view's last
+  row "More archived chats..." listing the rest like the results of an
+  online search, a part at a time (whole pages up to the list's size:
+  about 90 chats, 30 on 68k), the same row going on from where a part
+  stopped, so none is skipped).
   Fixed on the way: Reload chat list asked its later pages without the
   date of the last dialog, so the server answered with the first page
   again and the list stopped at 30 chats plus the pinned ones (10 on
