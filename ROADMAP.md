@@ -1427,7 +1427,13 @@ in the window's log (never the token): the QR login's
 answered `auth.loggedOut` with flags 0. Telegram issues no token to
 this client, or not to a session that young; the code stays, harmless,
 for the day it does. The log out itself works on 68k: the files went,
-the next start showed the QR code.
+the next start showed the QR code. The same afternoon on the Vampire:
+the QR code of the text client (its small window on the Workbench)
+scanned and signed in, the window then opened that session, a file
+downloaded with its drawer icon written and the system still alive
+(the AfA fix holds on AmiKit too), Show in drawer fell back to the
+status line as Directory Opus refuses the selection, and a third log
+out answered flags 0 as well.
 
 ## Done after 0.5: a session closed by Telegram
 

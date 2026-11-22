@@ -14672,8 +14672,7 @@ static int tg_gui_window_log_out(struct Window *win, tg_gui_state *state,
               "it keeps of the account here: telegram-auth.bin, the chat\n"
               "list, hidden chats, avatars and cached photos. Downloads\n"
               "and settings stay.\n\n"
-              "Then it quits, and the next start shows the login. A new\n"
-              "login by number on this computer may need no code.";
+              "Then it quits, and the next start shows the login.";
     es.es_GadgetFormat = (APTR)"Log out|Cancel";
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (pick != 1L) {

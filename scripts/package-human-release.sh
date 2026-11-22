@@ -256,9 +256,7 @@ prima con l'app ufficiale su un telefono."
 3. If your account has a cloud password (2FA), type it. If not, press
    Enter.
 4. The client saves the login in telegram-auth.bin, in this drawer, and
-   does not ask again. It also keeps data/telegram-future-tokens.txt:
-   with it a later login by number on this computer can go through
-   without waiting for a code."
+   does not ask again."
     login_steps_it="2. La finestra mostra un codice QR (il client testuale lo mostra in
    una piccola finestra sua sullo schermo del Workbench). Sul telefono
    apri Telegram, vai in Impostazioni > Dispositivi > Collega dispositivo
@@ -275,9 +273,7 @@ prima con l'app ufficiale su un telefono."
 3. Se il tuo account ha una password cloud (2FA), scrivila. Se no, premi
    Invio.
 4. Il client salva l'accesso in telegram-auth.bin, in questo cassetto, e
-   non te lo chiede piu'. Tiene anche data/telegram-future-tokens.txt:
-   con quello un accesso successivo col numero, su questo computer, puo'
-   passare senza aspettare il codice."
+   non te lo chiede piu'."
     shell_cmd="      Amigram --mtproto-start-file data/telegram-api.txt
         telegram-auth.bin data/phone-code-hash.txt data/telegram-peers.txt"
     if [ "$tui_icon" = "1" ]; then
@@ -937,8 +933,7 @@ Window and screen
 - "Log out..." ends the session at Telegram and removes what Amigram
   keeps of the account on this computer (telegram-auth.bin, chat list,
   hidden chats, avatars, cached photos; downloads and settings stay),
-  then quits. Telegram may hand back a token for this computer, so a new
-  login by number here can go through without a code.
+  then quits; the next start shows the login.
 
 ARexx
 - The program has an ARexx port named AMIGRAM (AMIGRAM.1 for a second
@@ -1284,9 +1279,7 @@ Finestra e schermo
 - "Log out..." chiude la sessione presso Telegram e toglie quello che
   Amigram tiene dell'account su questo computer (telegram-auth.bin,
   elenco chat, chat nascoste, avatar, foto in cache; download e
-  impostazioni restano), poi esce. Telegram puo' restituire un gettone
-  per questo computer, cosi' un nuovo accesso col numero qui puo'
-  passare senza codice.
+  impostazioni restano), poi esce; al prossimo avvio c'e' il login.
 
 ARexx
 - Il programma ha una porta ARexx di nome AMIGRAM (AMIGRAM.1 per una
