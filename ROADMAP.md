@@ -1415,8 +1415,13 @@ and `auth.sendCode` sends them in `codeSettings.logout_tokens` (flags.6,
 at most 2 KB of them in one query). The answer can then be
 `auth.sentCodeSuccess` (signed in, no code) or SESSION_PASSWORD_NEEDED
 (the cloud password step on the same key), both handled in the window
-and in the text client. Not seen live yet: it needs a login that leaves
-a token, then a login by number on the same computer.
+and in the text client. On the Vampire a QR login brought no token: the
+documentation names `auth.logOut` as where they come from ("may
+return"), the login answer only as a maybe. So Amigram got a Log out
+(Amigram menu): `auth.logOut#3e72ba19`, the token of `auth.loggedOut`
+(flags.0) kept, then the account's files removed when the session has
+closed, after its last write, and the window quits. To see live: Log
+out, then a login by number on the same computer.
 
 ## Done after 0.5: a session closed by Telegram
 

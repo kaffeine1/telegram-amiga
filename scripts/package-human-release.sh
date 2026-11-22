@@ -934,6 +934,11 @@ Window and screen
   if that screen cannot open, it falls back to a window.
 - "Iconify" (Amiga+I) leaves an icon on the Workbench; double-click it
   to come back.
+- "Log out..." ends the session at Telegram and removes what Amigram
+  keeps of the account on this computer (telegram-auth.bin, chat list,
+  hidden chats, avatars, cached photos; downloads and settings stay),
+  then quits. Telegram may hand back a token for this computer, so a new
+  login by number here can go through without a code.
 
 ARexx
 - The program has an ARexx port named AMIGRAM (AMIGRAM.1 for a second
@@ -1276,6 +1281,12 @@ Finestra e schermo
   schermo non si apre, torna alla finestra.
 - "Iconify" (Amiga+I) lascia un'icona sul Workbench; doppio click per
   tornare.
+- "Log out..." chiude la sessione presso Telegram e toglie quello che
+  Amigram tiene dell'account su questo computer (telegram-auth.bin,
+  elenco chat, chat nascoste, avatar, foto in cache; download e
+  impostazioni restano), poi esce. Telegram puo' restituire un gettone
+  per questo computer, cosi' un nuovo accesso col numero qui puo'
+  passare senza codice.
 
 ARexx
 - Il programma ha una porta ARexx di nome AMIGRAM (AMIGRAM.1 per una

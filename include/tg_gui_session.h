@@ -281,6 +281,10 @@ const char *tg_gui_session_closed_reason(void);
    in the same drawer, so the next start asks for the phone number again.
    0 = done, 2 = nothing closed or the rename failed. */
 int tg_gui_session_closed_put_aside(void);
+/* Log out: auth.logOut on the window's key, its future auth token kept;
+   the closing of the session then removes the account's files. 0 = logged
+   out (quit now), 2 = Telegram not reached. */
+int tg_gui_session_log_out(FILE *stream);
 int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream);
 /* Describe the current/last upload choice, including a failed start. */
 int tg_gui_session_transfer_requested_photo(void);

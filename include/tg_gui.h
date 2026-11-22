@@ -1142,6 +1142,9 @@ int tg_gui_photo_cache_clear_files(const char *const *paths, int count,
 /* Native cache-manager notifications. Host builds provide harmless stubs. */
 void tg_gui_window_photo_cache_file_changed(const char *path);
 void tg_gui_window_photo_cache_file_removed(const char *path);
+/* Log out: the files of a cache drawer (avatars, photos) removed, the
+   drawer itself kept. */
+void tg_gui_window_clear_drawer(const char *drawer);
 
 /* Right-click context-menu geometry/items. MINIMUM box width: the real width
    is measured from the item labels when the menu opens (state->ctx_w, see

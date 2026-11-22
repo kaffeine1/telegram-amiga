@@ -905,6 +905,16 @@ tg_mtproto_tl_status tg_mtproto_build_auth_send_code_tokens(
     const unsigned char *const *tokens,
     const unsigned long *token_lengths,
     unsigned long token_count);
+/* auth.logOut, and the future auth token of its auth.loggedOut answer
+   (body after the constructor; *out_length 0 when none). */
+tg_mtproto_tl_status tg_mtproto_build_auth_log_out(
+    tg_mtproto_tl_writer *writer);
+tg_mtproto_tl_status tg_mtproto_parse_logged_out_token(
+    const unsigned char *body,
+    unsigned long body_length,
+    unsigned char *out,
+    unsigned long out_size,
+    unsigned long *out_length);
 /* The future_auth_token of an auth.authorization (body from just after
    its constructor); *out_length 0 when Telegram gave none. */
 tg_mtproto_tl_status tg_mtproto_parse_future_auth_token(

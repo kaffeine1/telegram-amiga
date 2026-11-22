@@ -274,6 +274,7 @@ static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
 #define TG_MTPROTO_AUTH_SENT_CODE_CONSTRUCTOR 0x5e002502UL
 #define TG_MTPROTO_AUTH_SENT_CODE_SUCCESS_CONSTRUCTOR 0x2390fe44UL
 #define TG_MTPROTO_AUTH_AUTHORIZATION_CONSTRUCTOR 0x2ea2c0d4UL
+#define TG_MTPROTO_AUTH_LOGGED_OUT_CONSTRUCTOR 0xc3a2835fUL
 #define TG_MTPROTO_AUTH_SENT_CODE_PAYMENT_REQUIRED_CONSTRUCTOR 0xd7a2fcf9UL
 #define TG_MTPROTO_CONFIG_CONSTRUCTOR 0xcc1a241eUL
 #define TG_MTPROTO_ACCOUNT_PASSWORD_CONSTRUCTOR 0x957b50fbUL
@@ -5923,27 +5924,16 @@ static void tg_mtproto_future_token_put(FILE *file,
     fputc('\n', file);
 }
 
-/* Keeps the future auth token of an auth.authorization (body from just
-   after its constructor), if it carries one: first in the file, an older
-   copy of it dropped, the twenty-first left out. */
-static void tg_mtproto_future_token_note(const unsigned char *body,
-                                         unsigned long body_length)
+/* Keeps a future auth token: first in the file, an older copy of it
+   dropped, the twenty-first left out. */
+static void tg_mtproto_future_token_keep(const unsigned char *token,
+                                         unsigned long token_length)
 {
-    unsigned char token[TG_MTPROTO_FUTURE_TOKEN_BYTES];
-    unsigned long token_length = 0UL;
     unsigned long count;
     unsigned long kept = 1UL;
     unsigned long i;
     FILE *file;
 
-    if (body == 0 ||
-        tg_mtproto_parse_future_auth_token(body, body_length, token,
-                                           sizeof(token), &token_length) !=
-            TG_MTPROTO_TL_OK ||
-        token_length == 0UL) {
-        tg_mtproto_secure_zero(token, sizeof(token));
-        return;
-    }
     count = tg_mtproto_future_tokens_load();
     file = tg_file_fopen_replace(tg_mtproto_future_tokens_path, "wb");
     if (file != 0) {
@@ -5961,6 +5951,26 @@ static void tg_mtproto_future_token_note(const unsigned char *body,
         fclose(file);
     }
     tg_mtproto_future_tokens_forget();
+}
+
+/* The future auth token of an auth.authorization (body from just after its
+   constructor), kept if it carries one; the window's log says which. */
+static void tg_mtproto_future_token_note(const unsigned char *body,
+                                         unsigned long body_length)
+{
+    unsigned char token[TG_MTPROTO_FUTURE_TOKEN_BYTES];
+    unsigned long token_length = 0UL;
+
+    if (body != 0 &&
+        tg_mtproto_parse_future_auth_token(body, body_length, token,
+                                           sizeof(token), &token_length) ==
+            TG_MTPROTO_TL_OK &&
+        token_length > 0UL) {
+        tg_mtproto_future_token_keep(token, token_length);
+        tg_gui_log("login: future auth token kept");
+    } else {
+        tg_gui_log("login: no future auth token in the answer");
+    }
     tg_mtproto_secure_zero(token, sizeof(token));
 }
 
@@ -43697,18 +43707,112 @@ int tg_gui_session_tick(FILE *stream)
     return dirty;
 }
 
+/* Log out (the window's Amigram menu). Set once auth.logOut has gone
+   through, so that the closing of the session removes the account's files
+   after the last of its own writes. */
+static int tg_gui_logged_out = 0;
+
+/* What a log out removes: the keys, and what this computer keeps of the
+   account (the chat list and its archive, hidden chats and messages, chat
+   notification choices, the previews and the cached avatars and photos).
+   Downloads, settings and the future auth tokens stay. */
+static void tg_gui_logout_remove_files(void)
+{
+    char path[40];
+    unsigned long dc;
+
+    if (tg_gui_session_state.auth_file != 0) {
+        (void)remove(tg_gui_session_state.auth_file);
+    }
+    for (dc = 1UL; dc <= 5UL; ++dc) {
+        sprintf(path, "data/telegram-auth-dc%lu.bin", dc);
+        (void)remove(path);
+    }
+    (void)remove(TG_MTPROTO_LOGIN_KEY_FILE);
+    (void)remove("data/phone-code-hash.txt");
+    if (tg_gui_session_state.peer_cache_file != 0) {
+        (void)remove(tg_gui_session_state.peer_cache_file);
+    }
+    (void)remove(TG_GUI_ARCHIVED_FILE);
+    (void)remove(TG_GUI_HIDDEN_FILE);
+    (void)remove(tg_hidden_msgs_file);
+    (void)remove(TG_NOTIFY_OVERRIDE_FILE);
+    (void)remove("data/telegram-thumbs.bin");
+#if !defined(TG_NO_GUI)
+    tg_gui_window_clear_drawer("avatars");
+    tg_gui_window_clear_drawer("photos");
+#endif
+    tg_gui_log("logout: account files removed");
+}
+
+/* auth.logOut on the window's key: its answer may carry a future auth
+   token, kept for the next login by number. A session Telegram had closed
+   already counts as logged out. 0 = logged out (the window then quits and
+   the closing removes the files), 2 = Telegram not reached, nothing
+   changed. */
+int tg_gui_session_log_out(FILE *stream)
+{
+    unsigned char query[8];
+    unsigned char token[TG_MTPROTO_FUTURE_TOKEN_BYTES];
+    unsigned long token_length = 0UL;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    char emsg[48];
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_auth_log_out(&writer) != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    tg_gui_log("logout: auth.logOut");
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_gui_session_peer_request(query, writer.length, &result,
+                                     "mtproto auth.logOut", emsg,
+                                     sizeof(emsg), quiet);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 0 &&
+        result.result_constructor == TG_MTPROTO_AUTH_LOGGED_OUT_CONSTRUCTOR) {
+        if (tg_mtproto_parse_logged_out_token(result.result_body,
+                                              result.result_body_length,
+                                              token, sizeof(token),
+                                              &token_length) ==
+                TG_MTPROTO_TL_OK &&
+            token_length > 0UL) {
+            tg_mtproto_future_token_keep(token, token_length);
+            tg_gui_log("logout: future auth token kept");
+        } else {
+            tg_gui_log("logout: no future auth token in the answer");
+        }
+    } else if (rc == 1 && tg_mtproto_rpc_error_ends_session(emsg)) {
+        tg_gui_log("logout: Telegram had closed the session already");
+    } else {
+        tg_gui_log("logout: not taken");
+        return 2;
+    }
+    tg_mtproto_secure_zero(token, sizeof(token));
+    tg_gui_logged_out = 1;
+    return 0;
+}
+
 void tg_gui_session_close(void)
 {
     /* What the composer holds stays on Telegram as the open chat's draft.
        Only over a link that works: a dead one would hold the exit for the
-       length of a timeout. */
-    if (tg_gui_session_state.open && tg_gui_session_link_failed == 0UL) {
+       length of a timeout. Not after a log out: the key is gone. */
+    if (tg_gui_session_state.open && tg_gui_session_link_failed == 0UL &&
+        !tg_gui_logged_out) {
         tg_gui_draft_leave(stdout);
     }
     tg_gui_session_link_failed = 0UL;
     tg_gui_closed_auth_file[0] = '\0';
     tg_gui_closed_reason[0] = '\0';
-    tg_mtproto_avatar_store_save(); /* keep the previews for next run */
+    if (!tg_gui_logged_out) {
+        tg_mtproto_avatar_store_save(); /* keep the previews for next run */
+    }
     tg_gui_photo_queue_reset();
     tg_gui_topic_forget(); /* no topic outlives the session */
     if (!tg_gui_session_state.open) {
@@ -43756,6 +43860,10 @@ void tg_gui_session_close(void)
     tg_chat_edit_target = 0;
     tg_chat_delete_target = 0;
     tg_gui_session_state.open = 0;
+    if (tg_gui_logged_out) {
+        tg_gui_logged_out = 0;
+        tg_gui_logout_remove_files();
+    }
 }
 
 /* --- first-login flow (no saved session) -------------------------------- *

@@ -1534,6 +1534,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 /* not in a menu either: the media player line of the settings */
 #define TG_MENU_PLAYER 42
 #define TG_MENU_TOPIC_NEW 43
+#define TG_MENU_LOGOUT 44
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -3817,6 +3818,53 @@ static void tg_gui_photo_cache_begin(unsigned long limit_mb)
         tg_gui_photo_disk_cache.scan_failed = 1;
         tg_gui_photo_cache_scan_finish();
     }
+}
+
+/* Log out: the files of a cache drawer removed, the drawer kept. The names
+   are gathered a batch at a time and deleted after the scan, since a
+   directory is not to change under ExNext; a batch that deletes nothing
+   (protected files) ends it. */
+void tg_gui_window_clear_drawer(const char *drawer)
+{
+    static char names[16][120];
+    struct FileInfoBlock *fib;
+    int rounds;
+
+    if (drawer == 0 || drawer[0] == '\0' || strlen(drawer) > 8U) {
+        return;
+    }
+    fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, 0);
+    if (fib == 0) {
+        return;
+    }
+    for (rounds = 0; rounds < 1000; ++rounds) {
+        BPTR lock = Lock((CONST_STRPTR)drawer, ACCESS_READ);
+        int count = 0;
+        int deleted = 0;
+        int i;
+
+        if (lock == (BPTR)0) {
+            break;
+        }
+        if (TG_GUI_DOS_EXAMINE(lock, fib) && fib->fib_DirEntryType >= 0) {
+            while (count < 16 && TG_GUI_DOS_EXNEXT(lock, fib)) {
+                if (fib->fib_DirEntryType < 0) {
+                    sprintf(names[count++], "%s/%.107s", drawer,
+                            (const char *)fib->fib_FileName);
+                }
+            }
+        }
+        UnLock(lock);
+        for (i = 0; i < count; ++i) {
+            if (remove(names[i]) == 0) {
+                ++deleted;
+            }
+        }
+        if (count < 16 || deleted == 0) {
+            break;
+        }
+    }
+    FreeDosObject(DOS_FIB, fib);
 }
 
 static void tg_gui_photo_cache_end(void)
@@ -8546,6 +8594,8 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_ITEM,  (STRPTR)"Support development...", 0, 0, 0,
       (APTR)TG_MENU_SUPPORT },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
+    { NM_ITEM,  (STRPTR)"Log out...", 0, 0, 0,
+      (APTR)TG_MENU_LOGOUT },
     { NM_ITEM,  (STRPTR)"Quit", (STRPTR)"Q", 0, 0,
       (APTR)TG_MENU_QUIT },
 /* Edit */
@@ -14576,8 +14626,8 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
             "from another device. Telegram does not open it again: a new\n"
             "login is needed.\n\n"
             "Log in again puts the old file aside as\n"
-            "telegram-auth-closed.bin and quits: the next start asks\n"
-            "for your phone number.",
+            "telegram-auth-closed.bin and quits: the next start shows\n"
+            "the login.",
             tg_gui_session_closed_reason());
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
@@ -14595,6 +14645,49 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Session closed: restart Amigram to log in");
+    return 0;
+}
+
+/* Log out (the Amigram menu): a requester first, then auth.logOut. Once it
+   has gone through the window quits, and the closing of the session
+   removes the account's files: the next start shows the login. 1 = quit
+   now. */
+static int tg_gui_window_log_out(struct Window *win, tg_gui_state *state,
+                                 tg_gui_backend *backend)
+{
+    struct EasyStruct es;
+    LONG pick;
+
+    if (state->mode != TG_GUI_MODE_CHAT) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           "Not logged in yet");
+        return 0;
+    }
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    es.es_Title = (APTR)"Log out";
+    es.es_TextFormat =
+        (APTR)"Log out of Telegram on this computer?\n\n"
+              "Amigram ends this session at Telegram and removes what\n"
+              "it keeps of the account here: telegram-auth.bin, the chat\n"
+              "list, hidden chats, avatars and cached photos. Downloads\n"
+              "and settings stay.\n\n"
+              "Then it quits, and the next start shows the login. A new\n"
+              "login by number on this computer may need no code.";
+    es.es_GadgetFormat = (APTR)"Log out|Cancel";
+    pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
+    if (pick != 1L) {
+        return 0;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Logging out...");
+    state->status_hint[0] = '\0';
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_log_out(stdout) == 0) {
+        return 1;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       "Log out failed: Telegram not reached");
     return 0;
 }
 
@@ -18672,6 +18765,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                     (int)ctx.window->TopEdge,
                                                     want_own);
                             done = 3; /* reopen (no AppIcon) */
+                        } else if (ud == (APTR)TG_MENU_LOGOUT) {
+                            if (tg_gui_window_log_out(ctx.window, state,
+                                                      &backend)) {
+                                done = 1;
+                            } else {
+                                tg_gui_window_paint(state, &backend);
+                            }
                         } else if (ud == (APTR)TG_MENU_QUIT) {
                             done = 1;
                         }
@@ -21637,6 +21737,11 @@ void tg_gui_window_photo_cache_file_changed(const char *path)
 void tg_gui_window_photo_cache_file_removed(const char *path)
 {
     (void)path;
+}
+
+void tg_gui_window_clear_drawer(const char *drawer)
+{
+    (void)drawer; /* the host build keeps no avatars or photos */
 }
 
 void tg_gui_window_set_startup(int (*task)(tg_gui_state *state))

@@ -140,6 +140,7 @@
 #define TG_AUTH_SENT_CODE_SUCCESS_CONSTRUCTOR 0x2390fe44UL
 #define TG_AUTH_SENT_CODE_PAYMENT_REQUIRED_CONSTRUCTOR 0xd7a2fcf9UL
 #define TG_AUTH_AUTHORIZATION_CONSTRUCTOR 0x2ea2c0d4UL
+#define TG_AUTH_LOG_OUT_CONSTRUCTOR 0x3e72ba19UL
 #define TG_AUTH_AUTHORIZATION_SIGNUP_REQUIRED_CONSTRUCTOR 0x44747e9aUL
 #define TG_CONFIG_CONSTRUCTOR 0xcc1a241eUL
 #define TG_ACCOUNT_PASSWORD_CONSTRUCTOR 0x957b50fbUL
@@ -653,6 +654,50 @@ tg_mtproto_tl_status tg_mtproto_parse_future_auth_token(
         status = tg_mtproto_tl_read_u32(&reader, &skip); /* tmp_sessions */
     }
     if (status != TG_MTPROTO_TL_OK || (flags & (1UL << 2)) == 0UL) {
+        return status;
+    }
+    status = tg_mtproto_tl_read_bytes(&reader, &bytes, &length);
+    if (status != TG_MTPROTO_TL_OK) {
+        return status;
+    }
+    if (length == 0UL || length > out_size) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memcpy(out, bytes, (size_t)length);
+    *out_length = length;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* auth.logOut#3e72ba19 = auth.LoggedOut. */
+tg_mtproto_tl_status tg_mtproto_build_auth_log_out(
+    tg_mtproto_tl_writer *writer)
+{
+    return tg_mtproto_tl_write_u32(writer, TG_AUTH_LOG_OUT_CONSTRUCTOR);
+}
+
+/* auth.loggedOut#c3a2835f flags:# future_auth_token:flags.0?bytes: the
+   token, from the body after the constructor; *out_length 0 when Telegram
+   gave none. */
+tg_mtproto_tl_status tg_mtproto_parse_logged_out_token(
+    const unsigned char *body,
+    unsigned long body_length,
+    unsigned char *out,
+    unsigned long out_size,
+    unsigned long *out_length)
+{
+    tg_mtproto_tl_reader reader;
+    tg_mtproto_tl_status status;
+    unsigned long flags;
+    const unsigned char *bytes;
+    unsigned long length;
+
+    if (body == 0 || out == 0 || out_length == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    *out_length = 0UL;
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    status = tg_mtproto_tl_read_u32(&reader, &flags);
+    if (status != TG_MTPROTO_TL_OK || (flags & 1UL) == 0UL) {
         return status;
     }
     status = tg_mtproto_tl_read_bytes(&reader, &bytes, &length);
@@ -16646,6 +16691,33 @@ int tg_mtproto_login_self_test(void)
                 TG_MTPROTO_TL_OK) {
             puts("mtproto self-test: future auth token misread");
             return 2;
+        }
+        /* auth.logOut, and the token of its answer. */
+        {
+            static const unsigned char out_token[] = {
+                0x01, 0x00, 0x00, 0x00, 0x02, 0xcc, 0xdd, 0x00
+            };
+            static const unsigned char out_none[] = {
+                0x00, 0x00, 0x00, 0x00
+            };
+
+            tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+            if (tg_mtproto_build_auth_log_out(&writer) != TG_MTPROTO_TL_OK ||
+                writer.length != 4UL || query[0] != 0x19U ||
+                query[1] != 0xbaU || query[2] != 0x72U || query[3] != 0x3eU ||
+                tg_mtproto_parse_logged_out_token(out_token,
+                                                  sizeof(out_token), got,
+                                                  sizeof(got), &got_len) !=
+                    TG_MTPROTO_TL_OK ||
+                got_len != 2UL || got[0] != 0xccU || got[1] != 0xddU ||
+                tg_mtproto_parse_logged_out_token(out_none, sizeof(out_none),
+                                                  got, sizeof(got),
+                                                  &got_len) !=
+                    TG_MTPROTO_TL_OK ||
+                got_len != 0UL) {
+                puts("mtproto self-test: auth.logOut wrong");
+                return 2;
+            }
         }
     }
     /* Pin message 77 in that group, silently, then unpin it: 24 bytes. */
