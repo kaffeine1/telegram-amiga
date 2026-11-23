@@ -14691,6 +14691,21 @@ static int tg_gui_window_log_out(struct Window *win, tg_gui_state *state,
     if (tg_gui_session_log_out(stdout) == 0) {
         return 1;
     }
+    /* Telegram not reached, or a session that never opened (an offline
+       start): the files can still go from this computer. */
+    es.es_TextFormat =
+        (APTR)"Telegram could not be reached, so the session could\n"
+              "not be ended there.\n\n"
+              "Remove what Amigram keeps of the account on this\n"
+              "computer anyway? The session stays in Telegram's list\n"
+              "of devices (Settings > Devices on your phone) until\n"
+              "you end it there.";
+    es.es_GadgetFormat = (APTR)"Remove here|Cancel";
+    pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
+    if (pick == 1L) {
+        tg_gui_session_log_out_local();
+        return 1;
+    }
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Log out failed: Telegram not reached");
     return 0;

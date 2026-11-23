@@ -933,7 +933,10 @@ Window and screen
 - "Log out..." ends the session at Telegram and removes what Amigram
   keeps of the account on this computer (telegram-auth.bin, chat list,
   hidden chats, avatars, cached photos; downloads and settings stay),
-  then quits; the next start shows the login.
+  then quits; the next start shows the login. When Telegram cannot be
+  reached it offers to remove those files from this computer anyway
+  (the session then stays among your devices until you end it from
+  the phone).
 
 ARexx
 - The program has an ARexx port named AMIGRAM (AMIGRAM.1 for a second
@@ -1280,6 +1283,9 @@ Finestra e schermo
   Amigram tiene dell'account su questo computer (telegram-auth.bin,
   elenco chat, chat nascoste, avatar, foto in cache; download e
   impostazioni restano), poi esce; al prossimo avvio c'e' il login.
+  Se Telegram non si raggiunge propone di togliere comunque quei file
+  da questo computer (la sessione resta allora tra i tuoi dispositivi
+  finche' non la chiudi dal telefono).
 
 ARexx
 - Il programma ha una porta ARexx di nome AMIGRAM (AMIGRAM.1 per una
@@ -1339,7 +1345,10 @@ the caption), then drop the file's icon on the console window, or on the
 "TG drop" icon on AmigaOS 4, where the system keeps window drops for
 itself. The path appears in the input line and Enter sends. Quit with
 /quit, Ctrl+C or the close gadget; the window stays open so you can read
-the last lines, and one more click on the gadget closes it.
+the last lines, and one more click on the gadget closes it. /logout yes
+logs out of Telegram on this computer (the session ends, telegram-auth.bin
+and the chat list go, the client quits); /logout here removes those files
+when Telegram cannot be reached.
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
@@ -1430,7 +1439,10 @@ del file sulla finestra console, o sull'icona "TG drop" su AmigaOS 4,
 dove i drop sulle finestre li tiene il sistema. Il percorso compare nella
 riga di input e Invio lo manda. Per uscire: /quit, Ctrl+C o il gadget di
 chiusura; la finestra resta aperta per leggere le ultime righe, e un
-altro click sul gadget la chiude.
+altro click sul gadget la chiude. /logout yes esce da Telegram su questo
+computer (la sessione si chiude, telegram-auth.bin e l'elenco chat se ne
+vanno, il client esce); /logout here toglie quei file quando Telegram non
+si raggiunge.
 Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga

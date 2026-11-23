@@ -285,6 +285,9 @@ int tg_gui_session_closed_put_aside(void);
    the closing of the session then removes the account's files. 0 = logged
    out (quit now), 2 = Telegram not reached. */
 int tg_gui_session_log_out(FILE *stream);
+/* Log out on this computer only (Telegram not reached): the closing of the
+   session removes the account's files all the same. */
+void tg_gui_session_log_out_local(void);
 int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream);
 /* Describe the current/last upload choice, including a failed start. */
 int tg_gui_session_transfer_requested_photo(void);

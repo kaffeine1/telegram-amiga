@@ -13998,7 +13998,7 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic\n" \
-    "          /help /quit\n"
+    "          /help /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -17991,6 +17991,7 @@ static const char *const tg_chat_help_lines[] = {
     "  /topics         the topics of this group, when it is a forum",
     "  /topic n        only topic n of that list; /topic alone: all again",
     "  /topic new x    a new topic x; rename x, close, reopen: the chosen one",
+    "  /logout         log out on this computer (/logout yes)",
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
     "Support my work on Patreon: www.patreon.com/c/kaffeine1",
@@ -19165,6 +19166,15 @@ static int tg_chat_draft_of_index(const char *peer_cache_file,
     return tg_chat_draft_find_chat(*pc, *ph, *pl, tg_chat_draft_topic_now()) >= 0;
 }
 
+static int tg_mtproto_log_out_on_context(const char *host, const char *port,
+                                         const char *api_id,
+                                         const char *auth_file,
+                                         const char *dc_id_text,
+                                         tg_mtproto_auth_context *ctx,
+                                         FILE *quiet);
+static void tg_mtproto_logout_remove_files(const char *auth_file,
+                                           const char *peer_cache_file);
+
 int tg_mtproto_auth_chat_file(const char *host,
                               const char *port,
                               const char *api_file,
@@ -19749,6 +19759,60 @@ int tg_mtproto_auth_chat_file(const char *host,
                                     &chat_context, peer_cache_file,
                                     peer_index, peer_label, stream, quiet);
             tg_mtproto_close_quiet_stream(quiet, stream);
+        }
+        if (tg_mtproto_chat_named_command_arg(line, "/logout", &cmd_arg)) {
+            /* Log out, in two steps as the text client asks: /logout says
+               what it does, /logout yes does it (auth.logOut, then the
+               account's files go and the client quits), and /logout here
+               removes the files on this computer when Telegram cannot be
+               reached. */
+            int logged_out = 0;
+
+            if (strcmp(cmd_arg, "yes") == 0) {
+                tg_mtproto_chat_print_system_line(stream, "Logging out...");
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                logged_out = tg_mtproto_log_out_on_context(
+                                 host, port, api_id, auth_file, dc_id_text,
+                                 &chat_context, quiet) == 0;
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (!logged_out) {
+                    tg_mtproto_chat_print_system_line(
+                        stream,
+                        "Telegram could not be reached: nothing was removed. "
+                        "/logout here removes the files on this computer "
+                        "anyway; the session then stays in Telegram's list "
+                        "of devices until you end it from another device.");
+                    tg_mtproto_chat_show_prompt(stream, own_label,
+                                                peer_label, 0, 0UL,
+                                                tg_chat_input_raw);
+                    continue;
+                }
+            } else if (strcmp(cmd_arg, "here") != 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream,
+                    "/logout yes logs out of Telegram on this computer: it "
+                    "ends this session at Telegram, removes telegram-auth.bin "
+                    "and what is kept here of the account (the chat list, "
+                    "hidden chats; downloads stay) and quits. The next start "
+                    "shows the login.");
+                tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                            0UL, tg_chat_input_raw);
+                continue;
+            }
+            tg_mtproto_chat_print_system_line(
+                stream, logged_out
+                            ? "Logged out. The next start shows the login."
+                            : "The files are removed from this computer. The "
+                              "next start shows the login.");
+            tg_mtproto_close_quiet_stream(chat_quiet, stream);
+            tg_mtproto_close_auth_context(&chat_context);
+            tg_net_set_connect_timeout_seconds(saved_timeout);
+            tg_console_tui_leave(stream);
+            tg_chat_tui_stream = 0;
+            tg_console_ui_leave_screen(stream);
+            if (chat_raw) { tg_platform_stdin_set_raw(0); }
+            tg_mtproto_logout_remove_files(auth_file, peer_cache_file);
+            return 0;
         }
         if (strcmp(line, "/quit") == 0 || strcmp(line, "quit") == 0) {
             tg_mtproto_chat_print_system_line(stream, "Bye.");
@@ -43747,32 +43811,29 @@ int tg_gui_session_tick(FILE *stream)
     return dirty;
 }
 
-/* Log out (the window's Amigram menu). Set once auth.logOut has gone
-   through, so that the closing of the session removes the account's files
-   after the last of its own writes. */
-static int tg_gui_logged_out = 0;
-
 /* What a log out removes: the keys, and what this computer keeps of the
    account (the chat list and its archive, hidden chats and messages, chat
    notification choices, the previews and the cached avatars and photos).
-   Downloads, settings and the future auth tokens stay. */
-static void tg_gui_logout_remove_files(void)
+   Downloads, settings and the future auth tokens stay. A path not known
+   (a session that never opened) falls back to the usual name. */
+static void tg_mtproto_logout_remove_files(const char *auth_file,
+                                           const char *peer_cache_file)
 {
     char path[40];
     unsigned long dc;
 
-    if (tg_gui_session_state.auth_file != 0) {
-        (void)remove(tg_gui_session_state.auth_file);
-    }
+    (void)remove(auth_file != 0 && auth_file[0] != '\0'
+                     ? auth_file
+                     : "telegram-auth.bin");
     for (dc = 1UL; dc <= 5UL; ++dc) {
         sprintf(path, "data/telegram-auth-dc%lu.bin", dc);
         (void)remove(path);
     }
     (void)remove(TG_MTPROTO_LOGIN_KEY_FILE);
     (void)remove("data/phone-code-hash.txt");
-    if (tg_gui_session_state.peer_cache_file != 0) {
-        (void)remove(tg_gui_session_state.peer_cache_file);
-    }
+    (void)remove(peer_cache_file != 0 && peer_cache_file[0] != '\0'
+                     ? peer_cache_file
+                     : "data/telegram-peers.txt");
     (void)remove(TG_GUI_ARCHIVED_FILE);
     (void)remove(TG_GUI_HIDDEN_FILE);
     (void)remove(tg_hidden_msgs_file);
@@ -43785,41 +43846,70 @@ static void tg_gui_logout_remove_files(void)
     tg_gui_log("logout: account files removed");
 }
 
-/* auth.logOut on the window's key: its answer may carry a future auth
-   token, kept for the next login by number. A session Telegram had closed
-   already counts as logged out. 0 = logged out (the window then quits and
-   the closing removes the files), 2 = Telegram not reached, nothing
-   changed. */
-int tg_gui_session_log_out(FILE *stream)
+/* auth.logOut on a context; its answer may carry a future auth token,
+   kept for the next login by number. A session Telegram had closed
+   already counts as logged out. 0 = logged out, 2 = Telegram not reached
+   (nothing changed). The window and the text client share it. */
+static int tg_mtproto_log_out_on_context(const char *host, const char *port,
+                                         const char *api_id,
+                                         const char *auth_file,
+                                         const char *dc_id_text,
+                                         tg_mtproto_auth_context *ctx,
+                                         FILE *quiet)
 {
     unsigned char query[8];
     unsigned char token[TG_MTPROTO_FUTURE_TOKEN_BYTES];
     unsigned long token_length = 0UL;
     tg_mtproto_tl_writer writer;
     tg_mtproto_rpc_result result;
-    char emsg[48];
-    FILE *quiet;
+    char line[80];
     int rc;
+    static const char label[] = "mtproto auth.logOut";
 
-    if (!tg_gui_session_state.open || stream == 0) {
-        return 2;
-    }
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
     if (tg_mtproto_build_auth_log_out(&writer) != TG_MTPROTO_TL_OK) {
         return 2;
     }
     tg_gui_log("logout: auth.logOut");
-    quiet = tg_mtproto_open_quiet_stream(stream);
-    rc = tg_gui_session_peer_request(query, writer.length, &result,
-                                     "mtproto auth.logOut", emsg,
-                                     sizeof(emsg), quiet);
-    tg_mtproto_close_quiet_stream(quiet, stream);
-    if (rc == 0 &&
-        result.result_constructor == TG_MTPROTO_AUTH_LOGGED_OUT_CONSTRUCTOR) {
+    memset(&result, 0, sizeof(result));
+    tg_mtproto_query_fail[0] = '\0';
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+                                                dc_id_text, ctx, query,
+                                                writer.length, &result, quiet,
+                                                label, 200U);
+    if (rc != 0) {
+        /* A key closed already (the window's watch saw it) stops the
+           request before it leaves, with Telegram's word for the reason. */
+        if (tg_mtproto_rpc_error_ends_session(tg_mtproto_query_fail)) {
+            tg_gui_log("logout: Telegram had closed the session already");
+            return 0;
+        }
+        tg_gui_log("logout: not taken");
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        char text[48];
+        long code = 0L;
+
+        text[0] = '\0';
+        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                         result.result_body_length + 4U,
+                                         &code, text, sizeof(text));
+        if (tg_mtproto_rpc_error_ends_session(text)) {
+            tg_gui_log("logout: Telegram had closed the session already");
+            return 0;
+        }
+        tg_gui_log("logout: not taken");
+        return 2;
+    }
+    if (result.result_constructor != TG_MTPROTO_AUTH_LOGGED_OUT_CONSTRUCTOR) {
+        tg_gui_log("logout: an unexpected answer");
+        return 2;
+    }
+    {
         tg_mtproto_tl_status status = tg_mtproto_parse_logged_out_token(
             result.result_body, result.result_body_length, token,
             sizeof(token), &token_length);
-        char line[80];
 
         if (status == TG_MTPROTO_TL_OK && token_length > 0UL) {
             tg_mtproto_future_token_keep(token, token_length);
@@ -43834,15 +43924,46 @@ int tg_gui_session_log_out(FILE *stream)
                     ? (token_length > 0UL ? ", kept" : "")
                     : ", not kept");
         tg_gui_log(line);
-    } else if (rc == 1 && tg_mtproto_rpc_error_ends_session(emsg)) {
-        tg_gui_log("logout: Telegram had closed the session already");
-    } else {
-        tg_gui_log("logout: not taken");
-        return 2;
     }
     tg_mtproto_secure_zero(token, sizeof(token));
-    tg_gui_logged_out = 1;
     return 0;
+}
+
+/* Log out (the window's Amigram menu). Set once the account is to go, so
+   that the closing of the session removes its files after the last of
+   its own writes. */
+static int tg_gui_logged_out = 0;
+
+/* auth.logOut on the window's key. 0 = logged out (the window then quits
+   and the closing removes the files), 2 = Telegram not reached, nothing
+   changed: the window may then offer tg_gui_session_log_out_local. */
+int tg_gui_session_log_out(FILE *stream)
+{
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_log_out_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context, quiet);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 0) {
+        tg_gui_logged_out = 1;
+    }
+    return rc;
+}
+
+/* Log out on this computer only, when Telegram cannot be reached: the
+   closing removes the account's files all the same, and the session stays
+   in Telegram's list of devices until it is ended from another one. */
+void tg_gui_session_log_out_local(void)
+{
+    tg_gui_logged_out = 1;
+    tg_gui_log("logout: on this computer only, Telegram not reached");
 }
 
 void tg_gui_session_close(void)
@@ -43868,6 +43989,12 @@ void tg_gui_session_close(void)
         tg_chat_read_outbox_target = 0;
         tg_chat_edit_target = 0;
         tg_chat_delete_target = 0;
+        if (tg_gui_logged_out) { /* a log out on this computer only */
+            tg_gui_logged_out = 0;
+            tg_mtproto_logout_remove_files(
+                tg_gui_session_state.auth_file,
+                tg_gui_session_state.peer_cache_file);
+        }
         return;
     }
     tg_gui_log("close: closing context");
@@ -43909,7 +44036,8 @@ void tg_gui_session_close(void)
     tg_gui_session_state.open = 0;
     if (tg_gui_logged_out) {
         tg_gui_logged_out = 0;
-        tg_gui_logout_remove_files();
+        tg_mtproto_logout_remove_files(tg_gui_session_state.auth_file,
+                                       tg_gui_session_state.peer_cache_file);
     }
 }
 

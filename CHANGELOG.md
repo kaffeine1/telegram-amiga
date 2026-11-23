@@ -34,7 +34,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   computer (telegram-auth.bin and the other keys, the chat list and its
   archive, hidden chats and messages, chat notification choices,
   avatars and cached photos; downloads and settings stay) and quits;
-  the next start shows the login.
+  the next start shows the login. When Telegram cannot be reached, or
+  the window started offline, a second requester offers to remove those
+  files from this computer anyway; the session then stays in Telegram's
+  list of devices until it is ended from another one. The text client
+  has /logout: /logout yes logs out, /logout here removes the files
+  only.
 - Future auth tokens, as Telegram's documentation describes them: when
   Telegram hands one out, at a log out or a login, Amigram keeps it in
   data/telegram-future-tokens.txt (twenty at most, never shown), and the
