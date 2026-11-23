@@ -752,7 +752,8 @@ static void tg_gui_notify_label(const tg_gui_state *state, const char *base,
 void tg_gui_notify_title(const tg_gui_state *state, char *out,
                          unsigned long size)
 {
-    tg_gui_notify_label(state, TG_APP_TITLE, " new", out, size);
+    tg_gui_notify_label(state, TG_APP_TITLE, TG_STR(MSG_G_TITLE_NEW), out,
+                        size);
 }
 
 void tg_gui_notify_icon_label(const tg_gui_state *state, char *out,
@@ -810,12 +811,14 @@ void tg_gui_notify_popup_text(const tg_gui_state *state, char *head,
         return;
     }
     if (count == 1) {
-        strcpy(number, "1 new message");
+        tg_gui_copy(number, sizeof(number), TG_STR(MSG_G_1_NEW_MESSAGE));
     } else {
-        sprintf(number, "%d new messages", count);
+        tg_locale_format(number, sizeof(number), TG_STR(MSG_G_D_NEW_MESSAGES), count);
     }
     if (total > count) {
-        sprintf(number + strlen(number), ", %d in all", total);
+        tg_locale_format(number + strlen(number),
+                         sizeof(number) - strlen(number), TG_STR(MSG_G_IN_ALL),
+                         total);
     }
     tg_gui_copy(body, body_size, number);
 }
@@ -2527,22 +2530,22 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
         unsigned long placeholder_len;
 
         if (state->forward_pick_active) {
-            placeholder = "Choose destination...";
+            placeholder = TG_STR(MSG_G_CHOOSE_DESTINATION);
             placeholder_len = 21UL;
         } else if (state->msg_search_active && state->msg_search_global) {
-            placeholder = "Find in all chats...";
+            placeholder = TG_STR(MSG_MENU_FINDALL);
             placeholder_len = 20UL;
         } else if (state->msg_search_active) {
-            placeholder = "Find in this chat...";
+            placeholder = TG_STR(MSG_G_FIND_IN_THIS_CHAT);
             placeholder_len = 20UL;
         } else if (state->search_active) {
-            placeholder = "Type a name, ENTER...";
+            placeholder = TG_STR(MSG_G_TYPE_A_NAME_ENTER);
             placeholder_len = 20UL;
         } else if (state->archive_view) {
-            placeholder = "Archive - ESC goes back";
+            placeholder = TG_STR(MSG_ST_ARCHIVE_ESC_GOES_BACK);
             placeholder_len = 23UL;
         } else {
-            placeholder = "Search chats...";
+            placeholder = TG_STR(MSG_G_SEARCH_CHATS);
             placeholder_len = 15UL;
         }
         backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, 10, sbase,
@@ -3466,7 +3469,7 @@ void tg_gui_requester_name(char *out, unsigned long size, const char *name)
         out[--n] = '\0';
     }
     if (out[0] == '\0') {
-        tg_gui_copy(out, size, "them");
+        tg_gui_copy(out, size, TG_STR(MSG_G_THEM));
     }
 }
 
@@ -3506,7 +3509,7 @@ static void tg_gui_paint_archive_band(const tg_gui_state *state,
                                       tg_gui_backend *backend, int y,
                                       int band_h, int width, int lh)
 {
-    static const char label[] = "Archived chats";
+    const char *label = TG_STR(MSG_MENU_ARCHIVE);
     char badge[8];
     int badge_w = 0;
     int base = tg_gui_navigation_baseline(backend, y, band_h);
@@ -3815,8 +3818,8 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
                    stands apart from a message (the official clients use
                    red, which the palette does not have). */
                 if (chat->draft) {
-                    static const char label[] = "Draft: ";
-                    unsigned long label_len = sizeof(label) - 1UL;
+                    const char *label = TG_STR(MSG_G_DRAFT);
+                    unsigned long label_len = (unsigned long)strlen(label);
                     int label_w = backend->text_width(backend, label,
                                                       label_len);
 
@@ -4283,9 +4286,16 @@ static int tg_gui_message_day_break(const tg_gui_state *state, int index)
 static void tg_gui_day_label(const tg_gui_state *state, unsigned long day,
                              char *out, unsigned long size)
 {
-    static const char *const months[12] = {
-        "January", "February", "March", "April", "May", "June", "July",
-        "August", "September", "October", "November", "December"
+    static const long months[12] = {
+        MSG_G_JANUARY, MSG_G_FEBRUARY, MSG_G_MARCH, MSG_G_APRIL, MSG_G_MAY,
+        MSG_G_JUNE, MSG_G_JULY, MSG_G_AUGUST, MSG_G_SEPTEMBER, MSG_G_OCTOBER,
+        MSG_G_NOVEMBER, MSG_G_DECEMBER
+    };
+    static const char *const months_en[12] = {
+        MSG_G_JANUARY_STR, MSG_G_FEBRUARY_STR, MSG_G_MARCH_STR,
+        MSG_G_APRIL_STR, MSG_G_MAY_STR, MSG_G_JUNE_STR, MSG_G_JULY_STR,
+        MSG_G_AUGUST_STR, MSG_G_SEPTEMBER_STR, MSG_G_OCTOBER_STR,
+        MSG_G_NOVEMBER_STR, MSG_G_DECEMBER_STR
     };
     time_t when;
     struct tm *parts;
@@ -4299,11 +4309,11 @@ static void tg_gui_day_label(const tg_gui_state *state, unsigned long day,
         return;
     }
     if (state->today != 0UL && day == state->today) {
-        strcpy(out, "Today");
+        tg_gui_copy(out, size, TG_STR(MSG_G_TODAY));
         return;
     }
     if (state->today != 0UL && day + 1UL == state->today) {
-        strcpy(out, "Yesterday");
+        tg_gui_copy(out, size, TG_STR(MSG_G_YESTERDAY));
         return;
     }
     year = -1;
@@ -4320,9 +4330,11 @@ static void tg_gui_day_label(const tg_gui_state *state, unsigned long day,
         return;
     }
     if (parts->tm_year == year) {
-        sprintf(out, "%d %.9s", parts->tm_mday % 100, months[parts->tm_mon]);
+        sprintf(out, "%d %.9s", parts->tm_mday % 100,
+                tg_str(months[parts->tm_mon], months_en[parts->tm_mon]));
     } else {
-        sprintf(out, "%d %.9s %d", parts->tm_mday % 100, months[parts->tm_mon],
+        sprintf(out, "%d %.9s %d", parts->tm_mday % 100,
+                tg_str(months[parts->tm_mon], months_en[parts->tm_mon]),
                 (parts->tm_year + 1900) % 10000);
     }
 }
@@ -5765,7 +5777,7 @@ static void tg_gui_paint_pick_bar(const tg_gui_state *state,
                                   int width, int box_top, int content_h,
                                   int count)
 {
-    static const char *const names[3] = { "Cancel", "Delete", "Forward" };
+    const char *names[3];
     tg_gui_state *st = (tg_gui_state *)state;
     char label[32];
     int x0 = sidebar_w + 8;
@@ -5776,6 +5788,10 @@ static void tg_gui_paint_pick_bar(const tg_gui_state *state,
     int right = x0 + w - 6;
     int base;
     int k;
+
+    names[0] = TG_STR(MSG_W_CANCEL);
+    names[1] = TG_STR(MSG_G_SEL_DELETE);
+    names[2] = TG_STR(MSG_G_SEL_FORWARD);
 
     backend->fill_rect(backend, TG_GUI_PEN_WINDOW,
                        tg_gui_make_rect(sidebar_w, box_top,
@@ -5813,7 +5829,7 @@ static void tg_gui_paint_pick_bar(const tg_gui_state *state,
             st->pick_fw_w = bw;
         }
     }
-    sprintf(label, "%d selected", count);
+    tg_locale_format(label, sizeof(label), TG_STR(MSG_G_D_SELECTED), count);
     tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT, x0 + 8, base, label,
                         right - (x0 + 8));
 }
@@ -5999,13 +6015,15 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
         }
     } else {
         backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, area_x,
-                           text_base, "Write a message...", 18UL);
+                           text_base, TG_STR(MSG_G_WRITE_A_MESSAGE),
+                           (unsigned long)strlen(TG_STR(MSG_G_WRITE_A_MESSAGE)));
     }
     backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
                        tg_gui_make_rect(width - 64, box_top, 56, input_h - 4));
     backend->draw_text(backend, TG_GUI_PEN_ACCENT_TEXT, width - 56,
                        tg_gui_centred_baseline(backend, box_top, input_h - 4),
-                       "Send", 4UL);
+                       TG_STR(MSG_G_SEND),
+                       (unsigned long)strlen(TG_STR(MSG_G_SEND)));
     if (state->emoji_enabled) {
         tg_gui_paint_emoji_button(state, backend, width, box_top, input_h);
     }
@@ -6306,10 +6324,10 @@ static void tg_gui_paint_main(const tg_gui_state *state,
         if (state->pinned_count > 1 && state->pinned_index >= 1 &&
             state->pinned_index <= state->pinned_count &&
             state->pinned_count < 1000) {
-            sprintf(label, "Pinned %d/%d: ", state->pinned_index,
+            tg_locale_format(label, sizeof(label), TG_STR(MSG_G_PINNED_D_D), state->pinned_index,
                     state->pinned_count);
         } else {
-            strcpy(label, "Pinned: ");
+            tg_gui_copy(label, sizeof(label), TG_STR(MSG_G_PINNED));
         }
         label_len = (unsigned long)strlen(label);
         if (y + bar_h + 2 * lh < transcript_bottom && bar_w > 60) {
@@ -7421,7 +7439,7 @@ static void tg_gui_paint_login(const tg_gui_state *state,
     tg_gui_draw_centered(backend, TG_GUI_PEN_ACCENT, width, mid - (3 * lh),
                          TG_APP_TITLE);
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, mid - (2 * lh),
-                         TG_APP_INTRO_NOTE);
+                         TG_STR(MSG_G_INTRO_NOTE));
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT, width, mid - lh,
                          state->status);
 
@@ -7444,11 +7462,11 @@ static void tg_gui_paint_login(const tg_gui_state *state,
                              mid + (2 * lh) + 12,
                              state->status_hint[0] != '\0'
                                  ? state->status_hint
-                                 : TG_APP_ACCOUNT_NOTE);
+                                 : TG_STR(MSG_G_ACCOUNT_NOTE));
         footer = mid + (3 * lh) + 16; /* one line under the hint */
     }
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, footer,
-                         "ENTER confirms   ESC quits");
+                         TG_STR(MSG_G_LOGIN_KEYS));
     if (state->mode == TG_GUI_MODE_LOGIN_CODE) {
         /* When Telegram named another route, say how to ask for it: the
            in-app code does not always show up, and the official apps offer
@@ -7458,7 +7476,8 @@ static void tg_gui_paint_login(const tg_gui_state *state,
         if (route != 0) {
             char hint[64];
 
-            sprintf(hint, "No code? Press S to get it %.24s", route);
+            tg_locale_format(hint, sizeof(hint), TG_STR(MSG_G_NO_CODE_PRESS_S),
+                             route);
             tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width,
                                  footer + lh + 2, hint);
         }
@@ -7806,28 +7825,29 @@ void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
 {
     static const struct {
         const char *code;
+        long msg; /* the words' catalog id */
         const char *words;
     } known[] = {
-        { "CHAT_WRITE_FORBIDDEN", "you cannot write in this chat" },
-        { "USER_BANNED_IN_CHANNEL", "you cannot write in this chat" },
-        { "CHAT_RESTRICTED", "you cannot write in this chat" },
-        { "CHAT_SEND_PLAIN_FORBIDDEN", "you cannot write in this chat" },
-        { "CHAT_GUEST_SEND_FORBIDDEN", "you cannot write in this chat" },
-        { "CHAT_ADMIN_REQUIRED", "only the admins can write here" },
-        { "CHANNEL_PRIVATE", "you are not in this chat any more" },
-        { "PRIVACY_PREMIUM_REQUIRED", "only their contacts can write" },
-        { "USER_IS_BLOCKED", "this person has blocked you" },
-        { "YOU_BLOCKED_USER", "you have blocked this person" },
-        { "PEER_FLOOD", "Telegram limits your new chats now" },
-        { "INPUT_USER_DEACTIVATED", "this account was deleted" },
-        { "USER_DEACTIVATED", "this account was deleted" },
-        { "MESSAGE_TOO_LONG", "the message is too long" },
-        { "MESSAGE_EMPTY", "the message is empty" },
-        { "ENTITY_BOUNDS_INVALID", "Telegram refused the formatting" },
-        { "ENTITIES_TOO_LONG", "Telegram refused the formatting" },
-        { "TOPIC_NOT_CHOSEN", "choose a topic in the list first" },
-        { "TOPIC_CLOSED", "this topic is closed" },
-        { "TOPIC_DELETED", "this topic was deleted" },
+        { "CHAT_WRITE_FORBIDDEN", MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA, MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA_STR },
+        { "USER_BANNED_IN_CHANNEL", MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA, MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA_STR },
+        { "CHAT_RESTRICTED", MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA, MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA_STR },
+        { "CHAT_SEND_PLAIN_FORBIDDEN", MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA, MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA_STR },
+        { "CHAT_GUEST_SEND_FORBIDDEN", MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA, MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA_STR },
+        { "CHAT_ADMIN_REQUIRED", MSG_G_REFUSE_ONLY_THE_ADMINS_CAN_WRITE_HE, MSG_G_REFUSE_ONLY_THE_ADMINS_CAN_WRITE_HE_STR },
+        { "CHANNEL_PRIVATE", MSG_G_REFUSE_YOU_ARE_NOT_IN_THIS_CHAT_ANY, MSG_G_REFUSE_YOU_ARE_NOT_IN_THIS_CHAT_ANY_STR },
+        { "PRIVACY_PREMIUM_REQUIRED", MSG_G_REFUSE_ONLY_THEIR_CONTACTS_CAN_WRIT, MSG_G_REFUSE_ONLY_THEIR_CONTACTS_CAN_WRIT_STR },
+        { "USER_IS_BLOCKED", MSG_G_REFUSE_THIS_PERSON_HAS_BLOCKED_YOU, MSG_G_REFUSE_THIS_PERSON_HAS_BLOCKED_YOU_STR },
+        { "YOU_BLOCKED_USER", MSG_G_REFUSE_YOU_HAVE_BLOCKED_THIS_PERSON, MSG_G_REFUSE_YOU_HAVE_BLOCKED_THIS_PERSON_STR },
+        { "PEER_FLOOD", MSG_G_REFUSE_TELEGRAM_LIMITS_YOUR_NEW_CHA, MSG_G_REFUSE_TELEGRAM_LIMITS_YOUR_NEW_CHA_STR },
+        { "INPUT_USER_DEACTIVATED", MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED, MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED_STR },
+        { "USER_DEACTIVATED", MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED, MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED_STR },
+        { "MESSAGE_TOO_LONG", MSG_G_REFUSE_THE_MESSAGE_IS_TOO_LONG, MSG_G_REFUSE_THE_MESSAGE_IS_TOO_LONG_STR },
+        { "MESSAGE_EMPTY", MSG_G_REFUSE_THE_MESSAGE_IS_EMPTY, MSG_G_REFUSE_THE_MESSAGE_IS_EMPTY_STR },
+        { "ENTITY_BOUNDS_INVALID", MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT, MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT_STR },
+        { "ENTITIES_TOO_LONG", MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT, MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT_STR },
+        { "TOPIC_NOT_CHOSEN", MSG_G_REFUSE_CHOOSE_A_TOPIC_IN_THE_LIST_F, MSG_G_REFUSE_CHOOSE_A_TOPIC_IN_THE_LIST_F_STR },
+        { "TOPIC_CLOSED", MSG_G_REFUSE_THIS_TOPIC_IS_CLOSED, MSG_G_REFUSE_THIS_TOPIC_IS_CLOSED_STR },
+        { "TOPIC_DELETED", MSG_G_REFUSE_THIS_TOPIC_WAS_DELETED, MSG_G_REFUSE_THIS_TOPIC_WAS_DELETED_STR },
     };
     char line[80];
     unsigned long k;
@@ -7837,22 +7857,24 @@ void tg_gui_send_failure_line(int rc, const char *refusal, char *out,
     }
     if (rc == 3) {
         /* it may have gone: sending it again could make two */
-        strcpy(line, "Not confirmed: check the chat before resending");
+        tg_gui_copy(line, sizeof(line), TG_STR(MSG_G_NOT_CONFIRMED_CHECK_THE_CHAT));
     } else if (refusal == 0 || refusal[0] == '\0') {
-        strcpy(line, "Not sent: no answer from Telegram");
+        tg_gui_copy(line, sizeof(line), TG_STR(MSG_G_NOT_SENT_NO_ANSWER_FROM));
     } else if (strncmp(refusal, "SLOWMODE_WAIT_", 14U) == 0 ||
                strncmp(refusal, "FLOOD_WAIT_", 11U) == 0) {
         int slow = refusal[0] == 'S';
         unsigned long secs = strtoul(refusal + (slow ? 14 : 11), 0, 10);
 
-        sprintf(line, slow ? "Not sent: slow mode, wait %lu s"
-                           : "Not sent: too many messages, wait %lu s",
-                secs);
+        tg_locale_format(line, sizeof(line),
+                         slow ? TG_STR(MSG_G_NOT_SENT_SLOW_MODE)
+                              : TG_STR(MSG_G_NOT_SENT_FLOOD),
+                         secs);
     } else {
-        sprintf(line, "Not sent: %.36s", refusal);
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_G_NOT_SENT_36S), refusal);
         for (k = 0UL; k < sizeof(known) / sizeof(known[0]); ++k) {
             if (strcmp(refusal, known[k].code) == 0) {
-                sprintf(line, "Not sent: %s", known[k].words);
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_G_NOT_SENT_S),
+                                 tg_str(known[k].msg, known[k].words));
             }
         }
     }
@@ -7923,13 +7945,13 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         /* The paperclip's menu. A poll only where Telegram takes one. */
         const tg_gui_chat *row = tg_gui_open_chat_row(state);
 
-        labels[n] = "Photo...";
+        labels[n] = TG_STR(MSG_G_PHOTO);
         ids[n++] = TG_GUI_CTX_SENDPHOTO;
-        labels[n] = "File...";
+        labels[n] = TG_STR(MSG_G_FILE);
         ids[n++] = TG_GUI_CTX_SENDFILE;
         if (row != 0 &&
             (row->is_group || row->index == TG_GUI_SAVED_PEER_INDEX)) {
-            labels[n] = "Poll...";
+            labels[n] = TG_STR(MSG_G_POLL);
             ids[n++] = TG_GUI_CTX_POLL_NEW;
         }
         return n;
@@ -7938,9 +7960,9 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         state->ctx_msg < 0) {
         /* A forum topic's row: its name and whether it takes messages
            (Telegram says whether this account may change them). */
-        labels[n] = "Rename topic...";
+        labels[n] = TG_STR(MSG_G_RENAME_TOPIC);
         ids[n++] = TG_GUI_CTX_TOPIC_RENAME;
-        labels[n] = state->ctx_topic_closed ? "Reopen topic" : "Close topic";
+        labels[n] = state->ctx_topic_closed ? TG_STR(MSG_G_REOPEN_TOPIC) : TG_STR(MSG_G_CLOSE_TOPIC);
         ids[n++] = TG_GUI_CTX_TOPIC_CLOSE;
         return n;
     }
@@ -7949,19 +7971,19 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
            Archive offers the way back instead. */
         if (!state->archive_view) {
             labels[n] = state->chats[state->ctx_chat - 1].pinned
-                            ? "Unpin" : "Pin";
+                            ? TG_STR(MSG_G_UNPIN) : TG_STR(MSG_G_PIN);
             ids[n++] = TG_GUI_CTX_CHAT_PIN;
         }
         if (state->chats[state->ctx_chat - 1].index !=
             TG_GUI_SAVED_PEER_INDEX) {
-            labels[n] = state->archive_view ? "Unarchive" : "Archive";
+            labels[n] = state->archive_view ? TG_STR(MSG_G_UNARCHIVE) : TG_STR(MSG_G_ARCHIVE);
             ids[n++] = TG_GUI_CTX_CHAT_ARCHIVE;
             labels[n] = (state->chats[state->ctx_chat - 1].unread > 0 ||
                          state->chats[state->ctx_chat - 1].unread_mark)
-                            ? "Mark as read" : "Mark as unread";
+                            ? TG_STR(MSG_G_MARK_AS_READ) : TG_STR(MSG_G_MARK_AS_UNREAD);
             ids[n++] = TG_GUI_CTX_CHAT_READ;
         }
-        labels[n] = "Remove chat";
+        labels[n] = TG_STR(MSG_RQ_REMOVE_CHAT);
         ids[n++] = TG_GUI_CTX_CHAT_REMOVE;
         /* Muted on Telegram, or only on this machine (a mute from before
            it was sent there, or one Telegram did not get). */
@@ -7969,22 +7991,22 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
            and for good. */
         labels[n] = (state->ctx_muted ||
                      state->ctx_notify_choice == TG_GUI_NOTIFY_MUTE)
-                        ? "Unmute"
+                        ? TG_STR(MSG_G_UNMUTE)
                         : (state->chats[state->ctx_chat - 1].index !=
                                    TG_GUI_SAVED_PEER_INDEX
-                               ? "Mute..." : "Mute");
+                               ? TG_STR(MSG_G_MUTE) : TG_STR(MSG_RQ_MUTE));
         ids[n++] = TG_GUI_CTX_CHAT_MUTE;
         if (state->chats[state->ctx_chat - 1].is_group) {
             labels[n] = state->ctx_notify_choice == TG_GUI_NOTIFY_RING ?
-                        "Disable ring" : "Enable ring";
+                        TG_STR(MSG_G_DISABLE_RING) : TG_STR(MSG_G_ENABLE_RING);
             ids[n++] = TG_GUI_CTX_CHAT_RING;
         }
-        labels[n] = "Sound...";
+        labels[n] = TG_STR(MSG_G_SOUND);
         ids[n++] = TG_GUI_CTX_CHAT_SOUND;
-        labels[n] = "Default sound";
+        labels[n] = TG_STR(MSG_G_DEFAULT_SOUND);
         ids[n++] = TG_GUI_CTX_CHAT_DEFAULT_SOUND;
         if (state->ctx_hidden_count != 0UL) {
-            labels[n] = "Show hidden messages";
+            labels[n] = TG_STR(MSG_G_SHOW_HIDDEN_MESSAGES);
             ids[n++] = TG_GUI_CTX_CHAT_SHOW_HIDDEN;
         }
         /* Gone from Telegram, not just from this list: last of the chat's
@@ -7992,7 +8014,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         if (state->chats[state->ctx_chat - 1].index !=
             TG_GUI_SAVED_PEER_INDEX) {
             labels[n] = state->chats[state->ctx_chat - 1].is_group
-                            ? "Leave..." : "Delete chat...";
+                            ? TG_STR(MSG_G_LEAVE) : TG_STR(MSG_G_DELETE_CHAT);
             ids[n++] = TG_GUI_CTX_CHAT_LEAVE;
         }
         /* A row's menu holds what concerns that chat. The list's own
@@ -8000,7 +8022,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
            menu, with their shortcuts; the way out of the Archive is the
            one kept here too, where the pointer already is. */
         if (state->archive_view) {
-            labels[n] = "Back to chats";
+            labels[n] = TG_STR(MSG_G_BACK_TO_CHATS);
             ids[n++] = TG_GUI_CTX_LIST_ARCHIVE;
         }
         return n;
@@ -8019,7 +8041,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             ++n;
         }
         if (state->poll_multiple) {
-            labels[n] = "Send vote";
+            labels[n] = TG_STR(MSG_G_SEND_VOTE);
             ids[n++] = TG_GUI_CTX_POLL_SEND;
         }
         return n;
@@ -8032,7 +8054,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
 
         while (n < count) {
             if (tg_gui_react_choice(state, n) == 0UL) {
-                labels[n] = "More";
+                labels[n] = TG_STR(MSG_G_MORE);
                 ids[n] = TG_GUI_CTX_REACT_MORE;
             } else {
                 labels[n] = state->react_choice_count > 0 ||
@@ -8048,20 +8070,20 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
     if (state->ctx_msg >= 0 && state->ctx_msg < state->message_count &&
         state->messages[state->ctx_msg].id != 0UL &&
         !state->messages[state->ctx_msg].is_system) {
-        labels[n] = "React...";
+        labels[n] = TG_STR(MSG_G_REACT);
         ids[n++] = TG_GUI_CTX_REACT;
         /* A poll: the vote, or taking it back, right under. */
         if (state->messages[state->ctx_msg].poll_id_hi != 0UL ||
             state->messages[state->ctx_msg].poll_id_lo != 0UL) {
             if (state->ctx_poll_open) {
-                labels[n] = "Vote...";
+                labels[n] = TG_STR(MSG_G_VOTE);
                 ids[n++] = TG_GUI_CTX_POLL;
             } else if (state->ctx_poll_voted) {
-                labels[n] = "Take back vote";
+                labels[n] = TG_STR(MSG_G_TAKE_BACK_VOTE);
                 ids[n++] = TG_GUI_CTX_POLL_RETRACT;
             }
             if (state->ctx_poll_names) {
-                labels[n] = "Who voted...";
+                labels[n] = TG_STR(MSG_G_WHO_VOTED);
                 ids[n++] = TG_GUI_CTX_POLL_VOTERS;
             }
             /* Who made the poll may stop it while it is open. In Saved
@@ -8069,12 +8091,12 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             if (state->ctx_poll_live &&
                 (state->messages[state->ctx_msg].is_own ||
                  tg_gui_open_chat_is_self(state))) {
-                labels[n] = "Stop poll";
+                labels[n] = TG_STR(MSG_RQ_STOP_POLL);
                 ids[n++] = TG_GUI_CTX_POLL_STOP;
             }
         }
     }
-    labels[n] = "Reply";
+    labels[n] = TG_STR(MSG_G_REPLY);
     ids[n] = TG_GUI_CTX_REPLY;
     ++n;
     if (state->ctx_sender[0] != '\0') {
@@ -8090,23 +8112,23 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
            the self chat is "outgoing"), yet every message is the user's own
            -- so the self chat offers Edit/Delete on all of them. */
         if (m->is_own || tg_gui_open_chat_is_self(state)) {
-            labels[n] = "Edit";
+            labels[n] = TG_STR(MSG_MENU_EDIT);
             ids[n] = TG_GUI_CTX_EDIT;
             ++n;
-            labels[n] = "Delete";
+            labels[n] = TG_STR(MSG_G_DELETE);
             ids[n] = TG_GUI_CTX_DELETE;
             ++n;
         } else if (!m->is_system && tg_gui_open_chat_row(state) != 0 &&
                    tg_gui_open_chat_row(state)->is_group) {
             /* Telegram lets nobody delete someone else's message for
                themselves in a supergroup: the client hides it instead. */
-            labels[n] = "Hide message";
+            labels[n] = TG_STR(MSG_G_HIDE_MESSAGE);
             ids[n] = TG_GUI_CTX_HIDE;
             ++n;
         } else if (!m->is_system && tg_gui_open_chat_row(state) != 0) {
             /* A chat with one person: either side may delete any message
                of it, for itself or for both. */
-            labels[n] = "Delete";
+            labels[n] = TG_STR(MSG_G_DELETE);
             ids[n] = TG_GUI_CTX_DELETE;
             ++n;
         }
@@ -8114,7 +8136,7 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             /* A video or a sound plays: downloaded first when it is not
                here yet, then handed to the player of the settings, or to
                the Workbench. It takes Open's place once the file is here. */
-            labels[n] = "Play";
+            labels[n] = TG_STR(MSG_G_PLAY);
             ids[n] = TG_GUI_CTX_FILE_PLAY;
             ++n;
         }
@@ -8122,39 +8144,39 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             /* Already saved from here and still on disk: what one does
                with a file one has. */
             if (!m->playable) {
-                labels[n] = "Open";
+                labels[n] = TG_STR(MSG_G_OPEN);
                 ids[n] = TG_GUI_CTX_FILE_OPEN;
                 ++n;
             }
-            labels[n] = "Show in drawer";
+            labels[n] = TG_STR(MSG_G_SHOW_IN_DRAWER);
             ids[n] = TG_GUI_CTX_FILE_SHOW;
             ++n;
         } else if (m->has_document) { /* incoming OR own: you can save either */
-            labels[n] = "Download";
+            labels[n] = TG_STR(MSG_G_DOWNLOAD);
             ids[n] = TG_GUI_CTX_DOWNLOAD;
             ++n;
         }
         if (m->has_photo) {
-            labels[n] = "Save photo as...";
+            labels[n] = TG_STR(MSG_G_SAVE_PHOTO_AS);
             ids[n] = TG_GUI_CTX_SAVE_PHOTO;
             ++n;
         }
         if (m->text[0] != '\0') {
-            labels[n] = "Copy text";
+            labels[n] = TG_STR(MSG_G_COPY_TEXT);
             ids[n] = TG_GUI_CTX_COPY;
             ++n;
         }
         if (!m->is_system) {
-            labels[n] = "Select";
+            labels[n] = TG_STR(MSG_G_SELECT);
             ids[n] = TG_GUI_CTX_SELECT;
             ++n;
-            labels[n] = state->ctx_msg_pinned ? "Unpin" : "Pin";
+            labels[n] = state->ctx_msg_pinned ? TG_STR(MSG_G_UNPIN) : TG_STR(MSG_G_PIN);
             ids[n] = TG_GUI_CTX_MSG_PIN;
             ++n;
-            labels[n] = "Forward to Saved";
+            labels[n] = TG_STR(MSG_G_FORWARD_TO_SAVED);
             ids[n] = TG_GUI_CTX_FORWARD_SAVED;
             ++n;
-            labels[n] = "Forward to...";
+            labels[n] = TG_STR(MSG_G_FORWARD_TO);
             ids[n] = TG_GUI_CTX_FORWARD_TO;
             ++n;
         }
@@ -9077,6 +9099,7 @@ int tg_gui_paint_sidebar_area(const tg_gui_state *state,
 /* --- the settings panel -------------------------------------------------- */
 
 typedef struct tg_gui_settings_line {
+    long msg; /* the label's catalog id (tg_locale.h) */
     const char *label;
     int id; /* 0 = a group's heading */
 } tg_gui_settings_line;
@@ -9084,32 +9107,32 @@ typedef struct tg_gui_settings_line {
 /* The labels are the ones the Settings menu had, so the manuals' "Settings >
    Show avatars" still names a line of this panel. */
 static const tg_gui_settings_line tg_gui_settings_table[] = {
-    {"New messages", 0},
-    {"Notifications", TG_GUI_SET_NOTIFY},
-    {"Beep", TG_GUI_SET_BEEP},
-    {"Pause between sounds", TG_GUI_SET_QUIET},
-    {"Sound file...", TG_GUI_SET_SOUND_FILE},
-    {"Built-in chime", TG_GUI_SET_CHIME},
-    {"Photos and emoji", 0},
-    {"Show inline photos", TG_GUI_SET_INLINE},
-    {"Sticker pictures", TG_GUI_SET_STICKERS},
-    {"Full-size photos", TG_GUI_SET_FULLSIZE},
-    {"Photo dithering", TG_GUI_SET_DITHER},
-    {"Photo cache limit", TG_GUI_SET_CACHE},
-    {"Clear cache...", TG_GUI_SET_CACHE_CLEAR},
-    {"Enable emoji", TG_GUI_SET_EMOJI},
-    {"Emoticons become emoji", TG_GUI_SET_EMOTICONS},
-    {"Show avatars", TG_GUI_SET_AVATARS},
-    {"Writing", 0},
-    {"Markdown formatting", TG_GUI_SET_MARKDOWN},
-    {"Window and files", 0},
-    {"Use own screen", TG_GUI_SET_OWN_SCREEN},
-    {"Download drawer...", TG_GUI_SET_DOWNLOAD},
-    {"Media player...", TG_GUI_SET_PLAYER},
-    {"Check for updates", TG_GUI_SET_UPDATES},
-    {"ARexx", 0},
-    {"ARexx port", TG_GUI_SET_AREXX_PORT},
-    {"Scripts may send messages", TG_GUI_SET_AREXX_SEND},
+    {MSG_SET_NEW_MESSAGES, MSG_SET_NEW_MESSAGES_STR, 0},
+    {MSG_SET_NOTIFICATIONS, MSG_SET_NOTIFICATIONS_STR, TG_GUI_SET_NOTIFY},
+    {MSG_SET_BEEP, MSG_SET_BEEP_STR, TG_GUI_SET_BEEP},
+    {MSG_SET_PAUSE_BETWEEN_SOUNDS, MSG_SET_PAUSE_BETWEEN_SOUNDS_STR, TG_GUI_SET_QUIET},
+    {MSG_SET_SOUND_FILE, MSG_SET_SOUND_FILE_STR, TG_GUI_SET_SOUND_FILE},
+    {MSG_SET_BUILT_IN_CHIME, MSG_SET_BUILT_IN_CHIME_STR, TG_GUI_SET_CHIME},
+    {MSG_SET_PHOTOS_AND_EMOJI, MSG_SET_PHOTOS_AND_EMOJI_STR, 0},
+    {MSG_SET_SHOW_INLINE_PHOTOS, MSG_SET_SHOW_INLINE_PHOTOS_STR, TG_GUI_SET_INLINE},
+    {MSG_SET_STICKER_PICTURES, MSG_SET_STICKER_PICTURES_STR, TG_GUI_SET_STICKERS},
+    {MSG_SET_FULL_SIZE_PHOTOS, MSG_SET_FULL_SIZE_PHOTOS_STR, TG_GUI_SET_FULLSIZE},
+    {MSG_SET_PHOTO_DITHERING, MSG_SET_PHOTO_DITHERING_STR, TG_GUI_SET_DITHER},
+    {MSG_SET_PHOTO_CACHE_LIMIT, MSG_SET_PHOTO_CACHE_LIMIT_STR, TG_GUI_SET_CACHE},
+    {MSG_SET_CLEAR_CACHE, MSG_SET_CLEAR_CACHE_STR, TG_GUI_SET_CACHE_CLEAR},
+    {MSG_SET_ENABLE_EMOJI, MSG_SET_ENABLE_EMOJI_STR, TG_GUI_SET_EMOJI},
+    {MSG_SET_EMOTICONS_BECOME_EMOJI, MSG_SET_EMOTICONS_BECOME_EMOJI_STR, TG_GUI_SET_EMOTICONS},
+    {MSG_SET_SHOW_AVATARS, MSG_SET_SHOW_AVATARS_STR, TG_GUI_SET_AVATARS},
+    {MSG_SET_WRITING, MSG_SET_WRITING_STR, 0},
+    {MSG_SET_MARKDOWN_FORMATTING, MSG_SET_MARKDOWN_FORMATTING_STR, TG_GUI_SET_MARKDOWN},
+    {MSG_SET_WINDOW_AND_FILES, MSG_SET_WINDOW_AND_FILES_STR, 0},
+    {MSG_SET_USE_OWN_SCREEN, MSG_SET_USE_OWN_SCREEN_STR, TG_GUI_SET_OWN_SCREEN},
+    {MSG_SET_DOWNLOAD_DRAWER, MSG_SET_DOWNLOAD_DRAWER_STR, TG_GUI_SET_DOWNLOAD},
+    {MSG_SET_MEDIA_PLAYER, MSG_SET_MEDIA_PLAYER_STR, TG_GUI_SET_PLAYER},
+    {MSG_SET_CHECK_FOR_UPDATES, MSG_SET_CHECK_FOR_UPDATES_STR, TG_GUI_SET_UPDATES},
+    {MSG_SET_AREXX, MSG_SET_AREXX_STR, 0},
+    {MSG_SET_AREXX_PORT, MSG_SET_AREXX_PORT_STR, TG_GUI_SET_AREXX_PORT},
+    {MSG_SET_SCRIPTS_MAY_SEND_MESSAGES, MSG_SET_SCRIPTS_MAY_SEND_MESSAGES_STR, TG_GUI_SET_AREXX_SEND},
 };
 #define TG_GUI_SETTINGS_LINES \
     ((int)(sizeof(tg_gui_settings_table) / sizeof(tg_gui_settings_table[0])))
@@ -9128,7 +9151,9 @@ int tg_gui_settings_line_id(int line)
 const char *tg_gui_settings_line_label(int line)
 {
     return line >= 0 && line < TG_GUI_SETTINGS_LINES
-               ? tg_gui_settings_table[line].label : "";
+               ? tg_str(tg_gui_settings_table[line].msg,
+                        tg_gui_settings_table[line].label)
+               : "";
 }
 
 int tg_gui_settings_kind(int id)
@@ -9195,22 +9220,23 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     switch (id) {
     case TG_GUI_SET_NOTIFY:
         text = state->notify_mode == TG_GUI_NOTIFY_OFF
-                   ? "< Off >"
+                   ? TG_STR(MSG_SETV_OFF)
                    : state->notify_mode == TG_GUI_NOTIFY_TITLE
-                         ? "< Count in title >"
+                         ? TG_STR(MSG_SETV_COUNT_TITLE)
                          : state->notify_mode == TG_GUI_NOTIFY_POPUP
-                               ? "< Count and pop-up >"
-                               : "< Pop-up with the text >";
+                               ? TG_STR(MSG_SETV_COUNT_POPUP)
+                               : TG_STR(MSG_SETV_POPUP_TEXT);
         break;
     case TG_GUI_SET_QUIET:
         /* Any number the file holds, as it is; the line steps through
            off, 5, 10, 30 seconds and a minute. */
         if (state->notify_quiet == 0UL) {
-            text = "< Off >";
+            text = TG_STR(MSG_SETV_OFF);
         } else if (state->notify_quiet == 60UL) {
-            text = "< 1 minute >";
+            text = TG_STR(MSG_SETV_1_MINUTE);
         } else {
-            sprintf(quiet_text, "< %lu seconds >",
+            tg_locale_format(quiet_text, sizeof(quiet_text),
+                             TG_STR(MSG_SETV_SECONDS),
                     state->notify_quiet > TG_NOTIFY_QUIET_MAX
                         ? TG_NOTIFY_QUIET_MAX : state->notify_quiet);
             text = quiet_text;
@@ -9218,9 +9244,9 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
         break;
     case TG_GUI_SET_DITHER:
         text = state->photo_dither == TG_GUI_PHOTO_DITHER_LIGHT
-                   ? "< Light >"
+                   ? TG_STR(MSG_SETV_LIGHT)
                    : state->photo_dither == TG_GUI_PHOTO_DITHER_OFF
-                         ? "< Off >" : "< Full >";
+                         ? TG_STR(MSG_SETV_OFF) : TG_STR(MSG_SETV_FULL);
         break;
     case TG_GUI_SET_CACHE:
         text = state->photo_cache_limit_mb == 10UL
@@ -9229,12 +9255,12 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
                          ? "< 200 MB >"
                          : state->photo_cache_limit_mb ==
                                    TG_GUI_PHOTO_CACHE_UNLIMITED_MB
-                               ? "< Unlimited >" : "< 50 MB >";
+                               ? TG_STR(MSG_SETV_UNLIMITED) : "< 50 MB >";
         break;
     case TG_GUI_SET_SOUND_FILE:
         text = state->notify_sound[0] != '\0'
                    ? tg_gui_settings_leaf(state->notify_sound)
-                   : "(built-in chime)";
+                   : TG_STR(MSG_SETV_BUILTIN_CHIME);
         break;
     case TG_GUI_SET_DOWNLOAD:
         text = state->settings_download;
@@ -9242,7 +9268,7 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     case TG_GUI_SET_PLAYER:
         text = state->video_player[0] != '\0'
                    ? tg_gui_settings_leaf(state->video_player)
-                   : "(the Workbench)";
+                   : TG_STR(MSG_SETV_WORKBENCH);
         break;
     case TG_GUI_SET_BEEP: on = state->notify_beep; break;
     case TG_GUI_SET_INLINE: on = state->inline_photos; break;
@@ -9395,7 +9421,7 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
                                   int width, int content_h)
 {
     tg_gui_state *st = (tg_gui_state *)state;
-    static const char title[] = "Settings";
+    const char *title = TG_STR(MSG_SET_TITLE);
     char value[TG_GUI_NAME_MAX];
     int rh = tg_gui_native_line_height(backend) + 4;
     int x0 = sidebar_w;
@@ -9446,12 +9472,12 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
 
     backend->draw_text(backend, TG_GUI_PEN_TEXT, left,
                        tg_gui_navigation_baseline(backend, 2, rh), title,
-                       sizeof(title) - 1UL);
+                       (unsigned long)strlen(title));
     {
         /* The way out for the mouse: a button at the right of the title. */
-        static const char close_label[] = "Close";
-        static const char above[] = "more above";
-        unsigned long cn = sizeof(close_label) - 1UL;
+        const char *close_label = TG_STR(MSG_SET_CLOSE);
+        const char *above = TG_STR(MSG_SET_MORE_ABOVE);
+        unsigned long cn = (unsigned long)strlen(close_label);
         int cw = backend->text_width(backend, close_label, cn) + 16;
         int cx = right - cw;
 
@@ -9463,7 +9489,7 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
                            tg_gui_navigation_baseline(backend, 1, rh),
                            close_label, cn);
         if (st->settings_scroll > 0) {
-            unsigned long n = sizeof(above) - 1UL;
+            unsigned long n = (unsigned long)strlen(above);
 
             backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM,
                                cx - 10 -
@@ -9487,7 +9513,8 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
             break;
         }
         id = tg_gui_settings_table[line].id;
-        label = tg_gui_settings_table[line].label;
+        label = tg_str(tg_gui_settings_table[line].msg,
+                       tg_gui_settings_table[line].label);
         base = tg_gui_navigation_baseline(backend, y, rh);
         if (id == 0) {
             backend->draw_text(backend, TG_GUI_PEN_LINK, left, base, label,
@@ -9522,8 +9549,8 @@ static void tg_gui_paint_settings(const tg_gui_state *state,
         }
     }
     hint = st->settings_scroll < max_scroll
-               ? "more below - Up/Down, SPACE changes"
-               : "Up/Down move, SPACE or a click changes, ESC closes";
+               ? TG_STR(MSG_SET_MORE_BELOW)
+               : TG_STR(MSG_SET_KEYS);
     backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                        tg_gui_make_rect(x0 + 6, hint_y, w - 12, 1));
     tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT_DIM, left,
@@ -10965,7 +10992,7 @@ static int tg_gui_archive_band_self_test(void)
     backend.draw_text = tg_gui_rec_text;
     backend.fill_rect = tg_gui_rec_fill;
     backend.avatar_fill = tg_gui_rec_avatar;
-    record.watch_text[0] = "Archived chats";
+    record.watch_text[0] = TG_STR(MSG_MENU_ARCHIVE);
     record.watch_text[1] = "Zeta row";
     record.watch_text[2] = "77";
     state->archive_band = 0;
@@ -11046,15 +11073,15 @@ static int tg_gui_notify_menu_self_test(void)
     state->ctx_msg = -1;
     if (tg_gui_context_items(state, labels, ids) != 2 ||
         ids[0] != TG_GUI_CTX_TOPIC_RENAME ||
-        strcmp(labels[0], "Rename topic...") != 0 ||
+        strcmp(labels[0], TG_STR(MSG_G_RENAME_TOPIC)) != 0 ||
         ids[1] != TG_GUI_CTX_TOPIC_CLOSE ||
-        strcmp(labels[1], "Close topic") != 0) {
+        strcmp(labels[1], TG_STR(MSG_G_CLOSE_TOPIC)) != 0) {
         puts("gui self-test: a topic's menu");
         return 2;
     }
     state->ctx_topic_closed = 1;
     if (tg_gui_context_items(state, labels, ids) != 2 ||
-        strcmp(labels[1], "Reopen topic") != 0) {
+        strcmp(labels[1], TG_STR(MSG_G_REOPEN_TOPIC)) != 0) {
         puts("gui self-test: a closed topic's menu");
         return 2;
     }
@@ -11075,31 +11102,31 @@ static int tg_gui_notify_menu_self_test(void)
     state->chats[0].index = 5UL;
     state->chats[0].pinned = 0;
     if (tg_gui_context_items(state, labels, ids) != 8 ||
-        ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
+        ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], TG_STR(MSG_G_PIN)) != 0 ||
         ids[1] != TG_GUI_CTX_CHAT_ARCHIVE ||
-        strcmp(labels[1], "Archive") != 0 ||
+        strcmp(labels[1], TG_STR(MSG_G_ARCHIVE)) != 0 ||
         ids[2] != TG_GUI_CTX_CHAT_READ ||
-        strcmp(labels[2], "Mark as unread") != 0 ||
+        strcmp(labels[2], TG_STR(MSG_G_MARK_AS_UNREAD)) != 0 ||
         ids[3] != TG_GUI_CTX_CHAT_REMOVE || ids[4] != TG_GUI_CTX_CHAT_MUTE ||
-        strcmp(labels[4], "Mute...") != 0 || ids[5] != TG_GUI_CTX_CHAT_SOUND ||
-        strcmp(labels[5], "Sound...") != 0 ||
+        strcmp(labels[4], TG_STR(MSG_G_MUTE)) != 0 || ids[5] != TG_GUI_CTX_CHAT_SOUND ||
+        strcmp(labels[5], TG_STR(MSG_G_SOUND)) != 0 ||
         ids[6] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        strcmp(labels[6], "Default sound") != 0 ||
+        strcmp(labels[6], TG_STR(MSG_G_DEFAULT_SOUND)) != 0 ||
         ids[7] != TG_GUI_CTX_CHAT_LEAVE ||
-        strcmp(labels[7], "Delete chat...") != 0) {
+        strcmp(labels[7], TG_STR(MSG_G_DELETE_CHAT)) != 0) {
         puts("gui self-test: direct chat sound menu wrong");
         return 2;
     }
     state->chats[0].pinned = 1;
     if (tg_gui_context_items(state, labels, ids) != 8 ||
-        strcmp(labels[0], "Unpin") != 0) {
+        strcmp(labels[0], TG_STR(MSG_G_UNPIN)) != 0) {
         puts("gui self-test: a pinned chat's menu cannot unpin");
         return 2;
     }
     /* A chat with something unread, or marked so, offers to mark it read. */
     state->chats[0].unread_mark = 1;
     if (tg_gui_context_items(state, labels, ids) != 8 ||
-        strcmp(labels[2], "Mark as read") != 0) {
+        strcmp(labels[2], TG_STR(MSG_G_MARK_AS_READ)) != 0) {
         puts("gui self-test: a marked chat's menu cannot mark it read");
         return 2;
     }
@@ -11109,11 +11136,11 @@ static int tg_gui_notify_menu_self_test(void)
     state->archive_view = 1;
     if (tg_gui_context_items(state, labels, ids) != 8 ||
         ids[0] != TG_GUI_CTX_CHAT_ARCHIVE ||
-        strcmp(labels[0], "Unarchive") != 0 ||
+        strcmp(labels[0], TG_STR(MSG_G_UNARCHIVE)) != 0 ||
         ids[1] != TG_GUI_CTX_CHAT_READ ||
         ids[2] != TG_GUI_CTX_CHAT_REMOVE ||
         ids[7] != TG_GUI_CTX_LIST_ARCHIVE ||
-        strcmp(labels[7], "Back to chats") != 0) {
+        strcmp(labels[7], TG_STR(MSG_G_BACK_TO_CHATS)) != 0) {
         puts("gui self-test: an archived chat's menu cannot unarchive");
         return 2;
     }
@@ -11123,7 +11150,7 @@ static int tg_gui_notify_menu_self_test(void)
     /* Saved Messages pins like any chat (inputPeerSelf), and has no
        Archive, read mark or Leave. */
     if (tg_gui_context_items(state, labels, ids) != 5 ||
-        ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], "Pin") != 0 ||
+        ids[0] != TG_GUI_CTX_CHAT_PIN || strcmp(labels[0], TG_STR(MSG_G_PIN)) != 0 ||
         ids[1] != TG_GUI_CTX_CHAT_REMOVE ||
         ids[4] != TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
         puts("gui self-test: Saved Messages cannot be pinned");
@@ -11131,45 +11158,45 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->chats[0].pinned = 1;
     if (tg_gui_context_items(state, labels, ids) != 5 ||
-        strcmp(labels[0], "Unpin") != 0) {
+        strcmp(labels[0], TG_STR(MSG_G_UNPIN)) != 0) {
         puts("gui self-test: pinned Saved Messages cannot be unpinned");
         return 2;
     }
     state->chats[0].pinned = 0;
     /* Saved Messages is muted on this machine only, and nothing is asked:
        its item has no dots. */
-    if (ids[2] != TG_GUI_CTX_CHAT_MUTE || strcmp(labels[2], "Mute") != 0) {
+    if (ids[2] != TG_GUI_CTX_CHAT_MUTE || strcmp(labels[2], TG_STR(MSG_RQ_MUTE)) != 0) {
         puts("gui self-test: Saved Messages' Mute promises a question");
         return 2;
     }
     state->chats[0].index = 5UL;
     state->ctx_notify_choice = TG_GUI_NOTIFY_MUTE;
     if (tg_gui_context_items(state, labels, ids) != 8 ||
-        strcmp(labels[4], "Unmute") != 0) {
+        strcmp(labels[4], TG_STR(MSG_G_UNMUTE)) != 0) {
         puts("gui self-test: muted chat menu cannot unmute");
         return 2;
     }
     state->chats[0].is_group = 1;
     if (tg_gui_context_items(state, labels, ids) != 9 ||
-        ids[5] != TG_GUI_CTX_CHAT_RING || strcmp(labels[5], "Enable ring") != 0 ||
+        ids[5] != TG_GUI_CTX_CHAT_RING || strcmp(labels[5], TG_STR(MSG_G_ENABLE_RING)) != 0 ||
         ids[6] != TG_GUI_CTX_CHAT_SOUND ||
         ids[7] != TG_GUI_CTX_CHAT_DEFAULT_SOUND ||
-        ids[8] != TG_GUI_CTX_CHAT_LEAVE || strcmp(labels[8], "Leave...") != 0) {
+        ids[8] != TG_GUI_CTX_CHAT_LEAVE || strcmp(labels[8], TG_STR(MSG_G_LEAVE)) != 0) {
         puts("gui self-test: group menu cannot enable ringing");
         return 2;
     }
     state->ctx_notify_choice = TG_GUI_NOTIFY_RING;
     if (tg_gui_context_items(state, labels, ids) != 9 ||
-        strcmp(labels[4], "Mute...") != 0 ||
-        strcmp(labels[5], "Disable ring") != 0) {
+        strcmp(labels[4], TG_STR(MSG_G_MUTE)) != 0 ||
+        strcmp(labels[5], TG_STR(MSG_G_DISABLE_RING)) != 0) {
         puts("gui self-test: ringing group menu cannot go quiet");
         return 2;
     }
     /* Muted on Telegram: Unmute, whatever this machine's own choice. */
     state->ctx_muted = 1;
     if (tg_gui_context_items(state, labels, ids) != 9 ||
-        strcmp(labels[4], "Unmute") != 0 ||
-        strcmp(labels[5], "Disable ring") != 0) {
+        strcmp(labels[4], TG_STR(MSG_G_UNMUTE)) != 0 ||
+        strcmp(labels[5], TG_STR(MSG_G_DISABLE_RING)) != 0) {
         puts("gui self-test: a chat muted on Telegram cannot be unmuted");
         return 2;
     }
@@ -11193,7 +11220,7 @@ static int tg_gui_notify_menu_self_test(void)
             if (ids[i] == TG_GUI_CTX_LIST_ARCHIVE ||
                 ids[i] == TG_GUI_CTX_SENDFILE ||
                 ids[i] == TG_GUI_CTX_SENDPHOTO ||
-                strcmp(labels[i], "Reload chat list") == 0) {
+                strcmp(labels[i], TG_STR(MSG_MENU_RELOAD)) == 0) {
                 puts("gui self-test: a chat's menu repeats the Chats "
                      "menu");
                 return 2;
@@ -11229,7 +11256,7 @@ static int tg_gui_notify_menu_self_test(void)
             deletes = 0;
             for (i = 0; i < n; ++i) {
                 found = found || (ids[i] == TG_GUI_CTX_HIDE &&
-                                  strcmp(labels[i], "Hide message") == 0);
+                                  strcmp(labels[i], TG_STR(MSG_G_HIDE_MESSAGE)) == 0);
                 deletes += ids[i] == TG_GUI_CTX_DELETE;
             }
             /* ...and Delete: one's own anywhere, and in a chat with one
@@ -11316,7 +11343,10 @@ static int tg_gui_notify_menu_self_test(void)
         for (c = 0UL; c < sizeof(fail) / sizeof(fail[0]); ++c) {
             tg_gui_send_failure_line(fail[c].rc, fail[c].refusal, line,
                                      sizeof(line));
-            if (strcmp(line, fail[c].line) != 0) {
+            /* the English lines: checked word for word without a
+               catalog (TG_CATALOG) */
+            if (tg_locale_language()[0] == '\0' &&
+                strcmp(line, fail[c].line) != 0) {
                 printf("gui self-test: send failure case %lu wrong (%s)\n",
                        c, line);
                 return 2;
@@ -11424,11 +11454,11 @@ static int tg_gui_notify_menu_self_test(void)
         n = tg_gui_context_items(state, labels, ids);
         if (!state->ctx_visible || !state->ctx_attach || n != 3 ||
             ids[0] != TG_GUI_CTX_SENDPHOTO ||
-            strcmp(labels[0], "Photo...") != 0 ||
+            strcmp(labels[0], TG_STR(MSG_G_PHOTO)) != 0 ||
             ids[1] != TG_GUI_CTX_SENDFILE ||
-            strcmp(labels[1], "File...") != 0 ||
+            strcmp(labels[1], TG_STR(MSG_G_FILE)) != 0 ||
             ids[2] != TG_GUI_CTX_POLL_NEW ||
-            strcmp(labels[2], "Poll...") != 0 ||
+            strcmp(labels[2], TG_STR(MSG_G_POLL)) != 0 ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 200, 300) != -1 ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 204, 298) != -1 ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 204, 296) !=
@@ -11737,7 +11767,7 @@ static int tg_gui_notify_menu_self_test(void)
             return 2;
         }
         tg_gui_requester_name(name, sizeof(name), "");
-        if (strcmp(name, "them") != 0) {
+        if (strcmp(name, TG_STR(MSG_G_THEM)) != 0) {
             puts("gui self-test: empty requester name wrong");
             return 2;
         }
@@ -12989,11 +13019,11 @@ int tg_gui_self_test(void)
             for (i = 0; i < count; ++i) {
                 saw_download |= ids[i] == TG_GUI_CTX_DOWNLOAD;
                 if (ids[i] == TG_GUI_CTX_FILE_OPEN &&
-                    strcmp(labels[i], "Open") == 0) {
+                    strcmp(labels[i], TG_STR(MSG_G_OPEN)) == 0) {
                     at_open = i;
                 }
                 if (ids[i] == TG_GUI_CTX_FILE_SHOW &&
-                    strcmp(labels[i], "Show in drawer") == 0) {
+                    strcmp(labels[i], TG_STR(MSG_G_SHOW_IN_DRAWER)) == 0) {
                     at_show = i;
                 }
             }
@@ -13014,7 +13044,7 @@ int tg_gui_self_test(void)
             } else if (ids[i] == TG_GUI_CTX_SAVE_PHOTO) {
                 saw_photo_save = 1;
             } else if (ids[i] == TG_GUI_CTX_MSG_PIN) {
-                saw_pin = strcmp(labels[i], "Pin") == 0;
+                saw_pin = strcmp(labels[i], TG_STR(MSG_G_PIN)) == 0;
             }
         }
         /* A message that is pinned offers Unpin in the same place. */
@@ -13022,7 +13052,7 @@ int tg_gui_self_test(void)
         if (tg_gui_context_items(&state, labels, ids) == count) {
             for (i = 0; i < count; ++i) {
                 if (ids[i] == TG_GUI_CTX_MSG_PIN) {
-                    saw_unpin = strcmp(labels[i], "Unpin") == 0;
+                    saw_unpin = strcmp(labels[i], TG_STR(MSG_G_UNPIN)) == 0;
                 }
             }
         }
@@ -13058,7 +13088,7 @@ int tg_gui_self_test(void)
                 count = tg_gui_context_items(&state, labels, ids);
                 for (i = 0; i < count; ++i) {
                     if (ids[i] == TG_GUI_CTX_FILE_PLAY &&
-                        strcmp(labels[i], "Play") == 0 && at_play < 0) {
+                        strcmp(labels[i], TG_STR(MSG_G_PLAY)) == 0 && at_play < 0) {
                         at_play = i;
                     }
                     saw_download |= ids[i] == TG_GUI_CTX_DOWNLOAD;
@@ -13090,7 +13120,7 @@ int tg_gui_self_test(void)
             state.video_player[0] = '\0';
             tg_gui_settings_value(&state, TG_GUI_SET_PLAYER, value,
                                   sizeof(value));
-            if (strcmp(value, "(the Workbench)") != 0 ||
+            if (strcmp(value, TG_STR(MSG_SETV_WORKBENCH)) != 0 ||
                 tg_gui_settings_kind(TG_GUI_SET_PLAYER) !=
                     TG_GUI_SET_KIND_ACTION) {
                 puts("gui self-test: media player settings line");
@@ -13170,13 +13200,13 @@ int tg_gui_self_test(void)
         count = tg_gui_context_items(&state, labels, ids);
         ok_poll = ok_poll && count == plain + 1 && count <= TG_GUI_CTX_MENU_ITEMS &&
                   ids[0] == TG_GUI_CTX_REACT && ids[1] == TG_GUI_CTX_POLL &&
-                  strcmp(labels[1], "Vote...") == 0;
+                  strcmp(labels[1], TG_STR(MSG_G_VOTE)) == 0;
         state.ctx_poll_open = 0;
         state.ctx_poll_voted = 1;
         count = tg_gui_context_items(&state, labels, ids);
         ok_poll = ok_poll && count == plain + 1 &&
                   ids[1] == TG_GUI_CTX_POLL_RETRACT &&
-                  strcmp(labels[1], "Take back vote") == 0;
+                  strcmp(labels[1], TG_STR(MSG_G_TAKE_BACK_VOTE)) == 0;
         /* Stop poll: on one's own poll while it is open, voted or not,
            right under the vote; never on someone else's, never on a
            poll that is closed or no longer held. */
@@ -13191,7 +13221,7 @@ int tg_gui_self_test(void)
         ok_poll = ok_poll && count <= TG_GUI_CTX_MENU_ITEMS &&
                   ids[1] == TG_GUI_CTX_POLL_RETRACT &&
                   ids[2] == TG_GUI_CTX_POLL_STOP &&
-                  strcmp(labels[2], "Stop poll") == 0;
+                  strcmp(labels[2], TG_STR(MSG_RQ_STOP_POLL)) == 0;
         state.ctx_poll_voted = 0;
         count = tg_gui_context_items(&state, labels, ids);
         ok_poll = ok_poll && ids[1] == TG_GUI_CTX_POLL_STOP;
@@ -13210,7 +13240,7 @@ int tg_gui_self_test(void)
         ok_poll = ok_poll && count == plain + 2 &&
                   ids[1] == TG_GUI_CTX_POLL_RETRACT &&
                   ids[2] == TG_GUI_CTX_POLL_VOTERS &&
-                  strcmp(labels[2], "Who voted...") == 0;
+                  strcmp(labels[2], TG_STR(MSG_G_WHO_VOTED)) == 0;
         state.messages[0].is_own = 1;
         state.ctx_poll_live = 1;
         count = tg_gui_context_items(&state, labels, ids);
@@ -13238,7 +13268,7 @@ int tg_gui_self_test(void)
         state.poll_multiple = 1;
         count = tg_gui_context_items(&state, labels, ids);
         ok_poll = ok_poll && count == 3 && ids[2] == TG_GUI_CTX_POLL_SEND &&
-                  strcmp(labels[2], "Send vote") == 0;
+                  strcmp(labels[2], TG_STR(MSG_G_SEND_VOTE)) == 0;
         /* No answers to show, or a message without a poll: the usual
            menu. */
         state.poll_item_count = 0;
@@ -13303,7 +13333,7 @@ int tg_gui_self_test(void)
         count = tg_gui_context_items(&state, labels, ids);
         for (i = 0; i < count; ++i) {
             if (ids[i] == TG_GUI_CTX_SELECT &&
-                strcmp(labels[i], "Select") == 0) {
+                strcmp(labels[i], TG_STR(MSG_G_SELECT)) == 0) {
                 saw_select = 1;
             }
         }
@@ -13359,11 +13389,17 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 480;
-        rec.watch_text[0] = "3 selected";
-        rec.watch_text[1] = "Forward";
-        rec.watch_text[2] = "Delete";
-        rec.watch_text[3] = "Cancel";
-        rec.watch_text[4] = "Send";
+        {
+            static char three[32]; /* "3 selected" in the user's language */
+
+            tg_locale_format(three, sizeof(three), TG_STR(MSG_G_D_SELECTED),
+                             3);
+            rec.watch_text[0] = three;
+        }
+        rec.watch_text[1] = TG_STR(MSG_G_SEL_FORWARD);
+        rec.watch_text[2] = TG_STR(MSG_G_DELETE);
+        rec.watch_text[3] = TG_STR(MSG_W_CANCEL);
+        rec.watch_text[4] = TG_STR(MSG_G_SEND);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         lh = b.line_height(&b);
@@ -13394,8 +13430,8 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 480;
-        rec.watch_text[0] = "Send";
-        rec.watch_text[1] = "Cancel";
+        rec.watch_text[0] = TG_STR(MSG_G_SEND);
+        rec.watch_text[1] = TG_STR(MSG_W_CANCEL);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         ok_pick = ok_pick && rec.watch_hits[0] == 1 &&
@@ -13640,8 +13676,8 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 480;
         rec.height = 900; /* every row in view: the transcript sits low */
-        rec.watch_text[0] = "Yesterday";
-        rec.watch_text[1] = "Today";
+        rec.watch_text[0] = TG_STR(MSG_G_YESTERDAY);
+        rec.watch_text[1] = TG_STR(MSG_G_TODAY);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         if (rec.watch_hits[0] != 1 || rec.watch_hits[1] != 1 ||
@@ -13661,16 +13697,23 @@ int tg_gui_self_test(void)
             failed = 1;
         }
         tg_gui_day_label(&state, 20752UL, label, sizeof(label));
-        failed |= strcmp(label, "Today") != 0;
+        failed |= strcmp(label, TG_STR(MSG_G_TODAY)) != 0;
         tg_gui_day_label(&state, 20751UL, label, sizeof(label));
-        failed |= strcmp(label, "Yesterday") != 0;
-        tg_gui_day_label(&state, 20518UL, label, sizeof(label));
-        failed |= strcmp(label, "5 March") != 0;
-        tg_gui_day_label(&state, 20454UL, label, sizeof(label));
-        failed |= strcmp(label, "31 December 2025") != 0;
-        state.today = 0UL; /* not known yet: the full date */
-        tg_gui_day_label(&state, 20752UL, label, sizeof(label));
-        failed |= strcmp(label, "25 October 2026") != 0;
+        failed |= strcmp(label, TG_STR(MSG_G_YESTERDAY)) != 0;
+        {
+            char want[32]; /* the months in the user's language */
+
+            tg_gui_day_label(&state, 20518UL, label, sizeof(label));
+            sprintf(want, "5 %.9s", TG_STR(MSG_G_MARCH));
+            failed |= strcmp(label, want) != 0;
+            tg_gui_day_label(&state, 20454UL, label, sizeof(label));
+            sprintf(want, "31 %.9s 2025", TG_STR(MSG_G_DECEMBER));
+            failed |= strcmp(label, want) != 0;
+            state.today = 0UL; /* not known yet: the full date */
+            tg_gui_day_label(&state, 20752UL, label, sizeof(label));
+            sprintf(want, "25 %.9s 2026", TG_STR(MSG_G_OCTOBER));
+            failed |= strcmp(label, want) != 0;
+        }
         state.messages[0] = saved0;
         state.messages[1] = saved1;
         state.today = saved_today;
@@ -13697,7 +13740,7 @@ int tg_gui_self_test(void)
             memset(&rec, 0, sizeof(rec));
             rec.width = 640;
             rec.height = 480;
-            rec.watch_text[0] = "Draft: ";
+            rec.watch_text[0] = TG_STR(MSG_G_DRAFT);
             rec.watch_text[1] = state.chats[0].preview;
             b.context = &rec;
             tg_gui_paint(&state, &b);
@@ -13807,7 +13850,7 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 480;
-        rec.watch_text[0] = "Settings";
+        rec.watch_text[0] = TG_STR(MSG_SET_TITLE);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         ok_set = ok_set && rec.watch_hits[0] == 0 &&
@@ -13827,7 +13870,7 @@ int tg_gui_self_test(void)
                  tg_gui_settings_selected(&state) == TG_GUI_SET_NOTIFY;
         tg_gui_settings_value(&state, TG_GUI_SET_NOTIFY, value,
                               sizeof(value));
-        ok_set = ok_set && strcmp(value, "< Count and pop-up >") == 0;
+        ok_set = ok_set && strcmp(value, TG_STR(MSG_SETV_COUNT_POPUP)) == 0;
         tg_gui_settings_value(&state, TG_GUI_SET_AREXX_PORT, value,
                               sizeof(value));
         ok_set = ok_set && strcmp(value, "[x]") == 0;
@@ -13845,7 +13888,7 @@ int tg_gui_self_test(void)
         state.notify_sound[0] = '\0';
         tg_gui_settings_value(&state, TG_GUI_SET_SOUND_FILE, value,
                               sizeof(value));
-        ok_set = ok_set && strcmp(value, "(built-in chime)") == 0;
+        ok_set = ok_set && strcmp(value, TG_STR(MSG_SETV_BUILTIN_CHIME)) == 0;
         /* The pause between sounds: off unless set, any number from the
            file shown as it is, and dim while Beep is off. */
         {
@@ -13855,15 +13898,21 @@ int tg_gui_self_test(void)
             state.notify_quiet = 0UL;
             tg_gui_settings_value(&state, TG_GUI_SET_QUIET, value,
                                   sizeof(value));
-            ok_set = ok_set && strcmp(value, "< Off >") == 0;
+            ok_set = ok_set && strcmp(value, TG_STR(MSG_SETV_OFF)) == 0;
             state.notify_quiet = 60UL;
             tg_gui_settings_value(&state, TG_GUI_SET_QUIET, value,
                                   sizeof(value));
-            ok_set = ok_set && strcmp(value, "< 1 minute >") == 0;
+            ok_set = ok_set && strcmp(value, TG_STR(MSG_SETV_1_MINUTE)) == 0;
             state.notify_quiet = 20UL;
             tg_gui_settings_value(&state, TG_GUI_SET_QUIET, value,
                                   sizeof(value));
-            ok_set = ok_set && strcmp(value, "< 20 seconds >") == 0;
+            {
+                char want[32];
+
+                tg_locale_format(want, sizeof(want), TG_STR(MSG_SETV_SECONDS),
+                                 20UL);
+                ok_set = ok_set && strcmp(value, want) == 0;
+            }
             state.notify_beep = 0;
             ok_set = ok_set &&
                      tg_gui_settings_disabled(&state, TG_GUI_SET_QUIET);
@@ -13963,11 +14012,11 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 480;
-        rec.watch_text[0] = "Settings";
-        rec.watch_text[1] = "Photos and emoji";
-        rec.watch_text[2] = "Built-in chime";
-        rec.watch_text[3] = "< Count and pop-up >";
-        rec.watch_text[4] = "Close";
+        rec.watch_text[0] = TG_STR(MSG_SET_TITLE);
+        rec.watch_text[1] = TG_STR(MSG_SET_PHOTOS_AND_EMOJI);
+        rec.watch_text[2] = TG_STR(MSG_SET_BUILT_IN_CHIME);
+        rec.watch_text[3] = TG_STR(MSG_SETV_COUNT_POPUP);
+        rec.watch_text[4] = TG_STR(MSG_SET_CLOSE);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         ok_set = ok_set && rec.watch_hits[0] == 1 && rec.watch_hits[1] == 1 &&
@@ -14007,8 +14056,8 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 200;
-        rec.watch_text[0] = "ARexx port";
-        rec.watch_text[1] = "Notifications";
+        rec.watch_text[0] = TG_STR(MSG_SET_AREXX_PORT);
+        rec.watch_text[1] = TG_STR(MSG_SET_NOTIFICATIONS);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         ok_set = ok_set && state.set_rows > 0 && state.set_rows < lines &&
@@ -14022,9 +14071,9 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 200;
-        rec.watch_text[0] = "Scripts may send messages";
-        rec.watch_text[1] = "Notifications";
-        rec.watch_text[2] = "more above";
+        rec.watch_text[0] = TG_STR(MSG_SET_SCRIPTS_MAY_SEND_MESSAGES);
+        rec.watch_text[1] = TG_STR(MSG_SET_NOTIFICATIONS);
+        rec.watch_text[2] = TG_STR(MSG_SET_MORE_ABOVE);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         ok_set = ok_set && rec.watch_hits[0] == 1 && rec.watch_hits[1] == 0 &&
@@ -14369,7 +14418,7 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 480;
-        rec.watch_text[0] = "Pinned: ";
+        rec.watch_text[0] = TG_STR(MSG_G_PINNED);
         b.context = &rec;
         tg_gui_paint(&state, &b);
         header_bottom = tg_gui_header_h(&b);
@@ -14382,7 +14431,7 @@ int tg_gui_self_test(void)
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 480;
-        rec.watch_text[0] = "Pinned: ";
+        rec.watch_text[0] = TG_STR(MSG_G_PINNED);
         rec.watch_text[1] = state.pinned_text;
         b.context = &rec;
         tg_gui_paint(&state, &b);
@@ -14445,8 +14494,14 @@ int tg_gui_self_test(void)
             memset(&rec, 0, sizeof(rec));
             rec.width = 640;
             rec.height = 480;
-            rec.watch_text[0] = "Pinned 2/3: ";
-            rec.watch_text[1] = "Pinned: ";
+            {
+                static char two_of_three[32];
+
+                tg_locale_format(two_of_three, sizeof(two_of_three),
+                                 TG_STR(MSG_G_PINNED_D_D), 2, 3);
+                rec.watch_text[0] = two_of_three;
+            }
+            rec.watch_text[1] = TG_STR(MSG_G_PINNED);
             b.context = &rec;
             tg_gui_paint(&state, &b);
             state.pinned_index = 0;
@@ -15970,7 +16025,9 @@ int tg_gui_self_test(void)
             return 2;
         }
         tg_gui_notify_title(ns, text, sizeof(text));
-        if (strcmp(text, TG_APP_TITLE " (3 new)") != 0) {
+        /* the English words: checked without a catalog (TG_CATALOG) */
+        if (tg_locale_language()[0] == '\0' &&
+            strcmp(text, TG_APP_TITLE " (3 new)") != 0) {
             printf("gui self-test: notify title \"%s\"\n", text);
             return 2;
         }
@@ -16129,7 +16186,8 @@ int tg_gui_self_test(void)
             tg_gui_notify_popup_text(ns, head, sizeof(head), body,
                                      sizeof(body));
             if (strcmp(head, "Mario Rossi") != 0 ||
-                strcmp(body, "2 new messages, 3 in all") != 0) {
+                (tg_locale_language()[0] == '\0' &&
+                 strcmp(body, "2 new messages, 3 in all") != 0)) {
                 printf("gui self-test: notify pop-up \"%s\" \"%s\"\n", head,
                        body);
                 return 2;
@@ -16231,7 +16289,7 @@ int tg_gui_self_test(void)
             ns->notify_last_peer_lo = 0x30UL;
             tg_gui_notify_popup_text(ns, head, sizeof(head), body,
                                      sizeof(body));
-            if (strcmp(body, "1 new message") != 0) {
+            if (strcmp(body, TG_STR(MSG_G_1_NEW_MESSAGE)) != 0) {
                 printf("gui self-test: notify empty text \"%s\"\n", body);
                 return 2;
             }
@@ -16278,7 +16336,8 @@ int tg_gui_self_test(void)
                 }
             }
             if (kind == 0) {
-                sprintf(want, "%.80s (999 new)", TG_APP_TITLE);
+                sprintf(want, "%.80s (999%.8s)", TG_APP_TITLE,
+                        TG_STR(MSG_G_TITLE_NEW));
             } else if (kind == 1) {
                 strcpy(want, TG_APP_NAME " (999)");
             } else {
@@ -16882,7 +16941,7 @@ int tg_gui_self_test(void)
         tg_gui_state *draft = tg_gui_test_scratch_state();
         tg_gui_record rec;
         tg_gui_backend b = backend;
-        static const char keys[] = "ENTER confirms   ESC quits";
+        const char *keys = TG_STR(MSG_G_LOGIN_KEYS);
         static const char hint[] = "Type it with the country code";
         int lh;
         int mid = 200;
@@ -16909,7 +16968,7 @@ int tg_gui_self_test(void)
         rec.width = 640;
         rec.height = 2 * mid;
         rec.watch_text[0] = keys;
-        rec.watch_text[2] = TG_APP_ACCOUNT_NOTE;
+        rec.watch_text[2] = TG_STR(MSG_G_ACCOUNT_NOTE);
         tg_gui_paint(draft, &b);
         if (plain_y != mid + (3 * lh) || rec.watch_hits[2] != 1 ||
             rec.watch_y[2] - (lh - 2) < mid + lh + 12 ||
@@ -16928,7 +16987,7 @@ int tg_gui_self_test(void)
         rec.height = 2 * mid;
         rec.watch_text[0] = keys;
         rec.watch_text[1] = hint;
-        rec.watch_text[2] = TG_APP_ACCOUNT_NOTE;
+        rec.watch_text[2] = TG_STR(MSG_G_ACCOUNT_NOTE);
         tg_gui_paint(draft, &b);
         if (rec.watch_hits[1] != 1 || rec.watch_hits[2] != 0 ||
             rec.watch_y[1] - (lh - 2) < mid + lh + 12 ||
@@ -16938,7 +16997,7 @@ int tg_gui_self_test(void)
             return 2;
         }
         /* Whole in the smallest window, in an 8-pixel font like Topaz. */
-        if ((int)strlen(TG_APP_ACCOUNT_NOTE) * 8 > 480 - 4) {
+        if ((int)strlen(TG_STR(MSG_G_ACCOUNT_NOTE)) * 8 > 480 - 4) {
             puts("gui self-test: the account note does not fit 480 pixels");
             return 2;
         }

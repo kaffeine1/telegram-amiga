@@ -25,11 +25,15 @@ the program, replaces them. The Locale preferences choose the language.
    reminder. `\n` is a line break, and a line ending in a backslash goes
    on in the next one.
 3. Keep every `%s`, `%lu`, `%d` of the English text, in the same order:
-   a missing or different one would crash the program. A percent sign
-   on its own is written `%%`.
-4. Run `python3 scripts/catalog.py all`. It refuses a text that changes
-   the conversions and says which texts are still missing (those stay
-   English).
+   a missing or different one would crash the program. In a text that
+   has them, a percent sign is written `%%`; in a text without any, `%`.
+   Requester buttons are separated by `|`: keep their number and order.
+4. Keep status lines (the `MSG_ST_` texts) within 47 letters, or no
+   longer than the English where that is already longer: the window's
+   status line holds no more.
+5. Run `python3 scripts/catalog.py all`. It refuses a text that changes
+   the conversions, the number of buttons or the status line's width,
+   and says which texts are still missing (those stay English).
 
 The file can be UTF-8 or Latin-1; the catalog is Latin-1, the letters the
 window draws today. Languages written with other letters (Polish, Czech,
@@ -41,12 +45,17 @@ Greek, Russian) wait for the window to draw them (see ROADMAP.md,
 Put `Catalogs/<language>/amigram.catalog` in the Amigram drawer, choose
 the language in the Locale preferences and start Amigram. On the host
 build, `TG_CATALOG=Catalogs/<language>/amigram.catalog build/host/Amigram
---gui-self-test` checks the QR login screen with the translated texts.
+--gui-self-test` runs the window's layout checks with the translated
+texts: a label too wide for its place shows up there.
 
 ## A new text in the code
 
 Add it to `locale/amigram.cd` with a new id, run
 `python3 scripts/catalog.py all`, and use `TG_STR(MSG_NAME)` (from
-`tg_locale.h`) where the code had the English string. A text handed to
-EasyRequest as its format, or printed with sprintf, is a format: keep
-its conversions in the .cd as in the code.
+`tg_locale.h`) where the code had the English string. Copy it with a
+bounded copy, never strcpy: a translation can be longer. A text with a
+number or a name goes through `tg_locale_format(buf, sizeof(buf),
+TG_STR(MSG_NAME), ...)`, which cuts what does not fit; build once with
+`-DTG_LOCALE_CHECK_FORMATS` to have the compiler check the arguments
+against the English text. A plural is two texts (`MSG_X_1` and `MSG_X`),
+not an "s" added in the code. Requesters show their text as written.

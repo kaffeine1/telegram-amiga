@@ -4161,7 +4161,7 @@ static void tg_gui_photo_cache_request_clear(tg_gui_state *state,
     tg_gui_photo_disk_cache.clear_files = 0UL;
     tg_gui_photo_disk_cache.clear_bytes = 0ULL;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Clearing photo cache...");
+                       TG_STR(MSG_ST_CLEARING_PHOTO_CACHE));
 }
 
 static int tg_gui_photo_cache_clear_tick(tg_gui_state *state)
@@ -4202,7 +4202,7 @@ static int tg_gui_photo_cache_clear_tick(tg_gui_state *state)
         char line[64];
 
         if (tg_gui_photo_disk_cache.scan_failed) {
-            strcpy(line, "Photo cache clear incomplete: directory scan failed");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_DIRECTORY));
         } else if (tg_gui_photo_disk_cache.count == 0) {
             unsigned long mb;
             unsigned long tenth;
@@ -4218,10 +4218,10 @@ static int tg_gui_photo_cache_clear_tick(tg_gui_state *state)
                 ++mb;
                 tenth = 0UL;
             }
-            sprintf(line, "Photo cache cleared: %lu files, %lu.%lu MB",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_PHOTO_CACHE_CLEARED_LU_FILES),
                     tg_gui_photo_disk_cache.clear_files, mb, tenth);
         } else {
-            sprintf(line, "Photo cache clear incomplete: %d files busy",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_D),
                     tg_gui_photo_disk_cache.count);
         }
         tg_gui_window_copy(state->status, sizeof(state->status), line);
@@ -7608,7 +7608,7 @@ static void tg_gui_window_topic_pick(tg_gui_state *state, int row,
         state->chat_scroll = 0;
         state->chat_scroll_to_sel = 1;
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Live - F1-F10 chats, Amiga+Q quits");
+                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -7651,8 +7651,8 @@ static void tg_gui_window_topic_pick(tg_gui_state *state, int row,
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
                        state->topic_open != 0UL
-                           ? "Topic open - ENTER writes in it"
-                           : "Live - F1-F10 chats, Amiga+Q quits");
+                           ? TG_STR(MSG_ST_TOPIC_OPEN_ENTER_WRITES_IN)
+                           : TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
     tg_gui_window_paint(state, backend);
 }
 
@@ -7678,30 +7678,30 @@ static void tg_gui_window_topic_new(tg_gui_state *state,
 
     if (!tg_gui_session_is_open() || !tg_gui_session_forum_open()) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Open a group with topics first");
+                           TG_STR(MSG_ST_OPEN_A_GROUP_WITH_TOPICS));
         tg_gui_window_paint(state, backend);
         return;
     }
     name[0] = '\0';
-    if (!tg_gui_window_text_dialog(ctx, ctx->window, "New topic",
-                                   "A new topic in this group",
-                                   "Topic name:", "Create", name,
+    if (!tg_gui_window_text_dialog(ctx, ctx->window, TG_STR(MSG_W_NEW_TOPIC),
+                                   TG_STR(MSG_W_A_NEW_TOPIC_IN_THIS),
+                                   TG_STR(MSG_W_TOPIC_NAME), TG_STR(MSG_W_CREATE), name,
                                    sizeof(name)) ||
         name[0] == '\0') {
         tg_gui_window_paint(state, backend);
         return;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Making the topic...");
+                       TG_STR(MSG_ST_MAKING_THE_TOPIC));
     tg_gui_window_paint(state, backend);
     rc = tg_gui_session_topic_create(name, &id, stdout);
     if (rc == 1) {
-        sprintf(line, "Telegram refused: %.48s",
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_TELEGRAM_REFUSED_48S),
                 tg_gui_session_topic_refusal());
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else if (rc != 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not make the topic (network?)");
+                           TG_STR(MSG_ST_COULD_NOT_MAKE_THE_TOPIC));
     } else {
         for (k = 1; k < state->chat_count && tg_gui_topics_listed(state);
              ++k) {
@@ -7711,7 +7711,7 @@ static void tg_gui_window_topic_new(tg_gui_state *state,
             }
         }
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Topic made - ENTER writes in it");
+                           TG_STR(MSG_ST_TOPIC_MADE_ENTER_WRITES_IN));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -7745,9 +7745,9 @@ static void tg_gui_window_topic_change(tg_gui_state *state,
                 break;
             }
         }
-        if (!tg_gui_window_text_dialog(ctx, ctx->window, "Rename topic",
-                                       "A new name for the topic",
-                                       "Topic name:", "Rename", name,
+        if (!tg_gui_window_text_dialog(ctx, ctx->window, TG_STR(MSG_W_RENAME_TOPIC),
+                                       TG_STR(MSG_W_A_NEW_NAME_FOR_THE),
+                                       TG_STR(MSG_W_TOPIC_NAME), TG_STR(MSG_W_RENAME), name,
                                        sizeof(name)) ||
             name[0] == '\0') {
             tg_gui_window_paint(state, backend);
@@ -7755,23 +7755,23 @@ static void tg_gui_window_topic_change(tg_gui_state *state,
         }
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       close ? (closed ? "Closing the topic..."
-                                       : "Opening the topic again...")
-                             : "Renaming the topic...");
+                       close ? (closed ? TG_STR(MSG_ST_CLOSING_THE_TOPIC)
+                                       : TG_STR(MSG_ST_OPENING_THE_TOPIC_AGAIN))
+                             : TG_STR(MSG_ST_RENAMING_THE_TOPIC));
     tg_gui_window_paint(state, backend);
     rc = tg_gui_session_topic_edit(topic, close ? 0 : name, closed, stdout);
     if (rc == 1) {
-        sprintf(line, "Telegram refused: %.48s",
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_TELEGRAM_REFUSED_48S),
                 tg_gui_session_topic_refusal());
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else if (rc != 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not change the topic (network?)");
+                           TG_STR(MSG_ST_COULD_NOT_CHANGE_THE_TOPIC));
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           !close ? "Topic renamed"
-                           : closed ? "Topic closed: only admins write in it"
-                                    : "Topic open again");
+                           !close ? TG_STR(MSG_ST_TOPIC_RENAMED)
+                           : closed ? TG_STR(MSG_ST_TOPIC_CLOSED_ONLY_ADMINS_WRITE)
+                                    : TG_STR(MSG_ST_TOPIC_OPEN_AGAIN));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -7783,7 +7783,7 @@ static int tg_gui_window_topic_needed(tg_gui_state *state,
 {
     if (state->forum_open && state->topic_open == 0UL) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Choose a topic in the list first");
+                           TG_STR(MSG_ST_CHOOSE_A_TOPIC_IN_THE));
         tg_gui_window_paint(state, backend);
         return 1;
     }
@@ -8057,7 +8057,7 @@ static void tg_gui_window_login_finish(tg_gui_state *state)
     tg_gui_window_copy(state->title, sizeof(state->title), TG_APP_TITLE);
     state->open_chat_valid = 0;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Logged in - relaunch to connect");
+                       TG_STR(MSG_ST_LOGGED_IN_RELAUNCH_TO_CONNECT));
 }
 
 /* Handles one key while a login screen is shown (state->mode != CHAT). ESC
@@ -8080,7 +8080,7 @@ static void tg_gui_window_login_code_prompt(tg_gui_state *state)
         /* 35, not 34: "Code sent in Telegram on your phone" is 35 characters
            and the old limit showed it as "...your phon (5 digits)". With two
            digits at most the line is 47 characters, inside the status. */
-        sprintf(line, "%.35s (%lu digits)", hint, digits);
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_35S_LU_DIGITS), hint, digits);
     } else {
         sprintf(line, "%.46s", hint);
     }
@@ -8106,7 +8106,7 @@ static void tg_gui_window_login_failed(tg_gui_state *state,
 static void tg_gui_window_login_code_expired(tg_gui_state *state)
 {
     state->mode = TG_GUI_MODE_LOGIN_PHONE;
-    tg_gui_window_login_failed(state, "That code has expired");
+    tg_gui_window_login_failed(state, TG_STR(MSG_W_THAT_CODE_HAS_EXPIRED));
     tg_gui_window_copy(state->input, sizeof(state->input),
                        tg_gui_session_login_phone());
 }
@@ -8131,7 +8131,7 @@ static void tg_gui_window_login_qr_poll(tg_gui_state *state,
     first = tg_gui_session_login_qr_link()[0] == '\0';
     if (first) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Getting a code from Telegram...");
+                           TG_STR(MSG_ST_GETTING_A_CODE_FROM_TELEGRAM));
         state->status_hint[0] = '\0';
         tg_gui_window_paint(state, backend);
     }
@@ -8150,7 +8150,7 @@ static void tg_gui_window_login_qr_poll(tg_gui_state *state,
         }
     } else if (rc == TG_GUI_LOGIN_OK) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Signed in - opening your chats...");
+                           TG_STR(MSG_ST_SIGNED_IN_OPENING_YOUR_CHATS));
         tg_gui_window_paint(state, backend);
         tg_gui_window_login_finish(state);
         tg_gui_window_paint(state, backend);
@@ -8160,13 +8160,13 @@ static void tg_gui_window_login_qr_poll(tg_gui_state *state,
         state->input_masked = 1;
         state->status_hint[0] = '\0';
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Scanned - now your cloud password");
+                           TG_STR(MSG_ST_SCANNED_NOW_YOUR_CLOUD_PASSWORD));
         state->cursor_on = 1;
         tg_gui_window_paint(state, backend);
     } else {
         /* The code stays (or the screen keeps waiting for one) and the
            next ask comes in a few seconds. */
-        tg_gui_window_login_failed(state, "No answer from Telegram");
+        tg_gui_window_login_failed(state, TG_STR(MSG_W_NO_ANSWER_FROM_TELEGRAM));
         tg_gui_window_paint(state, backend);
     }
 }
@@ -8189,7 +8189,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->input[0] = '\0';
             state->status_hint[0] = '\0';
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Enter your phone number (+...)");
+                               TG_STR(MSG_ST_ENTER_YOUR_PHONE_NUMBER));
             state->cursor_on = 1;
             *caret_ticks = 0;
             tg_gui_window_paint(state, backend);
@@ -8220,20 +8220,19 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         state->status_hint[0] = '\0';
         if (route == 0) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Telegram offers no other way");
+                               TG_STR(MSG_ST_TELEGRAM_OFFERS_NO_OTHER_WAY));
             tg_gui_window_copy(state->status_hint,
                                sizeof(state->status_hint),
-                               "Look for the code in the Telegram app on "
-                               "your phone");
+                               TG_STR(MSG_ST_LOOK_FOR_THE_CODE_IN));
         } else if (wait > 0UL) {
-            sprintf(line, "Wait %lu s, then press S again",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_WAIT_LU_S_THEN_PRESS),
                     wait > 9999UL ? 9999UL : wait);
             tg_gui_window_copy(state->status, sizeof(state->status), line);
         } else {
             int rc;
 
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Asking Telegram to resend...");
+                               TG_STR(MSG_ST_ASKING_TELEGRAM_TO_RESEND));
             state->cursor_on = 0;
             tg_gui_window_paint(state, backend);
             rc = tg_gui_session_login_resend_code(stdout);
@@ -8243,7 +8242,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             } else if (rc == TG_GUI_LOGIN_CODE_EXPIRED) {
                 tg_gui_window_login_code_expired(state);
             } else {
-                tg_gui_window_login_failed(state, "Resend failed - try again");
+                tg_gui_window_login_failed(state, TG_STR(MSG_W_RESEND_FAILED_TRY_AGAIN));
             }
         }
         state->cursor_on = 1;
@@ -8283,7 +8282,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         state->input[0] == '\0') {
         if (state->mode == TG_GUI_MODE_LOGIN_PHONE) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Enter your phone (+ country code)");
+                               TG_STR(MSG_ST_ENTER_YOUR_PHONE_COUNTRY_CODE));
         } else {
             tg_gui_window_login_code_prompt(state);
         }
@@ -8296,7 +8295,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
     /* RETURN: submit the current field. Show progress first -- the DH/RPC round
        trip blocks the window for several seconds on a slow link. */
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Connecting to Telegram...");
+                       TG_STR(MSG_ST_CONNECTING_TO_TELEGRAM));
     state->status_hint[0] = '\0';
     state->cursor_on = 0;
     tg_gui_window_paint(state, backend);
@@ -8316,16 +8315,16 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             /* An earlier login on this computer left a future auth token,
                and Telegram took it instead of a code. */
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "No code needed - opening your chats...");
+                               TG_STR(MSG_ST_NO_CODE_NEEDED_OPENING_YOUR));
             tg_gui_window_paint(state, backend);
             tg_gui_window_login_finish(state);
         } else if (rc == TG_GUI_LOGIN_NEED_2FA) {
             state->mode = TG_GUI_MODE_LOGIN_2FA;
             state->input_masked = 1;
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "No code needed - your cloud password");
+                               TG_STR(MSG_ST_NO_CODE_NEEDED_YOUR_CLOUD));
         } else {
-            tg_gui_window_login_failed(state, "That number was not accepted");
+            tg_gui_window_login_failed(state, TG_STR(MSG_W_THAT_NUMBER_WAS_NOT_ACCEPTED));
         }
     } else if (state->mode == TG_GUI_MODE_LOGIN_CODE) {
         int rc;
@@ -8338,14 +8337,14 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->mode = TG_GUI_MODE_LOGIN_2FA;
             state->input_masked = 1;
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "2FA password (Enter if you have none)");
+                               TG_STR(MSG_ST_2FA_PASSWORD_ENTER_IF_YOU));
         } else if (rc == TG_GUI_LOGIN_CODE_EXPIRED) {
             tg_gui_window_login_code_expired(state);
         } else if (rc == TG_GUI_LOGIN_BAD_CODE) {
-            tg_gui_window_login_failed(state, "Wrong code - try again");
+            tg_gui_window_login_failed(state, TG_STR(MSG_W_WRONG_CODE_TRY_AGAIN));
             state->mode = TG_GUI_MODE_LOGIN_CODE;
         } else {
-            tg_gui_window_login_failed(state, "Error - try the code again");
+            tg_gui_window_login_failed(state, TG_STR(MSG_W_ERROR_TRY_THE_CODE_AGAIN));
         }
     } else { /* TG_GUI_MODE_LOGIN_2FA */
         int rc;
@@ -8356,10 +8355,10 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->input_masked = 0;
             tg_gui_window_login_finish(state);
         } else if (rc == TG_GUI_LOGIN_BAD_PASSWORD) {
-            tg_gui_window_login_failed(state, "Wrong password - try again");
+            tg_gui_window_login_failed(state, TG_STR(MSG_W_WRONG_PASSWORD_TRY_AGAIN));
         } else {
             tg_gui_window_login_failed(state,
-                                       "Error - try the password again");
+                                       TG_STR(MSG_W_ERROR_TRY_THE_PASSWORD_AGAIN));
         }
     }
     state->cursor_on = 1;
@@ -8841,53 +8840,74 @@ static void tg_gui_menu_set_photo_cache_limit(struct Menu *menu,
     }
 }
 
-static const char tg_gui_about_text[] =
-    TG_APP_TITLE "\n"
-    TG_VERSION_CHANNEL " " TG_VERSION "  (built " __DATE__ ")\n\n"
-    "The first native Telegram client for AmigaOS,\n"
-    "MorphOS and AROS. It uses the Telegram API and\n"
-    "is part of the Telegram ecosystem, but it is\n"
-    "not made by Telegram.\n\n"
-    "by Michele Dipace\n"
-    "michele.dipace@kaffeine.net\n\n"
-    "Contributions: Javier de las Rivas (javierdlr)\n"
-    "and Bohun (bohunamiga), who took the build to\n"
-    "AROS on ARM.\n"
-    "Icons optimised by Carlo Spadoni.\n\n"
-    "Thanks to Enrico Vitale of ACube Systems\n"
-    "for his tireless and fruitful testing.\n\n"
-    "And thanks to the testers around the world\n"
-    "who run this on real hardware and send back\n"
-    "what they find. This client is what it is\n"
-    "because of them.\n\n"
-    "Source, issues and new releases:\n"
-    "github.com/kaffeine1/telegram-amiga";
+/* The top of About, the same in every language; the rest is the catalog's
+   MSG_ABOUT_BODY. */
+#define TG_GUI_ABOUT_HEAD \
+    TG_APP_TITLE "\n" TG_VERSION_CHANNEL " " TG_VERSION \
+    "  (built " __DATE__ ")\n\n"
 
 #define TG_GUI_SUPPORT_URL "https://www.patreon.com/c/kaffeine1"
 #define TG_GUI_SUPPORT_KOFI_URL "https://ko-fi.com/kaffeine1"
 
-static const char tg_gui_support_text[] =
-    "Support my work on Patreon, or with a\n"
-    "one-time tip on Ko-fi.\n\n"
-    "Contributions are voluntary; no subscription\n"
-    "is required to use this software.\n\n"
-    "www.patreon.com/c/kaffeine1\n"
-    "ko-fi.com/kaffeine1";
+/* A catalog text printed with up to three strings (a text with fewer
+   conversions ignores the rest). One too long for dst falls back to the
+   built-in English text, which fits wherever it is used. */
+static const char *tg_gui_window_format3(char *dst, size_t size,
+                                         const char *fmt,
+                                         const char *builtin,
+                                         const char *a, const char *b,
+                                         const char *c)
+{
+    size_t need = strlen(a) + strlen(b) + strlen(c) + 1U;
 
-static const char tg_gui_help_text[] =
-    "Chat selection:\n"
-    "  F1 - F10          chats 1 to 10\n"
-    "  Shift + F1 - F10  chats 11 to 20\n\n"
-    "ENTER        write a message to the open chat\n"
-    "Shift+ENTER  new line in the message (ENTER sends)\n"
-    "Click msg    select it (A+C copies); double-click replies\n"
-    "Del / A+R    remove the selected chat from the list\n"
-    "A+F          send a file to the open chat\n"
-    "A+P          send a JPEG as a photo\n"
-    "A+I          iconify to an AppIcon (double-click it to return)\n"
-    "A+T          settings: notifications, photos, emoji, ARexx\n"
-    "ESC          cancel\n"
-    "Q            quit";
+    if (strlen(fmt) + need > size) {
+        fmt = builtin;
+    }
+    if (strlen(fmt) + need > size) {
+        dst[0] = '\0';
+        return dst;
+    }
+    sprintf(dst, fmt, a, b, c);
+    return dst;
+}
+
+/* EasyRequest reads es_TextFormat and es_GadgetFormat as formats of its
+   own: the text of a requester goes in with each % doubled, so that a name
+   or a translation with a % in it shows as written. */
+static const char *tg_gui_window_req_text(char *dst, size_t size,
+                                          const char *src)
+{
+    size_t n = 0U;
+
+    while (*src != '\0' && n + 2U < size) {
+        if (*src == '%') {
+            dst[n++] = '%';
+        }
+        dst[n++] = *src++;
+    }
+    dst[n] = '\0';
+    return dst;
+}
+
+/* Every requester's texts are final text, not formats: what was printed
+   into them (a name, a version, a translation) may hold a %. The copies
+   live until the next requester, which is after this one has closed. */
+static void tg_gui_amiga_req_final(struct EasyStruct *es)
+{
+    static char text[4096];
+    static char gadgets[512];
+
+    if (es->es_TextFormat != 0 &&
+        (const char *)es->es_TextFormat != text) {
+        es->es_TextFormat = (APTR)tg_gui_window_req_text(
+            text, sizeof(text), (const char *)es->es_TextFormat);
+    }
+    if (es->es_GadgetFormat != 0 &&
+        (const char *)es->es_GadgetFormat != gadgets) {
+        es->es_GadgetFormat = (APTR)tg_gui_window_req_text(
+            gadgets, sizeof(gadgets), (const char *)es->es_GadgetFormat);
+    }
+}
 
 /* EasyRequest runs its OWN modal input loop and never answers our
    IDCMP_MENUVERIFY handshake, so a right-click while it is up would stall every
@@ -8898,6 +8918,8 @@ static LONG tg_gui_amiga_easyreq_args(struct Window *win, struct EasyStruct *es)
 {
     ULONG saved = win->IDCMPFlags;
     LONG result;
+
+    tg_gui_amiga_req_final(es);
 
     if ((saved & IDCMP_MENUVERIFY) != 0UL) {
         ModifyIDCMP(win, saved & ~(ULONG)IDCMP_MENUVERIFY);
@@ -8919,6 +8941,8 @@ static LONG tg_gui_amiga_easyreq_cancel_args(struct Window *win,
     ULONG saved;
     struct Window *requester;
     LONG result;
+
+    tg_gui_amiga_req_final(es);
 
     saved = win->IDCMPFlags;
     if ((saved & IDCMP_MENUVERIFY) != 0UL) {
@@ -8965,8 +8989,8 @@ static LONG tg_gui_amiga_easyreq_cancel_args(struct Window *win,
     return result;
 }
 
-/* Shows a one-button info requester (About / Help). No printf args, so the
-   text is passed verbatim (it carries no '%'). */
+/* Shows a one-button info requester (About / Help); the text is shown as
+   written (tg_gui_amiga_req_final). */
 static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
                                  const char *body)
 {
@@ -8976,7 +9000,7 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
     es.es_Flags = 0UL;
     es.es_Title = (STRPTR)title;
     es.es_TextFormat = (STRPTR)body;
-    es.es_GadgetFormat = (STRPTR)"OK";
+    es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_OK);
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
@@ -8985,29 +9009,32 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
 /* 1 = the user chose Update in it (the caller offers the update). */
 static int tg_gui_window_about(struct Window *win)
 {
-    static char text[sizeof(tg_gui_about_text) + 128];
+    static char text[2048];
     const char *newer = tg_gui_session_update_newer();
+    int offer = newer[0] != '\0' && tg_gui_session_update_can_install();
     struct EasyStruct es;
+    size_t n;
 
-    if (newer[0] == '\0') {
-        tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, tg_gui_about_text);
+    text[0] = '\0';
+    if (newer[0] != '\0') {
+        tg_locale_format(text, sizeof(text),
+                         offer ? TG_STR(MSG_ABOUT_NEWER_UPDATE)
+                               : TG_STR(MSG_ABOUT_NEWER_GET),
+                         newer, TG_VERSION);
+    }
+    n = strlen(text);
+    tg_gui_window_copy(text + n, sizeof(text) - n, TG_GUI_ABOUT_HEAD);
+    n = strlen(text);
+    tg_gui_window_copy(text + n, sizeof(text) - n, TG_STR(MSG_ABOUT_BODY));
+    if (!offer) {
+        tg_gui_amiga_easyreq(win, TG_STR(MSG_ABOUT_TITLE), text);
         return 0;
     }
-    if (!tg_gui_session_update_can_install()) {
-        sprintf(text, TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n"
-                "Get it where you got this one.\n\n", newer);
-        strcat(text, tg_gui_about_text);
-        tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, text);
-        return 0;
-    }
-    sprintf(text, TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n"
-            "Update installs it from here.\n\n", newer);
-    strcat(text, tg_gui_about_text);
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (APTR)"About " TG_APP_NAME;
+    es.es_Title = (APTR)TG_STR(MSG_ABOUT_TITLE);
     es.es_TextFormat = (APTR)text;
-    es.es_GadgetFormat = (APTR)"Update|OK";
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_UPDATE_OK);
     return tg_gui_amiga_easyreq_args(win, &es) == 1L;
 }
 
@@ -9022,9 +9049,9 @@ static void tg_gui_window_support(tg_gui_state *state, struct Window *win)
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Support development";
-    es.es_TextFormat = (STRPTR)tg_gui_support_text;
-    es.es_GadgetFormat = (STRPTR)"Patreon|Ko-fi|Close";
+    es.es_Title = (STRPTR)TG_STR(MSG_RQ_SUPPORT_DEVELOPMENT);
+    es.es_TextFormat = (STRPTR)TG_STR(MSG_SUPPORT_TEXT);
+    es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_PATREON_KO_FI_CLOSE);
     choice = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (choice == 1L) {
         url = TG_GUI_SUPPORT_URL;
@@ -9035,13 +9062,13 @@ static void tg_gui_window_support(tg_gui_state *state, struct Window *win)
     }
     if (tg_platform_open_url(url) == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Opening URL in the browser...");
+                           TG_STR(MSG_ST_OPENING_URL_IN_THE_BROWSER));
     } else if (tg_gui_clip_write_text(url)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "URL copied (no OpenURL command)");
+                           TG_STR(MSG_ST_URL_COPIED_NO_OPENURL_COMMAND));
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not open the URL");
+                           TG_STR(MSG_ST_COULD_NOT_OPEN_THE_URL));
     }
 }
 
@@ -9055,8 +9082,8 @@ static int tg_gui_amiga_confirm_remove(struct Window *win, const char *name)
     struct EasyStruct es;
     char shown[3 * TG_GUI_NAME_MAX]; /* an emoticon outgrows its pair */
     char body[sizeof(shown) + 80];
-    const char *pre = "Remove this chat from the list?\n\n";
-    const char *post = "\n\n(re-add it later via Search)";
+    const char *pre = TG_STR(MSG_W_REMOVE_THIS_CHAT_FROM_THE);
+    const char *post = TG_STR(MSG_W_RE_ADD_IT_LATER_VIA);
     const char *p;
     int n;
 
@@ -9079,9 +9106,9 @@ static int tg_gui_amiga_confirm_remove(struct Window *win, const char *name)
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Remove chat";
+    es.es_Title = (STRPTR)TG_STR(MSG_RQ_REMOVE_CHAT);
     es.es_TextFormat = (STRPTR)body;
-    es.es_GadgetFormat = (STRPTR)"Remove|Cancel";
+    es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_REMOVE_CANCEL);
     return (int)tg_gui_amiga_easyreq_args(win, &es);
 }
 
@@ -9103,20 +9130,14 @@ static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
     int n;
 
     if (kind == 0) {
-        pre = "Delete this chat on Telegram?\n\n";
-        post = "\n\nIts messages are deleted on all your devices,\n"
-               "and for the other person too if you choose so.\n"
-               "This cannot be undone.";
+        pre = TG_STR(MSG_W_DELETE_THIS_CHAT_ON_TELEGRAM);
+        post = TG_STR(MSG_W_ITS_MESSAGES_ARE_DELETED_ON);
     } else if (kind == 1) {
-        pre = "Leave this group?\n\n";
-        post = "\n\nYou leave it on Telegram and its messages are\n"
-               "deleted for you. To come back, someone has to\n"
-               "add you again.";
+        pre = TG_STR(MSG_W_LEAVE_THIS_GROUP);
+        post = TG_STR(MSG_W_YOU_LEAVE_IT_ON_TELEGRAM);
     } else {
-        pre = "Leave this group or channel?\n\n";
-        post = "\n\nYou leave it on Telegram, on all your devices.\n"
-               "A private one needs a new invitation to come\n"
-               "back.";
+        pre = TG_STR(MSG_W_LEAVE_THIS_GROUP_OR_CHANNEL);
+        post = TG_STR(MSG_W_YOU_LEAVE_IT_ON_TELEGRAM_2);
     }
     n = 0;
     for (p = pre; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
@@ -9137,15 +9158,15 @@ static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)(kind == 0 ? "Delete chat" : "Leave");
+    es.es_Title = (STRPTR)(kind == 0 ? TG_STR(MSG_RQ_DELETE_CHAT) : TG_STR(MSG_RQ_LEAVE));
     es.es_TextFormat = (STRPTR)body;
     if (kind == 0) {
         /* The first button deletes for both, the second here only. */
         tg_gui_requester_name(who, sizeof(who), name);
-        sprintf(gadgets, "For me and %s|For me only|Cancel", who);
+        tg_locale_format(gadgets, sizeof(gadgets), TG_STR(MSG_ST_FOR_ME_AND_S_FOR), who);
         es.es_GadgetFormat = (APTR)gadgets;
     } else {
-        es.es_GadgetFormat = (STRPTR)"Leave|Cancel";
+        es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_LEAVE_CANCEL);
     }
     return (int)tg_gui_amiga_easyreq_args(win, &es);
 }
@@ -9158,11 +9179,11 @@ static int tg_gui_amiga_confirm_delete(struct Window *win, int own_chat)
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Delete message";
+    es.es_Title = (STRPTR)TG_STR(MSG_RQ_DELETE_MESSAGE);
     es.es_TextFormat = own_chat
-        ? (STRPTR)"Delete this message?"
-        : (STRPTR)"Delete this message for everyone?";
-    es.es_GadgetFormat = (STRPTR)"Delete|Cancel";
+        ? (STRPTR)TG_STR(MSG_RQ_DELETE_THIS_MESSAGE)
+        : (STRPTR)TG_STR(MSG_RQ_DELETE_THIS_MESSAGE_FOR_EVERYONE);
+    es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_DELETE_CANCEL);
     return (int)tg_gui_amiga_easyreq_args(win, &es);
 }
 
@@ -9178,7 +9199,7 @@ static int tg_gui_amiga_ask_both_sides(struct Window *win, const char *title,
     LONG choice;
 
     tg_gui_requester_name(who, sizeof(who), name);
-    sprintf(gadgets, "For me and %s|For me only|Cancel", who);
+    tg_locale_format(gadgets, sizeof(gadgets), TG_STR(MSG_ST_FOR_ME_AND_S_FOR), who);
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
@@ -9212,9 +9233,9 @@ static int tg_gui_amiga_confirm_photo_overwrite(struct Window *win)
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Replace photo";
-    es.es_TextFormat = (STRPTR)"That file already exists. Replace it?";
-    es.es_GadgetFormat = (STRPTR)"Replace|Cancel";
+    es.es_Title = (STRPTR)TG_STR(MSG_RQ_REPLACE_PHOTO);
+    es.es_TextFormat = (STRPTR)TG_STR(MSG_RQ_THAT_FILE_ALREADY_EXISTS_REPLACE);
+    es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_REPLACE_CANCEL);
     return (int)tg_gui_amiga_easyreq_cancel_args(win, &es);
 }
 
@@ -9226,10 +9247,10 @@ static int tg_gui_amiga_confirm_clear_photo_cache(struct Window *win)
 
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (STRPTR)"Clear photo cache";
+    es.es_Title = (STRPTR)TG_STR(MSG_RQ_CLEAR_PHOTO_CACHE);
     es.es_TextFormat =
-        (STRPTR)"Delete downloaded photos?\n\nAvatars are not affected.";
-    es.es_GadgetFormat = (STRPTR)"Yes|No";
+        (STRPTR)TG_STR(MSG_RQ_DELETE_DOWNLOADED_PHOTOS_AVATARS_ARE);
+    es.es_GadgetFormat = (STRPTR)TG_STR(MSG_RQ_YES_NO);
     return (int)tg_gui_amiga_easyreq_cancel_args(win, &es);
 }
 
@@ -9348,9 +9369,9 @@ static void tg_gui_sendphoto_paint(tg_gui_sendphoto_ui *ui)
     int nb = ui->buttons == 2 ? 2 : 3;
     int i;
 
-    labels[0] = ui->many ? "Album" : "Photo";
-    labels[1] = ui->many ? "Files" : "File";
-    labels[2] = "Cancel";
+    labels[0] = ui->many ? TG_STR(MSG_W_BTN_ALBUM) : TG_STR(MSG_W_BTN_PHOTO);
+    labels[1] = ui->many ? TG_STR(MSG_W_BTN_FILES) : TG_STR(MSG_W_BTN_FILE);
+    labels[2] = TG_STR(MSG_W_CANCEL);
     if (ui->btn_label[0] != 0) {
         for (i = 0; i < nb; ++i) {
             labels[i] = ui->btn_label[i];
@@ -9669,7 +9690,7 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
     }
     ui.name = name;
     if (count > 1) {
-        sprintf(many_name, "%d photos", count);
+        tg_locale_format(many_name, sizeof(many_name), TG_STR(MSG_ST_D_PHOTOS), count);
         ui.name = many_name;
         ui.many = 1;
         ui.bytes = total_bytes;
@@ -9689,7 +9710,7 @@ static int tg_gui_window_send_photos_dialog(tg_gui_state *state,
         }
     }
     return tg_gui_window_box_dialog(&ui, main_ctx, parent,
-                                    count > 1 ? "Send photos" : "Send photo");
+                                    count > 1 ? TG_STR(MSG_W_SEND_PHOTOS) : TG_STR(MSG_W_SEND_PHOTO));
 }
 
 static int tg_gui_window_send_photo_dialog(tg_gui_state *state,
@@ -9728,7 +9749,7 @@ static int tg_gui_window_text_dialog(tg_gui_amiga_ctx *main_ctx,
     ui.info = info != 0 ? info : "";
     ui.field = field;
     ui.btn_label[0] = ok;
-    ui.btn_label[1] = "Cancel";
+    ui.btn_label[1] = TG_STR(MSG_W_CANCEL);
     ui.buttons = 2;
     return tg_gui_window_box_dialog(&ui, main_ctx, parent, title);
 }
@@ -9851,49 +9872,49 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
     if (dir == 2) {
         if (trc == 0) {
             if (photo_fallback) {
-                strcpy(line, "File sent (photo was over 10 MiB)");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_FILE_SENT_PHOTO_WAS_OVER));
             } else if (requested_photo) {
-                strcpy(line, "Photo sent");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_PHOTO_SENT));
             } else {
-                strcpy(line, "File sent");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_FILE_SENT));
             }
         } else if (trc == 2) {
-            sprintf(line, "File too big (%lu MiB limit on this build)",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_FILE_TOO_BIG_LU_MIB),
                     tg_gui_session_upload_limit_mib());
         } else if (trc == 3) {
-            strcpy(line, requested_photo ? "Could not read that photo"
-                                         : "Could not read that file");
+            tg_gui_window_copy(line, sizeof(line), requested_photo ? TG_STR(MSG_ST_COULD_NOT_READ_THAT_PHOTO)
+                                         : TG_STR(MSG_ST_COULD_NOT_READ_THAT_FILE));
         } else if (trc == 5) {
-            strcpy(line, "That file is empty (0 bytes)");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_THAT_FILE_IS_EMPTY_0));
         } else if (trc == 6) {
-            strcpy(line, requested_photo ? "Photo upload cancelled"
-                                         : "Upload cancelled");
+            tg_gui_window_copy(line, sizeof(line), requested_photo ? TG_STR(MSG_ST_PHOTO_UPLOAD_CANCELLED)
+                                         : TG_STR(MSG_ST_UPLOAD_CANCELLED));
         } else if (trc == 7) {
             const char *why = tg_gui_session_last_transfer_error();
 
-            sprintf(line, "Not sent as a photo: %.100s",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_NOT_SENT_AS_A_PHOTO),
                     (why != 0 && why[0] != '\0') ? why
-                                                  : "not a valid JPEG or PNG");
+                                                  : TG_STR(MSG_ST_NOT_A_VALID_JPEG_OR));
         } else {
             const char *why = tg_gui_session_last_transfer_error();
 
             if (why != 0 && why[0] != '\0') {
-                sprintf(line, "Upload failed: %.100s", why);
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_UPLOAD_FAILED_100S), why);
             } else {
-                strcpy(line, "Upload failed");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_UPLOAD_FAILED));
             }
         }
     } else {
         if (trc == 0) {
-            sprintf(line, "Saved to %.160s", saved);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_SAVED_TO_160S), saved);
         } else if (trc == 2) {
-            strcpy(line, "File is on another server - not supported yet");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_FILE_IS_ON_ANOTHER_SERVER));
         } else if (trc == 3) {
             /* "RAM: is full, stopped at ... KB" when the volume ran out */
             if (saved[0] != '\0') {
                 sprintf(line, "%.170s", saved);
             } else {
-                sprintf(line, "Could not write to %.28s",
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_COULD_NOT_WRITE_TO_28S),
                         tg_gui_session_download_dir());
             }
         } else if (trc == 6) {
@@ -9901,21 +9922,21 @@ static void tg_gui_window_transfer_finished(tg_gui_state *state,
             if (saved[0] != '\0') {
                 sprintf(line, "%.170s", saved);
             } else {
-                strcpy(line, "Not enough room for that file");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_NOT_ENOUGH_ROOM_FOR_THAT));
             }
         } else if (trc == 5) {
-            strcpy(line, "Download cancelled");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_DOWNLOAD_CANCELLED));
         } else if (trc == 4) {
             if (saved[0] != '\0') {
-                sprintf(line, "Transfer failed: %.160s", saved);
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_TRANSFER_FAILED_160S), saved);
             } else {
-                strcpy(line, "Transfer failed (server error)");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_TRANSFER_FAILED_SERVER_ERROR));
             }
         } else {
             if (saved[0] != '\0') {
-                sprintf(line, "Not found: %.170s", saved);
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_NOT_FOUND_170S), saved);
             } else {
-                strcpy(line, "File not found or reference expired");
+                tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_FILE_NOT_FOUND_OR_REFERENCE));
             }
         }
     }
@@ -9938,7 +9959,7 @@ static int tg_gui_window_pick_file(tg_gui_state *state, struct Window *win,
     AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38L);
     if (AslBase == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "asl.library V38 not found");
+                           TG_STR(MSG_ST_ASL_LIBRARY_V38_NOT_FOUND));
         return 0;
     }
 #if defined(__amigaos4__)
@@ -9969,7 +9990,7 @@ static int tg_gui_window_pick_file(tg_gui_state *state, struct Window *win,
         }
         if (!selected) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Name too long or invalid");
+                               TG_STR(MSG_ST_NAME_TOO_LONG_OR_INVALID));
         }
     }
     if (req != 0) {
@@ -9997,7 +10018,7 @@ static void tg_gui_window_pick_download_dir(tg_gui_state *state,
     AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38L);
     if (AslBase == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "asl.library V38 not found");
+                           TG_STR(MSG_ST_ASL_LIBRARY_V38_NOT_FOUND));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -10011,7 +10032,7 @@ static void tg_gui_window_pick_download_dir(tg_gui_state *state,
 #endif
     req = (struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win), ASLFR_TitleText,
-        TG_GUI_TAG("Where should downloads go?"), ASLFR_DrawersOnly, TRUE,
+        TG_GUI_TAG(TG_STR(MSG_W_WHERE_SHOULD_DOWNLOADS_GO)), ASLFR_DrawersOnly, TRUE,
         ASLFR_InitialDrawer,
         TG_GUI_TAG(tg_gui_session_download_dir()), TAG_DONE);
     dir[0] = '\0';
@@ -10042,13 +10063,13 @@ static void tg_gui_window_pick_download_dir(tg_gui_state *state,
         char line[80];
 
         if (src == 0) {
-            sprintf(line, "Downloads go to %.30s",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_DOWNLOADS_GO_TO_30S),
                     tg_gui_session_download_dir());
         } else if (src == 2) {
-            sprintf(line, "Downloads: %.24s (this run only)",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_DOWNLOADS_24S_THIS_RUN_ONLY),
                     tg_gui_session_download_dir());
         } else {
-            strcpy(line, "That drawer name is not usable");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_THAT_DRAWER_NAME_IS_NOT));
         }
         tg_gui_window_copy(state->status, sizeof(state->status), line);
         tg_gui_window_paint(state, backend);
@@ -10234,7 +10255,7 @@ static int tg_gui_photo_pick_destination(struct Window *win,
 #endif
     req = (struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win), ASLFR_TitleText,
-        TG_GUI_TAG("Save photo as"), ASLFR_DoSaveMode, TRUE,
+        TG_GUI_TAG(TG_STR(MSG_W_SAVE_PHOTO_AS)), ASLFR_DoSaveMode, TRUE,
         ASLFR_InitialDrawer, TG_GUI_TAG(tg_gui_session_download_dir()),
         ASLFR_InitialFile, TG_GUI_TAG(name),
         /* List both supported formats; the suggestion follows the bytes. */
@@ -10293,15 +10314,15 @@ static void tg_gui_photo_save_ready(tg_gui_state *state,
     picked = tg_gui_photo_pick_destination(
         win, id_hi, id_lo, source, destination, sizeof(destination));
     if (picked == 0) {
-        strcpy(line, "Photo save cancelled");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_PHOTO_SAVE_CANCELLED));
     } else if (picked == -2) {
-        strcpy(line, "Could not read that photo's format");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_COULD_NOT_READ_THAT_PHOTO_2));
     } else if (picked < 0) {
-        strcpy(line, "Could not open the save requester");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_COULD_NOT_OPEN_THE_SAVE));
     } else if (tg_gui_photo_copy_atomic(source, destination) == 0) {
-        sprintf(line, "Saved: %.180s", destination);
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_SAVED_180S), destination);
     } else {
-        strcpy(line, "Could not save that photo");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_COULD_NOT_SAVE_THAT_PHOTO));
     }
     tg_gui_photo_save_status(state, backend, line);
 }
@@ -10318,12 +10339,12 @@ static void tg_gui_photo_save_begin(tg_gui_state *state,
 
     if (job->pending) {
         tg_gui_photo_save_status(state, backend,
-                                 "A photo save is already running");
+                                 TG_STR(MSG_W_A_PHOTO_SAVE_IS_ALREADY));
         return;
     }
     if (tg_gui_session_transfer_busy()) {
         tg_gui_photo_save_status(state, backend,
-                                 "A transfer is already running");
+                                 TG_STR(MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING));
         return;
     }
     kind = tg_gui_session_save_photo_kind(id_hi, id_lo);
@@ -10334,7 +10355,7 @@ static void tg_gui_photo_save_begin(tg_gui_state *state,
     }
     if (tg_gui_session_request_photo_jpeg(id_hi, id_lo, kind) == 0) {
         tg_gui_photo_save_status(state, backend,
-                                 "That photo is not available now");
+                                 TG_STR(MSG_W_THAT_PHOTO_IS_NOT_AVAILABLE));
         return;
     }
     job->pending = 1;
@@ -10343,7 +10364,7 @@ static void tg_gui_photo_save_begin(tg_gui_state *state,
     job->id_lo = id_lo;
     job->kind = kind;
     tg_gui_photo_save_status(state, backend,
-                             "Fetching photo... (ESC cancels)");
+                             TG_STR(MSG_W_FETCHING_PHOTO_ESC_CANCELS));
 }
 
 static int tg_gui_photo_save_tick(tg_gui_state *state,
@@ -10373,7 +10394,7 @@ static int tg_gui_photo_save_tick(tg_gui_state *state,
     if (pending == 0) {
         memset(job, 0, sizeof(*job));
         tg_gui_photo_save_status(state, backend,
-                                 "That photo is not available now");
+                                 TG_STR(MSG_W_THAT_PHOTO_IS_NOT_AVAILABLE));
         return 1;
     }
     done = total = 0UL;
@@ -10390,7 +10411,7 @@ static int tg_gui_photo_save_tick(tg_gui_state *state,
         }
         if ((int)percent != job->last_percent) {
             job->last_percent = (int)percent;
-            sprintf(line, "Fetching photo... %lu%% (ESC cancels)", percent);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_FETCHING_PHOTO_LU_ESC_CANCELS), percent);
             tg_gui_photo_save_status(state, backend, line);
             return 1;
         }
@@ -10406,7 +10427,7 @@ static void tg_gui_photo_save_cancel(tg_gui_state *state,
         return;
     }
     memset(job, 0, sizeof(*job));
-    tg_gui_photo_save_status(state, backend, "Photo save cancelled");
+    tg_gui_photo_save_status(state, backend, TG_STR(MSG_ST_PHOTO_SAVE_CANCELLED));
 }
 
 /* --- Several files picked in the requester at once, or dropped together. --
@@ -10514,9 +10535,9 @@ static int tg_gui_window_sendq_album(tg_gui_state *state,
         return 0;
     }
     if (tg_gui_sendq.albums > 0 || tg_gui_sendq.count > TG_GUI_SENDQ_ALBUM) {
-        sprintf(line, "Sending album %d...", tg_gui_sendq.albums + 1);
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_SENDING_ALBUM_D), tg_gui_sendq.albums + 1);
     } else {
-        strcpy(line, "Sending the album...");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_SENDING_THE_ALBUM));
     }
     tg_gui_window_copy(state->status, sizeof(state->status), line);
     tg_gui_window_paint_status(state, backend);
@@ -10541,45 +10562,61 @@ static void tg_gui_window_sendq_report(tg_gui_state *state,
             const char *why = tg_gui_session_last_transfer_error();
 
             if (tg_gui_sendq.albums > 0) {
-                sprintf(line, "%d album%s sent, the last not: %.24s",
-                        tg_gui_sendq.albums,
-                        tg_gui_sendq.albums == 1 ? "" : "s",
-                        (why != 0 && why[0] != '\0') ? why : "no reply");
+                tg_locale_format(line, sizeof(line),
+                                 tg_gui_sendq.albums == 1
+                                     ? TG_STR(MSG_ST_ALBUM_SENT_LAST_NOT_1)
+                                     : TG_STR(MSG_ST_ALBUMS_SENT_LAST_NOT),
+                                 tg_gui_sendq.albums,
+                                 (why != 0 && why[0] != '\0')
+                                     ? why : TG_STR(MSG_ST_NO_REPLY));
             } else {
-                sprintf(line, "Album not sent: %.30s",
-                        (why != 0 && why[0] != '\0') ? why : "no reply");
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_ALBUM_NOT_SENT_30S),
+                        (why != 0 && why[0] != '\0') ? why : TG_STR(MSG_ST_NO_REPLY));
             }
         } else if (tg_gui_sendq.albums > 0) {
-            const char *noun = tg_gui_sendq.album == 1 ? "photo" : "file";
+            int photos = tg_gui_sendq.album == 1;
+            int one = tg_gui_sendq.album_photos == 1;
 
             if (tg_gui_sendq.albums == 1) {
-                sprintf(line, "Album sent: %d %s%s",
-                        tg_gui_sendq.album_photos, noun,
-                        tg_gui_sendq.album_photos == 1 ? "" : "s");
+                tg_locale_format(line, sizeof(line),
+                                 photos ? (one ? TG_STR(MSG_ST_ALBUM_SENT_PHOTO_1)
+                                               : TG_STR(MSG_ST_ALBUM_SENT_PHOTOS))
+                                        : (one ? TG_STR(MSG_ST_ALBUM_SENT_FILE_1)
+                                               : TG_STR(MSG_ST_ALBUM_SENT_FILES)),
+                                 tg_gui_sendq.album_photos);
             } else {
-                sprintf(line, "%d albums sent: %d %ss",
-                        tg_gui_sendq.albums, tg_gui_sendq.album_photos, noun);
+                tg_locale_format(line, sizeof(line),
+                                 photos ? TG_STR(MSG_ST_ALBUMS_SENT_PHOTOS)
+                                        : TG_STR(MSG_ST_ALBUMS_SENT_FILES),
+                                 tg_gui_sendq.albums,
+                                 tg_gui_sendq.album_photos);
             }
             if (tg_gui_sendq.skipped > 0) {
-                sprintf(line + strlen(line), ", %d skipped",
-                        tg_gui_sendq.skipped);
+                tg_locale_format(line + strlen(line),
+                                 sizeof(line) - strlen(line),
+                                 TG_STR(MSG_ST_SKIPPED), tg_gui_sendq.skipped);
             }
         } else {
             const char *why = tg_gui_session_last_transfer_error();
 
-            sprintf(line, "No %s sent: %.30s",
-                    tg_gui_sendq.album == 1 ? "photo" : "file",
-                    (why != 0 && why[0] != '\0') ? why : "none was readable");
+            tg_locale_format(line, sizeof(line),
+                             tg_gui_sendq.album == 1
+                                 ? TG_STR(MSG_ST_NO_PHOTO_SENT)
+                                 : TG_STR(MSG_ST_NO_FILE_SENT),
+                             (why != 0 && why[0] != '\0')
+                                 ? why : TG_STR(MSG_ST_NONE_WAS_READABLE));
         }
     } else if (tg_gui_sendq.sent > 0) {
-        sprintf(line, "%d file%s sent", tg_gui_sendq.sent,
-                tg_gui_sendq.sent == 1 ? "" : "s");
+        tg_locale_format(line, sizeof(line),
+                         tg_gui_sendq.sent == 1 ? TG_STR(MSG_ST_FILES_SENT_1)
+                                                : TG_STR(MSG_ST_FILES_SENT),
+                         tg_gui_sendq.sent);
         if (tg_gui_sendq.skipped > 0) {
-            sprintf(line + strlen(line), ", %d skipped",
-                    tg_gui_sendq.skipped);
+            tg_locale_format(line + strlen(line), sizeof(line) - strlen(line),
+                             TG_STR(MSG_ST_SKIPPED), tg_gui_sendq.skipped);
         }
     } else {
-        strcpy(line, "No file could be sent");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_NO_FILE_COULD_BE_SENT));
     }
     tg_gui_window_sendq_close();
     tg_gui_window_copy(state->status, sizeof(state->status), line);
@@ -10648,9 +10685,9 @@ static void tg_gui_window_sendq_ended(tg_gui_state *state,
             tg_gui_window_sendq_album(state, backend) != 0) {
             const char *why = tg_gui_session_last_transfer_error();
 
-            sprintf(line, "Album %d not sent: %.30s",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_ALBUM_D_NOT_SENT_30S),
                     tg_gui_sendq.albums + 1,
-                    (why != 0 && why[0] != '\0') ? why : "no reply");
+                    (why != 0 && why[0] != '\0') ? why : TG_STR(MSG_ST_NO_REPLY));
             tg_gui_window_sendq_close();
             tg_gui_window_copy(state->status, sizeof(state->status), line);
             tg_gui_window_paint(state, backend);
@@ -10661,23 +10698,23 @@ static void tg_gui_window_sendq_ended(tg_gui_state *state,
     }
     if (trc == 6) {
         if (tg_gui_sendq.album) {
-            strcpy(line, "Album cancelled");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_ALBUM_CANCELLED));
         } else if (tg_gui_sendq.sent > 0) {
-            sprintf(line, "Cancelled: %d of %d files sent",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_CANCELLED_D_OF_D_FILES),
                     tg_gui_sendq.sent, tg_gui_sendq.count);
         } else {
-            strcpy(line, "Upload cancelled");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_UPLOAD_CANCELLED));
         }
     } else {
         const char *why = tg_gui_session_last_transfer_error();
 
         if (why == 0 || why[0] == '\0') {
-            why = "upload failed";
+            why = TG_STR(MSG_W_UPLOAD_FAILED);
         }
         if (tg_gui_sendq.album) {
-            sprintf(line, "Album not sent: %.30s", why);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_ALBUM_NOT_SENT_30S), why);
         } else {
-            sprintf(line, "Stopped at file %d of %d: %.20s",
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_STOPPED_AT_FILE_D_OF),
                     tg_gui_sendq.next, tg_gui_sendq.count, why);
         }
     }
@@ -10753,7 +10790,7 @@ static void tg_gui_window_sendq_begin(tg_gui_state *state, struct Window *win,
         if (drc == 0) {
             tg_gui_sendq.count = 0;
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Send cancelled");
+                               TG_STR(MSG_ST_SEND_CANCELLED));
             tg_gui_window_paint(state, backend);
             return;
         }
@@ -10763,7 +10800,7 @@ static void tg_gui_window_sendq_begin(tg_gui_state *state, struct Window *win,
     if (tg_gui_session_batch_begin(stdout) != 0) {
         tg_gui_sendq.count = 0;
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not start the upload");
+                           TG_STR(MSG_ST_COULD_NOT_START_THE_UPLOAD));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -10775,8 +10812,8 @@ static void tg_gui_window_sendq_begin(tg_gui_state *state, struct Window *win,
     if (tg_gui_window_sendq_next(state, backend)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            tg_gui_sendq.album == 1
-                               ? "Sending photos... (ESC cancels)"
-                               : "Sending files... (ESC cancels)");
+                               ? TG_STR(MSG_ST_SENDING_PHOTOS_ESC_CANCELS)
+                               : TG_STR(MSG_ST_SENDING_FILES_ESC_CANCELS));
         tg_gui_window_paint(state, backend);
     }
 }
@@ -10805,14 +10842,14 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     }
     if (tg_gui_session_transfer_busy()) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "A transfer is already running");
+                           TG_STR(MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING));
         tg_gui_window_paint(state, backend);
         return;
     }
     AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38L);
     if (AslBase == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "asl.library V38 not found");
+                           TG_STR(MSG_ST_ASL_LIBRARY_V38_NOT_FOUND));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -10827,7 +10864,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     if (as_photo) {
         req = (struct FileRequester *)AllocAslRequestTags(
             ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
-            ASLFR_TitleText, TG_GUI_TAG("Send photo to this chat"),
+            ASLFR_TitleText, TG_GUI_TAG(TG_STR(MSG_W_SEND_PHOTO_TO_THIS_CHAT)),
             /* Every file is listed: an Amiga picture needs no extension,
                and what was picked is known by its content afterwards. The
                pattern gadget stays (issue #13 asked for it to show), so a
@@ -10839,7 +10876,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     } else {
         req = (struct FileRequester *)AllocAslRequestTags(
             ASL_FileRequest, ASLFR_Window, TG_GUI_TAG(win),
-            ASLFR_TitleText, TG_GUI_TAG("Send file to this chat"),
+            ASLFR_TitleText, TG_GUI_TAG(TG_STR(MSG_W_SEND_FILE_TO_THIS_CHAT)),
             ASLFR_DoMultiSelect, TRUE, TAG_DONE);
     }
     path[0] = '\0';
@@ -10882,7 +10919,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     if (picked > TG_GUI_SENDQ_MAX) {
         char line[48];
 
-        sprintf(line, "Pick at most %d files at a time", TG_GUI_SENDQ_MAX);
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_PICK_AT_MOST_D_FILES), TG_GUI_SENDQ_MAX);
         tg_gui_window_copy(state->status, sizeof(state->status), line);
         tg_gui_window_paint(state, backend);
         return;
@@ -10904,7 +10941,7 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
             sizeof(dcaption));
         if (drc == 0) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Send cancelled");
+                               TG_STR(MSG_ST_SEND_CANCELLED));
             tg_gui_window_paint(state, backend);
             return;
         }
@@ -10940,11 +10977,11 @@ static void tg_gui_window_send_file_mode(tg_gui_state *state,
     }
     if (as_photo && tg_gui_session_transfer_photo_fallback()) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Photo over 10 MiB; sending as file");
+                           TG_STR(MSG_ST_PHOTO_OVER_10_MIB_SENDING));
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           as_photo ? "Sending photo... (ESC cancels)"
-                                    : "Uploading... (ESC cancels)");
+                           as_photo ? TG_STR(MSG_ST_SENDING_PHOTO_ESC_CANCELS)
+                                    : TG_STR(MSG_ST_UPLOADING_ESC_CANCELS));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -11034,11 +11071,14 @@ static void tg_gui_pollnew_line(tg_gui_pollnew_ui *ui, int line)
     char label[24];
 
     if (line == 0) {
-        strcpy(label, "Question");
+        tg_gui_window_copy(label, sizeof(label), TG_STR(MSG_ST_QUESTION));
     } else if (line == TG_POLLNEW_F_WHY(ui)) {
-        strcpy(label, "Why");
+        tg_gui_window_copy(label, sizeof(label), TG_STR(MSG_ST_WHY));
     } else {
-        sprintf(label, right ? "Right %d" : "Answer %d", line);
+        tg_locale_format(label, sizeof(label),
+                         right ? TG_STR(MSG_W_POLL_RIGHT)
+                               : TG_STR(MSG_W_POLL_ANSWER),
+                         line);
     }
     tg_gui_sendphoto_box(b, TG_GUI_PEN_WINDOW, 0, y, ui->field_x, lh + 6);
     tg_gui_sendphoto_text(b, right ? TG_GUI_PEN_TEXT : TG_GUI_PEN_TEXT_DIM, 8,
@@ -11097,9 +11137,9 @@ static int tg_gui_pollnew_switch(tg_gui_pollnew_ui *ui, int x, int y, int on,
    the two buttons. */
 static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
 {
-    static const char *labels[2] = { "Create", "Cancel" };
-    static const char multi_text[] = "Several answers";
-    static const char public_text[] = "Public votes";
+    const char *labels[2];
+    const char *multi_text = TG_STR(MSG_W_SEVERAL_ANSWERS);
+    const char *public_text = TG_STR(MSG_W_PUBLIC_VOTES);
     static const char *arrows[2] = { "<", ">" };
     tg_gui_sendphoto_ui *b = &ui->base;
     struct RastPort *rp = b->win->RPort;
@@ -11110,6 +11150,8 @@ static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
     int x;
     int i;
 
+    labels[0] = TG_STR(MSG_W_CREATE);
+    labels[1] = TG_STR(MSG_W_CANCEL);
     tg_gui_sendphoto_box(b, TG_GUI_PEN_WINDOW, 0, ui->sw_y, b->iw,
                          b->ih - ui->sw_y);
     x = tg_gui_pollnew_switch(ui, ui->sw_x, ui->sw_y, ui->draft->multiple,
@@ -11121,21 +11163,22 @@ static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
                                 ui->focus == TG_POLLNEW_F_PUBLIC(ui),
                                 public_text);
     x = tg_gui_pollnew_switch(ui, ui->sw_x, ui->quiz_y, ui->draft->quiz,
-                              ui->focus == TG_POLLNEW_F_QUIZ(ui), "Quiz");
+                              ui->focus == TG_POLLNEW_F_QUIZ(ui),
+                              TG_STR(MSG_W_QUIZ));
     ui->ra_w[0] = 0;
     ui->ra_w[1] = 0;
     if (ui->draft->quiz) {
         /* the right answer: its number between two arrows */
-        static const char ra_text[] = "Right answer:";
+        const char *ra_text = TG_STR(MSG_W_RIGHT_ANSWER);
         char number[16];
         int aw = tg_gui_sendphoto_text_width(b, "<", 1UL) + 10;
 
         x += 16;
         tg_gui_sendphoto_text(b, TG_GUI_PEN_TEXT_DIM, x,
                               ui->quiz_y + 3 + ascent, ra_text,
-                              (unsigned long)(sizeof(ra_text) - 1U));
+                              (unsigned long)strlen(ra_text));
         x += tg_gui_sendphoto_text_width(
-                 b, ra_text, (unsigned long)(sizeof(ra_text) - 1U)) + 8;
+                 b, ra_text, (unsigned long)strlen(ra_text)) + 8;
         sprintf(number, "%d", ui->draft->correct + 1);
         for (i = 0; i < 2; ++i) {
             ui->ra_x[i] = x;
@@ -11156,7 +11199,7 @@ static void tg_gui_pollnew_foot(tg_gui_pollnew_ui *ui)
             tg_gui_pollnew_line(ui, TG_POLLNEW_F_WHY(ui));
         }
         if (note == 0 && ui->focus == TG_POLLNEW_F_QUIZ(ui)) {
-            note = "Type the right answer's number";
+            note = TG_STR(MSG_W_TYPE_THE_RIGHT_ANSWER_S);
         }
     }
     /* buttons, right-aligned: [Create] [Cancel] */
@@ -11394,7 +11437,7 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
     }
     i = 0;
     tags[i].ti_Tag = WA_Title;
-    tags[i++].ti_Data = TG_GUI_TAG("Create poll");
+    tags[i++].ti_Data = TG_GUI_TAG(TG_STR(MSG_W_CREATE_POLL));
     tags[i].ti_Tag = WA_InnerWidth;
     tags[i++].ti_Data = (ULONG)ui.base.iw;
     tags[i].ti_Tag = WA_InnerHeight;
@@ -11430,16 +11473,45 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
     if (main_ctx->rport != 0 && main_ctx->rport->Font != 0) {
         SetFont(ui.base.win->RPort, main_ctx->rport->Font);
     }
-    /* the labels' column is as wide as the widest label in this font */
-    ui.field_x = 8 + tg_gui_sendphoto_text_width(&ui.base, "Answer 10", 9UL) +
-                 8;
+    /* the labels' column is as wide as the widest label in this font
+       (and in this language) */
+    {
+        char label[24];
+        int widest = 0;
+        int k;
+
+        for (k = 0; k < 4; ++k) {
+            int w;
+
+            if (k < 2) {
+                tg_locale_format(label, sizeof(label),
+                                 k == 0 ? TG_STR(MSG_W_POLL_ANSWER)
+                                        : TG_STR(MSG_W_POLL_RIGHT),
+                                 10);
+            } else {
+                tg_gui_window_copy(label, sizeof(label),
+                                   k == 2 ? TG_STR(MSG_ST_QUESTION)
+                                          : TG_STR(MSG_ST_WHY));
+            }
+            w = tg_gui_sendphoto_text_width(&ui.base, label,
+                                            (unsigned long)strlen(label));
+            if (w > widest) {
+                widest = w;
+            }
+        }
+        ui.field_x = 8 + widest + 8;
+    }
     ui.field_w = ui.base.iw - ui.field_x - 8;
     /* The switches start under the fields; in a font too wide for the two
        of the first row side by side, at the window's left edge. */
     ui.sw_x = ui.field_x;
     if (ui.sw_x + (2 * (lh + 6)) + 16 +
-            tg_gui_sendphoto_text_width(&ui.base, "Several answers", 15UL) +
-            tg_gui_sendphoto_text_width(&ui.base, "Public votes", 12UL) >
+            tg_gui_sendphoto_text_width(
+                &ui.base, TG_STR(MSG_W_SEVERAL_ANSWERS),
+                (unsigned long)strlen(TG_STR(MSG_W_SEVERAL_ANSWERS))) +
+            tg_gui_sendphoto_text_width(
+                &ui.base, TG_STR(MSG_W_PUBLIC_VOTES),
+                (unsigned long)strlen(TG_STR(MSG_W_PUBLIC_VOTES))) >
         ui.base.iw - 8) {
         ui.sw_x = 8;
     }
@@ -11588,9 +11660,9 @@ static int tg_gui_window_poll_dialog(tg_gui_amiga_ctx *main_ctx,
                     done = 1;
                 } else {
                     /* say what is missing, go to where it is put right */
-                    ui.note = n == -1 ? "A poll needs a question"
-                              : n == -2 ? "A poll needs two answers"
-                                        : "Pick the quiz's right answer";
+                    ui.note = n == -1 ? TG_STR(MSG_W_A_POLL_NEEDS_A_QUESTION)
+                              : n == -2 ? TG_STR(MSG_W_A_POLL_NEEDS_TWO_ANSWERS)
+                                        : TG_STR(MSG_W_PICK_THE_QUIZ_S_RIGHT);
                     ui.focus = n == -1 ? 0
                                : n == -3 ? TG_POLLNEW_F_QUIZ(&ui)
                                : (draft->answers[0][0] != '\0' ? 2 : 1);
@@ -11630,7 +11702,7 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
         state->chat_count <= 0 || state->selected_chat < 0 ||
         state->selected_chat >= state->chat_count) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Open a chat first");
+                           TG_STR(MSG_ST_OPEN_A_CHAT_FIRST));
         tg_gui_window_paint(state, backend);
         return 0;
     }
@@ -11643,7 +11715,7 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
        not in a chat with one person. */
     if (idx != TG_GUI_SAVED_PEER_INDEX && tg_gui_session_chat_kind(idx) == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Polls are for groups and channels");
+                           TG_STR(MSG_ST_POLLS_ARE_FOR_GROUPS_AND));
         tg_gui_window_paint(state, backend);
         return 0;
     }
@@ -11654,7 +11726,7 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
     if (!tg_gui_window_poll_dialog((tg_gui_amiga_ctx *)backend->context, win,
                                    &draft)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Poll cancelled");
+                           TG_STR(MSG_ST_POLL_CANCELLED));
         tg_gui_window_paint(state, backend);
         return 0;
     }
@@ -11666,7 +11738,7 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
         answers[k] = draft.answers[k];
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Sending the poll...");
+                       TG_STR(MSG_ST_SENDING_THE_POLL));
     tg_gui_window_paint_status(state, backend);
     why[0] = '\0';
     rc = tg_gui_session_poll_create(
@@ -11676,13 +11748,13 @@ static int tg_gui_window_create_poll(tg_gui_state *state, struct Window *win,
             (draft.quiz ? TG_MTPROTO_POLL_NEW_QUIZ : 0U),
         draft.quiz ? draft.correct : -1, draft.why, why, sizeof(why), stdout);
     if (rc == 0) {
-        strcpy(line, "Poll sent");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_POLL_SENT));
     } else {
         keep = 1; /* the menu item opens on the same texts */
         if (rc == 1 && why[0] != '\0') {
-            sprintf(line, "Poll not sent: %.30s", why);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_POLL_NOT_SENT_30S), why);
         } else {
-            strcpy(line, "Poll not sent (Create poll... tries again)");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_POLL_NOT_SENT_CREATE_POLL));
         }
     }
     tg_gui_window_copy(state->status, sizeof(state->status), line);
@@ -11730,7 +11802,7 @@ static void tg_gui_window_remove_chat(tg_gui_state *state,
     }
     if (idx == TG_GUI_SAVED_PEER_INDEX) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Saved Messages is always available");
+                           TG_STR(MSG_ST_SAVED_MESSAGES_IS_ALWAYS_AVAILABLE));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -11741,7 +11813,7 @@ static void tg_gui_window_remove_chat(tg_gui_state *state,
     if (tg_gui_session_remove_chat(idx, stdout) != 0) {
         /* Silent no-ops read as "stuck": say it and repaint instead. */
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not remove this chat");
+                           TG_STR(MSG_ST_COULD_NOT_REMOVE_THIS_CHAT));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -11791,14 +11863,14 @@ static int tg_gui_window_toggle_mute(tg_gui_state *state, struct Window *win,
             es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
             es.es_Flags = 0UL;
             /* APTR: STRPTR on some systems, UBYTE * on others. */
-            es.es_Title = (APTR)"Mute";
-            es.es_TextFormat = (APTR)"Mute this chat on every device?";
+            es.es_Title = (APTR)TG_STR(MSG_RQ_MUTE);
+            es.es_TextFormat = (APTR)TG_STR(MSG_RQ_MUTE_THIS_CHAT_ON_EVERY);
             es.es_GadgetFormat =
-                (APTR)"For 1 hour|For 8 hours|Until I unmute|Cancel";
+                (APTR)TG_STR(MSG_RQ_FOR_1_HOUR_FOR_8);
             how = tg_gui_amiga_easyreq_args(win, &es);
             if (how == 0L) {
                 tg_gui_window_copy(state->status, sizeof(state->status),
-                                   "Not muted");
+                                   TG_STR(MSG_ST_NOT_MUTED));
                 return 0;
             }
             sent = (how == 3L
@@ -11813,25 +11885,25 @@ static int tg_gui_window_toggle_mute(tg_gui_state *state, struct Window *win,
     if (want) {
         if (sent) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               how == 1L ? "Muted for 1 hour, on every device"
+                               how == 1L ? TG_STR(MSG_ST_MUTED_FOR_1_HOUR_ON)
                                : how == 2L
-                                     ? "Muted for 8 hours, on every device"
-                                     : "Muted on every device");
+                                     ? TG_STR(MSG_ST_MUTED_FOR_8_HOURS_ON)
+                                     : TG_STR(MSG_ST_MUTED_ON_EVERY_DEVICE));
             return 0;
         }
         value->choice = TG_GUI_NOTIFY_MUTE;
         tg_gui_window_copy(state->status, sizeof(state->status),
                            chat->index == TG_GUI_SAVED_PEER_INDEX
-                               ? "Muted"
-                               : "Muted on this machine only");
+                               ? TG_STR(MSG_ST_MUTED)
+                               : TG_STR(MSG_ST_MUTED_ON_THIS_MACHINE_ONLY));
         return 1;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
                        sent || chat->index == TG_GUI_SAVED_PEER_INDEX
-                           ? "Unmuted"
+                           ? TG_STR(MSG_ST_UNMUTED)
                            : (state->ctx_muted
-                                  ? "Could not unmute on Telegram"
-                                  : "Unmuted"));
+                                  ? TG_STR(MSG_ST_COULD_NOT_UNMUTE_ON_TELEGRAM)
+                                  : TG_STR(MSG_ST_UNMUTED)));
     if (here) {
         value->choice = TG_GUI_NOTIFY_DEFAULT;
         return 1;
@@ -11866,7 +11938,7 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     kind = tg_gui_session_chat_kind(idx);
     if (kind < 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not read this chat");
+                           TG_STR(MSG_ST_COULD_NOT_READ_THIS_CHAT));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -11879,20 +11951,20 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
     }
     both = kind == 0 && choice == 1;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       kind == 0 ? "Deleting the chat..." : "Leaving...");
+                       kind == 0 ? TG_STR(MSG_ST_DELETING_THE_CHAT) : TG_STR(MSG_ST_LEAVING));
     tg_gui_window_paint(state, backend);
     if (tg_gui_session_leave_chat(idx, both, stdout) != 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           kind == 0 ? "Could not delete it (network?)"
-                                     : "Could not leave (network?)");
+                           kind == 0 ? TG_STR(MSG_ST_COULD_NOT_DELETE_IT_NETWORK)
+                                     : TG_STR(MSG_ST_COULD_NOT_LEAVE_NETWORK));
         tg_gui_window_paint(state, backend);
         return;
     }
     state->nav_chat = -1;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       kind == 0 ? (both ? "Chat deleted for both"
-                                         : "Chat deleted, for you only")
-                                 : "Left");
+                       kind == 0 ? (both ? TG_STR(MSG_ST_CHAT_DELETED_FOR_BOTH)
+                                         : TG_STR(MSG_ST_CHAT_DELETED_FOR_YOU_ONLY))
+                                 : TG_STR(MSG_ST_LEFT));
     if (!was_open) {
         tg_gui_window_paint(state, backend);
         return;
@@ -11920,16 +11992,16 @@ static void tg_gui_window_reload_list(tg_gui_state *state,
         return;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Reloading chat list...");
+                       TG_STR(MSG_ST_RELOADING_CHAT_LIST));
     tg_gui_window_paint(state, backend);
     if (tg_gui_session_reload_chat_list(stdout) == 0) {
         char rl[64];
 
-        sprintf(rl, "Chat list reloaded (%d chats)", state->chat_count);
+        tg_locale_format(rl, sizeof(rl), TG_STR(MSG_ST_CHAT_LIST_RELOADED_D_CHATS), state->chat_count);
         tg_gui_window_copy(state->status, sizeof(state->status), rl);
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Reload failed");
+                           TG_STR(MSG_ST_RELOAD_FAILED));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -12238,7 +12310,7 @@ static void tg_gui_window_status_saved_in(tg_gui_state *state,
     char line[64];
     unsigned long n = (unsigned long)strlen(path);
 
-    sprintf(line, "Saved in %s%.35s", n > 35UL ? "..." : "",
+    tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_SAVED_IN_S_35S), n > 35UL ? "..." : "",
             n > 35UL ? path + (n - 35UL) : path);
     tg_gui_window_copy(state->status, sizeof(state->status), line);
 }
@@ -12271,7 +12343,7 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
 
     if (!tg_gui_session_saved_path(message_id, path, sizeof(path))) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "That file is no longer where it was saved");
+                           TG_STR(MSG_ST_THAT_FILE_IS_NO_LONGER));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -12281,11 +12353,10 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
 
         es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
         es.es_Flags = 0UL;
-        es.es_Title = (APTR)"Open file";
+        es.es_Title = (APTR)TG_STR(MSG_RQ_OPEN_FILE);
         es.es_TextFormat =
-            (APTR)"This file is a program: opening it runs it.\n"
-                  "Run it only if you trust who sent it.";
-        es.es_GadgetFormat = (APTR)"Run|Show in drawer|Cancel";
+            (APTR)TG_STR(MSG_RQ_THIS_FILE_IS_A_PROGRAM);
+        es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_RUN_SHOW_IN_DRAWER_CANCEL);
         pick = tg_gui_amiga_easyreq_args(win, &es);
         if (pick == 0) {
             tg_gui_window_paint(state, backend);
@@ -12296,11 +12367,11 @@ static void tg_gui_window_file_open(tg_gui_state *state, struct Window *win,
     rc = tg_gui_amiga_wb_open(path, show);
     if (rc == 1) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           show ? "Its drawer is open on the Workbench"
-                                : "Handed to the Workbench");
+                           show ? TG_STR(MSG_ST_ITS_DRAWER_IS_OPEN_ON)
+                                : TG_STR(MSG_ST_HANDED_TO_THE_WORKBENCH));
     } else if (rc < 0 && !show && tg_gui_window_multiview(path)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Handed to MultiView");
+                           TG_STR(MSG_ST_HANDED_TO_MULTIVIEW));
     } else {
         /* No Workbench that opens things (3.0, 3.1) and nothing MultiView
            shows, or the Workbench refused. */
@@ -12362,21 +12433,21 @@ static void tg_gui_window_play_path(tg_gui_state *state,
 {
     if (tg_gui_session_file_is_program(path)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "That file is a program, not media");
+                           TG_STR(MSG_ST_THAT_FILE_IS_A_PROGRAM));
     } else if (state->video_player[0] != '\0') {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            tg_gui_window_run_player(state->video_player, path)
-                               ? "Handed to the media player"
-                               : "The media player did not start");
+                               ? TG_STR(MSG_ST_HANDED_TO_THE_MEDIA_PLAYER)
+                               : TG_STR(MSG_ST_THE_MEDIA_PLAYER_DID_NOT));
     } else {
         int rc = tg_gui_amiga_wb_open(path, 0);
 
         if (rc == 1) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Handed to the Workbench");
+                               TG_STR(MSG_ST_HANDED_TO_THE_WORKBENCH));
         } else if (rc < 0 && tg_gui_window_multiview(path)) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Handed to MultiView");
+                               TG_STR(MSG_ST_HANDED_TO_MULTIVIEW));
         } else {
             /* No Workbench that opens things (3.0, 3.1) and nothing
                MultiView shows, or the Workbench refused. */
@@ -12399,13 +12470,13 @@ static void tg_gui_window_video_play(tg_gui_state *state,
         tg_gui_window_play_path(state, backend, path);
     } else if (tg_gui_session_transfer_busy()) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "A transfer is already running");
+                           TG_STR(MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING));
         tg_gui_window_paint(state, backend);
     } else if ((drc = tg_gui_session_transfer_start_download(message_id,
                                                              stdout)) == 0) {
         tg_gui_play_after = message_id;
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Downloading to play... (ESC cancels)");
+                           TG_STR(MSG_ST_DOWNLOADING_TO_PLAY_ESC_CANCELS));
         tg_gui_window_paint(state, backend);
     } else {
         tg_gui_window_transfer_finished(state, backend, 1, drc,
@@ -12425,22 +12496,22 @@ static void tg_gui_window_poll_vote(tg_gui_state *state,
     int rc;
 
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       mask != 0UL ? "Voting..." : "Taking the vote back...");
+                       mask != 0UL ? TG_STR(MSG_ST_VOTING) : TG_STR(MSG_ST_TAKING_THE_VOTE_BACK));
     tg_gui_window_paint(state, backend);
     rc = tg_gui_session_poll_vote(m->id, m->poll_id_hi, m->poll_id_lo, mask,
                                   why, sizeof(why), stdout);
     if (rc == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           mask != 0UL ? "Voted" : "Vote taken back");
+                           mask != 0UL ? TG_STR(MSG_ST_VOTED) : TG_STR(MSG_ST_VOTE_TAKEN_BACK));
     } else if (rc == 1) {
         char line[96]; /* the status line is shorter: cut on the copy */
 
-        sprintf(line, "Vote refused: %.32s",
-                why[0] != '\0' ? why : "no reason given");
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_VOTE_REFUSED_32S),
+                why[0] != '\0' ? why : TG_STR(MSG_ST_NO_REASON_GIVEN));
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not reach Telegram");
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -12475,8 +12546,8 @@ static int tg_gui_window_save_edit(tg_gui_state *state)
 static const char *tg_gui_window_edit_refused(const tg_gui_state *state)
 {
     return strlen(state->input) >= TG_GUI_MSG_TEXT_MAX
-               ? "Too long: an edit is one message"
-               : "Not saved - ENTER tries again, ESC gives up";
+               ? TG_STR(MSG_ST_EDIT_TOO_LONG)
+               : TG_STR(MSG_ST_EDIT_NOT_SAVED);
 }
 
 /* Stop poll: asked first, since a stopped poll stays stopped. */
@@ -12495,7 +12566,7 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     int rc;
 
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Asking who voted...");
+                       TG_STR(MSG_ST_ASKING_WHO_VOTED));
     tg_gui_window_paint(state, backend); /* the menu leaves the screen */
     rc = tg_gui_session_poll_voters(m->id, m->poll_id_hi, m->poll_id_lo,
                                     56UL, got, sizeof(got), why, sizeof(why),
@@ -12504,12 +12575,12 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
         char line[96]; /* the status line is shorter: cut on the copy */
 
         if (rc == 1 && strcmp(why, "POLL_VOTE_REQUIRED") == 0) {
-            strcpy(line, "Vote first: then Telegram says who voted");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_VOTE_FIRST_THEN_TELEGRAM_SAYS));
         } else if (rc == 1) {
-            sprintf(line, "Telegram refused: %.28s",
-                    why[0] != '\0' ? why : "no reason given");
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_TELEGRAM_REFUSED_28S),
+                    why[0] != '\0' ? why : TG_STR(MSG_ST_NO_REASON_GIVEN));
         } else {
-            strcpy(line, "Could not reach Telegram");
+            tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
         }
         tg_gui_window_copy(state->status, sizeof(state->status), line);
         tg_gui_window_paint(state, backend);
@@ -12531,9 +12602,9 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
-    es.es_Title = (APTR)"Who voted";
+    es.es_Title = (APTR)TG_STR(MSG_RQ_WHO_VOTED);
     es.es_TextFormat = (APTR)body;
-    es.es_GadgetFormat = (APTR)"OK";
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OK);
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
@@ -12566,43 +12637,36 @@ static void tg_gui_window_webp_install(tg_gui_state *state,
         { TG_WEBP_DT_DESC_NAME, TG_WEBP_DT_DESC_SIZE, TG_WEBP_DT_DESC_SHA256,
           "data/webp-descriptor.tmp", "DEVS:DataTypes/WebP" }
     };
-    static char body[512];
+    static char body[768];
     const char *channel = TG_WEBP_DT_CHANNEL;
     struct EasyStruct es;
-    char from[72];
+    char from[96];
     char why[96];
     char line[96]; /* the status line is shorter: cut on the copy */
     int rc;
 
     if (channel[0] != '\0') {
-        sprintf(from, "its Telegram channel, @%.40s,", channel);
+        tg_locale_format(from, sizeof(from), TG_STR(MSG_RQ_WEBP_FROM_CHANNEL),
+                         channel);
     } else {
-        strcpy(from, "this account's Saved Messages");
+        tg_gui_window_copy(from, sizeof(from), TG_STR(MSG_ST_THIS_ACCOUNT_S_SAVED_MESSAGES));
     }
-    sprintf(body,
-            "Stickers are WEBP pictures, and this system has\n"
-            "no datatype that reads them.\n\n"
-            TG_APP_NAME " can fetch its own webp.datatype (%lu KB)\n"
-            "from %s\n"
-            "and install it:\n\n"
-            "    %s\n"
-            "    %s\n\n"
-            "No file already there is replaced.",
-            ((unsigned long)TG_WEBP_DT_SIZE + 1023UL) / 1024UL, from,
-            items[0].target, items[1].target);
+    tg_locale_format(body, sizeof(body), TG_STR(MSG_RQ_WEBP_OFFER),
+                     ((unsigned long)TG_WEBP_DT_SIZE + 1023UL) / 1024UL, from,
+                     items[0].target, items[1].target);
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
-    es.es_Title = (APTR)"Sticker pictures";
+    es.es_Title = (APTR)TG_STR(MSG_RQ_STICKER_PICTURES);
     es.es_TextFormat = (APTR)body;
-    es.es_GadgetFormat = (APTR)"Install|Cancel";
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_INSTALL_CANCEL);
     if (tg_gui_amiga_easyreq_cancel_args(win, &es) != 1L) {
         tg_gui_log("webp: the datatype was offered and declined");
         tg_gui_window_paint(state, backend);
         return;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Fetching the WEBP datatype...");
+                       TG_STR(MSG_ST_FETCHING_THE_WEBP_DATATYPE));
     tg_gui_window_paint(state, backend);
     (void)mkdir("data", 0777);
     rc = tg_gui_session_install_channel_files(channel, items, 2U, why,
@@ -12614,32 +12678,28 @@ static void tg_gui_window_webp_install(tg_gui_state *state,
         tg_gui_log(state->sticker_can
                        ? "webp: datatype installed, it reads WEBP"
                        : "webp: datatype installed, not seen yet");
-        strcpy(line, state->sticker_can
-                         ? "WEBP datatype installed: stickers are pictures"
-                         : "Datatype installed: restart to see stickers");
+        tg_gui_window_copy(line, sizeof(line), state->sticker_can
+                         ? TG_STR(MSG_ST_WEBP_DATATYPE_INSTALLED_STICKERS_ARE)
+                         : TG_STR(MSG_ST_DATATYPE_INSTALLED_RESTART_TO_SEE));
     } else if (rc == TG_GUI_INSTALL_EXISTS || rc == TG_GUI_INSTALL_WRITE) {
-        sprintf(body,
-                rc == TG_GUI_INSTALL_EXISTS
-                    ? "A file is already there:\n\n    %.80s\n\n"
-                      "It was left as it is, and nothing was installed.\n"
-                      "If it is a WEBP datatype that does not work here,\n"
-                      "take it out by hand and ask again."
-                    : "This file could not be written:\n\n    %.80s\n\n"
-                      "Nothing was installed.",
-                why);
-        strcpy(line, "The WEBP datatype was not installed");
+        tg_locale_format(body, sizeof(body),
+                         rc == TG_GUI_INSTALL_EXISTS
+                             ? TG_STR(MSG_RQ_WEBP_EXISTS)
+                             : TG_STR(MSG_RQ_WEBP_UNWRITABLE),
+                         why);
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_THE_WEBP_DATATYPE_WAS_NOT));
         tg_gui_window_copy(state->status, sizeof(state->status), line);
         tg_gui_window_paint(state, backend);
-        tg_gui_amiga_easyreq(win, "Sticker pictures", body);
+        tg_gui_amiga_easyreq(win, TG_STR(MSG_RQ_STICKER_PICTURES), body);
     } else if (rc == 1) {
-        sprintf(line, "Telegram refused: %.28s",
-                why[0] != '\0' ? why : "no reason given");
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_TELEGRAM_REFUSED_28S),
+                why[0] != '\0' ? why : TG_STR(MSG_ST_NO_REASON_GIVEN));
     } else if (rc == 3) {
-        strcpy(line, "The WEBP datatype is not posted there yet");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_THE_WEBP_DATATYPE_IS_NOT));
     } else if (rc == 4) {
-        strcpy(line, "Not the file expected: nothing installed");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_NOT_THE_FILE_EXPECTED_NOTHING));
     } else {
-        strcpy(line, "Could not fetch the WEBP datatype");
+        tg_gui_window_copy(line, sizeof(line), TG_STR(MSG_ST_COULD_NOT_FETCH_THE_WEBP));
     }
     tg_gui_window_copy(state->status, sizeof(state->status), line);
     tg_gui_window_paint(state, backend);
@@ -12660,31 +12720,29 @@ static void tg_gui_window_poll_stop(tg_gui_state *state, struct Window *win,
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
-    es.es_Title = (APTR)"Stop poll";
-    es.es_TextFormat = (APTR)"Stop this poll?\n\n"
-                             "Nobody can vote after that, and a stopped\n"
-                             "poll cannot be opened again.";
-    es.es_GadgetFormat = (APTR)"Stop poll|Cancel";
+    es.es_Title = (APTR)TG_STR(MSG_RQ_STOP_POLL);
+    es.es_TextFormat = (APTR)TG_STR(MSG_RQ_STOP_THIS_POLL_NOBODY_CAN);
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_STOP_POLL_CANCEL);
     if (tg_gui_amiga_easyreq_args(win, &es) != 1) {
         return;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Stopping the poll...");
+                       TG_STR(MSG_ST_STOPPING_THE_POLL));
     tg_gui_window_paint(state, backend);
     rc = tg_gui_session_poll_stop(message_id, poll_hi, poll_lo, why,
                                   sizeof(why), stdout);
     if (rc == 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Poll stopped");
+                           TG_STR(MSG_ST_POLL_STOPPED));
     } else if (rc == 1) {
         char line[96]; /* the status line is shorter: cut on the copy */
 
-        sprintf(line, "Not stopped: %.32s",
-                why[0] != '\0' ? why : "no reason given");
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_NOT_STOPPED_32S),
+                why[0] != '\0' ? why : TG_STR(MSG_ST_NO_REASON_GIVEN));
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not reach Telegram");
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -12897,7 +12955,7 @@ static void tg_gui_window_filter_chats(tg_gui_state *state,
             row = &state->chats[0];
             memset(row, 0, sizeof(*row));
             tg_gui_window_copy(row->name, sizeof(row->name),
-                               "Browse all chats...");
+                               TG_STR(MSG_W_BROWSE_ALL_CHATS));
             row->initials[0] = '>';
             row->initials[1] = '\0';
             row->index = 0UL; /* the marker: not a chat, go online */
@@ -12909,8 +12967,8 @@ static void tg_gui_window_filter_chats(tg_gui_state *state,
             tg_gui_window_copy(
                 state->status, sizeof(state->status),
                 state->forward_pick_active
-                    ? "Choose a chat - type or ENTER to browse"
-                    : "ENTER lists ALL your chats - or type a name");
+                    ? TG_STR(MSG_ST_CHOOSE_A_CHAT_TYPE_OR)
+                    : TG_STR(MSG_ST_ENTER_LISTS_ALL_YOUR_CHATS));
         }
         tg_gui_window_paint(state, backend);
         return;
@@ -12935,7 +12993,7 @@ static void tg_gui_window_filter_chats(tg_gui_state *state,
 
         memset(row, 0, sizeof(*row));
         tg_gui_window_copy(row->name, sizeof(row->name),
-                           "Search Telegram...");
+                           TG_STR(MSG_W_SEARCH_TELEGRAM));
         row->initials[0] = '>';
         row->initials[1] = '\0';
         row->index = 0UL; /* the marker: not a chat, go online */
@@ -12950,10 +13008,10 @@ static void tg_gui_window_filter_chats(tg_gui_state *state,
         char st[64];
 
         if (state->forward_pick_active) {
-            sprintf(st, "%d local - ENTER forwards (last: online)",
+            tg_locale_format(st, sizeof(st), TG_STR(MSG_ST_D_LOCAL_ENTER_FORWARDS_LAST),
                     local_count);
         } else {
-            sprintf(st, "%d local - arrows + ENTER (last row: online)",
+            tg_locale_format(st, sizeof(st), TG_STR(MSG_ST_D_LOCAL_ARROWS_ENTER_LAST),
                     local_count);
         }
         tg_gui_window_copy(state->status, sizeof(state->status), st);
@@ -13043,7 +13101,7 @@ static void tg_gui_window_forward_to_index(tg_gui_state *state,
             char line[96]; /* the status line is shorter: cut on the copy */
 
             tg_gui_pick_end(state);
-            sprintf(line, "Forwarded %d to %.32s", n, name);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_FORWARDED_D_TO_32S), n, name);
             tg_gui_window_copy(state->status, sizeof(state->status), line);
             tg_gui_window_paint(state, backend);
             return;
@@ -13053,15 +13111,15 @@ static void tg_gui_window_forward_to_index(tg_gui_state *state,
         tg_gui_window_forward_restore(state);
     }
     if (rc == 0) {
-        sprintf(state->status, "Forwarded to %.32s", name);
+        tg_locale_format(state->status, sizeof(state->status), TG_STR(MSG_ST_FORWARDED_TO_32S), name);
     } else {
         const char *why = tg_gui_session_last_action_error();
 
         if (why != 0 && why[0] != '\0') {
-            sprintf(state->status, "Forward failed: %.30s", why);
+            tg_locale_format(state->status, sizeof(state->status), TG_STR(MSG_ST_FORWARD_FAILED_30S), why);
         } else {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Could not forward message");
+                               TG_STR(MSG_ST_COULD_NOT_FORWARD_MESSAGE));
         }
     }
     tg_gui_window_paint(state, backend);
@@ -13082,7 +13140,7 @@ static void tg_gui_window_forward_online_result(tg_gui_state *state,
                                            stdout) != 0 ||
         destination_index == 0UL) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not use that destination");
+                           TG_STR(MSG_ST_COULD_NOT_USE_THAT_DESTINATION));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -13098,7 +13156,7 @@ static void tg_gui_window_begin_forward_pick(tg_gui_state *state,
     source_index = tg_gui_session_current_peer_index();
     if (source_index == 0UL || message_id == 0UL) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Could not start forwarding");
+                           TG_STR(MSG_ST_COULD_NOT_START_FORWARDING));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -13148,7 +13206,7 @@ static void tg_gui_window_pick_delete(tg_gui_state *state, struct Window *win,
     static unsigned long own[TG_GUI_MAX_MESSAGES];
     static unsigned long others[TG_GUI_MAX_MESSAGES];
     struct EasyStruct es;
-    char body[224];
+    char body[400];
     int n_own = tg_gui_pick_ids(state, own, TG_GUI_MAX_MESSAGES,
                                 TG_GUI_PICK_OWN);
     int n_others = tg_gui_pick_ids(state, others, TG_GUI_MAX_MESSAGES,
@@ -13170,61 +13228,64 @@ static void tg_gui_window_pick_delete(tg_gui_state *state, struct Window *win,
                                     TG_GUI_PICK_ALL);
         int both;
 
-        sprintf(body, "Delete %d message%s?", n_all, n_all == 1 ? "" : "s");
-        both = tg_gui_amiga_ask_both_sides(win, "Delete messages", body,
-                                           other);
+        tg_locale_format(body, sizeof(body),
+                         n_all == 1 ? TG_STR(MSG_RQ_DELETE_MESSAGES_ASK_1)
+                                    : TG_STR(MSG_RQ_DELETE_MESSAGES_ASK),
+                         n_all);
+        both = tg_gui_amiga_ask_both_sides(win, TG_STR(MSG_RQ_DELETE_MESSAGES),
+                                           body, other);
         if (both < 0) {
             return; /* the selection stays as it was */
         }
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Deleting...");
+                           TG_STR(MSG_ST_DELETING));
         tg_gui_window_paint(state, backend);
         failed = tg_gui_session_delete_list(all, n_all, both, stdout) != 0;
         tg_gui_pick_end(state);
         if (failed) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "The messages could not be deleted");
+                               TG_STR(MSG_ST_THE_MESSAGES_COULD_NOT_BE));
         } else {
-            char done[64];
-
-            sprintf(done, "%d message%s deleted%s", n_all,
-                    n_all == 1 ? "" : "s", both ? " for both" : "");
-            tg_gui_window_copy(state->status, sizeof(state->status), done);
+            tg_locale_format(state->status, sizeof(state->status),
+                             n_all == 1
+                                 ? (both ? TG_STR(MSG_ST_MESSAGE_DELETED_BOTH_1)
+                                         : TG_STR(MSG_ST_MESSAGE_DELETED_1))
+                                 : (both ? TG_STR(MSG_ST_MESSAGES_DELETED_BOTH)
+                                         : TG_STR(MSG_ST_MESSAGES_DELETED)),
+                             n_all);
         }
         tg_gui_window_paint(state, backend);
         return;
     }
     if (n_others == 0) {
-        sprintf(body, "Delete %d message%s for everyone?", n_own,
-                n_own == 1 ? "" : "s");
+        tg_locale_format(body, sizeof(body),
+                         n_own == 1 ? TG_STR(MSG_RQ_DELETE_FOR_EVERYONE_1)
+                                    : TG_STR(MSG_RQ_DELETE_FOR_EVERYONE),
+                         n_own);
     } else if (is_group && n_own == 0) {
-        sprintf(body,
-                "Hide %d message%s of other people?\n\n"
-                "They leave this chat here only; the chat's menu\n"
-                "shows them again.",
-                n_others, n_others == 1 ? "" : "s");
+        tg_locale_format(body, sizeof(body),
+                         n_others == 1 ? TG_STR(MSG_RQ_HIDE_OTHERS_1)
+                                       : TG_STR(MSG_RQ_HIDE_OTHERS),
+                         n_others);
     } else if (is_group) {
-        sprintf(body,
-                "Delete %d of your messages for everyone\n"
-                "and hide %d of other people here?",
+        tg_locale_format(body, sizeof(body), TG_STR(MSG_ST_DELETE_D_OF_YOUR_MESSAGES),
                 n_own, n_others);
     } else {
-        sprintf(body,
-                "Delete %d message%s?\n\n"
-                "Yours go for everyone, the other person's\n"
-                "for you only.",
-                n_own + n_others, n_own + n_others == 1 ? "" : "s");
+        tg_locale_format(body, sizeof(body),
+                         n_own + n_others == 1 ? TG_STR(MSG_RQ_DELETE_MIXED_1)
+                                               : TG_STR(MSG_RQ_DELETE_MIXED),
+                         n_own + n_others);
     }
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
-    es.es_Title = (APTR)"Delete messages";
+    es.es_Title = (APTR)TG_STR(MSG_RQ_DELETE_MESSAGES);
     es.es_TextFormat = (APTR)body;
-    es.es_GadgetFormat = (APTR)"Delete|Cancel";
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_DELETE_CANCEL);
     if (tg_gui_amiga_easyreq_args(win, &es) == 0) {
         return; /* the selection stays as it was */
     }
-    tg_gui_window_copy(state->status, sizeof(state->status), "Deleting...");
+    tg_gui_window_copy(state->status, sizeof(state->status), TG_STR(MSG_ST_DELETING));
     tg_gui_window_paint(state, backend);
     if (n_own > 0 && tg_gui_session_delete_list(own, n_own, 1, stdout) != 0) {
         failed = 1;
@@ -13242,10 +13303,12 @@ static void tg_gui_window_pick_delete(tg_gui_state *state, struct Window *win,
     tg_gui_pick_end(state);
     if (failed) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Some messages could not be deleted");
+                           TG_STR(MSG_ST_SOME_MESSAGES_COULD_NOT_BE));
     } else {
-        sprintf(state->status, "%d message%s deleted", n_own + n_others,
-                n_own + n_others == 1 ? "" : "s");
+        tg_locale_format(state->status, sizeof(state->status),
+                         n_own + n_others == 1 ? TG_STR(MSG_ST_MESSAGE_DELETED_1)
+                                               : TG_STR(MSG_ST_MESSAGES_DELETED),
+                         n_own + n_others);
     }
     tg_gui_window_paint(state, backend);
 }
@@ -13266,10 +13329,10 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
     tg_gui_window_copy(
         state->status, sizeof(state->status),
         state->forward_pick_active
-            ? (state->search_query[0] == '\0' ? "Listing destinations..."
-                                               : "Searching destinations...")
-            : (state->search_query[0] == '\0' ? "Listing your chats..."
-                                               : "Searching Telegram..."));
+            ? (state->search_query[0] == '\0' ? TG_STR(MSG_ST_LISTING_DESTINATIONS)
+                                               : TG_STR(MSG_ST_SEARCHING_DESTINATIONS))
+            : (state->search_query[0] == '\0' ? TG_STR(MSG_ST_LISTING_YOUR_CHATS)
+                                               : TG_STR(MSG_ST_SEARCHING_TELEGRAM)));
     tg_gui_window_paint(state, backend);
     cnt = tg_gui_session_search_run(state->search_query, stdout);
     if (cnt == 1 && auto_open_single) {
@@ -13286,7 +13349,7 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
             state->search_query[0] = '\0';
             (void)tg_gui_session_search_open_result(0, stdout);
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Live - F1-F10 chats, Amiga+Q quits");
+                               TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
         }
     } else if (cnt >= 1) {
         /* Show the matches in the sidebar; keep the search box focused so ESC
@@ -13295,18 +13358,18 @@ static void tg_gui_window_run_search(tg_gui_state *state, tg_gui_backend *backen
         tg_gui_window_copy(
             state->status, sizeof(state->status),
             state->forward_pick_active
-                ? "Choose destination (ESC cancels)"
-                : "Pick a result - click it (ESC cancels)");
+                ? TG_STR(MSG_ST_CHOOSE_DESTINATION_ESC_CANCELS)
+                : TG_STR(MSG_ST_PICK_A_RESULT_CLICK_IT));
     } else {
         /* None / error: restore the local filter so the user can edit the query
            and retry instead of being stranded on an empty online picker. */
         state->in_search = 0;
         tg_gui_window_filter_chats(state, backend);
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           cnt < 0 ? "Search failed (network?)"
+                           cnt < 0 ? TG_STR(MSG_ST_SEARCH_FAILED_NETWORK)
                                    : (state->search_query[0] == '\0'
-                                          ? "No chats found"
-                                          : "No match - try a name or @username"));
+                                          ? TG_STR(MSG_ST_NO_CHATS_FOUND)
+                                          : TG_STR(MSG_ST_NO_MATCH_TRY_A_NAME)));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -13341,7 +13404,7 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
         int fresh;
 
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Reading the archive...");
+                           TG_STR(MSG_ST_READING_THE_ARCHIVE));
         tg_gui_window_paint(state, backend);
         n = tg_gui_session_archive_refresh(stdout);
         fresh = n >= 0;
@@ -13351,30 +13414,34 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
         if (n <= 0) {
             tg_gui_session_set_archive_view(0);
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               fresh ? "The archive is empty"
-                                     : "Could not read the archive (network?)");
+                               fresh ? TG_STR(MSG_ST_THE_ARCHIVE_IS_EMPTY)
+                                     : TG_STR(MSG_ST_COULD_NOT_READ_THE_ARCHIVE));
         } else {
             tg_gui_session_set_archive_view(1);
             /* A large Archive shows its most recent chats only. */
             if (!fresh) {
-                sprintf(line, "Archive (offline): %d chat%s - ESC goes back",
-                        state->chat_count % 10000,
-                        state->chat_count == 1 ? "" : "s");
+                tg_locale_format(line, sizeof(line),
+                                 state->chat_count == 1
+                                     ? TG_STR(MSG_ST_ARCHIVE_OFFLINE_1)
+                                     : TG_STR(MSG_ST_ARCHIVE_OFFLINE),
+                                 state->chat_count % 10000);
             } else if (tg_gui_session_archive_partial() ||
                        state->chat_count < n) {
-                sprintf(line, "Archive: newest %d chats - ESC goes back",
+                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_ARCHIVE_NEWEST_D_CHATS_ESC),
                         state->chat_count % 10000);
             } else {
-                sprintf(line, "Archive: %d chat%s - ESC goes back",
-                        state->chat_count % 10000,
-                        state->chat_count == 1 ? "" : "s");
+                tg_locale_format(line, sizeof(line),
+                                 state->chat_count == 1
+                                     ? TG_STR(MSG_ST_ARCHIVE_CHATS_1)
+                                     : TG_STR(MSG_ST_ARCHIVE_CHATS),
+                                 state->chat_count % 10000);
             }
             tg_gui_window_copy(state->status, sizeof(state->status), line);
         }
     } else {
         tg_gui_session_set_archive_view(0);
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Live - F1-F10 chats, Amiga+Q quits");
+                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
     }
     state->chat_scroll_to_sel = 1;
     tg_gui_window_paint(state, backend);
@@ -13392,13 +13459,13 @@ static void tg_gui_window_archive_more(tg_gui_state *state,
     int n;
 
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Reading the archive...");
+                       TG_STR(MSG_ST_READING_THE_ARCHIVE));
     tg_gui_window_paint(state, backend);
     n = tg_gui_session_archive_more(next, stdout);
     if (n <= 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           n < 0 ? "Could not read the archive (network?)"
-                                 : "No more archived chats");
+                           n < 0 ? TG_STR(MSG_ST_COULD_NOT_READ_THE_ARCHIVE)
+                                 : TG_STR(MSG_ST_NO_MORE_ARCHIVED_CHATS));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -13413,7 +13480,7 @@ static void tg_gui_window_archive_more(tg_gui_state *state,
 
         memset(row, 0, sizeof(*row));
         tg_gui_window_copy(row->name, sizeof(row->name),
-                           "More archived chats...");
+                           TG_STR(MSG_W_MORE_ARCHIVED_CHATS));
         row->initials[0] = '>';
         row->initials[1] = '\0';
         row->index = TG_GUI_ARCHIVE_MORE_INDEX;
@@ -13422,8 +13489,10 @@ static void tg_gui_window_archive_more(tg_gui_state *state,
     state->nav_chat = -1;
     state->chat_scroll = 0;
     state->chat_scroll_to_sel = 1;
-    sprintf(line, "Archive: %d chat%s - click one, ESC goes back",
-            n % 10000, n == 1 ? "" : "s");
+    tg_locale_format(line, sizeof(line),
+                     n == 1 ? TG_STR(MSG_ST_ARCHIVE_CLICK_1)
+                            : TG_STR(MSG_ST_ARCHIVE_CLICK),
+                     n % 10000);
     tg_gui_window_copy(state->status, sizeof(state->status), line);
     tg_gui_window_paint(state, backend);
 }
@@ -13437,8 +13506,8 @@ static void tg_gui_window_archive_more(tg_gui_state *state,
 static const char *tg_gui_window_msg_search_prompt(const tg_gui_state *state)
 {
     return state->msg_search_global
-               ? "All chats: type, ENTER searches (ESC ends)"
-               : "Find in chat: type, ENTER searches (ESC ends)";
+               ? TG_STR(MSG_ST_FIND_ALL_PROMPT)
+               : TG_STR(MSG_ST_FIND_CHAT_PROMPT);
 }
 
 /* global = 0 searches the open chat, 1 every chat of the account. */
@@ -13450,8 +13519,8 @@ static void tg_gui_window_begin_msg_search(tg_gui_state *state,
         state->forward_pick_active ||
         (!global && tg_gui_session_current_peer_index() == 0UL)) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           global ? "Not connected: no search yet"
-                                  : "Open a chat first, then Find in chat");
+                           global ? TG_STR(MSG_ST_NOT_CONNECTED_NO_SEARCH_YET)
+                                  : TG_STR(MSG_ST_OPEN_A_CHAT_FIRST_THEN));
         tg_gui_window_paint(state, backend);
         return;
     }
@@ -13489,7 +13558,7 @@ static void tg_gui_window_end_msg_search(tg_gui_state *state)
         state->chat_scroll_to_sel = 1;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Live - F1-F10 chats, Amiga+Q quits");
+                       TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
 }
 
 static void tg_gui_window_run_msg_search(tg_gui_state *state,
@@ -13499,13 +13568,13 @@ static void tg_gui_window_run_msg_search(tg_gui_state *state,
 
     if (state->search_query[0] == '\0') {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Type the words to find, then ENTER");
+                           TG_STR(MSG_ST_TYPE_THE_WORDS_TO_FIND));
         tg_gui_window_paint(state, backend);
         return;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       state->msg_search_global ? "Searching all chats..."
-                                                : "Searching this chat...");
+                       state->msg_search_global ? TG_STR(MSG_ST_SEARCHING_ALL_CHATS)
+                                                : TG_STR(MSG_ST_SEARCHING_THIS_CHAT));
     tg_gui_window_paint(state, backend);
     n = state->msg_search_global
             ? tg_gui_session_search_global(state->search_query, stdout)
@@ -13517,11 +13586,11 @@ static void tg_gui_window_run_msg_search(tg_gui_state *state,
         state->selected_chat = 0;
         state->nav_chat = -1;
         state->chat_scroll = 0;
-        sprintf(line, "%d found - click one or ENTER (ESC ends)",
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_D_FOUND_CLICK_ONE_OR),
                 n % 1000);
         if (state->chat_count > n) {
             /* a full page: the last row offers the older ones */
-            sprintf(line, "%d found, more below - click or ENTER", n % 1000);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_D_FOUND_MORE_BELOW_CLICK), n % 1000);
         }
         tg_gui_window_copy(state->status, sizeof(state->status), line);
     } else {
@@ -13531,8 +13600,8 @@ static void tg_gui_window_run_msg_search(tg_gui_state *state,
         state->nav_chat = -1;
         state->chat_scroll_to_sel = 1;
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           n < 0 ? "Search failed (network?)"
-                                 : "No message found - edit and ENTER");
+                           n < 0 ? TG_STR(MSG_ST_SEARCH_FAILED_NETWORK)
+                                 : TG_STR(MSG_ST_NO_MESSAGE_FOUND_EDIT_AND));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -13557,17 +13626,17 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
         int more;
 
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Searching further back...");
+                           TG_STR(MSG_ST_SEARCHING_FURTHER_BACK));
         tg_gui_window_paint(state, backend);
         more = state->msg_search_global
                    ? tg_gui_session_search_global_more(stdout)
                    : tg_gui_session_search_messages_more(stdout);
         if (more > 0) {
-            sprintf(line, "%d more found - click one or ENTER", more % 1000);
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_D_MORE_FOUND_CLICK_ONE), more % 1000);
         } else {
-            strcpy(line, more == 0 ? "No older message matches"
-                                   : (more == -1 ? "Search failed (network?)"
-                                                 : "Search again (ENTER)"));
+            tg_gui_window_copy(line, sizeof(line), more == 0 ? TG_STR(MSG_ST_NO_OLDER_MESSAGE_MATCHES)
+                                   : (more == -1 ? TG_STR(MSG_ST_SEARCH_FAILED_NETWORK)
+                                                 : TG_STR(MSG_ST_SEARCH_AGAIN_ENTER)));
         }
         if (state->chat_count > 0 && row >= state->chat_count) {
             row = state->chat_count - 1;
@@ -13581,7 +13650,7 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
     tg_gui_chat_touched = 1;
     state->selected_chat = row;
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Loading the message...");
+                       TG_STR(MSG_ST_LOADING_THE_MESSAGE));
     tg_gui_window_paint(state, backend);
     if (state->msg_search_global) {
         /* The hit's chat is opened first when it is not the open one; the
@@ -13602,11 +13671,11 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
         *older_cooldown = 0;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       rc > 0 ? "Found - another hit, or ESC ends the search"
-                              : (rc == 0 ? "That message is no longer there"
+                       rc > 0 ? TG_STR(MSG_ST_FOUND_ANOTHER_HIT_OR_ESC)
+                              : (rc == 0 ? TG_STR(MSG_ST_THAT_MESSAGE_IS_NO_LONGER)
                                          : (rc == -2
-                                                ? "Search again (ENTER)"
-                                                : "Could not load it (network?)")));
+                                                ? TG_STR(MSG_ST_SEARCH_AGAIN_ENTER)
+                                                : TG_STR(MSG_ST_COULD_NOT_LOAD_IT_NETWORK))));
     tg_gui_window_paint(state, backend);
 }
 
@@ -14697,72 +14766,25 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
     struct EasyStruct es;
     LONG pick;
 
-    sprintf(body,
-            "Telegram has closed this session (%.31s).\n\n"
-            "That happens when the same telegram-auth.bin is used on two\n"
-            "computers at the same time, or when the session is ended\n"
-            "from another device. Telegram does not open it again: a new\n"
-            "login is needed.\n\n"
-            "Log in again puts the old file aside as\n"
-            "telegram-auth-closed.bin and quits: the next start shows\n"
-            "the login.",
+    tg_locale_format(body, sizeof(body), TG_STR(MSG_ST_TELEGRAM_HAS_CLOSED_THIS_SESSION),
             tg_gui_session_closed_reason());
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (APTR)"Session closed";
+    es.es_Title = (APTR)TG_STR(MSG_RQ_SESSION_CLOSED);
     es.es_TextFormat = (APTR)body;
-    es.es_GadgetFormat = (APTR)"Log in again|Later";
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_LOG_IN_AGAIN_LATER);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (pick == 1L) {
         if (tg_gui_session_closed_put_aside() == 0) {
             return 1;
         }
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Move telegram-auth.bin away to log in");
+                           TG_STR(MSG_ST_MOVE_TELEGRAM_AUTH_BIN_AWAY));
         return 0;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Session closed: restart Amigram to log in");
+                       TG_STR(MSG_ST_SESSION_CLOSED_RESTART_AMIGRAM_TO));
     return 0;
-}
-
-/* A catalog text printed with up to three strings (a text with fewer
-   conversions ignores the rest). One too long for dst falls back to the
-   built-in English text, which fits wherever it is used. */
-static const char *tg_gui_window_format3(char *dst, size_t size,
-                                         const char *fmt,
-                                         const char *builtin,
-                                         const char *a, const char *b,
-                                         const char *c)
-{
-    size_t need = strlen(a) + strlen(b) + strlen(c) + 1U;
-
-    if (strlen(fmt) + need > size) {
-        fmt = builtin;
-    }
-    if (strlen(fmt) + need > size) {
-        dst[0] = '\0';
-        return dst;
-    }
-    sprintf(dst, fmt, a, b, c);
-    return dst;
-}
-
-/* EasyRequest reads es_TextFormat as a format of its own: a text printed
-   beforehand goes in with each % doubled. */
-static const char *tg_gui_window_req_text(char *dst, size_t size,
-                                          const char *src)
-{
-    size_t n = 0U;
-
-    while (*src != '\0' && n + 2U < size) {
-        if (*src == '%') {
-            dst[n++] = '%';
-        }
-        dst[n++] = *src++;
-    }
-    dst[n] = '\0';
-    return dst;
 }
 
 /* The update (tg_update.h): Amigram <newer> is offered; Update fetches the
@@ -14774,7 +14796,6 @@ static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
                                       tg_gui_backend *backend)
 {
     static char text[700];
-    static char body[1400];
     struct EasyStruct es;
     const char *newer = tg_gui_session_update_newer();
     char emsg[96];
@@ -14791,8 +14812,7 @@ static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
     es.es_Title = (APTR)TG_STR(MSG_UPDATE_TITLE);
-    es.es_TextFormat =
-        (APTR)tg_gui_window_req_text(body, sizeof(body), text);
+    es.es_TextFormat = (APTR)text;
     es.es_GadgetFormat = (APTR)TG_STR(MSG_UPDATE_BUTTONS);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (pick != 1L) {
@@ -14812,8 +14832,7 @@ static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
     }
     tg_gui_window_format3(text, sizeof(text), TG_STR(MSG_UPDATE_INSTALLED),
                           MSG_UPDATE_INSTALLED_STR, newer, "", "");
-    es.es_TextFormat =
-        (APTR)tg_gui_window_req_text(body, sizeof(body), text);
+    es.es_TextFormat = (APTR)text;
     es.es_GadgetFormat = (APTR)TG_STR(MSG_UPDATE_INSTALLED_BUTTONS);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     tg_gui_window_format3(text, sizeof(text),
@@ -15014,7 +15033,7 @@ static void tg_gui_window_fresh_state(tg_gui_state *state)
         tg_gui_emoji_close(state);
         if (state->mode == TG_GUI_MODE_CHAT) {
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Live - F1-F10 chats, Amiga+Q quits");
+                               TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
         }
     }
     state->nav_chat = -1;   /* no arrow-key focus yet (0 would tint row 0) */
@@ -15952,7 +15971,7 @@ static void tg_gui_window_notify_open(tg_gui_state *state,
             if (state->composing) {
                 state->composing = 0;
                 tg_gui_window_copy(state->status, sizeof(state->status),
-                                   "Live - F1-F10 chats, Amiga+Q quits");
+                                   TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
             }
             tg_gui_window_open_selection(state, i, backend);
             return;
@@ -16292,12 +16311,13 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
         /* How long a chat that rang stays quiet. A number from the file
            that is not on the list steps to its neighbour on the list. */
         static const unsigned long pauses[5] = { 0UL, 5UL, 10UL, 30UL, 60UL };
-        static const char *const names[5] = {
-            "Pause between sounds: off, every message rings",
-            "Pause between sounds: 5 seconds",
-            "Pause between sounds: 10 seconds",
-            "Pause between sounds: 30 seconds",
-            "Pause between sounds: 1 minute"
+        static const long names[5] = {
+            MSG_ST_PAUSE_OFF, MSG_ST_PAUSE_5S, MSG_ST_PAUSE_10S,
+            MSG_ST_PAUSE_30S, MSG_ST_PAUSE_1MIN
+        };
+        static const char *const names_en[5] = {
+            MSG_ST_PAUSE_OFF_STR, MSG_ST_PAUSE_5S_STR, MSG_ST_PAUSE_10S_STR,
+            MSG_ST_PAUSE_30S_STR, MSG_ST_PAUSE_1MIN_STR
         };
 
         at = 0;
@@ -16319,8 +16339,8 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                                state->notify_beep, state->notify_explicit,
                                state->notify_sound,
                                state->notify_quiet) == 0
-                               ? names[at]
-                               : "Could not save the pause between sounds");
+                               ? tg_str(names[at], names_en[at])
+                               : TG_STR(MSG_ST_COULD_NOT_SAVE_THE_PAUSE));
         return 0;
     }
     case TG_GUI_SET_SOUND_FILE: return (APTR)TG_MENU_NOTIFY_SOUND;
@@ -16341,8 +16361,8 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
         tg_gui_update_next = (time_t)0;
         tg_gui_window_copy(state->status, sizeof(state->status),
                            state->update_check
-                               ? "Updates: a look once a day"
-                               : "Updates: not looked for");
+                               ? TG_STR(MSG_ST_UPDATES_A_LOOK_ONCE_A)
+                               : TG_STR(MSG_ST_UPDATES_NOT_LOOKED_FOR));
         return 0;
     case TG_GUI_SET_STICKERS: {
         /* Read when a chat's messages are: the stickers already on screen
@@ -16366,13 +16386,13 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
             tg_gui_emoji_preferences_save_choice(
                     TG_GUI_STICKERS_FILE, state->stickers,
                     state->stickers_explicit) != 0
-                ? "Could not save the sticker setting"
-                : !state->stickers ? "Stickers: shown as their emoji"
+                ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_STICKER)
+                : !state->stickers ? TG_STR(MSG_ST_STICKERS_SHOWN_AS_THEIR_EMOJI)
                 : state->sticker_can
-                      ? "Stickers: pictures from the next chat opened"
+                      ? TG_STR(MSG_ST_STICKERS_PICTURES_FROM_THE_NEXT)
                 : tg_image_dt_truecolor()
-                      ? "No WEBP datatype here: stickers stay emoji"
-                      : "Sticker pictures need picture.datatype V43");
+                      ? TG_STR(MSG_ST_NO_WEBP_DATATYPE_HERE_STICKERS)
+                      : TG_STR(MSG_ST_STICKER_PICTURES_NEED_PICTURE_DATATYPE));
         return offer ? (APTR)TG_MENU_WEBP_DT : 0;
     }
     case TG_GUI_SET_MARKDOWN:
@@ -16383,9 +16403,9 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
             state->status, sizeof(state->status),
             tg_gui_emoji_preferences_save(TG_GUI_MARKDOWN_FILE,
                                           state->markdown) != 0
-                ? "Could not save the Markdown setting"
-                : state->markdown ? "Markdown: **bold** is sent as bold"
-                                  : "Markdown: sent as typed");
+                ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_MARKDOWN)
+                : state->markdown ? TG_STR(MSG_ST_MARKDOWN_BOLD_IS_SENT_AS)
+                                  : TG_STR(MSG_ST_MARKDOWN_SENT_AS_TYPED));
         return 0;
     case TG_GUI_SET_AREXX_PORT:
     case TG_GUI_SET_AREXX_SEND:
@@ -16407,13 +16427,13 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
             tg_gui_arexx_preferences_save(TG_GUI_AREXX_FILE,
                                           state->arexx_port,
                                           state->arexx_send) != 0
-                ? "Could not save the ARexx setting"
+                ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_AREXX)
                 : id == TG_GUI_SET_AREXX_PORT
-                      ? (state->arexx_port ? "ARexx port AMIGRAM: open"
-                                           : "ARexx port: closed")
+                      ? (state->arexx_port ? TG_STR(MSG_ST_AREXX_PORT_AMIGRAM_OPEN)
+                                           : TG_STR(MSG_ST_AREXX_PORT_CLOSED))
                       : (state->arexx_send
-                             ? "ARexx scripts may send messages"
-                             : "ARexx scripts cannot send messages"));
+                             ? TG_STR(MSG_ST_AREXX_SCRIPTS_MAY_SEND_MESSAGES)
+                             : TG_STR(MSG_ST_AREXX_SCRIPTS_CANNOT_SEND_MESSAGES)));
         return 0;
     default:
         return 0;
@@ -17062,7 +17082,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
             memcpy(contact_saved, state->status, sizeof(contact_saved));
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Setting up pictures, once: may take a minute");
+                               TG_STR(MSG_ST_SETTING_UP_PICTURES_ONCE_MAY));
             tg_gui_window_paint_status(state, &backend);
             tg_gui_session_run_deferred_contact(stdout);
             memcpy(state->status, contact_saved, sizeof(contact_saved));
@@ -17170,7 +17190,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->search_active = 0;
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Amiga+Q quits");
+                                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         tg_gui_window_open_selection(state, row, &backend);
                     }
                 } else {
@@ -17384,7 +17404,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_settings_show(state, 0);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Amiga+Q quits");
+                                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         set_dirty = 1;
                     } else if (msg_code == 13 || msg_code == 10 ||
                                msg_code == ' ') {
@@ -17417,7 +17437,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_settings_show(state, 0);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Amiga+Q quits");
+                                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         set_dirty = 1;
                     } else if (set_hit == TG_GUI_SET_HIT_UP) {
                         set_dirty = tg_gui_settings_page(state, -1);
@@ -17456,7 +17476,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_pick_end(state);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Amiga+Q quits");
+                                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         tg_gui_window_paint(state, &backend);
                     }
                     msg_class = 0;
@@ -17482,7 +17502,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             0) {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Amiga+Q quits");
+                                TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         }
                         tg_gui_window_paint(state, &backend);
                         msg_class = 0;
@@ -17490,7 +17510,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_pick_end(state);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Live - F1-F10 chats, Amiga+Q quits");
+                                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         tg_gui_window_paint(state, &backend);
                         msg_class = 0;
                     } else if (pick_hit == TG_GUI_HIT_PICK_DELETE) {
@@ -17546,7 +17566,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     tg_gui_log("window: close gadget = cancel transfer");
                     tg_gui_session_transfer_cancel();
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Cancelling...");
+                                       TG_STR(MSG_ST_CANCELLING));
                     tg_gui_window_paint(state, &backend);
                 } else if (photo_save.pending) {
                     tg_gui_log("window: close gadget = cancel photo save");
@@ -17561,7 +17581,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                    search and chat ESC meanings resume once it is idle). */
                 tg_gui_session_transfer_cancel();
                 tg_gui_window_copy(state->status, sizeof(state->status),
-                                   "Cancelling...");
+                                   TG_STR(MSG_ST_CANCELLING));
                 tg_gui_window_paint(state, &backend);
             } else if (msg_class == IDCMP_VANILLAKEY && msg_code == 27 &&
                        photo_save.pending) {
@@ -17585,7 +17605,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_forward_restore(state);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Forward cancelled");
+                                           TG_STR(MSG_ST_FORWARD_CANCELLED));
                     } else {
                         state->search_active = 0;
                         state->msg_search_active = 0;
@@ -17599,9 +17619,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
                                            state->archive_view
-                                               ? "Archive - ESC goes back"
-                                               : "Live - F1-F10 chats, "
-                                                 "Amiga+Q quits");
+                                               ? TG_STR(MSG_ST_ARCHIVE_ESC_GOES_BACK)
+                                               : TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                     }
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 8) { /* BACKSPACE: delete BEFORE the caret */
@@ -17661,7 +17680,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                                     stdout);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Amiga+Q quits");
+                                TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             tg_gui_window_paint(state, &backend);
                         }
                     } else if (state->in_filter && state->chat_count > 0 &&
@@ -17680,7 +17699,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->chats[state->selected_chat].index);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Amiga+Q quits");
+                                TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             tg_gui_window_paint(state, &backend);
                         }
                     } else {
@@ -17831,7 +17850,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->cursor_on = 1;
                     caret_ticks = 0;
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Type - ENTER sends, ESC cancels");
+                                       TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 27) {
                     state->input[0] = '\0';
@@ -17844,7 +17863,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->reply_snippet[0] = '\0';
                     state->edit_to_id = 0UL;
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Live - F1-F10 chats, Amiga+Q quits");
+                                       TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 8) { /* BACKSPACE: delete BEFORE the caret */
                     unsigned long n;
@@ -17967,7 +17986,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->cursor_on = 1;
                     caret_ticks = 0;
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Type - ENTER sends, ESC cancels");
+                                       TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
                     tg_gui_window_paint(state, &backend);
                 }
                 /* Chat selection is on the function keys now (IDCMP_RAWKEY). */
@@ -18268,8 +18287,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_support(state, ctx.window);
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_HELP) {
-                            tg_gui_amiga_easyreq(ctx.window, TG_APP_TITLE " Help",
-                                                 tg_gui_help_text);
+                            tg_gui_amiga_easyreq(ctx.window,
+                                                 TG_STR(MSG_HELP_TITLE),
+                                                 TG_STR(MSG_HELP_TEXT));
                         } else if (ud == (APTR)TG_MENU_REMOVE) {
                             tg_gui_window_remove_chat(state, ctx.window,
                                                        state->selected_chat,
@@ -18349,13 +18369,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (src != 0 && tg_gui_clip_write_text(src)) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Copied to clipboard");
+                                                   TG_STR(MSG_ST_COPIED_TO_CLIPBOARD));
                             } else {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
                                                    sel < 0
-                                                       ? "Right-click a message first"
-                                                       : "Nothing to copy");
+                                                       ? TG_STR(MSG_ST_RIGHT_CLICK_A_MESSAGE_FIRST)
+                                                       : TG_STR(MSG_ST_NOTHING_TO_COPY));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_CUT) {
@@ -18395,17 +18415,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         tg_gui_window_copy(
                                             state->status,
                                             sizeof(state->status),
-                                            "Cut to clipboard");
+                                            TG_STR(MSG_ST_CUT_TO_CLIPBOARD));
                                     } else {
                                         tg_gui_window_copy(
                                             state->status,
                                             sizeof(state->status),
-                                            "Copy failed");
+                                            TG_STR(MSG_ST_COPY_FAILED));
                                     }
                                 } else {
                                     tg_gui_window_copy(state->status,
                                                        sizeof(state->status),
-                                                       "Nothing to cut");
+                                                       TG_STR(MSG_ST_NOTHING_TO_CUT));
                                 }
                                 tg_gui_window_paint(state, &backend);
                             } else if (field[0] != '\0' &&
@@ -18423,11 +18443,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 }
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Cut to clipboard");
+                                                   TG_STR(MSG_ST_CUT_TO_CLIPBOARD));
                             } else {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Nothing to cut");
+                                                   TG_STR(MSG_ST_NOTHING_TO_CUT));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_PASTE) {
@@ -18481,7 +18501,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             if (got == 0UL) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Clipboard is empty");
+                                                   TG_STR(MSG_ST_CLIPBOARD_IS_EMPTY));
                                 tg_gui_window_paint(state, &backend);
                             } else if (state->search_active) {
                                 unsigned long n = (unsigned long)strlen(
@@ -18536,9 +18556,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                        counts. */
                                     char cut[80];
 
-                                    sprintf(cut,
-                                            "Pasted %lu of %lu characters "
-                                            "(composer full)",
+                                    tg_locale_format(cut, sizeof(cut), TG_STR(MSG_ST_PASTED_LU_OF_LU_CHARACTERS),
                                             (unsigned long)p,
                                             (unsigned long)got);
                                     tg_gui_window_copy(state->status,
@@ -18555,12 +18573,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     char note[48];
 
                                     if (parts > 1UL) {
-                                        sprintf(note,
-                                                "Pasted - ENTER sends %lu "
-                                                "messages",
+                                        tg_locale_format(note, sizeof(note), TG_STR(MSG_ST_PASTED_ENTER_SENDS_LU_MESSAGES),
                                                 parts % 100UL);
                                     } else {
-                                        strcpy(note, "Pasted");
+                                        tg_gui_window_copy(note, sizeof(note), TG_STR(MSG_ST_PASTED));
                                     }
                                     tg_gui_window_copy(state->status,
                                                        sizeof(state->status),
@@ -18570,7 +18586,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             } else {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Open a chat first");
+                                                   TG_STR(MSG_ST_OPEN_A_CHAT_FIRST));
                                 tg_gui_window_paint(state, &backend);
                             }
                         } else if (ud == (APTR)TG_MENU_SETTINGS) {
@@ -18580,7 +18596,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_settings_show(state, 0);
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Live - F1-F10 chats, Amiga+Q quits");
+                                    TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             } else if (state->mode == TG_GUI_MODE_CHAT) {
                                 state->composing = 0;
                                 state->search_active = 0;
@@ -18590,7 +18606,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_settings_show(state, 1);
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Settings - ESC closes");
+                                    TG_STR(MSG_ST_SETTINGS_ESC_CLOSES));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_ICONIFY) {
@@ -18615,10 +18631,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_emoji_preferences_save_choice(
                                     TG_GUI_EMOTICON_FILE,
                                     state->emoticon_replace, 1) != 0
-                                    ? "Could not save emoticon setting"
+                                    ? TG_STR(MSG_ST_COULD_NOT_SAVE_EMOTICON_SETTING)
                                     : state->emoticon_replace
-                                          ? "Emoticons become emoji"
-                                          : "Emoticons stay text");
+                                          ? TG_STR(MSG_ST_EMOTICONS_BECOME_EMOJI)
+                                          : TG_STR(MSG_ST_EMOTICONS_STAY_TEXT));
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_ENABLEEMOJI) {
                             tg_gui_set_emoji_enabled(state, !state->emoji_enabled);
@@ -18640,13 +18656,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->emoji_explicit) != 0) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Could not save emoji setting");
+                                                   TG_STR(MSG_ST_COULD_NOT_SAVE_EMOJI_SETTING));
                             } else {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
                                                    state->emoji_enabled
-                                                       ? "Emoji enabled"
-                                                       : "Emoji disabled");
+                                                       ? TG_STR(MSG_ST_EMOJI_ENABLED)
+                                                       : TG_STR(MSG_ST_EMOJI_DISABLED));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_AVATARS) {
@@ -18662,15 +18678,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->avatars_explicit) != 0) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Could not save avatar "
-                                                   "setting");
+                                                   TG_STR(MSG_ST_COULD_NOT_SAVE_AVATAR_SETTING));
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     state->avatars_enabled
-                                        ? "Avatars shown"
-                                        : "Avatars off: initials only, "
-                                          "nothing downloaded");
+                                        ? TG_STR(MSG_ST_AVATARS_SHOWN)
+                                        : TG_STR(MSG_ST_AVATARS_OFF_INITIALS_ONLY_NOTHING));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_FULLPHOTOS) {
@@ -18686,15 +18700,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->photo_full_size) != 0) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Could not save photo setting");
+                                                   TG_STR(MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING));
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     state->photo_full_size
-                                        ? "Full-size photos on: the viewer "
-                                          "and Save photo as... take the "
-                                          "largest copy"
-                                        : "Full-size photos off");
+                                        ? TG_STR(MSG_ST_FULL_SIZE_PHOTOS_ON_THE)
+                                        : TG_STR(MSG_ST_FULL_SIZE_PHOTOS_OFF));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_INLINEPHOTOS) {
@@ -18711,13 +18723,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->photo_cache_limit_mb) != 0) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Could not save photo setting");
+                                                   TG_STR(MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING));
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     state->inline_photos
-                                        ? "Inline photos enabled"
-                                        : "Inline photos disabled");
+                                        ? TG_STR(MSG_ST_INLINE_PHOTOS_ENABLED)
+                                        : TG_STR(MSG_ST_INLINE_PHOTOS_DISABLED));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_PLAYER) {
@@ -18737,15 +18749,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                    requester reads its text as a format */
                                 tg_gui_requester_text(shown, sizeof(shown),
                                                       state->video_player, 2);
-                                sprintf(text,
-                                        "Play hands videos and sounds to\n%s",
+                                tg_locale_format(text, sizeof(text), TG_STR(MSG_ST_PLAY_HANDS_VIDEOS_AND_SOUNDS),
                                         shown);
                                 es.es_StructSize = (ULONG)sizeof(es);
                                 es.es_Flags = 0UL;
-                                es.es_Title = (APTR)"Media player";
+                                es.es_Title = (APTR)TG_STR(MSG_RQ_MEDIA_PLAYER);
                                 es.es_TextFormat = (APTR)text;
                                 es.es_GadgetFormat =
-                                    (APTR)"Choose another...|Use the Workbench|Cancel";
+                                    (APTR)TG_STR(MSG_RQ_CHOOSE_ANOTHER_USE_THE_WORKBENCH);
                                 pick = tg_gui_amiga_easyreq_args(ctx.window,
                                                                  &es);
                             }
@@ -18754,7 +18765,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 changed = 1;
                             } else if (pick == 1) {
                                 changed = tg_gui_window_pick_file(state,
-                                    ctx.window, "Media player",
+                                    ctx.window, TG_STR(MSG_RQ_MEDIA_PLAYER),
                                     state->video_player,
                                     sizeof(state->video_player));
                             }
@@ -18764,10 +18775,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     sizeof(state->status),
                                     tg_gui_player_save(TG_GUI_PLAYER_FILE,
                                         state->video_player) != 0
-                                        ? "Could not save the media player"
+                                        ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_MEDIA)
                                         : state->video_player[0] != '\0'
-                                              ? "Play: media go to that program"
-                                              : "Play: the Workbench decides");
+                                              ? TG_STR(MSG_ST_PLAY_MEDIA_GO_TO_THAT)
+                                              : TG_STR(MSG_ST_PLAY_THE_WORKBENCH_DECIDES));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_NOTIFY_SOUND ||
@@ -18779,7 +18790,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->notify_sound[0] = '\0';
                             } else {
                                 changed = tg_gui_window_pick_file(state,
-                                    ctx.window, "Notification sound",
+                                    ctx.window, TG_STR(MSG_W_NOTIFICATION_SOUND),
                                     state->notify_sound,
                                     sizeof(state->notify_sound));
                             }
@@ -18793,8 +18804,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         state->notify_explicit,
                                         state->notify_sound,
                                         state->notify_quiet) == 0 ?
-                                    "Notification sound saved" :
-                                    "Could not save the notification sound");
+                                    TG_STR(MSG_ST_NOTIFICATION_SOUND_SAVED) :
+                                    TG_STR(MSG_ST_COULD_NOT_SAVE_THE_NOTIFICATION));
                                 tg_gui_notify_sound(state->notify_sound);
                             }
                             tg_gui_window_paint(state, &backend);
@@ -18803,11 +18814,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                    ud == (APTR)TG_MENU_NOTIFY_POPUP ||
                                    ud == (APTR)TG_MENU_NOTIFY_TEXT ||
                                    ud == (APTR)TG_MENU_NOTIFY_BEEP) {
-                            static const char *const notify_names[4] = {
-                                "New messages: off",
-                                "New messages: count in title",
-                                "New messages: count and pop-up",
-                                "New messages: pop-up with the text"
+                            static const long notify_names[4] = {
+                                MSG_ST_NEW_MESSAGES_OFF,
+                                MSG_ST_NEW_MESSAGES_TITLE,
+                                MSG_ST_NEW_MESSAGES_POPUP,
+                                MSG_ST_NEW_MESSAGES_TEXT
+                            };
+                            static const char *const notify_names_en[4] = {
+                                MSG_ST_NEW_MESSAGES_OFF_STR,
+                                MSG_ST_NEW_MESSAGES_TITLE_STR,
+                                MSG_ST_NEW_MESSAGES_POPUP_STR,
+                                MSG_ST_NEW_MESSAGES_TEXT_STR
                             };
 
                             if (ud == (APTR)TG_MENU_NOTIFY_BEEP) {
@@ -18834,17 +18851,18 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->notify_quiet) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Could not save the new-message setting");
+                                    TG_STR(MSG_ST_COULD_NOT_SAVE_THE_NEW));
                             } else if (ud == (APTR)TG_MENU_NOTIFY_BEEP) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     state->notify_beep
-                                        ? "Beep on new messages: on"
-                                        : "Beep on new messages: off");
+                                        ? TG_STR(MSG_ST_BEEP_ON_NEW_MESSAGES_ON)
+                                        : TG_STR(MSG_ST_BEEP_ON_NEW_MESSAGES_OFF));
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    notify_names[state->notify_mode]);
+                                    tg_str(notify_names[state->notify_mode],
+                                           notify_names_en[state->notify_mode]));
                             }
                             tg_gui_window_notify_title(ctx.window, state);
                             tg_gui_window_paint_status(state, &backend);
@@ -18886,17 +18904,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->photo_cache_limit_mb) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Could not save photo setting");
+                                    TG_STR(MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING));
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
                                     state->photo_dither ==
                                             TG_GUI_PHOTO_DITHER_LIGHT
-                                        ? "Photo dithering: Light"
+                                        ? TG_STR(MSG_ST_PHOTO_DITHERING_LIGHT)
                                         : state->photo_dither ==
                                                   TG_GUI_PHOTO_DITHER_OFF
-                                              ? "Photo dithering: Off"
-                                              : "Photo dithering: Full");
+                                              ? TG_STR(MSG_ST_PHOTO_DITHERING_OFF)
+                                              : TG_STR(MSG_ST_PHOTO_DITHERING_FULL));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_CACHE_10 ||
@@ -18920,16 +18938,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     state->photo_cache_limit_mb) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Could not save photo setting");
+                                    TG_STR(MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING));
                             } else if (state->photo_cache_limit_mb ==
                                        TG_GUI_PHOTO_CACHE_UNLIMITED_MB) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Photo cache limit: Unlimited");
+                                    TG_STR(MSG_ST_PHOTO_CACHE_LIMIT_UNLIMITED));
                             } else {
                                 char line[48];
 
-                                sprintf(line, "Photo cache limit: %lu MB",
+                                tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_PHOTO_CACHE_LIMIT_LU_MB),
                                         state->photo_cache_limit_mb);
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status), line);
@@ -19262,7 +19280,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                        was open: act on nothing rather than on whatever
                        message took its place. */
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                        "That message is no longer loaded.");
+                        TG_STR(MSG_ST_THAT_MESSAGE_IS_NO_LONGER_2));
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTDOWN && state->ctx_visible) {
                     /* A left click while the context menu is open: run the item
@@ -19310,7 +19328,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         }
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Hidden messages shown again");
+                                           TG_STR(MSG_ST_HIDDEN_MESSAGES_SHOWN_AGAIN));
                     } else if (it == TG_GUI_CTX_LIST_ARCHIVE) {
                         /* Back to chats, in the Archive's row menu. */
                         tg_gui_window_show_archive(state, &backend,
@@ -19327,16 +19345,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Marking...");
+                                           TG_STR(MSG_ST_MARKING));
                         tg_gui_window_paint(state, &backend);
                         mrc = tg_gui_session_mark_unread(
                             state->chats[ci].index, want_unread, stdout);
                         state->nav_chat = -1;
                         tg_gui_window_copy(
                             state->status, sizeof(state->status),
-                            mrc != 0 ? "Could not change it (network?)"
-                                     : (want_unread ? "Marked as unread"
-                                                    : "Marked as read"));
+                            mrc != 0 ? TG_STR(MSG_ST_COULD_NOT_CHANGE_IT_NETWORK)
+                                     : (want_unread ? TG_STR(MSG_ST_MARKED_AS_UNREAD)
+                                                    : TG_STR(MSG_ST_MARKED_AS_READ)));
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_ARCHIVE) {
                         int want = state->archive_view ? 0 : 1;
@@ -19344,8 +19362,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           want ? "Archiving..."
-                                                : "Bringing it back...");
+                                           want ? TG_STR(MSG_ST_ARCHIVING)
+                                                : TG_STR(MSG_ST_BRINGING_IT_BACK));
                         tg_gui_window_paint(state, &backend);
                         arc = tg_gui_session_set_archived(
                             state->chats[ci].index, want, stdout);
@@ -19353,7 +19371,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (arc != 0) {
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Could not move the chat");
+                                               TG_STR(MSG_ST_COULD_NOT_MOVE_THE_CHAT));
                         } else if (!want &&
                                    tg_gui_session_archived_count() == 0) {
                             /* The last one left the Archive: nothing to
@@ -19361,12 +19379,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_show_archive(state, &backend, 0);
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Back in your chats");
+                                               TG_STR(MSG_ST_BACK_IN_YOUR_CHATS));
                         } else {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                want ? "Archived (Chats menu, Archived chats)"
-                                     : "Back in your chats");
+                                want ? TG_STR(MSG_ST_ARCHIVED_CHATS_MENU_ARCHIVED_CHATS)
+                                     : TG_STR(MSG_ST_BACK_IN_YOUR_CHATS));
                         }
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_PIN) {
@@ -19375,17 +19393,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           want ? "Pinning..." : "Unpinning...");
+                                           want ? TG_STR(MSG_ST_PINNING) : TG_STR(MSG_ST_UNPINNING));
                         tg_gui_window_paint(state, &backend);
                         prc = tg_gui_session_set_pinned(state->chats[ci].index,
                                                         want, stdout);
                         tg_gui_window_copy(
                             state->status, sizeof(state->status),
-                            prc == 0 ? (want ? "Pinned to the top"
-                                             : "Unpinned")
+                            prc == 0 ? (want ? TG_STR(MSG_ST_PINNED_TO_THE_TOP)
+                                             : TG_STR(MSG_ST_UNPINNED))
                                      : (prc == 1
-                                            ? "Too many pinned chats - unpin one"
-                                            : "Could not change the pin"));
+                                            ? TG_STR(MSG_ST_TOO_MANY_PINNED_CHATS_UNPIN)
+                                            : TG_STR(MSG_ST_COULD_NOT_CHANGE_THE_PIN)));
                         state->chat_scroll_to_sel = 1;
                     } else if (ci >= 0 && ci < state->chat_count &&
                                (it == TG_GUI_CTX_CHAT_MUTE ||
@@ -19406,7 +19424,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 TG_GUI_NOTIFY_DEFAULT : TG_GUI_NOTIFY_RING;
                         } else if (it == TG_GUI_CTX_CHAT_SOUND) {
                             changed = tg_gui_window_pick_file(state,
-                                ctx.window, "Notification sound", value.sound,
+                                ctx.window, TG_STR(MSG_W_NOTIFICATION_SOUND), value.sound,
                                 sizeof(value.sound));
                         } else if (it == TG_GUI_CTX_CHAT_DEFAULT_SOUND) {
                             value.sound[0] = '\0';
@@ -19417,7 +19435,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 chat->peer_id_lo, &value) != 0) {
                             tg_gui_window_copy(state->status,
                                 sizeof(state->status),
-                                "Could not save this chat's sound choice");
+                                TG_STR(MSG_ST_COULD_NOT_SAVE_THIS_CHAT));
                         }
                         if (changed && it == TG_GUI_CTX_CHAT_SOUND) {
                             tg_gui_notify_sound(value.sound);
@@ -19439,7 +19457,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_pick_begin(state, mi);
                         tg_gui_window_copy(state->status,
                             sizeof(state->status),
-                            "Click to select, Shift+click a range, ESC ends");
+                            TG_STR(MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK));
                     } else if (it == TG_GUI_CTX_POLL && m != 0 &&
                                m->id != 0UL) {
                         /* Vote...: the poll's answers take the menu. */
@@ -19461,7 +19479,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else {
                             tg_gui_window_copy(state->status,
                                 sizeof(state->status),
-                                "Open the chat again to vote this poll");
+                                TG_STR(MSG_ST_OPEN_THE_CHAT_AGAIN_TO));
                         }
                     } else if (was_poll && m != 0 && m->id != 0UL &&
                                it >= TG_GUI_CTX_POLL_FIRST &&
@@ -19495,7 +19513,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (state->poll_mask == 0UL) {
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Choose at least one answer");
+                                               TG_STR(MSG_ST_CHOOSE_AT_LEAST_ONE_ANSWER));
                             state->ctx_poll = 1;
                             state->ctx_visible = 1;
                         } else {
@@ -19513,7 +19531,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
 
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Opening the chat...");
+                                           TG_STR(MSG_ST_OPENING_THE_CHAT));
                         tg_gui_window_paint(state, &backend);
                         tg_gui_chat_touched = 1;
                         src = tg_gui_session_message_sender(m->id, why,
@@ -19522,19 +19540,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (src == 0) {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Amiga+Q quits");
+                                TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                         } else if (src == 1) {
                             char line[96]; /* cut on the copy */
 
-                            sprintf(line, "Telegram refused: %.28s",
-                                    why[0] != '\0' ? why : "no reason given");
+                            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_TELEGRAM_REFUSED_28S),
+                                    why[0] != '\0' ? why : TG_STR(MSG_ST_NO_REASON_GIVEN));
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status), line);
                         } else {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                src == 3 ? "There is nobody to write to here"
-                                         : "Could not reach Telegram");
+                                src == 3 ? TG_STR(MSG_ST_THERE_IS_NOBODY_TO_WRITE)
+                                         : TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
                         }
                     } else if (it == TG_GUI_CTX_POLL_STOP && m != 0 &&
                                m->id != 0UL &&
@@ -19568,9 +19586,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_copy(state->status,
                                 sizeof(state->status),
                                 choices == TG_GUI_REACT_CHOICES_NONE
-                                    ? "This chat does not allow reactions."
-                                    : "This chat allows only reactions this "
-                                      "client cannot draw.");
+                                    ? TG_STR(MSG_ST_THIS_CHAT_DOES_NOT_ALLOW)
+                                    : TG_STR(MSG_ST_THIS_CHAT_ALLOWS_ONLY_REACTIONS));
                         }
                     } else if (it == TG_GUI_CTX_REACT_MORE && m != 0 &&
                                !m->is_system && m->id != 0UL) {
@@ -19608,7 +19625,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->cursor_on = 1;
                         caret_ticks = 0;
                         tg_gui_window_copy(state->status, sizeof(state->status),
-                                           "Reply - ENTER sends, ESC cancels");
+                                           TG_STR(MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS));
                     } else if (it == TG_GUI_CTX_EDIT && m != 0 &&
                                (state->in_sel_active = 0, 1) &&
                                (m->is_own ||
@@ -19629,8 +19646,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             state->status, sizeof(state->status),
                             tg_gui_edit_text(state, m->text, state->input,
                                              sizeof(state->input))
-                                ? "Editing - ENTER saves, ESC cancels"
-                                : "Editing - saving changes the formatting");
+                                ? TG_STR(MSG_ST_EDITING_ENTER_SAVES_ESC_CANCELS)
+                                : TG_STR(MSG_ST_EDITING_SAVING_CHANGES_THE_FORMATTING));
                         state->search_active = 0;
                         state->msg_search_active = 0;
                         state->composing = 1;
@@ -19648,15 +19665,15 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             /* A chat with one person: any message of it,
                                for both or for this account alone. */
                             int both = tg_gui_amiga_ask_both_sides(
-                                ctx.window, "Delete message",
-                                "Delete this message?", other);
+                                ctx.window, TG_STR(MSG_RQ_DELETE_MESSAGE),
+                                TG_STR(MSG_RQ_DELETE_THIS_MESSAGE), other);
 
                             if (both >= 0 &&
                                 tg_gui_session_delete_list(&del_id, 1, both,
                                                            stdout) != 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Could not delete this message");
+                                    TG_STR(MSG_ST_COULD_NOT_DELETE_THIS_MESSAGE));
                             }
                         } else if ((m->is_own ||
                                     tg_gui_open_chat_is_self(state)) &&
@@ -19671,8 +19688,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                             sizeof(state->status),
                             tg_gui_session_hide(m->id, stdout) == 0
-                                ? "Message hidden; the chat's menu shows it again"
-                                : "Could not hide this message");
+                                ? TG_STR(MSG_ST_MESSAGE_HIDDEN_THE_CHAT_S)
+                                : TG_STR(MSG_ST_COULD_NOT_HIDE_THIS_MESSAGE));
                     } else if (it == TG_GUI_CTX_DOWNLOAD && m != 0 &&
                                m->has_document && m->id != 0UL) {
                         unsigned long dl_id = m->id;
@@ -19685,13 +19702,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (tg_gui_session_transfer_busy()) {
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "A transfer is already running");
+                                               TG_STR(MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING));
                             tg_gui_window_paint(state, &backend);
                         } else if ((drc = tg_gui_session_transfer_start_download(
                                         dl_id, stdout)) == 0) {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Downloading... (ESC cancels)");
+                                TG_STR(MSG_ST_DOWNLOADING_ESC_CANCELS));
                             tg_gui_window_paint(state, &backend);
                         } else {
                             /* Failed before the first chunk (not in cache,
@@ -19726,8 +19743,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_window_chat_is_private(state, &other)) {
                             tg_gui_window_paint(state, &backend);
                             wide = tg_gui_amiga_ask_both_sides(
-                                ctx.window, "Pin message",
-                                "Pin this message?", other);
+                                ctx.window, TG_STR(MSG_RQ_PIN_MESSAGE),
+                                TG_STR(MSG_W_PIN_THIS_MESSAGE), other);
                         } else if (want && kind > 0) {
                             struct EasyStruct pes;
                             LONG pick;
@@ -19736,11 +19753,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             pes.es_StructSize =
                                 (ULONG)sizeof(struct EasyStruct);
                             pes.es_Flags = 0UL;
-                            pes.es_Title = (APTR)"Pin message";
+                            pes.es_Title = (APTR)TG_STR(MSG_RQ_PIN_MESSAGE);
                             pes.es_TextFormat =
-                                (APTR)"Pin this message for everyone here?";
+                                (APTR)TG_STR(MSG_RQ_PIN_THIS_MESSAGE_FOR_EVERYONE);
                             pes.es_GadgetFormat =
-                                (APTR)"Pin and notify|Pin quietly|Cancel";
+                                (APTR)TG_STR(MSG_RQ_PIN_AND_NOTIFY_PIN_QUIETLY);
                             pick = tg_gui_amiga_easyreq_args(ctx.window,
                                                              &pes);
                             wide = pick == 1 ? 1 : (pick == 2 ? 0 : -1);
@@ -19748,14 +19765,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (wide < 0) {
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Not pinned");
+                                               TG_STR(MSG_ST_NOT_PINNED));
                             tg_gui_window_paint(state, &backend);
                             prc = -1;
                         } else {
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               want ? "Pinning..."
-                                                    : "Unpinning...");
+                                               want ? TG_STR(MSG_ST_PINNING)
+                                                    : TG_STR(MSG_ST_UNPINNING));
                             tg_gui_window_paint(state, &backend);
                             prc = tg_gui_session_pin_message_as(
                                 m->id, want, wide, why, sizeof(why), stdout);
@@ -19765,24 +19782,24 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else if (prc == 0) {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                !want ? "Unpinned"
+                                !want ? TG_STR(MSG_ST_UNPINNED)
                                       : (kind == 0
-                                             ? (wide ? "Pinned for both"
-                                                     : "Pinned, for you only")
+                                             ? (wide ? TG_STR(MSG_ST_PINNED_FOR_BOTH)
+                                                     : TG_STR(MSG_ST_PINNED_FOR_YOU_ONLY))
                                              : (wide
-                                                    ? "Pinned, members notified"
-                                                    : "Pinned for everyone")));
+                                                    ? TG_STR(MSG_ST_PINNED_MEMBERS_NOTIFIED)
+                                                    : TG_STR(MSG_ST_PINNED_FOR_EVERYONE))));
                         } else if (prc == 1) {
                             /* CHAT_ADMIN_REQUIRED and its kin: only who
                                may pin here can. */
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                want ? "Telegram refused: you cannot pin here"
-                                     : "Telegram refused: you cannot unpin here");
+                                want ? TG_STR(MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_PIN)
+                                     : TG_STR(MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_UNPIN));
                         } else {
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Could not reach Telegram");
+                                               TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
                         }
                         /* The bar has the message already (or has let go
                            of it): shown now, not at the next answer. */
@@ -19803,8 +19820,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
                                            tg_gui_clip_write_text(src)
-                                               ? "Copied to clipboard"
-                                               : "Copy failed");
+                                               ? TG_STR(MSG_ST_COPIED_TO_CLIPBOARD)
+                                               : TG_STR(MSG_ST_COPY_FAILED));
                         tg_gui_window_paint(state, &backend);
                     } else if (it == TG_GUI_CTX_FORWARD_SAVED && m != 0 &&
                                !m->is_system && m->id != 0UL) {
@@ -19815,17 +19832,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (frc == 0) {
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Forwarded to Saved Messages");
+                                TG_STR(MSG_ST_FORWARDED_TO_SAVED_MESSAGES));
                         } else {
                             const char *why =
                                 tg_gui_session_last_action_error();
                             if (why != 0 && why[0] != '\0') {
-                                sprintf(state->status,
-                                        "Forward failed: %.30s", why);
+                                tg_locale_format(state->status, sizeof(state->status), TG_STR(MSG_ST_FORWARD_FAILED_30S), why);
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Could not forward message");
+                                    TG_STR(MSG_ST_COULD_NOT_FORWARD_MESSAGE));
                             }
                         }
                         tg_gui_window_paint(state, &backend);
@@ -19892,7 +19908,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         tg_gui_window_copy(
                                             state->status,
                                             sizeof(state->status),
-                                            "Spoiler shown");
+                                            TG_STR(MSG_ST_SPOILER_SHOWN));
                                         tg_gui_window_paint(state, &backend);
                                         continue;
                                     }
@@ -19911,18 +19927,18 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                             tg_gui_window_copy(
                                                 state->status,
                                                 sizeof(state->status),
-                                                "Opening URL in the browser...");
+                                                TG_STR(MSG_ST_OPENING_URL_IN_THE_BROWSER));
                                         } else if (tg_gui_clip_write_text(
                                                        clicked_url)) {
                                             tg_gui_window_copy(
                                                 state->status,
                                                 sizeof(state->status),
-                                                "URL copied (no OpenURL command)");
+                                                TG_STR(MSG_ST_URL_COPIED_NO_OPENURL_COMMAND));
                                         } else {
                                             tg_gui_window_copy(
                                                 state->status,
                                                 sizeof(state->status),
-                                                "Could not open the URL");
+                                                TG_STR(MSG_ST_COULD_NOT_OPEN_THE_URL));
                                         }
                                         tg_gui_window_paint(state, &backend);
                                         continue;
@@ -19951,7 +19967,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         tg_gui_window_copy(
                                             state->status,
                                             sizeof(state->status),
-                                            "Reply - ENTER sends, ESC cancels");
+                                            TG_STR(MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS));
                                         tg_gui_window_paint(state, &backend);
                                     } else {
                                         /* Single click = select/highlight;
@@ -19964,8 +19980,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         tg_gui_window_copy(
                                             state->status,
                                             sizeof(state->status),
-                                            "Selected - double-click to reply, "
-                                            "A+C copies");
+                                            TG_STR(MSG_ST_SELECTED_DOUBLE_CLICK_TO_REPLY));
                                         tg_gui_window_paint(state, &backend);
                                     }
                                 }
@@ -19977,7 +19992,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             dbl_last_id = 0UL;
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Selected - A+C copies");
+                                               TG_STR(MSG_ST_SELECTED_A_C_COPIES));
                             tg_gui_window_paint(state, &backend);
                         }
                     }
@@ -19998,7 +20013,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 state->history_pos = -1;
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Live - F1-F10 chats, Amiga+Q quits");
+                                                   TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             }
                             if (hit >= 0 && hit < state->chat_count &&
                                 hit != state->selected_chat) {
@@ -20047,14 +20062,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     /* the new order at once, then Telegram */
                                     tg_gui_window_copy(state->status,
                                                        sizeof(state->status),
-                                                       "Moving the pin...");
+                                                       TG_STR(MSG_ST_MOVING_THE_PIN));
                                     tg_gui_window_paint(state, &backend);
                                     mrc = tg_gui_session_send_pins(stdout);
                                 }
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    mrc == 2 ? "Could not move the pin"
-                                             : "Live - F1-F10 chats, Amiga+Q quits");
+                                    mrc == 2 ? TG_STR(MSG_ST_COULD_NOT_MOVE_THE_PIN)
+                                             : TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             } else if (dest != src &&
                                 !state->chats[src].pinned &&
                                 !state->chats[dest].pinned &&
@@ -20092,7 +20107,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     int mrc;
 
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Loading the mention...");
+                                       TG_STR(MSG_ST_LOADING_THE_MENTION));
                     tg_gui_window_paint(state, &backend);
                     mrc = tg_gui_session_next_mention(stdout);
                     older_exhausted = 0;
@@ -20100,10 +20115,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     tg_gui_window_copy(
                         state->status, sizeof(state->status),
                         mrc > 0 ? (state->unread_mentions > 0
-                                       ? "A mention - click @ for the next"
-                                       : "The last unread mention")
-                                : (mrc == 0 ? "No unread mentions left"
-                                            : "Could not load it (network?)"));
+                                       ? TG_STR(MSG_ST_A_MENTION_CLICK_FOR_THE)
+                                       : TG_STR(MSG_ST_THE_LAST_UNREAD_MENTION))
+                                : (mrc == 0 ? TG_STR(MSG_ST_NO_UNREAD_MENTIONS_LEFT)
+                                            : TG_STR(MSG_ST_COULD_NOT_LOAD_IT_NETWORK)));
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTDOWN && state->pin_h > 0 &&
                            state->pinned_id != 0UL &&
@@ -20118,7 +20133,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     int prc;
 
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Loading the pinned message...");
+                                       TG_STR(MSG_ST_LOADING_THE_PINNED_MESSAGE));
                     tg_gui_window_paint(state, &backend);
                     prc = tg_gui_session_jump_to_message(state->pinned_id,
                                                          stdout);
@@ -20128,18 +20143,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->pinned_count < 100) {
                         char pline[64];
 
-                        sprintf(pline,
-                                "Pinned %d of %d - click the bar for the next",
+                        tg_locale_format(pline, sizeof(pline), TG_STR(MSG_ST_PINNED_D_OF_D_CLICK),
                                 state->pinned_index, state->pinned_count);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status), pline);
                     } else {
                         tg_gui_window_copy(
                             state->status, sizeof(state->status),
-                            prc > 0 ? "The pinned message"
+                            prc > 0 ? TG_STR(MSG_ST_THE_PINNED_MESSAGE)
                                     : (prc == 0
-                                           ? "That message is no longer there"
-                                           : "Could not load it (network?)"));
+                                           ? TG_STR(MSG_ST_THAT_MESSAGE_IS_NO_LONGER)
+                                           : TG_STR(MSG_ST_COULD_NOT_LOAD_IT_NETWORK)));
                     }
                     /* The bar moves on to the one pinned before it. */
                     (void)tg_gui_session_pinned_next();
@@ -20291,7 +20305,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_platform_open_url(page_url) == 0) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Opening URL in the browser...");
+                                    TG_STR(MSG_ST_OPENING_URL_IN_THE_BROWSER));
                                 tg_gui_window_paint(state, &backend);
                                 continue;
                             }
@@ -20305,11 +20319,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                     &viewer, &ctx, &state->messages[mi]) == 0) {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Photo viewer open");
+                                                   TG_STR(MSG_ST_PHOTO_VIEWER_OPEN));
                             } else {
                                 tg_gui_window_copy(state->status,
                                                    sizeof(state->status),
-                                                   "Could not open that photo");
+                                                   TG_STR(MSG_ST_COULD_NOT_OPEN_THAT_PHOTO));
                             }
                             tg_gui_window_paint(state, &backend);
                         }
@@ -20354,7 +20368,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             (void)tg_gui_session_search_open_result(hit, stdout);
                             tg_gui_window_copy(
                                 state->status, sizeof(state->status),
-                                "Live - F1-F10 chats, Amiga+Q quits");
+                                TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             tg_gui_window_paint(state, &backend);
                         }
                         picked_secs = msg_secs;   /* swallow the second click */
@@ -20379,7 +20393,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             picked_micros = msg_micros;
                             tg_gui_window_copy(state->status,
                                                sizeof(state->status),
-                                               "Live - F1-F10 chats, Amiga+Q quits");
+                                               TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
                             tg_gui_window_paint(state, &backend);
                         }
                     } else if (hit >= 0) {
@@ -20418,7 +20432,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else {
                         tg_gui_window_copy(
                             state->status, sizeof(state->status),
-                            "Search: type to filter your chats (arrows+ENTER)");
+                            TG_STR(MSG_ST_SEARCH_TYPE_TO_FILTER_YOUR));
                         /* Surfaces the "Browse all chats..." top row right away
                            when the box opens empty (it paints either way). */
                         tg_gui_window_filter_chats(state, &backend);
@@ -20458,7 +20472,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->cursor_on = 1;
                         caret_ticks = 0;
                         tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Type - ENTER sends, ESC cancels");
+                                       TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
                         tg_gui_window_paint(state, &backend);
                     } else if (hit == TG_GUI_HIT_INPUT && state->composing) {
                         /* F8: click places the caret in the composer text.
@@ -20518,7 +20532,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->cursor_on = 1;
                         caret_ticks = 0;
                         tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Type - ENTER sends, ESC cancels");
+                               TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
                         tg_gui_window_paint(state, &backend);
                     } else if (hit == TG_GUI_HIT_REPLY_CANCEL) {
                         /* The composer's reply header "X": drop the reply target
@@ -20546,8 +20560,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             tg_gui_pick_begin(state, mi);
                             tg_gui_window_copy(state->status,
                                 sizeof(state->status),
-                                "Click to select, Shift+click a range, "
-                                "ESC ends");
+                                TG_STR(MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK));
                             tg_gui_window_paint(state, &backend);
                         } else if (mi >= 0 && mi < state->message_count) {
                             const tg_gui_message *m = &state->messages[mi];
@@ -20773,13 +20786,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                 if (state->mode != TG_GUI_MODE_CHAT ||
                     !tg_gui_session_is_open() || state->chat_count <= 0) {
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "Open a chat first, then drop the file");
+                                       TG_STR(MSG_ST_OPEN_A_CHAT_FIRST_THEN_2));
                     tg_gui_window_paint(state, &backend);
                 } else if (tg_gui_window_topic_needed(state, &backend)) {
                     /* a forum with no topic open: said in the status line */
                 } else if (tg_gui_session_transfer_busy()) {
                     tg_gui_window_copy(state->status, sizeof(state->status),
-                                       "A transfer is already running");
+                                       TG_STR(MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING));
                     tg_gui_window_paint(state, &backend);
                 } else if (tg_platform_console_drop_more(more_path,
                                                          sizeof(more_path))) {
@@ -20791,7 +20804,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     if (dn > TG_GUI_SENDQ_MAX) {
                         char line[48];
 
-                        sprintf(line, "Drop at most %d files at a time",
+                        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_DROP_AT_MOST_D_FILES),
                                 TG_GUI_SENDQ_MAX);
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status), line);
@@ -20844,7 +20857,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     if (jpeg_mode == 0) {
                         tg_gui_window_copy(state->status,
                                            sizeof(state->status),
-                                           "Send cancelled");
+                                           TG_STR(MSG_ST_SEND_CANCELLED));
                         tg_gui_window_paint(state, &backend);
                     } else {
                         if (urc == 0) {
@@ -20858,12 +20871,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 tg_gui_session_transfer_photo_fallback()) {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    "Photo over 10 MiB; sending as file");
+                                    TG_STR(MSG_ST_PHOTO_OVER_10_MIB_SENDING));
                             } else {
                                 tg_gui_window_copy(
                                     state->status, sizeof(state->status),
-                                    as_photo ? "Sending photo... (ESC cancels)"
-                                             : "Sending... (ESC cancels)");
+                                    as_photo ? TG_STR(MSG_ST_SENDING_PHOTO_ESC_CANCELS)
+                                             : TG_STR(MSG_ST_SENDING_ESC_CANCELS));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else {
@@ -20931,19 +20944,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     /* Uploads name the file: that IS the drop feedback, and
                        it stays up for the whole transfer. */
                     if (xfer_kbs > 0UL) {
-                        sprintf(tline, "Sending %.20s %lu%% %lu KB/s",
+                        tg_locale_format(tline, sizeof(tline), TG_STR(MSG_ST_SENDING_20S_LU_LU_KB),
                                 tg_gui_xfer_name, percent, xfer_kbs);
                     } else {
-                        sprintf(tline, "Sending %.20s %lu%% (ESC cancels)",
+                        tg_locale_format(tline, sizeof(tline), TG_STR(MSG_ST_SENDING_20S_LU_ESC_CANCELS),
                                 tg_gui_xfer_name, percent);
                     }
                 } else if (xfer_kbs > 0UL) {
-                    sprintf(tline, "%s %lu%% %lu KB/s (ESC cancels)",
-                            tdir == 2 ? "Uploading" : "Downloading", percent,
+                    tg_locale_format(tline, sizeof(tline), TG_STR(MSG_ST_S_LU_LU_KB_S),
+                            tdir == 2 ? TG_STR(MSG_ST_UPLOADING) : TG_STR(MSG_ST_DOWNLOADING), percent,
                             xfer_kbs);
                 } else {
-                    sprintf(tline, "%s %lu%% (ESC cancels)",
-                            tdir == 2 ? "Uploading" : "Downloading", percent);
+                    tg_locale_format(tline, sizeof(tline), TG_STR(MSG_ST_S_LU_ESC_CANCELS),
+                            tdir == 2 ? TG_STR(MSG_ST_UPLOADING) : TG_STR(MSG_ST_DOWNLOADING), percent);
                 }
                 if (strcmp(state->status, tline) != 0) {
                     tg_gui_window_copy(state->status, sizeof(state->status),

@@ -97,5 +97,1219 @@
 #define MSG_UPDATE_INSTALLED_STATUS_STR "Amigram %s installed: start it again"
 #define MSG_UPDATE_FAILED 57
 #define MSG_UPDATE_FAILED_STR "The update failed"
+#define MSG_ST_CLEARING_PHOTO_CACHE 100
+#define MSG_ST_CLEARING_PHOTO_CACHE_STR "Clearing photo cache..."
+#define MSG_ST_LIVE_F1_F10_CHATS_AMIGA 101
+#define MSG_ST_LIVE_F1_F10_CHATS_AMIGA_STR "Live - F1-F10 chats, Amiga+Q quits"
+#define MSG_ST_TOPIC_OPEN_ENTER_WRITES_IN 102
+#define MSG_ST_TOPIC_OPEN_ENTER_WRITES_IN_STR "Topic open - ENTER writes in it"
+#define MSG_ST_OPEN_A_GROUP_WITH_TOPICS 103
+#define MSG_ST_OPEN_A_GROUP_WITH_TOPICS_STR "Open a group with topics first"
+#define MSG_ST_MAKING_THE_TOPIC 104
+#define MSG_ST_MAKING_THE_TOPIC_STR "Making the topic..."
+#define MSG_ST_COULD_NOT_MAKE_THE_TOPIC 105
+#define MSG_ST_COULD_NOT_MAKE_THE_TOPIC_STR "Could not make the topic (network?)"
+#define MSG_ST_TOPIC_MADE_ENTER_WRITES_IN 106
+#define MSG_ST_TOPIC_MADE_ENTER_WRITES_IN_STR "Topic made - ENTER writes in it"
+#define MSG_ST_CLOSING_THE_TOPIC 107
+#define MSG_ST_CLOSING_THE_TOPIC_STR "Closing the topic..."
+#define MSG_ST_OPENING_THE_TOPIC_AGAIN 108
+#define MSG_ST_OPENING_THE_TOPIC_AGAIN_STR "Opening the topic again..."
+#define MSG_ST_RENAMING_THE_TOPIC 109
+#define MSG_ST_RENAMING_THE_TOPIC_STR "Renaming the topic..."
+#define MSG_ST_COULD_NOT_CHANGE_THE_TOPIC 110
+#define MSG_ST_COULD_NOT_CHANGE_THE_TOPIC_STR "Could not change the topic (network?)"
+#define MSG_ST_TOPIC_RENAMED 111
+#define MSG_ST_TOPIC_RENAMED_STR "Topic renamed"
+#define MSG_ST_TOPIC_CLOSED_ONLY_ADMINS_WRITE 112
+#define MSG_ST_TOPIC_CLOSED_ONLY_ADMINS_WRITE_STR "Topic closed: only admins write in it"
+#define MSG_ST_TOPIC_OPEN_AGAIN 113
+#define MSG_ST_TOPIC_OPEN_AGAIN_STR "Topic open again"
+#define MSG_ST_CHOOSE_A_TOPIC_IN_THE 114
+#define MSG_ST_CHOOSE_A_TOPIC_IN_THE_STR "Choose a topic in the list first"
+#define MSG_ST_LOGGED_IN_RELAUNCH_TO_CONNECT 115
+#define MSG_ST_LOGGED_IN_RELAUNCH_TO_CONNECT_STR "Logged in - relaunch to connect"
+#define MSG_ST_GETTING_A_CODE_FROM_TELEGRAM 116
+#define MSG_ST_GETTING_A_CODE_FROM_TELEGRAM_STR "Getting a code from Telegram..."
+#define MSG_ST_SIGNED_IN_OPENING_YOUR_CHATS 117
+#define MSG_ST_SIGNED_IN_OPENING_YOUR_CHATS_STR "Signed in - opening your chats..."
+#define MSG_ST_SCANNED_NOW_YOUR_CLOUD_PASSWORD 118
+#define MSG_ST_SCANNED_NOW_YOUR_CLOUD_PASSWORD_STR "Scanned - now your cloud password"
+#define MSG_ST_ENTER_YOUR_PHONE_NUMBER 119
+#define MSG_ST_ENTER_YOUR_PHONE_NUMBER_STR "Enter your phone number (+...)"
+#define MSG_ST_TELEGRAM_OFFERS_NO_OTHER_WAY 120
+#define MSG_ST_TELEGRAM_OFFERS_NO_OTHER_WAY_STR "Telegram offers no other way"
+#define MSG_ST_LOOK_FOR_THE_CODE_IN 121
+#define MSG_ST_LOOK_FOR_THE_CODE_IN_STR "Look for the code in the Telegram app on your phone"
+#define MSG_ST_ASKING_TELEGRAM_TO_RESEND 122
+#define MSG_ST_ASKING_TELEGRAM_TO_RESEND_STR "Asking Telegram to resend..."
+#define MSG_ST_ENTER_YOUR_PHONE_COUNTRY_CODE 123
+#define MSG_ST_ENTER_YOUR_PHONE_COUNTRY_CODE_STR "Enter your phone (+ country code)"
+#define MSG_ST_CONNECTING_TO_TELEGRAM 124
+#define MSG_ST_CONNECTING_TO_TELEGRAM_STR "Connecting to Telegram..."
+#define MSG_ST_NO_CODE_NEEDED_OPENING_YOUR 125
+#define MSG_ST_NO_CODE_NEEDED_OPENING_YOUR_STR "No code needed - opening your chats..."
+#define MSG_ST_NO_CODE_NEEDED_YOUR_CLOUD 126
+#define MSG_ST_NO_CODE_NEEDED_YOUR_CLOUD_STR "No code needed - your cloud password"
+#define MSG_ST_2FA_PASSWORD_ENTER_IF_YOU 127
+#define MSG_ST_2FA_PASSWORD_ENTER_IF_YOU_STR "2FA password (Enter if you have none)"
+#define MSG_ST_OPENING_URL_IN_THE_BROWSER 128
+#define MSG_ST_OPENING_URL_IN_THE_BROWSER_STR "Opening URL in the browser..."
+#define MSG_ST_URL_COPIED_NO_OPENURL_COMMAND 129
+#define MSG_ST_URL_COPIED_NO_OPENURL_COMMAND_STR "URL copied (no OpenURL command)"
+#define MSG_ST_COULD_NOT_OPEN_THE_URL 130
+#define MSG_ST_COULD_NOT_OPEN_THE_URL_STR "Could not open the URL"
+#define MSG_ST_ASL_LIBRARY_V38_NOT_FOUND 131
+#define MSG_ST_ASL_LIBRARY_V38_NOT_FOUND_STR "asl.library V38 not found"
+#define MSG_ST_NAME_TOO_LONG_OR_INVALID 132
+#define MSG_ST_NAME_TOO_LONG_OR_INVALID_STR "Name too long or invalid"
+#define MSG_ST_SEND_CANCELLED 133
+#define MSG_ST_SEND_CANCELLED_STR "Send cancelled"
+#define MSG_ST_COULD_NOT_START_THE_UPLOAD 134
+#define MSG_ST_COULD_NOT_START_THE_UPLOAD_STR "Could not start the upload"
+#define MSG_ST_SENDING_PHOTOS_ESC_CANCELS 135
+#define MSG_ST_SENDING_PHOTOS_ESC_CANCELS_STR "Sending photos... (ESC cancels)"
+#define MSG_ST_SENDING_FILES_ESC_CANCELS 136
+#define MSG_ST_SENDING_FILES_ESC_CANCELS_STR "Sending files... (ESC cancels)"
+#define MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING 137
+#define MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING_STR "A transfer is already running"
+#define MSG_ST_PHOTO_OVER_10_MIB_SENDING 138
+#define MSG_ST_PHOTO_OVER_10_MIB_SENDING_STR "Photo over 10 MiB; sending as file"
+#define MSG_ST_SENDING_PHOTO_ESC_CANCELS 139
+#define MSG_ST_SENDING_PHOTO_ESC_CANCELS_STR "Sending photo... (ESC cancels)"
+#define MSG_ST_UPLOADING_ESC_CANCELS 140
+#define MSG_ST_UPLOADING_ESC_CANCELS_STR "Uploading... (ESC cancels)"
+#define MSG_ST_OPEN_A_CHAT_FIRST 141
+#define MSG_ST_OPEN_A_CHAT_FIRST_STR "Open a chat first"
+#define MSG_ST_POLLS_ARE_FOR_GROUPS_AND 142
+#define MSG_ST_POLLS_ARE_FOR_GROUPS_AND_STR "Polls are for groups and channels"
+#define MSG_ST_POLL_CANCELLED 143
+#define MSG_ST_POLL_CANCELLED_STR "Poll cancelled"
+#define MSG_ST_SENDING_THE_POLL 144
+#define MSG_ST_SENDING_THE_POLL_STR "Sending the poll..."
+#define MSG_ST_SAVED_MESSAGES_IS_ALWAYS_AVAILABLE 145
+#define MSG_ST_SAVED_MESSAGES_IS_ALWAYS_AVAILABLE_STR "Saved Messages is always available"
+#define MSG_ST_COULD_NOT_REMOVE_THIS_CHAT 146
+#define MSG_ST_COULD_NOT_REMOVE_THIS_CHAT_STR "Could not remove this chat"
+#define MSG_ST_NOT_MUTED 147
+#define MSG_ST_NOT_MUTED_STR "Not muted"
+#define MSG_ST_MUTED_FOR_1_HOUR_ON 148
+#define MSG_ST_MUTED_FOR_1_HOUR_ON_STR "Muted for 1 hour, on every device"
+#define MSG_ST_MUTED_FOR_8_HOURS_ON 149
+#define MSG_ST_MUTED_FOR_8_HOURS_ON_STR "Muted for 8 hours, on every device"
+#define MSG_ST_MUTED_ON_EVERY_DEVICE 150
+#define MSG_ST_MUTED_ON_EVERY_DEVICE_STR "Muted on every device"
+#define MSG_ST_MUTED 151
+#define MSG_ST_MUTED_STR "Muted"
+#define MSG_ST_MUTED_ON_THIS_MACHINE_ONLY 152
+#define MSG_ST_MUTED_ON_THIS_MACHINE_ONLY_STR "Muted on this machine only"
+#define MSG_ST_UNMUTED 153
+#define MSG_ST_UNMUTED_STR "Unmuted"
+#define MSG_ST_COULD_NOT_UNMUTE_ON_TELEGRAM 154
+#define MSG_ST_COULD_NOT_UNMUTE_ON_TELEGRAM_STR "Could not unmute on Telegram"
+#define MSG_ST_COULD_NOT_READ_THIS_CHAT 155
+#define MSG_ST_COULD_NOT_READ_THIS_CHAT_STR "Could not read this chat"
+#define MSG_ST_DELETING_THE_CHAT 156
+#define MSG_ST_DELETING_THE_CHAT_STR "Deleting the chat..."
+#define MSG_ST_LEAVING 157
+#define MSG_ST_LEAVING_STR "Leaving..."
+#define MSG_ST_COULD_NOT_DELETE_IT_NETWORK 158
+#define MSG_ST_COULD_NOT_DELETE_IT_NETWORK_STR "Could not delete it (network?)"
+#define MSG_ST_COULD_NOT_LEAVE_NETWORK 159
+#define MSG_ST_COULD_NOT_LEAVE_NETWORK_STR "Could not leave (network?)"
+#define MSG_ST_CHAT_DELETED_FOR_BOTH 160
+#define MSG_ST_CHAT_DELETED_FOR_BOTH_STR "Chat deleted for both"
+#define MSG_ST_CHAT_DELETED_FOR_YOU_ONLY 161
+#define MSG_ST_CHAT_DELETED_FOR_YOU_ONLY_STR "Chat deleted, for you only"
+#define MSG_ST_LEFT 162
+#define MSG_ST_LEFT_STR "Left"
+#define MSG_ST_RELOADING_CHAT_LIST 163
+#define MSG_ST_RELOADING_CHAT_LIST_STR "Reloading chat list..."
+#define MSG_ST_RELOAD_FAILED 164
+#define MSG_ST_RELOAD_FAILED_STR "Reload failed"
+#define MSG_ST_THAT_FILE_IS_NO_LONGER 165
+#define MSG_ST_THAT_FILE_IS_NO_LONGER_STR "That file is no longer where it was saved"
+#define MSG_ST_ITS_DRAWER_IS_OPEN_ON 166
+#define MSG_ST_ITS_DRAWER_IS_OPEN_ON_STR "Its drawer is open on the Workbench"
+#define MSG_ST_HANDED_TO_THE_WORKBENCH 167
+#define MSG_ST_HANDED_TO_THE_WORKBENCH_STR "Handed to the Workbench"
+#define MSG_ST_HANDED_TO_MULTIVIEW 168
+#define MSG_ST_HANDED_TO_MULTIVIEW_STR "Handed to MultiView"
+#define MSG_ST_THAT_FILE_IS_A_PROGRAM 169
+#define MSG_ST_THAT_FILE_IS_A_PROGRAM_STR "That file is a program, not media"
+#define MSG_ST_HANDED_TO_THE_MEDIA_PLAYER 170
+#define MSG_ST_HANDED_TO_THE_MEDIA_PLAYER_STR "Handed to the media player"
+#define MSG_ST_THE_MEDIA_PLAYER_DID_NOT 171
+#define MSG_ST_THE_MEDIA_PLAYER_DID_NOT_STR "The media player did not start"
+#define MSG_ST_DOWNLOADING_TO_PLAY_ESC_CANCELS 172
+#define MSG_ST_DOWNLOADING_TO_PLAY_ESC_CANCELS_STR "Downloading to play... (ESC cancels)"
+#define MSG_ST_VOTING 173
+#define MSG_ST_VOTING_STR "Voting..."
+#define MSG_ST_TAKING_THE_VOTE_BACK 174
+#define MSG_ST_TAKING_THE_VOTE_BACK_STR "Taking the vote back..."
+#define MSG_ST_VOTED 175
+#define MSG_ST_VOTED_STR "Voted"
+#define MSG_ST_VOTE_TAKEN_BACK 176
+#define MSG_ST_VOTE_TAKEN_BACK_STR "Vote taken back"
+#define MSG_ST_COULD_NOT_REACH_TELEGRAM 177
+#define MSG_ST_COULD_NOT_REACH_TELEGRAM_STR "Could not reach Telegram"
+#define MSG_ST_ASKING_WHO_VOTED 178
+#define MSG_ST_ASKING_WHO_VOTED_STR "Asking who voted..."
+#define MSG_ST_FETCHING_THE_WEBP_DATATYPE 179
+#define MSG_ST_FETCHING_THE_WEBP_DATATYPE_STR "Fetching the WEBP datatype..."
+#define MSG_ST_STOPPING_THE_POLL 180
+#define MSG_ST_STOPPING_THE_POLL_STR "Stopping the poll..."
+#define MSG_ST_POLL_STOPPED 181
+#define MSG_ST_POLL_STOPPED_STR "Poll stopped"
+#define MSG_ST_CHOOSE_A_CHAT_TYPE_OR 182
+#define MSG_ST_CHOOSE_A_CHAT_TYPE_OR_STR "Choose a chat - type or ENTER to browse"
+#define MSG_ST_ENTER_LISTS_ALL_YOUR_CHATS 183
+#define MSG_ST_ENTER_LISTS_ALL_YOUR_CHATS_STR "ENTER lists ALL your chats - or type a name"
+#define MSG_ST_COULD_NOT_FORWARD_MESSAGE 184
+#define MSG_ST_COULD_NOT_FORWARD_MESSAGE_STR "Could not forward message"
+#define MSG_ST_COULD_NOT_USE_THAT_DESTINATION 185
+#define MSG_ST_COULD_NOT_USE_THAT_DESTINATION_STR "Could not use that destination"
+#define MSG_ST_COULD_NOT_START_FORWARDING 186
+#define MSG_ST_COULD_NOT_START_FORWARDING_STR "Could not start forwarding"
+#define MSG_ST_DELETING 187
+#define MSG_ST_DELETING_STR "Deleting..."
+#define MSG_ST_THE_MESSAGES_COULD_NOT_BE 188
+#define MSG_ST_THE_MESSAGES_COULD_NOT_BE_STR "The messages could not be deleted"
+#define MSG_ST_SOME_MESSAGES_COULD_NOT_BE 189
+#define MSG_ST_SOME_MESSAGES_COULD_NOT_BE_STR "Some messages could not be deleted"
+#define MSG_ST_LISTING_DESTINATIONS 190
+#define MSG_ST_LISTING_DESTINATIONS_STR "Listing destinations..."
+#define MSG_ST_SEARCHING_DESTINATIONS 191
+#define MSG_ST_SEARCHING_DESTINATIONS_STR "Searching destinations..."
+#define MSG_ST_LISTING_YOUR_CHATS 192
+#define MSG_ST_LISTING_YOUR_CHATS_STR "Listing your chats..."
+#define MSG_ST_SEARCHING_TELEGRAM 193
+#define MSG_ST_SEARCHING_TELEGRAM_STR "Searching Telegram..."
+#define MSG_ST_CHOOSE_DESTINATION_ESC_CANCELS 194
+#define MSG_ST_CHOOSE_DESTINATION_ESC_CANCELS_STR "Choose destination (ESC cancels)"
+#define MSG_ST_PICK_A_RESULT_CLICK_IT 195
+#define MSG_ST_PICK_A_RESULT_CLICK_IT_STR "Pick a result - click it (ESC cancels)"
+#define MSG_ST_SEARCH_FAILED_NETWORK 196
+#define MSG_ST_SEARCH_FAILED_NETWORK_STR "Search failed (network?)"
+#define MSG_ST_NO_CHATS_FOUND 197
+#define MSG_ST_NO_CHATS_FOUND_STR "No chats found"
+#define MSG_ST_NO_MATCH_TRY_A_NAME 198
+#define MSG_ST_NO_MATCH_TRY_A_NAME_STR "No match - try a name or @username"
+#define MSG_ST_READING_THE_ARCHIVE 199
+#define MSG_ST_READING_THE_ARCHIVE_STR "Reading the archive..."
+#define MSG_ST_THE_ARCHIVE_IS_EMPTY 200
+#define MSG_ST_THE_ARCHIVE_IS_EMPTY_STR "The archive is empty"
+#define MSG_ST_COULD_NOT_READ_THE_ARCHIVE 201
+#define MSG_ST_COULD_NOT_READ_THE_ARCHIVE_STR "Could not read the archive (network?)"
+#define MSG_ST_NO_MORE_ARCHIVED_CHATS 202
+#define MSG_ST_NO_MORE_ARCHIVED_CHATS_STR "No more archived chats"
+#define MSG_ST_NOT_CONNECTED_NO_SEARCH_YET 203
+#define MSG_ST_NOT_CONNECTED_NO_SEARCH_YET_STR "Not connected: no search yet"
+#define MSG_ST_OPEN_A_CHAT_FIRST_THEN 204
+#define MSG_ST_OPEN_A_CHAT_FIRST_THEN_STR "Open a chat first, then Find in chat"
+#define MSG_ST_TYPE_THE_WORDS_TO_FIND 205
+#define MSG_ST_TYPE_THE_WORDS_TO_FIND_STR "Type the words to find, then ENTER"
+#define MSG_ST_SEARCHING_ALL_CHATS 206
+#define MSG_ST_SEARCHING_ALL_CHATS_STR "Searching all chats..."
+#define MSG_ST_SEARCHING_THIS_CHAT 207
+#define MSG_ST_SEARCHING_THIS_CHAT_STR "Searching this chat..."
+#define MSG_ST_NO_MESSAGE_FOUND_EDIT_AND 208
+#define MSG_ST_NO_MESSAGE_FOUND_EDIT_AND_STR "No message found - edit and ENTER"
+#define MSG_ST_SEARCHING_FURTHER_BACK 209
+#define MSG_ST_SEARCHING_FURTHER_BACK_STR "Searching further back..."
+#define MSG_ST_LOADING_THE_MESSAGE 210
+#define MSG_ST_LOADING_THE_MESSAGE_STR "Loading the message..."
+#define MSG_ST_FOUND_ANOTHER_HIT_OR_ESC 211
+#define MSG_ST_FOUND_ANOTHER_HIT_OR_ESC_STR "Found - another hit, or ESC ends the search"
+#define MSG_ST_THAT_MESSAGE_IS_NO_LONGER 212
+#define MSG_ST_THAT_MESSAGE_IS_NO_LONGER_STR "That message is no longer there"
+#define MSG_ST_SEARCH_AGAIN_ENTER 213
+#define MSG_ST_SEARCH_AGAIN_ENTER_STR "Search again (ENTER)"
+#define MSG_ST_COULD_NOT_LOAD_IT_NETWORK 214
+#define MSG_ST_COULD_NOT_LOAD_IT_NETWORK_STR "Could not load it (network?)"
+#define MSG_ST_MOVE_TELEGRAM_AUTH_BIN_AWAY 215
+#define MSG_ST_MOVE_TELEGRAM_AUTH_BIN_AWAY_STR "Move telegram-auth.bin away to log in"
+#define MSG_ST_SESSION_CLOSED_RESTART_AMIGRAM_TO 216
+#define MSG_ST_SESSION_CLOSED_RESTART_AMIGRAM_TO_STR "Session closed: restart Amigram to log in"
+#define MSG_ST_COULD_NOT_SAVE_THE_PAUSE 217
+#define MSG_ST_COULD_NOT_SAVE_THE_PAUSE_STR "Could not save the pause between sounds"
+#define MSG_ST_UPDATES_A_LOOK_ONCE_A 218
+#define MSG_ST_UPDATES_A_LOOK_ONCE_A_STR "Updates: a look once a day"
+#define MSG_ST_UPDATES_NOT_LOOKED_FOR 219
+#define MSG_ST_UPDATES_NOT_LOOKED_FOR_STR "Updates: not looked for"
+#define MSG_ST_COULD_NOT_SAVE_THE_STICKER 220
+#define MSG_ST_COULD_NOT_SAVE_THE_STICKER_STR "Could not save the sticker setting"
+#define MSG_ST_STICKERS_SHOWN_AS_THEIR_EMOJI 221
+#define MSG_ST_STICKERS_SHOWN_AS_THEIR_EMOJI_STR "Stickers: shown as their emoji"
+#define MSG_ST_STICKERS_PICTURES_FROM_THE_NEXT 222
+#define MSG_ST_STICKERS_PICTURES_FROM_THE_NEXT_STR "Stickers: pictures from the next chat opened"
+#define MSG_ST_NO_WEBP_DATATYPE_HERE_STICKERS 223
+#define MSG_ST_NO_WEBP_DATATYPE_HERE_STICKERS_STR "No WEBP datatype here: stickers stay emoji"
+#define MSG_ST_STICKER_PICTURES_NEED_PICTURE_DATATYPE 224
+#define MSG_ST_STICKER_PICTURES_NEED_PICTURE_DATATYPE_STR "Sticker pictures need picture.datatype V43"
+#define MSG_ST_COULD_NOT_SAVE_THE_MARKDOWN 225
+#define MSG_ST_COULD_NOT_SAVE_THE_MARKDOWN_STR "Could not save the Markdown setting"
+#define MSG_ST_MARKDOWN_BOLD_IS_SENT_AS 226
+#define MSG_ST_MARKDOWN_BOLD_IS_SENT_AS_STR "Markdown: **bold** is sent as bold"
+#define MSG_ST_MARKDOWN_SENT_AS_TYPED 227
+#define MSG_ST_MARKDOWN_SENT_AS_TYPED_STR "Markdown: sent as typed"
+#define MSG_ST_COULD_NOT_SAVE_THE_AREXX 228
+#define MSG_ST_COULD_NOT_SAVE_THE_AREXX_STR "Could not save the ARexx setting"
+#define MSG_ST_AREXX_PORT_AMIGRAM_OPEN 229
+#define MSG_ST_AREXX_PORT_AMIGRAM_OPEN_STR "ARexx port AMIGRAM: open"
+#define MSG_ST_AREXX_PORT_CLOSED 230
+#define MSG_ST_AREXX_PORT_CLOSED_STR "ARexx port: closed"
+#define MSG_ST_AREXX_SCRIPTS_MAY_SEND_MESSAGES 231
+#define MSG_ST_AREXX_SCRIPTS_MAY_SEND_MESSAGES_STR "ARexx scripts may send messages"
+#define MSG_ST_AREXX_SCRIPTS_CANNOT_SEND_MESSAGES 232
+#define MSG_ST_AREXX_SCRIPTS_CANNOT_SEND_MESSAGES_STR "ARexx scripts cannot send messages"
+#define MSG_ST_SETTING_UP_PICTURES_ONCE_MAY 233
+#define MSG_ST_SETTING_UP_PICTURES_ONCE_MAY_STR "Setting up pictures, once: may take a minute"
+#define MSG_ST_CANCELLING 234
+#define MSG_ST_CANCELLING_STR "Cancelling..."
+#define MSG_ST_FORWARD_CANCELLED 235
+#define MSG_ST_FORWARD_CANCELLED_STR "Forward cancelled"
+#define MSG_ST_ARCHIVE_ESC_GOES_BACK 236
+#define MSG_ST_ARCHIVE_ESC_GOES_BACK_STR "Archive - ESC goes back"
+#define MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS 237
+#define MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS_STR "Type - ENTER sends, ESC cancels"
+#define MSG_ST_COPIED_TO_CLIPBOARD 238
+#define MSG_ST_COPIED_TO_CLIPBOARD_STR "Copied to clipboard"
+#define MSG_ST_RIGHT_CLICK_A_MESSAGE_FIRST 239
+#define MSG_ST_RIGHT_CLICK_A_MESSAGE_FIRST_STR "Right-click a message first"
+#define MSG_ST_NOTHING_TO_COPY 240
+#define MSG_ST_NOTHING_TO_COPY_STR "Nothing to copy"
+#define MSG_ST_CUT_TO_CLIPBOARD 241
+#define MSG_ST_CUT_TO_CLIPBOARD_STR "Cut to clipboard"
+#define MSG_ST_COPY_FAILED 242
+#define MSG_ST_COPY_FAILED_STR "Copy failed"
+#define MSG_ST_NOTHING_TO_CUT 243
+#define MSG_ST_NOTHING_TO_CUT_STR "Nothing to cut"
+#define MSG_ST_CLIPBOARD_IS_EMPTY 244
+#define MSG_ST_CLIPBOARD_IS_EMPTY_STR "Clipboard is empty"
+#define MSG_ST_SETTINGS_ESC_CLOSES 245
+#define MSG_ST_SETTINGS_ESC_CLOSES_STR "Settings - ESC closes"
+#define MSG_ST_COULD_NOT_SAVE_EMOTICON_SETTING 246
+#define MSG_ST_COULD_NOT_SAVE_EMOTICON_SETTING_STR "Could not save emoticon setting"
+#define MSG_ST_EMOTICONS_BECOME_EMOJI 247
+#define MSG_ST_EMOTICONS_BECOME_EMOJI_STR "Emoticons become emoji"
+#define MSG_ST_EMOTICONS_STAY_TEXT 248
+#define MSG_ST_EMOTICONS_STAY_TEXT_STR "Emoticons stay text"
+#define MSG_ST_COULD_NOT_SAVE_EMOJI_SETTING 249
+#define MSG_ST_COULD_NOT_SAVE_EMOJI_SETTING_STR "Could not save emoji setting"
+#define MSG_ST_EMOJI_ENABLED 250
+#define MSG_ST_EMOJI_ENABLED_STR "Emoji enabled"
+#define MSG_ST_EMOJI_DISABLED 251
+#define MSG_ST_EMOJI_DISABLED_STR "Emoji disabled"
+#define MSG_ST_COULD_NOT_SAVE_AVATAR_SETTING 252
+#define MSG_ST_COULD_NOT_SAVE_AVATAR_SETTING_STR "Could not save avatar setting"
+#define MSG_ST_AVATARS_SHOWN 253
+#define MSG_ST_AVATARS_SHOWN_STR "Avatars shown"
+#define MSG_ST_AVATARS_OFF_INITIALS_ONLY_NOTHING 254
+#define MSG_ST_AVATARS_OFF_INITIALS_ONLY_NOTHING_STR "Avatars off: initials only, nothing downloaded"
+#define MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING 255
+#define MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING_STR "Could not save photo setting"
+#define MSG_ST_FULL_SIZE_PHOTOS_ON_THE 256
+#define MSG_ST_FULL_SIZE_PHOTOS_ON_THE_STR "Full-size photos on: the viewer and Save photo as... take the largest copy"
+#define MSG_ST_FULL_SIZE_PHOTOS_OFF 257
+#define MSG_ST_FULL_SIZE_PHOTOS_OFF_STR "Full-size photos off"
+#define MSG_ST_INLINE_PHOTOS_ENABLED 258
+#define MSG_ST_INLINE_PHOTOS_ENABLED_STR "Inline photos enabled"
+#define MSG_ST_INLINE_PHOTOS_DISABLED 259
+#define MSG_ST_INLINE_PHOTOS_DISABLED_STR "Inline photos disabled"
+#define MSG_ST_COULD_NOT_SAVE_THE_MEDIA 260
+#define MSG_ST_COULD_NOT_SAVE_THE_MEDIA_STR "Could not save the media player"
+#define MSG_ST_PLAY_MEDIA_GO_TO_THAT 261
+#define MSG_ST_PLAY_MEDIA_GO_TO_THAT_STR "Play: media go to that program"
+#define MSG_ST_PLAY_THE_WORKBENCH_DECIDES 262
+#define MSG_ST_PLAY_THE_WORKBENCH_DECIDES_STR "Play: the Workbench decides"
+#define MSG_ST_NOTIFICATION_SOUND_SAVED 263
+#define MSG_ST_NOTIFICATION_SOUND_SAVED_STR "Notification sound saved"
+#define MSG_ST_COULD_NOT_SAVE_THE_NOTIFICATION 264
+#define MSG_ST_COULD_NOT_SAVE_THE_NOTIFICATION_STR "Could not save the notification sound"
+#define MSG_ST_COULD_NOT_SAVE_THE_NEW 265
+#define MSG_ST_COULD_NOT_SAVE_THE_NEW_STR "Could not save the new-message setting"
+#define MSG_ST_BEEP_ON_NEW_MESSAGES_ON 266
+#define MSG_ST_BEEP_ON_NEW_MESSAGES_ON_STR "Beep on new messages: on"
+#define MSG_ST_BEEP_ON_NEW_MESSAGES_OFF 267
+#define MSG_ST_BEEP_ON_NEW_MESSAGES_OFF_STR "Beep on new messages: off"
+#define MSG_ST_PHOTO_DITHERING_LIGHT 268
+#define MSG_ST_PHOTO_DITHERING_LIGHT_STR "Photo dithering: Light"
+#define MSG_ST_PHOTO_DITHERING_OFF 269
+#define MSG_ST_PHOTO_DITHERING_OFF_STR "Photo dithering: Off"
+#define MSG_ST_PHOTO_DITHERING_FULL 270
+#define MSG_ST_PHOTO_DITHERING_FULL_STR "Photo dithering: Full"
+#define MSG_ST_PHOTO_CACHE_LIMIT_UNLIMITED 271
+#define MSG_ST_PHOTO_CACHE_LIMIT_UNLIMITED_STR "Photo cache limit: Unlimited"
+#define MSG_ST_THAT_MESSAGE_IS_NO_LONGER_2 272
+#define MSG_ST_THAT_MESSAGE_IS_NO_LONGER_2_STR "That message is no longer loaded."
+#define MSG_ST_HIDDEN_MESSAGES_SHOWN_AGAIN 273
+#define MSG_ST_HIDDEN_MESSAGES_SHOWN_AGAIN_STR "Hidden messages shown again"
+#define MSG_ST_MARKING 274
+#define MSG_ST_MARKING_STR "Marking..."
+#define MSG_ST_COULD_NOT_CHANGE_IT_NETWORK 275
+#define MSG_ST_COULD_NOT_CHANGE_IT_NETWORK_STR "Could not change it (network?)"
+#define MSG_ST_MARKED_AS_UNREAD 276
+#define MSG_ST_MARKED_AS_UNREAD_STR "Marked as unread"
+#define MSG_ST_MARKED_AS_READ 277
+#define MSG_ST_MARKED_AS_READ_STR "Marked as read"
+#define MSG_ST_ARCHIVING 278
+#define MSG_ST_ARCHIVING_STR "Archiving..."
+#define MSG_ST_BRINGING_IT_BACK 279
+#define MSG_ST_BRINGING_IT_BACK_STR "Bringing it back..."
+#define MSG_ST_COULD_NOT_MOVE_THE_CHAT 280
+#define MSG_ST_COULD_NOT_MOVE_THE_CHAT_STR "Could not move the chat"
+#define MSG_ST_BACK_IN_YOUR_CHATS 281
+#define MSG_ST_BACK_IN_YOUR_CHATS_STR "Back in your chats"
+#define MSG_ST_ARCHIVED_CHATS_MENU_ARCHIVED_CHATS 282
+#define MSG_ST_ARCHIVED_CHATS_MENU_ARCHIVED_CHATS_STR "Archived (Chats menu, Archived chats)"
+#define MSG_ST_PINNING 283
+#define MSG_ST_PINNING_STR "Pinning..."
+#define MSG_ST_UNPINNING 284
+#define MSG_ST_UNPINNING_STR "Unpinning..."
+#define MSG_ST_PINNED_TO_THE_TOP 285
+#define MSG_ST_PINNED_TO_THE_TOP_STR "Pinned to the top"
+#define MSG_ST_UNPINNED 286
+#define MSG_ST_UNPINNED_STR "Unpinned"
+#define MSG_ST_TOO_MANY_PINNED_CHATS_UNPIN 287
+#define MSG_ST_TOO_MANY_PINNED_CHATS_UNPIN_STR "Too many pinned chats - unpin one"
+#define MSG_ST_COULD_NOT_CHANGE_THE_PIN 288
+#define MSG_ST_COULD_NOT_CHANGE_THE_PIN_STR "Could not change the pin"
+#define MSG_ST_COULD_NOT_SAVE_THIS_CHAT 289
+#define MSG_ST_COULD_NOT_SAVE_THIS_CHAT_STR "Could not save this chat's sound choice"
+#define MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK 290
+#define MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK_STR "Click to select, Shift+click a range, ESC ends"
+#define MSG_ST_OPEN_THE_CHAT_AGAIN_TO 291
+#define MSG_ST_OPEN_THE_CHAT_AGAIN_TO_STR "Open the chat again to vote this poll"
+#define MSG_ST_CHOOSE_AT_LEAST_ONE_ANSWER 292
+#define MSG_ST_CHOOSE_AT_LEAST_ONE_ANSWER_STR "Choose at least one answer"
+#define MSG_ST_OPENING_THE_CHAT 293
+#define MSG_ST_OPENING_THE_CHAT_STR "Opening the chat..."
+#define MSG_ST_THERE_IS_NOBODY_TO_WRITE 294
+#define MSG_ST_THERE_IS_NOBODY_TO_WRITE_STR "There is nobody to write to here"
+#define MSG_ST_THIS_CHAT_DOES_NOT_ALLOW 295
+#define MSG_ST_THIS_CHAT_DOES_NOT_ALLOW_STR "This chat does not allow reactions."
+#define MSG_ST_THIS_CHAT_ALLOWS_ONLY_REACTIONS 296
+#define MSG_ST_THIS_CHAT_ALLOWS_ONLY_REACTIONS_STR "This chat allows only reactions this client cannot draw."
+#define MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS 297
+#define MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS_STR "Reply - ENTER sends, ESC cancels"
+#define MSG_ST_EDITING_ENTER_SAVES_ESC_CANCELS 298
+#define MSG_ST_EDITING_ENTER_SAVES_ESC_CANCELS_STR "Editing - ENTER saves, ESC cancels"
+#define MSG_ST_EDITING_SAVING_CHANGES_THE_FORMATTING 299
+#define MSG_ST_EDITING_SAVING_CHANGES_THE_FORMATTING_STR "Editing - saving changes the formatting"
+#define MSG_ST_COULD_NOT_DELETE_THIS_MESSAGE 300
+#define MSG_ST_COULD_NOT_DELETE_THIS_MESSAGE_STR "Could not delete this message"
+#define MSG_ST_MESSAGE_HIDDEN_THE_CHAT_S 301
+#define MSG_ST_MESSAGE_HIDDEN_THE_CHAT_S_STR "Message hidden; the chat's menu shows it again"
+#define MSG_ST_COULD_NOT_HIDE_THIS_MESSAGE 302
+#define MSG_ST_COULD_NOT_HIDE_THIS_MESSAGE_STR "Could not hide this message"
+#define MSG_ST_DOWNLOADING_ESC_CANCELS 303
+#define MSG_ST_DOWNLOADING_ESC_CANCELS_STR "Downloading... (ESC cancels)"
+#define MSG_ST_NOT_PINNED 304
+#define MSG_ST_NOT_PINNED_STR "Not pinned"
+#define MSG_ST_PINNED_FOR_BOTH 305
+#define MSG_ST_PINNED_FOR_BOTH_STR "Pinned for both"
+#define MSG_ST_PINNED_FOR_YOU_ONLY 306
+#define MSG_ST_PINNED_FOR_YOU_ONLY_STR "Pinned, for you only"
+#define MSG_ST_PINNED_MEMBERS_NOTIFIED 307
+#define MSG_ST_PINNED_MEMBERS_NOTIFIED_STR "Pinned, members notified"
+#define MSG_ST_PINNED_FOR_EVERYONE 308
+#define MSG_ST_PINNED_FOR_EVERYONE_STR "Pinned for everyone"
+#define MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_PIN 309
+#define MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_PIN_STR "Telegram refused: you cannot pin here"
+#define MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_UNPIN 310
+#define MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_UNPIN_STR "Telegram refused: you cannot unpin here"
+#define MSG_ST_FORWARDED_TO_SAVED_MESSAGES 311
+#define MSG_ST_FORWARDED_TO_SAVED_MESSAGES_STR "Forwarded to Saved Messages"
+#define MSG_ST_SPOILER_SHOWN 312
+#define MSG_ST_SPOILER_SHOWN_STR "Spoiler shown"
+#define MSG_ST_SELECTED_DOUBLE_CLICK_TO_REPLY 313
+#define MSG_ST_SELECTED_DOUBLE_CLICK_TO_REPLY_STR "Selected - double-click to reply, A+C copies"
+#define MSG_ST_SELECTED_A_C_COPIES 314
+#define MSG_ST_SELECTED_A_C_COPIES_STR "Selected - A+C copies"
+#define MSG_ST_MOVING_THE_PIN 315
+#define MSG_ST_MOVING_THE_PIN_STR "Moving the pin..."
+#define MSG_ST_COULD_NOT_MOVE_THE_PIN 316
+#define MSG_ST_COULD_NOT_MOVE_THE_PIN_STR "Could not move the pin"
+#define MSG_ST_LOADING_THE_MENTION 317
+#define MSG_ST_LOADING_THE_MENTION_STR "Loading the mention..."
+#define MSG_ST_A_MENTION_CLICK_FOR_THE 318
+#define MSG_ST_A_MENTION_CLICK_FOR_THE_STR "A mention - click @ for the next"
+#define MSG_ST_THE_LAST_UNREAD_MENTION 319
+#define MSG_ST_THE_LAST_UNREAD_MENTION_STR "The last unread mention"
+#define MSG_ST_NO_UNREAD_MENTIONS_LEFT 320
+#define MSG_ST_NO_UNREAD_MENTIONS_LEFT_STR "No unread mentions left"
+#define MSG_ST_LOADING_THE_PINNED_MESSAGE 321
+#define MSG_ST_LOADING_THE_PINNED_MESSAGE_STR "Loading the pinned message..."
+#define MSG_ST_THE_PINNED_MESSAGE 322
+#define MSG_ST_THE_PINNED_MESSAGE_STR "The pinned message"
+#define MSG_ST_PHOTO_VIEWER_OPEN 323
+#define MSG_ST_PHOTO_VIEWER_OPEN_STR "Photo viewer open"
+#define MSG_ST_COULD_NOT_OPEN_THAT_PHOTO 324
+#define MSG_ST_COULD_NOT_OPEN_THAT_PHOTO_STR "Could not open that photo"
+#define MSG_ST_SEARCH_TYPE_TO_FILTER_YOUR 325
+#define MSG_ST_SEARCH_TYPE_TO_FILTER_YOUR_STR "Search: type to filter your chats (arrows+ENTER)"
+#define MSG_ST_OPEN_A_CHAT_FIRST_THEN_2 326
+#define MSG_ST_OPEN_A_CHAT_FIRST_THEN_2_STR "Open a chat first, then drop the file"
+#define MSG_ST_SENDING_ESC_CANCELS 327
+#define MSG_ST_SENDING_ESC_CANCELS_STR "Sending... (ESC cancels)"
+#define MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_DIRECTORY 328
+#define MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_DIRECTORY_STR "Photo cache clear incomplete: directory scan failed"
+#define MSG_ST_FILE_SENT_PHOTO_WAS_OVER 329
+#define MSG_ST_FILE_SENT_PHOTO_WAS_OVER_STR "File sent (photo was over 10 MiB)"
+#define MSG_ST_PHOTO_SENT 330
+#define MSG_ST_PHOTO_SENT_STR "Photo sent"
+#define MSG_ST_FILE_SENT 331
+#define MSG_ST_FILE_SENT_STR "File sent"
+#define MSG_ST_COULD_NOT_READ_THAT_PHOTO 332
+#define MSG_ST_COULD_NOT_READ_THAT_PHOTO_STR "Could not read that photo"
+#define MSG_ST_COULD_NOT_READ_THAT_FILE 333
+#define MSG_ST_COULD_NOT_READ_THAT_FILE_STR "Could not read that file"
+#define MSG_ST_THAT_FILE_IS_EMPTY_0 334
+#define MSG_ST_THAT_FILE_IS_EMPTY_0_STR "That file is empty (0 bytes)"
+#define MSG_ST_PHOTO_UPLOAD_CANCELLED 335
+#define MSG_ST_PHOTO_UPLOAD_CANCELLED_STR "Photo upload cancelled"
+#define MSG_ST_UPLOAD_CANCELLED 336
+#define MSG_ST_UPLOAD_CANCELLED_STR "Upload cancelled"
+#define MSG_ST_UPLOAD_FAILED 337
+#define MSG_ST_UPLOAD_FAILED_STR "Upload failed"
+#define MSG_ST_FILE_IS_ON_ANOTHER_SERVER 338
+#define MSG_ST_FILE_IS_ON_ANOTHER_SERVER_STR "File is on another server - not supported yet"
+#define MSG_ST_NOT_ENOUGH_ROOM_FOR_THAT 339
+#define MSG_ST_NOT_ENOUGH_ROOM_FOR_THAT_STR "Not enough room for that file"
+#define MSG_ST_DOWNLOAD_CANCELLED 340
+#define MSG_ST_DOWNLOAD_CANCELLED_STR "Download cancelled"
+#define MSG_ST_TRANSFER_FAILED_SERVER_ERROR 341
+#define MSG_ST_TRANSFER_FAILED_SERVER_ERROR_STR "Transfer failed (server error)"
+#define MSG_ST_FILE_NOT_FOUND_OR_REFERENCE 342
+#define MSG_ST_FILE_NOT_FOUND_OR_REFERENCE_STR "File not found or reference expired"
+#define MSG_ST_THAT_DRAWER_NAME_IS_NOT 343
+#define MSG_ST_THAT_DRAWER_NAME_IS_NOT_STR "That drawer name is not usable"
+#define MSG_ST_PHOTO_SAVE_CANCELLED 344
+#define MSG_ST_PHOTO_SAVE_CANCELLED_STR "Photo save cancelled"
+#define MSG_ST_COULD_NOT_READ_THAT_PHOTO_2 345
+#define MSG_ST_COULD_NOT_READ_THAT_PHOTO_2_STR "Could not read that photo's format"
+#define MSG_ST_COULD_NOT_OPEN_THE_SAVE 346
+#define MSG_ST_COULD_NOT_OPEN_THE_SAVE_STR "Could not open the save requester"
+#define MSG_ST_COULD_NOT_SAVE_THAT_PHOTO 347
+#define MSG_ST_COULD_NOT_SAVE_THAT_PHOTO_STR "Could not save that photo"
+#define MSG_ST_SENDING_THE_ALBUM 348
+#define MSG_ST_SENDING_THE_ALBUM_STR "Sending the album..."
+#define MSG_ST_NO_FILE_COULD_BE_SENT 349
+#define MSG_ST_NO_FILE_COULD_BE_SENT_STR "No file could be sent"
+#define MSG_ST_ALBUM_CANCELLED 350
+#define MSG_ST_ALBUM_CANCELLED_STR "Album cancelled"
+#define MSG_ST_QUESTION 351
+#define MSG_ST_QUESTION_STR "Question"
+#define MSG_ST_WHY 352
+#define MSG_ST_WHY_STR "Why"
+#define MSG_ST_POLL_SENT 353
+#define MSG_ST_POLL_SENT_STR "Poll sent"
+#define MSG_ST_POLL_NOT_SENT_CREATE_POLL 354
+#define MSG_ST_POLL_NOT_SENT_CREATE_POLL_STR "Poll not sent (Create poll... tries again)"
+#define MSG_ST_VOTE_FIRST_THEN_TELEGRAM_SAYS 355
+#define MSG_ST_VOTE_FIRST_THEN_TELEGRAM_SAYS_STR "Vote first: then Telegram says who voted"
+#define MSG_ST_THIS_ACCOUNT_S_SAVED_MESSAGES 356
+#define MSG_ST_THIS_ACCOUNT_S_SAVED_MESSAGES_STR "this account's Saved Messages"
+#define MSG_ST_WEBP_DATATYPE_INSTALLED_STICKERS_ARE 357
+#define MSG_ST_WEBP_DATATYPE_INSTALLED_STICKERS_ARE_STR "WEBP datatype installed: stickers are pictures"
+#define MSG_ST_DATATYPE_INSTALLED_RESTART_TO_SEE 358
+#define MSG_ST_DATATYPE_INSTALLED_RESTART_TO_SEE_STR "Datatype installed: restart to see stickers"
+#define MSG_ST_THE_WEBP_DATATYPE_WAS_NOT 359
+#define MSG_ST_THE_WEBP_DATATYPE_WAS_NOT_STR "The WEBP datatype was not installed"
+#define MSG_ST_THE_WEBP_DATATYPE_IS_NOT 360
+#define MSG_ST_THE_WEBP_DATATYPE_IS_NOT_STR "The WEBP datatype is not posted there yet"
+#define MSG_ST_NOT_THE_FILE_EXPECTED_NOTHING 361
+#define MSG_ST_NOT_THE_FILE_EXPECTED_NOTHING_STR "Not the file expected: nothing installed"
+#define MSG_ST_COULD_NOT_FETCH_THE_WEBP 362
+#define MSG_ST_COULD_NOT_FETCH_THE_WEBP_STR "Could not fetch the WEBP datatype"
+#define MSG_ST_NO_OLDER_MESSAGE_MATCHES 363
+#define MSG_ST_NO_OLDER_MESSAGE_MATCHES_STR "No older message matches"
+#define MSG_ST_PASTED 364
+#define MSG_ST_PASTED_STR "Pasted"
+#define MSG_ST_PHOTO_CACHE_CLEARED_LU_FILES 365
+#define MSG_ST_PHOTO_CACHE_CLEARED_LU_FILES_STR "Photo cache cleared: %lu files, %lu.%lu MB"
+#define MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_D 366
+#define MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_D_STR "Photo cache clear incomplete: %d files busy"
+#define MSG_ST_TELEGRAM_REFUSED_48S 367
+#define MSG_ST_TELEGRAM_REFUSED_48S_STR "Telegram refused: %.48s"
+#define MSG_ST_35S_LU_DIGITS 368
+#define MSG_ST_35S_LU_DIGITS_STR "%.35s (%lu digits)"
+#define MSG_ST_WAIT_LU_S_THEN_PRESS 369
+#define MSG_ST_WAIT_LU_S_THEN_PRESS_STR "Wait %lu s, then press S again"
+#define MSG_ST_FOR_ME_AND_S_FOR 370
+#define MSG_ST_FOR_ME_AND_S_FOR_STR "For me and %s|For me only|Cancel"
+#define MSG_ST_D_PHOTOS 371
+#define MSG_ST_D_PHOTOS_STR "%d photos"
+#define MSG_ST_FILE_TOO_BIG_LU_MIB 372
+#define MSG_ST_FILE_TOO_BIG_LU_MIB_STR "File too big (%lu MiB limit on this build)"
+#define MSG_ST_NOT_SENT_AS_A_PHOTO 373
+#define MSG_ST_NOT_SENT_AS_A_PHOTO_STR "Not sent as a photo: %.100s"
+#define MSG_ST_NOT_A_VALID_JPEG_OR 374
+#define MSG_ST_NOT_A_VALID_JPEG_OR_STR "not a valid JPEG or PNG"
+#define MSG_ST_UPLOAD_FAILED_100S 375
+#define MSG_ST_UPLOAD_FAILED_100S_STR "Upload failed: %.100s"
+#define MSG_ST_SAVED_TO_160S 376
+#define MSG_ST_SAVED_TO_160S_STR "Saved to %.160s"
+#define MSG_ST_COULD_NOT_WRITE_TO_28S 377
+#define MSG_ST_COULD_NOT_WRITE_TO_28S_STR "Could not write to %.28s"
+#define MSG_ST_TRANSFER_FAILED_160S 378
+#define MSG_ST_TRANSFER_FAILED_160S_STR "Transfer failed: %.160s"
+#define MSG_ST_NOT_FOUND_170S 379
+#define MSG_ST_NOT_FOUND_170S_STR "Not found: %.170s"
+#define MSG_ST_DOWNLOADS_GO_TO_30S 380
+#define MSG_ST_DOWNLOADS_GO_TO_30S_STR "Downloads go to %.30s"
+#define MSG_ST_DOWNLOADS_24S_THIS_RUN_ONLY 381
+#define MSG_ST_DOWNLOADS_24S_THIS_RUN_ONLY_STR "Downloads: %.24s (this run only)"
+#define MSG_ST_SAVED_180S 382
+#define MSG_ST_SAVED_180S_STR "Saved: %.180s"
+#define MSG_ST_FETCHING_PHOTO_LU_ESC_CANCELS 383
+#define MSG_ST_FETCHING_PHOTO_LU_ESC_CANCELS_STR "Fetching photo... %lu%% (ESC cancels)"
+#define MSG_ST_SENDING_ALBUM_D 384
+#define MSG_ST_SENDING_ALBUM_D_STR "Sending album %d..."
+#define MSG_ST_ALBUM_NOT_SENT_30S 385
+#define MSG_ST_ALBUM_NOT_SENT_30S_STR "Album not sent: %.30s"
+#define MSG_ST_NO_REPLY 386
+#define MSG_ST_NO_REPLY_STR "no reply"
+#define MSG_ST_ALBUM_D_NOT_SENT_30S 387
+#define MSG_ST_ALBUM_D_NOT_SENT_30S_STR "Album %d not sent: %.30s"
+#define MSG_ST_CANCELLED_D_OF_D_FILES 388
+#define MSG_ST_CANCELLED_D_OF_D_FILES_STR "Cancelled: %d of %d files sent"
+#define MSG_ST_STOPPED_AT_FILE_D_OF 389
+#define MSG_ST_STOPPED_AT_FILE_D_OF_STR "Stopped at file %d of %d: %.20s"
+#define MSG_ST_PICK_AT_MOST_D_FILES 390
+#define MSG_ST_PICK_AT_MOST_D_FILES_STR "Pick at most %d files at a time"
+#define MSG_ST_POLL_NOT_SENT_30S 391
+#define MSG_ST_POLL_NOT_SENT_30S_STR "Poll not sent: %.30s"
+#define MSG_ST_CHAT_LIST_RELOADED_D_CHATS 392
+#define MSG_ST_CHAT_LIST_RELOADED_D_CHATS_STR "Chat list reloaded (%d chats)"
+#define MSG_ST_SAVED_IN_S_35S 393
+#define MSG_ST_SAVED_IN_S_35S_STR "Saved in %s%.35s"
+#define MSG_ST_VOTE_REFUSED_32S 394
+#define MSG_ST_VOTE_REFUSED_32S_STR "Vote refused: %.32s"
+#define MSG_ST_NO_REASON_GIVEN 395
+#define MSG_ST_NO_REASON_GIVEN_STR "no reason given"
+#define MSG_ST_TELEGRAM_REFUSED_28S 396
+#define MSG_ST_TELEGRAM_REFUSED_28S_STR "Telegram refused: %.28s"
+#define MSG_ST_NOT_STOPPED_32S 397
+#define MSG_ST_NOT_STOPPED_32S_STR "Not stopped: %.32s"
+#define MSG_ST_D_LOCAL_ENTER_FORWARDS_LAST 398
+#define MSG_ST_D_LOCAL_ENTER_FORWARDS_LAST_STR "%d local - ENTER forwards (last: online)"
+#define MSG_ST_D_LOCAL_ARROWS_ENTER_LAST 399
+#define MSG_ST_D_LOCAL_ARROWS_ENTER_LAST_STR "%d local - arrows + ENTER (last row: online)"
+#define MSG_ST_FORWARDED_D_TO_32S 400
+#define MSG_ST_FORWARDED_D_TO_32S_STR "Forwarded %d to %.32s"
+#define MSG_ST_FORWARDED_TO_32S 401
+#define MSG_ST_FORWARDED_TO_32S_STR "Forwarded to %.32s"
+#define MSG_ST_FORWARD_FAILED_30S 402
+#define MSG_ST_FORWARD_FAILED_30S_STR "Forward failed: %.30s"
+#define MSG_ST_DELETE_D_OF_YOUR_MESSAGES 403
+#define MSG_ST_DELETE_D_OF_YOUR_MESSAGES_STR "Delete %d of your messages for everyone\nand hide %d of other people here?"
+#define MSG_ST_ARCHIVE_NEWEST_D_CHATS_ESC 404
+#define MSG_ST_ARCHIVE_NEWEST_D_CHATS_ESC_STR "Archive: newest %d chats - ESC goes back"
+#define MSG_ST_D_FOUND_CLICK_ONE_OR 405
+#define MSG_ST_D_FOUND_CLICK_ONE_OR_STR "%d found - click one or ENTER (ESC ends)"
+#define MSG_ST_D_FOUND_MORE_BELOW_CLICK 406
+#define MSG_ST_D_FOUND_MORE_BELOW_CLICK_STR "%d found, more below - click or ENTER"
+#define MSG_ST_D_MORE_FOUND_CLICK_ONE 407
+#define MSG_ST_D_MORE_FOUND_CLICK_ONE_STR "%d more found - click one or ENTER"
+#define MSG_ST_TELEGRAM_HAS_CLOSED_THIS_SESSION 408
+#define MSG_ST_TELEGRAM_HAS_CLOSED_THIS_SESSION_STR "Telegram has closed this session (%.31s).\n\nThat happens when the same telegram-auth.bin is used on two\ncomputers at the same time, or when the session is ended\nfrom another device. Telegram does not open it again: a new\nlogin is needed.\n\nLog in again puts the old file aside as\ntelegram-auth-closed.bin and quits: the next start shows\nthe login."
+#define MSG_ST_PASTED_LU_OF_LU_CHARACTERS 409
+#define MSG_ST_PASTED_LU_OF_LU_CHARACTERS_STR "Pasted %lu of %lu characters (composer full)"
+#define MSG_ST_PASTED_ENTER_SENDS_LU_MESSAGES 410
+#define MSG_ST_PASTED_ENTER_SENDS_LU_MESSAGES_STR "Pasted - ENTER sends %lu messages"
+#define MSG_ST_PLAY_HANDS_VIDEOS_AND_SOUNDS 411
+#define MSG_ST_PLAY_HANDS_VIDEOS_AND_SOUNDS_STR "Play hands videos and sounds to\n%s"
+#define MSG_ST_PHOTO_CACHE_LIMIT_LU_MB 412
+#define MSG_ST_PHOTO_CACHE_LIMIT_LU_MB_STR "Photo cache limit: %lu MB"
+#define MSG_ST_PINNED_D_OF_D_CLICK 413
+#define MSG_ST_PINNED_D_OF_D_CLICK_STR "Pinned %d of %d - click the bar for the next"
+#define MSG_ST_DROP_AT_MOST_D_FILES 414
+#define MSG_ST_DROP_AT_MOST_D_FILES_STR "Drop at most %d files at a time"
+#define MSG_ST_SENDING_20S_LU_LU_KB 415
+#define MSG_ST_SENDING_20S_LU_LU_KB_STR "Sending %.20s %lu%% %lu KB/s"
+#define MSG_ST_SENDING_20S_LU_ESC_CANCELS 416
+#define MSG_ST_SENDING_20S_LU_ESC_CANCELS_STR "Sending %.20s %lu%% (ESC cancels)"
+#define MSG_ST_S_LU_LU_KB_S 417
+#define MSG_ST_S_LU_LU_KB_S_STR "%s %lu%% %lu KB/s (ESC cancels)"
+#define MSG_ST_UPLOADING 418
+#define MSG_ST_UPLOADING_STR "Uploading"
+#define MSG_ST_DOWNLOADING 419
+#define MSG_ST_DOWNLOADING_STR "Downloading"
+#define MSG_ST_S_LU_ESC_CANCELS 420
+#define MSG_ST_S_LU_ESC_CANCELS_STR "%s %lu%% (ESC cancels)"
+#define MSG_ST_ALBUM_SENT_LAST_NOT_1 421
+#define MSG_ST_ALBUM_SENT_LAST_NOT_1_STR "%d album sent, the last not: %.24s"
+#define MSG_ST_ALBUMS_SENT_LAST_NOT 422
+#define MSG_ST_ALBUMS_SENT_LAST_NOT_STR "%d albums sent, the last not: %.24s"
+#define MSG_ST_ALBUM_SENT_PHOTO_1 423
+#define MSG_ST_ALBUM_SENT_PHOTO_1_STR "Album sent: %d photo"
+#define MSG_ST_ALBUM_SENT_PHOTOS 424
+#define MSG_ST_ALBUM_SENT_PHOTOS_STR "Album sent: %d photos"
+#define MSG_ST_ALBUM_SENT_FILE_1 425
+#define MSG_ST_ALBUM_SENT_FILE_1_STR "Album sent: %d file"
+#define MSG_ST_ALBUM_SENT_FILES 426
+#define MSG_ST_ALBUM_SENT_FILES_STR "Album sent: %d files"
+#define MSG_ST_ALBUMS_SENT_PHOTOS 427
+#define MSG_ST_ALBUMS_SENT_PHOTOS_STR "%d albums sent: %d photos"
+#define MSG_ST_ALBUMS_SENT_FILES 428
+#define MSG_ST_ALBUMS_SENT_FILES_STR "%d albums sent: %d files"
+#define MSG_ST_SKIPPED 429
+#define MSG_ST_SKIPPED_STR ", %d skipped"
+#define MSG_ST_NO_PHOTO_SENT 430
+#define MSG_ST_NO_PHOTO_SENT_STR "No photo sent: %.30s"
+#define MSG_ST_NO_FILE_SENT 431
+#define MSG_ST_NO_FILE_SENT_STR "No file sent: %.30s"
+#define MSG_ST_NONE_WAS_READABLE 432
+#define MSG_ST_NONE_WAS_READABLE_STR "none was readable"
+#define MSG_ST_FILES_SENT_1 433
+#define MSG_ST_FILES_SENT_1_STR "%d file sent"
+#define MSG_ST_FILES_SENT 434
+#define MSG_ST_FILES_SENT_STR "%d files sent"
+#define MSG_ST_MESSAGE_DELETED_1 435
+#define MSG_ST_MESSAGE_DELETED_1_STR "%d message deleted"
+#define MSG_ST_MESSAGES_DELETED 436
+#define MSG_ST_MESSAGES_DELETED_STR "%d messages deleted"
+#define MSG_ST_MESSAGE_DELETED_BOTH_1 437
+#define MSG_ST_MESSAGE_DELETED_BOTH_1_STR "%d message deleted for both"
+#define MSG_ST_MESSAGES_DELETED_BOTH 438
+#define MSG_ST_MESSAGES_DELETED_BOTH_STR "%d messages deleted for both"
+#define MSG_ST_ARCHIVE_OFFLINE_1 439
+#define MSG_ST_ARCHIVE_OFFLINE_1_STR "Archive (offline): %d chat - ESC goes back"
+#define MSG_ST_ARCHIVE_OFFLINE 440
+#define MSG_ST_ARCHIVE_OFFLINE_STR "Archive (offline): %d chats - ESC goes back"
+#define MSG_ST_ARCHIVE_CHATS_1 441
+#define MSG_ST_ARCHIVE_CHATS_1_STR "Archive: %d chat - ESC goes back"
+#define MSG_ST_ARCHIVE_CHATS 442
+#define MSG_ST_ARCHIVE_CHATS_STR "Archive: %d chats - ESC goes back"
+#define MSG_ST_ARCHIVE_CLICK_1 443
+#define MSG_ST_ARCHIVE_CLICK_1_STR "Archive: %d chat - click one, ESC goes back"
+#define MSG_ST_ARCHIVE_CLICK 444
+#define MSG_ST_ARCHIVE_CLICK_STR "Archive: %d chats - click one, ESC goes back"
+#define MSG_ST_PAUSE_OFF 445
+#define MSG_ST_PAUSE_OFF_STR "Pause between sounds: off, every message rings"
+#define MSG_ST_PAUSE_5S 446
+#define MSG_ST_PAUSE_5S_STR "Pause between sounds: 5 seconds"
+#define MSG_ST_PAUSE_10S 447
+#define MSG_ST_PAUSE_10S_STR "Pause between sounds: 10 seconds"
+#define MSG_ST_PAUSE_30S 448
+#define MSG_ST_PAUSE_30S_STR "Pause between sounds: 30 seconds"
+#define MSG_ST_PAUSE_1MIN 449
+#define MSG_ST_PAUSE_1MIN_STR "Pause between sounds: 1 minute"
+#define MSG_ST_NEW_MESSAGES_OFF 450
+#define MSG_ST_NEW_MESSAGES_OFF_STR "New messages: off"
+#define MSG_ST_NEW_MESSAGES_TITLE 451
+#define MSG_ST_NEW_MESSAGES_TITLE_STR "New messages: count in title"
+#define MSG_ST_NEW_MESSAGES_POPUP 452
+#define MSG_ST_NEW_MESSAGES_POPUP_STR "New messages: count and pop-up"
+#define MSG_ST_NEW_MESSAGES_TEXT 453
+#define MSG_ST_NEW_MESSAGES_TEXT_STR "New messages: pop-up with the text"
+#define MSG_ST_EDIT_TOO_LONG 454
+#define MSG_ST_EDIT_TOO_LONG_STR "Too long: an edit is one message"
+#define MSG_ST_EDIT_NOT_SAVED 455
+#define MSG_ST_EDIT_NOT_SAVED_STR "Not saved - ENTER tries again, ESC gives up"
+#define MSG_ST_FIND_ALL_PROMPT 456
+#define MSG_ST_FIND_ALL_PROMPT_STR "All chats: type, ENTER searches (ESC ends)"
+#define MSG_ST_FIND_CHAT_PROMPT 457
+#define MSG_ST_FIND_CHAT_PROMPT_STR "Find in chat: type, ENTER searches (ESC ends)"
+#define MSG_RQ_OK 600
+#define MSG_RQ_OK_STR "OK"
+#define MSG_RQ_UPDATE_OK 601
+#define MSG_RQ_UPDATE_OK_STR "Update|OK"
+#define MSG_RQ_SUPPORT_DEVELOPMENT 602
+#define MSG_RQ_SUPPORT_DEVELOPMENT_STR "Support development"
+#define MSG_RQ_PATREON_KO_FI_CLOSE 603
+#define MSG_RQ_PATREON_KO_FI_CLOSE_STR "Patreon|Ko-fi|Close"
+#define MSG_RQ_REMOVE_CHAT 604
+#define MSG_RQ_REMOVE_CHAT_STR "Remove chat"
+#define MSG_RQ_REMOVE_CANCEL 605
+#define MSG_RQ_REMOVE_CANCEL_STR "Remove|Cancel"
+#define MSG_RQ_DELETE_CHAT 606
+#define MSG_RQ_DELETE_CHAT_STR "Delete chat"
+#define MSG_RQ_LEAVE 607
+#define MSG_RQ_LEAVE_STR "Leave"
+#define MSG_RQ_LEAVE_CANCEL 608
+#define MSG_RQ_LEAVE_CANCEL_STR "Leave|Cancel"
+#define MSG_RQ_DELETE_MESSAGE 609
+#define MSG_RQ_DELETE_MESSAGE_STR "Delete message"
+#define MSG_RQ_DELETE_THIS_MESSAGE 610
+#define MSG_RQ_DELETE_THIS_MESSAGE_STR "Delete this message?"
+#define MSG_RQ_DELETE_THIS_MESSAGE_FOR_EVERYONE 611
+#define MSG_RQ_DELETE_THIS_MESSAGE_FOR_EVERYONE_STR "Delete this message for everyone?"
+#define MSG_RQ_DELETE_CANCEL 612
+#define MSG_RQ_DELETE_CANCEL_STR "Delete|Cancel"
+#define MSG_RQ_REPLACE_PHOTO 613
+#define MSG_RQ_REPLACE_PHOTO_STR "Replace photo"
+#define MSG_RQ_THAT_FILE_ALREADY_EXISTS_REPLACE 614
+#define MSG_RQ_THAT_FILE_ALREADY_EXISTS_REPLACE_STR "That file already exists. Replace it?"
+#define MSG_RQ_REPLACE_CANCEL 615
+#define MSG_RQ_REPLACE_CANCEL_STR "Replace|Cancel"
+#define MSG_RQ_CLEAR_PHOTO_CACHE 616
+#define MSG_RQ_CLEAR_PHOTO_CACHE_STR "Clear photo cache"
+#define MSG_RQ_DELETE_DOWNLOADED_PHOTOS_AVATARS_ARE 617
+#define MSG_RQ_DELETE_DOWNLOADED_PHOTOS_AVATARS_ARE_STR "Delete downloaded photos?\n\nAvatars are not affected."
+#define MSG_RQ_YES_NO 618
+#define MSG_RQ_YES_NO_STR "Yes|No"
+#define MSG_RQ_MUTE 619
+#define MSG_RQ_MUTE_STR "Mute"
+#define MSG_RQ_MUTE_THIS_CHAT_ON_EVERY 620
+#define MSG_RQ_MUTE_THIS_CHAT_ON_EVERY_STR "Mute this chat on every device?"
+#define MSG_RQ_FOR_1_HOUR_FOR_8 621
+#define MSG_RQ_FOR_1_HOUR_FOR_8_STR "For 1 hour|For 8 hours|Until I unmute|Cancel"
+#define MSG_RQ_OPEN_FILE 622
+#define MSG_RQ_OPEN_FILE_STR "Open file"
+#define MSG_RQ_THIS_FILE_IS_A_PROGRAM 623
+#define MSG_RQ_THIS_FILE_IS_A_PROGRAM_STR "This file is a program: opening it runs it.\nRun it only if you trust who sent it."
+#define MSG_RQ_RUN_SHOW_IN_DRAWER_CANCEL 624
+#define MSG_RQ_RUN_SHOW_IN_DRAWER_CANCEL_STR "Run|Show in drawer|Cancel"
+#define MSG_RQ_WHO_VOTED 625
+#define MSG_RQ_WHO_VOTED_STR "Who voted"
+#define MSG_RQ_STICKER_PICTURES 626
+#define MSG_RQ_STICKER_PICTURES_STR "Sticker pictures"
+#define MSG_RQ_INSTALL_CANCEL 627
+#define MSG_RQ_INSTALL_CANCEL_STR "Install|Cancel"
+#define MSG_RQ_STOP_POLL 628
+#define MSG_RQ_STOP_POLL_STR "Stop poll"
+#define MSG_RQ_STOP_THIS_POLL_NOBODY_CAN 629
+#define MSG_RQ_STOP_THIS_POLL_NOBODY_CAN_STR "Stop this poll?\n\nNobody can vote after that, and a stopped\npoll cannot be opened again."
+#define MSG_RQ_STOP_POLL_CANCEL 630
+#define MSG_RQ_STOP_POLL_CANCEL_STR "Stop poll|Cancel"
+#define MSG_RQ_DELETE_MESSAGES 631
+#define MSG_RQ_DELETE_MESSAGES_STR "Delete messages"
+#define MSG_RQ_SESSION_CLOSED 632
+#define MSG_RQ_SESSION_CLOSED_STR "Session closed"
+#define MSG_RQ_LOG_IN_AGAIN_LATER 633
+#define MSG_RQ_LOG_IN_AGAIN_LATER_STR "Log in again|Later"
+#define MSG_RQ_MEDIA_PLAYER 634
+#define MSG_RQ_MEDIA_PLAYER_STR "Media player"
+#define MSG_RQ_CHOOSE_ANOTHER_USE_THE_WORKBENCH 635
+#define MSG_RQ_CHOOSE_ANOTHER_USE_THE_WORKBENCH_STR "Choose another...|Use the Workbench|Cancel"
+#define MSG_RQ_PIN_MESSAGE 636
+#define MSG_RQ_PIN_MESSAGE_STR "Pin message"
+#define MSG_RQ_PIN_THIS_MESSAGE_FOR_EVERYONE 637
+#define MSG_RQ_PIN_THIS_MESSAGE_FOR_EVERYONE_STR "Pin this message for everyone here?"
+#define MSG_RQ_PIN_AND_NOTIFY_PIN_QUIETLY 638
+#define MSG_RQ_PIN_AND_NOTIFY_PIN_QUIETLY_STR "Pin and notify|Pin quietly|Cancel"
+#define MSG_RQ_DELETE_MESSAGES_ASK_1 639
+#define MSG_RQ_DELETE_MESSAGES_ASK_1_STR "Delete %d message?"
+#define MSG_RQ_DELETE_MESSAGES_ASK 640
+#define MSG_RQ_DELETE_MESSAGES_ASK_STR "Delete %d messages?"
+#define MSG_RQ_DELETE_FOR_EVERYONE_1 641
+#define MSG_RQ_DELETE_FOR_EVERYONE_1_STR "Delete %d message for everyone?"
+#define MSG_RQ_DELETE_FOR_EVERYONE 642
+#define MSG_RQ_DELETE_FOR_EVERYONE_STR "Delete %d messages for everyone?"
+#define MSG_RQ_HIDE_OTHERS_1 643
+#define MSG_RQ_HIDE_OTHERS_1_STR "Hide %d message of other people?\n\nThey leave this chat here only; the chat's menu\nshows them again."
+#define MSG_RQ_HIDE_OTHERS 644
+#define MSG_RQ_HIDE_OTHERS_STR "Hide %d messages of other people?\n\nThey leave this chat here only; the chat's menu\nshows them again."
+#define MSG_RQ_DELETE_MIXED_1 645
+#define MSG_RQ_DELETE_MIXED_1_STR "Delete %d message?\n\nYours go for everyone, the other person's\nfor you only."
+#define MSG_RQ_DELETE_MIXED 646
+#define MSG_RQ_DELETE_MIXED_STR "Delete %d messages?\n\nYours go for everyone, the other person's\nfor you only."
+#define MSG_RQ_WEBP_FROM_CHANNEL 647
+#define MSG_RQ_WEBP_FROM_CHANNEL_STR "its Telegram channel, @%.40s,"
+#define MSG_RQ_WEBP_OFFER 648
+#define MSG_RQ_WEBP_OFFER_STR "Stickers are WEBP pictures, and this system has\nno datatype that reads them.\n\nAmigram can fetch its own webp.datatype (%lu KB)\nfrom %s\nand install it:\n\n    %s\n    %s\n\nNo file already there is replaced."
+#define MSG_RQ_WEBP_EXISTS 649
+#define MSG_RQ_WEBP_EXISTS_STR "A file is already there:\n\n    %.80s\n\nIt was left as it is, and nothing was installed.\nIf it is a WEBP datatype that does not work here,\ntake it out by hand and ask again."
+#define MSG_RQ_WEBP_UNWRITABLE 650
+#define MSG_RQ_WEBP_UNWRITABLE_STR "This file could not be written:\n\n    %.80s\n\nNothing was installed."
+#define MSG_ABOUT_TITLE 800
+#define MSG_ABOUT_TITLE_STR "About Amigram"
+#define MSG_ABOUT_BODY 801
+#define MSG_ABOUT_BODY_STR "The first native Telegram client for AmigaOS,\nMorphOS and AROS. It uses the Telegram API and\nis part of the Telegram ecosystem, but it is\nnot made by Telegram.\n\nby Michele Dipace\nmichele.dipace@kaffeine.net\n\nContributions: Javier de las Rivas (javierdlr)\nand Bohun (bohunamiga), who took the build to\nAROS on ARM.\nIcons optimised by Carlo Spadoni.\n\nThanks to Enrico Vitale of ACube Systems\nfor his tireless and fruitful testing.\n\nAnd thanks to the testers around the world\nwho run this on real hardware and send back\nwhat they find. This client is what it is\nbecause of them.\n\nSource, issues and new releases:\ngithub.com/kaffeine1/telegram-amiga"
+#define MSG_ABOUT_NEWER_GET 802
+#define MSG_ABOUT_NEWER_GET_STR "Amigram %s is out: you have %s.\nGet it where you got this one.\n\n"
+#define MSG_ABOUT_NEWER_UPDATE 803
+#define MSG_ABOUT_NEWER_UPDATE_STR "Amigram %s is out: you have %s.\nUpdate installs it from here.\n\n"
+#define MSG_SUPPORT_TEXT 804
+#define MSG_SUPPORT_TEXT_STR "Support my work on Patreon, or with a\none-time tip on Ko-fi.\n\nContributions are voluntary; no subscription\nis required to use this software.\n\nwww.patreon.com/c/kaffeine1\nko-fi.com/kaffeine1"
+#define MSG_HELP_TITLE 805
+#define MSG_HELP_TITLE_STR "Amigram Help"
+#define MSG_HELP_TEXT 806
+#define MSG_HELP_TEXT_STR "Chat selection:\n  F1 - F10          chats 1 to 10\n  Shift + F1 - F10  chats 11 to 20\n\nENTER        write a message to the open chat\nShift+ENTER  new line in the message (ENTER sends)\nClick msg    select it (A+C copies); double-click replies\nDel / A+R    remove the selected chat from the list\nA+F          send a file to the open chat\nA+P          send a JPEG as a photo\nA+I          iconify to an AppIcon (double-click it to return)\nA+T          settings: notifications, photos, emoji, ARexx\nESC          cancel\nQ            quit"
+#define MSG_W_NEW_TOPIC 900
+#define MSG_W_NEW_TOPIC_STR "New topic"
+#define MSG_W_RENAME_TOPIC 901
+#define MSG_W_RENAME_TOPIC_STR "Rename topic"
+#define MSG_W_A_NEW_TOPIC_IN_THIS 902
+#define MSG_W_A_NEW_TOPIC_IN_THIS_STR "A new topic in this group"
+#define MSG_W_A_NEW_NAME_FOR_THE 903
+#define MSG_W_A_NEW_NAME_FOR_THE_STR "A new name for the topic"
+#define MSG_W_TOPIC_NAME 904
+#define MSG_W_TOPIC_NAME_STR "Topic name:"
+#define MSG_W_CREATE 905
+#define MSG_W_CREATE_STR "Create"
+#define MSG_W_RENAME 906
+#define MSG_W_RENAME_STR "Rename"
+#define MSG_W_THAT_CODE_HAS_EXPIRED 907
+#define MSG_W_THAT_CODE_HAS_EXPIRED_STR "That code has expired"
+#define MSG_W_NO_ANSWER_FROM_TELEGRAM 908
+#define MSG_W_NO_ANSWER_FROM_TELEGRAM_STR "No answer from Telegram"
+#define MSG_W_RESEND_FAILED_TRY_AGAIN 909
+#define MSG_W_RESEND_FAILED_TRY_AGAIN_STR "Resend failed - try again"
+#define MSG_W_THAT_NUMBER_WAS_NOT_ACCEPTED 910
+#define MSG_W_THAT_NUMBER_WAS_NOT_ACCEPTED_STR "That number was not accepted"
+#define MSG_W_WRONG_CODE_TRY_AGAIN 911
+#define MSG_W_WRONG_CODE_TRY_AGAIN_STR "Wrong code - try again"
+#define MSG_W_ERROR_TRY_THE_CODE_AGAIN 912
+#define MSG_W_ERROR_TRY_THE_CODE_AGAIN_STR "Error - try the code again"
+#define MSG_W_WRONG_PASSWORD_TRY_AGAIN 913
+#define MSG_W_WRONG_PASSWORD_TRY_AGAIN_STR "Wrong password - try again"
+#define MSG_W_ERROR_TRY_THE_PASSWORD_AGAIN 914
+#define MSG_W_ERROR_TRY_THE_PASSWORD_AGAIN_STR "Error - try the password again"
+#define MSG_W_REMOVE_THIS_CHAT_FROM_THE 915
+#define MSG_W_REMOVE_THIS_CHAT_FROM_THE_STR "Remove this chat from the list?\n\n"
+#define MSG_W_RE_ADD_IT_LATER_VIA 916
+#define MSG_W_RE_ADD_IT_LATER_VIA_STR "\n\n(re-add it later via Search)"
+#define MSG_W_DELETE_THIS_CHAT_ON_TELEGRAM 917
+#define MSG_W_DELETE_THIS_CHAT_ON_TELEGRAM_STR "Delete this chat on Telegram?\n\n"
+#define MSG_W_ITS_MESSAGES_ARE_DELETED_ON 918
+#define MSG_W_ITS_MESSAGES_ARE_DELETED_ON_STR "\n\nIts messages are deleted on all your devices,\nand for the other person too if you choose so.\nThis cannot be undone."
+#define MSG_W_LEAVE_THIS_GROUP 919
+#define MSG_W_LEAVE_THIS_GROUP_STR "Leave this group?\n\n"
+#define MSG_W_YOU_LEAVE_IT_ON_TELEGRAM 920
+#define MSG_W_YOU_LEAVE_IT_ON_TELEGRAM_STR "\n\nYou leave it on Telegram and its messages are\ndeleted for you. To come back, someone has to\nadd you again."
+#define MSG_W_LEAVE_THIS_GROUP_OR_CHANNEL 921
+#define MSG_W_LEAVE_THIS_GROUP_OR_CHANNEL_STR "Leave this group or channel?\n\n"
+#define MSG_W_YOU_LEAVE_IT_ON_TELEGRAM_2 922
+#define MSG_W_YOU_LEAVE_IT_ON_TELEGRAM_2_STR "\n\nYou leave it on Telegram, on all your devices.\nA private one needs a new invitation to come\nback."
+#define MSG_W_WHERE_SHOULD_DOWNLOADS_GO 923
+#define MSG_W_WHERE_SHOULD_DOWNLOADS_GO_STR "Where should downloads go?"
+#define MSG_W_SAVE_PHOTO_AS 924
+#define MSG_W_SAVE_PHOTO_AS_STR "Save photo as"
+#define MSG_W_SEND_PHOTO_TO_THIS_CHAT 925
+#define MSG_W_SEND_PHOTO_TO_THIS_CHAT_STR "Send photo to this chat"
+#define MSG_W_SEND_FILE_TO_THIS_CHAT 926
+#define MSG_W_SEND_FILE_TO_THIS_CHAT_STR "Send file to this chat"
+#define MSG_W_CREATE_POLL 927
+#define MSG_W_CREATE_POLL_STR "Create poll"
+#define MSG_W_A_PHOTO_SAVE_IS_ALREADY 928
+#define MSG_W_A_PHOTO_SAVE_IS_ALREADY_STR "A photo save is already running"
+#define MSG_W_THAT_PHOTO_IS_NOT_AVAILABLE 929
+#define MSG_W_THAT_PHOTO_IS_NOT_AVAILABLE_STR "That photo is not available now"
+#define MSG_W_FETCHING_PHOTO_ESC_CANCELS 930
+#define MSG_W_FETCHING_PHOTO_ESC_CANCELS_STR "Fetching photo... (ESC cancels)"
+#define MSG_W_PIN_THIS_MESSAGE 931
+#define MSG_W_PIN_THIS_MESSAGE_STR "Pin this message?"
+#define MSG_W_SEND_PHOTOS 932
+#define MSG_W_SEND_PHOTOS_STR "Send photos"
+#define MSG_W_SEND_PHOTO 933
+#define MSG_W_SEND_PHOTO_STR "Send photo"
+#define MSG_W_NOTIFICATION_SOUND 934
+#define MSG_W_NOTIFICATION_SOUND_STR "Notification sound"
+#define MSG_W_BROWSE_ALL_CHATS 935
+#define MSG_W_BROWSE_ALL_CHATS_STR "Browse all chats..."
+#define MSG_W_SEARCH_TELEGRAM 936
+#define MSG_W_SEARCH_TELEGRAM_STR "Search Telegram..."
+#define MSG_W_MORE_ARCHIVED_CHATS 937
+#define MSG_W_MORE_ARCHIVED_CHATS_STR "More archived chats..."
+#define MSG_W_UPLOAD_FAILED 938
+#define MSG_W_UPLOAD_FAILED_STR "upload failed"
+#define MSG_W_TYPE_THE_RIGHT_ANSWER_S 939
+#define MSG_W_TYPE_THE_RIGHT_ANSWER_S_STR "Type the right answer's number"
+#define MSG_W_A_POLL_NEEDS_A_QUESTION 940
+#define MSG_W_A_POLL_NEEDS_A_QUESTION_STR "A poll needs a question"
+#define MSG_W_A_POLL_NEEDS_TWO_ANSWERS 941
+#define MSG_W_A_POLL_NEEDS_TWO_ANSWERS_STR "A poll needs two answers"
+#define MSG_W_PICK_THE_QUIZ_S_RIGHT 942
+#define MSG_W_PICK_THE_QUIZ_S_RIGHT_STR "Pick the quiz's right answer"
+#define MSG_W_CANCEL 943
+#define MSG_W_CANCEL_STR "Cancel"
+#define MSG_W_SEVERAL_ANSWERS 944
+#define MSG_W_SEVERAL_ANSWERS_STR "Several answers"
+#define MSG_W_PUBLIC_VOTES 945
+#define MSG_W_PUBLIC_VOTES_STR "Public votes"
+#define MSG_W_QUIZ 946
+#define MSG_W_QUIZ_STR "Quiz"
+#define MSG_W_RIGHT_ANSWER 947
+#define MSG_W_RIGHT_ANSWER_STR "Right answer:"
+#define MSG_W_POLL_ANSWER 948
+#define MSG_W_POLL_ANSWER_STR "Answer %d"
+#define MSG_W_POLL_RIGHT 949
+#define MSG_W_POLL_RIGHT_STR "Right %d"
+#define MSG_W_BTN_ALBUM 950
+#define MSG_W_BTN_ALBUM_STR "Album"
+#define MSG_W_BTN_PHOTO 951
+#define MSG_W_BTN_PHOTO_STR "Photo"
+#define MSG_W_BTN_FILES 952
+#define MSG_W_BTN_FILES_STR "Files"
+#define MSG_W_BTN_FILE 953
+#define MSG_W_BTN_FILE_STR "File"
+#define MSG_G_CHOOSE_DESTINATION 1300
+#define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
+#define MSG_G_FIND_IN_THIS_CHAT 1301
+#define MSG_G_FIND_IN_THIS_CHAT_STR "Find in this chat..."
+#define MSG_G_TYPE_A_NAME_ENTER 1302
+#define MSG_G_TYPE_A_NAME_ENTER_STR "Type a name, ENTER..."
+#define MSG_G_SEARCH_CHATS 1303
+#define MSG_G_SEARCH_CHATS_STR "Search chats..."
+#define MSG_G_PHOTO 1304
+#define MSG_G_PHOTO_STR "Photo..."
+#define MSG_G_FILE 1305
+#define MSG_G_FILE_STR "File..."
+#define MSG_G_POLL 1306
+#define MSG_G_POLL_STR "Poll..."
+#define MSG_G_RENAME_TOPIC 1307
+#define MSG_G_RENAME_TOPIC_STR "Rename topic..."
+#define MSG_G_REOPEN_TOPIC 1308
+#define MSG_G_REOPEN_TOPIC_STR "Reopen topic"
+#define MSG_G_CLOSE_TOPIC 1309
+#define MSG_G_CLOSE_TOPIC_STR "Close topic"
+#define MSG_G_UNPIN 1310
+#define MSG_G_UNPIN_STR "Unpin"
+#define MSG_G_PIN 1311
+#define MSG_G_PIN_STR "Pin"
+#define MSG_G_UNARCHIVE 1312
+#define MSG_G_UNARCHIVE_STR "Unarchive"
+#define MSG_G_ARCHIVE 1313
+#define MSG_G_ARCHIVE_STR "Archive"
+#define MSG_G_MARK_AS_READ 1314
+#define MSG_G_MARK_AS_READ_STR "Mark as read"
+#define MSG_G_MARK_AS_UNREAD 1315
+#define MSG_G_MARK_AS_UNREAD_STR "Mark as unread"
+#define MSG_G_UNMUTE 1316
+#define MSG_G_UNMUTE_STR "Unmute"
+#define MSG_G_MUTE 1317
+#define MSG_G_MUTE_STR "Mute..."
+#define MSG_G_DISABLE_RING 1318
+#define MSG_G_DISABLE_RING_STR "Disable ring"
+#define MSG_G_ENABLE_RING 1319
+#define MSG_G_ENABLE_RING_STR "Enable ring"
+#define MSG_G_SOUND 1320
+#define MSG_G_SOUND_STR "Sound..."
+#define MSG_G_DEFAULT_SOUND 1321
+#define MSG_G_DEFAULT_SOUND_STR "Default sound"
+#define MSG_G_SHOW_HIDDEN_MESSAGES 1322
+#define MSG_G_SHOW_HIDDEN_MESSAGES_STR "Show hidden messages"
+#define MSG_G_LEAVE 1323
+#define MSG_G_LEAVE_STR "Leave..."
+#define MSG_G_DELETE_CHAT 1324
+#define MSG_G_DELETE_CHAT_STR "Delete chat..."
+#define MSG_G_BACK_TO_CHATS 1325
+#define MSG_G_BACK_TO_CHATS_STR "Back to chats"
+#define MSG_G_SEND_VOTE 1326
+#define MSG_G_SEND_VOTE_STR "Send vote"
+#define MSG_G_MORE 1327
+#define MSG_G_MORE_STR "More"
+#define MSG_G_REACT 1328
+#define MSG_G_REACT_STR "React..."
+#define MSG_G_VOTE 1329
+#define MSG_G_VOTE_STR "Vote..."
+#define MSG_G_TAKE_BACK_VOTE 1330
+#define MSG_G_TAKE_BACK_VOTE_STR "Take back vote"
+#define MSG_G_WHO_VOTED 1331
+#define MSG_G_WHO_VOTED_STR "Who voted..."
+#define MSG_G_REPLY 1332
+#define MSG_G_REPLY_STR "Reply"
+#define MSG_G_DELETE 1333
+#define MSG_G_DELETE_STR "Delete"
+#define MSG_G_HIDE_MESSAGE 1334
+#define MSG_G_HIDE_MESSAGE_STR "Hide message"
+#define MSG_G_PLAY 1335
+#define MSG_G_PLAY_STR "Play"
+#define MSG_G_OPEN 1336
+#define MSG_G_OPEN_STR "Open"
+#define MSG_G_SHOW_IN_DRAWER 1337
+#define MSG_G_SHOW_IN_DRAWER_STR "Show in drawer"
+#define MSG_G_DOWNLOAD 1338
+#define MSG_G_DOWNLOAD_STR "Download"
+#define MSG_G_SAVE_PHOTO_AS 1339
+#define MSG_G_SAVE_PHOTO_AS_STR "Save photo as..."
+#define MSG_G_COPY_TEXT 1340
+#define MSG_G_COPY_TEXT_STR "Copy text"
+#define MSG_G_SELECT 1341
+#define MSG_G_SELECT_STR "Select"
+#define MSG_G_FORWARD_TO_SAVED 1342
+#define MSG_G_FORWARD_TO_SAVED_STR "Forward to Saved"
+#define MSG_G_FORWARD_TO 1343
+#define MSG_G_FORWARD_TO_STR "Forward to..."
+#define MSG_G_1_NEW_MESSAGE 1344
+#define MSG_G_1_NEW_MESSAGE_STR "1 new message"
+#define MSG_G_PINNED 1345
+#define MSG_G_PINNED_STR "Pinned: "
+#define MSG_G_NOT_CONFIRMED_CHECK_THE_CHAT 1346
+#define MSG_G_NOT_CONFIRMED_CHECK_THE_CHAT_STR "Not confirmed: check the chat before resending"
+#define MSG_G_NOT_SENT_NO_ANSWER_FROM 1347
+#define MSG_G_NOT_SENT_NO_ANSWER_FROM_STR "Not sent: no answer from Telegram"
+#define MSG_G_D_NEW_MESSAGES 1360
+#define MSG_G_D_NEW_MESSAGES_STR "%d new messages"
+#define MSG_G_D_SELECTED 1361
+#define MSG_G_D_SELECTED_STR "%d selected"
+#define MSG_G_PINNED_D_D 1362
+#define MSG_G_PINNED_D_D_STR "Pinned %d/%d: "
+#define MSG_G_NOT_SENT_36S 1363
+#define MSG_G_NOT_SENT_36S_STR "Not sent: %.36s"
+#define MSG_G_NOT_SENT_S 1364
+#define MSG_G_NOT_SENT_S_STR "Not sent: %s"
+#define MSG_SET_NEW_MESSAGES 1348
+#define MSG_SET_NEW_MESSAGES_STR "New messages"
+#define MSG_SET_NOTIFICATIONS 1349
+#define MSG_SET_NOTIFICATIONS_STR "Notifications"
+#define MSG_SET_BEEP 1350
+#define MSG_SET_BEEP_STR "Beep"
+#define MSG_SET_PAUSE_BETWEEN_SOUNDS 1351
+#define MSG_SET_PAUSE_BETWEEN_SOUNDS_STR "Pause between sounds"
+#define MSG_SET_SOUND_FILE 1352
+#define MSG_SET_SOUND_FILE_STR "Sound file..."
+#define MSG_SET_BUILT_IN_CHIME 1353
+#define MSG_SET_BUILT_IN_CHIME_STR "Built-in chime"
+#define MSG_SET_PHOTOS_AND_EMOJI 1354
+#define MSG_SET_PHOTOS_AND_EMOJI_STR "Photos and emoji"
+#define MSG_SET_SHOW_INLINE_PHOTOS 1355
+#define MSG_SET_SHOW_INLINE_PHOTOS_STR "Show inline photos"
+#define MSG_SET_STICKER_PICTURES 1356
+#define MSG_SET_STICKER_PICTURES_STR "Sticker pictures"
+#define MSG_SET_FULL_SIZE_PHOTOS 1357
+#define MSG_SET_FULL_SIZE_PHOTOS_STR "Full-size photos"
+#define MSG_SET_PHOTO_DITHERING 1358
+#define MSG_SET_PHOTO_DITHERING_STR "Photo dithering"
+#define MSG_SET_PHOTO_CACHE_LIMIT 1359
+#define MSG_SET_PHOTO_CACHE_LIMIT_STR "Photo cache limit"
+#define MSG_SET_CLEAR_CACHE 1365
+#define MSG_SET_CLEAR_CACHE_STR "Clear cache..."
+#define MSG_SET_ENABLE_EMOJI 1366
+#define MSG_SET_ENABLE_EMOJI_STR "Enable emoji"
+#define MSG_SET_EMOTICONS_BECOME_EMOJI 1367
+#define MSG_SET_EMOTICONS_BECOME_EMOJI_STR "Emoticons become emoji"
+#define MSG_SET_SHOW_AVATARS 1368
+#define MSG_SET_SHOW_AVATARS_STR "Show avatars"
+#define MSG_SET_WRITING 1369
+#define MSG_SET_WRITING_STR "Writing"
+#define MSG_SET_MARKDOWN_FORMATTING 1370
+#define MSG_SET_MARKDOWN_FORMATTING_STR "Markdown formatting"
+#define MSG_SET_WINDOW_AND_FILES 1371
+#define MSG_SET_WINDOW_AND_FILES_STR "Window and files"
+#define MSG_SET_USE_OWN_SCREEN 1372
+#define MSG_SET_USE_OWN_SCREEN_STR "Use own screen"
+#define MSG_SET_DOWNLOAD_DRAWER 1373
+#define MSG_SET_DOWNLOAD_DRAWER_STR "Download drawer..."
+#define MSG_SET_MEDIA_PLAYER 1374
+#define MSG_SET_MEDIA_PLAYER_STR "Media player..."
+#define MSG_SET_CHECK_FOR_UPDATES 1375
+#define MSG_SET_CHECK_FOR_UPDATES_STR "Check for updates"
+#define MSG_SET_AREXX 1376
+#define MSG_SET_AREXX_STR "ARexx"
+#define MSG_SET_AREXX_PORT 1377
+#define MSG_SET_AREXX_PORT_STR "ARexx port"
+#define MSG_SET_SCRIPTS_MAY_SEND_MESSAGES 1378
+#define MSG_SET_SCRIPTS_MAY_SEND_MESSAGES_STR "Scripts may send messages"
+#define MSG_SETV_OFF 1379
+#define MSG_SETV_OFF_STR "< Off >"
+#define MSG_SETV_COUNT_TITLE 1380
+#define MSG_SETV_COUNT_TITLE_STR "< Count in title >"
+#define MSG_SETV_COUNT_POPUP 1381
+#define MSG_SETV_COUNT_POPUP_STR "< Count and pop-up >"
+#define MSG_SETV_POPUP_TEXT 1382
+#define MSG_SETV_POPUP_TEXT_STR "< Pop-up with the text >"
+#define MSG_SETV_1_MINUTE 1383
+#define MSG_SETV_1_MINUTE_STR "< 1 minute >"
+#define MSG_SETV_LIGHT 1384
+#define MSG_SETV_LIGHT_STR "< Light >"
+#define MSG_SETV_FULL 1385
+#define MSG_SETV_FULL_STR "< Full >"
+#define MSG_SETV_UNLIMITED 1386
+#define MSG_SETV_UNLIMITED_STR "< Unlimited >"
+#define MSG_SETV_BUILTIN_CHIME 1387
+#define MSG_SETV_BUILTIN_CHIME_STR "(built-in chime)"
+#define MSG_SETV_WORKBENCH 1388
+#define MSG_SETV_WORKBENCH_STR "(the Workbench)"
+#define MSG_SETV_SECONDS 1389
+#define MSG_SETV_SECONDS_STR "< %lu seconds >"
+#define MSG_SET_TITLE 1390
+#define MSG_SET_TITLE_STR "Settings"
+#define MSG_SET_CLOSE 1391
+#define MSG_SET_CLOSE_STR "Close"
+#define MSG_SET_MORE_ABOVE 1392
+#define MSG_SET_MORE_ABOVE_STR "more above"
+#define MSG_SET_MORE_BELOW 1393
+#define MSG_SET_MORE_BELOW_STR "more below - Up/Down, SPACE changes"
+#define MSG_SET_KEYS 1394
+#define MSG_SET_KEYS_STR "Up/Down move, SPACE or a click changes, ESC closes"
+#define MSG_G_TITLE_NEW 1395
+#define MSG_G_TITLE_NEW_STR " new"
+#define MSG_G_IN_ALL 1396
+#define MSG_G_IN_ALL_STR ", %d in all"
+#define MSG_G_THEM 1397
+#define MSG_G_THEM_STR "them"
+#define MSG_G_DRAFT 1398
+#define MSG_G_DRAFT_STR "Draft: "
+#define MSG_G_JANUARY 1399
+#define MSG_G_JANUARY_STR "January"
+#define MSG_G_FEBRUARY 1400
+#define MSG_G_FEBRUARY_STR "February"
+#define MSG_G_MARCH 1401
+#define MSG_G_MARCH_STR "March"
+#define MSG_G_APRIL 1402
+#define MSG_G_APRIL_STR "April"
+#define MSG_G_MAY 1403
+#define MSG_G_MAY_STR "May"
+#define MSG_G_JUNE 1404
+#define MSG_G_JUNE_STR "June"
+#define MSG_G_JULY 1405
+#define MSG_G_JULY_STR "July"
+#define MSG_G_AUGUST 1406
+#define MSG_G_AUGUST_STR "August"
+#define MSG_G_SEPTEMBER 1407
+#define MSG_G_SEPTEMBER_STR "September"
+#define MSG_G_OCTOBER 1408
+#define MSG_G_OCTOBER_STR "October"
+#define MSG_G_NOVEMBER 1409
+#define MSG_G_NOVEMBER_STR "November"
+#define MSG_G_DECEMBER 1410
+#define MSG_G_DECEMBER_STR "December"
+#define MSG_G_TODAY 1411
+#define MSG_G_TODAY_STR "Today"
+#define MSG_G_YESTERDAY 1412
+#define MSG_G_YESTERDAY_STR "Yesterday"
+#define MSG_G_SEL_DELETE 1413
+#define MSG_G_SEL_DELETE_STR "Delete"
+#define MSG_G_SEL_FORWARD 1414
+#define MSG_G_SEL_FORWARD_STR "Forward"
+#define MSG_G_WRITE_A_MESSAGE 1415
+#define MSG_G_WRITE_A_MESSAGE_STR "Write a message..."
+#define MSG_G_SEND 1416
+#define MSG_G_SEND_STR "Send"
+#define MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA 1417
+#define MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA_STR "you cannot write in this chat"
+#define MSG_G_REFUSE_ONLY_THE_ADMINS_CAN_WRITE_HE 1418
+#define MSG_G_REFUSE_ONLY_THE_ADMINS_CAN_WRITE_HE_STR "only the admins can write here"
+#define MSG_G_REFUSE_YOU_ARE_NOT_IN_THIS_CHAT_ANY 1419
+#define MSG_G_REFUSE_YOU_ARE_NOT_IN_THIS_CHAT_ANY_STR "you are not in this chat any more"
+#define MSG_G_REFUSE_ONLY_THEIR_CONTACTS_CAN_WRIT 1420
+#define MSG_G_REFUSE_ONLY_THEIR_CONTACTS_CAN_WRIT_STR "only their contacts can write"
+#define MSG_G_REFUSE_THIS_PERSON_HAS_BLOCKED_YOU 1421
+#define MSG_G_REFUSE_THIS_PERSON_HAS_BLOCKED_YOU_STR "this person has blocked you"
+#define MSG_G_REFUSE_YOU_HAVE_BLOCKED_THIS_PERSON 1422
+#define MSG_G_REFUSE_YOU_HAVE_BLOCKED_THIS_PERSON_STR "you have blocked this person"
+#define MSG_G_REFUSE_TELEGRAM_LIMITS_YOUR_NEW_CHA 1423
+#define MSG_G_REFUSE_TELEGRAM_LIMITS_YOUR_NEW_CHA_STR "Telegram limits your new chats now"
+#define MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED 1424
+#define MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED_STR "this account was deleted"
+#define MSG_G_REFUSE_THE_MESSAGE_IS_TOO_LONG 1425
+#define MSG_G_REFUSE_THE_MESSAGE_IS_TOO_LONG_STR "the message is too long"
+#define MSG_G_REFUSE_THE_MESSAGE_IS_EMPTY 1426
+#define MSG_G_REFUSE_THE_MESSAGE_IS_EMPTY_STR "the message is empty"
+#define MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT 1427
+#define MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT_STR "Telegram refused the formatting"
+#define MSG_G_REFUSE_CHOOSE_A_TOPIC_IN_THE_LIST_F 1428
+#define MSG_G_REFUSE_CHOOSE_A_TOPIC_IN_THE_LIST_F_STR "choose a topic in the list first"
+#define MSG_G_REFUSE_THIS_TOPIC_IS_CLOSED 1429
+#define MSG_G_REFUSE_THIS_TOPIC_IS_CLOSED_STR "this topic is closed"
+#define MSG_G_REFUSE_THIS_TOPIC_WAS_DELETED 1430
+#define MSG_G_REFUSE_THIS_TOPIC_WAS_DELETED_STR "this topic was deleted"
+#define MSG_G_NOT_SENT_SLOW_MODE 1431
+#define MSG_G_NOT_SENT_SLOW_MODE_STR "Not sent: slow mode, wait %lu s"
+#define MSG_G_NOT_SENT_FLOOD 1432
+#define MSG_G_NOT_SENT_FLOOD_STR "Not sent: too many messages, wait %lu s"
+#define MSG_G_INTRO_NOTE 1433
+#define MSG_G_INTRO_NOTE_STR "A Telegram API client, part of the Telegram ecosystem"
+#define MSG_G_ACCOUNT_NOTE 1434
+#define MSG_G_ACCOUNT_NOTE_STR "No account yet? Create one in the official Telegram app"
+#define MSG_G_LOGIN_KEYS 1435
+#define MSG_G_LOGIN_KEYS_STR "ENTER confirms   ESC quits"
+#define MSG_G_NO_CODE_PRESS_S 1436
+#define MSG_G_NO_CODE_PRESS_S_STR "No code? Press S to get it %.24s"
 
 #endif

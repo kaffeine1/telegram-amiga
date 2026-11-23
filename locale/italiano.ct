@@ -70,7 +70,6 @@ Crea sondaggio...
 MSG_MENU_EMOJI
 Inserisci emoji...
 ; Insert emoji...
-;
 MSG_QR_STEP1
 1. Apri Telegram sul telefono
 ; 1. Open Telegram on your phone
@@ -86,23 +85,25 @@ P: accedi col numero di telefono   ESC esce
 MSG_QR_SCAN
 Inquadralo con Telegram sul telefono
 ; Scan it with Telegram on your phone
-;
 MSG_LOGOUT_TITLE
 Esci dall'account
 ; Log out
 MSG_LOGOUT_BODY
-Uscire da Telegram su questo computer?\n\n\
+Uscire da Telegram su questo computer?\n\
+\n\
 Amigram chiude questa sessione presso Telegram e toglie\n\
 quello che tiene qui dell'account: telegram-auth.bin,\n\
 l'elenco chat, le chat nascoste, gli avatar e le foto in\n\
-cache. Download e impostazioni restano.\n\n\
+cache. Download e impostazioni restano.\n\
+\n\
 Poi si chiude, e al prossimo avvio c'è il login.
 MSG_LOGOUT_BUTTONS
 Esci|Annulla
 ; Log out|Cancel
 MSG_LOGOUT_OFFLINE_BODY
 Telegram non risponde, quindi la sessione non è stata\n\
-chiusa là.\n\n\
+chiusa là.\n\
+\n\
 Togliere comunque da questo computer quello che Amigram\n\
 tiene dell'account? La sessione resta nell'elenco dei\n\
 dispositivi di Telegram (Impostazioni > Dispositivi sul\n\
@@ -119,12 +120,12 @@ Uscita dall'account...
 MSG_LOGOUT_FAILED
 Uscita non riuscita: Telegram non risponde
 ; Log out failed: Telegram not reached
-;
 MSG_UPDATE_TITLE
 Aggiornamento
 ; Update
 MSG_UPDATE_OFFER
-È uscito Amigram %s: tu hai la %s.\n\n\
+È uscito Amigram %s: tu hai la %s.\n\
+\n\
 Aggiornare ora? Amigram lo prende dal canale\n\
 @%s, controlla che sia firmato dal suo\n\
 autore e tiene questa versione come Amigram.old.
@@ -135,7 +136,8 @@ MSG_UPDATE_FETCHING
 Scarico Amigram %s...
 ; Fetching Amigram %s...
 MSG_UPDATE_INSTALLED
-Amigram %s è installato.\n\n\
+Amigram %s è installato.\n\
+\n\
 Esci ora e riavvia Amigram per usarlo.\n\
 La versione vecchia resta come Amigram.old.
 MSG_UPDATE_INSTALLED_BUTTONS
@@ -147,3 +149,1910 @@ Amigram %s installato: riavvialo
 MSG_UPDATE_FAILED
 Aggiornamento non riuscito
 ; The update failed
+MSG_ST_CLEARING_PHOTO_CACHE
+Svuoto la cache delle foto...
+; Clearing photo cache...
+MSG_ST_LIVE_F1_F10_CHATS_AMIGA
+In linea - F1-F10 chat, Amiga+Q esce
+; Live - F1-F10 chats, Amiga+Q quits
+MSG_ST_TOPIC_OPEN_ENTER_WRITES_IN
+Argomento aperto - ENTER ci scrive
+; Topic open - ENTER writes in it
+MSG_ST_OPEN_A_GROUP_WITH_TOPICS
+Apri prima un gruppo con argomenti
+; Open a group with topics first
+MSG_ST_MAKING_THE_TOPIC
+Creo l'argomento...
+; Making the topic...
+MSG_ST_COULD_NOT_MAKE_THE_TOPIC
+Argomento non creato (rete?)
+; Could not make the topic (network?)
+MSG_ST_TOPIC_MADE_ENTER_WRITES_IN
+Argomento creato - ENTER ci scrive
+; Topic made - ENTER writes in it
+MSG_ST_CLOSING_THE_TOPIC
+Chiudo l'argomento...
+; Closing the topic...
+MSG_ST_OPENING_THE_TOPIC_AGAIN
+Riapro l'argomento...
+; Opening the topic again...
+MSG_ST_RENAMING_THE_TOPIC
+Rinomino l'argomento...
+; Renaming the topic...
+MSG_ST_COULD_NOT_CHANGE_THE_TOPIC
+Argomento non cambiato (rete?)
+; Could not change the topic (network?)
+MSG_ST_TOPIC_RENAMED
+Argomento rinominato
+; Topic renamed
+MSG_ST_TOPIC_CLOSED_ONLY_ADMINS_WRITE
+Argomento chiuso: ci scrivono solo gli admin
+; Topic closed: only admins write in it
+MSG_ST_TOPIC_OPEN_AGAIN
+Argomento riaperto
+; Topic open again
+MSG_ST_CHOOSE_A_TOPIC_IN_THE
+Scegli prima un argomento nell'elenco
+; Choose a topic in the list first
+MSG_ST_LOGGED_IN_RELAUNCH_TO_CONNECT
+Accesso fatto - riavvia per collegarti
+; Logged in - relaunch to connect
+MSG_ST_GETTING_A_CODE_FROM_TELEGRAM
+Chiedo un codice a Telegram...
+; Getting a code from Telegram...
+MSG_ST_SIGNED_IN_OPENING_YOUR_CHATS
+Accesso fatto - apro le tue chat...
+; Signed in - opening your chats...
+MSG_ST_SCANNED_NOW_YOUR_CLOUD_PASSWORD
+Inquadrato - ora la password cloud
+; Scanned - now your cloud password
+MSG_ST_ENTER_YOUR_PHONE_NUMBER
+Scrivi il tuo numero di telefono (+...)
+; Enter your phone number (+...)
+MSG_ST_TELEGRAM_OFFERS_NO_OTHER_WAY
+Telegram non offre altre vie
+; Telegram offers no other way
+MSG_ST_LOOK_FOR_THE_CODE_IN
+Cerca il codice nell'app Telegram del telefono
+; Look for the code in the Telegram app on your phone
+MSG_ST_ASKING_TELEGRAM_TO_RESEND
+Chiedo a Telegram di rimandarlo...
+; Asking Telegram to resend...
+MSG_ST_ENTER_YOUR_PHONE_COUNTRY_CODE
+Scrivi il telefono (+ prefisso del paese)
+; Enter your phone (+ country code)
+MSG_ST_CONNECTING_TO_TELEGRAM
+Mi collego a Telegram...
+; Connecting to Telegram...
+MSG_ST_NO_CODE_NEEDED_OPENING_YOUR
+Niente codice - apro le tue chat...
+; No code needed - opening your chats...
+MSG_ST_NO_CODE_NEEDED_YOUR_CLOUD
+Niente codice - la tua password cloud
+; No code needed - your cloud password
+MSG_ST_2FA_PASSWORD_ENTER_IF_YOU
+Password 2FA (ENTER se non ne hai)
+; 2FA password (Enter if you have none)
+MSG_ST_OPENING_URL_IN_THE_BROWSER
+Apro il link nel browser...
+; Opening URL in the browser...
+MSG_ST_URL_COPIED_NO_OPENURL_COMMAND
+Link copiato (manca il comando OpenURL)
+; URL copied (no OpenURL command)
+MSG_ST_COULD_NOT_OPEN_THE_URL
+Impossibile aprire il link
+; Could not open the URL
+MSG_ST_ASL_LIBRARY_V38_NOT_FOUND
+asl.library V38 non trovata
+; asl.library V38 not found
+MSG_ST_NAME_TOO_LONG_OR_INVALID
+Nome troppo lungo o non valido
+; Name too long or invalid
+MSG_ST_SEND_CANCELLED
+Invio annullato
+; Send cancelled
+MSG_ST_COULD_NOT_START_THE_UPLOAD
+Impossibile iniziare il caricamento
+; Could not start the upload
+MSG_ST_SENDING_PHOTOS_ESC_CANCELS
+Invio le foto... (ESC annulla)
+; Sending photos... (ESC cancels)
+MSG_ST_SENDING_FILES_ESC_CANCELS
+Invio i file... (ESC annulla)
+; Sending files... (ESC cancels)
+MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING
+C'è già un trasferimento in corso
+; A transfer is already running
+MSG_ST_PHOTO_OVER_10_MIB_SENDING
+Foto oltre 10 MiB: la mando come file
+; Photo over 10 MiB; sending as file
+MSG_ST_SENDING_PHOTO_ESC_CANCELS
+Invio la foto... (ESC annulla)
+; Sending photo... (ESC cancels)
+MSG_ST_UPLOADING_ESC_CANCELS
+Carico... (ESC annulla)
+; Uploading... (ESC cancels)
+MSG_ST_OPEN_A_CHAT_FIRST
+Apri prima una chat
+; Open a chat first
+MSG_ST_POLLS_ARE_FOR_GROUPS_AND
+I sondaggi sono per gruppi e canali
+; Polls are for groups and channels
+MSG_ST_POLL_CANCELLED
+Sondaggio annullato
+; Poll cancelled
+MSG_ST_SENDING_THE_POLL
+Invio il sondaggio...
+; Sending the poll...
+MSG_ST_SAVED_MESSAGES_IS_ALWAYS_AVAILABLE
+Messaggi salvati c'è sempre
+; Saved Messages is always available
+MSG_ST_COULD_NOT_REMOVE_THIS_CHAT
+Impossibile togliere questa chat
+; Could not remove this chat
+MSG_ST_NOT_MUTED
+Non silenziata
+; Not muted
+MSG_ST_MUTED_FOR_1_HOUR_ON
+Silenziata per 1 ora, su ogni dispositivo
+; Muted for 1 hour, on every device
+MSG_ST_MUTED_FOR_8_HOURS_ON
+Silenziata per 8 ore, su ogni dispositivo
+; Muted for 8 hours, on every device
+MSG_ST_MUTED_ON_EVERY_DEVICE
+Silenziata su ogni dispositivo
+; Muted on every device
+MSG_ST_MUTED
+Silenziata
+; Muted
+MSG_ST_MUTED_ON_THIS_MACHINE_ONLY
+Silenziata solo su questo computer
+; Muted on this machine only
+MSG_ST_UNMUTED
+Notifiche riattivate
+; Unmuted
+MSG_ST_COULD_NOT_UNMUTE_ON_TELEGRAM
+Notifiche non riattivate su Telegram
+; Could not unmute on Telegram
+MSG_ST_COULD_NOT_READ_THIS_CHAT
+Impossibile leggere questa chat
+; Could not read this chat
+MSG_ST_DELETING_THE_CHAT
+Elimino la chat...
+; Deleting the chat...
+MSG_ST_LEAVING
+Esco...
+; Leaving...
+MSG_ST_COULD_NOT_DELETE_IT_NETWORK
+Non eliminata (rete?)
+; Could not delete it (network?)
+MSG_ST_COULD_NOT_LEAVE_NETWORK
+Impossibile uscire (rete?)
+; Could not leave (network?)
+MSG_ST_CHAT_DELETED_FOR_BOTH
+Chat eliminata per entrambi
+; Chat deleted for both
+MSG_ST_CHAT_DELETED_FOR_YOU_ONLY
+Chat eliminata, solo per te
+; Chat deleted, for you only
+MSG_ST_LEFT
+Sei uscito
+; Left
+MSG_ST_RELOADING_CHAT_LIST
+Ricarico l'elenco chat...
+; Reloading chat list...
+MSG_ST_RELOAD_FAILED
+Ricaricamento non riuscito
+; Reload failed
+MSG_ST_THAT_FILE_IS_NO_LONGER
+Quel file non è più dove era stato salvato
+; That file is no longer where it was saved
+MSG_ST_ITS_DRAWER_IS_OPEN_ON
+Il suo cassetto è aperto sul Workbench
+; Its drawer is open on the Workbench
+MSG_ST_HANDED_TO_THE_WORKBENCH
+Passato al Workbench
+; Handed to the Workbench
+MSG_ST_HANDED_TO_MULTIVIEW
+Passato a MultiView
+; Handed to MultiView
+MSG_ST_THAT_FILE_IS_A_PROGRAM
+Quel file è un programma, non un media
+; That file is a program, not media
+MSG_ST_HANDED_TO_THE_MEDIA_PLAYER
+Passato al lettore multimediale
+; Handed to the media player
+MSG_ST_THE_MEDIA_PLAYER_DID_NOT
+Il lettore multimediale non è partito
+; The media player did not start
+MSG_ST_DOWNLOADING_TO_PLAY_ESC_CANCELS
+Scarico per riprodurre... (ESC annulla)
+; Downloading to play... (ESC cancels)
+MSG_ST_VOTING
+Voto...
+; Voting...
+MSG_ST_TAKING_THE_VOTE_BACK
+Ritiro il voto...
+; Taking the vote back...
+MSG_ST_VOTED
+Votato
+; Voted
+MSG_ST_VOTE_TAKEN_BACK
+Voto ritirato
+; Vote taken back
+MSG_ST_COULD_NOT_REACH_TELEGRAM
+Telegram non raggiungibile
+; Could not reach Telegram
+MSG_ST_ASKING_WHO_VOTED
+Chiedo chi ha votato...
+; Asking who voted...
+MSG_ST_FETCHING_THE_WEBP_DATATYPE
+Scarico il datatype WEBP...
+; Fetching the WEBP datatype...
+MSG_ST_STOPPING_THE_POLL
+Chiudo il sondaggio...
+; Stopping the poll...
+MSG_ST_POLL_STOPPED
+Sondaggio chiuso
+; Poll stopped
+MSG_ST_CHOOSE_A_CHAT_TYPE_OR
+Scegli una chat - scrivi o ENTER per sfogliare
+; Choose a chat - type or ENTER to browse
+MSG_ST_ENTER_LISTS_ALL_YOUR_CHATS
+ENTER elenca TUTTE le chat - o scrivi un nome
+; ENTER lists ALL your chats - or type a name
+MSG_ST_COULD_NOT_FORWARD_MESSAGE
+Impossibile inoltrare il messaggio
+; Could not forward message
+MSG_ST_COULD_NOT_USE_THAT_DESTINATION
+Destinazione non utilizzabile
+; Could not use that destination
+MSG_ST_COULD_NOT_START_FORWARDING
+Impossibile iniziare l'inoltro
+; Could not start forwarding
+MSG_ST_DELETING
+Elimino...
+; Deleting...
+MSG_ST_THE_MESSAGES_COULD_NOT_BE
+Messaggi non eliminati
+; The messages could not be deleted
+MSG_ST_SOME_MESSAGES_COULD_NOT_BE
+Alcuni messaggi non sono stati eliminati
+; Some messages could not be deleted
+MSG_ST_LISTING_DESTINATIONS
+Elenco le destinazioni...
+; Listing destinations...
+MSG_ST_SEARCHING_DESTINATIONS
+Cerco le destinazioni...
+; Searching destinations...
+MSG_ST_LISTING_YOUR_CHATS
+Elenco le tue chat...
+; Listing your chats...
+MSG_ST_SEARCHING_TELEGRAM
+Cerco su Telegram...
+; Searching Telegram...
+MSG_ST_CHOOSE_DESTINATION_ESC_CANCELS
+Scegli la destinazione (ESC annulla)
+; Choose destination (ESC cancels)
+MSG_ST_PICK_A_RESULT_CLICK_IT
+Scegli un risultato - cliccalo (ESC annulla)
+; Pick a result - click it (ESC cancels)
+MSG_ST_SEARCH_FAILED_NETWORK
+Ricerca non riuscita (rete?)
+; Search failed (network?)
+MSG_ST_NO_CHATS_FOUND
+Nessuna chat trovata
+; No chats found
+MSG_ST_NO_MATCH_TRY_A_NAME
+Niente - prova un nome o @utente
+; No match - try a name or @username
+MSG_ST_READING_THE_ARCHIVE
+Leggo l'archivio...
+; Reading the archive...
+MSG_ST_THE_ARCHIVE_IS_EMPTY
+L'archivio è vuoto
+; The archive is empty
+MSG_ST_COULD_NOT_READ_THE_ARCHIVE
+Impossibile leggere l'archivio (rete?)
+; Could not read the archive (network?)
+MSG_ST_NO_MORE_ARCHIVED_CHATS
+Non ci sono altre chat archiviate
+; No more archived chats
+MSG_ST_NOT_CONNECTED_NO_SEARCH_YET
+Non collegato: niente ricerca per ora
+; Not connected: no search yet
+MSG_ST_OPEN_A_CHAT_FIRST_THEN
+Apri prima una chat, poi Cerca nella chat
+; Open a chat first, then Find in chat
+MSG_ST_TYPE_THE_WORDS_TO_FIND
+Scrivi le parole da cercare, poi ENTER
+; Type the words to find, then ENTER
+MSG_ST_SEARCHING_ALL_CHATS
+Cerco in tutte le chat...
+; Searching all chats...
+MSG_ST_SEARCHING_THIS_CHAT
+Cerco in questa chat...
+; Searching this chat...
+MSG_ST_NO_MESSAGE_FOUND_EDIT_AND
+Nessun messaggio - modifica e ENTER
+; No message found - edit and ENTER
+MSG_ST_SEARCHING_FURTHER_BACK
+Cerco più indietro...
+; Searching further back...
+MSG_ST_LOADING_THE_MESSAGE
+Carico il messaggio...
+; Loading the message...
+MSG_ST_FOUND_ANOTHER_HIT_OR_ESC
+Trovato - un altro risultato, o ESC chiude
+; Found - another hit, or ESC ends the search
+MSG_ST_THAT_MESSAGE_IS_NO_LONGER
+Quel messaggio non c'è più
+; That message is no longer there
+MSG_ST_SEARCH_AGAIN_ENTER
+Cerca di nuovo (ENTER)
+; Search again (ENTER)
+MSG_ST_COULD_NOT_LOAD_IT_NETWORK
+Impossibile caricarlo (rete?)
+; Could not load it (network?)
+MSG_ST_MOVE_TELEGRAM_AUTH_BIN_AWAY
+Sposta telegram-auth.bin per accedere
+; Move telegram-auth.bin away to log in
+MSG_ST_SESSION_CLOSED_RESTART_AMIGRAM_TO
+Sessione chiusa: riavvia Amigram per accedere
+; Session closed: restart Amigram to log in
+MSG_ST_COULD_NOT_SAVE_THE_PAUSE
+Impossibile salvare la pausa fra i suoni
+; Could not save the pause between sounds
+MSG_ST_UPDATES_A_LOOK_ONCE_A
+Aggiornamenti: un controllo al giorno
+; Updates: a look once a day
+MSG_ST_UPDATES_NOT_LOOKED_FOR
+Aggiornamenti: non controllati
+; Updates: not looked for
+MSG_ST_COULD_NOT_SAVE_THE_STICKER
+Impossibile salvare l'impostazione sticker
+; Could not save the sticker setting
+MSG_ST_STICKERS_SHOWN_AS_THEIR_EMOJI
+Sticker: mostrati come la loro emoji
+; Stickers: shown as their emoji
+MSG_ST_STICKERS_PICTURES_FROM_THE_NEXT
+Sticker: immagini dalla prossima chat aperta
+; Stickers: pictures from the next chat opened
+MSG_ST_NO_WEBP_DATATYPE_HERE_STICKERS
+Manca il datatype WEBP: sticker come emoji
+; No WEBP datatype here: stickers stay emoji
+MSG_ST_STICKER_PICTURES_NEED_PICTURE_DATATYPE
+Gli sticker vogliono picture.datatype V43
+; Sticker pictures need picture.datatype V43
+MSG_ST_COULD_NOT_SAVE_THE_MARKDOWN
+Impossibile salvare l'impostazione Markdown
+; Could not save the Markdown setting
+MSG_ST_MARKDOWN_BOLD_IS_SENT_AS
+Markdown: **grassetto** parte in grassetto
+; Markdown: **bold** is sent as bold
+MSG_ST_MARKDOWN_SENT_AS_TYPED
+Markdown: parte come scritto
+; Markdown: sent as typed
+MSG_ST_COULD_NOT_SAVE_THE_AREXX
+Impossibile salvare l'impostazione ARexx
+; Could not save the ARexx setting
+MSG_ST_AREXX_PORT_AMIGRAM_OPEN
+Porta ARexx AMIGRAM: aperta
+; ARexx port AMIGRAM: open
+MSG_ST_AREXX_PORT_CLOSED
+Porta ARexx: chiusa
+; ARexx port: closed
+MSG_ST_AREXX_SCRIPTS_MAY_SEND_MESSAGES
+Gli script ARexx possono inviare messaggi
+; ARexx scripts may send messages
+MSG_ST_AREXX_SCRIPTS_CANNOT_SEND_MESSAGES
+Gli script ARexx non possono inviare messaggi
+; ARexx scripts cannot send messages
+MSG_ST_SETTING_UP_PICTURES_ONCE_MAY
+Preparo le immagini, una volta: forse un minuto
+; Setting up pictures, once: may take a minute
+MSG_ST_CANCELLING
+Annullo...
+; Cancelling...
+MSG_ST_FORWARD_CANCELLED
+Inoltro annullato
+; Forward cancelled
+MSG_ST_ARCHIVE_ESC_GOES_BACK
+Archivio - ESC torna indietro
+; Archive - ESC goes back
+MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS
+Scrivi - ENTER invia, ESC annulla
+; Type - ENTER sends, ESC cancels
+MSG_ST_COPIED_TO_CLIPBOARD
+Copiato negli appunti
+; Copied to clipboard
+MSG_ST_RIGHT_CLICK_A_MESSAGE_FIRST
+Prima clic destro su un messaggio
+; Right-click a message first
+MSG_ST_NOTHING_TO_COPY
+Niente da copiare
+; Nothing to copy
+MSG_ST_CUT_TO_CLIPBOARD
+Tagliato negli appunti
+; Cut to clipboard
+MSG_ST_COPY_FAILED
+Copia non riuscita
+; Copy failed
+MSG_ST_NOTHING_TO_CUT
+Niente da tagliare
+; Nothing to cut
+MSG_ST_CLIPBOARD_IS_EMPTY
+Gli appunti sono vuoti
+; Clipboard is empty
+MSG_ST_SETTINGS_ESC_CLOSES
+Impostazioni - ESC chiude
+; Settings - ESC closes
+MSG_ST_COULD_NOT_SAVE_EMOTICON_SETTING
+Impossibile salvare l'impostazione emoticon
+; Could not save emoticon setting
+MSG_ST_EMOTICONS_BECOME_EMOJI
+Le emoticon diventano emoji
+; Emoticons become emoji
+MSG_ST_EMOTICONS_STAY_TEXT
+Le emoticon restano testo
+; Emoticons stay text
+MSG_ST_COULD_NOT_SAVE_EMOJI_SETTING
+Impossibile salvare l'impostazione emoji
+; Could not save emoji setting
+MSG_ST_EMOJI_ENABLED
+Emoji attive
+; Emoji enabled
+MSG_ST_EMOJI_DISABLED
+Emoji spente
+; Emoji disabled
+MSG_ST_COULD_NOT_SAVE_AVATAR_SETTING
+Impossibile salvare l'impostazione avatar
+; Could not save avatar setting
+MSG_ST_AVATARS_SHOWN
+Avatar mostrati
+; Avatars shown
+MSG_ST_AVATARS_OFF_INITIALS_ONLY_NOTHING
+Avatar spenti: solo iniziali, niente download
+; Avatars off: initials only, nothing downloaded
+MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING
+Impossibile salvare l'impostazione foto
+; Could not save photo setting
+MSG_ST_FULL_SIZE_PHOTOS_ON_THE
+Foto piene: visore e Salva usano la più grande
+; Full-size photos on: the viewer and Save photo as... take the largest copy
+MSG_ST_FULL_SIZE_PHOTOS_OFF
+Foto a grandezza piena spente
+; Full-size photos off
+MSG_ST_INLINE_PHOTOS_ENABLED
+Foto nella chat attive
+; Inline photos enabled
+MSG_ST_INLINE_PHOTOS_DISABLED
+Foto nella chat spente
+; Inline photos disabled
+MSG_ST_COULD_NOT_SAVE_THE_MEDIA
+Impossibile salvare il lettore multimediale
+; Could not save the media player
+MSG_ST_PLAY_MEDIA_GO_TO_THAT
+Riproduci: i media vanno a quel programma
+; Play: media go to that program
+MSG_ST_PLAY_THE_WORKBENCH_DECIDES
+Riproduci: decide il Workbench
+; Play: the Workbench decides
+MSG_ST_NOTIFICATION_SOUND_SAVED
+Suono di notifica salvato
+; Notification sound saved
+MSG_ST_COULD_NOT_SAVE_THE_NOTIFICATION
+Impossibile salvare il suono di notifica
+; Could not save the notification sound
+MSG_ST_COULD_NOT_SAVE_THE_NEW
+Impostazione nuovi messaggi non salvata
+; Could not save the new-message setting
+MSG_ST_BEEP_ON_NEW_MESSAGES_ON
+Beep ai nuovi messaggi: acceso
+; Beep on new messages: on
+MSG_ST_BEEP_ON_NEW_MESSAGES_OFF
+Beep ai nuovi messaggi: spento
+; Beep on new messages: off
+MSG_ST_PHOTO_DITHERING_LIGHT
+Retinatura foto: leggera
+; Photo dithering: Light
+MSG_ST_PHOTO_DITHERING_OFF
+Retinatura foto: spenta
+; Photo dithering: Off
+MSG_ST_PHOTO_DITHERING_FULL
+Retinatura foto: piena
+; Photo dithering: Full
+MSG_ST_PHOTO_CACHE_LIMIT_UNLIMITED
+Limite cache foto: nessuno
+; Photo cache limit: Unlimited
+MSG_ST_THAT_MESSAGE_IS_NO_LONGER_2
+Quel messaggio non è più caricato.
+; That message is no longer loaded.
+MSG_ST_HIDDEN_MESSAGES_SHOWN_AGAIN
+Messaggi nascosti di nuovo visibili
+; Hidden messages shown again
+MSG_ST_MARKING
+Segno...
+; Marking...
+MSG_ST_COULD_NOT_CHANGE_IT_NETWORK
+Impossibile cambiarlo (rete?)
+; Could not change it (network?)
+MSG_ST_MARKED_AS_UNREAD
+Segnata come non letta
+; Marked as unread
+MSG_ST_MARKED_AS_READ
+Segnata come letta
+; Marked as read
+MSG_ST_ARCHIVING
+Archivio...
+; Archiving...
+MSG_ST_BRINGING_IT_BACK
+La riporto indietro...
+; Bringing it back...
+MSG_ST_COULD_NOT_MOVE_THE_CHAT
+Impossibile spostare la chat
+; Could not move the chat
+MSG_ST_BACK_IN_YOUR_CHATS
+Di nuovo fra le tue chat
+; Back in your chats
+MSG_ST_ARCHIVED_CHATS_MENU_ARCHIVED_CHATS
+Archiviata (menu Chat, Chat archiviate)
+; Archived (Chats menu, Archived chats)
+MSG_ST_PINNING
+Fisso...
+; Pinning...
+MSG_ST_UNPINNING
+Tolgo dai fissati...
+; Unpinning...
+MSG_ST_PINNED_TO_THE_TOP
+Fissata in cima
+; Pinned to the top
+MSG_ST_UNPINNED
+Tolta dai fissati
+; Unpinned
+MSG_ST_TOO_MANY_PINNED_CHATS_UNPIN
+Troppe chat fissate - togline una
+; Too many pinned chats - unpin one
+MSG_ST_COULD_NOT_CHANGE_THE_PIN
+Impossibile cambiare il fissaggio
+; Could not change the pin
+MSG_ST_COULD_NOT_SAVE_THIS_CHAT
+Impossibile salvare il suono di questa chat
+; Could not save this chat's sound choice
+MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK
+Clic sceglie, Shift+clic un tratto, ESC chiude
+; Click to select, Shift+click a range, ESC ends
+MSG_ST_OPEN_THE_CHAT_AGAIN_TO
+Riapri la chat per votare questo sondaggio
+; Open the chat again to vote this poll
+MSG_ST_CHOOSE_AT_LEAST_ONE_ANSWER
+Scegli almeno una risposta
+; Choose at least one answer
+MSG_ST_OPENING_THE_CHAT
+Apro la chat...
+; Opening the chat...
+MSG_ST_THERE_IS_NOBODY_TO_WRITE
+Qui non c'è nessuno a cui scrivere
+; There is nobody to write to here
+MSG_ST_THIS_CHAT_DOES_NOT_ALLOW
+Questa chat non ammette reazioni.
+; This chat does not allow reactions.
+MSG_ST_THIS_CHAT_ALLOWS_ONLY_REACTIONS
+Qui solo reazioni che non so disegnare.
+; This chat allows only reactions this client cannot draw.
+MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS
+Risposta - ENTER invia, ESC annulla
+; Reply - ENTER sends, ESC cancels
+MSG_ST_EDITING_ENTER_SAVES_ESC_CANCELS
+Modifica - ENTER salva, ESC annulla
+; Editing - ENTER saves, ESC cancels
+MSG_ST_EDITING_SAVING_CHANGES_THE_FORMATTING
+Modifica - salvando cambia la formattazione
+; Editing - saving changes the formatting
+MSG_ST_COULD_NOT_DELETE_THIS_MESSAGE
+Impossibile eliminare questo messaggio
+; Could not delete this message
+MSG_ST_MESSAGE_HIDDEN_THE_CHAT_S
+Nascosto; il menu della chat lo rimostra
+; Message hidden; the chat's menu shows it again
+MSG_ST_COULD_NOT_HIDE_THIS_MESSAGE
+Impossibile nascondere questo messaggio
+; Could not hide this message
+MSG_ST_DOWNLOADING_ESC_CANCELS
+Scarico... (ESC annulla)
+; Downloading... (ESC cancels)
+MSG_ST_NOT_PINNED
+Non fissato
+; Not pinned
+MSG_ST_PINNED_FOR_BOTH
+Fissato per entrambi
+; Pinned for both
+MSG_ST_PINNED_FOR_YOU_ONLY
+Fissato, solo per te
+; Pinned, for you only
+MSG_ST_PINNED_MEMBERS_NOTIFIED
+Fissato, membri avvisati
+; Pinned, members notified
+MSG_ST_PINNED_FOR_EVERYONE
+Fissato per tutti
+; Pinned for everyone
+MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_PIN
+Telegram rifiuta: qui non puoi fissare
+; Telegram refused: you cannot pin here
+MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_UNPIN
+Rifiutato: qui non puoi togliere i fissati
+; Telegram refused: you cannot unpin here
+MSG_ST_FORWARDED_TO_SAVED_MESSAGES
+Inoltrato nei Messaggi salvati
+; Forwarded to Saved Messages
+MSG_ST_SPOILER_SHOWN
+Spoiler mostrato
+; Spoiler shown
+MSG_ST_SELECTED_DOUBLE_CLICK_TO_REPLY
+Selezionato - doppio clic risponde, A+C copia
+; Selected - double-click to reply, A+C copies
+MSG_ST_SELECTED_A_C_COPIES
+Selezionato - A+C copia
+; Selected - A+C copies
+MSG_ST_MOVING_THE_PIN
+Sposto il fissato...
+; Moving the pin...
+MSG_ST_COULD_NOT_MOVE_THE_PIN
+Impossibile spostare il fissato
+; Could not move the pin
+MSG_ST_LOADING_THE_MENTION
+Carico la menzione...
+; Loading the mention...
+MSG_ST_A_MENTION_CLICK_FOR_THE
+Una menzione - clic su @ per la prossima
+; A mention - click @ for the next
+MSG_ST_THE_LAST_UNREAD_MENTION
+L'ultima menzione non letta
+; The last unread mention
+MSG_ST_NO_UNREAD_MENTIONS_LEFT
+Nessuna menzione non letta rimasta
+; No unread mentions left
+MSG_ST_LOADING_THE_PINNED_MESSAGE
+Carico il messaggio fissato...
+; Loading the pinned message...
+MSG_ST_THE_PINNED_MESSAGE
+Il messaggio fissato
+; The pinned message
+MSG_ST_PHOTO_VIEWER_OPEN
+Visore foto aperto
+; Photo viewer open
+MSG_ST_COULD_NOT_OPEN_THAT_PHOTO
+Impossibile aprire quella foto
+; Could not open that photo
+MSG_ST_SEARCH_TYPE_TO_FILTER_YOUR
+Cerca: scrivi per filtrare (frecce+ENTER)
+; Search: type to filter your chats (arrows+ENTER)
+MSG_ST_OPEN_A_CHAT_FIRST_THEN_2
+Apri prima una chat, poi trascina il file
+; Open a chat first, then drop the file
+MSG_ST_SENDING_ESC_CANCELS
+Invio... (ESC annulla)
+; Sending... (ESC cancels)
+MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_DIRECTORY
+Cache svuotata in parte: cartella illeggibile
+; Photo cache clear incomplete: directory scan failed
+MSG_ST_FILE_SENT_PHOTO_WAS_OVER
+File inviato (la foto superava 10 MiB)
+; File sent (photo was over 10 MiB)
+MSG_ST_PHOTO_SENT
+Foto inviata
+; Photo sent
+MSG_ST_FILE_SENT
+File inviato
+; File sent
+MSG_ST_COULD_NOT_READ_THAT_PHOTO
+Impossibile leggere quella foto
+; Could not read that photo
+MSG_ST_COULD_NOT_READ_THAT_FILE
+Impossibile leggere quel file
+; Could not read that file
+MSG_ST_THAT_FILE_IS_EMPTY_0
+Quel file è vuoto (0 byte)
+; That file is empty (0 bytes)
+MSG_ST_PHOTO_UPLOAD_CANCELLED
+Invio della foto annullato
+; Photo upload cancelled
+MSG_ST_UPLOAD_CANCELLED
+Caricamento annullato
+; Upload cancelled
+MSG_ST_UPLOAD_FAILED
+Caricamento non riuscito
+; Upload failed
+MSG_ST_FILE_IS_ON_ANOTHER_SERVER
+File su un altro server - non ancora gestito
+; File is on another server - not supported yet
+MSG_ST_NOT_ENOUGH_ROOM_FOR_THAT
+Non c'è spazio per quel file
+; Not enough room for that file
+MSG_ST_DOWNLOAD_CANCELLED
+Download annullato
+; Download cancelled
+MSG_ST_TRANSFER_FAILED_SERVER_ERROR
+Trasferimento fallito (errore del server)
+; Transfer failed (server error)
+MSG_ST_FILE_NOT_FOUND_OR_REFERENCE
+File non trovato o riferimento scaduto
+; File not found or reference expired
+MSG_ST_THAT_DRAWER_NAME_IS_NOT
+Quel nome di cassetto non si può usare
+; That drawer name is not usable
+MSG_ST_PHOTO_SAVE_CANCELLED
+Salvataggio foto annullato
+; Photo save cancelled
+MSG_ST_COULD_NOT_READ_THAT_PHOTO_2
+Impossibile leggere il formato di quella foto
+; Could not read that photo's format
+MSG_ST_COULD_NOT_OPEN_THE_SAVE
+Impossibile aprire il requester di salvataggio
+; Could not open the save requester
+MSG_ST_COULD_NOT_SAVE_THAT_PHOTO
+Impossibile salvare quella foto
+; Could not save that photo
+MSG_ST_SENDING_THE_ALBUM
+Invio l'album...
+; Sending the album...
+MSG_ST_NO_FILE_COULD_BE_SENT
+Nessun file è partito
+; No file could be sent
+MSG_ST_ALBUM_CANCELLED
+Album annullato
+; Album cancelled
+MSG_ST_QUESTION
+Domanda
+; Question
+MSG_ST_WHY
+Perché
+; Why
+MSG_ST_POLL_SENT
+Sondaggio inviato
+; Poll sent
+MSG_ST_POLL_NOT_SENT_CREATE_POLL
+Sondaggio non inviato (Crea sondaggio riprova)
+; Poll not sent (Create poll... tries again)
+MSG_ST_VOTE_FIRST_THEN_TELEGRAM_SAYS
+Vota prima: poi Telegram dice chi ha votato
+; Vote first: then Telegram says who voted
+MSG_ST_THIS_ACCOUNT_S_SAVED_MESSAGES
+i Messaggi salvati di questo account
+; this account's Saved Messages
+MSG_ST_WEBP_DATATYPE_INSTALLED_STICKERS_ARE
+Datatype WEBP installato: sticker come immagini
+; WEBP datatype installed: stickers are pictures
+MSG_ST_DATATYPE_INSTALLED_RESTART_TO_SEE
+Datatype installato: riavvia per gli sticker
+; Datatype installed: restart to see stickers
+MSG_ST_THE_WEBP_DATATYPE_WAS_NOT
+Il datatype WEBP non è stato installato
+; The WEBP datatype was not installed
+MSG_ST_THE_WEBP_DATATYPE_IS_NOT
+Il datatype WEBP non è ancora pubblicato lì
+; The WEBP datatype is not posted there yet
+MSG_ST_NOT_THE_FILE_EXPECTED_NOTHING
+Non è il file atteso: niente installato
+; Not the file expected: nothing installed
+MSG_ST_COULD_NOT_FETCH_THE_WEBP
+Impossibile scaricare il datatype WEBP
+; Could not fetch the WEBP datatype
+MSG_ST_NO_OLDER_MESSAGE_MATCHES
+Nessun messaggio più vecchio corrisponde
+; No older message matches
+MSG_ST_PASTED
+Incollato
+; Pasted
+MSG_ST_PHOTO_CACHE_CLEARED_LU_FILES
+Cache foto svuotata: %lu file, %lu.%lu MB
+; Photo cache cleared: %lu files, %lu.%lu MB
+MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_D
+Cache foto svuotata in parte: %d file in uso
+; Photo cache clear incomplete: %d files busy
+MSG_ST_TELEGRAM_REFUSED_48S
+Telegram rifiuta: %.48s
+; Telegram refused: %.48s
+MSG_ST_35S_LU_DIGITS
+%.35s (%lu cifre)
+; %.35s (%lu digits)
+MSG_ST_WAIT_LU_S_THEN_PRESS
+Aspetta %lu s, poi premi di nuovo S
+; Wait %lu s, then press S again
+MSG_ST_FOR_ME_AND_S_FOR
+Per me e %s|Solo per me|Annulla
+; For me and %s|For me only|Cancel
+MSG_ST_D_PHOTOS
+%d foto
+; %d photos
+MSG_ST_FILE_TOO_BIG_LU_MIB
+File troppo grande (limite %lu MiB qui)
+; File too big (%lu MiB limit on this build)
+MSG_ST_NOT_SENT_AS_A_PHOTO
+Non inviata come foto: %.100s
+; Not sent as a photo: %.100s
+MSG_ST_NOT_A_VALID_JPEG_OR
+non è un JPEG o PNG valido
+; not a valid JPEG or PNG
+MSG_ST_UPLOAD_FAILED_100S
+Caricamento non riuscito: %.100s
+; Upload failed: %.100s
+MSG_ST_SAVED_TO_160S
+Salvato in %.160s
+; Saved to %.160s
+MSG_ST_COULD_NOT_WRITE_TO_28S
+Impossibile scrivere in %.28s
+; Could not write to %.28s
+MSG_ST_TRANSFER_FAILED_160S
+Trasferimento fallito: %.160s
+; Transfer failed: %.160s
+MSG_ST_NOT_FOUND_170S
+Non trovato: %.170s
+; Not found: %.170s
+MSG_ST_DOWNLOADS_GO_TO_30S
+I download vanno in %.30s
+; Downloads go to %.30s
+MSG_ST_DOWNLOADS_24S_THIS_RUN_ONLY
+Download: %.24s (solo per questa sessione)
+; Downloads: %.24s (this run only)
+MSG_ST_SAVED_180S
+Salvata: %.180s
+; Saved: %.180s
+MSG_ST_FETCHING_PHOTO_LU_ESC_CANCELS
+Scarico la foto... %lu%% (ESC annulla)
+; Fetching photo... %lu%% (ESC cancels)
+MSG_ST_SENDING_ALBUM_D
+Invio l'album %d...
+; Sending album %d...
+MSG_ST_ALBUM_NOT_SENT_30S
+Album non inviato: %.30s
+; Album not sent: %.30s
+MSG_ST_NO_REPLY
+nessuna risposta
+; no reply
+MSG_ST_ALBUM_D_NOT_SENT_30S
+Album %d non inviato: %.30s
+; Album %d not sent: %.30s
+MSG_ST_CANCELLED_D_OF_D_FILES
+Annullato: %d file su %d inviati
+; Cancelled: %d of %d files sent
+MSG_ST_STOPPED_AT_FILE_D_OF
+Fermo al file %d di %d: %.20s
+; Stopped at file %d of %d: %.20s
+MSG_ST_PICK_AT_MOST_D_FILES
+Scegli al massimo %d file alla volta
+; Pick at most %d files at a time
+MSG_ST_POLL_NOT_SENT_30S
+Sondaggio non inviato: %.30s
+; Poll not sent: %.30s
+MSG_ST_CHAT_LIST_RELOADED_D_CHATS
+Elenco chat ricaricato (%d chat)
+; Chat list reloaded (%d chats)
+MSG_ST_SAVED_IN_S_35S
+Salvato in %s%.35s
+; Saved in %s%.35s
+MSG_ST_VOTE_REFUSED_32S
+Voto rifiutato: %.32s
+; Vote refused: %.32s
+MSG_ST_NO_REASON_GIVEN
+nessun motivo indicato
+; no reason given
+MSG_ST_TELEGRAM_REFUSED_28S
+Telegram rifiuta: %.28s
+; Telegram refused: %.28s
+MSG_ST_NOT_STOPPED_32S
+Non chiuso: %.32s
+; Not stopped: %.32s
+MSG_ST_D_LOCAL_ENTER_FORWARDS_LAST
+%d qui - ENTER inoltra (ultima: in rete)
+; %d local - ENTER forwards (last: online)
+MSG_ST_D_LOCAL_ARROWS_ENTER_LAST
+%d qui - frecce + ENTER (ultima riga: in rete)
+; %d local - arrows + ENTER (last row: online)
+MSG_ST_FORWARDED_D_TO_32S
+Inoltrati %d a %.32s
+; Forwarded %d to %.32s
+MSG_ST_FORWARDED_TO_32S
+Inoltrato a %.32s
+; Forwarded to %.32s
+MSG_ST_FORWARD_FAILED_30S
+Inoltro non riuscito: %.30s
+; Forward failed: %.30s
+MSG_ST_DELETE_D_OF_YOUR_MESSAGES
+Eliminare %d dei tuoi messaggi per tutti\n\
+e nascondere qui %d degli altri?
+MSG_ST_ARCHIVE_NEWEST_D_CHATS_ESC
+Archivio: le %d chat più recenti - ESC torna
+; Archive: newest %d chats - ESC goes back
+MSG_ST_D_FOUND_CLICK_ONE_OR
+%d trovati - cliccane uno o ENTER (ESC chiude)
+; %d found - click one or ENTER (ESC ends)
+MSG_ST_D_FOUND_MORE_BELOW_CLICK
+%d trovati, altri sotto - clic o ENTER
+; %d found, more below - click or ENTER
+MSG_ST_D_MORE_FOUND_CLICK_ONE
+Altri %d trovati - cliccane uno o ENTER
+; %d more found - click one or ENTER
+MSG_ST_TELEGRAM_HAS_CLOSED_THIS_SESSION
+Telegram ha chiuso questa sessione (%.31s).\n\
+\n\
+Succede quando lo stesso telegram-auth.bin è usato su due\n\
+computer insieme, o quando la sessione è chiusa da un altro\n\
+dispositivo. Telegram non la riapre: serve un nuovo accesso.\n\
+\n\
+Accedi di nuovo mette da parte il vecchio file come\n\
+telegram-auth-closed.bin e chiude: al prossimo avvio c'è\n\
+il login.
+MSG_ST_PASTED_LU_OF_LU_CHARACTERS
+Incollati %lu caratteri su %lu (casella piena)
+; Pasted %lu of %lu characters (composer full)
+MSG_ST_PASTED_ENTER_SENDS_LU_MESSAGES
+Incollato - ENTER invia %lu messaggi
+; Pasted - ENTER sends %lu messages
+MSG_ST_PLAY_HANDS_VIDEOS_AND_SOUNDS
+Riproduci passa video e suoni a\n\
+%s
+MSG_ST_PHOTO_CACHE_LIMIT_LU_MB
+Limite cache foto: %lu MB
+; Photo cache limit: %lu MB
+MSG_ST_PINNED_D_OF_D_CLICK
+Fissato %d di %d - clic barra per il prossimo
+; Pinned %d of %d - click the bar for the next
+MSG_ST_DROP_AT_MOST_D_FILES
+Trascina al massimo %d file alla volta
+; Drop at most %d files at a time
+MSG_ST_SENDING_20S_LU_LU_KB
+Invio %.20s %lu%% %lu KB/s
+; Sending %.20s %lu%% %lu KB/s
+MSG_ST_SENDING_20S_LU_ESC_CANCELS
+Invio %.20s %lu%% (ESC annulla)
+; Sending %.20s %lu%% (ESC cancels)
+MSG_ST_S_LU_LU_KB_S
+%s %lu%% %lu KB/s (ESC annulla)
+; %s %lu%% %lu KB/s (ESC cancels)
+MSG_ST_UPLOADING
+Carico
+; Uploading
+MSG_ST_DOWNLOADING
+Scarico
+; Downloading
+MSG_ST_S_LU_ESC_CANCELS
+%s %lu%% (ESC annulla)
+; %s %lu%% (ESC cancels)
+MSG_ST_ALBUM_SENT_LAST_NOT_1
+%d album inviato, l'ultimo no: %.24s
+; %d album sent, the last not: %.24s
+MSG_ST_ALBUMS_SENT_LAST_NOT
+%d album inviati, l'ultimo no: %.24s
+; %d albums sent, the last not: %.24s
+MSG_ST_ALBUM_SENT_PHOTO_1
+Album inviato: %d foto
+; Album sent: %d photo
+MSG_ST_ALBUM_SENT_PHOTOS
+Album inviato: %d foto
+; Album sent: %d photos
+MSG_ST_ALBUM_SENT_FILE_1
+Album inviato: %d file
+; Album sent: %d file
+MSG_ST_ALBUM_SENT_FILES
+Album inviato: %d file
+; Album sent: %d files
+MSG_ST_ALBUMS_SENT_PHOTOS
+%d album inviati: %d foto
+; %d albums sent: %d photos
+MSG_ST_ALBUMS_SENT_FILES
+%d album inviati: %d file
+; %d albums sent: %d files
+MSG_ST_SKIPPED
+, %d saltati
+; , %d skipped
+MSG_ST_NO_PHOTO_SENT
+Nessuna foto inviata: %.30s
+; No photo sent: %.30s
+MSG_ST_NO_FILE_SENT
+Nessun file inviato: %.30s
+; No file sent: %.30s
+MSG_ST_NONE_WAS_READABLE
+nessuno era leggibile
+; none was readable
+MSG_ST_FILES_SENT_1
+%d file inviato
+; %d file sent
+MSG_ST_FILES_SENT
+%d file inviati
+; %d files sent
+MSG_ST_MESSAGE_DELETED_1
+%d messaggio eliminato
+; %d message deleted
+MSG_ST_MESSAGES_DELETED
+%d messaggi eliminati
+; %d messages deleted
+MSG_ST_MESSAGE_DELETED_BOTH_1
+%d messaggio eliminato per entrambi
+; %d message deleted for both
+MSG_ST_MESSAGES_DELETED_BOTH
+%d messaggi eliminati per entrambi
+; %d messages deleted for both
+MSG_ST_ARCHIVE_OFFLINE_1
+Archivio (non in linea): %d chat - ESC torna
+; Archive (offline): %d chat - ESC goes back
+MSG_ST_ARCHIVE_OFFLINE
+Archivio (non in linea): %d chat - ESC torna
+; Archive (offline): %d chats - ESC goes back
+MSG_ST_ARCHIVE_CHATS_1
+Archivio: %d chat - ESC torna indietro
+; Archive: %d chat - ESC goes back
+MSG_ST_ARCHIVE_CHATS
+Archivio: %d chat - ESC torna indietro
+; Archive: %d chats - ESC goes back
+MSG_ST_ARCHIVE_CLICK_1
+Archivio: %d chat - cliccala, ESC torna
+; Archive: %d chat - click one, ESC goes back
+MSG_ST_ARCHIVE_CLICK
+Archivio: %d chat - cliccane una, ESC torna
+; Archive: %d chats - click one, ESC goes back
+MSG_ST_PAUSE_OFF
+Pausa fra i suoni: no, suona ogni messaggio
+; Pause between sounds: off, every message rings
+MSG_ST_PAUSE_5S
+Pausa fra i suoni: 5 secondi
+; Pause between sounds: 5 seconds
+MSG_ST_PAUSE_10S
+Pausa fra i suoni: 10 secondi
+; Pause between sounds: 10 seconds
+MSG_ST_PAUSE_30S
+Pausa fra i suoni: 30 secondi
+; Pause between sounds: 30 seconds
+MSG_ST_PAUSE_1MIN
+Pausa fra i suoni: 1 minuto
+; Pause between sounds: 1 minute
+MSG_ST_NEW_MESSAGES_OFF
+Nuovi messaggi: niente
+; New messages: off
+MSG_ST_NEW_MESSAGES_TITLE
+Nuovi messaggi: numero nel titolo
+; New messages: count in title
+MSG_ST_NEW_MESSAGES_POPUP
+Nuovi messaggi: numero e pop-up
+; New messages: count and pop-up
+MSG_ST_NEW_MESSAGES_TEXT
+Nuovi messaggi: pop-up col testo
+; New messages: pop-up with the text
+MSG_ST_EDIT_TOO_LONG
+Troppo lungo: una modifica è un messaggio
+; Too long: an edit is one message
+MSG_ST_EDIT_NOT_SAVED
+Non salvato - ENTER riprova, ESC rinuncia
+; Not saved - ENTER tries again, ESC gives up
+MSG_ST_FIND_ALL_PROMPT
+Tutte le chat: scrivi, ENTER cerca (ESC chiude)
+; All chats: type, ENTER searches (ESC ends)
+MSG_ST_FIND_CHAT_PROMPT
+Nella chat: scrivi, ENTER cerca (ESC chiude)
+; Find in chat: type, ENTER searches (ESC ends)
+MSG_RQ_OK
+OK
+; OK
+MSG_RQ_UPDATE_OK
+Aggiorna|OK
+; Update|OK
+MSG_RQ_SUPPORT_DEVELOPMENT
+Sostieni lo sviluppo
+; Support development
+MSG_RQ_PATREON_KO_FI_CLOSE
+Patreon|Ko-fi|Chiudi
+; Patreon|Ko-fi|Close
+MSG_RQ_REMOVE_CHAT
+Togli la chat
+; Remove chat
+MSG_RQ_REMOVE_CANCEL
+Togli|Annulla
+; Remove|Cancel
+MSG_RQ_DELETE_CHAT
+Elimina la chat
+; Delete chat
+MSG_RQ_LEAVE
+Esci
+; Leave
+MSG_RQ_LEAVE_CANCEL
+Esci|Annulla
+; Leave|Cancel
+MSG_RQ_DELETE_MESSAGE
+Elimina il messaggio
+; Delete message
+MSG_RQ_DELETE_THIS_MESSAGE
+Eliminare questo messaggio?
+; Delete this message?
+MSG_RQ_DELETE_THIS_MESSAGE_FOR_EVERYONE
+Eliminare questo messaggio per tutti?
+; Delete this message for everyone?
+MSG_RQ_DELETE_CANCEL
+Elimina|Annulla
+; Delete|Cancel
+MSG_RQ_REPLACE_PHOTO
+Sostituisci la foto
+; Replace photo
+MSG_RQ_THAT_FILE_ALREADY_EXISTS_REPLACE
+Quel file esiste già. Sostituirlo?
+; That file already exists. Replace it?
+MSG_RQ_REPLACE_CANCEL
+Sostituisci|Annulla
+; Replace|Cancel
+MSG_RQ_CLEAR_PHOTO_CACHE
+Svuota la cache delle foto
+; Clear photo cache
+MSG_RQ_DELETE_DOWNLOADED_PHOTOS_AVATARS_ARE
+Eliminare le foto scaricate?\n\
+\n\
+Gli avatar restano.
+MSG_RQ_YES_NO
+Sì|No
+; Yes|No
+MSG_RQ_MUTE
+Silenzia
+; Mute
+MSG_RQ_MUTE_THIS_CHAT_ON_EVERY
+Silenziare questa chat su ogni dispositivo?
+; Mute this chat on every device?
+MSG_RQ_FOR_1_HOUR_FOR_8
+Per 1 ora|Per 8 ore|Finché la riattivo|Annulla
+; For 1 hour|For 8 hours|Until I unmute|Cancel
+MSG_RQ_OPEN_FILE
+Apri il file
+; Open file
+MSG_RQ_THIS_FILE_IS_A_PROGRAM
+Questo file è un programma: aprirlo lo esegue.\n\
+Eseguilo solo se ti fidi di chi l'ha mandato.
+MSG_RQ_RUN_SHOW_IN_DRAWER_CANCEL
+Esegui|Mostra nel cassetto|Annulla
+; Run|Show in drawer|Cancel
+MSG_RQ_WHO_VOTED
+Chi ha votato
+; Who voted
+MSG_RQ_STICKER_PICTURES
+Immagini degli sticker
+; Sticker pictures
+MSG_RQ_INSTALL_CANCEL
+Installa|Annulla
+; Install|Cancel
+MSG_RQ_STOP_POLL
+Chiudi il sondaggio
+; Stop poll
+MSG_RQ_STOP_THIS_POLL_NOBODY_CAN
+Chiudere questo sondaggio?\n\
+\n\
+Dopo nessuno può più votare, e un sondaggio\n\
+chiuso non si può riaprire.
+MSG_RQ_STOP_POLL_CANCEL
+Chiudi sondaggio|Annulla
+; Stop poll|Cancel
+MSG_RQ_DELETE_MESSAGES
+Elimina i messaggi
+; Delete messages
+MSG_RQ_SESSION_CLOSED
+Sessione chiusa
+; Session closed
+MSG_RQ_LOG_IN_AGAIN_LATER
+Accedi di nuovo|Dopo
+; Log in again|Later
+MSG_RQ_MEDIA_PLAYER
+Lettore multimediale
+; Media player
+MSG_RQ_CHOOSE_ANOTHER_USE_THE_WORKBENCH
+Scegline un altro...|Usa il Workbench|Annulla
+; Choose another...|Use the Workbench|Cancel
+MSG_RQ_PIN_MESSAGE
+Fissa il messaggio
+; Pin message
+MSG_RQ_PIN_THIS_MESSAGE_FOR_EVERYONE
+Fissare questo messaggio per tutti qui?
+; Pin this message for everyone here?
+MSG_RQ_PIN_AND_NOTIFY_PIN_QUIETLY
+Fissa e avvisa|Fissa in silenzio|Annulla
+; Pin and notify|Pin quietly|Cancel
+MSG_RQ_DELETE_MESSAGES_ASK_1
+Eliminare %d messaggio?
+; Delete %d message?
+MSG_RQ_DELETE_MESSAGES_ASK
+Eliminare %d messaggi?
+; Delete %d messages?
+MSG_RQ_DELETE_FOR_EVERYONE_1
+Eliminare %d messaggio per tutti?
+; Delete %d message for everyone?
+MSG_RQ_DELETE_FOR_EVERYONE
+Eliminare %d messaggi per tutti?
+; Delete %d messages for everyone?
+MSG_RQ_HIDE_OTHERS_1
+Nascondere %d messaggio di altre persone?\n\
+\n\
+Esce da questa chat solo qui; il menu della chat\n\
+lo rimostra.
+MSG_RQ_HIDE_OTHERS
+Nascondere %d messaggi di altre persone?\n\
+\n\
+Escono da questa chat solo qui; il menu della chat\n\
+li rimostra.
+MSG_RQ_DELETE_MIXED_1
+Eliminare %d messaggio?\n\
+\n\
+I tuoi spariscono per tutti, quelli dell'altra\n\
+persona solo per te.
+MSG_RQ_DELETE_MIXED
+Eliminare %d messaggi?\n\
+\n\
+I tuoi spariscono per tutti, quelli dell'altra\n\
+persona solo per te.
+MSG_RQ_WEBP_FROM_CHANNEL
+il suo canale Telegram, @%.40s,
+; its Telegram channel, @%.40s,
+MSG_RQ_WEBP_OFFER
+Gli sticker sono immagini WEBP, e questo sistema\n\
+non ha un datatype che le legga.\n\
+\n\
+Amigram può scaricare il suo webp.datatype (%lu KB)\n\
+da %s\n\
+e installarlo:\n\
+\n\
+    %s\n\
+    %s\n\
+\n\
+Nessun file già presente viene sostituito.
+MSG_RQ_WEBP_EXISTS
+C'è già un file:\n\
+\n\
+    %.80s\n\
+\n\
+È rimasto com'era, e non è stato installato niente.\n\
+Se è un datatype WEBP che qui non funziona,\n\
+toglilo a mano e chiedi di nuovo.
+MSG_RQ_WEBP_UNWRITABLE
+Impossibile scrivere questo file:\n\
+\n\
+    %.80s\n\
+\n\
+Non è stato installato niente.
+MSG_ABOUT_TITLE
+Informazioni su Amigram
+; About Amigram
+MSG_ABOUT_BODY
+Il primo client Telegram nativo per AmigaOS,\n\
+MorphOS e AROS. Usa le API di Telegram e fa\n\
+parte dell'ecosistema Telegram, ma non è\n\
+fatto da Telegram.\n\
+\n\
+di Michele Dipace\n\
+michele.dipace@kaffeine.net\n\
+\n\
+Contributi: Javier de las Rivas (javierdlr)\n\
+e Bohun (bohunamiga), che ha portato la build\n\
+su AROS per ARM.\n\
+Icone ottimizzate da Carlo Spadoni.\n\
+\n\
+Grazie a Enrico Vitale di ACube Systems\n\
+per i suoi test instancabili e fruttuosi.\n\
+\n\
+E grazie ai tester di tutto il mondo che lo\n\
+provano su hardware vero e raccontano cosa\n\
+trovano. Questo client è quello che è\n\
+grazie a loro.\n\
+\n\
+Sorgenti, segnalazioni e nuove versioni:\n\
+github.com/kaffeine1/telegram-amiga
+MSG_ABOUT_NEWER_GET
+È uscito Amigram %s: tu hai la %s.\n\
+Prendilo dove hai preso questo.\n\
+\n
+MSG_ABOUT_NEWER_UPDATE
+È uscito Amigram %s: tu hai la %s.\n\
+Aggiorna lo installa da qui.\n\
+\n
+MSG_SUPPORT_TEXT
+Sostieni il mio lavoro su Patreon, o con una\n\
+mancia una tantum su Ko-fi.\n\
+\n\
+I contributi sono volontari; per usare questo\n\
+programma non serve nessun abbonamento.\n\
+\n\
+www.patreon.com/c/kaffeine1\n\
+ko-fi.com/kaffeine1
+MSG_HELP_TITLE
+Aiuto di Amigram
+; Amigram Help
+MSG_HELP_TEXT
+Scelta della chat:\n\
+  F1 - F10          chat da 1 a 10\n\
+  Shift + F1 - F10  chat da 11 a 20\n\
+\n\
+ENTER        scrive un messaggio nella chat aperta\n\
+Shift+ENTER  a capo nel messaggio (ENTER invia)\n\
+Clic msg     lo seleziona (A+C copia); doppio clic risponde\n\
+Canc / A+R   toglie dall'elenco la chat scelta\n\
+A+F          invia un file alla chat aperta\n\
+A+P          invia un JPEG come foto\n\
+A+I          iconifica in un'AppIcon (doppio clic per tornare)\n\
+A+T          impostazioni: notifiche, foto, emoji, ARexx\n\
+ESC          annulla\n\
+Q            esce
+MSG_W_NEW_TOPIC
+Nuovo argomento
+; New topic
+MSG_W_RENAME_TOPIC
+Rinomina l'argomento
+; Rename topic
+MSG_W_A_NEW_TOPIC_IN_THIS
+Un nuovo argomento in questo gruppo
+; A new topic in this group
+MSG_W_A_NEW_NAME_FOR_THE
+Un nuovo nome per l'argomento
+; A new name for the topic
+MSG_W_TOPIC_NAME
+Nome:
+; Topic name:
+MSG_W_CREATE
+Crea
+; Create
+MSG_W_RENAME
+Rinomina
+; Rename
+MSG_W_THAT_CODE_HAS_EXPIRED
+Quel codice è scaduto
+; That code has expired
+MSG_W_NO_ANSWER_FROM_TELEGRAM
+Nessuna risposta da Telegram
+; No answer from Telegram
+MSG_W_RESEND_FAILED_TRY_AGAIN
+Nuovo invio fallito - riprova
+; Resend failed - try again
+MSG_W_THAT_NUMBER_WAS_NOT_ACCEPTED
+Quel numero non è stato accettato
+; That number was not accepted
+MSG_W_WRONG_CODE_TRY_AGAIN
+Codice sbagliato - riprova
+; Wrong code - try again
+MSG_W_ERROR_TRY_THE_CODE_AGAIN
+Errore - riprova il codice
+; Error - try the code again
+MSG_W_WRONG_PASSWORD_TRY_AGAIN
+Password sbagliata - riprova
+; Wrong password - try again
+MSG_W_ERROR_TRY_THE_PASSWORD_AGAIN
+Errore - riprova la password
+; Error - try the password again
+MSG_W_REMOVE_THIS_CHAT_FROM_THE
+Togliere questa chat dall'elenco?\n\
+\n
+MSG_W_RE_ADD_IT_LATER_VIA
+\n\
+\n\
+(la ritrovi poi con Cerca)
+MSG_W_DELETE_THIS_CHAT_ON_TELEGRAM
+Eliminare questa chat su Telegram?\n\
+\n
+MSG_W_ITS_MESSAGES_ARE_DELETED_ON
+\n\
+\n\
+I suoi messaggi spariscono su tutti i tuoi dispositivi,\n\
+e anche per l'altra persona se lo scegli.\n\
+Non si può tornare indietro.
+MSG_W_LEAVE_THIS_GROUP
+Uscire da questo gruppo?\n\
+\n
+MSG_W_YOU_LEAVE_IT_ON_TELEGRAM
+\n\
+\n\
+Ne esci su Telegram e i suoi messaggi spariscono\n\
+per te. Per tornare, qualcuno deve aggiungerti\n\
+di nuovo.
+MSG_W_LEAVE_THIS_GROUP_OR_CHANNEL
+Uscire da questo gruppo o canale?\n\
+\n
+MSG_W_YOU_LEAVE_IT_ON_TELEGRAM_2
+\n\
+\n\
+Ne esci su Telegram, su tutti i tuoi dispositivi.\n\
+Per tornare in uno privato serve un nuovo\n\
+invito.
+MSG_W_WHERE_SHOULD_DOWNLOADS_GO
+Dove vanno i download?
+; Where should downloads go?
+MSG_W_SAVE_PHOTO_AS
+Salva la foto come
+; Save photo as
+MSG_W_SEND_PHOTO_TO_THIS_CHAT
+Invia una foto a questa chat
+; Send photo to this chat
+MSG_W_SEND_FILE_TO_THIS_CHAT
+Invia un file a questa chat
+; Send file to this chat
+MSG_W_CREATE_POLL
+Crea un sondaggio
+; Create poll
+MSG_W_A_PHOTO_SAVE_IS_ALREADY
+C'è già un salvataggio di foto in corso
+; A photo save is already running
+MSG_W_THAT_PHOTO_IS_NOT_AVAILABLE
+Quella foto ora non è disponibile
+; That photo is not available now
+MSG_W_FETCHING_PHOTO_ESC_CANCELS
+Scarico la foto... (ESC annulla)
+; Fetching photo... (ESC cancels)
+MSG_W_PIN_THIS_MESSAGE
+Fissare questo messaggio?
+; Pin this message?
+MSG_W_SEND_PHOTOS
+Invia le foto
+; Send photos
+MSG_W_SEND_PHOTO
+Invia la foto
+; Send photo
+MSG_W_NOTIFICATION_SOUND
+Suono di notifica
+; Notification sound
+MSG_W_BROWSE_ALL_CHATS
+Sfoglia tutte le chat...
+; Browse all chats...
+MSG_W_SEARCH_TELEGRAM
+Cerca su Telegram...
+; Search Telegram...
+MSG_W_MORE_ARCHIVED_CHATS
+Altre chat archiviate...
+; More archived chats...
+MSG_W_UPLOAD_FAILED
+caricamento fallito
+; upload failed
+MSG_W_TYPE_THE_RIGHT_ANSWER_S
+Scrivi il numero della risposta giusta
+; Type the right answer's number
+MSG_W_A_POLL_NEEDS_A_QUESTION
+Un sondaggio vuole una domanda
+; A poll needs a question
+MSG_W_A_POLL_NEEDS_TWO_ANSWERS
+Un sondaggio vuole due risposte
+; A poll needs two answers
+MSG_W_PICK_THE_QUIZ_S_RIGHT
+Scegli la risposta giusta del quiz
+; Pick the quiz's right answer
+MSG_W_CANCEL
+Annulla
+; Cancel
+MSG_W_SEVERAL_ANSWERS
+Più risposte
+; Several answers
+MSG_W_PUBLIC_VOTES
+Voti pubblici
+; Public votes
+MSG_W_QUIZ
+Quiz
+; Quiz
+MSG_W_RIGHT_ANSWER
+Risposta giusta:
+; Right answer:
+MSG_W_POLL_ANSWER
+Risposta %d
+; Answer %d
+MSG_W_POLL_RIGHT
+Giusta %d
+; Right %d
+MSG_W_BTN_ALBUM
+Album
+; Album
+MSG_W_BTN_PHOTO
+Foto
+; Photo
+MSG_W_BTN_FILES
+File
+; Files
+MSG_W_BTN_FILE
+File
+; File
+MSG_G_CHOOSE_DESTINATION
+Scegli la destinazione...
+; Choose destination...
+MSG_G_FIND_IN_THIS_CHAT
+Cerca in questa chat...
+; Find in this chat...
+MSG_G_TYPE_A_NAME_ENTER
+Scrivi un nome, ENTER...
+; Type a name, ENTER...
+MSG_G_SEARCH_CHATS
+Cerca le chat...
+; Search chats...
+MSG_G_PHOTO
+Foto...
+; Photo...
+MSG_G_FILE
+File...
+; File...
+MSG_G_POLL
+Sondaggio...
+; Poll...
+MSG_G_RENAME_TOPIC
+Rinomina l'argomento...
+; Rename topic...
+MSG_G_REOPEN_TOPIC
+Riapri l'argomento
+; Reopen topic
+MSG_G_CLOSE_TOPIC
+Chiudi l'argomento
+; Close topic
+MSG_G_UNPIN
+Togli dai fissati
+; Unpin
+MSG_G_PIN
+Fissa
+; Pin
+MSG_G_UNARCHIVE
+Togli dall'archivio
+; Unarchive
+MSG_G_ARCHIVE
+Archivia
+; Archive
+MSG_G_MARK_AS_READ
+Segna come letta
+; Mark as read
+MSG_G_MARK_AS_UNREAD
+Segna come non letta
+; Mark as unread
+MSG_G_UNMUTE
+Riattiva le notifiche
+; Unmute
+MSG_G_MUTE
+Silenzia...
+; Mute...
+MSG_G_DISABLE_RING
+Disattiva lo squillo
+; Disable ring
+MSG_G_ENABLE_RING
+Attiva lo squillo
+; Enable ring
+MSG_G_SOUND
+Suono...
+; Sound...
+MSG_G_DEFAULT_SOUND
+Suono predefinito
+; Default sound
+MSG_G_SHOW_HIDDEN_MESSAGES
+Mostra i messaggi nascosti
+; Show hidden messages
+MSG_G_LEAVE
+Esci...
+; Leave...
+MSG_G_DELETE_CHAT
+Elimina la chat...
+; Delete chat...
+MSG_G_BACK_TO_CHATS
+Torna alle chat
+; Back to chats
+MSG_G_SEND_VOTE
+Invia il voto
+; Send vote
+MSG_G_MORE
+Altro
+; More
+MSG_G_REACT
+Reagisci...
+; React...
+MSG_G_VOTE
+Vota...
+; Vote...
+MSG_G_TAKE_BACK_VOTE
+Ritira il voto
+; Take back vote
+MSG_G_WHO_VOTED
+Chi ha votato...
+; Who voted...
+MSG_G_REPLY
+Rispondi
+; Reply
+MSG_G_DELETE
+Elimina
+; Delete
+MSG_G_HIDE_MESSAGE
+Nascondi il messaggio
+; Hide message
+MSG_G_PLAY
+Riproduci
+; Play
+MSG_G_OPEN
+Apri
+; Open
+MSG_G_SHOW_IN_DRAWER
+Mostra nel cassetto
+; Show in drawer
+MSG_G_DOWNLOAD
+Scarica
+; Download
+MSG_G_SAVE_PHOTO_AS
+Salva la foto come...
+; Save photo as...
+MSG_G_COPY_TEXT
+Copia il testo
+; Copy text
+MSG_G_SELECT
+Seleziona
+; Select
+MSG_G_FORWARD_TO_SAVED
+Inoltra nei Salvati
+; Forward to Saved
+MSG_G_FORWARD_TO
+Inoltra a...
+; Forward to...
+MSG_G_1_NEW_MESSAGE
+1 nuovo messaggio
+; 1 new message
+MSG_G_PINNED
+Fissato: 
+; Pinned: 
+MSG_G_NOT_CONFIRMED_CHECK_THE_CHAT
+Non confermato: guarda la chat prima di rifarlo
+; Not confirmed: check the chat before resending
+MSG_G_NOT_SENT_NO_ANSWER_FROM
+Non inviato: nessuna risposta da Telegram
+; Not sent: no answer from Telegram
+MSG_G_D_NEW_MESSAGES
+%d nuovi messaggi
+; %d new messages
+MSG_G_D_SELECTED
+%d selezionati
+; %d selected
+MSG_G_PINNED_D_D
+Fissato %d/%d: 
+; Pinned %d/%d: 
+MSG_G_NOT_SENT_36S
+Non inviato: %.36s
+; Not sent: %.36s
+MSG_G_NOT_SENT_S
+Non inviato: %s
+; Not sent: %s
+MSG_SET_NEW_MESSAGES
+Nuovi messaggi
+; New messages
+MSG_SET_NOTIFICATIONS
+Notifiche
+; Notifications
+MSG_SET_BEEP
+Beep
+; Beep
+MSG_SET_PAUSE_BETWEEN_SOUNDS
+Pausa fra i suoni
+; Pause between sounds
+MSG_SET_SOUND_FILE
+File del suono...
+; Sound file...
+MSG_SET_BUILT_IN_CHIME
+Suono interno
+; Built-in chime
+MSG_SET_PHOTOS_AND_EMOJI
+Foto ed emoji
+; Photos and emoji
+MSG_SET_SHOW_INLINE_PHOTOS
+Foto nella chat
+; Show inline photos
+MSG_SET_STICKER_PICTURES
+Immagini degli sticker
+; Sticker pictures
+MSG_SET_FULL_SIZE_PHOTOS
+Foto a grandezza piena
+; Full-size photos
+MSG_SET_PHOTO_DITHERING
+Retinatura delle foto
+; Photo dithering
+MSG_SET_PHOTO_CACHE_LIMIT
+Limite della cache foto
+; Photo cache limit
+MSG_SET_CLEAR_CACHE
+Svuota la cache...
+; Clear cache...
+MSG_SET_ENABLE_EMOJI
+Emoji attive
+; Enable emoji
+MSG_SET_EMOTICONS_BECOME_EMOJI
+Le emoticon diventano emoji
+; Emoticons become emoji
+MSG_SET_SHOW_AVATARS
+Mostra gli avatar
+; Show avatars
+MSG_SET_WRITING
+Scrittura
+; Writing
+MSG_SET_MARKDOWN_FORMATTING
+Formattazione Markdown
+; Markdown formatting
+MSG_SET_WINDOW_AND_FILES
+Finestra e file
+; Window and files
+MSG_SET_USE_OWN_SCREEN
+Schermo proprio
+; Use own screen
+MSG_SET_DOWNLOAD_DRAWER
+Cassetto dei download...
+; Download drawer...
+MSG_SET_MEDIA_PLAYER
+Lettore multimediale...
+; Media player...
+MSG_SET_CHECK_FOR_UPDATES
+Controlla gli aggiornamenti
+; Check for updates
+MSG_SET_AREXX
+ARexx
+; ARexx
+MSG_SET_AREXX_PORT
+Porta ARexx
+; ARexx port
+MSG_SET_SCRIPTS_MAY_SEND_MESSAGES
+Gli script possono inviare messaggi
+; Scripts may send messages
+MSG_SETV_OFF
+< No >
+; < Off >
+MSG_SETV_COUNT_TITLE
+< Numero nel titolo >
+; < Count in title >
+MSG_SETV_COUNT_POPUP
+< Numero e pop-up >
+; < Count and pop-up >
+MSG_SETV_POPUP_TEXT
+< Pop-up col testo >
+; < Pop-up with the text >
+MSG_SETV_1_MINUTE
+< 1 minuto >
+; < 1 minute >
+MSG_SETV_LIGHT
+< Leggera >
+; < Light >
+MSG_SETV_FULL
+< Piena >
+; < Full >
+MSG_SETV_UNLIMITED
+< Nessuno >
+; < Unlimited >
+MSG_SETV_BUILTIN_CHIME
+(suono interno)
+; (built-in chime)
+MSG_SETV_WORKBENCH
+(il Workbench)
+; (the Workbench)
+MSG_SETV_SECONDS
+< %lu secondi >
+; < %lu seconds >
+MSG_SET_TITLE
+Impostazioni
+; Settings
+MSG_SET_CLOSE
+Chiudi
+; Close
+MSG_SET_MORE_ABOVE
+altre sopra
+; more above
+MSG_SET_MORE_BELOW
+altre sotto - Su/Giù, SPAZIO cambia
+; more below - Up/Down, SPACE changes
+MSG_SET_KEYS
+Su/Giù sposta, SPAZIO o un clic cambia, ESC chiude
+; Up/Down move, SPACE or a click changes, ESC closes
+MSG_G_TITLE_NEW
+ nuovi
+;  new
+MSG_G_IN_ALL
+, %d in tutto
+; , %d in all
+MSG_G_THEM
+l'altro
+; them
+MSG_G_DRAFT
+Bozza: 
+; Draft: 
+MSG_G_JANUARY
+gennaio
+; January
+MSG_G_FEBRUARY
+febbraio
+; February
+MSG_G_MARCH
+marzo
+; March
+MSG_G_APRIL
+aprile
+; April
+MSG_G_MAY
+maggio
+; May
+MSG_G_JUNE
+giugno
+; June
+MSG_G_JULY
+luglio
+; July
+MSG_G_AUGUST
+agosto
+; August
+MSG_G_SEPTEMBER
+settembre
+; September
+MSG_G_OCTOBER
+ottobre
+; October
+MSG_G_NOVEMBER
+novembre
+; November
+MSG_G_DECEMBER
+dicembre
+; December
+MSG_G_TODAY
+Oggi
+; Today
+MSG_G_YESTERDAY
+Ieri
+; Yesterday
+MSG_G_SEL_DELETE
+Elimina
+; Delete
+MSG_G_SEL_FORWARD
+Inoltra
+; Forward
+MSG_G_WRITE_A_MESSAGE
+Scrivi un messaggio...
+; Write a message...
+MSG_G_SEND
+Invia
+; Send
+MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA
+non puoi scrivere in questa chat
+; you cannot write in this chat
+MSG_G_REFUSE_ONLY_THE_ADMINS_CAN_WRITE_HE
+qui scrivono solo gli admin
+; only the admins can write here
+MSG_G_REFUSE_YOU_ARE_NOT_IN_THIS_CHAT_ANY
+non sei più in questa chat
+; you are not in this chat any more
+MSG_G_REFUSE_ONLY_THEIR_CONTACTS_CAN_WRIT
+scrivono solo i suoi contatti
+; only their contacts can write
+MSG_G_REFUSE_THIS_PERSON_HAS_BLOCKED_YOU
+questa persona ti ha bloccato
+; this person has blocked you
+MSG_G_REFUSE_YOU_HAVE_BLOCKED_THIS_PERSON
+hai bloccato questa persona
+; you have blocked this person
+MSG_G_REFUSE_TELEGRAM_LIMITS_YOUR_NEW_CHA
+Telegram limita le nuove chat
+; Telegram limits your new chats now
+MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED
+questo account è stato eliminato
+; this account was deleted
+MSG_G_REFUSE_THE_MESSAGE_IS_TOO_LONG
+il messaggio è troppo lungo
+; the message is too long
+MSG_G_REFUSE_THE_MESSAGE_IS_EMPTY
+il messaggio è vuoto
+; the message is empty
+MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT
+formattazione rifiutata
+; Telegram refused the formatting
+MSG_G_REFUSE_CHOOSE_A_TOPIC_IN_THE_LIST_F
+scegli prima un argomento
+; choose a topic in the list first
+MSG_G_REFUSE_THIS_TOPIC_IS_CLOSED
+questo argomento è chiuso
+; this topic is closed
+MSG_G_REFUSE_THIS_TOPIC_WAS_DELETED
+questo argomento è stato eliminato
+; this topic was deleted
+MSG_G_NOT_SENT_SLOW_MODE
+Non inviato: modo lento, attendi %lu s
+; Not sent: slow mode, wait %lu s
+MSG_G_NOT_SENT_FLOOD
+Non inviato: troppi invii, attendi %lu s
+; Not sent: too many messages, wait %lu s
+MSG_G_INTRO_NOTE
+Client delle API Telegram, parte del suo ecosistema
+; A Telegram API client, part of the Telegram ecosystem
+MSG_G_ACCOUNT_NOTE
+Niente account? Crealo nell'app ufficiale di Telegram
+; No account yet? Create one in the official Telegram app
+MSG_G_LOGIN_KEYS
+ENTER conferma   ESC esce
+; ENTER confirms   ESC quits
+MSG_G_NO_CODE_PRESS_S
+Niente codice? Premi S per averlo %.24s
+; No code? Press S to get it %.24s

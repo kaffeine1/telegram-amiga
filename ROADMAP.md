@@ -553,11 +553,15 @@ are in locale/amigram.cd, the Italian catalog in locale/italiano.ct, and
 scripts/catalog.py, ours, writes include/tg_strings.h (each text's id
 and its English form) and Catalogs/<language>/amigram.catalog, checking
 that a translation keeps every printf conversion of the English text
-in the same order. The first step covers the menus, the QR login
-screen and the Log out and Update requesters. Next: the Settings panel,
-About and Help, the status lines and the session's messages, then the
-text client and the login wizard (the 68000 build leaves locale.library
-shut until then, to keep its memory). Still open: the update from
+in the same order, its number of requester buttons and the 47 letters
+of the status line. The window is translated: menus, context menus,
+Settings, status lines, requesters, dialogs, the login and QR screens,
+dates (some 650 texts, Italian complete). The GUI self-test runs with a
+catalog too (TG_CATALOG=Catalogs/italiano/amigram.catalog on the host),
+so a translation that breaks the layout shows there. Next: what the
+session layer says (Telegram's reasons, chat names, media labels such as
+[Photo]), then the text client and the login wizard (the 68000 build
+leaves locale.library shut until then, to keep its memory). Still open: the update from
 inside Amigram replaces the program alone, so a new catalog reaches
 those who update that way only once the manifest carries catalogs too.
 

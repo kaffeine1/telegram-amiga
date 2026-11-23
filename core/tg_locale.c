@@ -6,6 +6,7 @@
 /* Amigram's texts in the user's language (tg_locale.h): locale.library's
    catalog on the Amiga, a catalog file read by hand on the host. */
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -238,6 +239,138 @@ const char *tg_locale_language(void)
 
 #endif
 
+/* tg_locale_format: sprintf bounded by size, for the texts of a catalog,
+   which may be longer than the English ones a buffer was sized for. Ours,
+   since snprintf is not on every system's C library alike: %s %c %d %i %u
+   %x %X %%, with -, 0, width, .precision and l. What does not fit is cut. */
+static void tg_locale_put(char *dst, size_t size, size_t *n, const char *s,
+                          size_t len)
+{
+    while (len > 0U && *n + 1U < size) {
+        dst[(*n)++] = *s++;
+        --len;
+    }
+}
+
+const char *tg_locale_format(char *dst, size_t size, const char *fmt, ...)
+{
+    va_list ap;
+    size_t n = 0U;
+
+    if (dst == 0 || size == 0U) {
+        return dst;
+    }
+    va_start(ap, fmt);
+    while (*fmt != '\0') {
+        char spec[16];
+        char tmp[48];
+        size_t k = 0U;
+        int left = 0;
+        int width = 0;
+        int prec = -1;
+        int is_long = 0;
+        char conv;
+
+        if (*fmt != '%') {
+            tg_locale_put(dst, size, &n, fmt, 1U);
+            ++fmt;
+            continue;
+        }
+        spec[k++] = *fmt++;
+        while ((*fmt == '-' || *fmt == '0') && k < 4U) {
+            if (*fmt == '-') {
+                left = 1;
+            }
+            spec[k++] = *fmt++;
+        }
+        while (*fmt >= '0' && *fmt <= '9') {
+            if (width < 40) {
+                width = width * 10 + (*fmt - '0');
+            }
+            ++fmt;
+        }
+        if (width > 40) {
+            width = 40;
+        }
+        if (width > 0) {
+            if (width >= 10) {
+                spec[k++] = (char)('0' + width / 10);
+            }
+            spec[k++] = (char)('0' + width % 10);
+        }
+        if (*fmt == '.') {
+            ++fmt;
+            prec = 0;
+            while (*fmt >= '0' && *fmt <= '9') {
+                if (prec < 10000) {
+                    prec = prec * 10 + (*fmt - '0');
+                }
+                ++fmt;
+            }
+        }
+        if (*fmt == 'l') {
+            is_long = 1;
+            spec[k++] = *fmt++;
+        } else if (*fmt == 'h') {
+            ++fmt;
+        }
+        conv = *fmt;
+        if (conv == '\0') {
+            break;
+        }
+        ++fmt;
+        spec[k++] = conv;
+        spec[k] = '\0';
+        if (conv == '%') {
+            tg_locale_put(dst, size, &n, "%", 1U);
+        } else if (conv == 's') {
+            const char *str = va_arg(ap, const char *);
+            size_t len;
+            int pad;
+
+            if (str == 0) {
+                str = "";
+            }
+            len = strlen(str);
+            if (prec >= 0 && len > (size_t)prec) {
+                len = (size_t)prec;
+            }
+            pad = width > (int)len ? width - (int)len : 0;
+            while (!left && pad-- > 0) {
+                tg_locale_put(dst, size, &n, " ", 1U);
+            }
+            tg_locale_put(dst, size, &n, str, len);
+            while (left && pad-- > 0) {
+                tg_locale_put(dst, size, &n, " ", 1U);
+            }
+        } else if (conv == 'c') {
+            tmp[0] = (char)va_arg(ap, int);
+            tg_locale_put(dst, size, &n, tmp, 1U);
+        } else if (conv == 'd' || conv == 'i') {
+            if (is_long) {
+                sprintf(tmp, spec, va_arg(ap, long));
+            } else {
+                sprintf(tmp, spec, va_arg(ap, int));
+            }
+            tg_locale_put(dst, size, &n, tmp, strlen(tmp));
+        } else if (conv == 'u' || conv == 'x' || conv == 'X') {
+            if (is_long) {
+                sprintf(tmp, spec, va_arg(ap, unsigned long));
+            } else {
+                sprintf(tmp, spec, va_arg(ap, unsigned int));
+            }
+            tg_locale_put(dst, size, &n, tmp, strlen(tmp));
+        } else {
+            /* a conversion of no catalog's (scripts/catalog.py refuses
+               them): shown as written, nothing taken */
+            tg_locale_put(dst, size, &n, spec, k);
+        }
+    }
+    va_end(ap);
+    dst[n] = '\0';
+    return dst;
+}
+
 #if !defined(TG_NO_SELFTEST)
 /* Without a catalog every text is its English one. */
 int tg_locale_self_test(void)
@@ -251,6 +384,41 @@ int tg_locale_self_test(void)
         strcmp(tg_str(999999L, "fallback"), "fallback") != 0) {
         puts("locale self-test: an unknown id lost its fallback");
         return 2;
+    }
+    /* the bounded formatter: as sprintf where it fits, cut where not */
+    {
+        char a[96];
+        char b[96];
+        char small[8];
+
+        sprintf(a, "%d %s|%-6s|%5s|%.3s %lu %05d %x %X %ld%% %c %u",
+                -42, "ab", "cd", "ef", "ghijk", 4000000000UL, 42, 255U, 255U,
+                -7L, 'z', 7U);
+        tg_locale_format(b, sizeof(b),
+                         "%d %s|%-6s|%5s|%.3s %lu %05d %x %X %ld%% %c %u",
+                         -42, "ab", "cd", "ef", "ghijk", 4000000000UL, 42,
+                         255U, 255U, -7L, 'z', 7U);
+        if (strcmp(a, b) != 0) {
+            printf("locale self-test: format gave \"%s\", not \"%s\"\n",
+                   b, a);
+            return 2;
+        }
+        tg_locale_format(small, sizeof(small), "%s and %d", "abcdef", 12345);
+        if (strcmp(small, "abcdef ") != 0) {
+            printf("locale self-test: a cut format gave \"%s\"\n", small);
+            return 2;
+        }
+        {
+            /* volatile: the compiler's printf check would refuse a
+               visible null, which is just what this tries */
+            const char *volatile none = 0;
+
+            tg_locale_format(small, sizeof(small), "%s", none);
+        }
+        if (small[0] != '\0') {
+            puts("locale self-test: a null string was not empty");
+            return 2;
+        }
     }
     return 0;
 }

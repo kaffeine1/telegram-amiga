@@ -23,16 +23,24 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   text client, the 68000 one included, has the same: /update says
   whether a newer version is out, /update yes installs it. The first
   update this way is from this release to the next one.
-- Amigram in Italian, the first step of the translations. The window's
-  menus, the QR login screen and the Log out and Update requesters come
-  from a catalog through the system's locale.library: with Italian
-  chosen in the Locale preferences they are in Italian, and English,
-  built into the program, stands wherever a catalog has no text. The
-  catalog ships in Catalogs/italiano/ next to the program. The texts are
-  in locale/amigram.cd, a translation is one text file in locale/, and
-  scripts/catalog.py turns it into a catalog (no FlexCat or CatComp
-  needed); docs/TRANSLATING.md says how. The rest of the window, the
-  text client and the login wizard follow.
+- Amigram in Italian. The window speaks the language chosen in the
+  Locale preferences through the system's locale.library: menus,
+  context menus, the Settings panel with its values, every status line,
+  the requesters (About, Help, Log out, Update, deleting, leaving,
+  pinning, muting, the WEBP datatype), the poll and photo dialogs, the
+  login and QR screens, the composer, dates and the title's count of new
+  messages. English, built into the program, stands wherever a catalog
+  has no text. The Italian catalog ships in Catalogs/italiano/ next to
+  the program. The texts are in locale/amigram.cd, a translation is one
+  text file in locale/, and scripts/catalog.py turns it into a catalog
+  (no FlexCat or CatComp needed), refusing a translation that changes a
+  text's conversions, its number of buttons, or would not fit the status
+  line; docs/TRANSLATING.md says how. Texts printed with a number or a
+  name go through a bounded formatter of ours, and every requester shows
+  its text as written: a name with a % in it no longer upsets one. Still
+  in English: what the session reports (reasons from Telegram, chat
+  names such as Saved Messages, media labels), the text client and the
+  login wizard.
 
 ## [0.6] - 2026-11-23
 

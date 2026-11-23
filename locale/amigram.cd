@@ -116,3 +116,1340 @@ MSG_UPDATE_INSTALLED_STATUS (56//)
 Amigram %s installed: start it again
 MSG_UPDATE_FAILED (57//)
 The update failed
+;
+; --- status lines (100-599) ------------------------------------------------
+MSG_ST_CLEARING_PHOTO_CACHE (100//)
+Clearing photo cache...
+MSG_ST_LIVE_F1_F10_CHATS_AMIGA (101//)
+Live - F1-F10 chats, Amiga+Q quits
+MSG_ST_TOPIC_OPEN_ENTER_WRITES_IN (102//)
+Topic open - ENTER writes in it
+MSG_ST_OPEN_A_GROUP_WITH_TOPICS (103//)
+Open a group with topics first
+MSG_ST_MAKING_THE_TOPIC (104//)
+Making the topic...
+MSG_ST_COULD_NOT_MAKE_THE_TOPIC (105//)
+Could not make the topic (network?)
+MSG_ST_TOPIC_MADE_ENTER_WRITES_IN (106//)
+Topic made - ENTER writes in it
+MSG_ST_CLOSING_THE_TOPIC (107//)
+Closing the topic...
+MSG_ST_OPENING_THE_TOPIC_AGAIN (108//)
+Opening the topic again...
+MSG_ST_RENAMING_THE_TOPIC (109//)
+Renaming the topic...
+MSG_ST_COULD_NOT_CHANGE_THE_TOPIC (110//)
+Could not change the topic (network?)
+MSG_ST_TOPIC_RENAMED (111//)
+Topic renamed
+MSG_ST_TOPIC_CLOSED_ONLY_ADMINS_WRITE (112//)
+Topic closed: only admins write in it
+MSG_ST_TOPIC_OPEN_AGAIN (113//)
+Topic open again
+MSG_ST_CHOOSE_A_TOPIC_IN_THE (114//)
+Choose a topic in the list first
+MSG_ST_LOGGED_IN_RELAUNCH_TO_CONNECT (115//)
+Logged in - relaunch to connect
+MSG_ST_GETTING_A_CODE_FROM_TELEGRAM (116//)
+Getting a code from Telegram...
+MSG_ST_SIGNED_IN_OPENING_YOUR_CHATS (117//)
+Signed in - opening your chats...
+MSG_ST_SCANNED_NOW_YOUR_CLOUD_PASSWORD (118//)
+Scanned - now your cloud password
+MSG_ST_ENTER_YOUR_PHONE_NUMBER (119//)
+Enter your phone number (+...)
+MSG_ST_TELEGRAM_OFFERS_NO_OTHER_WAY (120//)
+Telegram offers no other way
+MSG_ST_LOOK_FOR_THE_CODE_IN (121//)
+Look for the code in the Telegram app on your phone
+MSG_ST_ASKING_TELEGRAM_TO_RESEND (122//)
+Asking Telegram to resend...
+MSG_ST_ENTER_YOUR_PHONE_COUNTRY_CODE (123//)
+Enter your phone (+ country code)
+MSG_ST_CONNECTING_TO_TELEGRAM (124//)
+Connecting to Telegram...
+MSG_ST_NO_CODE_NEEDED_OPENING_YOUR (125//)
+No code needed - opening your chats...
+MSG_ST_NO_CODE_NEEDED_YOUR_CLOUD (126//)
+No code needed - your cloud password
+MSG_ST_2FA_PASSWORD_ENTER_IF_YOU (127//)
+2FA password (Enter if you have none)
+MSG_ST_OPENING_URL_IN_THE_BROWSER (128//)
+Opening URL in the browser...
+MSG_ST_URL_COPIED_NO_OPENURL_COMMAND (129//)
+URL copied (no OpenURL command)
+MSG_ST_COULD_NOT_OPEN_THE_URL (130//)
+Could not open the URL
+MSG_ST_ASL_LIBRARY_V38_NOT_FOUND (131//)
+asl.library V38 not found
+MSG_ST_NAME_TOO_LONG_OR_INVALID (132//)
+Name too long or invalid
+MSG_ST_SEND_CANCELLED (133//)
+Send cancelled
+MSG_ST_COULD_NOT_START_THE_UPLOAD (134//)
+Could not start the upload
+MSG_ST_SENDING_PHOTOS_ESC_CANCELS (135//)
+Sending photos... (ESC cancels)
+MSG_ST_SENDING_FILES_ESC_CANCELS (136//)
+Sending files... (ESC cancels)
+MSG_ST_A_TRANSFER_IS_ALREADY_RUNNING (137//)
+A transfer is already running
+MSG_ST_PHOTO_OVER_10_MIB_SENDING (138//)
+Photo over 10 MiB; sending as file
+MSG_ST_SENDING_PHOTO_ESC_CANCELS (139//)
+Sending photo... (ESC cancels)
+MSG_ST_UPLOADING_ESC_CANCELS (140//)
+Uploading... (ESC cancels)
+MSG_ST_OPEN_A_CHAT_FIRST (141//)
+Open a chat first
+MSG_ST_POLLS_ARE_FOR_GROUPS_AND (142//)
+Polls are for groups and channels
+MSG_ST_POLL_CANCELLED (143//)
+Poll cancelled
+MSG_ST_SENDING_THE_POLL (144//)
+Sending the poll...
+MSG_ST_SAVED_MESSAGES_IS_ALWAYS_AVAILABLE (145//)
+Saved Messages is always available
+MSG_ST_COULD_NOT_REMOVE_THIS_CHAT (146//)
+Could not remove this chat
+MSG_ST_NOT_MUTED (147//)
+Not muted
+MSG_ST_MUTED_FOR_1_HOUR_ON (148//)
+Muted for 1 hour, on every device
+MSG_ST_MUTED_FOR_8_HOURS_ON (149//)
+Muted for 8 hours, on every device
+MSG_ST_MUTED_ON_EVERY_DEVICE (150//)
+Muted on every device
+MSG_ST_MUTED (151//)
+Muted
+MSG_ST_MUTED_ON_THIS_MACHINE_ONLY (152//)
+Muted on this machine only
+MSG_ST_UNMUTED (153//)
+Unmuted
+MSG_ST_COULD_NOT_UNMUTE_ON_TELEGRAM (154//)
+Could not unmute on Telegram
+MSG_ST_COULD_NOT_READ_THIS_CHAT (155//)
+Could not read this chat
+MSG_ST_DELETING_THE_CHAT (156//)
+Deleting the chat...
+MSG_ST_LEAVING (157//)
+Leaving...
+MSG_ST_COULD_NOT_DELETE_IT_NETWORK (158//)
+Could not delete it (network?)
+MSG_ST_COULD_NOT_LEAVE_NETWORK (159//)
+Could not leave (network?)
+MSG_ST_CHAT_DELETED_FOR_BOTH (160//)
+Chat deleted for both
+MSG_ST_CHAT_DELETED_FOR_YOU_ONLY (161//)
+Chat deleted, for you only
+MSG_ST_LEFT (162//)
+Left
+MSG_ST_RELOADING_CHAT_LIST (163//)
+Reloading chat list...
+MSG_ST_RELOAD_FAILED (164//)
+Reload failed
+MSG_ST_THAT_FILE_IS_NO_LONGER (165//)
+That file is no longer where it was saved
+MSG_ST_ITS_DRAWER_IS_OPEN_ON (166//)
+Its drawer is open on the Workbench
+MSG_ST_HANDED_TO_THE_WORKBENCH (167//)
+Handed to the Workbench
+MSG_ST_HANDED_TO_MULTIVIEW (168//)
+Handed to MultiView
+MSG_ST_THAT_FILE_IS_A_PROGRAM (169//)
+That file is a program, not media
+MSG_ST_HANDED_TO_THE_MEDIA_PLAYER (170//)
+Handed to the media player
+MSG_ST_THE_MEDIA_PLAYER_DID_NOT (171//)
+The media player did not start
+MSG_ST_DOWNLOADING_TO_PLAY_ESC_CANCELS (172//)
+Downloading to play... (ESC cancels)
+MSG_ST_VOTING (173//)
+Voting...
+MSG_ST_TAKING_THE_VOTE_BACK (174//)
+Taking the vote back...
+MSG_ST_VOTED (175//)
+Voted
+MSG_ST_VOTE_TAKEN_BACK (176//)
+Vote taken back
+MSG_ST_COULD_NOT_REACH_TELEGRAM (177//)
+Could not reach Telegram
+MSG_ST_ASKING_WHO_VOTED (178//)
+Asking who voted...
+MSG_ST_FETCHING_THE_WEBP_DATATYPE (179//)
+Fetching the WEBP datatype...
+MSG_ST_STOPPING_THE_POLL (180//)
+Stopping the poll...
+MSG_ST_POLL_STOPPED (181//)
+Poll stopped
+MSG_ST_CHOOSE_A_CHAT_TYPE_OR (182//)
+Choose a chat - type or ENTER to browse
+MSG_ST_ENTER_LISTS_ALL_YOUR_CHATS (183//)
+ENTER lists ALL your chats - or type a name
+MSG_ST_COULD_NOT_FORWARD_MESSAGE (184//)
+Could not forward message
+MSG_ST_COULD_NOT_USE_THAT_DESTINATION (185//)
+Could not use that destination
+MSG_ST_COULD_NOT_START_FORWARDING (186//)
+Could not start forwarding
+MSG_ST_DELETING (187//)
+Deleting...
+MSG_ST_THE_MESSAGES_COULD_NOT_BE (188//)
+The messages could not be deleted
+MSG_ST_SOME_MESSAGES_COULD_NOT_BE (189//)
+Some messages could not be deleted
+MSG_ST_LISTING_DESTINATIONS (190//)
+Listing destinations...
+MSG_ST_SEARCHING_DESTINATIONS (191//)
+Searching destinations...
+MSG_ST_LISTING_YOUR_CHATS (192//)
+Listing your chats...
+MSG_ST_SEARCHING_TELEGRAM (193//)
+Searching Telegram...
+MSG_ST_CHOOSE_DESTINATION_ESC_CANCELS (194//)
+Choose destination (ESC cancels)
+MSG_ST_PICK_A_RESULT_CLICK_IT (195//)
+Pick a result - click it (ESC cancels)
+MSG_ST_SEARCH_FAILED_NETWORK (196//)
+Search failed (network?)
+MSG_ST_NO_CHATS_FOUND (197//)
+No chats found
+MSG_ST_NO_MATCH_TRY_A_NAME (198//)
+No match - try a name or @username
+MSG_ST_READING_THE_ARCHIVE (199//)
+Reading the archive...
+MSG_ST_THE_ARCHIVE_IS_EMPTY (200//)
+The archive is empty
+MSG_ST_COULD_NOT_READ_THE_ARCHIVE (201//)
+Could not read the archive (network?)
+MSG_ST_NO_MORE_ARCHIVED_CHATS (202//)
+No more archived chats
+MSG_ST_NOT_CONNECTED_NO_SEARCH_YET (203//)
+Not connected: no search yet
+MSG_ST_OPEN_A_CHAT_FIRST_THEN (204//)
+Open a chat first, then Find in chat
+MSG_ST_TYPE_THE_WORDS_TO_FIND (205//)
+Type the words to find, then ENTER
+MSG_ST_SEARCHING_ALL_CHATS (206//)
+Searching all chats...
+MSG_ST_SEARCHING_THIS_CHAT (207//)
+Searching this chat...
+MSG_ST_NO_MESSAGE_FOUND_EDIT_AND (208//)
+No message found - edit and ENTER
+MSG_ST_SEARCHING_FURTHER_BACK (209//)
+Searching further back...
+MSG_ST_LOADING_THE_MESSAGE (210//)
+Loading the message...
+MSG_ST_FOUND_ANOTHER_HIT_OR_ESC (211//)
+Found - another hit, or ESC ends the search
+MSG_ST_THAT_MESSAGE_IS_NO_LONGER (212//)
+That message is no longer there
+MSG_ST_SEARCH_AGAIN_ENTER (213//)
+Search again (ENTER)
+MSG_ST_COULD_NOT_LOAD_IT_NETWORK (214//)
+Could not load it (network?)
+MSG_ST_MOVE_TELEGRAM_AUTH_BIN_AWAY (215//)
+Move telegram-auth.bin away to log in
+MSG_ST_SESSION_CLOSED_RESTART_AMIGRAM_TO (216//)
+Session closed: restart Amigram to log in
+MSG_ST_COULD_NOT_SAVE_THE_PAUSE (217//)
+Could not save the pause between sounds
+MSG_ST_UPDATES_A_LOOK_ONCE_A (218//)
+Updates: a look once a day
+MSG_ST_UPDATES_NOT_LOOKED_FOR (219//)
+Updates: not looked for
+MSG_ST_COULD_NOT_SAVE_THE_STICKER (220//)
+Could not save the sticker setting
+MSG_ST_STICKERS_SHOWN_AS_THEIR_EMOJI (221//)
+Stickers: shown as their emoji
+MSG_ST_STICKERS_PICTURES_FROM_THE_NEXT (222//)
+Stickers: pictures from the next chat opened
+MSG_ST_NO_WEBP_DATATYPE_HERE_STICKERS (223//)
+No WEBP datatype here: stickers stay emoji
+MSG_ST_STICKER_PICTURES_NEED_PICTURE_DATATYPE (224//)
+Sticker pictures need picture.datatype V43
+MSG_ST_COULD_NOT_SAVE_THE_MARKDOWN (225//)
+Could not save the Markdown setting
+MSG_ST_MARKDOWN_BOLD_IS_SENT_AS (226//)
+Markdown: **bold** is sent as bold
+MSG_ST_MARKDOWN_SENT_AS_TYPED (227//)
+Markdown: sent as typed
+MSG_ST_COULD_NOT_SAVE_THE_AREXX (228//)
+Could not save the ARexx setting
+MSG_ST_AREXX_PORT_AMIGRAM_OPEN (229//)
+ARexx port AMIGRAM: open
+MSG_ST_AREXX_PORT_CLOSED (230//)
+ARexx port: closed
+MSG_ST_AREXX_SCRIPTS_MAY_SEND_MESSAGES (231//)
+ARexx scripts may send messages
+MSG_ST_AREXX_SCRIPTS_CANNOT_SEND_MESSAGES (232//)
+ARexx scripts cannot send messages
+MSG_ST_SETTING_UP_PICTURES_ONCE_MAY (233//)
+Setting up pictures, once: may take a minute
+MSG_ST_CANCELLING (234//)
+Cancelling...
+MSG_ST_FORWARD_CANCELLED (235//)
+Forward cancelled
+MSG_ST_ARCHIVE_ESC_GOES_BACK (236//)
+Archive - ESC goes back
+MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS (237//)
+Type - ENTER sends, ESC cancels
+MSG_ST_COPIED_TO_CLIPBOARD (238//)
+Copied to clipboard
+MSG_ST_RIGHT_CLICK_A_MESSAGE_FIRST (239//)
+Right-click a message first
+MSG_ST_NOTHING_TO_COPY (240//)
+Nothing to copy
+MSG_ST_CUT_TO_CLIPBOARD (241//)
+Cut to clipboard
+MSG_ST_COPY_FAILED (242//)
+Copy failed
+MSG_ST_NOTHING_TO_CUT (243//)
+Nothing to cut
+MSG_ST_CLIPBOARD_IS_EMPTY (244//)
+Clipboard is empty
+MSG_ST_SETTINGS_ESC_CLOSES (245//)
+Settings - ESC closes
+MSG_ST_COULD_NOT_SAVE_EMOTICON_SETTING (246//)
+Could not save emoticon setting
+MSG_ST_EMOTICONS_BECOME_EMOJI (247//)
+Emoticons become emoji
+MSG_ST_EMOTICONS_STAY_TEXT (248//)
+Emoticons stay text
+MSG_ST_COULD_NOT_SAVE_EMOJI_SETTING (249//)
+Could not save emoji setting
+MSG_ST_EMOJI_ENABLED (250//)
+Emoji enabled
+MSG_ST_EMOJI_DISABLED (251//)
+Emoji disabled
+MSG_ST_COULD_NOT_SAVE_AVATAR_SETTING (252//)
+Could not save avatar setting
+MSG_ST_AVATARS_SHOWN (253//)
+Avatars shown
+MSG_ST_AVATARS_OFF_INITIALS_ONLY_NOTHING (254//)
+Avatars off: initials only, nothing downloaded
+MSG_ST_COULD_NOT_SAVE_PHOTO_SETTING (255//)
+Could not save photo setting
+MSG_ST_FULL_SIZE_PHOTOS_ON_THE (256//)
+Full-size photos on: the viewer and Save photo as... take the largest copy
+MSG_ST_FULL_SIZE_PHOTOS_OFF (257//)
+Full-size photos off
+MSG_ST_INLINE_PHOTOS_ENABLED (258//)
+Inline photos enabled
+MSG_ST_INLINE_PHOTOS_DISABLED (259//)
+Inline photos disabled
+MSG_ST_COULD_NOT_SAVE_THE_MEDIA (260//)
+Could not save the media player
+MSG_ST_PLAY_MEDIA_GO_TO_THAT (261//)
+Play: media go to that program
+MSG_ST_PLAY_THE_WORKBENCH_DECIDES (262//)
+Play: the Workbench decides
+MSG_ST_NOTIFICATION_SOUND_SAVED (263//)
+Notification sound saved
+MSG_ST_COULD_NOT_SAVE_THE_NOTIFICATION (264//)
+Could not save the notification sound
+MSG_ST_COULD_NOT_SAVE_THE_NEW (265//)
+Could not save the new-message setting
+MSG_ST_BEEP_ON_NEW_MESSAGES_ON (266//)
+Beep on new messages: on
+MSG_ST_BEEP_ON_NEW_MESSAGES_OFF (267//)
+Beep on new messages: off
+MSG_ST_PHOTO_DITHERING_LIGHT (268//)
+Photo dithering: Light
+MSG_ST_PHOTO_DITHERING_OFF (269//)
+Photo dithering: Off
+MSG_ST_PHOTO_DITHERING_FULL (270//)
+Photo dithering: Full
+MSG_ST_PHOTO_CACHE_LIMIT_UNLIMITED (271//)
+Photo cache limit: Unlimited
+MSG_ST_THAT_MESSAGE_IS_NO_LONGER_2 (272//)
+That message is no longer loaded.
+MSG_ST_HIDDEN_MESSAGES_SHOWN_AGAIN (273//)
+Hidden messages shown again
+MSG_ST_MARKING (274//)
+Marking...
+MSG_ST_COULD_NOT_CHANGE_IT_NETWORK (275//)
+Could not change it (network?)
+MSG_ST_MARKED_AS_UNREAD (276//)
+Marked as unread
+MSG_ST_MARKED_AS_READ (277//)
+Marked as read
+MSG_ST_ARCHIVING (278//)
+Archiving...
+MSG_ST_BRINGING_IT_BACK (279//)
+Bringing it back...
+MSG_ST_COULD_NOT_MOVE_THE_CHAT (280//)
+Could not move the chat
+MSG_ST_BACK_IN_YOUR_CHATS (281//)
+Back in your chats
+MSG_ST_ARCHIVED_CHATS_MENU_ARCHIVED_CHATS (282//)
+Archived (Chats menu, Archived chats)
+MSG_ST_PINNING (283//)
+Pinning...
+MSG_ST_UNPINNING (284//)
+Unpinning...
+MSG_ST_PINNED_TO_THE_TOP (285//)
+Pinned to the top
+MSG_ST_UNPINNED (286//)
+Unpinned
+MSG_ST_TOO_MANY_PINNED_CHATS_UNPIN (287//)
+Too many pinned chats - unpin one
+MSG_ST_COULD_NOT_CHANGE_THE_PIN (288//)
+Could not change the pin
+MSG_ST_COULD_NOT_SAVE_THIS_CHAT (289//)
+Could not save this chat's sound choice
+MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK (290//)
+Click to select, Shift+click a range, ESC ends
+MSG_ST_OPEN_THE_CHAT_AGAIN_TO (291//)
+Open the chat again to vote this poll
+MSG_ST_CHOOSE_AT_LEAST_ONE_ANSWER (292//)
+Choose at least one answer
+MSG_ST_OPENING_THE_CHAT (293//)
+Opening the chat...
+MSG_ST_THERE_IS_NOBODY_TO_WRITE (294//)
+There is nobody to write to here
+MSG_ST_THIS_CHAT_DOES_NOT_ALLOW (295//)
+This chat does not allow reactions.
+MSG_ST_THIS_CHAT_ALLOWS_ONLY_REACTIONS (296//)
+This chat allows only reactions this client cannot draw.
+MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS (297//)
+Reply - ENTER sends, ESC cancels
+MSG_ST_EDITING_ENTER_SAVES_ESC_CANCELS (298//)
+Editing - ENTER saves, ESC cancels
+MSG_ST_EDITING_SAVING_CHANGES_THE_FORMATTING (299//)
+Editing - saving changes the formatting
+MSG_ST_COULD_NOT_DELETE_THIS_MESSAGE (300//)
+Could not delete this message
+MSG_ST_MESSAGE_HIDDEN_THE_CHAT_S (301//)
+Message hidden; the chat's menu shows it again
+MSG_ST_COULD_NOT_HIDE_THIS_MESSAGE (302//)
+Could not hide this message
+MSG_ST_DOWNLOADING_ESC_CANCELS (303//)
+Downloading... (ESC cancels)
+MSG_ST_NOT_PINNED (304//)
+Not pinned
+MSG_ST_PINNED_FOR_BOTH (305//)
+Pinned for both
+MSG_ST_PINNED_FOR_YOU_ONLY (306//)
+Pinned, for you only
+MSG_ST_PINNED_MEMBERS_NOTIFIED (307//)
+Pinned, members notified
+MSG_ST_PINNED_FOR_EVERYONE (308//)
+Pinned for everyone
+MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_PIN (309//)
+Telegram refused: you cannot pin here
+MSG_ST_TELEGRAM_REFUSED_YOU_CANNOT_UNPIN (310//)
+Telegram refused: you cannot unpin here
+MSG_ST_FORWARDED_TO_SAVED_MESSAGES (311//)
+Forwarded to Saved Messages
+MSG_ST_SPOILER_SHOWN (312//)
+Spoiler shown
+MSG_ST_SELECTED_DOUBLE_CLICK_TO_REPLY (313//)
+Selected - double-click to reply, A+C copies
+MSG_ST_SELECTED_A_C_COPIES (314//)
+Selected - A+C copies
+MSG_ST_MOVING_THE_PIN (315//)
+Moving the pin...
+MSG_ST_COULD_NOT_MOVE_THE_PIN (316//)
+Could not move the pin
+MSG_ST_LOADING_THE_MENTION (317//)
+Loading the mention...
+MSG_ST_A_MENTION_CLICK_FOR_THE (318//)
+A mention - click @ for the next
+MSG_ST_THE_LAST_UNREAD_MENTION (319//)
+The last unread mention
+MSG_ST_NO_UNREAD_MENTIONS_LEFT (320//)
+No unread mentions left
+MSG_ST_LOADING_THE_PINNED_MESSAGE (321//)
+Loading the pinned message...
+MSG_ST_THE_PINNED_MESSAGE (322//)
+The pinned message
+MSG_ST_PHOTO_VIEWER_OPEN (323//)
+Photo viewer open
+MSG_ST_COULD_NOT_OPEN_THAT_PHOTO (324//)
+Could not open that photo
+MSG_ST_SEARCH_TYPE_TO_FILTER_YOUR (325//)
+Search: type to filter your chats (arrows+ENTER)
+MSG_ST_OPEN_A_CHAT_FIRST_THEN_2 (326//)
+Open a chat first, then drop the file
+MSG_ST_SENDING_ESC_CANCELS (327//)
+Sending... (ESC cancels)
+;
+MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_DIRECTORY (328//)
+Photo cache clear incomplete: directory scan failed
+MSG_ST_FILE_SENT_PHOTO_WAS_OVER (329//)
+File sent (photo was over 10 MiB)
+MSG_ST_PHOTO_SENT (330//)
+Photo sent
+MSG_ST_FILE_SENT (331//)
+File sent
+MSG_ST_COULD_NOT_READ_THAT_PHOTO (332//)
+Could not read that photo
+MSG_ST_COULD_NOT_READ_THAT_FILE (333//)
+Could not read that file
+MSG_ST_THAT_FILE_IS_EMPTY_0 (334//)
+That file is empty (0 bytes)
+MSG_ST_PHOTO_UPLOAD_CANCELLED (335//)
+Photo upload cancelled
+MSG_ST_UPLOAD_CANCELLED (336//)
+Upload cancelled
+MSG_ST_UPLOAD_FAILED (337//)
+Upload failed
+MSG_ST_FILE_IS_ON_ANOTHER_SERVER (338//)
+File is on another server - not supported yet
+MSG_ST_NOT_ENOUGH_ROOM_FOR_THAT (339//)
+Not enough room for that file
+MSG_ST_DOWNLOAD_CANCELLED (340//)
+Download cancelled
+MSG_ST_TRANSFER_FAILED_SERVER_ERROR (341//)
+Transfer failed (server error)
+MSG_ST_FILE_NOT_FOUND_OR_REFERENCE (342//)
+File not found or reference expired
+MSG_ST_THAT_DRAWER_NAME_IS_NOT (343//)
+That drawer name is not usable
+MSG_ST_PHOTO_SAVE_CANCELLED (344//)
+Photo save cancelled
+MSG_ST_COULD_NOT_READ_THAT_PHOTO_2 (345//)
+Could not read that photo's format
+MSG_ST_COULD_NOT_OPEN_THE_SAVE (346//)
+Could not open the save requester
+MSG_ST_COULD_NOT_SAVE_THAT_PHOTO (347//)
+Could not save that photo
+MSG_ST_SENDING_THE_ALBUM (348//)
+Sending the album...
+MSG_ST_NO_FILE_COULD_BE_SENT (349//)
+No file could be sent
+MSG_ST_ALBUM_CANCELLED (350//)
+Album cancelled
+MSG_ST_QUESTION (351//)
+Question
+MSG_ST_WHY (352//)
+Why
+MSG_ST_POLL_SENT (353//)
+Poll sent
+MSG_ST_POLL_NOT_SENT_CREATE_POLL (354//)
+Poll not sent (Create poll... tries again)
+MSG_ST_VOTE_FIRST_THEN_TELEGRAM_SAYS (355//)
+Vote first: then Telegram says who voted
+MSG_ST_THIS_ACCOUNT_S_SAVED_MESSAGES (356//)
+this account's Saved Messages
+MSG_ST_WEBP_DATATYPE_INSTALLED_STICKERS_ARE (357//)
+WEBP datatype installed: stickers are pictures
+MSG_ST_DATATYPE_INSTALLED_RESTART_TO_SEE (358//)
+Datatype installed: restart to see stickers
+MSG_ST_THE_WEBP_DATATYPE_WAS_NOT (359//)
+The WEBP datatype was not installed
+MSG_ST_THE_WEBP_DATATYPE_IS_NOT (360//)
+The WEBP datatype is not posted there yet
+MSG_ST_NOT_THE_FILE_EXPECTED_NOTHING (361//)
+Not the file expected: nothing installed
+MSG_ST_COULD_NOT_FETCH_THE_WEBP (362//)
+Could not fetch the WEBP datatype
+MSG_ST_NO_OLDER_MESSAGE_MATCHES (363//)
+No older message matches
+MSG_ST_PASTED (364//)
+Pasted
+MSG_ST_PHOTO_CACHE_CLEARED_LU_FILES (365//)
+Photo cache cleared: %lu files, %lu.%lu MB
+MSG_ST_PHOTO_CACHE_CLEAR_INCOMPLETE_D (366//)
+Photo cache clear incomplete: %d files busy
+MSG_ST_TELEGRAM_REFUSED_48S (367//)
+Telegram refused: %.48s
+MSG_ST_35S_LU_DIGITS (368//)
+%.35s (%lu digits)
+MSG_ST_WAIT_LU_S_THEN_PRESS (369//)
+Wait %lu s, then press S again
+MSG_ST_FOR_ME_AND_S_FOR (370//)
+For me and %s|For me only|Cancel
+MSG_ST_D_PHOTOS (371//)
+%d photos
+MSG_ST_FILE_TOO_BIG_LU_MIB (372//)
+File too big (%lu MiB limit on this build)
+MSG_ST_NOT_SENT_AS_A_PHOTO (373//)
+Not sent as a photo: %.100s
+MSG_ST_NOT_A_VALID_JPEG_OR (374//)
+not a valid JPEG or PNG
+MSG_ST_UPLOAD_FAILED_100S (375//)
+Upload failed: %.100s
+MSG_ST_SAVED_TO_160S (376//)
+Saved to %.160s
+MSG_ST_COULD_NOT_WRITE_TO_28S (377//)
+Could not write to %.28s
+MSG_ST_TRANSFER_FAILED_160S (378//)
+Transfer failed: %.160s
+MSG_ST_NOT_FOUND_170S (379//)
+Not found: %.170s
+MSG_ST_DOWNLOADS_GO_TO_30S (380//)
+Downloads go to %.30s
+MSG_ST_DOWNLOADS_24S_THIS_RUN_ONLY (381//)
+Downloads: %.24s (this run only)
+MSG_ST_SAVED_180S (382//)
+Saved: %.180s
+MSG_ST_FETCHING_PHOTO_LU_ESC_CANCELS (383//)
+Fetching photo... %lu%% (ESC cancels)
+MSG_ST_SENDING_ALBUM_D (384//)
+Sending album %d...
+MSG_ST_ALBUM_NOT_SENT_30S (385//)
+Album not sent: %.30s
+MSG_ST_NO_REPLY (386//)
+no reply
+MSG_ST_ALBUM_D_NOT_SENT_30S (387//)
+Album %d not sent: %.30s
+MSG_ST_CANCELLED_D_OF_D_FILES (388//)
+Cancelled: %d of %d files sent
+MSG_ST_STOPPED_AT_FILE_D_OF (389//)
+Stopped at file %d of %d: %.20s
+MSG_ST_PICK_AT_MOST_D_FILES (390//)
+Pick at most %d files at a time
+MSG_ST_POLL_NOT_SENT_30S (391//)
+Poll not sent: %.30s
+MSG_ST_CHAT_LIST_RELOADED_D_CHATS (392//)
+Chat list reloaded (%d chats)
+MSG_ST_SAVED_IN_S_35S (393//)
+Saved in %s%.35s
+MSG_ST_VOTE_REFUSED_32S (394//)
+Vote refused: %.32s
+MSG_ST_NO_REASON_GIVEN (395//)
+no reason given
+MSG_ST_TELEGRAM_REFUSED_28S (396//)
+Telegram refused: %.28s
+MSG_ST_NOT_STOPPED_32S (397//)
+Not stopped: %.32s
+MSG_ST_D_LOCAL_ENTER_FORWARDS_LAST (398//)
+%d local - ENTER forwards (last: online)
+MSG_ST_D_LOCAL_ARROWS_ENTER_LAST (399//)
+%d local - arrows + ENTER (last row: online)
+MSG_ST_FORWARDED_D_TO_32S (400//)
+Forwarded %d to %.32s
+MSG_ST_FORWARDED_TO_32S (401//)
+Forwarded to %.32s
+MSG_ST_FORWARD_FAILED_30S (402//)
+Forward failed: %.30s
+MSG_ST_DELETE_D_OF_YOUR_MESSAGES (403//)
+Delete %d of your messages for everyone\n\
+and hide %d of other people here?
+MSG_ST_ARCHIVE_NEWEST_D_CHATS_ESC (404//)
+Archive: newest %d chats - ESC goes back
+MSG_ST_D_FOUND_CLICK_ONE_OR (405//)
+%d found - click one or ENTER (ESC ends)
+MSG_ST_D_FOUND_MORE_BELOW_CLICK (406//)
+%d found, more below - click or ENTER
+MSG_ST_D_MORE_FOUND_CLICK_ONE (407//)
+%d more found - click one or ENTER
+MSG_ST_TELEGRAM_HAS_CLOSED_THIS_SESSION (408//)
+Telegram has closed this session (%.31s).\n\
+\n\
+That happens when the same telegram-auth.bin is used on two\n\
+computers at the same time, or when the session is ended\n\
+from another device. Telegram does not open it again: a new\n\
+login is needed.\n\
+\n\
+Log in again puts the old file aside as\n\
+telegram-auth-closed.bin and quits: the next start shows\n\
+the login.
+MSG_ST_PASTED_LU_OF_LU_CHARACTERS (409//)
+Pasted %lu of %lu characters (composer full)
+MSG_ST_PASTED_ENTER_SENDS_LU_MESSAGES (410//)
+Pasted - ENTER sends %lu messages
+MSG_ST_PLAY_HANDS_VIDEOS_AND_SOUNDS (411//)
+Play hands videos and sounds to\n\
+%s
+MSG_ST_PHOTO_CACHE_LIMIT_LU_MB (412//)
+Photo cache limit: %lu MB
+MSG_ST_PINNED_D_OF_D_CLICK (413//)
+Pinned %d of %d - click the bar for the next
+MSG_ST_DROP_AT_MOST_D_FILES (414//)
+Drop at most %d files at a time
+MSG_ST_SENDING_20S_LU_LU_KB (415//)
+Sending %.20s %lu%% %lu KB/s
+MSG_ST_SENDING_20S_LU_ESC_CANCELS (416//)
+Sending %.20s %lu%% (ESC cancels)
+MSG_ST_S_LU_LU_KB_S (417//)
+%s %lu%% %lu KB/s (ESC cancels)
+MSG_ST_UPLOADING (418//)
+Uploading
+MSG_ST_DOWNLOADING (419//)
+Downloading
+MSG_ST_S_LU_ESC_CANCELS (420//)
+%s %lu%% (ESC cancels)
+MSG_ST_ALBUM_SENT_LAST_NOT_1 (421//)
+%d album sent, the last not: %.24s
+MSG_ST_ALBUMS_SENT_LAST_NOT (422//)
+%d albums sent, the last not: %.24s
+MSG_ST_ALBUM_SENT_PHOTO_1 (423//)
+Album sent: %d photo
+MSG_ST_ALBUM_SENT_PHOTOS (424//)
+Album sent: %d photos
+MSG_ST_ALBUM_SENT_FILE_1 (425//)
+Album sent: %d file
+MSG_ST_ALBUM_SENT_FILES (426//)
+Album sent: %d files
+MSG_ST_ALBUMS_SENT_PHOTOS (427//)
+%d albums sent: %d photos
+MSG_ST_ALBUMS_SENT_FILES (428//)
+%d albums sent: %d files
+MSG_ST_SKIPPED (429//)
+, %d skipped
+MSG_ST_NO_PHOTO_SENT (430//)
+No photo sent: %.30s
+MSG_ST_NO_FILE_SENT (431//)
+No file sent: %.30s
+MSG_ST_NONE_WAS_READABLE (432//)
+none was readable
+MSG_ST_FILES_SENT_1 (433//)
+%d file sent
+MSG_ST_FILES_SENT (434//)
+%d files sent
+MSG_ST_MESSAGE_DELETED_1 (435//)
+%d message deleted
+MSG_ST_MESSAGES_DELETED (436//)
+%d messages deleted
+MSG_ST_MESSAGE_DELETED_BOTH_1 (437//)
+%d message deleted for both
+MSG_ST_MESSAGES_DELETED_BOTH (438//)
+%d messages deleted for both
+MSG_ST_ARCHIVE_OFFLINE_1 (439//)
+Archive (offline): %d chat - ESC goes back
+MSG_ST_ARCHIVE_OFFLINE (440//)
+Archive (offline): %d chats - ESC goes back
+MSG_ST_ARCHIVE_CHATS_1 (441//)
+Archive: %d chat - ESC goes back
+MSG_ST_ARCHIVE_CHATS (442//)
+Archive: %d chats - ESC goes back
+MSG_ST_ARCHIVE_CLICK_1 (443//)
+Archive: %d chat - click one, ESC goes back
+MSG_ST_ARCHIVE_CLICK (444//)
+Archive: %d chats - click one, ESC goes back
+MSG_ST_PAUSE_OFF (445//)
+Pause between sounds: off, every message rings
+MSG_ST_PAUSE_5S (446//)
+Pause between sounds: 5 seconds
+MSG_ST_PAUSE_10S (447//)
+Pause between sounds: 10 seconds
+MSG_ST_PAUSE_30S (448//)
+Pause between sounds: 30 seconds
+MSG_ST_PAUSE_1MIN (449//)
+Pause between sounds: 1 minute
+MSG_ST_NEW_MESSAGES_OFF (450//)
+New messages: off
+MSG_ST_NEW_MESSAGES_TITLE (451//)
+New messages: count in title
+MSG_ST_NEW_MESSAGES_POPUP (452//)
+New messages: count and pop-up
+MSG_ST_NEW_MESSAGES_TEXT (453//)
+New messages: pop-up with the text
+MSG_ST_EDIT_TOO_LONG (454//)
+Too long: an edit is one message
+MSG_ST_EDIT_NOT_SAVED (455//)
+Not saved - ENTER tries again, ESC gives up
+MSG_ST_FIND_ALL_PROMPT (456//)
+All chats: type, ENTER searches (ESC ends)
+MSG_ST_FIND_CHAT_PROMPT (457//)
+Find in chat: type, ENTER searches (ESC ends)
+; --- requesters (600-799) --------------------------------------------------
+MSG_RQ_OK (600//)
+OK
+MSG_RQ_UPDATE_OK (601//)
+Update|OK
+MSG_RQ_SUPPORT_DEVELOPMENT (602//)
+Support development
+MSG_RQ_PATREON_KO_FI_CLOSE (603//)
+Patreon|Ko-fi|Close
+MSG_RQ_REMOVE_CHAT (604//)
+Remove chat
+MSG_RQ_REMOVE_CANCEL (605//)
+Remove|Cancel
+MSG_RQ_DELETE_CHAT (606//)
+Delete chat
+MSG_RQ_LEAVE (607//)
+Leave
+MSG_RQ_LEAVE_CANCEL (608//)
+Leave|Cancel
+MSG_RQ_DELETE_MESSAGE (609//)
+Delete message
+MSG_RQ_DELETE_THIS_MESSAGE (610//)
+Delete this message?
+MSG_RQ_DELETE_THIS_MESSAGE_FOR_EVERYONE (611//)
+Delete this message for everyone?
+MSG_RQ_DELETE_CANCEL (612//)
+Delete|Cancel
+MSG_RQ_REPLACE_PHOTO (613//)
+Replace photo
+MSG_RQ_THAT_FILE_ALREADY_EXISTS_REPLACE (614//)
+That file already exists. Replace it?
+MSG_RQ_REPLACE_CANCEL (615//)
+Replace|Cancel
+MSG_RQ_CLEAR_PHOTO_CACHE (616//)
+Clear photo cache
+MSG_RQ_DELETE_DOWNLOADED_PHOTOS_AVATARS_ARE (617//)
+Delete downloaded photos?\n\
+\n\
+Avatars are not affected.
+MSG_RQ_YES_NO (618//)
+Yes|No
+MSG_RQ_MUTE (619//)
+Mute
+MSG_RQ_MUTE_THIS_CHAT_ON_EVERY (620//)
+Mute this chat on every device?
+MSG_RQ_FOR_1_HOUR_FOR_8 (621//)
+For 1 hour|For 8 hours|Until I unmute|Cancel
+MSG_RQ_OPEN_FILE (622//)
+Open file
+MSG_RQ_THIS_FILE_IS_A_PROGRAM (623//)
+This file is a program: opening it runs it.\n\
+Run it only if you trust who sent it.
+MSG_RQ_RUN_SHOW_IN_DRAWER_CANCEL (624//)
+Run|Show in drawer|Cancel
+MSG_RQ_WHO_VOTED (625//)
+Who voted
+MSG_RQ_STICKER_PICTURES (626//)
+Sticker pictures
+MSG_RQ_INSTALL_CANCEL (627//)
+Install|Cancel
+MSG_RQ_STOP_POLL (628//)
+Stop poll
+MSG_RQ_STOP_THIS_POLL_NOBODY_CAN (629//)
+Stop this poll?\n\
+\n\
+Nobody can vote after that, and a stopped\n\
+poll cannot be opened again.
+MSG_RQ_STOP_POLL_CANCEL (630//)
+Stop poll|Cancel
+MSG_RQ_DELETE_MESSAGES (631//)
+Delete messages
+MSG_RQ_SESSION_CLOSED (632//)
+Session closed
+MSG_RQ_LOG_IN_AGAIN_LATER (633//)
+Log in again|Later
+MSG_RQ_MEDIA_PLAYER (634//)
+Media player
+MSG_RQ_CHOOSE_ANOTHER_USE_THE_WORKBENCH (635//)
+Choose another...|Use the Workbench|Cancel
+MSG_RQ_PIN_MESSAGE (636//)
+Pin message
+MSG_RQ_PIN_THIS_MESSAGE_FOR_EVERYONE (637//)
+Pin this message for everyone here?
+MSG_RQ_PIN_AND_NOTIFY_PIN_QUIETLY (638//)
+Pin and notify|Pin quietly|Cancel
+;
+MSG_RQ_DELETE_MESSAGES_ASK_1 (639//)
+Delete %d message?
+MSG_RQ_DELETE_MESSAGES_ASK (640//)
+Delete %d messages?
+MSG_RQ_DELETE_FOR_EVERYONE_1 (641//)
+Delete %d message for everyone?
+MSG_RQ_DELETE_FOR_EVERYONE (642//)
+Delete %d messages for everyone?
+MSG_RQ_HIDE_OTHERS_1 (643//)
+Hide %d message of other people?\n\
+\n\
+They leave this chat here only; the chat's menu\n\
+shows them again.
+MSG_RQ_HIDE_OTHERS (644//)
+Hide %d messages of other people?\n\
+\n\
+They leave this chat here only; the chat's menu\n\
+shows them again.
+MSG_RQ_DELETE_MIXED_1 (645//)
+Delete %d message?\n\
+\n\
+Yours go for everyone, the other person's\n\
+for you only.
+MSG_RQ_DELETE_MIXED (646//)
+Delete %d messages?\n\
+\n\
+Yours go for everyone, the other person's\n\
+for you only.
+MSG_RQ_WEBP_FROM_CHANNEL (647//)
+its Telegram channel, @%.40s,
+MSG_RQ_WEBP_OFFER (648//)
+Stickers are WEBP pictures, and this system has\n\
+no datatype that reads them.\n\
+\n\
+Amigram can fetch its own webp.datatype (%lu KB)\n\
+from %s\n\
+and install it:\n\
+\n\
+    %s\n\
+    %s\n\
+\n\
+No file already there is replaced.
+MSG_RQ_WEBP_EXISTS (649//)
+A file is already there:\n\
+\n\
+    %.80s\n\
+\n\
+It was left as it is, and nothing was installed.\n\
+If it is a WEBP datatype that does not work here,\n\
+take it out by hand and ask again.
+MSG_RQ_WEBP_UNWRITABLE (650//)
+This file could not be written:\n\
+\n\
+    %.80s\n\
+\n\
+Nothing was installed.
+; --- About, Support and Help (800-849) --------------------------------------
+MSG_ABOUT_TITLE (800//)
+About Amigram
+MSG_ABOUT_BODY (801//)
+The first native Telegram client for AmigaOS,\n\
+MorphOS and AROS. It uses the Telegram API and\n\
+is part of the Telegram ecosystem, but it is\n\
+not made by Telegram.\n\
+\n\
+by Michele Dipace\n\
+michele.dipace@kaffeine.net\n\
+\n\
+Contributions: Javier de las Rivas (javierdlr)\n\
+and Bohun (bohunamiga), who took the build to\n\
+AROS on ARM.\n\
+Icons optimised by Carlo Spadoni.\n\
+\n\
+Thanks to Enrico Vitale of ACube Systems\n\
+for his tireless and fruitful testing.\n\
+\n\
+And thanks to the testers around the world\n\
+who run this on real hardware and send back\n\
+what they find. This client is what it is\n\
+because of them.\n\
+\n\
+Source, issues and new releases:\n\
+github.com/kaffeine1/telegram-amiga
+MSG_ABOUT_NEWER_GET (802//)
+Amigram %s is out: you have %s.\n\
+Get it where you got this one.\n\
+\n
+MSG_ABOUT_NEWER_UPDATE (803//)
+Amigram %s is out: you have %s.\n\
+Update installs it from here.\n\
+\n
+MSG_SUPPORT_TEXT (804//)
+Support my work on Patreon, or with a\n\
+one-time tip on Ko-fi.\n\
+\n\
+Contributions are voluntary; no subscription\n\
+is required to use this software.\n\
+\n\
+www.patreon.com/c/kaffeine1\n\
+ko-fi.com/kaffeine1
+MSG_HELP_TITLE (805//)
+Amigram Help
+MSG_HELP_TEXT (806//)
+Chat selection:\n\
+  F1 - F10          chats 1 to 10\n\
+  Shift + F1 - F10  chats 11 to 20\n\
+\n\
+ENTER        write a message to the open chat\n\
+Shift+ENTER  new line in the message (ENTER sends)\n\
+Click msg    select it (A+C copies); double-click replies\n\
+Del / A+R    remove the selected chat from the list\n\
+A+F          send a file to the open chat\n\
+A+P          send a JPEG as a photo\n\
+A+I          iconify to an AppIcon (double-click it to return)\n\
+A+T          settings: notifications, photos, emoji, ARexx\n\
+ESC          cancel\n\
+Q            quit
+;
+; --- window texts (900-1299) -----------------------------------------------
+MSG_W_NEW_TOPIC (900//)
+New topic
+MSG_W_RENAME_TOPIC (901//)
+Rename topic
+MSG_W_A_NEW_TOPIC_IN_THIS (902//)
+A new topic in this group
+MSG_W_A_NEW_NAME_FOR_THE (903//)
+A new name for the topic
+MSG_W_TOPIC_NAME (904//)
+Topic name:
+MSG_W_CREATE (905//)
+Create
+MSG_W_RENAME (906//)
+Rename
+MSG_W_THAT_CODE_HAS_EXPIRED (907//)
+That code has expired
+MSG_W_NO_ANSWER_FROM_TELEGRAM (908//)
+No answer from Telegram
+MSG_W_RESEND_FAILED_TRY_AGAIN (909//)
+Resend failed - try again
+MSG_W_THAT_NUMBER_WAS_NOT_ACCEPTED (910//)
+That number was not accepted
+MSG_W_WRONG_CODE_TRY_AGAIN (911//)
+Wrong code - try again
+MSG_W_ERROR_TRY_THE_CODE_AGAIN (912//)
+Error - try the code again
+MSG_W_WRONG_PASSWORD_TRY_AGAIN (913//)
+Wrong password - try again
+MSG_W_ERROR_TRY_THE_PASSWORD_AGAIN (914//)
+Error - try the password again
+MSG_W_REMOVE_THIS_CHAT_FROM_THE (915//)
+Remove this chat from the list?\n\
+\n
+MSG_W_RE_ADD_IT_LATER_VIA (916//)
+\n\
+\n\
+(re-add it later via Search)
+MSG_W_DELETE_THIS_CHAT_ON_TELEGRAM (917//)
+Delete this chat on Telegram?\n\
+\n
+MSG_W_ITS_MESSAGES_ARE_DELETED_ON (918//)
+\n\
+\n\
+Its messages are deleted on all your devices,\n\
+and for the other person too if you choose so.\n\
+This cannot be undone.
+MSG_W_LEAVE_THIS_GROUP (919//)
+Leave this group?\n\
+\n
+MSG_W_YOU_LEAVE_IT_ON_TELEGRAM (920//)
+\n\
+\n\
+You leave it on Telegram and its messages are\n\
+deleted for you. To come back, someone has to\n\
+add you again.
+MSG_W_LEAVE_THIS_GROUP_OR_CHANNEL (921//)
+Leave this group or channel?\n\
+\n
+MSG_W_YOU_LEAVE_IT_ON_TELEGRAM_2 (922//)
+\n\
+\n\
+You leave it on Telegram, on all your devices.\n\
+A private one needs a new invitation to come\n\
+back.
+MSG_W_WHERE_SHOULD_DOWNLOADS_GO (923//)
+Where should downloads go?
+MSG_W_SAVE_PHOTO_AS (924//)
+Save photo as
+MSG_W_SEND_PHOTO_TO_THIS_CHAT (925//)
+Send photo to this chat
+MSG_W_SEND_FILE_TO_THIS_CHAT (926//)
+Send file to this chat
+MSG_W_CREATE_POLL (927//)
+Create poll
+MSG_W_A_PHOTO_SAVE_IS_ALREADY (928//)
+A photo save is already running
+MSG_W_THAT_PHOTO_IS_NOT_AVAILABLE (929//)
+That photo is not available now
+MSG_W_FETCHING_PHOTO_ESC_CANCELS (930//)
+Fetching photo... (ESC cancels)
+MSG_W_PIN_THIS_MESSAGE (931//)
+Pin this message?
+MSG_W_SEND_PHOTOS (932//)
+Send photos
+MSG_W_SEND_PHOTO (933//)
+Send photo
+MSG_W_NOTIFICATION_SOUND (934//)
+Notification sound
+MSG_W_BROWSE_ALL_CHATS (935//)
+Browse all chats...
+MSG_W_SEARCH_TELEGRAM (936//)
+Search Telegram...
+MSG_W_MORE_ARCHIVED_CHATS (937//)
+More archived chats...
+MSG_W_UPLOAD_FAILED (938//)
+upload failed
+MSG_W_TYPE_THE_RIGHT_ANSWER_S (939//)
+Type the right answer's number
+MSG_W_A_POLL_NEEDS_A_QUESTION (940//)
+A poll needs a question
+MSG_W_A_POLL_NEEDS_TWO_ANSWERS (941//)
+A poll needs two answers
+MSG_W_PICK_THE_QUIZ_S_RIGHT (942//)
+Pick the quiz's right answer
+MSG_W_CANCEL (943//)
+Cancel
+MSG_W_SEVERAL_ANSWERS (944//)
+Several answers
+MSG_W_PUBLIC_VOTES (945//)
+Public votes
+MSG_W_QUIZ (946//)
+Quiz
+MSG_W_RIGHT_ANSWER (947//)
+Right answer:
+MSG_W_POLL_ANSWER (948//)
+Answer %d
+MSG_W_POLL_RIGHT (949//)
+Right %d
+MSG_W_BTN_ALBUM (950//)
+Album
+MSG_W_BTN_PHOTO (951//)
+Photo
+MSG_W_BTN_FILES (952//)
+Files
+MSG_W_BTN_FILE (953//)
+File
+;
+; --- painted texts (1300-1599) ---------------------------------------------
+MSG_G_CHOOSE_DESTINATION (1300//)
+Choose destination...
+MSG_G_FIND_IN_THIS_CHAT (1301//)
+Find in this chat...
+MSG_G_TYPE_A_NAME_ENTER (1302//)
+Type a name, ENTER...
+MSG_G_SEARCH_CHATS (1303//)
+Search chats...
+MSG_G_PHOTO (1304//)
+Photo...
+MSG_G_FILE (1305//)
+File...
+MSG_G_POLL (1306//)
+Poll...
+MSG_G_RENAME_TOPIC (1307//)
+Rename topic...
+MSG_G_REOPEN_TOPIC (1308//)
+Reopen topic
+MSG_G_CLOSE_TOPIC (1309//)
+Close topic
+MSG_G_UNPIN (1310//)
+Unpin
+MSG_G_PIN (1311//)
+Pin
+MSG_G_UNARCHIVE (1312//)
+Unarchive
+MSG_G_ARCHIVE (1313//)
+Archive
+MSG_G_MARK_AS_READ (1314//)
+Mark as read
+MSG_G_MARK_AS_UNREAD (1315//)
+Mark as unread
+MSG_G_UNMUTE (1316//)
+Unmute
+MSG_G_MUTE (1317//)
+Mute...
+MSG_G_DISABLE_RING (1318//)
+Disable ring
+MSG_G_ENABLE_RING (1319//)
+Enable ring
+MSG_G_SOUND (1320//)
+Sound...
+MSG_G_DEFAULT_SOUND (1321//)
+Default sound
+MSG_G_SHOW_HIDDEN_MESSAGES (1322//)
+Show hidden messages
+MSG_G_LEAVE (1323//)
+Leave...
+MSG_G_DELETE_CHAT (1324//)
+Delete chat...
+MSG_G_BACK_TO_CHATS (1325//)
+Back to chats
+MSG_G_SEND_VOTE (1326//)
+Send vote
+MSG_G_MORE (1327//)
+More
+MSG_G_REACT (1328//)
+React...
+MSG_G_VOTE (1329//)
+Vote...
+MSG_G_TAKE_BACK_VOTE (1330//)
+Take back vote
+MSG_G_WHO_VOTED (1331//)
+Who voted...
+MSG_G_REPLY (1332//)
+Reply
+MSG_G_DELETE (1333//)
+Delete
+MSG_G_HIDE_MESSAGE (1334//)
+Hide message
+MSG_G_PLAY (1335//)
+Play
+MSG_G_OPEN (1336//)
+Open
+MSG_G_SHOW_IN_DRAWER (1337//)
+Show in drawer
+MSG_G_DOWNLOAD (1338//)
+Download
+MSG_G_SAVE_PHOTO_AS (1339//)
+Save photo as...
+MSG_G_COPY_TEXT (1340//)
+Copy text
+MSG_G_SELECT (1341//)
+Select
+MSG_G_FORWARD_TO_SAVED (1342//)
+Forward to Saved
+MSG_G_FORWARD_TO (1343//)
+Forward to...
+MSG_G_1_NEW_MESSAGE (1344//)
+1 new message
+MSG_G_PINNED (1345//)
+Pinned: 
+MSG_G_NOT_CONFIRMED_CHECK_THE_CHAT (1346//)
+Not confirmed: check the chat before resending
+MSG_G_NOT_SENT_NO_ANSWER_FROM (1347//)
+Not sent: no answer from Telegram
+MSG_G_D_NEW_MESSAGES (1360//)
+%d new messages
+MSG_G_D_SELECTED (1361//)
+%d selected
+MSG_G_PINNED_D_D (1362//)
+Pinned %d/%d: 
+MSG_G_NOT_SENT_36S (1363//)
+Not sent: %.36s
+MSG_G_NOT_SENT_S (1364//)
+Not sent: %s
+MSG_SET_NEW_MESSAGES (1348//)
+New messages
+MSG_SET_NOTIFICATIONS (1349//)
+Notifications
+MSG_SET_BEEP (1350//)
+Beep
+MSG_SET_PAUSE_BETWEEN_SOUNDS (1351//)
+Pause between sounds
+MSG_SET_SOUND_FILE (1352//)
+Sound file...
+MSG_SET_BUILT_IN_CHIME (1353//)
+Built-in chime
+MSG_SET_PHOTOS_AND_EMOJI (1354//)
+Photos and emoji
+MSG_SET_SHOW_INLINE_PHOTOS (1355//)
+Show inline photos
+MSG_SET_STICKER_PICTURES (1356//)
+Sticker pictures
+MSG_SET_FULL_SIZE_PHOTOS (1357//)
+Full-size photos
+MSG_SET_PHOTO_DITHERING (1358//)
+Photo dithering
+MSG_SET_PHOTO_CACHE_LIMIT (1359//)
+Photo cache limit
+MSG_SET_CLEAR_CACHE (1365//)
+Clear cache...
+MSG_SET_ENABLE_EMOJI (1366//)
+Enable emoji
+MSG_SET_EMOTICONS_BECOME_EMOJI (1367//)
+Emoticons become emoji
+MSG_SET_SHOW_AVATARS (1368//)
+Show avatars
+MSG_SET_WRITING (1369//)
+Writing
+MSG_SET_MARKDOWN_FORMATTING (1370//)
+Markdown formatting
+MSG_SET_WINDOW_AND_FILES (1371//)
+Window and files
+MSG_SET_USE_OWN_SCREEN (1372//)
+Use own screen
+MSG_SET_DOWNLOAD_DRAWER (1373//)
+Download drawer...
+MSG_SET_MEDIA_PLAYER (1374//)
+Media player...
+MSG_SET_CHECK_FOR_UPDATES (1375//)
+Check for updates
+MSG_SET_AREXX (1376//)
+ARexx
+MSG_SET_AREXX_PORT (1377//)
+ARexx port
+MSG_SET_SCRIPTS_MAY_SEND_MESSAGES (1378//)
+Scripts may send messages
+MSG_SETV_OFF (1379//)
+< Off >
+MSG_SETV_COUNT_TITLE (1380//)
+< Count in title >
+MSG_SETV_COUNT_POPUP (1381//)
+< Count and pop-up >
+MSG_SETV_POPUP_TEXT (1382//)
+< Pop-up with the text >
+MSG_SETV_1_MINUTE (1383//)
+< 1 minute >
+MSG_SETV_LIGHT (1384//)
+< Light >
+MSG_SETV_FULL (1385//)
+< Full >
+MSG_SETV_UNLIMITED (1386//)
+< Unlimited >
+MSG_SETV_BUILTIN_CHIME (1387//)
+(built-in chime)
+MSG_SETV_WORKBENCH (1388//)
+(the Workbench)
+MSG_SETV_SECONDS (1389//)
+< %lu seconds >
+MSG_SET_TITLE (1390//)
+Settings
+MSG_SET_CLOSE (1391//)
+Close
+MSG_SET_MORE_ABOVE (1392//)
+more above
+MSG_SET_MORE_BELOW (1393//)
+more below - Up/Down, SPACE changes
+MSG_SET_KEYS (1394//)
+Up/Down move, SPACE or a click changes, ESC closes
+MSG_G_TITLE_NEW (1395//)
+ new
+MSG_G_IN_ALL (1396//)
+, %d in all
+MSG_G_THEM (1397//)
+them
+MSG_G_DRAFT (1398//)
+Draft: 
+MSG_G_JANUARY (1399//)
+January
+MSG_G_FEBRUARY (1400//)
+February
+MSG_G_MARCH (1401//)
+March
+MSG_G_APRIL (1402//)
+April
+MSG_G_MAY (1403//)
+May
+MSG_G_JUNE (1404//)
+June
+MSG_G_JULY (1405//)
+July
+MSG_G_AUGUST (1406//)
+August
+MSG_G_SEPTEMBER (1407//)
+September
+MSG_G_OCTOBER (1408//)
+October
+MSG_G_NOVEMBER (1409//)
+November
+MSG_G_DECEMBER (1410//)
+December
+MSG_G_TODAY (1411//)
+Today
+MSG_G_YESTERDAY (1412//)
+Yesterday
+MSG_G_SEL_DELETE (1413//)
+Delete
+MSG_G_SEL_FORWARD (1414//)
+Forward
+MSG_G_WRITE_A_MESSAGE (1415//)
+Write a message...
+MSG_G_SEND (1416//)
+Send
+MSG_G_REFUSE_YOU_CANNOT_WRITE_IN_THIS_CHA (1417//)
+you cannot write in this chat
+MSG_G_REFUSE_ONLY_THE_ADMINS_CAN_WRITE_HE (1418//)
+only the admins can write here
+MSG_G_REFUSE_YOU_ARE_NOT_IN_THIS_CHAT_ANY (1419//)
+you are not in this chat any more
+MSG_G_REFUSE_ONLY_THEIR_CONTACTS_CAN_WRIT (1420//)
+only their contacts can write
+MSG_G_REFUSE_THIS_PERSON_HAS_BLOCKED_YOU (1421//)
+this person has blocked you
+MSG_G_REFUSE_YOU_HAVE_BLOCKED_THIS_PERSON (1422//)
+you have blocked this person
+MSG_G_REFUSE_TELEGRAM_LIMITS_YOUR_NEW_CHA (1423//)
+Telegram limits your new chats now
+MSG_G_REFUSE_THIS_ACCOUNT_WAS_DELETED (1424//)
+this account was deleted
+MSG_G_REFUSE_THE_MESSAGE_IS_TOO_LONG (1425//)
+the message is too long
+MSG_G_REFUSE_THE_MESSAGE_IS_EMPTY (1426//)
+the message is empty
+MSG_G_REFUSE_TELEGRAM_REFUSED_THE_FORMATT (1427//)
+Telegram refused the formatting
+MSG_G_REFUSE_CHOOSE_A_TOPIC_IN_THE_LIST_F (1428//)
+choose a topic in the list first
+MSG_G_REFUSE_THIS_TOPIC_IS_CLOSED (1429//)
+this topic is closed
+MSG_G_REFUSE_THIS_TOPIC_WAS_DELETED (1430//)
+this topic was deleted
+MSG_G_NOT_SENT_SLOW_MODE (1431//)
+Not sent: slow mode, wait %lu s
+MSG_G_NOT_SENT_FLOOD (1432//)
+Not sent: too many messages, wait %lu s
+MSG_G_INTRO_NOTE (1433//)
+A Telegram API client, part of the Telegram ecosystem
+MSG_G_ACCOUNT_NOTE (1434//)
+No account yet? Create one in the official Telegram app
+MSG_G_LOGIN_KEYS (1435//)
+ENTER confirms   ESC quits
+MSG_G_NO_CODE_PRESS_S (1436//)
+No code? Press S to get it %.24s

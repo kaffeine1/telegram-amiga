@@ -17,8 +17,9 @@ Latin-1 in the catalog (codeset 4): the window draws one byte a letter.
 The .cd and .ct files may be UTF-8 or Latin-1.
 
 A translated text must keep the printf conversions of the English one, in
-the same order: a wrong one would crash the program on the Amiga. A
-percent sign is written %%, in every text: requesters read them as formats.
+the same order: a wrong one would crash the program on the Amiga. In a
+text with conversions a percent sign is written %%; in one without, %.
+A requester's buttons are separated by |: a translation keeps their number.
 """
 import os
 import re
@@ -31,6 +32,7 @@ CD = os.path.join(SRCDIR, "amigram.cd")
 HEADER = os.path.join(ROOT, "include", "tg_strings.h")
 OUTDIR = os.path.join(ROOT, "Catalogs")
 CATALOG_NAME = "amigram.catalog"
+STATUS_WIDTH = 47  # the window's status line (TG_GUI_NAME_MAX - 1)
 
 NAME_RE = re.compile(r"^(MSG_[A-Z0-9_]+)\s*\((\d+)/(\d*)/(\d*)\)\s*$")
 CT_NAME_RE = re.compile(r"^(MSG_[A-Z0-9_]+)\s*$")
@@ -154,9 +156,10 @@ def formats(text):
 
 
 def lone_percent(text):
-    """A % that is neither %% nor a conversion: printf and EasyRequest would
-    read what follows it as one."""
-    return "%" in FORMAT_RE.sub("", text)
+    """In a text with conversions (a format), a % that is neither %% nor a
+    conversion. A text without conversions is shown as written: its % is a
+    percent sign (requesters double it before EasyRequest sees it)."""
+    return bool(formats(text)) and "%" in FORMAT_RE.sub("", text)
 
 
 def check_translation(entries, meta, texts, path):
@@ -167,8 +170,19 @@ def check_translation(entries, meta, texts, path):
             problems.append("%s: %s is not in amigram.cd" % (path, name))
             continue
         if lone_percent(text):
-            problems.append("%s: %s has a lone %% (write %%%% for a percent sign)"
-                            % (path, name))
+            problems.append("%s: %s has a lone %% (in a text with %%s or %%d "
+                            "a percent sign is %%%%)" % (path, name))
+        if name.startswith("MSG_ST_") and "\n" not in known[name]:
+            # a status line holds 47 letters: no longer than that, or than
+            # the English text where that is already longer
+            width = len(FORMAT_RE.sub("XX", text))
+            if width > max(STATUS_WIDTH, len(FORMAT_RE.sub("XX", known[name]))):
+                problems.append("%s: %s is %d letters, the status line holds %d"
+                                % (path, name, width, STATUS_WIDTH))
+        if text.count("|") != known[name].count("|"):
+            problems.append("%s: %s has %d | where the English has %d (one "
+                            "button each)" % (path, name, text.count("|"),
+                                              known[name].count("|")))
         if formats(text) != formats(known[name]):
             problems.append("%s: %s changes the conversions %s -> %s"
                             % (path, name, formats(known[name]), formats(text)))
