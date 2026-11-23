@@ -20,7 +20,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   someone else cannot hand out a program, a manifest of an older
   version is refused, and if the new program cannot be written the old
   one is put back. Nothing is installed unless Update is chosen. The
-  first update this way is from this release to the next one.
+  text client, the 68000 one included, has the same: /update says
+  whether a newer version is out, /update yes installs it. The first
+  update this way is from this release to the next one.
 
 ## [0.6] - 2026-11-23
 

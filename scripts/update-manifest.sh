@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the signed update of a release, for Amigram's own update
-# (include/tg_update.h): one program per platform that can update itself
-# and the manifest that names them, signed with the release key.
+# (include/tg_update.h): one program per platform and the manifest that
+# names them, signed with the release key.
 #
 #   sh scripts/update-manifest.sh <version> [private-key.pem]
 #
@@ -10,8 +10,8 @@
 # build/human-releases/update-<version>/: post the programs in the update
 # channel first and the manifest last, then the "Amigram <version>"
 # announcement. The binaries are the ones the packaging takes (same
-# variables to point elsewhere). The 68000 text client is left out: it
-# has no window to update itself from.
+# variables to point elsewhere); the window updates with Update, the text
+# client (the 68000 one too) with /update yes.
 set -eu
 cd "$(dirname "$0")/.." || exit 1
 VERSION=${1:?usage: sh scripts/update-manifest.sh <version> [key.pem]}
@@ -46,6 +46,7 @@ lane() { # $1 lane, $2 binary
     printf '%s %s %s %s\n' "$1" "$name" "$size" "$sum" >> "$manifest.part"
 }
 lane os3 "${AMIGAOS3_BINARY:-build/amigaos3-clib2/Amigram}"
+lane os3-68000 "${AMIGAOS3_68000_BINARY:-build/amigaos3-68000-lowmem/Amigram}"
 lane os4 "${AMIGAOS4_BINARY:-build/amigaos4/Amigram}"
 lane morphos "${MORPHOS_BINARY:-build/morphos-cross/Amigram}"
 lane aros-i386 "${AROS_I386_BINARY:-build/aros-i386-abiv0/Amigram}"

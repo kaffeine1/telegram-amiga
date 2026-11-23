@@ -1417,7 +1417,14 @@ refuses a key that is not the one built in). Tried live on the Mac with
 the test account, Saved Messages standing for the channel: a manifest
 changed after signing was refused, a program that did not match the
 manifest was refused, a good one was installed with the old one kept.
-Still to come: the text client, and the 68000 package.
+The same day the text client got it too, the 68000 package included:
+the channel fetch, the version lookup and the install were taken out of
+the window's session (they run on any context: the window gives its
+session and its file channel, the text client its own context twice)
+and out of the TG_NO_GUI guard, and /update and /update yes call them
+(the 68000 program grew by 11.7 KB). Tried live on a context of its
+own: the lookup read 0.6 from @amigram1, the install from Saved
+Messages replaced the program and kept the old one.
 
 ## Done after 0.5: login with a QR code
 

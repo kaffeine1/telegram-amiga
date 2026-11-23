@@ -13999,7 +13999,7 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic\n" \
-    "          /help /logout /quit\n"
+    "          /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -17992,6 +17992,7 @@ static const char *const tg_chat_help_lines[] = {
     "  /topics         the topics of this group, when it is a forum",
     "  /topic n        only topic n of that list; /topic alone: all again",
     "  /topic new x    a new topic x; rename x, close, reopen: the chosen one",
+    "  /update         a new version? /update yes installs it",
     "  /logout         log out on this computer (/logout yes)",
     "  /swap /saved /peers  the same as Tab, 0 and /list",
     "",
@@ -19175,6 +19176,18 @@ static int tg_mtproto_log_out_on_context(const char *host, const char *port,
                                          FILE *quiet);
 static void tg_mtproto_logout_remove_files(const char *auth_file,
                                            const char *peer_cache_file);
+static int tg_update_parse(const char *s, unsigned long v[3],
+                           const char **end);
+static int tg_update_cmp(const unsigned long a[3], const unsigned long b[3]);
+static int tg_mtproto_update_newest_on(const tg_mtproto_file_ctx *q,
+                                       const char *channel, const char *word,
+                                       char *version, unsigned long size,
+                                       char *emsg, unsigned long emsg_size,
+                                       FILE *stream);
+static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
+                                        const tg_mtproto_file_ctx *fc,
+                                        const char *version, char *emsg,
+                                        unsigned long emsg_size, FILE *stream);
 
 int tg_mtproto_auth_chat_file(const char *host,
                               const char *port,
@@ -19760,6 +19773,85 @@ int tg_mtproto_auth_chat_file(const char *host,
                                     &chat_context, peer_cache_file,
                                     peer_index, peer_label, stream, quiet);
             tg_mtproto_close_quiet_stream(quiet, stream);
+        }
+        if (tg_mtproto_chat_named_command_arg(line, "/update", &cmd_arg)) {
+            /* Amigram's own update (tg_update.h): /update says whether the
+               update channel names a newer version, /update yes fetches it,
+               checks its author's signature and puts it in place of this
+               program, kept as Amigram.old. */
+            tg_mtproto_file_ctx ufc;
+            unsigned long want[3];
+            unsigned long own[3];
+            char newer[16];
+            char why[96];
+            char say[240];
+            int urc;
+
+            ufc.host = host;
+            ufc.port = port;
+            ufc.api_id = api_id;
+            ufc.auth_file = auth_file;
+            ufc.dc_id_text = dc_id_text;
+            ufc.context = &chat_context;
+            ufc.peer_cache_file = peer_cache_file;
+            ufc.peer_index = peer_index;
+            if (!tg_gui_session_update_can_install()) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "This system has no update to install.");
+            } else if (cmd_arg[0] != '\0' && strcmp(cmd_arg, "yes") != 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, "/update says whether a new version is out; "
+                            "/update yes installs it.");
+            } else {
+                tg_mtproto_chat_print_system_line(
+                    stream, "Looking for a new version...");
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                urc = tg_mtproto_update_newest_on(
+                    &ufc, TG_UPDATE_FILES_CHANNEL, TG_UPDATE_WORD, newer,
+                    sizeof(newer), why, sizeof(why), quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (urc != 0) {
+                    sprintf(say, "Could not ask @%.32s%s%.60s.",
+                            TG_UPDATE_FILES_CHANNEL, why[0] != '\0' ? ": " : "",
+                            why);
+                    tg_mtproto_chat_print_system_line(stream, say);
+                } else if (newer[0] == '\0' ||
+                           !tg_update_parse(newer, want, 0) ||
+                           !tg_update_parse(TG_VERSION, own, 0) ||
+                           tg_update_cmp(want, own) <= 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, "You have the newest version, " TG_VERSION
+                                ".");
+                } else if (cmd_arg[0] == '\0') {
+                    sprintf(say,
+                            TG_APP_NAME " %.15s is out: you have " TG_VERSION
+                            ". /update yes installs it: it comes from "
+                            "@%.32s, signed by its author, and this version "
+                            "is kept as Amigram.old.",
+                            newer, TG_UPDATE_FILES_CHANNEL);
+                    tg_mtproto_chat_print_system_line(stream, say);
+                } else {
+                    sprintf(say, "Fetching " TG_APP_NAME " %.15s...", newer);
+                    tg_mtproto_chat_print_system_line(stream, say);
+                    quiet = tg_mtproto_open_quiet_stream(stream);
+                    urc = tg_mtproto_update_install_on(&ufc, &ufc, newer, why,
+                                                       sizeof(why), quiet);
+                    tg_mtproto_close_quiet_stream(quiet, stream);
+                    if (urc == 0) {
+                        sprintf(say,
+                                TG_APP_NAME " %.15s is installed. Quit with "
+                                "/quit and start Amigram again to use it.",
+                                newer);
+                    } else {
+                        sprintf(say, "%.150s.",
+                                why[0] != '\0' ? why : "The update failed");
+                    }
+                    tg_mtproto_chat_print_system_line(stream, say);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0, 0UL,
+                                        tg_chat_input_raw);
+            continue;
         }
         if (tg_mtproto_chat_named_command_arg(line, "/logout", &cmd_arg)) {
             /* Log out, in two steps as the text client asks: /logout says
@@ -39919,52 +40011,12 @@ static int tg_gui_batch_self_test(void)
 }
 #endif
 
-#if !defined(TG_NO_GUI)
-/* --- The update notice (0.2). ---------------------------------------------
-   Releases are announced on public Telegram channels or groups, the names
-   in TG_UPDATE_CHANNELS, in a post that names the program and the version:
-   "Amigram 0.2". Once a day the client goes round them, one at each quiet
-   moment: it asks a channel for its newest posts with the program's name in
-   them (messages.search, so that other posts in between do not hide an
-   announcement) and keeps the highest version they name. When the round is
-   over and that version is higher than this build's, it says so: once in
-   the status line, and in About for as long as it holds. Nothing is
-   downloaded and nothing is run. A channel is looked up by name once and
-   remembered; a build without channels, or with the switch off, never asks
-   anything. */
-#define TG_GUI_UPDATE_FILE "data/telegram-update.txt"
-#define TG_GUI_UPDATE_EVERY 86400UL /* seconds: one round a day */
-#define TG_GUI_UPDATE_POSTS 5UL
-#define TG_GUI_UPDATE_CHANNELS_MAX 8 /* names read from the list */
-#define TG_GUI_UPDATE_NAME_MAX 48
-
-typedef struct tg_gui_update_peer {
-    char channel[TG_GUI_UPDATE_NAME_MAX]; /* whose id and hash these are */
-    unsigned long id_hi, id_lo, hash_hi, hash_lo;
-} tg_gui_update_peer;
-
-typedef struct tg_gui_update_state {
-    int loaded;
-    int off;              /* the user's switch */
-    tg_gui_update_peer peers[TG_GUI_UPDATE_CHANNELS_MAX];
-    int peer_count;        /* the channels looked up so far */
-    unsigned long checked; /* time() of the last round that ended */
-    unsigned long found[3];
-    int has_found;         /* the highest version the last round read */
-    unsigned long told[3];
-    int has_told;          /* the one the status line has already said */
-    /* the round under way: not kept between two runs */
-    int next;              /* 1-based channel to ask next, 0 = no round */
-    unsigned long best[3];
-    int has_best;          /* the highest version of this round so far */
-} tg_gui_update_state;
-
-static tg_gui_update_state tg_gui_update;
-/* variables, so that the self-test and a live check can aim elsewhere */
-static const char *tg_gui_update_file = TG_GUI_UPDATE_FILE;
-static const char *tg_gui_update_channels = TG_UPDATE_CHANNELS;
-static const char *tg_gui_update_name = TG_UPDATE_WORD;
-static const char *tg_gui_update_own = TG_VERSION;
+/* --- Shared by the window and the text client: versions named in posts,
+   a file from a channel's posts, Amigram's own update (tg_update.h). All
+   of it runs on any session, through two file contexts: `q` for the
+   requests (resolving a name, searching posts) and `fc` for the download;
+   the text client gives the same one twice, the window its session and
+   its file channel. */
 
 /* "0.2" or "0.2.1" at s: two or three numbers of at most four digits. */
 static int tg_update_parse(const char *s, unsigned long v[3],
@@ -40070,6 +40122,622 @@ static int tg_update_scan(const char *text, const char *name,
     }
     return had;
 }
+
+
+/* --- a file from a public channel's posts --------------------------------
+   The client can fetch one file a public channel posted: the WEBP
+   datatype it offers to install where the system has none. The file is
+   known beforehand by its exact name and by its SHA-256, which this
+   program carries: whatever else the channel may hold, or come to hold,
+   nothing but that very file is ever kept. */
+
+/* The newest of the listed messages that carries a file of exactly this
+   name and of this size: its place in the list, -1 when there is none.
+   Size 0 = any size up to TG_GUI_CHANNEL_FILE_MAX: what is fetched this
+   way is small, and a name alone must not bring down something that is
+   not. */
+#define TG_GUI_CHANNEL_FILE_MAX 1048576UL
+static int tg_gui_channel_file_pick(const tg_mtproto_message_text_list *list,
+                                    const char *file_name,
+                                    unsigned long size)
+{
+    unsigned long best_id = 0UL;
+    unsigned long i;
+    int best = -1;
+
+    for (i = 0UL; i < list->count; ++i) {
+        const tg_mtproto_message_text *m = &list->messages[i];
+
+        if (m->document.has_document &&
+            m->document.file_reference_len != 0UL &&
+            strcmp(m->document.file_name, file_name) == 0 &&
+            m->document.size_hi == 0UL &&
+            (size == 0UL ? m->document.size_lo <= TG_GUI_CHANNEL_FILE_MAX
+                         : m->document.size_lo == size) &&
+            m->id > best_id) {
+            best = (int)i;
+            best_id = m->id;
+        }
+    }
+    return best;
+}
+
+/* The SHA-256 of a file as 64 lowercase hex digits. 1 = `hex` holds it. */
+static int tg_gui_file_sha256_hex(const char *path, char hex[65])
+{
+    static const char digits[] = "0123456789abcdef";
+    static unsigned char block[4096];
+    unsigned char digest[TG_MTPROTO_SHA256_LENGTH];
+    tg_mtproto_sha256_ctx ctx;
+    FILE *f = fopen(path, "rb");
+    size_t got;
+    int k;
+
+    hex[0] = '\0';
+    if (f == 0) {
+        return 0;
+    }
+    tg_mtproto_sha256_init(&ctx);
+    while ((got = fread(block, 1, sizeof(block), f)) > 0U) {
+        tg_mtproto_sha256_update(&ctx, block, (unsigned long)got);
+    }
+    k = ferror(f);
+    fclose(f);
+    if (k) {
+        return 0;
+    }
+    tg_mtproto_sha256_final(&ctx, digest);
+    for (k = 0; k < (int)TG_MTPROTO_SHA256_LENGTH; ++k) {
+        hex[2 * k] = digits[digest[k] >> 4];
+        hex[(2 * k) + 1] = digits[digest[k] & 15U];
+    }
+    hex[64] = '\0';
+    return 1;
+}
+
+
+static int tg_gui_file_is_there(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+
+    if (f == 0) {
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+/* A checked file is copied to a place where there is none. 0 = copied, and
+   the copy read back has the hash expected; TG_GUI_INSTALL_EXISTS = a file
+   is already there (left as it is); TG_GUI_INSTALL_WRITE = it could not be
+   written (whatever was written is removed). */
+static int tg_gui_install_copy(const char *from, const char *to,
+                               const char *sha256_hex)
+{
+    static unsigned char block[4096];
+    char hex[65];
+    FILE *in;
+    FILE *out;
+    size_t got;
+    int bad = 0;
+
+    if (tg_gui_file_is_there(to)) {
+        return TG_GUI_INSTALL_EXISTS;
+    }
+    in = fopen(from, "rb");
+    if (in == 0) {
+        return TG_GUI_INSTALL_WRITE;
+    }
+    out = fopen(to, "wb");
+    if (out == 0) {
+        fclose(in);
+        return TG_GUI_INSTALL_WRITE;
+    }
+    while ((got = fread(block, 1, sizeof(block), in)) > 0U) {
+        if (fwrite(block, 1, got, out) != got) {
+            bad = 1;
+            break;
+        }
+    }
+    if (ferror(in)) {
+        bad = 1;
+    }
+    fclose(in);
+    if (fclose(out) != 0) {
+        bad = 1;
+    }
+    if (!bad && (!tg_gui_file_sha256_hex(to, hex) ||
+                 strcmp(hex, sha256_hex) != 0)) {
+        bad = 1; /* a full disk can cut a file without an error */
+    }
+    if (bad) {
+        (void)remove(to);
+        return TG_GUI_INSTALL_WRITE;
+    }
+    /* a library gets the run bit its own archive gives it */
+    tg_mtproto_mark_downloaded_file(to);
+    return 0;
+}
+
+static void tg_gui_install_say(char *emsg, unsigned long emsg_size,
+                               const char *text)
+{
+    unsigned long n = 0UL;
+
+    if (emsg == 0 || emsg_size == 0UL) {
+        return;
+    }
+    while (text[n] != '\0' && n + 1UL < emsg_size) {
+        emsg[n] = text[n];
+        ++n;
+    }
+    emsg[n] = '\0';
+}
+
+
+/* One request on a context: 0 = answered, 1 = Telegram refused (its word
+   in emsg), 2 = no answer. */
+static int tg_mtproto_ctx_request(const tg_mtproto_file_ctx *q,
+                                  const unsigned char *query,
+                                  unsigned long length,
+                                  tg_mtproto_rpc_result *result,
+                                  const char *label, char *emsg,
+                                  unsigned long emsg_size, FILE *quiet)
+{
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    memset(result, 0, sizeof(*result));
+    if (tg_mtproto_send_saved_query_on_context(
+            q->host, q->port, q->api_id, q->auth_file, q->dc_id_text,
+            q->context, query, length, result, quiet, label, 200U) != 0) {
+        return 2;
+    }
+    if (result->result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+        char text[48];
+
+        text[0] = '\0';
+        (void)tg_mtproto_print_rpc_error(label, result, quiet);
+        (void)tg_mtproto_parse_rpc_error(result->result_body - 4U,
+                                         result->result_body_length + 4U,
+                                         &ecode, text, sizeof(text));
+        tg_gui_install_say(emsg, emsg_size, text);
+        return 1;
+    }
+    return 0;
+}
+
+/* A public channel by its name into *peer (constructor, id, hash); an
+   empty name is this account's Saved Messages. 0 = found, 1 = refused,
+   2 = no answer, 3 = no such channel. */
+static int tg_mtproto_channel_peer(const tg_mtproto_file_ctx *q,
+                                   const char *channel, unsigned long *pc,
+                                   unsigned long *ph, unsigned long *pl,
+                                   unsigned long *ahh, unsigned long *ahl,
+                                   char *emsg, unsigned long emsg_size,
+                                   FILE *quiet)
+{
+    static unsigned char query[192];
+    static const char label[] = "channel file";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    const tg_mtproto_peer_cache_entry *e;
+    int rc;
+
+    *pc = TG_MTPROTO_PEER_SELF_CONSTRUCTOR;
+    *ph = *pl = *ahh = *ahl = 0UL;
+    if (channel == 0 || channel[0] == '\0') {
+        return 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    rc = tg_mtproto_build_contacts_resolve_username_flags(&writer, channel) ==
+                 TG_MTPROTO_TL_OK
+             ? tg_mtproto_ctx_request(q, query, writer.length, &result, label,
+                                      emsg, emsg_size, quiet)
+             : 3;
+    if (rc == 0 &&
+        (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
+         tg_mtproto_parse_resolved_peer_cache(
+             result.result_constructor, result.result_body,
+             result.result_body_length, &tg_peer_cache_scratch) !=
+             TG_MTPROTO_TL_OK ||
+         tg_peer_cache_scratch.count == 0UL)) {
+        rc = 3;
+    }
+    if (rc != 0) {
+        return rc;
+    }
+    e = &tg_peer_cache_scratch.entries[0];
+    if (e->peer_constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
+        !e->has_access_hash) {
+        return 3; /* a person's name, not a channel's */
+    }
+    *pc = e->peer_constructor;
+    *ph = e->id_hi;
+    *pl = e->id_lo;
+    *ahh = e->access_hash_hi;
+    *ahl = e->access_hash_lo;
+    return 0;
+}
+
+/* Fetches the file `file_name`, `size` bytes long (0 = any small one),
+   that the public channel `channel` posted ("" = Saved Messages), into
+   `out_path`, and keeps it only when its SHA-256 is `sha256_hex` (0 = no
+   check: the caller checks what came, as with the update's signed
+   manifest). Blocking. 0 = the file is there and is the one expected,
+   1 = Telegram refused (emsg says why), 2 = failed, 3 = the channel or
+   the file was not found, 4 = what came is not the file expected
+   (removed). */
+static int tg_mtproto_fetch_channel_file_on(const tg_mtproto_file_ctx *q,
+                                            const tg_mtproto_file_ctx *fc,
+                                            const char *channel,
+                                            const char *file_name,
+                                            unsigned long size,
+                                            const char *sha256_hex,
+                                            const char *out_path, char *emsg,
+                                            unsigned long emsg_size,
+                                            FILE *stream)
+{
+    static unsigned char query[192];
+    static tg_mtproto_document_meta doc;
+    static const char label[] = "channel file";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long msg_id = 0UL;
+    char hex[65];
+    FILE *quiet;
+    int pass;
+    int at = -1;
+    int rc;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (q == 0 || fc == 0 || stream == 0 || file_name == 0 ||
+        file_name[0] == '\0' ||
+        (sha256_hex != 0 && strlen(sha256_hex) != 64UL) || out_path == 0 ||
+        out_path[0] == '\0' || tg_shared_message_texts_busy) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_channel_peer(q, channel, &pc, &ph, &pl, &ahh, &ahl, emsg,
+                                 emsg_size, quiet);
+    if (rc != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        tg_gui_log("channel file: the channel was not found");
+        return rc;
+    }
+    /* The channel's files by that name; where the search does not look at
+       file names, its latest files, among which the name is looked for. */
+    for (pass = 0; pass < 2 && at < 0; ++pass) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        rc = tg_mtproto_build_messages_search_documents(
+                 &writer, pc, ph, pl, ahh, ahl,
+                 pc != TG_MTPROTO_PEER_SELF_CONSTRUCTOR,
+                 pass == 0 ? file_name : "",
+                 pass == 0 ? 10UL : 30UL) == TG_MTPROTO_TL_OK
+                 ? tg_mtproto_ctx_request(q, query, writer.length, &result,
+                                          label, emsg, emsg_size, quiet)
+                 : 2;
+        if (rc == 0 &&
+            tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+            rc = 2;
+        }
+        if (rc != 0) {
+            tg_mtproto_close_quiet_stream(quiet, stream);
+            tg_gui_log("channel file: the search was not answered");
+            return rc;
+        }
+        tg_shared_message_texts_busy = 1;
+        if (tg_mtproto_parse_message_text_list(
+                result.result_constructor, result.result_body,
+                result.result_body_length, &tg_shared_message_texts) ==
+            TG_MTPROTO_TL_OK) {
+            at = tg_gui_channel_file_pick(&tg_shared_message_texts,
+                                          file_name, size);
+            if (at >= 0) {
+                doc = tg_shared_message_texts.messages[at].document;
+                msg_id = tg_shared_message_texts.messages[at].id;
+            }
+        }
+        tg_shared_message_texts_busy = 0;
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (at < 0) {
+        tg_gui_log("channel file: no post carries that file");
+        return 3;
+    }
+    rc = tg_mtproto_download_begin_at(fc, msg_id, &doc, out_path, stream);
+    if (rc == 0) {
+        while (tg_mtproto_download_step()) {
+        }
+        rc = tg_mtproto_download_end(0, 0UL);
+    }
+    if (rc != 0) {
+        (void)remove(out_path);
+        tg_gui_log("channel file: the download failed");
+        return 2;
+    }
+    if (sha256_hex != 0 && (!tg_gui_file_sha256_hex(out_path, hex) ||
+                            strcmp(hex, sha256_hex) != 0)) {
+        (void)remove(out_path);
+        tg_gui_log("channel file: not the file expected, removed");
+        return 4;
+    }
+    tg_gui_log("channel file: fetched and checked");
+    return 0;
+}
+
+#define TG_UPDATE_POSTS 5UL
+
+/* The highest version the channel's newest posts name after `word`
+   ("Amigram 0.7"), into version (empty when none). 0 = asked (found or
+   not), 1 = refused, 2 = no answer, 3 = no such channel. */
+static int tg_mtproto_update_newest_on(const tg_mtproto_file_ctx *q,
+                                       const char *channel, const char *word,
+                                       char *version, unsigned long size,
+                                       char *emsg, unsigned long emsg_size,
+                                       FILE *stream)
+{
+    static unsigned char query[192];
+    static const char label[] = "update look";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long best[3];
+    unsigned long i;
+    char text[24];
+    FILE *quiet;
+    int had = 0;
+    int rc;
+
+    if (version != 0 && size > 0UL) {
+        version[0] = '\0';
+    }
+    if (q == 0 || version == 0 || size < 16UL || word == 0 ||
+        tg_shared_message_texts_busy) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    rc = tg_mtproto_channel_peer(q, channel, &pc, &ph, &pl, &ahh, &ahl, emsg,
+                                 emsg_size, quiet);
+    if (rc == 0) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        rc = tg_mtproto_build_messages_search_peer(
+                 &writer, pc, ph, pl, ahh, ahl,
+                 pc != TG_MTPROTO_PEER_SELF_CONSTRUCTOR, word, 0UL,
+                 TG_UPDATE_POSTS) == TG_MTPROTO_TL_OK
+                 ? tg_mtproto_ctx_request(q, query, writer.length, &result,
+                                          label, emsg, emsg_size, quiet)
+                 : 2;
+    }
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    if (rc == 0) {
+        tg_shared_message_texts_busy = 1;
+        if (tg_mtproto_parse_message_text_list(
+                result.result_constructor, result.result_body,
+                result.result_body_length, &tg_shared_message_texts) ==
+            TG_MTPROTO_TL_OK) {
+            for (i = 0UL; i < tg_shared_message_texts.count; ++i) {
+                had = tg_update_scan(tg_shared_message_texts.messages[i].text,
+                                     word, best, had);
+            }
+        }
+        tg_shared_message_texts_busy = 0;
+        if (had) {
+            tg_update_format(text, best);
+            tg_gui_install_say(version, size, text);
+        }
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    return rc;
+}
+
+/* --- The update of Amigram from inside Amigram (tg_update.h). --------------
+   The manifest of the version the notice named comes from the update
+   channel and is checked against the release key built in; then this
+   platform's program comes, checked by its size and SHA-256 from the
+   manifest, and takes the place of the running one. Copies, never renames
+   (rename is unreliable on the AROS FAT handler): the running program is
+   copied to Amigram.old, then the new one is copied over a removed
+   Amigram and read back; if that fails the old one is copied back. The
+   paths are variables, so that a live check can aim elsewhere. */
+static const char *tg_gui_update_files_channel = TG_UPDATE_FILES_CHANNEL;
+static const char *tg_gui_update_program = "Amigram";
+static const char *tg_gui_update_program_new = "Amigram.new";
+static const char *tg_gui_update_program_old = "Amigram.old";
+static const char *tg_gui_update_manifest_path =
+    "data/telegram-update-manifest.txt";
+static const char *tg_update_own_version = TG_VERSION;
+
+/* A live check on the Mac sets it: the host build then installs the
+   manifest's "host" line, in the drawer it runs in. */
+static int tg_gui_update_host_ok = 0;
+
+/* Public: 1 when this build can update itself (an Amiga platform). */
+int tg_gui_session_update_can_install(void)
+{
+    return strcmp(tg_update_lane(), "host") != 0 || tg_gui_update_host_ok;
+}
+
+/* Fetches and installs `version`, on any session. 0 = installed (it runs at the next start); 1 = Telegram
+   refused; 2 = failed (network); 3 = the channel has no update for this
+   version or this platform; 4 = a file came wrong; 5 = the manifest is not
+   signed by Amigram's author or does not name a newer version; 6 = the
+   program could not be replaced (the old one is back). emsg says it in
+   words. Blocking: the program is a megabyte or two. */
+static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
+                                        const tg_mtproto_file_ctx *fc,
+                                        const char *version, char *emsg,
+                                        unsigned long emsg_size, FILE *stream)
+{
+    static char text[4096];
+    static tg_update_manifest m;
+    unsigned long want[3];
+    unsigned long own[3];
+    const tg_update_entry *e;
+    char name[48];
+    char old_hex[65];
+    FILE *f;
+    size_t got;
+    int rc;
+
+    tg_gui_install_say(emsg, emsg_size, "");
+    if (version == 0 || !tg_gui_session_update_can_install() ||
+        !tg_update_parse(version, want, 0) ||
+        !tg_update_parse(tg_update_own_version, own, 0) ||
+        tg_update_cmp(want, own) <= 0) {
+        tg_gui_install_say(emsg, emsg_size, "No update to install");
+        return 5;
+    }
+    tg_update_manifest_name(version, name, sizeof(name));
+    tg_gui_log("update: fetching the manifest");
+    rc = tg_mtproto_fetch_channel_file_on(q, fc, tg_gui_update_files_channel,
+                                          name, 0UL, 0,
+                                          tg_gui_update_manifest_path, emsg,
+                                          emsg_size, stream);
+    if (rc != 0) {
+        if (rc == 3) {
+            tg_gui_install_say(emsg, emsg_size,
+                               "The update is not in the channel yet");
+        }
+        return rc;
+    }
+    f = fopen(tg_gui_update_manifest_path, "rb");
+    got = 0U;
+    if (f != 0) {
+        got = fread(text, 1, sizeof(text) - 1U, f);
+        fclose(f);
+    }
+    (void)remove(tg_gui_update_manifest_path);
+    text[got] = '\0';
+    rc = tg_update_manifest_read(text, (unsigned long)got, &m);
+    if (rc != TG_UPDATE_OK || strcmp(m.version, version) != 0) {
+        tg_gui_log(rc == TG_UPDATE_BAD_SIGNATURE
+                       ? "update: the manifest is not signed by the author"
+                       : "update: the manifest is not one for this version");
+        tg_gui_install_say(emsg, emsg_size,
+                           rc == TG_UPDATE_BAD_SIGNATURE
+                               ? "The update is not signed by its author"
+                               : "The update's manifest is not right");
+        return 5;
+    }
+    e = tg_update_manifest_lane(&m, tg_update_lane());
+    if (e == 0) {
+        tg_gui_install_say(emsg, emsg_size,
+                           "No update for this system in that version");
+        return 3;
+    }
+    (void)remove(tg_gui_update_program_new);
+    tg_gui_log("update: fetching the program");
+    rc = tg_mtproto_fetch_channel_file_on(q, fc, tg_gui_update_files_channel,
+                                          e->file_name, e->size, e->sha256_hex,
+                                          tg_gui_update_program_new, emsg,
+                                          emsg_size, stream);
+    if (rc != 0) {
+        if (rc == 3) {
+            tg_gui_install_say(emsg, emsg_size,
+                               "The program is not in the channel yet");
+        } else if (rc == 4) {
+            tg_gui_install_say(emsg, emsg_size,
+                               "The program that came is not the signed one");
+        }
+        return rc;
+    }
+    /* The running program aside, as Amigram.old, read back. */
+    if (!tg_gui_file_sha256_hex(tg_gui_update_program, old_hex)) {
+        (void)remove(tg_gui_update_program_new);
+        tg_gui_install_say(emsg, emsg_size,
+                           "The program is not called Amigram here: "
+                           "update it by hand");
+        return 6;
+    }
+    (void)remove(tg_gui_update_program_old);
+    if (tg_gui_install_copy(tg_gui_update_program, tg_gui_update_program_old,
+                            old_hex) != 0) {
+        (void)remove(tg_gui_update_program_new);
+        tg_gui_install_say(emsg, emsg_size,
+                           "Could not keep the old program as Amigram.old");
+        return 6;
+    }
+    /* The new one in its place; the old one back if that fails. */
+    (void)remove(tg_gui_update_program);
+    if (tg_gui_install_copy(tg_gui_update_program_new, tg_gui_update_program,
+                            e->sha256_hex) != 0) {
+        (void)remove(tg_gui_update_program);
+        (void)tg_gui_install_copy(tg_gui_update_program_old,
+                                  tg_gui_update_program, old_hex);
+        (void)remove(tg_gui_update_program_new);
+        tg_gui_log("update: the new program could not be written, old back");
+        tg_gui_install_say(emsg, emsg_size,
+                           "Could not write the new program: the old one "
+                           "is back");
+        return 6;
+    }
+    (void)remove(tg_gui_update_program_new);
+    tg_platform_set_executable(tg_gui_update_program);
+    tg_gui_log("update: installed");
+    return 0;
+}
+
+#if !defined(TG_NO_GUI)
+/* --- The update notice (0.2). ---------------------------------------------
+   Releases are announced on public Telegram channels or groups, the names
+   in TG_UPDATE_CHANNELS, in a post that names the program and the version:
+   "Amigram 0.2". Once a day the client goes round them, one at each quiet
+   moment: it asks a channel for its newest posts with the program's name in
+   them (messages.search, so that other posts in between do not hide an
+   announcement) and keeps the highest version they name. When the round is
+   over and that version is higher than this build's, it says so: once in
+   the status line, and in About for as long as it holds. Nothing is
+   downloaded and nothing is run. A channel is looked up by name once and
+   remembered; a build without channels, or with the switch off, never asks
+   anything. */
+#define TG_GUI_UPDATE_FILE "data/telegram-update.txt"
+#define TG_GUI_UPDATE_EVERY 86400UL /* seconds: one round a day */
+#define TG_GUI_UPDATE_POSTS 5UL
+#define TG_GUI_UPDATE_CHANNELS_MAX 8 /* names read from the list */
+#define TG_GUI_UPDATE_NAME_MAX 48
+
+typedef struct tg_gui_update_peer {
+    char channel[TG_GUI_UPDATE_NAME_MAX]; /* whose id and hash these are */
+    unsigned long id_hi, id_lo, hash_hi, hash_lo;
+} tg_gui_update_peer;
+
+typedef struct tg_gui_update_state {
+    int loaded;
+    int off;              /* the user's switch */
+    tg_gui_update_peer peers[TG_GUI_UPDATE_CHANNELS_MAX];
+    int peer_count;        /* the channels looked up so far */
+    unsigned long checked; /* time() of the last round that ended */
+    unsigned long found[3];
+    int has_found;         /* the highest version the last round read */
+    unsigned long told[3];
+    int has_told;          /* the one the status line has already said */
+    /* the round under way: not kept between two runs */
+    int next;              /* 1-based channel to ask next, 0 = no round */
+    unsigned long best[3];
+    int has_best;          /* the highest version of this round so far */
+} tg_gui_update_state;
+
+static tg_gui_update_state tg_gui_update;
+/* variables, so that the self-test and a live check can aim elsewhere */
+static const char *tg_gui_update_file = TG_GUI_UPDATE_FILE;
+static const char *tg_gui_update_channels = TG_UPDATE_CHANNELS;
+static const char *tg_gui_update_name = TG_UPDATE_WORD;
+static const char *tg_gui_update_own = TG_VERSION;
 
 static int tg_update_list_gap(char c)
 {
@@ -40427,85 +41095,22 @@ static int tg_gui_update_ask(const char *channel, FILE *quiet)
     return 0;
 }
 
-/* --- a file from a public channel's posts --------------------------------
-   The client can fetch one file a public channel posted: the WEBP
-   datatype it offers to install where the system has none. The file is
-   known beforehand by its exact name and by its SHA-256, which this
-   program carries: whatever else the channel may hold, or come to hold,
-   nothing but that very file is ever kept. */
-
-/* The newest of the listed messages that carries a file of exactly this
-   name and of this size: its place in the list, -1 when there is none.
-   Size 0 = any size up to TG_GUI_CHANNEL_FILE_MAX: what is fetched this
-   way is small, and a name alone must not bring down something that is
-   not. */
-#define TG_GUI_CHANNEL_FILE_MAX 1048576UL
-static int tg_gui_channel_file_pick(const tg_mtproto_message_text_list *list,
-                                    const char *file_name,
-                                    unsigned long size)
+/* The window's session as the context of requests. */
+static void tg_gui_session_query_ctx(tg_mtproto_file_ctx *q)
 {
-    unsigned long best_id = 0UL;
-    unsigned long i;
-    int best = -1;
-
-    for (i = 0UL; i < list->count; ++i) {
-        const tg_mtproto_message_text *m = &list->messages[i];
-
-        if (m->document.has_document &&
-            m->document.file_reference_len != 0UL &&
-            strcmp(m->document.file_name, file_name) == 0 &&
-            m->document.size_hi == 0UL &&
-            (size == 0UL ? m->document.size_lo <= TG_GUI_CHANNEL_FILE_MAX
-                         : m->document.size_lo == size) &&
-            m->id > best_id) {
-            best = (int)i;
-            best_id = m->id;
-        }
-    }
-    return best;
+    q->host = tg_gui_session_state.host;
+    q->port = tg_gui_session_state.port;
+    q->api_id = tg_gui_session_state.api_id;
+    q->auth_file = tg_gui_session_state.auth_file;
+    q->dc_id_text = tg_gui_session_state.dc_id_text;
+    q->context = &tg_gui_session_state.context;
+    q->peer_cache_file = tg_gui_session_state.peer_cache_file;
+    q->peer_index = tg_gui_session_state.current_peer_index;
 }
 
-/* The SHA-256 of a file as 64 lowercase hex digits. 1 = `hex` holds it. */
-static int tg_gui_file_sha256_hex(const char *path, char hex[65])
-{
-    static const char digits[] = "0123456789abcdef";
-    static unsigned char block[4096];
-    unsigned char digest[TG_MTPROTO_SHA256_LENGTH];
-    tg_mtproto_sha256_ctx ctx;
-    FILE *f = fopen(path, "rb");
-    size_t got;
-    int k;
-
-    hex[0] = '\0';
-    if (f == 0) {
-        return 0;
-    }
-    tg_mtproto_sha256_init(&ctx);
-    while ((got = fread(block, 1, sizeof(block), f)) > 0U) {
-        tg_mtproto_sha256_update(&ctx, block, (unsigned long)got);
-    }
-    k = ferror(f);
-    fclose(f);
-    if (k) {
-        return 0;
-    }
-    tg_mtproto_sha256_final(&ctx, digest);
-    for (k = 0; k < (int)TG_MTPROTO_SHA256_LENGTH; ++k) {
-        hex[2 * k] = digits[digest[k] >> 4];
-        hex[(2 * k) + 1] = digits[digest[k] & 15U];
-    }
-    hex[64] = '\0';
-    return 1;
-}
-
-/* Public: fetches the file `file_name`, `size` bytes long (0 = any small
-   one), that the public channel `channel` posted, into `out_path`, and
-   keeps it only when its SHA-256 is `sha256_hex` (64 lowercase hex
-   digits). An empty channel name stands for this account's Saved
-   Messages, which is how the function is tried without a channel. 0 = the
-   file is there and is the one expected, 1 = Telegram refused (emsg says
-   why), 2 = failed, 3 = the channel or the file was not found, 4 = what
-   came is not the file expected (it is removed). */
+/* Public: a file a public channel posted, on the window's session (the
+   WEBP datatype offered where a system has none); see
+   tg_mtproto_fetch_channel_file_on. */
 int tg_gui_session_fetch_channel_file(const char *channel,
                                       const char *file_name,
                                       unsigned long size,
@@ -40513,132 +41118,20 @@ int tg_gui_session_fetch_channel_file(const char *channel,
                                       const char *out_path, char *emsg,
                                       unsigned long emsg_size, FILE *stream)
 {
-    static unsigned char query[192];
-    static tg_mtproto_document_meta doc;
-    static const char label[] = "channel file";
-    tg_mtproto_rpc_result result;
-    tg_mtproto_tl_writer writer;
+    tg_mtproto_file_ctx q;
     tg_mtproto_file_ctx fc;
-    unsigned long pc = TG_MTPROTO_PEER_SELF_CONSTRUCTOR;
-    unsigned long ph = 0UL;
-    unsigned long pl = 0UL;
-    unsigned long ahh = 0UL;
-    unsigned long ahl = 0UL;
-    unsigned long msg_id = 0UL;
-    char hex[65];
-    FILE *quiet;
-    int pass;
-    int at = -1;
-    int rc;
 
     if (emsg != 0 && emsg_size > 0UL) {
         emsg[0] = '\0';
     }
-    if (!tg_gui_session_state.open || stream == 0 || file_name == 0 ||
-        file_name[0] == '\0' ||
-        (sha256_hex != 0 && strlen(sha256_hex) != 64UL) || out_path == 0 ||
-        out_path[0] == '\0' || tg_shared_message_texts_busy ||
-        tg_gui_dl.active) {
+    if (!tg_gui_session_state.open || tg_gui_dl.active) {
         return 2;
     }
-    quiet = tg_mtproto_open_quiet_stream(stream);
-    if (channel != 0 && channel[0] != '\0') {
-        const tg_mtproto_peer_cache_entry *e;
-
-        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-        rc = tg_mtproto_build_contacts_resolve_username_flags(
-                 &writer, channel) == TG_MTPROTO_TL_OK
-                 ? tg_gui_session_peer_request(query, writer.length, &result,
-                                               label, emsg, emsg_size, quiet)
-                 : 3;
-        if (rc == 0 &&
-            (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
-             tg_mtproto_parse_resolved_peer_cache(
-                 result.result_constructor, result.result_body,
-                 result.result_body_length, &tg_peer_cache_scratch) !=
-                 TG_MTPROTO_TL_OK ||
-             tg_peer_cache_scratch.count == 0UL)) {
-            rc = 3;
-        }
-        if (rc == 0) {
-            e = &tg_peer_cache_scratch.entries[0];
-            if (e->peer_constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
-                !e->has_access_hash) {
-                rc = 3; /* a person's name, not a channel's */
-            } else {
-                pc = e->peer_constructor;
-                ph = e->id_hi;
-                pl = e->id_lo;
-                ahh = e->access_hash_hi;
-                ahl = e->access_hash_lo;
-            }
-        }
-        if (rc != 0) {
-            tg_mtproto_close_quiet_stream(quiet, stream);
-            tg_gui_log("channel file: the channel was not found");
-            return rc;
-        }
-    }
-    /* The channel's files by that name; where the search does not look at
-       file names, its latest files, among which the name is looked for. */
-    for (pass = 0; pass < 2 && at < 0; ++pass) {
-        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-        rc = tg_mtproto_build_messages_search_documents(
-                 &writer, pc, ph, pl, ahh, ahl,
-                 pc != TG_MTPROTO_PEER_SELF_CONSTRUCTOR,
-                 pass == 0 ? file_name : "",
-                 pass == 0 ? 10UL : 30UL) == TG_MTPROTO_TL_OK
-                 ? tg_gui_session_peer_request(query, writer.length, &result,
-                                               label, emsg, emsg_size, quiet)
-                 : 2;
-        if (rc == 0 &&
-            tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
-            rc = 2;
-        }
-        if (rc != 0) {
-            tg_mtproto_close_quiet_stream(quiet, stream);
-            tg_gui_log("channel file: the search was not answered");
-            return rc;
-        }
-        tg_shared_message_texts_busy = 1;
-        if (tg_mtproto_parse_message_text_list(
-                result.result_constructor, result.result_body,
-                result.result_body_length, &tg_shared_message_texts) ==
-            TG_MTPROTO_TL_OK) {
-            at = tg_gui_channel_file_pick(&tg_shared_message_texts,
-                                          file_name, size);
-            if (at >= 0) {
-                doc = tg_shared_message_texts.messages[at].document;
-                msg_id = tg_shared_message_texts.messages[at].id;
-            }
-        }
-        tg_shared_message_texts_busy = 0;
-    }
-    tg_mtproto_close_quiet_stream(quiet, stream);
-    if (at < 0) {
-        tg_gui_log("channel file: no post carries that file");
-        return 3;
-    }
+    tg_gui_session_query_ctx(&q);
     tg_gui_session_file_ctx(&fc);
-    rc = tg_mtproto_download_begin_at(&fc, msg_id, &doc, out_path, stream);
-    if (rc == 0) {
-        while (tg_mtproto_download_step()) {
-        }
-        rc = tg_mtproto_download_end(0, 0UL);
-    }
-    if (rc != 0) {
-        (void)remove(out_path);
-        tg_gui_log("channel file: the download failed");
-        return 2;
-    }
-    if (sha256_hex != 0 && (!tg_gui_file_sha256_hex(out_path, hex) ||
-                            strcmp(hex, sha256_hex) != 0)) {
-        (void)remove(out_path);
-        tg_gui_log("channel file: not the file expected, removed");
-        return 4;
-    }
-    tg_gui_log("channel file: fetched and checked");
-    return 0;
+    return tg_mtproto_fetch_channel_file_on(&q, &fc, channel, file_name, size,
+                                            sha256_hex, out_path, emsg,
+                                            emsg_size, stream);
 }
 
 /* a variable, so that the self-test can install without a network */
@@ -40650,84 +41143,6 @@ static int (*tg_gui_channel_fetch_fn)(const char *channel,
                                       unsigned long emsg_size,
                                       FILE *stream) =
     tg_gui_session_fetch_channel_file;
-
-static int tg_gui_file_is_there(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-
-    if (f == 0) {
-        return 0;
-    }
-    fclose(f);
-    return 1;
-}
-
-/* A checked file is copied to a place where there is none. 0 = copied, and
-   the copy read back has the hash expected; TG_GUI_INSTALL_EXISTS = a file
-   is already there (left as it is); TG_GUI_INSTALL_WRITE = it could not be
-   written (whatever was written is removed). */
-static int tg_gui_install_copy(const char *from, const char *to,
-                               const char *sha256_hex)
-{
-    static unsigned char block[4096];
-    char hex[65];
-    FILE *in;
-    FILE *out;
-    size_t got;
-    int bad = 0;
-
-    if (tg_gui_file_is_there(to)) {
-        return TG_GUI_INSTALL_EXISTS;
-    }
-    in = fopen(from, "rb");
-    if (in == 0) {
-        return TG_GUI_INSTALL_WRITE;
-    }
-    out = fopen(to, "wb");
-    if (out == 0) {
-        fclose(in);
-        return TG_GUI_INSTALL_WRITE;
-    }
-    while ((got = fread(block, 1, sizeof(block), in)) > 0U) {
-        if (fwrite(block, 1, got, out) != got) {
-            bad = 1;
-            break;
-        }
-    }
-    if (ferror(in)) {
-        bad = 1;
-    }
-    fclose(in);
-    if (fclose(out) != 0) {
-        bad = 1;
-    }
-    if (!bad && (!tg_gui_file_sha256_hex(to, hex) ||
-                 strcmp(hex, sha256_hex) != 0)) {
-        bad = 1; /* a full disk can cut a file without an error */
-    }
-    if (bad) {
-        (void)remove(to);
-        return TG_GUI_INSTALL_WRITE;
-    }
-    /* a library gets the run bit its own archive gives it */
-    tg_mtproto_mark_downloaded_file(to);
-    return 0;
-}
-
-static void tg_gui_install_say(char *emsg, unsigned long emsg_size,
-                               const char *text)
-{
-    unsigned long n = 0UL;
-
-    if (emsg == 0 || emsg_size == 0UL) {
-        return;
-    }
-    while (text[n] != '\0' && n + 1UL < emsg_size) {
-        emsg[n] = text[n];
-        ++n;
-    }
-    emsg[n] = '\0';
-}
 
 /* Public: fetches `count` files a public channel posted and puts each into
    its place in the system: all of them or none. Nothing is fetched when
@@ -40798,149 +41213,22 @@ int tg_gui_session_install_channel_files(const char *channel,
     return rc;
 }
 
-/* --- The update of Amigram from inside Amigram (tg_update.h). --------------
-   The manifest of the version the notice named comes from the update
-   channel and is checked against the release key built in; then this
-   platform's program comes, checked by its size and SHA-256 from the
-   manifest, and takes the place of the running one. Copies, never renames
-   (rename is unreliable on the AROS FAT handler): the running program is
-   copied to Amigram.old, then the new one is copied over a removed
-   Amigram and read back; if that fails the old one is copied back. The
-   paths are variables, so that a live check can aim elsewhere. */
-static const char *tg_gui_update_files_channel = TG_UPDATE_FILES_CHANNEL;
-static const char *tg_gui_update_program = "Amigram";
-static const char *tg_gui_update_program_new = "Amigram.new";
-static const char *tg_gui_update_program_old = "Amigram.old";
-static const char *tg_gui_update_manifest_path =
-    "data/telegram-update-manifest.txt";
-
-/* A live check on the Mac sets it: the host build then installs the
-   manifest's "host" line, in the drawer it runs in. */
-static int tg_gui_update_host_ok = 0;
-
-/* Public: 1 when this build can update itself (an Amiga platform). */
-int tg_gui_session_update_can_install(void)
-{
-    return strcmp(tg_update_lane(), "host") != 0 || tg_gui_update_host_ok;
-}
-
 /* Public: fetches and installs `version` (as tg_gui_session_update_newer()
-   names it). 0 = installed (it runs at the next start); 1 = Telegram
-   refused; 2 = failed (network); 3 = the channel has no update for this
-   version or this platform; 4 = a file came wrong; 5 = the manifest is not
-   signed by Amigram's author or does not name a newer version; 6 = the
-   program could not be replaced (the old one is back). emsg says it in
-   words. Blocking: the program is a megabyte or two. */
+   names it) on the window's session; see tg_mtproto_update_install_on. */
 int tg_gui_session_update_install(const char *version, char *emsg,
                                   unsigned long emsg_size, FILE *stream)
 {
-    static char text[4096];
-    static tg_update_manifest m;
-    unsigned long want[3];
-    unsigned long own[3];
-    const tg_update_entry *e;
-    char name[48];
-    char old_hex[65];
-    FILE *f;
-    size_t got;
-    int rc;
+    tg_mtproto_file_ctx q;
+    tg_mtproto_file_ctx fc;
 
-    tg_gui_install_say(emsg, emsg_size, "");
-    if (version == 0 || !tg_gui_session_update_can_install() ||
-        !tg_update_parse(version, want, 0) ||
-        !tg_update_parse(tg_gui_update_own, own, 0) ||
-        tg_update_cmp(want, own) <= 0) {
-        tg_gui_install_say(emsg, emsg_size, "No update to install");
-        return 5;
+    if (!tg_gui_session_state.open || tg_gui_dl.active) {
+        tg_gui_install_say(emsg, emsg_size, "Not connected to Telegram");
+        return 2;
     }
-    tg_update_manifest_name(version, name, sizeof(name));
-    tg_gui_log("update: fetching the manifest");
-    rc = tg_gui_session_fetch_channel_file(tg_gui_update_files_channel, name,
-                                           0UL, 0, tg_gui_update_manifest_path,
-                                           emsg, emsg_size, stream);
-    if (rc != 0) {
-        if (rc == 3) {
-            tg_gui_install_say(emsg, emsg_size,
-                               "The update is not in the channel yet");
-        }
-        return rc;
-    }
-    f = fopen(tg_gui_update_manifest_path, "rb");
-    got = 0U;
-    if (f != 0) {
-        got = fread(text, 1, sizeof(text) - 1U, f);
-        fclose(f);
-    }
-    (void)remove(tg_gui_update_manifest_path);
-    text[got] = '\0';
-    rc = tg_update_manifest_read(text, (unsigned long)got, &m);
-    if (rc != TG_UPDATE_OK || strcmp(m.version, version) != 0) {
-        tg_gui_log(rc == TG_UPDATE_BAD_SIGNATURE
-                       ? "update: the manifest is not signed by the author"
-                       : "update: the manifest is not one for this version");
-        tg_gui_install_say(emsg, emsg_size,
-                           rc == TG_UPDATE_BAD_SIGNATURE
-                               ? "The update is not signed by its author"
-                               : "The update's manifest is not right");
-        return 5;
-    }
-    e = tg_update_manifest_lane(&m, tg_update_lane());
-    if (e == 0) {
-        tg_gui_install_say(emsg, emsg_size,
-                           "No update for this system in that version");
-        return 3;
-    }
-    (void)remove(tg_gui_update_program_new);
-    tg_gui_log("update: fetching the program");
-    rc = tg_gui_session_fetch_channel_file(tg_gui_update_files_channel,
-                                           e->file_name, e->size,
-                                           e->sha256_hex,
-                                           tg_gui_update_program_new, emsg,
-                                           emsg_size, stream);
-    if (rc != 0) {
-        if (rc == 3) {
-            tg_gui_install_say(emsg, emsg_size,
-                               "The program is not in the channel yet");
-        } else if (rc == 4) {
-            tg_gui_install_say(emsg, emsg_size,
-                               "The program that came is not the signed one");
-        }
-        return rc;
-    }
-    /* The running program aside, as Amigram.old, read back. */
-    if (!tg_gui_file_sha256_hex(tg_gui_update_program, old_hex)) {
-        (void)remove(tg_gui_update_program_new);
-        tg_gui_install_say(emsg, emsg_size,
-                           "The program is not called Amigram here: "
-                           "update it by hand");
-        return 6;
-    }
-    (void)remove(tg_gui_update_program_old);
-    if (tg_gui_install_copy(tg_gui_update_program, tg_gui_update_program_old,
-                            old_hex) != 0) {
-        (void)remove(tg_gui_update_program_new);
-        tg_gui_install_say(emsg, emsg_size,
-                           "Could not keep the old program as Amigram.old");
-        return 6;
-    }
-    /* The new one in its place; the old one back if that fails. */
-    (void)remove(tg_gui_update_program);
-    if (tg_gui_install_copy(tg_gui_update_program_new, tg_gui_update_program,
-                            e->sha256_hex) != 0) {
-        (void)remove(tg_gui_update_program);
-        (void)tg_gui_install_copy(tg_gui_update_program_old,
-                                  tg_gui_update_program, old_hex);
-        (void)remove(tg_gui_update_program_new);
-        tg_gui_log("update: the new program could not be written, old back");
-        tg_gui_install_say(emsg, emsg_size,
-                           "Could not write the new program: the old one "
-                           "is back");
-        return 6;
-    }
-    (void)remove(tg_gui_update_program_new);
-    tg_platform_set_executable(tg_gui_update_program);
-    tg_gui_log("update: installed");
-    return 0;
+    tg_gui_session_query_ctx(&q);
+    tg_gui_session_file_ctx(&fc);
+    return tg_mtproto_update_install_on(&q, &fc, version, emsg, emsg_size,
+                                        stream);
 }
 
 /* a variable, so that the self-test can go round without a network */

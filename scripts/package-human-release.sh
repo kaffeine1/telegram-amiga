@@ -1354,6 +1354,9 @@ the last lines, and one more click on the gadget closes it. /logout yes
 logs out of Telegram on this computer (the session ends, telegram-auth.bin
 and the chat list go, the client quits); /logout here removes those files
 when Telegram cannot be reached.
+/update says whether a newer version is out on Telegram; /update yes
+installs it (signed by its author; this version is kept as Amigram.old),
+and the next start uses it.
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
@@ -1448,6 +1451,9 @@ altro click sul gadget la chiude. /logout yes esce da Telegram su questo
 computer (la sessione si chiude, telegram-auth.bin e l'elenco chat se ne
 vanno, il client esce); /logout here toglie quei file quando Telegram non
 si raggiunge.
+/update dice se su Telegram c'e' una versione nuova; /update yes la
+installa (firmata dal suo autore; questa versione resta come
+Amigram.old), e il prossimo avvio la usa.
 Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga
