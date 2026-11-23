@@ -1420,7 +1420,9 @@ anything else is square: OS4 RTG 10/10, AROS (mode 00100000) 10/10,
 both codes square and read back. On 2026-11-23 Michele signed in by QR on a stock
 A1200 (68EC020, 8 MB fast, test5 build): slow at the first key exchange
 but through, and on a 640x256 PAL screen the code showed square on the
-monitor.
+monitor. With test6 the same A1200 also logged out from the text
+client (/logout yes) and, with the PLIPbox cable pulled, removed the
+files from the window's second requester (Remove here).
 
 Next to it, the same day, the future auth tokens of
 core.telegram.org/api/auth: every `auth.authorization` (signIn,
