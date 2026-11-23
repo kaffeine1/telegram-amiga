@@ -49,15 +49,20 @@ if [ -n "$UPDATE_SHOWN" ]; then
 - \"Settings > Check for updates\": once a day the program reads, on
   Telegram, where new versions are announced: $UPDATE_SHOWN.
   When one is newer than yours the status line says so, once, and About
-  keeps saying it. Nothing is downloaded and nothing is installed.
-  Switch the line off and the program never looks."
+  keeps saying it. It then offers to install it: Update fetches the new
+  program from that channel, checks that its author signed it and keeps
+  your version as Amigram.old; start Amigram again to use it. Nothing
+  is installed unless you choose Update. Switch the line off and the
+  program never looks."
     update_manual_it="
 - \"Settings > Check for updates\": una volta al giorno il programma
   legge, su Telegram, dove vengono annunciate le versioni nuove:
   $UPDATE_SHOWN. Quando ce n'e' una piu' nuova della tua la riga di
-  stato lo dice, una volta sola, e About continua a dirlo. Non viene
-  scaricato ne' installato niente. Spegni la riga e il programma non
-  guarda piu'."
+  stato lo dice, una volta sola, e About continua a dirlo. Poi propone
+  di installarla: Update prende il programma nuovo da quel canale,
+  controlla che sia firmato dal suo autore e tiene la tua versione come
+  Amigram.old; riavvia Amigram per usarla. Non si installa niente se
+  non scegli Update. Spegni la riga e il programma non guarda piu'."
 fi
 if [ -z "$CHANNEL" ]; then
     case $VERSION in

@@ -1395,6 +1395,30 @@ a username is mentioned by first name with an
 of a basic group (`messages.getFullChat`), so in one of those only who
 wrote lately is offered.
 
+## Done after 0.6: the update from inside Amigram
+
+Asked by Michele on 2026-11-23, right after 0.6: the notice said a new
+version was out and nothing more. Now the window offers to install it.
+The update channel (@amigram1, TG_UPDATE_FILES_CHANNEL) carries, for each
+release, one program per platform that has a window (os3, os4, morphos,
+aros-i386, aros-x86_64, aros-aarch64; the 68000 text client is left out)
+and `Amigram-update-<version>.txt`, a manifest with each program's name,
+size and SHA-256, signed RSA-2048 PKCS#1 v1.5 SHA-256 (`openssl dgst
+-sha256 -sign`) with a key whose private half stays with the author
+(`~/.config/amigram-release/update-key.pem`) and whose public half is in
+include/tg_update_key.h. core/tg_update.c reads it strictly and checks
+the signature with the bigint code of the MTProto key exchange; the
+session fetches the manifest and the program over MTProto like the WEBP
+datatype, checks the version against the notice's and its own, and
+replaces the program by copies (Amigram.old kept, the old one copied
+back on a failure), since rename is unreliable on the AROS FAT handler.
+`sh scripts/update-manifest.sh <version>` makes the files to post (it
+refuses a key that is not the one built in). Tried live on the Mac with
+the test account, Saved Messages standing for the channel: a manifest
+changed after signing was refused, a program that did not match the
+manifest was refused, a good one was installed with the old one kept.
+Still to come: the text client, and the 68000 package.
+
 ## Done after 0.5: login with a QR code
 
 On 2026-11-22 the login code stopped coming for the test account, on

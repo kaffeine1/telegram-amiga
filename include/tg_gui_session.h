@@ -261,6 +261,16 @@ int tg_gui_session_update_possible(void);
 int tg_gui_session_update_enabled(void);
 void tg_gui_session_update_set_enabled(int on);
 const char *tg_gui_session_update_newer(void);
+/* The update itself (tg_update.h): 1 when this build can install one;
+   install fetches the signed manifest of `version` from the update
+   channel, then this platform's program, and puts it in place of the
+   running one (kept as Amigram.old). 0 = installed, 1 = Telegram refused,
+   2 = failed, 3 = not in the channel, 4 = a file came wrong, 5 = not
+   signed or not newer, 6 = the program could not be replaced; emsg says
+   it in words. Blocking. */
+int tg_gui_session_update_can_install(void);
+int tg_gui_session_update_install(const char *version, char *emsg,
+                                  unsigned long emsg_size, FILE *stream);
 
 /* The QR login (auth.exportLoginToken): the first call makes the key and
    gets a code, the next ones ask whether the phone has scanned it.

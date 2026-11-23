@@ -53,6 +53,12 @@
 #ifndef TG_UPDATE_CHANNELS
 #define TG_UPDATE_CHANNELS "amigram1"
 #endif
+/* Where the update itself is fetched from (the signed manifest and one
+   program per platform, tg_update.h): a public channel only the author
+   posts in. Empty = this account's Saved Messages, for trying it. */
+#ifndef TG_UPDATE_FILES_CHANNEL
+#define TG_UPDATE_FILES_CHANNEL "amigram1"
+#endif
 #ifndef TG_UPDATE_WORD
 #define TG_UPDATE_WORD TG_APP_NAME
 #endif

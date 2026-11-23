@@ -8927,19 +8927,33 @@ static void tg_gui_amiga_easyreq(struct Window *win, const char *title,
 
 /* About, with one more line on top when the update notice knows of a
    version newer than this one. */
-static void tg_gui_window_about(struct Window *win)
+/* 1 = the user chose Update in it (the caller offers the update). */
+static int tg_gui_window_about(struct Window *win)
 {
-    static char text[sizeof(tg_gui_about_text) + 96];
+    static char text[sizeof(tg_gui_about_text) + 128];
     const char *newer = tg_gui_session_update_newer();
+    struct EasyStruct es;
 
     if (newer[0] == '\0') {
         tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, tg_gui_about_text);
-        return;
+        return 0;
+    }
+    if (!tg_gui_session_update_can_install()) {
+        sprintf(text, TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n"
+                "Get it where you got this one.\n\n", newer);
+        strcat(text, tg_gui_about_text);
+        tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, text);
+        return 0;
     }
     sprintf(text, TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n"
-            "Get it where you got this one.\n\n", newer);
+            "Update installs it from here.\n\n", newer);
     strcat(text, tg_gui_about_text);
-    tg_gui_amiga_easyreq(win, "About " TG_APP_NAME, text);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    es.es_Title = (APTR)"About " TG_APP_NAME;
+    es.es_TextFormat = (APTR)text;
+    es.es_GadgetFormat = (APTR)"Update|OK";
+    return tg_gui_amiga_easyreq_args(win, &es) == 1L;
 }
 
 /* The menu's "Support development...": the chosen link (Patreon or Ko-fi)
@@ -14613,6 +14627,9 @@ static void tg_gui_tick_after(time_t *last_poll, unsigned long interval)
 
 /* When the update notice is next offered a look (0 = at the first chance). */
 static time_t tg_gui_update_next = (time_t)0;
+/* The notice has just named a newer version: the main loop offers to
+   install it, once. */
+static int tg_gui_update_offer = 0;
 
 /* Telegram has closed the session for good (tg_gui_session_closed_reason):
    once, a requester says so and offers the new login, which puts the auth
@@ -14652,6 +14669,63 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
     tg_gui_window_copy(state->status, sizeof(state->status),
                        "Session closed: restart Amigram to log in");
     return 0;
+}
+
+/* The update (tg_update.h): Amigram <newer> is offered; Update fetches the
+   signed manifest and this platform's program from the update channel and
+   puts it in place of this one, kept as Amigram.old. Offered once when the
+   notice names the version, and from About while it holds. 1 = quit now
+   (installed, and the user chose to start again). */
+static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
+                                      tg_gui_backend *backend)
+{
+    static char body[400];
+    struct EasyStruct es;
+    const char *newer = tg_gui_session_update_newer();
+    char emsg[96];
+    LONG pick;
+    int rc;
+
+    if (newer[0] == '\0' || !tg_gui_session_update_can_install() ||
+        state->mode != TG_GUI_MODE_CHAT) {
+        return 0;
+    }
+    sprintf(body,
+            TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n\n"
+            "Update now? Amigram fetches it from the channel\n"
+            "@%.20s, checks that its author signed it and\n"
+            "keeps this version as Amigram.old.",
+            newer, TG_UPDATE_FILES_CHANNEL);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    es.es_Title = (APTR)"Update";
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)"Update|Later";
+    pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
+    if (pick != 1L) {
+        return 0;
+    }
+    sprintf(body, "Fetching " TG_APP_NAME " %.8s...", newer);
+    tg_gui_window_copy(state->status, sizeof(state->status), body);
+    state->status_hint[0] = '\0';
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_update_install(newer, emsg, sizeof(emsg), stdout);
+    if (rc != 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           emsg[0] != '\0' ? emsg : "The update failed");
+        return 0;
+    }
+    sprintf(body,
+            TG_APP_NAME " %.8s is installed.\n\n"
+            "Quit now and start Amigram again to use it.\n"
+            "The old version is kept as Amigram.old.",
+            newer);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)"Quit|Later";
+    pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
+    sprintf(body, TG_APP_NAME " %.8s installed: start it again", newer);
+    tg_gui_window_copy(state->status, sizeof(state->status), body);
+    return pick == 1L;
 }
 
 /* Log out (the Amigram menu): a requester first, then auth.logOut. Once it
@@ -14787,6 +14861,7 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
             tg_gui_window_copy(((tg_gui_state *)state)->status,
                                sizeof(state->status), uline);
             *session_dirty = 1;
+            tg_gui_update_offer = 1; /* the main loop offers to install */
         }
     }
     if ((state->composing || tg_gui_session_transfer_busy()) &&
@@ -18100,7 +18175,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             ud = GTMENUITEM_USERDATA(item);
                         }
                         if (ud == (APTR)TG_MENU_ABOUT) {
-                            tg_gui_window_about(ctx.window);
+                            if (tg_gui_window_about(ctx.window) &&
+                                tg_gui_window_update_offer(ctx.window, state,
+                                                           &backend)) {
+                                done = 1;
+                            }
                         } else if (ud == (APTR)TG_MENU_SUPPORT) {
                             tg_gui_window_support(state, ctx.window);
                             tg_gui_window_paint(state, &backend);
@@ -21116,6 +21195,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             tg_gui_session_closed_reason()[0] != '\0') {
             closed_asked = 1;
             if (tg_gui_window_session_closed(ctx.window, state)) {
+                done = 1;
+            } else {
+                session_dirty = 1;
+            }
+        }
+        /* The notice named a newer version: the update is offered once,
+           when the user is not typing. */
+        if (!done && tg_gui_update_offer && !state->composing &&
+            state->mode == TG_GUI_MODE_CHAT) {
+            tg_gui_update_offer = 0;
+            if (tg_gui_window_update_offer(ctx.window, state, &backend)) {
                 done = 1;
             } else {
                 session_dirty = 1;

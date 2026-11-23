@@ -31,6 +31,7 @@
 #include "tg_mtproto_message_id.h"
 #include "tg_mtproto_probe.h"
 #include "tg_qr.h"
+#include "tg_update.h"
 #include "tg_emoji_sheet.h"
 #include "tg_mtproto_rsa.h"
 #include "tg_mtproto_session.h"
@@ -40534,9 +40535,10 @@ int tg_gui_session_fetch_channel_file(const char *channel,
         emsg[0] = '\0';
     }
     if (!tg_gui_session_state.open || stream == 0 || file_name == 0 ||
-        file_name[0] == '\0' || sha256_hex == 0 ||
-        strlen(sha256_hex) != 64UL || out_path == 0 || out_path[0] == '\0' ||
-        tg_shared_message_texts_busy || tg_gui_dl.active) {
+        file_name[0] == '\0' ||
+        (sha256_hex != 0 && strlen(sha256_hex) != 64UL) || out_path == 0 ||
+        out_path[0] == '\0' || tg_shared_message_texts_busy ||
+        tg_gui_dl.active) {
         return 2;
     }
     quiet = tg_mtproto_open_quiet_stream(stream);
@@ -40629,8 +40631,8 @@ int tg_gui_session_fetch_channel_file(const char *channel,
         tg_gui_log("channel file: the download failed");
         return 2;
     }
-    if (!tg_gui_file_sha256_hex(out_path, hex) ||
-        strcmp(hex, sha256_hex) != 0) {
+    if (sha256_hex != 0 && (!tg_gui_file_sha256_hex(out_path, hex) ||
+                            strcmp(hex, sha256_hex) != 0)) {
         (void)remove(out_path);
         tg_gui_log("channel file: not the file expected, removed");
         return 4;
@@ -40794,6 +40796,151 @@ int tg_gui_session_install_channel_files(const char *channel,
     tg_gui_log(rc == 0 ? "install: all the files are in place"
                        : "install: nothing was installed");
     return rc;
+}
+
+/* --- The update of Amigram from inside Amigram (tg_update.h). --------------
+   The manifest of the version the notice named comes from the update
+   channel and is checked against the release key built in; then this
+   platform's program comes, checked by its size and SHA-256 from the
+   manifest, and takes the place of the running one. Copies, never renames
+   (rename is unreliable on the AROS FAT handler): the running program is
+   copied to Amigram.old, then the new one is copied over a removed
+   Amigram and read back; if that fails the old one is copied back. The
+   paths are variables, so that a live check can aim elsewhere. */
+static const char *tg_gui_update_files_channel = TG_UPDATE_FILES_CHANNEL;
+static const char *tg_gui_update_program = "Amigram";
+static const char *tg_gui_update_program_new = "Amigram.new";
+static const char *tg_gui_update_program_old = "Amigram.old";
+static const char *tg_gui_update_manifest_path =
+    "data/telegram-update-manifest.txt";
+
+/* A live check on the Mac sets it: the host build then installs the
+   manifest's "host" line, in the drawer it runs in. */
+static int tg_gui_update_host_ok = 0;
+
+/* Public: 1 when this build can update itself (an Amiga platform). */
+int tg_gui_session_update_can_install(void)
+{
+    return strcmp(tg_update_lane(), "host") != 0 || tg_gui_update_host_ok;
+}
+
+/* Public: fetches and installs `version` (as tg_gui_session_update_newer()
+   names it). 0 = installed (it runs at the next start); 1 = Telegram
+   refused; 2 = failed (network); 3 = the channel has no update for this
+   version or this platform; 4 = a file came wrong; 5 = the manifest is not
+   signed by Amigram's author or does not name a newer version; 6 = the
+   program could not be replaced (the old one is back). emsg says it in
+   words. Blocking: the program is a megabyte or two. */
+int tg_gui_session_update_install(const char *version, char *emsg,
+                                  unsigned long emsg_size, FILE *stream)
+{
+    static char text[4096];
+    static tg_update_manifest m;
+    unsigned long want[3];
+    unsigned long own[3];
+    const tg_update_entry *e;
+    char name[48];
+    char old_hex[65];
+    FILE *f;
+    size_t got;
+    int rc;
+
+    tg_gui_install_say(emsg, emsg_size, "");
+    if (version == 0 || !tg_gui_session_update_can_install() ||
+        !tg_update_parse(version, want, 0) ||
+        !tg_update_parse(tg_gui_update_own, own, 0) ||
+        tg_update_cmp(want, own) <= 0) {
+        tg_gui_install_say(emsg, emsg_size, "No update to install");
+        return 5;
+    }
+    tg_update_manifest_name(version, name, sizeof(name));
+    tg_gui_log("update: fetching the manifest");
+    rc = tg_gui_session_fetch_channel_file(tg_gui_update_files_channel, name,
+                                           0UL, 0, tg_gui_update_manifest_path,
+                                           emsg, emsg_size, stream);
+    if (rc != 0) {
+        if (rc == 3) {
+            tg_gui_install_say(emsg, emsg_size,
+                               "The update is not in the channel yet");
+        }
+        return rc;
+    }
+    f = fopen(tg_gui_update_manifest_path, "rb");
+    got = 0U;
+    if (f != 0) {
+        got = fread(text, 1, sizeof(text) - 1U, f);
+        fclose(f);
+    }
+    (void)remove(tg_gui_update_manifest_path);
+    text[got] = '\0';
+    rc = tg_update_manifest_read(text, (unsigned long)got, &m);
+    if (rc != TG_UPDATE_OK || strcmp(m.version, version) != 0) {
+        tg_gui_log(rc == TG_UPDATE_BAD_SIGNATURE
+                       ? "update: the manifest is not signed by the author"
+                       : "update: the manifest is not one for this version");
+        tg_gui_install_say(emsg, emsg_size,
+                           rc == TG_UPDATE_BAD_SIGNATURE
+                               ? "The update is not signed by its author"
+                               : "The update's manifest is not right");
+        return 5;
+    }
+    e = tg_update_manifest_lane(&m, tg_update_lane());
+    if (e == 0) {
+        tg_gui_install_say(emsg, emsg_size,
+                           "No update for this system in that version");
+        return 3;
+    }
+    (void)remove(tg_gui_update_program_new);
+    tg_gui_log("update: fetching the program");
+    rc = tg_gui_session_fetch_channel_file(tg_gui_update_files_channel,
+                                           e->file_name, e->size,
+                                           e->sha256_hex,
+                                           tg_gui_update_program_new, emsg,
+                                           emsg_size, stream);
+    if (rc != 0) {
+        if (rc == 3) {
+            tg_gui_install_say(emsg, emsg_size,
+                               "The program is not in the channel yet");
+        } else if (rc == 4) {
+            tg_gui_install_say(emsg, emsg_size,
+                               "The program that came is not the signed one");
+        }
+        return rc;
+    }
+    /* The running program aside, as Amigram.old, read back. */
+    if (!tg_gui_file_sha256_hex(tg_gui_update_program, old_hex)) {
+        (void)remove(tg_gui_update_program_new);
+        tg_gui_install_say(emsg, emsg_size,
+                           "The program is not called Amigram here: "
+                           "update it by hand");
+        return 6;
+    }
+    (void)remove(tg_gui_update_program_old);
+    if (tg_gui_install_copy(tg_gui_update_program, tg_gui_update_program_old,
+                            old_hex) != 0) {
+        (void)remove(tg_gui_update_program_new);
+        tg_gui_install_say(emsg, emsg_size,
+                           "Could not keep the old program as Amigram.old");
+        return 6;
+    }
+    /* The new one in its place; the old one back if that fails. */
+    (void)remove(tg_gui_update_program);
+    if (tg_gui_install_copy(tg_gui_update_program_new, tg_gui_update_program,
+                            e->sha256_hex) != 0) {
+        (void)remove(tg_gui_update_program);
+        (void)tg_gui_install_copy(tg_gui_update_program_old,
+                                  tg_gui_update_program, old_hex);
+        (void)remove(tg_gui_update_program_new);
+        tg_gui_log("update: the new program could not be written, old back");
+        tg_gui_install_say(emsg, emsg_size,
+                           "Could not write the new program: the old one "
+                           "is back");
+        return 6;
+    }
+    (void)remove(tg_gui_update_program_new);
+    tg_platform_set_executable(tg_gui_update_program);
+    tg_gui_log("update: installed");
+    return 0;
 }
 
 /* a variable, so that the self-test can go round without a network */

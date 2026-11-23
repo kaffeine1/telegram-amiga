@@ -14,6 +14,7 @@
 #include "tg_mtproto_envelope.h"
 #include "tg_mtproto_login.h"
 #include "tg_mtproto_message_id.h"
+#include "tg_update.h"
 #include "tg_mtproto_probe.h"
 #include "tg_mtproto_rsa.h"
 #include "tg_mtproto_session.h"
@@ -85,6 +86,9 @@ int tg_mtproto_self_test(void)
         return 2;
     }
     if (tg_mtproto_run_self_test_step("srp", tg_mtproto_srp_self_test) != 0) {
+        return 2;
+    }
+    if (tg_mtproto_run_self_test_step("update", tg_update_self_test) != 0) {
         return 2;
     }
     if (tg_mtproto_run_self_test_step("session",

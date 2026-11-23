@@ -8,6 +8,20 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
 
+### Added
+- Update from inside Amigram. When the update notice finds a newer
+  version, a requester offers to install it, and About offers it too
+  for as long as it holds. Update fetches that version's manifest from
+  the update channel (@amigram1), checks that it is signed with the
+  author's key, whose public half is built into Amigram, then fetches
+  this system's program, checks its size and SHA-256 against the
+  manifest and puts it in place of the running one, which is kept as
+  Amigram.old; Amigram is then started again. A channel taken over by
+  someone else cannot hand out a program, a manifest of an older
+  version is refused, and if the new program cannot be written the old
+  one is put back. Nothing is installed unless Update is chosen. The
+  first update this way is from this release to the next one.
+
 ## [0.6] - 2026-11-23
 
 ### Added
