@@ -60,3 +60,6 @@ telegram-text.txt
 # The api pair built into the release binaries (see include/tg_api_default.h).
 include/tg_api_default.local.h
 assets/public-telegram-api.txt
+
+# Python byte code (scripts/catalog.py)
+__pycache__/

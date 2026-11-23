@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Amigram's catalogs, without FlexCat or CatComp.
+
+    python3 scripts/catalog.py header            include/tg_strings.h from locale/amigram.cd
+    python3 scripts/catalog.py catalog <x.ct>    Catalogs/<language>/amigram.catalog from a translation
+    python3 scripts/catalog.py all               the header and every locale/*.ct
+    python3 scripts/catalog.py check             the header is up to date, every translation is sound
+
+locale/amigram.cd is a catalog description in the CatComp/FlexCat form:
+a line "MSG_NAME (id//)" and the English text on the next line(s); ";"
+starts a comment. A translation locale/<language>.ct has "## version",
+"## language" and "## codeset" lines, then each "MSG_NAME" and its text.
+Escapes: \\n, \\t, \\\\, \\" ; a line ending in a backslash goes on. Texts are
+Latin-1 in the catalog (codeset 4): the window draws one byte a letter.
+The .cd and .ct files may be UTF-8 or Latin-1.
+
+A translated text must keep the printf conversions of the English one, in
+the same order: a wrong one would crash the program on the Amiga. A
+percent sign is written %%, in every text: requesters read them as formats.
+"""
+import os
+import re
+import struct
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRCDIR = os.path.join(ROOT, "locale")  # not "catalogs": Catalogs/ is the same name on APFS
+CD = os.path.join(SRCDIR, "amigram.cd")
+HEADER = os.path.join(ROOT, "include", "tg_strings.h")
+OUTDIR = os.path.join(ROOT, "Catalogs")
+CATALOG_NAME = "amigram.catalog"
+
+NAME_RE = re.compile(r"^(MSG_[A-Z0-9_]+)\s*\((\d+)/(\d*)/(\d*)\)\s*$")
+CT_NAME_RE = re.compile(r"^(MSG_[A-Z0-9_]+)\s*$")
+FORMAT_RE = re.compile(r"%(?:%|[-+ #0]*\d*(?:\.\d+)?(?:l|h)?[sdiuxXcp])")
+
+
+class CatalogError(Exception):
+    pass
+
+
+def unescape(text, where):
+    out = []
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == "\\" and i + 1 < len(text):
+            n = text[i + 1]
+            if n == "n":
+                out.append("\n")
+            elif n == "t":
+                out.append("\t")
+            elif n == "\\":
+                out.append("\\")
+            elif n == '"':
+                out.append('"')
+            else:
+                raise CatalogError("%s: unknown escape \\%s" % (where, n))
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def read_lines(path):
+    with open(path, "rb") as f:
+        raw = f.read()
+    try:
+        text = raw.decode("utf-8")  # what today's editors write
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")  # an Amiga editor's file
+    if "\r" in text:
+        raise CatalogError("%s: CR in the file (LF only)" % path)
+    return text.split("\n")
+
+
+def take_text(lines, i, path):
+    """The text starting at lines[i], with backslash continuations: (text, next i)."""
+    parts = []
+    while True:
+        if i >= len(lines):
+            raise CatalogError("%s: a text is missing at the end" % path)
+        line = lines[i]
+        i += 1
+        if line.endswith("\\") and not line.endswith("\\\\"):
+            parts.append(line[:-1])
+            continue
+        parts.append(line)
+        break
+    return unescape("".join(parts), "%s:%d" % (path, i)), i
+
+
+def parse_cd(path=CD):
+    lines = read_lines(path)
+    entries = []
+    names = set()
+    ids = set()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if line.startswith(";") or line.startswith("#") or not line.strip():
+            continue
+        m = NAME_RE.match(line)
+        if not m:
+            raise CatalogError("%s:%d: expected MSG_NAME (id//), got %r" % (path, i, line))
+        name, ident = m.group(1), int(m.group(2))
+        if name in names or ident in ids:
+            raise CatalogError("%s:%d: %s or id %d twice" % (path, i, name, ident))
+        text, i = take_text(lines, i, path)
+        if lone_percent(text):
+            raise CatalogError("%s:%d: %s has a lone %% (write %%%%)" % (path, i, name))
+        names.add(name)
+        ids.add(ident)
+        entries.append((name, ident, text))
+    if not entries:
+        raise CatalogError("%s: no texts" % path)
+    return entries
+
+
+def parse_ct(path):
+    lines = read_lines(path)
+    meta = {}
+    texts = {}
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if line.startswith("##"):
+            key, _, value = line[2:].strip().partition(" ")
+            meta[key] = value.strip()
+            continue
+        if line.startswith(";") or not line.strip():
+            continue
+        m = CT_NAME_RE.match(line)
+        if not m:
+            raise CatalogError("%s:%d: expected MSG_NAME, got %r" % (path, i, line))
+        name = m.group(1)
+        if name in texts:
+            raise CatalogError("%s:%d: %s twice" % (path, i, name))
+        text, i = take_text(lines, i, path)
+        texts[name] = text
+    for key in ("version", "language"):
+        if key not in meta:
+            raise CatalogError("%s: no '## %s' line" % (path, key))
+    return meta, texts
+
+
+def formats(text):
+    return [f for f in FORMAT_RE.findall(text) if f != "%%"]
+
+
+def lone_percent(text):
+    """A % that is neither %% nor a conversion: printf and EasyRequest would
+    read what follows it as one."""
+    return "%" in FORMAT_RE.sub("", text)
+
+
+def check_translation(entries, meta, texts, path):
+    known = {name: text for name, _, text in entries}
+    problems = []
+    for name, text in texts.items():
+        if name not in known:
+            problems.append("%s: %s is not in amigram.cd" % (path, name))
+            continue
+        if lone_percent(text):
+            problems.append("%s: %s has a lone %% (write %%%% for a percent sign)"
+                            % (path, name))
+        if formats(text) != formats(known[name]):
+            problems.append("%s: %s changes the conversions %s -> %s"
+                            % (path, name, formats(known[name]), formats(text)))
+        if text != text.strip("\n") and known[name] == known[name].strip("\n"):
+            problems.append("%s: %s adds a line break at an end" % (path, name))
+    missing = [name for name, _, _ in entries if name not in texts]
+    return problems, missing
+
+
+def c_string(text):
+    out = []
+    for ch in text:
+        o = ord(ch)
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\t":
+            out.append("\\t")
+        elif 32 <= o < 127:
+            out.append(ch)
+        else:
+            out.append("\\%03o" % o)
+    return '"' + "".join(out) + '"'
+
+
+def make_header(entries):
+    lines = [
+        "/*",
+        " * Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>",
+        " * SPDX-License-Identifier: GPL-3.0-or-later",
+        " */",
+        "",
+        "/* Generated by scripts/catalog.py from locale/amigram.cd: do not",
+        "   edit, run `python3 scripts/catalog.py header`. Each text has its",
+        "   catalog id and its English form, built into the program as the",
+        "   fallback; TG_STR(MSG_NAME) gives the one of the user's language. */",
+        "",
+        "#ifndef TG_STRINGS_H",
+        "#define TG_STRINGS_H",
+        "",
+    ]
+    for name, ident, text in entries:
+        lines.append("#define %s %d" % (name, ident))
+        lines.append("#define %s_STR %s" % (name, c_string(text)))
+    lines += ["", "#endif", ""]
+    return "\n".join(lines)
+
+
+def chunk(cid, body):
+    data = cid + struct.pack(">I", len(body)) + body
+    if len(body) & 1:
+        data += b"\0"
+    return data
+
+
+def make_catalog(entries, meta, texts):
+    by_name = {name: ident for name, ident, _ in entries}
+    version = meta["version"]
+    if not version.startswith("$VER: "):
+        version = "$VER: " + version
+    language = meta["language"]
+    codeset = int(meta.get("codeset", "4"))
+    strs = b""
+    for name, _, _ in entries:
+        if name not in texts:
+            continue  # the English one, built in, stands
+        try:
+            raw = texts[name].encode("latin-1") + b"\0"
+        except UnicodeEncodeError:
+            raise CatalogError("%s has a letter outside Latin-1" % name)
+        strs += struct.pack(">II", by_name[name], len(raw)) + raw
+        strs += b"\0" * ((4 - len(raw) % 4) % 4)
+    body = b"CTLG"
+    body += chunk(b"FVER", version.encode("latin-1") + b"\0")
+    body += chunk(b"LANG", language.encode("latin-1") + b"\0")
+    body += chunk(b"CSET", struct.pack(">I", codeset) + b"\0" * 28)
+    body += chunk(b"STRS", strs)
+    return language, b"FORM" + struct.pack(">I", len(body)) + body
+
+
+def read_catalog(data):
+    """(language, {id: text}) of a catalog, to check what was written."""
+    if data[:4] != b"FORM" or data[8:12] != b"CTLG":
+        raise CatalogError("not a catalog")
+    end = 8 + struct.unpack(">I", data[4:8])[0]
+    i = 12
+    language = None
+    strings = {}
+    while i < end:
+        cid = data[i:i + 4]
+        size = struct.unpack(">I", data[i + 4:i + 8])[0]
+        body = data[i + 8:i + 8 + size]
+        if cid == b"LANG":
+            language = body.rstrip(b"\0").decode("latin-1")
+        elif cid == b"STRS":
+            j = 0
+            while j < size:
+                ident, length = struct.unpack(">II", body[j:j + 8])
+                raw = body[j + 8:j + 8 + length]
+                strings[ident] = raw.rstrip(b"\0").decode("latin-1")
+                j += 8 + ((length + 3) & ~3)
+        i += 8 + size + (size & 1)
+    return language, strings
+
+
+def write_catalog(entries, ct_path):
+    meta, texts = parse_ct(ct_path)
+    problems, missing = check_translation(entries, meta, texts, ct_path)
+    if problems:
+        raise CatalogError("\n".join(problems))
+    language, data = make_catalog(entries, meta, texts)
+    lang2, strings = read_catalog(data)
+    by_name = {name: ident for name, ident, _ in entries}
+    if lang2 != language or any(strings[by_name[n]] != t for n, t in texts.items()):
+        raise CatalogError("%s: the catalog does not read back" % ct_path)
+    out = os.path.join(OUTDIR, language, CATALOG_NAME)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "wb") as f:
+        f.write(data)
+    return out, len(texts), missing
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__)
+        return 2
+    entries = parse_cd()
+    cmd = argv[1]
+    if cmd in ("header", "all"):
+        with open(HEADER, "w") as f:
+            f.write(make_header(entries))
+        print("%s: %d texts" % (os.path.relpath(HEADER, ROOT), len(entries)))
+    if cmd in ("catalog", "all"):
+        cts = argv[2:] if cmd == "catalog" else sorted(
+            os.path.join(SRCDIR, n) for n in os.listdir(SRCDIR)
+            if n.endswith(".ct"))
+        for ct in cts:
+            out, n, missing = write_catalog(entries, ct)
+            print("%s: %d of %d texts translated%s" % (
+                os.path.relpath(out, ROOT), n, len(entries),
+                "" if not missing else " (missing: %s)" % ", ".join(missing[:8])
+                + (" ..." if len(missing) > 8 else "")))
+    if cmd == "check":
+        with open(HEADER) as f:
+            if f.read() != make_header(entries):
+                print("include/tg_strings.h is out of date: run catalog.py header")
+                return 1
+        bad = 0
+        for n in sorted(os.listdir(SRCDIR)):
+            if n.endswith(".ct"):
+                path = os.path.join(SRCDIR, n)
+                meta, texts = parse_ct(path)
+                problems, missing = check_translation(entries, meta, texts, path)
+                for p in problems:
+                    print(p)
+                bad += len(problems)
+                if not problems:
+                    language, data = make_catalog(entries, meta, texts)
+                    out = os.path.join(OUTDIR, language, CATALOG_NAME)
+                    try:
+                        with open(out, "rb") as f:
+                            same = f.read() == data
+                    except OSError:
+                        same = False
+                    if not same:
+                        print("%s is out of date: run catalog.py all"
+                              % os.path.relpath(out, ROOT))
+                        bad += 1
+                print("%s: %d of %d translated" % (n, len(texts), len(entries)))
+        return 1 if bad else 0
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except CatalogError as e:
+        print("catalog.py: %s" % e, file=sys.stderr)
+        sys.exit(1)

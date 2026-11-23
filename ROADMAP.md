@@ -548,6 +548,19 @@ well. Languages written outside Latin-1, such as Polish, Czech, Greek or
 Russian, also wait for the second codepage in "Letters outside Latin-1"
 below: the window has to draw their letters before it can speak them.
 
+Started after 0.6, translations first and skins after them. The texts
+are in locale/amigram.cd, the Italian catalog in locale/italiano.ct, and
+scripts/catalog.py, ours, writes include/tg_strings.h (each text's id
+and its English form) and Catalogs/<language>/amigram.catalog, checking
+that a translation keeps every printf conversion of the English text
+in the same order. The first step covers the menus, the QR login
+screen and the Log out and Update requesters. Next: the Settings panel,
+About and Help, the status lines and the session's messages, then the
+text client and the login wizard (the 68000 build leaves locale.library
+shut until then, to keep its memory). Still open: the update from
+inside Amigram replaces the program alone, so a new catalog reaches
+those who update that way only once the manifest carries catalogs too.
+
 ## Done for 0.0.95: two-step verification on slow 68k
 
 Signing in with Two-Step Verification derives the key with PBKDF2 (100000

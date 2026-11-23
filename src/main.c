@@ -9,6 +9,7 @@
 #include "tg_notify.h"
 #include "tg_gui_session.h" /* tg_gui_log: diagnostic trace */
 #include "tg_version.h"
+#include "tg_locale.h"
 
 /* Amiga $VER version tag (GitHub issue #3): lets the shell "Version" command
    report the binary's version on every Amiga-like OS. Must be a real string
@@ -301,5 +302,18 @@ static int tg_main_body(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-    return tg_platform_run_with_safe_stack(tg_main_body, argc, argv);
+    int rc;
+
+    /* The user's language before the first word is shown; English stands
+       where there is no catalog. Only the window's texts are translated so
+       far: the text-only builds (the 68000 one) leave locale.library shut
+       and keep its memory. */
+#if !defined(TG_NO_GUI)
+    tg_locale_open();
+#endif
+    rc = tg_platform_run_with_safe_stack(tg_main_body, argc, argv);
+#if !defined(TG_NO_GUI)
+    tg_locale_close();
+#endif
+    return rc;
 }

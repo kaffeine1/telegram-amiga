@@ -23,6 +23,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   text client, the 68000 one included, has the same: /update says
   whether a newer version is out, /update yes installs it. The first
   update this way is from this release to the next one.
+- Amigram in Italian, the first step of the translations. The window's
+  menus, the QR login screen and the Log out and Update requesters come
+  from a catalog through the system's locale.library: with Italian
+  chosen in the Locale preferences they are in Italian, and English,
+  built into the program, stands wherever a catalog has no text. The
+  catalog ships in Catalogs/italiano/ next to the program. The texts are
+  in locale/amigram.cd, a translation is one text file in locale/, and
+  scripts/catalog.py turns it into a catalog (no FlexCat or CatComp
+  needed); docs/TRANSLATING.md says how. The rest of the window, the
+  text client and the login wizard follow.
 
 ## [0.6] - 2026-11-23
 

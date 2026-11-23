@@ -16,6 +16,7 @@
 
 #include "tg_gui.h"
 #include "tg_qr.h"
+#include "tg_locale.h"
 #include "tg_file.h"
 #include "tg_gui_session.h"
 #if defined(TG_DIAG_XFER)
@@ -8144,7 +8145,7 @@ static void tg_gui_window_login_qr_poll(tg_gui_state *state,
                                link);
             state->status_hint[0] = '\0';
             tg_gui_window_copy(state->status, sizeof(state->status),
-                               "Scan it with Telegram on your phone");
+                               TG_STR(MSG_QR_SCAN));
             tg_gui_window_paint(state, backend);
         }
     } else if (rc == TG_GUI_LOGIN_OK) {
@@ -8638,6 +8639,60 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_EMOJI },
     { NM_END,   0, 0, 0, 0, 0 }
 };
+
+/* The menu in the user's language (tg_locale.h): each English label of the
+   table above takes its catalog text, once, before the strip is made; the
+   shortcuts stay the same in every language. */
+static void tg_gui_window_localize_menu(void)
+{
+    static const struct {
+        const char *english;
+        long id;
+    } labels[] = {
+        { MSG_MENU_ICONIFY_STR, MSG_MENU_ICONIFY },
+        { MSG_MENU_SETTINGS_STR, MSG_MENU_SETTINGS },
+        { MSG_MENU_ABOUT_STR, MSG_MENU_ABOUT },
+        { MSG_MENU_HELP_STR, MSG_MENU_HELP },
+        { MSG_MENU_SUPPORT_STR, MSG_MENU_SUPPORT },
+        { MSG_MENU_LOGOUT_STR, MSG_MENU_LOGOUT },
+        { MSG_MENU_QUIT_STR, MSG_MENU_QUIT },
+        { MSG_MENU_EDIT_STR, MSG_MENU_EDIT },
+        { MSG_MENU_CUT_STR, MSG_MENU_CUT },
+        { MSG_MENU_COPY_STR, MSG_MENU_COPY },
+        { MSG_MENU_PASTE_STR, MSG_MENU_PASTE },
+        { MSG_MENU_FINDCHAT_STR, MSG_MENU_FINDCHAT },
+        { MSG_MENU_FINDALL_STR, MSG_MENU_FINDALL },
+        { MSG_MENU_CHATS_STR, MSG_MENU_CHATS },
+        { MSG_MENU_REMOVE_STR, MSG_MENU_REMOVE },
+        { MSG_MENU_RELOAD_STR, MSG_MENU_RELOAD },
+        { MSG_MENU_ARCHIVE_STR, MSG_MENU_ARCHIVE },
+        { MSG_MENU_TOPIC_NEW_STR, MSG_MENU_TOPIC_NEW },
+        { MSG_MENU_SENDFILE_STR, MSG_MENU_SENDFILE },
+        { MSG_MENU_SENDPHOTO_STR, MSG_MENU_SENDPHOTO },
+        { MSG_MENU_POLL_STR, MSG_MENU_POLL },
+        { MSG_MENU_EMOJI_STR, MSG_MENU_EMOJI }
+    };
+    static int done = 0;
+    struct NewMenu *nm;
+    unsigned int i;
+
+    if (done) {
+        return;
+    }
+    done = 1;
+    for (nm = tg_gui_newmenu; nm->nm_Type != NM_END; ++nm) {
+        if (nm->nm_Label == 0 || nm->nm_Label == NM_BARLABEL) {
+            continue;
+        }
+        for (i = 0U; i < sizeof(labels) / sizeof(labels[0]); ++i) {
+            if (strcmp((const char *)nm->nm_Label, labels[i].english) == 0) {
+                nm->nm_Label = (STRPTR)tg_str(labels[i].id,
+                                              labels[i].english);
+                break;
+            }
+        }
+    }
+}
 
 static struct MenuItem *tg_gui_menu_find_userdata(struct Menu *menu, APTR data)
 {
@@ -14671,6 +14726,45 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
     return 0;
 }
 
+/* A catalog text printed with up to three strings (a text with fewer
+   conversions ignores the rest). One too long for dst falls back to the
+   built-in English text, which fits wherever it is used. */
+static const char *tg_gui_window_format3(char *dst, size_t size,
+                                         const char *fmt,
+                                         const char *builtin,
+                                         const char *a, const char *b,
+                                         const char *c)
+{
+    size_t need = strlen(a) + strlen(b) + strlen(c) + 1U;
+
+    if (strlen(fmt) + need > size) {
+        fmt = builtin;
+    }
+    if (strlen(fmt) + need > size) {
+        dst[0] = '\0';
+        return dst;
+    }
+    sprintf(dst, fmt, a, b, c);
+    return dst;
+}
+
+/* EasyRequest reads es_TextFormat as a format of its own: a text printed
+   beforehand goes in with each % doubled. */
+static const char *tg_gui_window_req_text(char *dst, size_t size,
+                                          const char *src)
+{
+    size_t n = 0U;
+
+    while (*src != '\0' && n + 2U < size) {
+        if (*src == '%') {
+            dst[n++] = '%';
+        }
+        dst[n++] = *src++;
+    }
+    dst[n] = '\0';
+    return dst;
+}
+
 /* The update (tg_update.h): Amigram <newer> is offered; Update fetches the
    signed manifest and this platform's program from the update channel and
    puts it in place of this one, kept as Amigram.old. Offered once when the
@@ -14679,7 +14773,8 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
 static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
                                       tg_gui_backend *backend)
 {
-    static char body[400];
+    static char text[700];
+    static char body[1400];
     struct EasyStruct es;
     const char *newer = tg_gui_session_update_newer();
     char emsg[96];
@@ -14690,41 +14785,41 @@ static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
         state->mode != TG_GUI_MODE_CHAT) {
         return 0;
     }
-    sprintf(body,
-            TG_APP_NAME " %.8s is out: you have " TG_VERSION ".\n\n"
-            "Update now? Amigram fetches it from the channel\n"
-            "@%.20s, checks that its author signed it and\n"
-            "keeps this version as Amigram.old.",
-            newer, TG_UPDATE_FILES_CHANNEL);
+    tg_gui_window_format3(text, sizeof(text), TG_STR(MSG_UPDATE_OFFER),
+                          MSG_UPDATE_OFFER_STR, newer, TG_VERSION,
+                          TG_UPDATE_FILES_CHANNEL);
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (APTR)"Update";
-    es.es_TextFormat = (APTR)body;
-    es.es_GadgetFormat = (APTR)"Update|Later";
+    es.es_Title = (APTR)TG_STR(MSG_UPDATE_TITLE);
+    es.es_TextFormat =
+        (APTR)tg_gui_window_req_text(body, sizeof(body), text);
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_UPDATE_BUTTONS);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (pick != 1L) {
         return 0;
     }
-    sprintf(body, "Fetching " TG_APP_NAME " %.8s...", newer);
-    tg_gui_window_copy(state->status, sizeof(state->status), body);
+    tg_gui_window_format3(text, sizeof(text), TG_STR(MSG_UPDATE_FETCHING),
+                          MSG_UPDATE_FETCHING_STR, newer, "", "");
+    tg_gui_window_copy(state->status, sizeof(state->status), text);
     state->status_hint[0] = '\0';
     tg_gui_window_paint(state, backend);
     rc = tg_gui_session_update_install(newer, emsg, sizeof(emsg), stdout);
     if (rc != 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           emsg[0] != '\0' ? emsg : "The update failed");
+                           emsg[0] != '\0' ? emsg
+                                            : TG_STR(MSG_UPDATE_FAILED));
         return 0;
     }
-    sprintf(body,
-            TG_APP_NAME " %.8s is installed.\n\n"
-            "Quit now and start Amigram again to use it.\n"
-            "The old version is kept as Amigram.old.",
-            newer);
-    es.es_TextFormat = (APTR)body;
-    es.es_GadgetFormat = (APTR)"Quit|Later";
+    tg_gui_window_format3(text, sizeof(text), TG_STR(MSG_UPDATE_INSTALLED),
+                          MSG_UPDATE_INSTALLED_STR, newer, "", "");
+    es.es_TextFormat =
+        (APTR)tg_gui_window_req_text(body, sizeof(body), text);
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_UPDATE_INSTALLED_BUTTONS);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
-    sprintf(body, TG_APP_NAME " %.8s installed: start it again", newer);
-    tg_gui_window_copy(state->status, sizeof(state->status), body);
+    tg_gui_window_format3(text, sizeof(text),
+                          TG_STR(MSG_UPDATE_INSTALLED_STATUS),
+                          MSG_UPDATE_INSTALLED_STATUS_STR, newer, "", "");
+    tg_gui_window_copy(state->status, sizeof(state->status), text);
     return pick == 1L;
 }
 
@@ -14740,26 +14835,20 @@ static int tg_gui_window_log_out(struct Window *win, tg_gui_state *state,
 
     if (state->mode != TG_GUI_MODE_CHAT) {
         tg_gui_window_copy(state->status, sizeof(state->status),
-                           "Not logged in yet");
+                           TG_STR(MSG_LOGOUT_NOT_LOGGED_IN));
         return 0;
     }
     es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
     es.es_Flags = 0UL;
-    es.es_Title = (APTR)"Log out";
-    es.es_TextFormat =
-        (APTR)"Log out of Telegram on this computer?\n\n"
-              "Amigram ends this session at Telegram and removes what\n"
-              "it keeps of the account here: telegram-auth.bin, the chat\n"
-              "list, hidden chats, avatars and cached photos. Downloads\n"
-              "and settings stay.\n\n"
-              "Then it quits, and the next start shows the login.";
-    es.es_GadgetFormat = (APTR)"Log out|Cancel";
+    es.es_Title = (APTR)TG_STR(MSG_LOGOUT_TITLE);
+    es.es_TextFormat = (APTR)TG_STR(MSG_LOGOUT_BODY);
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_LOGOUT_BUTTONS);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (pick != 1L) {
         return 0;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Logging out...");
+                       TG_STR(MSG_LOGOUT_LOGGING_OUT));
     state->status_hint[0] = '\0';
     tg_gui_window_paint(state, backend);
     if (tg_gui_session_log_out(stdout) == 0) {
@@ -14767,21 +14856,15 @@ static int tg_gui_window_log_out(struct Window *win, tg_gui_state *state,
     }
     /* Telegram not reached, or a session that never opened (an offline
        start): the files can still go from this computer. */
-    es.es_TextFormat =
-        (APTR)"Telegram could not be reached, so the session could\n"
-              "not be ended there.\n\n"
-              "Remove what Amigram keeps of the account on this\n"
-              "computer anyway? The session stays in Telegram's list\n"
-              "of devices (Settings > Devices on your phone) until\n"
-              "you end it there.";
-    es.es_GadgetFormat = (APTR)"Remove here|Cancel";
+    es.es_TextFormat = (APTR)TG_STR(MSG_LOGOUT_OFFLINE_BODY);
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_LOGOUT_OFFLINE_BUTTONS);
     pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
     if (pick == 1L) {
         tg_gui_session_log_out_local();
         return 1;
     }
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       "Log out failed: Telegram not reached");
+                       TG_STR(MSG_LOGOUT_FAILED));
     return 0;
 }
 
@@ -16671,6 +16754,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
             lmtags[0].ti_Data = TRUE;
             lmtags[1].ti_Tag = TAG_DONE;
             lmtags[1].ti_Data = 0;
+            tg_gui_window_localize_menu();
             menu = CreateMenusA(tg_gui_newmenu, 0);
             if (menu != 0 && LayoutMenusA(menu, vi, lmtags)) {
                 /* The settings panel shows the own-screen mode too, and it

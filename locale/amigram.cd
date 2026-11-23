@@ -1,0 +1,118 @@
+; Amigram's texts: the catalog description (CatComp/FlexCat form).
+; Each text is "MSG_NAME (id//)" and its English form on the next line(s);
+; \n is a line break, a line ending in a backslash goes on. The ids never
+; change once a release has them: a new text takes a new id. A translation
+; is locale/<language>.ct; scripts/catalog.py turns it into
+; Catalogs/<language>/amigram.catalog and this file into include/tg_strings.h.
+; Keep every %s, %lu, %d of a text in its translation, in the same order.
+#language english
+#version 1
+;
+; --- menus (1-29) -----------------------------------------------------------
+MSG_MENU_ICONIFY (1//)
+Iconify
+MSG_MENU_SETTINGS (2//)
+Settings...
+MSG_MENU_ABOUT (3//)
+About...
+MSG_MENU_HELP (4//)
+Help...
+MSG_MENU_SUPPORT (5//)
+Support development...
+MSG_MENU_LOGOUT (6//)
+Log out...
+MSG_MENU_QUIT (7//)
+Quit
+MSG_MENU_EDIT (8//)
+Edit
+MSG_MENU_CUT (9//)
+Cut
+MSG_MENU_COPY (10//)
+Copy
+MSG_MENU_PASTE (11//)
+Paste
+MSG_MENU_FINDCHAT (12//)
+Find in chat...
+MSG_MENU_FINDALL (13//)
+Find in all chats...
+MSG_MENU_CHATS (14//)
+Chats
+MSG_MENU_REMOVE (15//)
+Remove chat from list
+MSG_MENU_RELOAD (16//)
+Reload chat list
+MSG_MENU_ARCHIVE (17//)
+Archived chats
+MSG_MENU_TOPIC_NEW (18//)
+New topic...
+MSG_MENU_SENDFILE (19//)
+Send file...
+MSG_MENU_SENDPHOTO (20//)
+Send photo...
+MSG_MENU_POLL (21//)
+Create poll...
+MSG_MENU_EMOJI (22//)
+Insert emoji...
+;
+; --- the QR login screen (30-39) ---------------------------------------------
+MSG_QR_STEP1 (30//)
+1. Open Telegram on your phone
+MSG_QR_STEP2 (31//)
+2. Settings > Devices > Link Desktop Device
+MSG_QR_STEP3 (32//)
+3. Point the phone at this code
+MSG_QR_KEYS (33//)
+P: log in with your phone number   ESC quits
+MSG_QR_SCAN (34//)
+Scan it with Telegram on your phone
+;
+; --- Log out (40-49) ---------------------------------------------------------
+MSG_LOGOUT_TITLE (40//)
+Log out
+MSG_LOGOUT_BODY (41//)
+Log out of Telegram on this computer?\n\n\
+Amigram ends this session at Telegram and removes what\n\
+it keeps of the account here: telegram-auth.bin, the chat\n\
+list, hidden chats, avatars and cached photos. Downloads\n\
+and settings stay.\n\n\
+Then it quits, and the next start shows the login.
+MSG_LOGOUT_BUTTONS (42//)
+Log out|Cancel
+MSG_LOGOUT_OFFLINE_BODY (43//)
+Telegram could not be reached, so the session could\n\
+not be ended there.\n\n\
+Remove what Amigram keeps of the account on this\n\
+computer anyway? The session stays in Telegram's list\n\
+of devices (Settings > Devices on your phone) until\n\
+you end it there.
+MSG_LOGOUT_OFFLINE_BUTTONS (44//)
+Remove here|Cancel
+MSG_LOGOUT_NOT_LOGGED_IN (45//)
+Not logged in yet
+MSG_LOGOUT_LOGGING_OUT (46//)
+Logging out...
+MSG_LOGOUT_FAILED (47//)
+Log out failed: Telegram not reached
+;
+; --- the update (50-59) ------------------------------------------------------
+MSG_UPDATE_TITLE (50//)
+Update
+MSG_UPDATE_OFFER (51//)
+Amigram %s is out: you have %s.\n\n\
+Update now? Amigram fetches it from the channel\n\
+@%s, checks that its author signed it and\n\
+keeps this version as Amigram.old.
+MSG_UPDATE_BUTTONS (52//)
+Update|Later
+MSG_UPDATE_FETCHING (53//)
+Fetching Amigram %s...
+MSG_UPDATE_INSTALLED (54//)
+Amigram %s is installed.\n\n\
+Quit now and start Amigram again to use it.\n\
+The old version is kept as Amigram.old.
+MSG_UPDATE_INSTALLED_BUTTONS (55//)
+Quit|Later
+MSG_UPDATE_INSTALLED_STATUS (56//)
+Amigram %s installed: start it again
+MSG_UPDATE_FAILED (57//)
+The update failed

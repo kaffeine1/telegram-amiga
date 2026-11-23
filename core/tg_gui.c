@@ -11,6 +11,7 @@
 
 #include "tg_gui.h"
 #include "tg_qr.h"
+#include "tg_locale.h"
 #include "tg_avatar.h"
 #include "tg_version.h"
 #include "tg_file.h"
@@ -7272,11 +7273,7 @@ static int tg_gui_qr_ready;
 static void tg_gui_paint_login_qr(const tg_gui_state *state,
                                   tg_gui_backend *backend)
 {
-    static const char *const steps[3] = {
-        "1. Open Telegram on your phone",
-        "2. Settings > Devices > Link Desktop Device",
-        "3. Point the phone at this code"
-    };
+    const char *steps[3];
     int width = backend->width(backend);
     int height = backend->height(backend);
     int lh = backend->line_height(backend);
@@ -7294,6 +7291,9 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
     int y;
     int i;
 
+    steps[0] = TG_STR(MSG_QR_STEP1);
+    steps[1] = TG_STR(MSG_QR_STEP2);
+    steps[2] = TG_STR(MSG_QR_STEP3);
     if (width <= 0 || height <= 0 || lh <= 0) {
         return;
     }
@@ -7382,7 +7382,7 @@ static void tg_gui_paint_login_qr(const tg_gui_state *state,
     }
     y += lh + 6;
     tg_gui_draw_centered(backend, TG_GUI_PEN_TEXT_DIM, width, y,
-                         "P: log in with your phone number   ESC quits");
+                         TG_STR(MSG_QR_KEYS));
 }
 
 static void tg_gui_paint_login(const tg_gui_state *state,
@@ -16955,10 +16955,10 @@ int tg_gui_self_test(void)
         tg_gui_state *draft = tg_gui_test_scratch_state();
         tg_gui_record rec;
         tg_gui_backend b = backend;
-        static const char step2[] =
-            "2. Settings > Devices > Link Desktop Device";
-        static const char qkeys[] =
-            "P: log in with your phone number   ESC quits";
+        /* the user's language: with a catalog (TG_CATALOG on the host)
+           this checks the translated screen */
+        const char *step2 = TG_STR(MSG_QR_STEP2);
+        const char *qkeys = TG_STR(MSG_QR_KEYS);
         int before;
 
         draft->mode = TG_GUI_MODE_LOGIN_QR;

@@ -1,0 +1,149 @@
+## version $VER: amigram.catalog 1.0 (23.11.2026)
+## language italiano
+## codeset 4
+; Amigram in italiano. Ogni testo tiene i %s, %lu, %d dell'inglese, nello
+; stesso ordine. Testo in Latin-1.
+;
+MSG_MENU_ICONIFY
+Iconifica
+; Iconify
+MSG_MENU_SETTINGS
+Impostazioni...
+; Settings...
+MSG_MENU_ABOUT
+Informazioni...
+; About...
+MSG_MENU_HELP
+Aiuto...
+; Help...
+MSG_MENU_SUPPORT
+Sostieni lo sviluppo...
+; Support development...
+MSG_MENU_LOGOUT
+Esci dall'account...
+; Log out...
+MSG_MENU_QUIT
+Esci
+; Quit
+MSG_MENU_EDIT
+Modifica
+; Edit
+MSG_MENU_CUT
+Taglia
+; Cut
+MSG_MENU_COPY
+Copia
+; Copy
+MSG_MENU_PASTE
+Incolla
+; Paste
+MSG_MENU_FINDCHAT
+Cerca nella chat...
+; Find in chat...
+MSG_MENU_FINDALL
+Cerca in tutte le chat...
+; Find in all chats...
+MSG_MENU_CHATS
+Chat
+; Chats
+MSG_MENU_REMOVE
+Togli la chat dall'elenco
+; Remove chat from list
+MSG_MENU_RELOAD
+Ricarica l'elenco chat
+; Reload chat list
+MSG_MENU_ARCHIVE
+Chat archiviate
+; Archived chats
+MSG_MENU_TOPIC_NEW
+Nuovo argomento...
+; New topic...
+MSG_MENU_SENDFILE
+Invia file...
+; Send file...
+MSG_MENU_SENDPHOTO
+Invia foto...
+; Send photo...
+MSG_MENU_POLL
+Crea sondaggio...
+; Create poll...
+MSG_MENU_EMOJI
+Inserisci emoji...
+; Insert emoji...
+;
+MSG_QR_STEP1
+1. Apri Telegram sul telefono
+; 1. Open Telegram on your phone
+MSG_QR_STEP2
+2. Impostazioni > Dispositivi > Collega dispositivo desktop
+; 2. Settings > Devices > Link Desktop Device
+MSG_QR_STEP3
+3. Inquadra questo codice col telefono
+; 3. Point the phone at this code
+MSG_QR_KEYS
+P: accedi col numero di telefono   ESC esce
+; P: log in with your phone number   ESC quits
+MSG_QR_SCAN
+Inquadralo con Telegram sul telefono
+; Scan it with Telegram on your phone
+;
+MSG_LOGOUT_TITLE
+Esci dall'account
+; Log out
+MSG_LOGOUT_BODY
+Uscire da Telegram su questo computer?\n\n\
+Amigram chiude questa sessione presso Telegram e toglie\n\
+quello che tiene qui dell'account: telegram-auth.bin,\n\
+l'elenco chat, le chat nascoste, gli avatar e le foto in\n\
+cache. Download e impostazioni restano.\n\n\
+Poi si chiude, e al prossimo avvio c'è il login.
+MSG_LOGOUT_BUTTONS
+Esci|Annulla
+; Log out|Cancel
+MSG_LOGOUT_OFFLINE_BODY
+Telegram non risponde, quindi la sessione non è stata\n\
+chiusa là.\n\n\
+Togliere comunque da questo computer quello che Amigram\n\
+tiene dell'account? La sessione resta nell'elenco dei\n\
+dispositivi di Telegram (Impostazioni > Dispositivi sul\n\
+telefono) finché non la chiudi da lì.
+MSG_LOGOUT_OFFLINE_BUTTONS
+Togli qui|Annulla
+; Remove here|Cancel
+MSG_LOGOUT_NOT_LOGGED_IN
+Non hai ancora fatto l'accesso
+; Not logged in yet
+MSG_LOGOUT_LOGGING_OUT
+Uscita dall'account...
+; Logging out...
+MSG_LOGOUT_FAILED
+Uscita non riuscita: Telegram non risponde
+; Log out failed: Telegram not reached
+;
+MSG_UPDATE_TITLE
+Aggiornamento
+; Update
+MSG_UPDATE_OFFER
+È uscito Amigram %s: tu hai la %s.\n\n\
+Aggiornare ora? Amigram lo prende dal canale\n\
+@%s, controlla che sia firmato dal suo\n\
+autore e tiene questa versione come Amigram.old.
+MSG_UPDATE_BUTTONS
+Aggiorna|Dopo
+; Update|Later
+MSG_UPDATE_FETCHING
+Scarico Amigram %s...
+; Fetching Amigram %s...
+MSG_UPDATE_INSTALLED
+Amigram %s è installato.\n\n\
+Esci ora e riavvia Amigram per usarlo.\n\
+La versione vecchia resta come Amigram.old.
+MSG_UPDATE_INSTALLED_BUTTONS
+Esci|Dopo
+; Quit|Later
+MSG_UPDATE_INSTALLED_STATUS
+Amigram %s installato: riavvialo
+; Amigram %s installed: start it again
+MSG_UPDATE_FAILED
+Aggiornamento non riuscito
+; The update failed

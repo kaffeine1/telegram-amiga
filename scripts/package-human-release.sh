@@ -1883,6 +1883,24 @@ package_one() {
         cp "$ROOT_DIR"/assets/sounds/*.8svx "$dest/sounds/"
     fi
 
+    # The translations (locale/<language>.ct, made into Catalogs/ by
+    # scripts/catalog.py): the system's locale.library finds
+    # Catalogs/<language>/amigram.catalog next to the program. Only the
+    # window's texts are translated so far, so the 68000 text client gets
+    # none.
+    if [ "$gui_icon" != "0" ]; then
+        if ! python3 "$ROOT_DIR/scripts/catalog.py" check >/dev/null; then
+            echo "ERROR: Catalogs/ out of date: python3 scripts/catalog.py all" >&2
+            exit 1
+        fi
+        for catalog in "$ROOT_DIR"/Catalogs/*/amigram.catalog; do
+            [ -f "$catalog" ] || continue
+            language=$(basename "$(dirname "$catalog")")
+            mkdir -p "$dest/Catalogs/$language"
+            cp "$catalog" "$dest/Catalogs/$language/amigram.catalog"
+        done
+    fi
+
     write_readme "$dest/README.txt" "$platform"
     write_manual_en "$dest/Manual-EN.txt" "$platform"
     write_manual_it "$dest/Manuale-IT.txt" "$platform"
