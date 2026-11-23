@@ -265,6 +265,18 @@ Features are therefore grouped by the work they share.
   ships. That last round found three small defects in the chat list
   (the unread count of a pinned chat, the badge of the chat opened at
   the start, a pin left on a search result), fixed before the cut.
+- **0.6, the login with a QR code.** RELEASED 2026-11-23. Telegram had
+  stopped delivering login codes to this client for some accounts (the
+  test account, on every system, and at least one user's on OS4), so the
+  login starts on a QR code, in the window and in the text client, with
+  the phone number second; Log out came with it, in both and offline,
+  and the rest of what had gathered since 0.5 (long texts in parts,
+  Play, albums of files, topics made and closed, many chat-list fixes).
+  Tried during the cycle on a stock A1200 (the QR code in the window and
+  in the text client, square on a 640x256 PAL screen, Log out in both
+  and offline), a Vampire, a PiStorm under AfA OS and a G5 under
+  MorphOS, in the AmigaOS 4 and AROS i386 VMs and on the Kickstart 3.1
+  bench in WinUAE.
 - **After the beta: skins and translations.** Colours, fonts and more
   still to be defined, and the client in other languages through the
   system's locale.library. Both touch every colour or every word on

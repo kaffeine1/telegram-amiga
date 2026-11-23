@@ -8,6 +8,8 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 
 ## [Unreleased]
 
+## [0.6] - 2026-11-23
+
 ### Added
 - Logging in with a QR code, the way Telegram Desktop does. The window
   starts on a code; Telegram on a phone that is signed in scans it
