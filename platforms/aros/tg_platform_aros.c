@@ -166,7 +166,7 @@ unsigned long tg_platform_local_epoch(void)
    arg 0 of WBStartup is the icon the user double-clicked. Returns 1 (TUI),
    0 (GUI: NO/FALSE/OFF), -1 (no tooltype / no icon -> caller uses the name
    heuristic). Opening icon.library here is cheap and one-shot at startup. */
-int tg_platform_wb_tui_mode(char **argv)
+int tg_platform_wb_tooltype(char **argv, const char *name)
 {
     struct WBStartup *wb = (struct WBStartup *)argv;
     struct Library *IconBase;
@@ -193,7 +193,7 @@ int tg_platform_wb_tui_mode(char **argv)
         dobj = GetDiskObject((STRPTR)a->wa_Name);
         if (dobj != 0) {
             STRPTR tt = FindToolType(dobj->do_ToolTypes,
-                                     (STRPTR)"TUI_MODE");
+                                     (STRPTR)name);
 
             if (tt != 0) {
                 result = (MatchToolValue(tt, (STRPTR)"NO") ||
@@ -210,12 +210,19 @@ int tg_platform_wb_tui_mode(char **argv)
     return result;
 }
 #else
-int tg_platform_wb_tui_mode(char **argv)
+int tg_platform_wb_tooltype(char **argv, const char *name)
 {
     (void)argv;
+    (void)name;
     return -1; /* host build: no Workbench icons */
 }
 #endif
+
+/* issue #9: the launch icon's TUI_MODE tooltype, read like any other. */
+int tg_platform_wb_tui_mode(char **argv)
+{
+    return tg_platform_wb_tooltype(argv, "TUI_MODE");
+}
 
 void tg_platform_workbench_init(void)
 {

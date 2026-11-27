@@ -288,7 +288,8 @@ static int tg_main_body(int argc, char **argv)
                 return tg_main_finish(rc);
             }
         } else {
-            static char *wb_argv[3];
+            static char *wb_argv[4];
+            int wb_argc = 3;
             FILE *redir;
             /* GUI: no console -- redirect BEFORE any output so the lazy console
                window is never opened. */
@@ -300,7 +301,12 @@ static int tg_main_body(int argc, char **argv)
             wb_argv[0] = TG_APP_NAME;
             wb_argv[1] = "--gui-live";
             wb_argv[2] = "data/telegram-peers.txt";
-            return tg_main_finish(tg_app_run(3, wb_argv));
+            /* ICONIFY on the launch icon: the window gives way to the
+               AppIcon as soon as it has connected. */
+            if (tg_platform_wb_tooltype(argv, "ICONIFY") == 1) {
+                wb_argv[wb_argc++] = "--iconify";
+            }
+            return tg_main_finish(tg_app_run(wb_argc, wb_argv));
         }
     }
     return tg_main_finish(tg_app_run(argc, argv));

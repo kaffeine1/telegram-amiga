@@ -8027,6 +8027,11 @@ void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh)
     state->ctx_visible = 1;
 }
 
+int tg_gui_may_start_iconified(int mode, int session_open)
+{
+    return mode == TG_GUI_MODE_CHAT && session_open != 0;
+}
+
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids)
 {
@@ -11244,6 +11249,15 @@ static int tg_gui_notify_menu_self_test(void)
         return 2;
     }
     state->chats[0].unread_mark = 0;
+    /* Starting on the AppIcon is for a connected chat list: a login keeps
+       its window, and so does a connection that failed. */
+    if (!tg_gui_may_start_iconified(TG_GUI_MODE_CHAT, 1) ||
+        tg_gui_may_start_iconified(TG_GUI_MODE_CHAT, 0) ||
+        tg_gui_may_start_iconified(TG_GUI_MODE_LOGIN_QR, 1) ||
+        tg_gui_may_start_iconified(TG_GUI_MODE_LOGIN_QR, 0)) {
+        puts("gui self-test: when a window may start iconified wrong");
+        return 2;
+    }
     /* A person can be blocked: the line before the chat's deletion, which
        reads Unblock once they are known blocked. Never a group, never
        Saved Messages. */

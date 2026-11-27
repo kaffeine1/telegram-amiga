@@ -192,6 +192,10 @@ int tg_platform_open_url(const char *url);
    filename heuristic, keeping the default byte-identical icons working.
    `argv` is main()'s argv, i.e. the WBStartup pointer on a Workbench launch. */
 int tg_platform_wb_tui_mode(char **argv);
+/* The same reading for any tooltype of that icon: 1 when `name` is there
+   and not NO/FALSE/OFF, 0 when it is there and says no, -1 when it is not
+   there (or there is no icon, as from a Shell and on the host). */
+int tg_platform_wb_tooltype(char **argv, const char *name);
 
 /* Drag-and-drop for the Workbench TUI console: a file icon dropped on the
    window delivers its path so the user can just drop it after "/sendfile ".

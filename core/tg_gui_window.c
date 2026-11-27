@@ -7417,6 +7417,14 @@ void tg_gui_window_set_startup(int (*task)(tg_gui_state *state))
     tg_gui_startup_task = task;
 }
 
+/* ICONIFY: the first window, once connected, gives way to the AppIcon. */
+static int tg_gui_start_iconified = 0;
+
+void tg_gui_window_start_iconified(int on)
+{
+    tg_gui_start_iconified = on != 0;
+}
+
 void tg_gui_window_startup_status(const char *text)
 {
     if (tg_gui_startup_state == 0 || tg_gui_startup_backend == 0 ||
@@ -17197,6 +17205,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
     last_avatar_ms = 0UL;
     last_avatar_none = 0;
     done = 0;
+    if (tg_gui_start_iconified) {
+        /* Asked once, of the first window: the one that comes back from
+           the AppIcon stays. */
+        tg_gui_start_iconified = 0;
+        if (tg_gui_may_start_iconified(state->mode,
+                                       tg_gui_session_is_open())) {
+            tg_gui_log("window: starting iconified");
+            done = 2;
+        }
+    }
     caret_ticks = 0;
     xfer_mark = (time_t)0;
     xfer_bytes = 0UL;
@@ -22232,6 +22250,11 @@ void tg_gui_window_clear_drawer(const char *drawer)
 void tg_gui_window_set_startup(int (*task)(tg_gui_state *state))
 {
     (void)task; /* no window to run it in */
+}
+
+void tg_gui_window_start_iconified(int on)
+{
+    (void)on; /* no window, no AppIcon */
 }
 
 void tg_gui_window_startup_status(const char *text)

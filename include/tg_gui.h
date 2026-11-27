@@ -1635,6 +1635,14 @@ int tg_gui_run_window(tg_gui_state *state);
    chats, "Connecting to Telegram...") is on screen while a link is slow; an
    iconified window that reopens does not run it again. */
 void tg_gui_window_set_startup(int (*task)(tg_gui_state *state));
+/* ICONIFY (the launch icon's tooltype, --iconify from a Shell): the first
+   window gives way to the AppIcon as soon as its startup task has
+   connected. Once, and only with a chat list to go back to: a login, or a
+   connection that failed, keeps the window. */
+void tg_gui_window_start_iconified(int on);
+/* Whether a window in this mode, with the session open or not, may do
+   so. */
+int tg_gui_may_start_iconified(int mode, int session_open);
 /* For that task: show `text` in the status bar at once. */
 void tg_gui_window_startup_status(const char *text);
 

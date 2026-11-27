@@ -4654,6 +4654,9 @@ int tg_app_run(int argc, char **argv)
             tg_app_gui_auth_file = config.mtproto_auth_file;
             tg_app_gui_chats_file = config.gui_chats_cache_file;
             tg_gui_window_set_startup(tg_app_gui_connect);
+            if (config.gui_iconify) {
+                tg_gui_window_start_iconified(1);
+            }
         }
         tg_gui_log("live: run_window start");
         rc = tg_gui_run_window(gui);

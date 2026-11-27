@@ -156,7 +156,7 @@ unsigned long tg_platform_local_epoch(void)
    local-IIcon alias trick as ensure_drawer_icon so the __USE_INLINE__ icon
    macros resolve to our opened interface; SetCurrentDir goes through the
    auto-provided IDOS. Returns 1 (TUI), 0 (GUI), -1 (no tooltype -> heuristic). */
-int tg_platform_wb_tui_mode(char **argv)
+int tg_platform_wb_tooltype(char **argv, const char *name)
 {
 #if defined(__amigaos4__)
     struct WBStartup *wb = (struct WBStartup *)argv;
@@ -193,7 +193,7 @@ int tg_platform_wb_tui_mode(char **argv)
             dobj = GetDiskObject((STRPTR)a->wa_Name);
             if (dobj != 0) {
                 STRPTR tt = FindToolType(dobj->do_ToolTypes,
-                                         (CONST_STRPTR)"TUI_MODE");
+                                         (CONST_STRPTR)name);
 
                 if (tt != 0) {
                     result = (MatchToolValue(tt, (CONST_STRPTR)"NO") ||
@@ -212,8 +212,15 @@ int tg_platform_wb_tui_mode(char **argv)
     return result;
 #else
     (void)argv;
+    (void)name;
     return -1;
 #endif
+}
+
+/* issue #9: the launch icon's TUI_MODE tooltype, read like any other. */
+int tg_platform_wb_tui_mode(char **argv)
+{
+    return tg_platform_wb_tooltype(argv, "TUI_MODE");
 }
 
 void tg_platform_workbench_init(void)

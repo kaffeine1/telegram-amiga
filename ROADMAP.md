@@ -1424,6 +1424,51 @@ a username is mentioned by first name with an
 of a basic group (`messages.getFullChat`), so in one of those only who
 wrote lately is offered.
 
+## Done after 0.6: ten small things other clients show
+
+Asked by Michele on 2026-11-27, after a look at what other Telegram
+clients show and Amigram did not: everything feasible, done Amigram's
+way (no dependency, nothing heavy on a 68k, the text client where it
+makes sense, every constructor checked on the layer 214 schema, a
+self-test for each thing). The small ones first, one commit each:
+
+- A chat read on another device loses its unread count here
+  (updateReadHistoryInbox, updateReadChannelInbox).
+- The chat list shows each chat's last message: a table with one entry
+  a chat, kept in data/telegram-last.txt, fed by the pushes, by the
+  pages of the list and by the open chat. What Telegram states as a
+  chat's newest message stands against a newer one still held here,
+  which was deleted elsewhere without the update coming. A setting
+  turns the lines off.
+- "Forwarded from ...", "edited", and the views of a channel's post.
+- "online" and "last seen" under the name of a person
+  (updateUserStatus). The reader of a user's status knew only the
+  constructors from before layer 169, and did not step over
+  bot_info_version: both fixed on the way.
+- "is typing..." told to the others (messages.setTyping; a setting,
+  off on 68k until turned on), and a message sent without a sound
+  (Alt+ENTER, /silent in the text client).
+- Who read a message of one's own in a group
+  (messages.getMessageReadParticipants).
+- Block and unblock a person (contacts.block, contacts.unblock;
+  users.getFullUser is asked only when Block is chosen, and
+  updatePeerBlocked tells of a block made elsewhere). /block and
+  /unblock in the text client.
+- The ICONIFY tooltype (and --iconify from a Shell): the window opens,
+  connects and gives way to the AppIcon.
+
+Tried live with the test account, two sessions of it for what one
+device tells another, and seen in a window on the OS4 VM in Italian.
+The 68000 text client grew by about 5 KB with its share of them.
+
+Next, in this order: bot buttons and Start, jump to a date, comments on
+channel posts (the topics view serves), active sessions, translation,
+t.me links opened inside Amigram, scheduled messages, contacts,
+password recovery by email, a richer ARexx port. The large ones (chat
+folders, profile editing, group administration, quoting part of a
+message, sending stickers, GIFs and a location, voice in the window,
+creating an account) are weighed one by one after that.
+
 ## Done after 0.6: the update from inside Amigram
 
 Asked by Michele on 2026-11-23, right after 0.6: the notice said a new

@@ -115,6 +115,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the menu then reads "Unblock"; a block or an unblock made elsewhere
   while Amigram runs is heard of too. The text client has `/block` and
   `/unblock` for the open chat.
+- Start iconified: with the tooltype `ICONIFY` on the icon Amigram is
+  started from (or `--iconify` after `--gui-live` in a Shell), the
+  window gives way to the AppIcon on Workbench as soon as it has
+  connected, and the notifications work from there. A login, or a
+  connection that fails, keeps the window.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message

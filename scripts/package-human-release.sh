@@ -644,7 +644,14 @@ Using the window
 Chats
 - The chat list is on the left, the open chat on the right. F1 to F10
   open chats 1 to 10, Shift+F1 to F10 chats 11 to 20.
-- Each chat shows its unread count until you open it.
+- Each chat shows its unread count until you open it, here or on
+  another device.
+- Under a chat's name is its last message, with the name of who wrote
+  it in a group and "You:" before your own. "Settings > Previews in
+  the chat list" takes those lines away.
+- Under the name of a person, the header of the open chat says when
+  they were last here ("online", "last seen at 14:05", "last seen
+  recently"), as far as their privacy settings let Telegram tell.
 - The search box at the top left finds a chat on Telegram when you press
   Enter, and adds it to the list.
 - Del, Right-Amiga+R or "Remove chat from list" removes a chat. Search
@@ -654,7 +661,8 @@ Chats
 - The right mouse button on a chat in the list opens its menu: Pin,
   Archive, Mark as read or unread, Remove chat, Mute... or Unmute,
   Enable ring (groups and channels), Sound..., Show hidden messages,
-  and Leave... or Delete chat... Saved Messages can be pinned too.
+  Block... (a chat with one person), and Leave... or Delete chat...
+  Saved Messages can be pinned too.
 - An archived chat leaves the list for the Archive, which Chats >
   Archived chats (Amiga+A) shows, and so does a click on the line
   "Archived chats" at the top of the list. That line says how many
@@ -674,6 +682,10 @@ Chats
   Telegram, after a question. For a chat with one person the question
   is whether its messages go for both of you or for you only. Neither
   can be undone.
+- Block... stops a person from writing to you, on all your devices,
+  after a question. Telegram is asked first whether they are blocked
+  already, and from then on the menu reads Unblock. The text client
+  has /block and /unblock for the open chat.
 - A chat muted on Telegram shows it in the list: its unread count is
   grey instead of blue, and with nothing unread a small crossed
   loudspeaker sits at the right of its row. The marks fill in during
@@ -696,6 +708,16 @@ Messages
   on your own messages Edit and Delete (for everyone).
 - In a chat with one person Delete is on every message, theirs too, and
   asks how: for you and for them, or for you only.
+- A forwarded message says where it comes from, "Forwarded from ...",
+  in a line above it. An edited one has "edited" beside its time. A
+  channel's post shows how many have seen it, beside a small eye.
+- Alt+Enter, or Shift held while you click Send, sends the message
+  without a sound for the others. The text client has /silent text.
+- "Settings > Show others when I type" tells the people of the chat
+  that you are writing, as the other clients do. On a 68k machine it
+  is off until you turn it on.
+- On your own message in a group the menu has "Who read...": who read
+  it and when. Telegram tells it in small groups, for a week.
 - A chat with pinned messages shows the latest under its header,
   "Pinned:" and how it starts; a click shows the chat around it, and
   the next click the one pinned before. Pin and Unpin are in a
@@ -934,7 +956,9 @@ Window and screen
 - "Settings > Use own screen" opens the client on a screen of its own;
   if that screen cannot open, it falls back to a window.
 - "Iconify" (Amiga+I) leaves an icon on the Workbench; double-click it
-  to come back.
+  to come back. With the tooltype ICONIFY on the icon you start
+  Amigram from (Icons > Information... on Workbench), it starts that
+  way: the window opens, connects and gives way to the icon.
 - "Log out..." ends the session at Telegram and removes what Amigram
   keeps of the account on this computer (telegram-auth.bin, chat list,
   hidden chats, avatars, cached photos; downloads and settings stay),
@@ -974,7 +998,15 @@ Usare la finestra
 Chat
 - A sinistra la lista chat, a destra la chat aperta. I tasti da F1 a F10
   aprono le chat da 1 a 10, Shift+F1..F10 quelle da 11 a 20.
-- Ogni chat mostra i messaggi non letti finche' non la apri.
+- Ogni chat mostra i messaggi non letti finche' non la apri, qui o su
+  un altro dispositivo.
+- Sotto il nome di una chat c'e' il suo ultimo messaggio, con il nome
+  di chi l'ha scritto in un gruppo e "You:" davanti ai tuoi.
+  "Settings > Previews in the chat list" toglie quelle righe.
+- Sotto il nome di una persona, l'intestazione della chat aperta dice
+  quando e' stata qui l'ultima volta ("online", "last seen at 14:05",
+  "last seen recently"), per quanto le sue impostazioni di privacy
+  lasciano dire a Telegram.
 - La casella di ricerca in alto a sinistra trova una chat su Telegram
   quando premi Invio, e la aggiunge alla lista.
 - Del, Amiga-destro+R o "Remove chat from list" toglie una chat. La
@@ -984,9 +1016,9 @@ Chat
   dei pin, anche su Telegram.
 - Il tasto destro su una chat della lista apre il suo menu: Pin,
   Archive, Mark as read o unread, Remove chat, Mute... o Unmute, Enable
-  ring (gruppi e canali), Sound..., Show hidden messages, e Leave... o
-  Delete chat... Anche i Messaggi salvati (Saved Messages) si possono
-  fissare.
+  ring (gruppi e canali), Sound..., Show hidden messages, Block... (una
+  chat con una persona), e Leave... o Delete chat... Anche i Messaggi
+  salvati (Saved Messages) si possono fissare.
 - Una chat archiviata lascia la lista per l'Archivio, che si apre da
   Chats > Archived chats (Amiga+A) o con un clic sulla riga "Archived
   chats" in cima alla lista. Quella riga dice quante chat archiviate
@@ -1007,6 +1039,10 @@ Chat
   Telegram, dopo una domanda. Per una chat con una persona la domanda
   e' se i messaggi spariscono per tutti e due o solo per te. Nessuna
   delle due si puo' annullare.
+- Block... impedisce a una persona di scriverti, su tutti i tuoi
+  dispositivi, dopo una domanda. Prima viene chiesto a Telegram se e'
+  gia' bloccata, e da allora il menu dice Unblock. Il client testuale
+  ha /block e /unblock per la chat aperta.
 - Una chat silenziata su Telegram lo mostra nell'elenco: il numero dei
   non letti e' grigio invece che azzurro, e se non c'e' niente da
   leggere un piccolo altoparlante barrato sta a destra della sua riga.
@@ -1030,6 +1066,18 @@ Messaggi
   sui tuoi messaggi Edit e Delete (per tutti).
 - In una chat con una persona Delete c'e' su ogni messaggio, anche sui
   suoi, e chiede come: per te e per l'altra persona, o solo per te.
+- Un messaggio inoltrato dice da dove viene, "Forwarded from ...", in
+  una riga sopra. Uno modificato ha "edited" accanto all'ora. Un post
+  di un canale mostra quanti l'hanno visto, accanto a un piccolo
+  occhio.
+- Alt+Invio, o Shift tenuto mentre clicchi Send, manda il messaggio
+  senza suono per gli altri. Il client testuale ha /silent testo.
+- "Settings > Show others when I type" dice alle persone della chat
+  che stai scrivendo, come fanno gli altri client. Su una macchina
+  68k e' spento finche' non lo accendi.
+- Su un tuo messaggio in un gruppo il menu ha "Who read...": chi l'ha
+  letto e quando. Telegram lo dice nei gruppi piccoli, per una
+  settimana.
 - Una chat con messaggi fissati mostra l'ultimo sotto l'intestazione,
   "Pinned:" e come comincia; un click mostra la chat attorno a quel
   messaggio, e il click dopo quello fissato prima. Pin e Unpin sono nel
@@ -1283,7 +1331,9 @@ Finestra e schermo
 - "Settings > Use own screen" apre il client su uno schermo suo; se lo
   schermo non si apre, torna alla finestra.
 - "Iconify" (Amiga+I) lascia un'icona sul Workbench; doppio click per
-  tornare.
+  tornare. Con il tooltype ICONIFY nell'icona da cui avvii Amigram
+  (Icone > Informazioni... sul Workbench) parte gia' cosi': la
+  finestra si apre, si collega e lascia il posto all'icona.
 - "Log out..." chiude la sessione presso Telegram e toglie quello che
   Amigram tiene dell'account su questo computer (telegram-auth.bin,
   elenco chat, chat nascoste, avatar, foto in cache; download e
@@ -1357,6 +1407,11 @@ when Telegram cannot be reached.
 /update says whether a newer version is out on Telegram; /update yes
 installs it (signed by its author; this version is kept as Amigram.old),
 and the next start uses it.
+/silent text sends the text without a sound for the others. /block
+stops the person of the open chat from writing to you, on all your
+devices, and /unblock lets them back in.
+A forwarded message starts with [Forwarded from ...], and an edited one
+ends with (edited).
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
@@ -1461,6 +1516,11 @@ si raggiunge.
 /update dice se su Telegram c'e' una versione nuova; /update yes la
 installa (firmata dal suo autore; questa versione resta come
 Amigram.old), e il prossimo avvio la usa.
+/silent testo manda il testo senza suono per gli altri. /block
+impedisce alla persona della chat aperta di scriverti, su tutti i tuoi
+dispositivi, e /unblock la fa rientrare.
+Un messaggio inoltrato comincia con [Forwarded from ...], e uno
+modificato finisce con (edited).
 Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga
