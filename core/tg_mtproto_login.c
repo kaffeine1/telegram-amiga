@@ -6179,27 +6179,73 @@ static tg_mtproto_tl_status tg_read_user_profile_photo(
     return tg_mtproto_tl_read_u32(reader, &out->photo_dc_id);
 }
 
-static tg_mtproto_tl_status tg_skip_user_status(tg_mtproto_tl_reader *reader)
+/* UserStatus. Layer 214: userStatusEmpty#9d05049,
+   userStatusOnline#edb93949 expires:int,
+   userStatusOffline#8c703f was_online:int, and with a flags word each
+   userStatusRecently#7b197dc8, userStatusLastWeek#541a1d1a,
+   userStatusLastMonth#65899777. The three last had no flags in the
+   layers before (e26f42f1, 07bf09fc, 77ebc742): those were the only
+   forms this reader knew, so a user seen "recently" stopped the reading
+   of a user at this field. Both forms are read. */
+static tg_mtproto_tl_status tg_read_user_status(tg_mtproto_tl_reader *reader,
+                                                int *kind,
+                                                unsigned long *when)
 {
     unsigned long constructor;
     unsigned long scratch;
 
+    *kind = TG_MTPROTO_USER_STATUS_UNKNOWN;
+    *when = 0UL;
     if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     switch (constructor) {
     case 0x09d05049UL:
-    case 0xe26f42f1UL:
-    case 0x07bf09fcUL:
-    case 0x77ebc742UL:
+        *kind = TG_MTPROTO_USER_STATUS_LONG_AGO;
         return TG_MTPROTO_TL_OK;
-    case 0xedb93949UL:
-    case 0x008c703fUL:
+    case 0xe26f42f1UL:
+        *kind = TG_MTPROTO_USER_STATUS_RECENTLY;
+        return TG_MTPROTO_TL_OK;
+    case 0x07bf09fcUL:
+        *kind = TG_MTPROTO_USER_STATUS_LAST_WEEK;
+        return TG_MTPROTO_TL_OK;
+    case 0x77ebc742UL:
+        *kind = TG_MTPROTO_USER_STATUS_LAST_MONTH;
+        return TG_MTPROTO_TL_OK;
+    case 0x7b197dc8UL:
+        *kind = TG_MTPROTO_USER_STATUS_RECENTLY;
         return tg_mtproto_tl_read_u32(reader, &scratch);
+    case 0x541a1d1aUL:
+        *kind = TG_MTPROTO_USER_STATUS_LAST_WEEK;
+        return tg_mtproto_tl_read_u32(reader, &scratch);
+    case 0x65899777UL:
+        *kind = TG_MTPROTO_USER_STATUS_LAST_MONTH;
+        return tg_mtproto_tl_read_u32(reader, &scratch);
+    case 0xedb93949UL:
+        *kind = TG_MTPROTO_USER_STATUS_ONLINE;
+        return tg_mtproto_tl_read_u32(reader, when);
+    case 0x008c703fUL:
+        *kind = TG_MTPROTO_USER_STATUS_OFFLINE;
+        return tg_mtproto_tl_read_u32(reader, when);
     default:
         return TG_MTPROTO_TL_INVALID_DATA;
     }
 }
+
+#if !defined(TG_NO_GUI) /* the window's header alone shows it */
+int tg_mtproto_read_update_user_status(tg_mtproto_tl_reader *reader,
+                                       unsigned long *id_hi,
+                                       unsigned long *id_lo, int *kind,
+                                       unsigned long *when)
+{
+    if (reader == 0 || id_hi == 0 || id_lo == 0 || kind == 0 || when == 0) {
+        return 0;
+    }
+    return tg_mtproto_tl_read_u64(reader, id_hi, id_lo) == TG_MTPROTO_TL_OK &&
+           (*id_hi != 0UL || *id_lo != 0UL) && *id_hi <= 0x000fffffUL &&
+           tg_read_user_status(reader, kind, when) == TG_MTPROTO_TL_OK;
+}
+#endif
 
 static tg_mtproto_tl_status tg_skip_restriction_reason_vector(
     tg_mtproto_tl_reader *reader)
@@ -6277,8 +6323,17 @@ static tg_mtproto_tl_status tg_read_user_summary_from_reader(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((out->flags & 64UL) != 0UL &&
-        tg_skip_user_status(reader) != TG_MTPROTO_TL_OK) {
+        tg_read_user_status(reader, &out->status_kind, &out->status_time) !=
+            TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if ((out->flags & (1UL << 14)) != 0UL) {
+        unsigned long bot_info_version; /* bot_info_version:flags.14?int */
+
+        if (tg_mtproto_tl_read_u32(reader, &bot_info_version) !=
+            TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
     }
     if ((out->flags & (1UL << 18)) != 0UL &&
         tg_skip_restriction_reason_vector(reader) != TG_MTPROTO_TL_OK) {
@@ -6535,6 +6590,86 @@ int tg_mtproto_find_user_name(const unsigned char *body,
     }
     return 0;
 }
+
+#if !defined(TG_NO_GUI) /* the window's header alone shows it */
+int tg_mtproto_find_user_status(const unsigned char *body,
+                                unsigned long body_length,
+                                unsigned long id_hi, unsigned long id_lo,
+                                int *kind, unsigned long *when, int *is_bot)
+{
+    static tg_mtproto_user_summary user;
+    tg_mtproto_tl_reader reader;
+    unsigned long offset;
+    unsigned long users_start = 0UL;
+    unsigned long users_left = 0UL;
+    unsigned long constructor;
+    unsigned long count;
+
+    if (kind == 0 || when == 0) {
+        return 0;
+    }
+    *kind = TG_MTPROTO_USER_STATUS_UNKNOWN;
+    *when = 0UL;
+    if (is_bot != 0) {
+        *is_bot = 0;
+    }
+    if (body == 0 || body_length < 20UL || (id_hi == 0UL && id_lo == 0UL)) {
+        return 0;
+    }
+    /* The users vector is found as tg_mtproto_find_user_name finds it: the
+       last vector that opens with a User. */
+    for (offset = 0UL; offset <= body_length - 12UL; offset += 4UL) {
+        if (tg_read_u32_le(body + offset) != TG_VECTOR_CONSTRUCTOR) {
+            continue;
+        }
+        count = tg_read_u32_le(body + offset + 4UL);
+        constructor = tg_read_u32_le(body + offset + 8UL);
+        if (count > 0UL && count <= (body_length - offset - 8UL) / 12UL &&
+            (constructor == TG_USER_CONSTRUCTOR ||
+             constructor == TG_USER_EMPTY_CONSTRUCTOR)) {
+            users_start = offset + 8UL;
+            users_left = count;
+        }
+    }
+    for (offset = users_start; users_left > 0UL &&
+         offset <= body_length - 12UL; offset += 4UL) {
+        constructor = tg_read_u32_le(body + offset);
+        if (constructor == TG_USER_EMPTY_CONSTRUCTOR) {
+            --users_left;
+            offset += 8UL;
+            continue;
+        }
+        if (constructor != TG_USER_CONSTRUCTOR) {
+            continue;
+        }
+        if (body_length - offset < 20UL) {
+            break;
+        }
+        --users_left;
+        if (tg_read_u32_le(body + offset + 12UL) != id_lo ||
+            tg_read_u32_le(body + offset + 16UL) != id_hi) {
+            offset += 16UL;
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&reader, body + offset,
+                                  body_length - offset);
+        /* The status stands before the fields this reader may not get
+           through: what it read up to there is good either way. */
+        (void)tg_read_user_summary_from_reader(&reader, &user);
+        if (user.id_hi != id_hi || user.id_lo != id_lo) {
+            continue;
+        }
+        if (is_bot != 0) {
+            *is_bot = user.is_bot;
+        }
+        *kind = user.status_kind;
+        *when = user.status_time;
+        return user.status_kind != TG_MTPROTO_USER_STATUS_UNKNOWN ||
+               user.is_bot;
+    }
+    return 0;
+}
+#endif /* !TG_NO_GUI */
 
 static int tg_peer_cache_apply_chat(tg_mtproto_peer_cache *cache,
                                     unsigned long peer_constructor,
@@ -8358,6 +8493,7 @@ static tg_mtproto_tl_status tg_read_message_fwd_header(
     return tg_skip_message_fwd_header(reader);
 }
 
+#if !defined(TG_NO_GUI) /* the window alone shows the count */
 /* views:flags.10?int, which stands after the media behind
    reply_markup:flags.6?ReplyMarkup and entities:flags.7?Vector<MessageEntity>.
    `reader` stands right after a media that was read to its last byte; the
@@ -8387,6 +8523,7 @@ static void tg_read_views_after_media(const tg_mtproto_tl_reader *reader,
         out->has_views = 1U;
     }
 }
+#endif
 
 /* Reaction constructors already used by the old skip walker. The optional
    lists follow core.telegram.org/constructor/messagePeerReaction and
@@ -10991,7 +11128,9 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         if (media_whole) {
             tg_read_album_id(reader, flags, &out->grouped_id_hi,
                              &out->grouped_id_lo);
+#if !defined(TG_NO_GUI)
             tg_read_views_after_media(reader, flags, out);
+#endif
         }
         return TG_MTPROTO_TL_OK;
     }
@@ -19392,6 +19531,116 @@ int tg_mtproto_login_self_test(void)
         text_list.messages[3].reply_to_msg_id != 1002UL ||
         strcmp(text_list.messages[3].reply_quote, "reply quote") != 0) {
         return 2;
+    }
+#if !defined(TG_NO_GUI)
+    /* When a user was last here: found among a page's users by id, with
+       the status the layer sends for someone seen recently (a flags word
+       after the constructor), which the reader used to stop at. */
+    {
+        unsigned long when = 1UL;
+        int kind = -1;
+        int bot = -1;
+
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+            /* a person seen recently */
+            tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2UL | 64UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x501UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "Anna") != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0x7b197dc8UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            /* a person last seen at a time */
+            tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2UL | 64UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x502UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "Marco") != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0x008c703fUL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1700000123UL) !=
+                TG_MTPROTO_TL_OK ||
+            /* a bot: no status at all */
+            tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 2UL | (1UL << 14)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x503UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "Helper") != TG_MTPROTO_TL_OK ||
+            tg_mtproto_find_user_status(peer_rpc, writer.length, 0UL, 0x501UL,
+                                        &kind, &when, &bot) != 1 ||
+            kind != TG_MTPROTO_USER_STATUS_RECENTLY || when != 0UL ||
+            bot != 0 ||
+            tg_mtproto_find_user_status(peer_rpc, writer.length, 0UL, 0x502UL,
+                                        &kind, &when, &bot) != 1 ||
+            kind != TG_MTPROTO_USER_STATUS_OFFLINE ||
+            when != 1700000123UL || bot != 0 ||
+            tg_mtproto_find_user_status(peer_rpc, writer.length, 0UL, 0x503UL,
+                                        &kind, &when, &bot) != 1 ||
+            kind != TG_MTPROTO_USER_STATUS_UNKNOWN || bot != 1 ||
+            tg_mtproto_find_user_status(peer_rpc, writer.length, 0UL, 0x504UL,
+                                        &kind, &when, &bot) != 0 ||
+            tg_mtproto_find_user_status(peer_rpc, writer.length, 0UL, 0UL,
+                                        &kind, &when, &bot) != 0) {
+            return 2;
+        }
+    }
+#endif
+    /* A user read field by field, to its end: the flags word of "seen
+       recently" and a bot's bot_info_version are stepped over, so the
+       language code after them is read from its own place and nothing is
+       left over. */
+    {
+        tg_mtproto_tl_reader user_reader;
+        int form;
+
+        for (form = 0; form < 2; ++form) {
+            tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+            if (tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(
+                    &writer, 2UL | (1UL << 22) |
+                                 (form ? (1UL << 14) : 64UL)) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL, 0x601UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Anna") != TG_MTPROTO_TL_OK ||
+                /* seen recently, with its flags; or the bot's version */
+                (form == 0 &&
+                 (tg_mtproto_tl_write_u32(&writer, 0x7b197dc8UL) !=
+                      TG_MTPROTO_TL_OK ||
+                  tg_mtproto_tl_write_u32(&writer, 0UL) !=
+                      TG_MTPROTO_TL_OK)) ||
+                (form == 1 && /* 3: read as a string, it would end early */
+                 tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK) ||
+                tg_write_string(&writer, "it") != TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            tg_mtproto_tl_reader_init(&user_reader, peer_rpc, writer.length);
+            if (tg_read_user_summary_from_reader(&user_reader, &user) !=
+                    TG_MTPROTO_TL_OK ||
+                user_reader.offset != writer.length ||
+                user.id_lo != 0x601UL ||
+                strcmp(user.first_name, "Anna") != 0 ||
+                user.is_bot != form ||
+                user.status_kind != (form ? TG_MTPROTO_USER_STATUS_UNKNOWN
+                                          : TG_MTPROTO_USER_STATUS_RECENTLY)) {
+                return 2;
+            }
+        }
     }
     /* What a message says of itself besides its text. The first one above
        was forwarded in by a header that names nobody. */

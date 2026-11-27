@@ -418,6 +418,13 @@ int tg_mtproto_avatar_thumb_lookup(unsigned long id_hi, unsigned long id_lo,
                                    const unsigned char **thumb,
                                    unsigned long *len);
 
+#define TG_MTPROTO_USER_STATUS_UNKNOWN 0 /* the user came without one */
+#define TG_MTPROTO_USER_STATUS_ONLINE 1     /* until status_time */
+#define TG_MTPROTO_USER_STATUS_OFFLINE 2    /* last seen at status_time */
+#define TG_MTPROTO_USER_STATUS_RECENTLY 3   /* the exact time is kept private */
+#define TG_MTPROTO_USER_STATUS_LAST_WEEK 4
+#define TG_MTPROTO_USER_STATUS_LAST_MONTH 5
+#define TG_MTPROTO_USER_STATUS_LONG_AGO 6
 typedef struct tg_mtproto_user_summary {
     unsigned long constructor;
     unsigned long flags;
@@ -439,6 +446,11 @@ typedef struct tg_mtproto_user_summary {
     unsigned long photo_dc_id;
     unsigned long stripped_len;
     unsigned char stripped[TG_MTPROTO_STRIPPED_MAX];
+    /* When the user was last here (status:flags.6?UserStatus): one of
+       TG_MTPROTO_USER_STATUS_*, and for online and offline the time
+       Telegram gives (until when, or since when), on its clock. */
+    int status_kind;
+    unsigned long status_time;
 } tg_mtproto_user_summary;
 
 typedef struct tg_mtproto_dialogs_summary {
@@ -1994,6 +2006,21 @@ int tg_mtproto_next_message_text(const unsigned char *body,
                                  unsigned long *pos,
                                  tg_mtproto_message_text *out,
                                  tg_mtproto_dialog_peer *dest);
+/* When the user `id` of a reply body was last here: 1 = found among the
+   body's users, with a status or as a bot (*is_bot, when asked); *kind is
+   a TG_MTPROTO_USER_STATUS_* and *when its time (online, offline). 0 =
+   not there, or a person who came without a status. */
+int tg_mtproto_find_user_status(const unsigned char *body,
+                                unsigned long body_length,
+                                unsigned long id_hi, unsigned long id_lo,
+                                int *kind, unsigned long *when, int *is_bot);
+/* updateUserStatus#e5bdf8de user_id:long status:UserStatus, the reader
+   just past the constructor: 1 = read, and it is a status Telegram can
+   send. */
+int tg_mtproto_read_update_user_status(tg_mtproto_tl_reader *reader,
+                                       unsigned long *id_hi,
+                                       unsigned long *id_lo, int *kind,
+                                       unsigned long *when);
 int tg_mtproto_find_user_name(const unsigned char *body,
                               unsigned long body_length,
                               unsigned long id_hi, unsigned long id_lo,

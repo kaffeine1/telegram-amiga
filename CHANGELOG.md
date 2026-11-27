@@ -83,6 +83,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   reaction) leaves no mark.
 - A channel's post shows how many saw it, an eye and the count (1.2K,
   45K, 1.2M) before the time.
+- A private chat says under the person's name when they were last
+  here: "online", "last seen at 14:05", "last seen on 26/11", or what
+  Telegram says of someone who keeps the time private ("last seen
+  recently", "within a week", "within a month", "a long time ago"); a
+  bot is a bot. It comes with the chat's own page, so opening a chat
+  costs no request, and follows the updates Telegram sends while the
+  chat is open; "is typing..." still takes the line while it lasts.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message
@@ -92,6 +99,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 ### Fixed
 - A long topic title could run past the room of the window's subtitle
   line (60 letters written where 47 fit). The line is cut where it ends.
+- The reader of a user knew the status "last seen recently" (and
+  "within a week", "within a month") only in the form older layers
+  sent, without the flags word the current layer puts after it, and did
+  not step over a bot's bot_info_version: reading a reply's users one
+  after the other stopped at the first such user. Both are read as the
+  layer 214 schema has them.
 
 ## [0.6] - 2026-11-23
 

@@ -2212,6 +2212,30 @@ Anteprime nell'elenco chat
 MSG_G_DECIMAL_MARK
 ,
 ; .
+MSG_G_SEEN_ONLINE
+in linea
+; online
+MSG_G_SEEN_AT
+ultimo accesso alle %s
+; last seen at %s
+MSG_G_SEEN_ON
+ultimo accesso il %s
+; last seen on %s
+MSG_G_SEEN_RECENTLY
+ultimo accesso di recente
+; last seen recently
+MSG_G_SEEN_WEEK
+ultimo accesso in settimana
+; last seen within a week
+MSG_G_SEEN_MONTH
+ultimo accesso nel mese
+; last seen within a month
+MSG_G_SEEN_LONG_AGO
+ultimo accesso molto tempo fa
+; last seen a long time ago
+MSG_G_SEEN_BOT
+bot
+; bot
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]

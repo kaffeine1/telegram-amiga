@@ -1415,6 +1415,22 @@
 #define MSG_SET_PREVIEWS_IN_THE_CHAT_LIST_STR "Previews in the chat list"
 #define MSG_G_DECIMAL_MARK 1439
 #define MSG_G_DECIMAL_MARK_STR "."
+#define MSG_G_SEEN_ONLINE 1440
+#define MSG_G_SEEN_ONLINE_STR "online"
+#define MSG_G_SEEN_AT 1441
+#define MSG_G_SEEN_AT_STR "last seen at %s"
+#define MSG_G_SEEN_ON 1442
+#define MSG_G_SEEN_ON_STR "last seen on %s"
+#define MSG_G_SEEN_RECENTLY 1443
+#define MSG_G_SEEN_RECENTLY_STR "last seen recently"
+#define MSG_G_SEEN_WEEK 1444
+#define MSG_G_SEEN_WEEK_STR "last seen within a week"
+#define MSG_G_SEEN_MONTH 1445
+#define MSG_G_SEEN_MONTH_STR "last seen within a month"
+#define MSG_G_SEEN_LONG_AGO 1446
+#define MSG_G_SEEN_LONG_AGO_STR "last seen a long time ago"
+#define MSG_G_SEEN_BOT 1447
+#define MSG_G_SEEN_BOT_STR "bot"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

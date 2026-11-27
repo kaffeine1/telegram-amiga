@@ -1558,6 +1558,22 @@ MSG_SET_PREVIEWS_IN_THE_CHAT_LIST (1438//)
 Previews in the chat list
 MSG_G_DECIMAL_MARK (1439//)
 .
+MSG_G_SEEN_ONLINE (1440//)
+online
+MSG_G_SEEN_AT (1441//)
+last seen at %s
+MSG_G_SEEN_ON (1442//)
+last seen on %s
+MSG_G_SEEN_RECENTLY (1443//)
+last seen recently
+MSG_G_SEEN_WEEK (1444//)
+last seen within a week
+MSG_G_SEEN_MONTH (1445//)
+last seen within a month
+MSG_G_SEEN_LONG_AGO (1446//)
+last seen a long time ago
+MSG_G_SEEN_BOT (1447//)
+bot
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

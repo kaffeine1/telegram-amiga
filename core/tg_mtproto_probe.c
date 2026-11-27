@@ -617,6 +617,83 @@ typedef struct tg_chat_inbox_read_entry {
 static tg_chat_inbox_read_entry
     tg_chat_inbox_read_queue[TG_CHAT_INBOX_READ_QUEUE_MAX];
 static unsigned long tg_chat_inbox_read_count = 0UL;
+#if !defined(TG_NO_GUI)
+/* When someone was last here: what an update says (a person coming online
+   or leaving) and what a chat's page says of its users, kept until the
+   window's tick looks whether it is the person of the open chat, whose
+   header shows it. The newest word about a person replaces the older.
+   updateUserStatus#e5bdf8de user_id:long status:UserStatus (layer 214). */
+#define TG_MTPROTO_UPDATE_USER_STATUS_CONSTRUCTOR 0xe5bdf8deUL
+#define TG_CHAT_STATUS_QUEUE_MAX 4U
+typedef struct tg_chat_status_entry {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long when; /* Telegram's clock: online until, or last seen at */
+    int kind;           /* TG_MTPROTO_USER_STATUS_* */
+    int is_bot;
+} tg_chat_status_entry;
+static tg_chat_status_entry tg_chat_status_queue[TG_CHAT_STATUS_QUEUE_MAX];
+static unsigned long tg_chat_status_count = 0UL;
+/* What is known of the open chat's person (unknown = nothing yet): reset
+   when a chat opens. */
+static int tg_gui_peer_seen_kind = TG_MTPROTO_USER_STATUS_UNKNOWN;
+static unsigned long tg_gui_peer_seen_when = 0UL;
+static int tg_gui_peer_seen_bot = 0;
+
+static void tg_chat_status_note(unsigned long id_hi, unsigned long id_lo,
+                                int kind, unsigned long when, int is_bot)
+{
+    tg_chat_status_entry *e = 0;
+    unsigned long i;
+
+    for (i = 0UL; i < tg_chat_status_count; ++i) {
+        if (tg_chat_status_queue[i].id_hi == id_hi &&
+            tg_chat_status_queue[i].id_lo == id_lo) {
+            e = &tg_chat_status_queue[i];
+            break;
+        }
+    }
+    if (e == 0) {
+        if (tg_chat_status_count == TG_CHAT_STATUS_QUEUE_MAX) {
+            memmove(tg_chat_status_queue, tg_chat_status_queue + 1,
+                    (TG_CHAT_STATUS_QUEUE_MAX - 1U) *
+                        sizeof(*tg_chat_status_queue));
+            --tg_chat_status_count;
+        }
+        e = &tg_chat_status_queue[tg_chat_status_count++];
+    }
+    e->id_hi = id_hi;
+    e->id_lo = id_lo;
+    e->kind = kind;
+    e->when = when;
+    e->is_bot = is_bot;
+}
+
+/* updateUserStatus, the reader just past the constructor. The envelope
+   scan offers any aligned constructor match: the update counts only when
+   it reads as one, with a time Telegram can send. */
+static void tg_chat_status_parse_update(tg_mtproto_tl_reader *reader)
+{
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long when;
+    int kind;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: nobody shows it */
+    }
+    if (!tg_mtproto_read_update_user_status(reader, &id_hi, &id_lo, &kind,
+                                            &when)) {
+        return;
+    }
+    if ((kind == TG_MTPROTO_USER_STATUS_ONLINE ||
+         kind == TG_MTPROTO_USER_STATUS_OFFLINE) &&
+        (when < 1000000000UL || when > 0x7fffffffUL)) {
+        return;
+    }
+    tg_chat_status_note(id_hi, id_lo, kind, when, 0);
+}
+#endif /* !TG_NO_GUI */
 /* The pinned chats, or the chats marked as unread, changed on another
    device: the window reads them again at its next tick rather than piece
    the change together from the update. */
@@ -5452,6 +5529,12 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_inbox_read_parse_update(&reader, constructor);
+#if !defined(TG_NO_GUI)
+        } else if (constructor == TG_MTPROTO_UPDATE_USER_STATUS_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_status_parse_update(&reader);
+#endif
         } else if (constructor ==
                        TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
                    constructor ==
@@ -5618,6 +5701,12 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
         tg_chat_inbox_read_parse_update(reader, update_ctor);
         return;
     }
+#if !defined(TG_NO_GUI)
+    if (update_ctor == TG_MTPROTO_UPDATE_USER_STATUS_CONSTRUCTOR) {
+        tg_chat_status_parse_update(reader);
+        return;
+    }
+#endif
     if (update_ctor == TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
         update_ctor == TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR ||
         update_ctor == TG_MTPROTO_UPDATE_DIALOG_UNREAD_MARK_CONSTRUCTOR) {
@@ -17130,6 +17219,23 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                                        peer_constructor, peer_id_hi,
                                        peer_id_lo, 0, 0UL);
     }
+    if (tg_chat_delete_target != 0 &&
+        peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+        tg_mtproto_history_search_query == 0) {
+        /* ...and a private chat's page carries its person, with when they
+           were last here: the header's second line. */
+        unsigned long seen_when;
+        int seen_kind;
+        int seen_bot;
+
+        if (tg_mtproto_find_user_status(result.result_body,
+                                        result.result_body_length,
+                                        peer_id_hi, peer_id_lo, &seen_kind,
+                                        &seen_when, &seen_bot)) {
+            tg_chat_status_note(peer_id_hi, peer_id_lo, seen_kind, seen_when,
+                                seen_bot);
+        }
+    }
 #endif
 
     max_seen_message_id = last_seen_message_id != 0 ?
@@ -22765,6 +22871,7 @@ static int tg_gui_update_self_test(void);
 static int tg_gui_channel_install_self_test(void);
 static int tg_gui_unread_self_test(void);
 static int tg_gui_last_self_test(void);
+static int tg_gui_peer_seen_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
@@ -25209,6 +25316,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_channel_install_self_test() != 0 ||
         tg_gui_unread_self_test() != 0 ||
         tg_gui_last_self_test() != 0 ||
+        tg_gui_peer_seen_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
         return 2;
     }
@@ -29151,6 +29259,12 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     tg_gui_session_state.open_peer_id_lo = 0UL;
     tg_gui_session_state.open_peer_is_chat = 0;
     tg_gui_session_state.typing.active = 0;
+#if !defined(TG_NO_GUI)
+    /* ...and when this chat's person was last here is learnt again. */
+    tg_gui_peer_seen_kind = TG_MTPROTO_USER_STATUS_UNKNOWN;
+    tg_gui_peer_seen_when = 0UL;
+    tg_gui_peer_seen_bot = 0;
+#endif
     /* Fresh group -> re-attempt the member-name fetch once for the typing names. */
     tg_gui_session_state.member_fetch_done = 0;
     tg_gui_session_state.member_cache.count = 0UL;
@@ -44213,6 +44327,114 @@ static int tg_gui_session_apply_inbox_read_updates(void)
     return changed;
 }
 
+/* When the person of the open chat was last here, as the header says it
+   under the name: "online", "last seen at 14:05" (of today), "last seen on
+   26/11", or what Telegram says of someone who keeps the time private; a
+   bot is a bot. Times are in the local frame, as the messages' are. */
+static void tg_gui_peer_seen_text(int kind, int is_bot,
+                                  unsigned long local_when,
+                                  unsigned long local_now, char *out,
+                                  unsigned long size)
+{
+    const char *words = 0;
+    char clock[12];
+    time_t when = (time_t)local_when;
+    struct tm *parts;
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    if (is_bot) {
+        words = TG_STR(MSG_G_SEEN_BOT);
+    } else if (kind == TG_MTPROTO_USER_STATUS_ONLINE) {
+        words = TG_STR(MSG_G_SEEN_ONLINE);
+    } else if (kind == TG_MTPROTO_USER_STATUS_RECENTLY) {
+        words = TG_STR(MSG_G_SEEN_RECENTLY);
+    } else if (kind == TG_MTPROTO_USER_STATUS_LAST_WEEK) {
+        words = TG_STR(MSG_G_SEEN_WEEK);
+    } else if (kind == TG_MTPROTO_USER_STATUS_LAST_MONTH) {
+        words = TG_STR(MSG_G_SEEN_MONTH);
+    } else if (kind == TG_MTPROTO_USER_STATUS_LONG_AGO) {
+        words = TG_STR(MSG_G_SEEN_LONG_AGO);
+    }
+    if (words != 0) {
+        tg_locale_format(out, size, "%s", words);
+        return;
+    }
+    if (kind != TG_MTPROTO_USER_STATUS_OFFLINE || local_when == 0UL) {
+        return;
+    }
+    parts = gmtime(&when);
+    if (parts == 0) {
+        return;
+    }
+    if (local_when / 86400UL == local_now / 86400UL) {
+        sprintf(clock, "%02u:%02u", (unsigned int)parts->tm_hour % 24U,
+                (unsigned int)parts->tm_min % 60U);
+        tg_locale_format(out, size, TG_STR(MSG_G_SEEN_AT), clock);
+    } else {
+        sprintf(clock, "%02u/%02u", (unsigned int)parts->tm_mday % 32U,
+                (unsigned int)(parts->tm_mon + 1) % 13U);
+        tg_locale_format(out, size, TG_STR(MSG_G_SEEN_ON), clock);
+    }
+}
+
+/* The news about who was here go to the open chat's header when they are
+   about its person; someone who was online past the time Telegram gave
+   was last seen then. 1 = the header's line changed. */
+static int tg_gui_session_apply_peer_seen(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    char line[TG_GUI_NAME_MAX];
+    unsigned long i;
+    unsigned long now;
+    long delta;
+    int kind;
+
+    for (i = 0UL; i < tg_chat_status_count; ++i) {
+        const tg_chat_status_entry *e = &tg_chat_status_queue[i];
+
+        if (tg_gui_session_state.current_peer_index[0] != '\0' &&
+            tg_gui_session_state.open_peer_constructor ==
+                TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+            e->id_hi == tg_gui_session_state.open_peer_id_hi &&
+            e->id_lo == tg_gui_session_state.open_peer_id_lo) {
+            tg_gui_peer_seen_kind = e->kind;
+            tg_gui_peer_seen_when = e->when;
+            /* an update does not say again that it is a bot */
+            tg_gui_peer_seen_bot = tg_gui_peer_seen_bot || e->is_bot;
+        }
+    }
+    tg_chat_status_count = 0UL;
+    if (gst == 0 || tg_gui_session_state.current_peer_index[0] == '\0' ||
+        tg_gui_session_state.open_peer_constructor !=
+            TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
+        (tg_gui_peer_seen_kind == TG_MTPROTO_USER_STATUS_UNKNOWN &&
+         !tg_gui_peer_seen_bot)) {
+        return 0;
+    }
+    now = tg_mtproto_context_time(&tg_gui_session_state.context);
+    delta = tg_mtproto_display_delta(
+        tg_gui_session_state.context.server_time_delta_seconds,
+        tg_mtproto_local_clock_skew());
+    kind = tg_gui_peer_seen_kind;
+    if (kind == TG_MTPROTO_USER_STATUS_ONLINE &&
+        tg_gui_peer_seen_when <= now) {
+        kind = TG_MTPROTO_USER_STATUS_OFFLINE;
+    }
+    tg_gui_peer_seen_text(kind, tg_gui_peer_seen_bot,
+                          tg_mtproto_chat_local_epoch(tg_gui_peer_seen_when,
+                                                      delta),
+                          tg_mtproto_chat_local_epoch(now, delta), line,
+                          sizeof(line));
+    if (strcmp(gst->subtitle, line) == 0) {
+        return 0;
+    }
+    memcpy(gst->subtitle, line, sizeof(line));
+    return 1;
+}
+
 /* Asks Telegram for the dialog of the chat at this 1-based cache index:
    its mute is stored where the mutes are kept, its unread count is given
    back. 0 = asked, 2 = no such chat, 1 = Telegram did not answer. */
@@ -44249,6 +44471,191 @@ static int tg_gui_session_chat_dialog(unsigned long peer_index,
     tg_gui_log(rc == 2 ? "dialog: no such chat" : "dialog: could not ask");
     return rc == 2 ? 2 : 1;
 }
+
+#if !defined(TG_NO_SELFTEST)
+/* When someone was last here: the header's words for each thing Telegram
+   says, the update read off the wire, and what is kept of several. */
+static int tg_gui_peer_seen_self_test(void)
+{
+    /* 10 Jan 1970 14:05 and 11 Jan 1970 09:30, in the local frame */
+    const unsigned long day = 86400UL;
+    const unsigned long seen = 9UL * day + 14UL * 3600UL + 5UL * 60UL;
+    const unsigned long later = 9UL * day + 23UL * 3600UL;
+    const unsigned long next_day = 10UL * day + 9UL * 3600UL + 30UL * 60UL;
+    static const struct {
+        int kind;
+        int bot;
+        long msg;
+        const char *en;
+    } words[] = {
+        { TG_MTPROTO_USER_STATUS_ONLINE, 0, MSG_G_SEEN_ONLINE,
+          MSG_G_SEEN_ONLINE_STR },
+        { TG_MTPROTO_USER_STATUS_RECENTLY, 0, MSG_G_SEEN_RECENTLY,
+          MSG_G_SEEN_RECENTLY_STR },
+        { TG_MTPROTO_USER_STATUS_LAST_WEEK, 0, MSG_G_SEEN_WEEK,
+          MSG_G_SEEN_WEEK_STR },
+        { TG_MTPROTO_USER_STATUS_LAST_MONTH, 0, MSG_G_SEEN_MONTH,
+          MSG_G_SEEN_MONTH_STR },
+        { TG_MTPROTO_USER_STATUS_LONG_AGO, 0, MSG_G_SEEN_LONG_AGO,
+          MSG_G_SEEN_LONG_AGO_STR },
+        { TG_MTPROTO_USER_STATUS_OFFLINE, 1, MSG_G_SEEN_BOT,
+          MSG_G_SEEN_BOT_STR },
+        { TG_MTPROTO_USER_STATUS_UNKNOWN, 1, MSG_G_SEEN_BOT,
+          MSG_G_SEEN_BOT_STR }
+    };
+    static tg_chat_notify notify; /* the collector works for an armed one */
+    unsigned char payload[64];
+    tg_mtproto_tl_writer writer;
+    tg_chat_delete_sink del_sink;
+    char got[TG_GUI_NAME_MAX];
+    char want[TG_GUI_NAME_MAX];
+    unsigned int c;
+    int ok = 1;
+
+    memset(&notify, 0, sizeof(notify));
+    notify.armed = 1;
+    tg_chat_nq = &notify;
+    for (c = 0U; c < sizeof(words) / sizeof(words[0]); ++c) {
+        tg_gui_peer_seen_text(words[c].kind, words[c].bot, seen, later, got,
+                              sizeof(got));
+        if (strcmp(got, tg_str(words[c].msg, words[c].en)) != 0) {
+            printf("probe self-test: last seen, case %u is \"%s\"\n", c, got);
+            tg_chat_nq = 0;
+            return 2;
+        }
+    }
+    /* seen today: the time; another day: the date; nothing known: nothing */
+    tg_gui_peer_seen_text(TG_MTPROTO_USER_STATUS_OFFLINE, 0, seen, later, got,
+                          sizeof(got));
+    tg_locale_format(want, sizeof(want), TG_STR(MSG_G_SEEN_AT), "14:05");
+    ok = strcmp(got, want) == 0;
+    tg_gui_peer_seen_text(TG_MTPROTO_USER_STATUS_OFFLINE, 0, seen, next_day,
+                          got, sizeof(got));
+    tg_locale_format(want, sizeof(want), TG_STR(MSG_G_SEEN_ON), "10/01");
+    ok = ok && strcmp(got, want) == 0;
+    strcpy(got, "x");
+    tg_gui_peer_seen_text(TG_MTPROTO_USER_STATUS_UNKNOWN, 0, seen, later, got,
+                          sizeof(got));
+    ok = ok && got[0] == '\0';
+    strcpy(got, "x");
+    tg_gui_peer_seen_text(TG_MTPROTO_USER_STATUS_OFFLINE, 0, 0UL, later, got,
+                          sizeof(got));
+    ok = ok && got[0] == '\0';
+    if (!ok) {
+        puts("probe self-test: last seen at a time or on a day wrong");
+        tg_chat_nq = 0;
+        return 2;
+    }
+    /* The update, in an updateShort and found by the scan of an envelope:
+       offline since, online until, seen recently (the layer's form, with
+       its flags); nothing without a window, from a user that is none, a
+       status that is none, or a time Telegram cannot send. */
+    {
+        static const struct {
+            unsigned long id_lo;
+            unsigned long status;
+            unsigned long word; /* the time, or the flags */
+            int has_word;
+            int kind; /* 0 = not kept */
+        } cases[] = {
+            { 77UL, 0x008c703fUL, 1700000000UL, 1,
+              TG_MTPROTO_USER_STATUS_OFFLINE },
+            { 77UL, 0xedb93949UL, 1700000300UL, 1,
+              TG_MTPROTO_USER_STATUS_ONLINE },
+            { 77UL, 0x7b197dc8UL, 0UL, 1, TG_MTPROTO_USER_STATUS_RECENTLY },
+            { 77UL, 0xe26f42f1UL, 0UL, 0, TG_MTPROTO_USER_STATUS_RECENTLY },
+            { 77UL, 0x09d05049UL, 0UL, 0, TG_MTPROTO_USER_STATUS_LONG_AGO },
+            { 0UL, 0x008c703fUL, 1700000000UL, 1, 0 },
+            { 77UL, 0x12345678UL, 1700000000UL, 1, 0 },
+            { 77UL, 0x008c703fUL, 5UL, 1, 0 }
+        };
+        int window;
+        int scan;
+
+        for (window = 1; ok && window >= 0; --window) {
+            for (scan = 0; ok && scan < 2; ++scan) {
+                for (c = 0U; ok && c < sizeof(cases) / sizeof(cases[0]);
+                     ++c) {
+                    int want_kind = window ? cases[c].kind : 0;
+
+                    memset(&del_sink, 0, sizeof(del_sink));
+                    tg_chat_status_count = 0UL;
+                    tg_chat_delete_target = window ? &del_sink : 0;
+                    tg_mtproto_tl_writer_init(&writer, payload,
+                                              sizeof(payload));
+                    ok = tg_mtproto_tl_write_u32(
+                             &writer,
+                             scan ? 0x11111111UL
+                                  : TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                             TG_MTPROTO_TL_OK &&
+                         tg_mtproto_tl_write_u32(
+                             &writer,
+                             TG_MTPROTO_UPDATE_USER_STATUS_CONSTRUCTOR) ==
+                             TG_MTPROTO_TL_OK &&
+                         tg_mtproto_tl_write_u64(&writer, 0UL,
+                                                 cases[c].id_lo) ==
+                             TG_MTPROTO_TL_OK &&
+                         tg_mtproto_tl_write_u32(&writer, cases[c].status) ==
+                             TG_MTPROTO_TL_OK &&
+                         (!cases[c].has_word ||
+                          tg_mtproto_tl_write_u32(&writer, cases[c].word) ==
+                              TG_MTPROTO_TL_OK) &&
+                         tg_mtproto_tl_write_u32(&writer, 1700000005UL) ==
+                             TG_MTPROTO_TL_OK;
+                    if (ok && scan) {
+                        tg_chat_edit_scan_updates(payload, writer.length,
+                                                  0UL);
+                    } else if (ok) {
+                        tg_chat_notify_collect(payload, writer.length);
+                    }
+                    tg_chat_delete_target = 0;
+                    if (!ok ||
+                        tg_chat_status_count != (want_kind ? 1UL : 0UL) ||
+                        (want_kind &&
+                         (tg_chat_status_queue[0].kind != want_kind ||
+                          tg_chat_status_queue[0].id_lo != cases[c].id_lo ||
+                          (cases[c].status == 0x008c703fUL &&
+                           tg_chat_status_queue[0].when != cases[c].word)))) {
+                        tg_chat_status_count = 0UL;
+                        tg_chat_nq = 0;
+                        tg_chat_typing_target = 0;
+                        tg_chat_edit_target = 0;
+                        printf("probe self-test: someone's status, case %u "
+                               "(window %d, scan %d) wrong\n", c, window,
+                               scan);
+                        return 2;
+                    }
+                }
+            }
+        }
+    }
+    /* The newest word about a person replaces the older; a fifth person
+       pushes the first out. */
+    tg_chat_status_count = 0UL;
+    tg_chat_status_note(0UL, 1UL, TG_MTPROTO_USER_STATUS_ONLINE, 100UL, 0);
+    tg_chat_status_note(0UL, 1UL, TG_MTPROTO_USER_STATUS_OFFLINE, 200UL, 0);
+    ok = tg_chat_status_count == 1UL &&
+         tg_chat_status_queue[0].kind == TG_MTPROTO_USER_STATUS_OFFLINE &&
+         tg_chat_status_queue[0].when == 200UL;
+    tg_chat_status_note(0UL, 2UL, TG_MTPROTO_USER_STATUS_ONLINE, 1UL, 0);
+    tg_chat_status_note(0UL, 3UL, TG_MTPROTO_USER_STATUS_ONLINE, 1UL, 1);
+    tg_chat_status_note(0UL, 4UL, TG_MTPROTO_USER_STATUS_ONLINE, 1UL, 0);
+    tg_chat_status_note(0UL, 5UL, TG_MTPROTO_USER_STATUS_ONLINE, 1UL, 0);
+    ok = ok && tg_chat_status_count == TG_CHAT_STATUS_QUEUE_MAX &&
+         tg_chat_status_queue[0].id_lo == 2UL &&
+         tg_chat_status_queue[1].is_bot == 1 &&
+         tg_chat_status_queue[TG_CHAT_STATUS_QUEUE_MAX - 1U].id_lo == 5UL;
+    tg_chat_status_count = 0UL;
+    tg_chat_nq = 0;
+    tg_chat_typing_target = 0;
+    tg_chat_edit_target = 0;
+    if (!ok) {
+        puts("probe self-test: what is kept of who was here wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 #if !defined(TG_NO_SELFTEST)
 /* The newest message of each chat: what is news and what is not, an edit,
@@ -45447,6 +45854,12 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
         dirty = 1;
         tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_HEADER;
     }
+#if !defined(TG_NO_GUI)
+    if (tg_gui_session_apply_peer_seen()) {
+        dirty = 1;
+        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_HEADER;
+    }
+#endif
     return dirty;
 }
 
