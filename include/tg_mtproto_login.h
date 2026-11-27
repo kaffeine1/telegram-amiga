@@ -1074,6 +1074,20 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
     long add_offset,
     unsigned long limit);
 
+/* The same from a moment of Telegram's clock (offset_date): with
+   add_offset -1 and a limit of 1, the first message at or after it. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_dated(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_date,
+    long add_offset,
+    unsigned long limit);
+
 /* --- topics of a forum group (0.5) -------------------------------------
    A supergroup can be a forum: its messages live in topics, each with a
    title, a colour and its own thread. A topic is named by the id of the

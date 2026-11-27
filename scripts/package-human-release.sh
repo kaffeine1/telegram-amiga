@@ -791,6 +791,8 @@ Messages
   page holds, the last row, More results..., brings the older ones.
   Find in all chats (Amiga+G) searches every chat the same way. Esc
   ends the search.
+- A date typed in Find in chat, 12/11/2026 or 12.11.26 or 2026-11-12,
+  shows the chat from that day on.
 - A group divided into topics opens on General, its main topic, with
   the list of its topics in the chat list's place: All chats first,
   which goes back, then each topic with its newest message, the time
@@ -1163,6 +1165,8 @@ Messaggi
   quel messaggio. Se sono piu' di una pagina, l'ultima riga, More
   results..., porta i piu' vecchi. Find in all chats (Amiga+G) cerca
   allo stesso modo in tutte le chat. Esc chiude la ricerca.
+- Una data scritta in Find in chat, 12/11/2026 o 12.11.26 o 2026-11-12,
+  mostra la chat da quel giorno in poi.
 - Un gruppo diviso in argomenti (topic) si apre su General, il suo
   argomento principale, con l'elenco degli argomenti al posto
   dell'elenco delle chat: prima All chats, che torna indietro, poi ogni

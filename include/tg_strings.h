@@ -812,7 +812,7 @@
 #define MSG_ST_FIND_ALL_PROMPT 456
 #define MSG_ST_FIND_ALL_PROMPT_STR "All chats: type, ENTER searches (ESC ends)"
 #define MSG_ST_FIND_CHAT_PROMPT 457
-#define MSG_ST_FIND_CHAT_PROMPT_STR "Find in chat: type, ENTER searches (ESC ends)"
+#define MSG_ST_FIND_CHAT_PROMPT_STR "Find in chat: words or a date, ENTER (ESC ends)"
 #define MSG_ST_CODE_IN_TELEGRAM 458
 #define MSG_ST_CODE_IN_TELEGRAM_STR "Code sent in Telegram on your phone"
 #define MSG_ST_CODE_BY_SMS 459
@@ -947,6 +947,12 @@
 #define MSG_ST_BUTTON_NEEDS_TELEGRAM_APP_STR "That button needs Telegram's own app"
 #define MSG_ST_THE_BOT_DID_NOT_ANSWER 524
 #define MSG_ST_THE_BOT_DID_NOT_ANSWER_STR "The bot did not take it. Try again."
+#define MSG_ST_GOING_TO_THAT_DAY 525
+#define MSG_ST_GOING_TO_THAT_DAY_STR "Going to that day..."
+#define MSG_ST_THE_CHAT_FROM_THAT_DAY 526
+#define MSG_ST_THE_CHAT_FROM_THAT_DAY_STR "The chat from that day on"
+#define MSG_ST_NO_MESSAGE_FROM_THAT_DAY 527
+#define MSG_ST_NO_MESSAGE_FROM_THAT_DAY_STR "No message from that day on"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601

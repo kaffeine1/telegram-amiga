@@ -132,6 +132,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   used to hide. A chat with a bot that holds no message yet says "Press
   Enter to start the bot": ENTER, or a click on Send, sends it `/start`,
   and the header says "bot" there too.
+- Go to a date: a date typed in Find in chat (12/11/2026, 12.11.26 or
+  2026-11-12) shows the chat from that day on, the first message of the
+  day with what stands around it. The day is the one of the clock the
+  times are shown in.
 - Start iconified: with the tooltype `ICONIFY` on the icon Amigram is
   started from (or `--iconify` after `--gui-live` in a Shell), the
   window gives way to the AppIcon on Workbench as soon as it has

@@ -1474,14 +1474,23 @@ Then the middle-sized ones:
   own keyboard sends its whole text. /press in the text client. A chat
   with a bot that holds no message yet offers to start it: ENTER sends
   /start. Reading the keyboard also gives the views and the album of a
-  message that has one, which used to be lost behind it.
+  message that has one, which used to be lost behind it. Not yet tried
+  against a real bot: no chat of the test account holds a keyboard.
+- Go to a date. A date typed in Find in chat (12/11/2026, 12.11.26,
+  2026-11-12) is a day to go to, not words: messages.getHistory with
+  offset_date at the day's first second and add_offset -1 gives the
+  first message at or after it, and the page a search hit opens is
+  shown around that message. The day is the one of the clock the times
+  are shown in. Tried live on a public channel: a day with no post
+  leads to the next post, a day still to come says that nothing was
+  written from then on. The text client does not have it yet.
 
 Tried live with the test account, two sessions of it for what one
 device tells another, and seen in a window on the OS4 VM in Italian.
 The 68000 text client grew by about 5 KB with its share of the small
 ones, and by 7 KB more with the bots' buttons.
 
-Next, in this order: jump to a date, comments on
+Next, in this order: comments on
 channel posts (the topics view serves), active sessions, translation,
 t.me links opened inside Amigram, scheduled messages, contacts,
 password recovery by email, a richer ARexx port. The large ones (chat

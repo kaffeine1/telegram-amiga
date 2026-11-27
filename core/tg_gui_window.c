@@ -13983,6 +13983,38 @@ static void tg_gui_window_open_msg_hit(tg_gui_state *state,
     tg_gui_window_paint(state, backend);
 }
 
+/* A date typed in Find in chat: the chat is shown from that day on, and
+   the search gives way to it. */
+static void tg_gui_window_go_to_date(tg_gui_state *state,
+                                     tg_gui_backend *backend, int year,
+                                     int month, int day,
+                                     int *older_exhausted,
+                                     int *older_cooldown)
+{
+    int rc;
+
+    tg_gui_chat_touched = 1;
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_GOING_TO_THAT_DAY));
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_jump_to_date(year, month, day, stdout);
+    if (older_exhausted != 0) {
+        *older_exhausted = 0;
+    }
+    if (older_cooldown != 0) {
+        *older_cooldown = 0;
+    }
+    if (rc > 0) {
+        tg_gui_window_end_msg_search(state);
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       rc > 0 ? TG_STR(MSG_ST_THE_CHAT_FROM_THAT_DAY)
+                              : (rc == 0
+                                     ? TG_STR(MSG_ST_NO_MESSAGE_FROM_THAT_DAY)
+                                     : TG_STR(MSG_ST_COULD_NOT_LOAD_IT_NETWORK)));
+    tg_gui_window_paint(state, backend);
+}
+
 /* The search box's keys in Find in chat. */
 static void tg_gui_window_msg_search_key(tg_gui_state *state,
                                          tg_gui_backend *backend,
@@ -14004,6 +14036,20 @@ static void tg_gui_window_msg_search_key(tg_gui_state *state,
             tg_gui_window_open_msg_hit(state, backend, state->selected_chat,
                                        older_exhausted, older_cooldown);
             return;
+        }
+        {
+            int year;
+            int month;
+            int day;
+
+            /* a date is a day to go to, in the open chat, not words */
+            if (!state->msg_search_global &&
+                tg_gui_parse_date(state->search_query, &year, &month,
+                                  &day)) {
+                tg_gui_window_go_to_date(state, backend, year, month, day,
+                                         older_exhausted, older_cooldown);
+                return;
+            }
         }
         tg_gui_window_run_msg_search(state, backend);
         return;

@@ -1650,6 +1650,11 @@ void tg_gui_window_start_iconified(int on);
 /* Whether a window in this mode, with the session open or not, may do
    so. */
 int tg_gui_may_start_iconified(int mode, int session_open);
+/* A date typed where words are searched: day, month and year in that
+   order with '/', '.' or '-' between them (12/11/2026, 12.11.26), or the
+   year first (2026-11-12). 1 = a day that exists, from 2013 on; anything
+   else is words. */
+int tg_gui_parse_date(const char *text, int *year, int *month, int *day);
 /* For that task: show `text` in the status bar at once. */
 void tg_gui_window_startup_status(const char *text);
 

@@ -1228,8 +1228,8 @@ MSG_ST_FIND_ALL_PROMPT
 Tutte le chat: scrivi, ENTER cerca (ESC chiude)
 ; All chats: type, ENTER searches (ESC ends)
 MSG_ST_FIND_CHAT_PROMPT
-Nella chat: scrivi, ENTER cerca (ESC chiude)
-; Find in chat: type, ENTER searches (ESC ends)
+Nella chat: parole o data, ENTER (ESC chiude)
+; Find in chat: words or a date, ENTER (ESC ends)
 MSG_ST_CODE_IN_TELEGRAM
 Codice mandato in Telegram sul telefono
 ; Code sent in Telegram on your phone
@@ -1431,6 +1431,15 @@ Quel bottone vuole l'app di Telegram
 MSG_ST_THE_BOT_DID_NOT_ANSWER
 Il bot non l'ha accettato. Riprova.
 ; The bot did not take it. Try again.
+MSG_ST_GOING_TO_THAT_DAY
+Vado a quel giorno...
+; Going to that day...
+MSG_ST_THE_CHAT_FROM_THAT_DAY
+La chat da quel giorno in poi
+; The chat from that day on
+MSG_ST_NO_MESSAGE_FROM_THAT_DAY
+Nessun messaggio da quel giorno in poi
+; No message from that day on
 MSG_RQ_OK
 OK
 ; OK

@@ -1351,10 +1351,11 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer(
         access_hash_lo, has_access_hash, offset_id, 0L, limit);
 }
 
-/* messages.getHistory with add_offset: a negative add_offset with offset_id
-   set returns that many messages NEWER than offset_id first, then the older
-   ones, so a page can be centred on a message (the jump to a search hit). */
-tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
+/* messages.getHistory as its two callers below ask it: the page starts at
+   a message (offset_id) or at a moment (offset_date), the first thing left
+   out either way, and a negative add_offset brings that many newer
+   messages first. */
+static tg_mtproto_tl_status tg_build_messages_get_history(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
     unsigned long peer_id_hi,
@@ -1363,6 +1364,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
     unsigned long access_hash_lo,
     int has_access_hash,
     unsigned long offset_id,
+    unsigned long offset_date,
     long add_offset,
     unsigned long limit)
 {
@@ -1384,7 +1386,7 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
         status = tg_mtproto_tl_write_u32(writer, offset_id);
     }
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, 0UL); /* offset_date */
+        status = tg_mtproto_tl_write_u32(writer, offset_date);
     }
     if (status == TG_MTPROTO_TL_OK) {
         /* add_offset:int, two's complement on the wire. */
@@ -1407,6 +1409,51 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
         status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL);
     }
     return status;
+}
+
+/* messages.getHistory with add_offset: a negative add_offset with offset_id
+   set returns that many messages NEWER than offset_id first, then the older
+   ones, so a page can be centred on a message (the jump to a search hit). */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_at(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_id,
+    long add_offset,
+    unsigned long limit)
+{
+    return tg_build_messages_get_history(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, offset_id, 0UL, add_offset, limit);
+}
+
+/* The same from a moment of Telegram's clock: messages older than
+   offset_date come, and with add_offset -1 and a limit of 1 the one
+   message that comes is the first at or after that moment (the jump to a
+   date). */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_history_peer_dated(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long offset_date,
+    long add_offset,
+    unsigned long limit)
+{
+    if (offset_date == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_build_messages_get_history(
+        writer, peer_constructor, peer_id_hi, peer_id_lo, access_hash_hi,
+        access_hash_lo, has_access_hash, 0UL, offset_date, add_offset,
+        limit);
 }
 
 /* messages.getPinnedDialogs#d6b94df2 folder_id:int = messages.PeerDialogs
@@ -17455,6 +17502,23 @@ int tg_mtproto_login_self_test(void)
         query[24] != 0xfbU || query[25] != 0xffU ||
         query[26] != 0xffU || query[27] != 0xffU ||
         query[28] != 10U) {
+        return 2;
+    }
+    /* getHistory from a moment: no offset_id, offset_date 0x6af53f80 (12
+       November 2026, 00:00 UTC), add_offset -1, limit 1; no moment, no
+       request. */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_history_peer_dated(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 1794441600UL, -1L, 1UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 48UL ||
+        tg_read_u32_le(query + 16) != 0UL ||
+        tg_read_u32_le(query + 20) != 1794441600UL ||
+        tg_read_u32_le(query + 24) != 0xffffffffUL ||
+        tg_read_u32_le(query + 28) != 1UL ||
+        tg_mtproto_build_messages_get_history_peer_dated(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0x01020304UL, 0x05060708UL,
+            0UL, 0UL, 0, 0UL, -1L, 1UL) == TG_MTPROTO_TL_OK) {
         return 2;
     }
     /* messages.search#29ee847a in a basic group: flags 0, q "ciao" (TL string

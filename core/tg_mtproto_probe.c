@@ -23363,6 +23363,7 @@ static int tg_gui_last_self_test(void);
 static int tg_gui_peer_seen_self_test(void);
 static int tg_gui_block_self_test(void);
 static int tg_gui_keys_self_test(void);
+static int tg_gui_day_start_self_test(void);
 static int tg_gui_who_read_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
@@ -25811,6 +25812,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_peer_seen_self_test() != 0 ||
         tg_gui_block_self_test() != 0 ||
         tg_gui_keys_self_test() != 0 ||
+        tg_gui_day_start_self_test() != 0 ||
         tg_gui_who_read_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
         return 2;
@@ -30577,6 +30579,105 @@ int tg_gui_session_search_messages_more(FILE *stream)
    newest message, the ring bottom is marked stale, so the jump button and a
    send reload the newest as after deep paging. Returns 1 when the message is
    shown, 0 when the page came back without it, -1 on failure. */
+#if !defined(TG_NO_GUI)
+/* The moment a day starts on Telegram's clock, from the date as the
+   user's clock has it: the times shown are Telegram's moved by `delta`
+   (tg_mtproto_chat_local_epoch), and this is the way back. The days are
+   counted the usual way, by eras of 400 years. */
+static unsigned long tg_gui_day_start(int year, int month, int day,
+                                      long delta)
+{
+    unsigned long y = (unsigned long)year - (month <= 2 ? 1UL : 0UL);
+    unsigned long era = y / 400UL;
+    unsigned long yoe = y - era * 400UL;
+    unsigned long mp = (unsigned long)(month > 2 ? month - 3 : month + 9);
+    unsigned long doy = (153UL * mp + 2UL) / 5UL + (unsigned long)day - 1UL;
+    unsigned long doe = yoe * 365UL + yoe / 4UL - yoe / 100UL + doy;
+    unsigned long local = (era * 146097UL + doe - 719468UL) * 86400UL;
+
+    if (delta < 0L) {
+        return local > (unsigned long)(0L - delta)
+                   ? local - (unsigned long)(0L - delta) : 0UL;
+    }
+    return local + (unsigned long)delta;
+}
+
+/* Public: the open chat shown from a day on. */
+int tg_gui_session_jump_to_date(int year, int month, int day, FILE *stream)
+{
+    static unsigned char query[96];
+    static const char label[] = "mtproto messages.getHistory (date)";
+    tg_mtproto_dialog_peer dest;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long from;
+    unsigned long pos = 0UL;
+    unsigned long id = 0UL;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+    from = tg_gui_day_start(
+        year, month, day,
+        tg_mtproto_display_delta(
+            tg_gui_session_state.context.server_time_delta_seconds,
+            tg_mtproto_local_clock_skew()));
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (from == 0UL ||
+        tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "date peer") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_get_history_peer_dated(
+             &writer, pc, ph, pl, ahh, ahl, hah, from, -1L, 1UL) ==
+                 TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, 0, 0UL, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log("date: Telegram did not say what was written that day");
+        return -1;
+    }
+    /* The one message that comes is the first at or after that moment;
+       an older one means nothing was written from that day on. */
+    while (tg_mtproto_next_message_text(result.result_body,
+                                        result.result_body_length, &pos,
+                                        &tg_gui_last_scratch, &dest)) {
+        if (tg_gui_last_scratch.date >= from) {
+            id = tg_gui_last_scratch.id;
+            break;
+        }
+    }
+    if (id == 0UL) {
+        tg_gui_log("date: nothing from that day on");
+        return 0;
+    }
+    tg_gui_log("date: the first message from that day found");
+    return tg_gui_session_jump_to_message(id, stream) > 0 ? 1 : -1;
+}
+#endif
+
 int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream)
 {
     FILE *quiet;
@@ -45791,6 +45892,35 @@ static int tg_gui_peer_seen_self_test(void)
     tg_chat_edit_target = 0;
     if (!ok) {
         puts("probe self-test: what is kept of who was here wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
+#if !defined(TG_NO_SELFTEST)
+/* The moment a day starts: the day count against dates known, and the
+   way back from the user's clock to Telegram's, east and west of it. */
+static int tg_gui_day_start_self_test(void)
+{
+    if (tg_gui_day_start(1970, 1, 1, 0L) != 0UL ||
+        tg_gui_day_start(2000, 1, 1, 0L) != 946684800UL ||
+        tg_gui_day_start(2013, 8, 14, 0L) != 1376438400UL ||
+        tg_gui_day_start(2024, 2, 29, 0L) != 1709164800UL ||
+        tg_gui_day_start(2026, 11, 12, 0L) != 1794441600UL ||
+        /* a clock an hour ahead of Telegram's shows its times an hour
+           later (delta -3600): its midnight is an hour earlier there */
+        tg_gui_day_start(2026, 11, 12, -3600L) != 1794441600UL - 3600UL ||
+        tg_gui_day_start(2026, 11, 12, 7200L) != 1794441600UL + 7200UL ||
+        tg_gui_day_start(1970, 1, 1, -3600L) != 0UL ||
+        /* and back: the day's first second shows as 00:00:00 */
+        tg_mtproto_chat_local_epoch(
+            tg_gui_day_start(2026, 11, 12, -3600L), -3600L) !=
+            1794441600UL ||
+        tg_mtproto_chat_local_epoch(
+            tg_gui_day_start(2026, 11, 12, 7200L), 7200L) !=
+            1794441600UL) {
+        puts("probe self-test: the moment a day starts wrong");
         return 2;
     }
     return 0;

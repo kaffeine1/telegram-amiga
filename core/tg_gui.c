@@ -8036,6 +8036,85 @@ int tg_gui_may_start_iconified(int mode, int session_open)
     return mode == TG_GUI_MODE_CHAT && session_open != 0;
 }
 
+int tg_gui_parse_date(const char *text, int *year, int *month, int *day)
+{
+    static const int month_days[12] = { 31, 28, 31, 30, 31, 30,
+                                        31, 31, 30, 31, 30, 31 };
+    const char *p = text;
+    long part[3];
+    int digits[3];
+    char sep = '\0';
+    int last;
+    int y;
+    int m;
+    int d;
+    int n;
+
+    if (text == 0 || year == 0 || month == 0 || day == 0) {
+        return 0;
+    }
+    while (*p == ' ') {
+        ++p;
+    }
+    for (n = 0; n < 3; ++n) {
+        part[n] = 0L;
+        digits[n] = 0;
+        while (*p >= '0' && *p <= '9' && digits[n] < 4) {
+            part[n] = part[n] * 10L + (long)(*p - '0');
+            ++digits[n];
+            ++p;
+        }
+        if (digits[n] == 0) {
+            return 0;
+        }
+        if (n < 2) {
+            /* the same mark both times: 12/11.2026 is no date */
+            if ((*p != '/' && *p != '.' && *p != '-') ||
+                (sep != '\0' && *p != sep)) {
+                return 0;
+            }
+            sep = *p++;
+        }
+    }
+    while (*p == ' ') {
+        ++p;
+    }
+    if (*p != '\0') {
+        return 0; /* a fifth digit, or words after it */
+    }
+    if (digits[0] == 4) {
+        if (digits[1] > 2 || digits[2] > 2) {
+            return 0;
+        }
+        y = (int)part[0];
+        m = (int)part[1];
+        d = (int)part[2];
+    } else {
+        if (digits[0] > 2 || digits[1] > 2 ||
+            (digits[2] != 2 && digits[2] != 4)) {
+            return 0;
+        }
+        d = (int)part[0];
+        m = (int)part[1];
+        y = (int)part[2] + (digits[2] == 2 ? 2000 : 0);
+    }
+    /* Telegram opened in 2013 */
+    if (y < 2013 || y > 2099 || m < 1 || m > 12 || d < 1) {
+        return 0;
+    }
+    last = month_days[m - 1];
+    if (m == 2 && y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) {
+        last = 29;
+    }
+    if (d > last) {
+        return 0;
+    }
+    *year = y;
+    *month = m;
+    *day = d;
+    return 1;
+}
+
 static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                                 int *ids)
 {
@@ -11279,6 +11358,50 @@ static int tg_gui_notify_menu_self_test(void)
         tg_gui_may_start_iconified(TG_GUI_MODE_LOGIN_QR, 0)) {
         puts("gui self-test: when a window may start iconified wrong");
         return 2;
+    }
+    /* A date typed where words are searched: the three orders it is
+       written in, a day that does not exist, and what is only words. */
+    {
+        static const struct {
+            const char *text;
+            int ok;
+            int y;
+            int m;
+            int d;
+        } dates[] = {
+            { "12/11/2026", 1, 2026, 11, 12 },
+            { " 1.2.26 ", 1, 2026, 2, 1 },
+            { "2026-11-12", 1, 2026, 11, 12 },
+            { "2026-1-5", 1, 2026, 1, 5 },
+            { "29/02/2024", 1, 2024, 2, 29 },
+            { "29/02/2026", 0, 0, 0, 0 },
+            { "31/04/2026", 0, 0, 0, 0 },
+            { "12/13/2026", 0, 0, 0, 0 },
+            { "1/1/2012", 0, 0, 0, 0 },
+            { "12/11", 0, 0, 0, 0 },
+            { "12/11/202", 0, 0, 0, 0 },
+            { "12/11/20261", 0, 0, 0, 0 },
+            { "12-11.2026", 0, 0, 0, 0 },
+            { "12/11/2026 x", 0, 0, 0, 0 },
+            { "hello", 0, 0, 0, 0 },
+            { "", 0, 0, 0, 0 }
+        };
+        unsigned int k;
+
+        for (k = 0U; k < sizeof(dates) / sizeof(dates[0]); ++k) {
+            int y = -1;
+            int m = -1;
+            int d = -1;
+            int got = tg_gui_parse_date(dates[k].text, &y, &m, &d);
+
+            if (got != dates[k].ok ||
+                (got && (y != dates[k].y || m != dates[k].m ||
+                         d != dates[k].d))) {
+                printf("gui self-test: the date \"%s\" read wrong\n",
+                       dates[k].text);
+                return 2;
+            }
+        }
     }
     /* A person can be blocked: the line before the chat's deletion, which
        reads Unblock once they are known blocked. Never a group, never

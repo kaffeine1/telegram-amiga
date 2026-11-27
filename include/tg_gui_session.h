@@ -393,6 +393,12 @@ int tg_gui_session_search_messages_more(FILE *stream);
    (newest_dropped). 1 = shown, 0 = not in the page, -1 = failed. */
 int tg_gui_session_jump_to_message(unsigned long message_id, FILE *stream);
 
+/* Shows the open chat from a day on, the date as the user's clock has it:
+   the first message of that day, or of the first day after it that has
+   one, with what stands around it. 1 = shown, 0 = nothing was written
+   from that day on, -1 = failed. */
+int tg_gui_session_jump_to_date(int year, int month, int day, FILE *stream);
+
 /* Searches every chat of the account for `query` (messages.searchGlobal).
    The hits replace the sidebar rows, newest first: the chat's name, who
    wrote it and how the message starts, its date; a row's index is the hit's
