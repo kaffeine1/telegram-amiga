@@ -8955,6 +8955,9 @@ int tg_mtproto_parse_bot_callback_answer(unsigned long constructor,
 }
 
 #if !defined(TG_NO_GUI) /* the window alone shows the count */
+static tg_mtproto_tl_status tg_read_message_replies(
+    tg_mtproto_tl_reader *reader, int *comments, unsigned long *replies);
+
 /* views:flags.10?int, which stands after the media behind
    reply_markup:flags.6?ReplyMarkup and entities:flags.7?Vector<MessageEntity>.
    `reader` stands right after a media that was read to its last byte; the
@@ -8978,10 +8981,26 @@ static void tg_read_views_after_media(const tg_mtproto_tl_reader *reader,
                                       &ent_count) != TG_MTPROTO_TL_OK) {
         return;
     }
-    if (tg_mtproto_tl_read_u32(&trial, &views) == TG_MTPROTO_TL_OK &&
-        views <= 0x7fffffffUL) {
-        out->views = views;
-        out->has_views = 1U;
+    if (tg_mtproto_tl_read_u32(&trial, &views) != TG_MTPROTO_TL_OK ||
+        views > 0x7fffffffUL) {
+        return;
+    }
+    out->views = views;
+    out->has_views = 1U;
+    /* forwards:flags.10?int, then replies:flags.23?MessageReplies: the
+       comments of a channel's post */
+    if ((flags & (1UL << 23)) != 0UL) {
+        unsigned long forwards;
+        unsigned long replies = 0UL;
+        int comments = 0;
+
+        if (tg_mtproto_tl_read_u32(&trial, &forwards) == TG_MTPROTO_TL_OK &&
+            tg_read_message_replies(&trial, &comments, &replies) ==
+                TG_MTPROTO_TL_OK &&
+            comments && replies <= 0x7fffffffUL) {
+            out->has_comments = 1U;
+            out->comments = replies;
+        }
     }
 }
 #endif
@@ -9014,11 +9033,17 @@ static tg_mtproto_tl_status tg_read_reaction(tg_mtproto_tl_reader *reader,
     }
 }
 
-static tg_mtproto_tl_status tg_skip_message_replies(
-    tg_mtproto_tl_reader *reader)
+/* messageReplies#83d60fc2 flags:# comments:flags.0?true replies:int
+   replies_pts:int recent_repliers:flags.1?Vector<Peer>
+   channel_id:flags.0?long max_id:flags.2?int read_max_id:flags.3?int,
+   read to its end. When asked, *comments says whether these are the
+   comments of a channel's post and *replies how many there are. */
+static tg_mtproto_tl_status tg_read_message_replies(
+    tg_mtproto_tl_reader *reader, int *comments, unsigned long *replies)
 {
     unsigned long constructor;
     unsigned long flags;
+    unsigned long total;
     unsigned long count;
     unsigned long scratch_hi;
     unsigned long scratch_lo;
@@ -9028,7 +9053,7 @@ static tg_mtproto_tl_status tg_skip_message_replies(
     if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK ||
         constructor != TG_MESSAGE_REPLIES_CONSTRUCTOR ||
         tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u32(reader, &scratch_lo) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(reader, &total) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_read_u32(reader, &scratch_lo) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
@@ -9055,7 +9080,19 @@ static tg_mtproto_tl_status tg_skip_message_replies(
         tg_mtproto_tl_read_u32(reader, &scratch_lo) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
+    if (comments != 0) {
+        *comments = (flags & 1UL) != 0UL;
+    }
+    if (replies != 0) {
+        *replies = total;
+    }
     return TG_MTPROTO_TL_OK;
+}
+
+static tg_mtproto_tl_status tg_skip_message_replies(
+    tg_mtproto_tl_reader *reader)
+{
+    return tg_read_message_replies(reader, 0, 0);
 }
 
 tg_mtproto_tl_status tg_mtproto_read_message_reactions(
@@ -10301,6 +10338,36 @@ int tg_mtproto_parse_user_full_blocked(unsigned long constructor,
     return (flags & 1UL) != 0UL ? 1 : 0;
 }
 #endif
+
+/* messages.getDiscussionMessage#446972fd peer:InputPeer msg_id:int =
+   messages.DiscussionMessage (layer 214 schema): the copy of a channel's
+   post in its discussion group, which the comments answer. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_discussion_message(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x446972fdUL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    return status;
+}
 
 /* contacts.block#2e2e8734 and contacts.unblock#b550d328, both flags:#
    my_stories_from:flags.0?true id:InputPeer = Bool (layer 214 schema): a
@@ -11819,9 +11886,19 @@ static tg_mtproto_tl_status tg_read_common_message_text(
             out->has_views = 1U;
         }
     }
-    if ((flags & (1UL << 23)) != 0UL &&
-        tg_skip_message_replies(reader) != TG_MTPROTO_TL_OK) {
-        return TG_MTPROTO_TL_OK;
+    if ((flags & (1UL << 23)) != 0UL) {
+        unsigned long replies = 0UL;
+        int comments = 0;
+
+        if (tg_read_message_replies(reader, &comments, &replies) !=
+            TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_OK;
+        }
+        if (comments && replies <= 0x7fffffffUL) {
+            /* a channel's post that takes comments */
+            out->has_comments = 1U;
+            out->comments = replies;
+        }
     }
     if ((flags & (1UL << 15)) != 0UL &&
         tg_mtproto_tl_read_u32(reader, &scratch_lo) != TG_MTPROTO_TL_OK) {
@@ -14711,6 +14788,16 @@ static int tg_album_id_self_test(void)
         puts("login self-test: the album behind every other field is lost");
         return 2;
     }
+#if !defined(TG_NO_GUI)
+    /* ...and on the way its replies record says that it takes comments,
+       and that it has five; a post without one takes none */
+    if (list.messages[1].has_comments != 1U ||
+        list.messages[1].comments != 5UL ||
+        list.messages[0].has_comments != 0U) {
+        puts("login self-test: the comments of a post behind a media");
+        return 2;
+    }
+#endif
     if (list.messages[2].grouped_id_hi != 0xabcdUL ||
         list.messages[2].grouped_id_lo != 0x73UL ||
         !list.messages[2].document.has_document) {
@@ -20401,6 +20488,21 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #endif
+    /* The discussion of a post: the request's bytes; no post, no
+       request. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_get_discussion_message(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+            4321UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 20UL ||
+        tg_read_u32_le(peer_rpc) != 0x446972fdUL ||
+        tg_read_u32_le(peer_rpc + 8) != 0x77UL ||
+        tg_read_u32_le(peer_rpc + 16) != 4321UL ||
+        tg_mtproto_build_messages_get_discussion_message(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+            0UL) == TG_MTPROTO_TL_OK) {
+        return 2;
+    }
     /* Blocking and unblocking a person: the two requests, flags 0 and the
        person; nothing but a person is blocked from here. */
     tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
@@ -20595,6 +20697,73 @@ int tg_mtproto_login_self_test(void)
         text_list.messages[2].is_forward != 0U ||
         text_list.messages[2].edited != 0U ||
         text_list.messages[2].has_views != 0U) {
+        return 2;
+    }
+
+    /* A channel's post of text alone that takes comments: views, forwards,
+       then messageReplies with its comments flag, seven of them, and the
+       discussion group's id; the same record without the flag is a thread
+       of a group, not comments. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, (1UL << 10) | (1UL << 23)) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2201UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3001UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "a post") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 900UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_REPLIES_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 7UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 55UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x777UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, (1UL << 10) | (1UL << 23)) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2200UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3000UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "a thread") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 10UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_REPLIES_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 4UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 56UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           peer_rpc, writer.length,
+                                           &text_list) != TG_MTPROTO_TL_OK ||
+        text_list.count != 2UL ||
+        text_list.messages[0].has_views != 1U ||
+        text_list.messages[0].views != 900UL ||
+        text_list.messages[0].has_comments != 1U ||
+        text_list.messages[0].comments != 7UL ||
+        text_list.messages[1].has_views != 1U ||
+        text_list.messages[1].has_comments != 0U ||
+        text_list.messages[1].comments != 0UL) {
         return 2;
     }
 

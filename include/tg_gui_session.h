@@ -467,6 +467,18 @@ int tg_gui_session_who_read(unsigned long message_id, char *out,
                             unsigned long size, char *emsg,
                             unsigned long emsg_size, FILE *stream);
 
+/* The comments of a channel's post (message_id, a message of the open
+   channel): the discussion group they are written in is found, kept among
+   the chats this client knows without a row in the list, and opened on
+   the thread of that post, where a message sent is a comment. 0 = open,
+   1 = Telegram refused (*emsg says why: the post takes no comments), 2 =
+   failed. tg_gui_session_comments_back goes back to the channel and its
+   post: 1 = back, 0 = no comments were open, -1 = failed. */
+int tg_gui_session_open_comments(unsigned long message_id, char *emsg,
+                                 unsigned long emsg_size, FILE *stream);
+int tg_gui_session_comments_back(FILE *stream);
+int tg_gui_session_in_comments(void);
+
 /* A bot's buttons. tg_gui_session_keys reads the message of the open chat
    again (a bot changes its buttons at will) and writes their labels to
    `items` (item_len bytes each, at most max), as the window draws them:

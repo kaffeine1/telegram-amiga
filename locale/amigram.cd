@@ -986,6 +986,14 @@ MSG_ST_THE_CHAT_FROM_THAT_DAY (526//)
 The chat from that day on
 MSG_ST_NO_MESSAGE_FROM_THAT_DAY (527//)
 No message from that day on
+MSG_ST_OPENING_THE_COMMENTS (528//)
+Opening the comments...
+MSG_ST_COMMENTS_ESC_GOES_BACK (529//)
+Comments: ESC goes back to the channel
+MSG_ST_THIS_POST_TAKES_NO_COMMENTS (530//)
+This post takes no comments
+MSG_ST_BACK_TO_THE_CHANNEL (531//)
+Back to the channel...
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1654,6 +1662,14 @@ MSG_G_BUTTONS (1452//)
 Buttons...
 MSG_G_PRESS_ENTER_TO_START_THE_BOT (1453//)
 Press Enter to start the bot
+MSG_G_COMMENTS (1454//)
+Comments...
+MSG_G_1_COMMENT (1455//)
+1 comment
+MSG_G_D_COMMENTS (1456//)
+%lu comments
+MSG_G_COMMENTS_ON_A_POST (1457//)
+Comments on a post
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

@@ -121,6 +121,8 @@ typedef struct tg_chat_message_row {
     unsigned long views;
     int buttons;               /* a bot's buttons, listed under the text:
                                   how many */
+    int has_comments;          /* a channel's post that takes comments... */
+    unsigned long comments;    /* ...and how many it has */
     const tg_reactions *reactions;
     /* The reader stopped short of the reactions field (a media, a keyboard):
        reactions is 0 and the message's reactions are still to be asked. */

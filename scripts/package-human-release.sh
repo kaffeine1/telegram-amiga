@@ -725,6 +725,9 @@ Messages
   link. Buttons that need Telegram's own app (web apps, payments,
   games) say so. In the text client /press lists the buttons of the
   last message that has some, and /press 2 presses the second.
+- A channel's post that takes comments says how many it has beside its
+  views, and "Comments..." in its menu opens them. What you write
+  there is a comment on the post; Esc goes back to the channel.
 - A chat with pinned messages shows the latest under its header,
   "Pinned:" and how it starts; a click shows the chat around it, and
   the next click the one pinned before. Pin and Unpin are in a
@@ -1095,6 +1098,9 @@ Messaggi
   Telegram (web app, pagamenti, giochi) lo dicono. Nel client testuale
   /press elenca i bottoni dell'ultimo messaggio che ne ha, e /press 2
   preme il secondo.
+- Un post di un canale che accetta commenti dice quanti ne ha accanto
+  alle visualizzazioni, e "Comments..." nel suo menu li apre. Quello
+  che scrivi li' e' un commento al post; Esc torna al canale.
 - Una chat con messaggi fissati mostra l'ultimo sotto l'intestazione,
   "Pinned:" e come comincia; un click mostra la chat attorno a quel
   messaggio, e il click dopo quello fissato prima. Pin e Unpin sono nel

@@ -953,6 +953,14 @@
 #define MSG_ST_THE_CHAT_FROM_THAT_DAY_STR "The chat from that day on"
 #define MSG_ST_NO_MESSAGE_FROM_THAT_DAY 527
 #define MSG_ST_NO_MESSAGE_FROM_THAT_DAY_STR "No message from that day on"
+#define MSG_ST_OPENING_THE_COMMENTS 528
+#define MSG_ST_OPENING_THE_COMMENTS_STR "Opening the comments..."
+#define MSG_ST_COMMENTS_ESC_GOES_BACK 529
+#define MSG_ST_COMMENTS_ESC_GOES_BACK_STR "Comments: ESC goes back to the channel"
+#define MSG_ST_THIS_POST_TAKES_NO_COMMENTS 530
+#define MSG_ST_THIS_POST_TAKES_NO_COMMENTS_STR "This post takes no comments"
+#define MSG_ST_BACK_TO_THE_CHANNEL 531
+#define MSG_ST_BACK_TO_THE_CHANNEL_STR "Back to the channel..."
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1509,6 +1517,14 @@
 #define MSG_G_BUTTONS_STR "Buttons..."
 #define MSG_G_PRESS_ENTER_TO_START_THE_BOT 1453
 #define MSG_G_PRESS_ENTER_TO_START_THE_BOT_STR "Press Enter to start the bot"
+#define MSG_G_COMMENTS 1454
+#define MSG_G_COMMENTS_STR "Comments..."
+#define MSG_G_1_COMMENT 1455
+#define MSG_G_1_COMMENT_STR "1 comment"
+#define MSG_G_D_COMMENTS 1456
+#define MSG_G_D_COMMENTS_STR "%lu comments"
+#define MSG_G_COMMENTS_ON_A_POST 1457
+#define MSG_G_COMMENTS_ON_A_POST_STR "Comments on a post"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

@@ -448,7 +448,7 @@ int tg_gui_mute_mark_width(int lh);
 
 /* What stands in a message's time row: the count of views of a channel's
    post, "edited", the time. */
-#define TG_GUI_MSG_TIME_MAX 40
+#define TG_GUI_MSG_TIME_MAX 60
 typedef struct tg_gui_message {
     char sender[TG_GUI_NAME_MAX];
     char text[TG_GUI_MSG_TEXT_MAX];
@@ -460,6 +460,9 @@ typedef struct tg_gui_message {
                                           "Forwarded from ...", 0 = none */
     unsigned char buttons;             /* a bot's buttons, listed under the
                                           text: its menu offers them */
+    unsigned char has_comments;        /* a channel's post that takes
+                                          comments: its menu opens them */
+    unsigned long comments;            /* how many, said in the time row */
     unsigned long views;
     unsigned long day;   /* day of the shown time, + 1; 0 = no date */
     int sender_color;
@@ -1214,6 +1217,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_WHO_READ 20 /* Who read...: one's own message in a group */
 #define TG_GUI_CTX_CHAT_BLOCK 21 /* Block... / Unblock: a person's row */
 #define TG_GUI_CTX_KEYS 22 /* Buttons...: a bot's buttons take the menu */
+#define TG_GUI_CTX_COMMENTS 23 /* Comments...: the comments of a post */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */

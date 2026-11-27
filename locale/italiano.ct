@@ -1440,6 +1440,18 @@ La chat da quel giorno in poi
 MSG_ST_NO_MESSAGE_FROM_THAT_DAY
 Nessun messaggio da quel giorno in poi
 ; No message from that day on
+MSG_ST_OPENING_THE_COMMENTS
+Apro i commenti...
+; Opening the comments...
+MSG_ST_COMMENTS_ESC_GOES_BACK
+Commenti: ESC torna al canale
+; Comments: ESC goes back to the channel
+MSG_ST_THIS_POST_TAKES_NO_COMMENTS
+Questo post non accetta commenti
+; This post takes no comments
+MSG_ST_BACK_TO_THE_CHANNEL
+Torno al canale...
+; Back to the channel...
 MSG_RQ_OK
 OK
 ; OK
@@ -2358,6 +2370,18 @@ Bottoni...
 MSG_G_PRESS_ENTER_TO_START_THE_BOT
 Premi Invio per avviare il bot
 ; Press Enter to start the bot
+MSG_G_COMMENTS
+Commenti...
+; Comments...
+MSG_G_1_COMMENT
+1 commento
+; 1 comment
+MSG_G_D_COMMENTS
+%lu commenti
+; %lu comments
+MSG_G_COMMENTS_ON_A_POST
+Commenti a un post
+; Comments on a post
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]

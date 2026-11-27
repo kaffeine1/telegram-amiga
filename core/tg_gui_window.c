@@ -12762,6 +12762,48 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* Comments...: the comments of a channel's post take the transcript, and
+   what is written there is a comment. ESC comes back to the post. */
+static void tg_gui_window_open_comments(tg_gui_state *state,
+                                        tg_gui_backend *backend,
+                                        unsigned long message_id)
+{
+    char why[48];
+    int rc;
+
+    tg_gui_chat_touched = 1;
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_OPENING_THE_COMMENTS));
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    rc = tg_gui_session_open_comments(message_id, why, sizeof(why), stdout);
+    if (rc == 0) {
+        state->nav_chat = -1;
+        state->selected_msg = -1;
+        state->transcript_scroll = 0;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       rc == 0 ? TG_STR(MSG_ST_COMMENTS_ESC_GOES_BACK)
+                               : (rc == 1
+                                      ? TG_STR(MSG_ST_THIS_POST_TAKES_NO_COMMENTS)
+                                      : TG_STR(MSG_ST_COULD_NOT_LOAD_IT_NETWORK)));
+    tg_gui_window_paint(state, backend);
+}
+
+static void tg_gui_window_comments_back(tg_gui_state *state,
+                                        tg_gui_backend *backend)
+{
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_BACK_TO_THE_CHANNEL));
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_comments_back(stdout) > 0) {
+        state->nav_chat = -1;
+        state->transcript_scroll = 0;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
+    tg_gui_window_paint(state, backend);
+}
+
 /* A bot's button chosen from the menu: pressed, and what comes of it
    shown. The bot's word goes on the status line, or in a requester when
    the bot wants it read; a link is opened after a question, because the
@@ -18368,6 +18410,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     /* ESC with nothing else to cancel: from a forum's
                        topics back to the chats. */
                     tg_gui_window_topic_pick(state, 0, &backend, 0);
+                } else if (msg_code == 27 && tg_gui_session_in_comments()) {
+                    /* ESC with nothing else to cancel, in the comments of
+                       a post: back to the channel, at the post. */
+                    tg_gui_window_comments_back(state, &backend);
                 } else if (msg_code == 27 && state->archive_view) {
                     /* ESC with nothing else to cancel: back from the
                        Archive to the main list. */
@@ -19880,6 +19926,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                             sizeof(state->status),
                             TG_STR(MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK));
+                    } else if (it == TG_GUI_CTX_COMMENTS && m != 0 &&
+                               m->id != 0UL) {
+                        tg_gui_window_open_comments(state, &backend, m->id);
                     } else if (it == TG_GUI_CTX_KEYS && m != 0 &&
                                m->id != 0UL) {
                         /* Buttons...: the bot's buttons take the menu,

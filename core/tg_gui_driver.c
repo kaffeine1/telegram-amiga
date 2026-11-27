@@ -195,12 +195,13 @@ static void tg_gui_driver_count_text(unsigned long n, char *out)
 }
 
 /* The message's time row, written from its parts: the count of views of a
-   channel's post (the painter draws an eye before it), "edited", the
-   time. Nothing while the message has no time yet (the echo of a message
-   just sent). */
+   channel's post (the painter draws an eye before it), how many comments
+   it has, "edited", the time. Nothing while the message has no time yet
+   (the echo of a message just sent). */
 static void tg_gui_driver_compose_time(tg_gui_message *message)
 {
     char views[16];
+    char talk[24];
     char word[20];
 
     if (message->clock[0] == '\0') {
@@ -208,15 +209,28 @@ static void tg_gui_driver_compose_time(tg_gui_message *message)
         return;
     }
     views[0] = '\0';
+    talk[0] = '\0';
     word[0] = '\0';
     if (message->has_views) {
         tg_gui_driver_count_text(message->views, views);
         strcat(views, "  ");
     }
+    if (message->has_comments && message->comments > 0UL) {
+        if (message->comments == 1UL) {
+            tg_locale_format(talk, sizeof(talk) - 2UL, "%s",
+                             TG_STR(MSG_G_1_COMMENT));
+        } else {
+            tg_locale_format(talk, sizeof(talk) - 2UL,
+                             TG_STR(MSG_G_D_COMMENTS),
+                             message->comments % 1000000UL);
+        }
+        strcat(talk, "  ");
+    }
     if (message->edited) {
         sprintf(word, "%.16s ", TG_STR(MSG_S_EDITED));
     }
-    sprintf(message->time, "%.13s%.18s%.5s", views, word, message->clock);
+    sprintf(message->time, "%.13s%.23s%.18s%.5s", views, talk, word,
+            message->clock);
 }
 
 static void tg_gui_driver_set_time(tg_gui_message *message,
@@ -246,14 +260,19 @@ static int tg_gui_driver_take_marks(tg_gui_message *message,
 {
     unsigned char edited = row->edited ? 1U : 0U;
     unsigned char has_views = row->has_views ? 1U : 0U;
+    unsigned char has_comments = row->has_comments ? 1U : 0U;
 
     if (message->edited == edited && message->has_views == has_views &&
-        (!has_views || message->views == row->views)) {
+        (!has_views || message->views == row->views) &&
+        message->has_comments == has_comments &&
+        (!has_comments || message->comments == row->comments)) {
         return 0;
     }
     message->edited = edited;
     message->has_views = has_views;
     message->views = has_views ? row->views : 0UL;
+    message->has_comments = has_comments;
+    message->comments = has_comments ? row->comments : 0UL;
     tg_gui_driver_compose_time(message);
     return 1;
 }
@@ -571,6 +590,8 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     message->views = row->has_views ? row->views : 0UL;
     message->buttons = row->buttons > 255 ? 255U
                                           : (unsigned char)row->buttons;
+    message->has_comments = row->has_comments ? 1U : 0U;
+    message->comments = row->has_comments ? row->comments : 0UL;
     if (row->reply_quote != 0 && row->reply_quote[0] != '\0') {
         tg_gui_driver_copy_latin1(message->reply_text,
                                   sizeof(message->reply_text), row->reply_quote);
@@ -2433,6 +2454,30 @@ static int tg_gui_driver_marks_self_test(void)
     generation = state->msg_gen;
     driver.on_message(driver.ctx, &row); /* the same again: nothing moves */
     ok = ok && state->msg_gen == generation;
+    /* The post takes comments: none yet says nothing, one and several are
+       said after the views, and a new comment moves the row. */
+    row.has_comments = 1;
+    row.comments = 0UL;
+    driver.on_message(driver.ctx, &row);
+    ok = ok && state->messages[2].has_comments == 1U &&
+         strcmp(state->messages[2].time, want) == 0;
+    row.comments = 1UL;
+    generation = state->msg_gen;
+    driver.on_message(driver.ctx, &row);
+    sprintf(want, "15K  %s  %.16s 09:05", TG_STR(MSG_G_1_COMMENT),
+            TG_STR(MSG_S_EDITED));
+    ok = ok && strcmp(state->messages[2].time, want) == 0 &&
+         state->msg_gen > generation;
+    row.comments = 12UL;
+    driver.on_message(driver.ctx, &row);
+    {
+        char said[24];
+
+        tg_locale_format(said, sizeof(said), TG_STR(MSG_G_D_COMMENTS), 12UL);
+        sprintf(want, "15K  %s  %.16s 09:05", said, TG_STR(MSG_S_EDITED));
+    }
+    ok = ok && state->messages[2].comments == 12UL &&
+         strcmp(state->messages[2].time, want) == 0;
     /* A forwarded photo with no caption: the line, then its label, which
        the painter gives up for the picture; a service line takes no such
        line. */

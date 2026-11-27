@@ -8301,6 +8301,11 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = TG_STR(MSG_G_BUTTONS);
             ids[n++] = TG_GUI_CTX_KEYS;
         }
+        /* A channel's post that takes comments: they open from here. */
+        if (state->messages[state->ctx_msg].has_comments) {
+            labels[n] = TG_STR(MSG_G_COMMENTS);
+            ids[n++] = TG_GUI_CTX_COMMENTS;
+        }
     }
     labels[n] = TG_STR(MSG_G_REPLY);
     ids[n] = TG_GUI_CTX_REPLY;
@@ -13775,6 +13780,18 @@ int tg_gui_self_test(void)
         state.poll_item_count = 0;
         count = tg_gui_context_items(&state, labels, ids);
         ok_keys = ok_keys && count == plain + 1 && ids[1] == TG_GUI_CTX_KEYS;
+        /* a post that takes comments offers them, under the buttons */
+        state.ctx_poll = 0;
+        state.messages[0].has_comments = 1U;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_keys = ok_keys && count == plain + 2 &&
+                  ids[1] == TG_GUI_CTX_KEYS &&
+                  ids[2] == TG_GUI_CTX_COMMENTS &&
+                  strcmp(labels[2], TG_STR(MSG_G_COMMENTS)) == 0;
+        state.messages[0].buttons = 0U;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_keys = ok_keys && count == plain + 1 &&
+                  ids[1] == TG_GUI_CTX_COMMENTS;
         state.ctx_poll = 0;
         state.ctx_visible = 0;
         state.ctx_msg = -1;

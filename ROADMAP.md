@@ -1484,14 +1484,27 @@ Then the middle-sized ones:
   are shown in. Tried live on a public channel: a day with no post
   leads to the next post, a day still to come says that nothing was
   written from then on. The text client does not have it yet.
+- Comments on a channel's post. The reader keeps what messageReplies
+  says of a post (its comments flag, how many), the time row says the
+  number, and "Comments..." in the post's menu asks Telegram for the
+  post's copy in the discussion group (messages.getDiscussionMessage):
+  the group goes into the peer cache, hidden from the list unless it
+  was there already, and opens as the one thread that answers the post.
+  That is a forum's topic without the list of topics: the same
+  getReplies, the same sends with the thread's first message, the same
+  drafts and read marks. A comment that answers the post itself shows
+  no reply line. ESC goes back to the channel, at the post. Tried live
+  on a public channel for reading (a post of 20 comments shows 20
+  messages, the group stays out of the list, the way back marks the
+  post); a comment was not written, for want of a place to write one
+  that is not somebody's public group.
 
 Tried live with the test account, two sessions of it for what one
 device tells another, and seen in a window on the OS4 VM in Italian.
 The 68000 text client grew by about 5 KB with its share of the small
 ones, and by 7 KB more with the bots' buttons.
 
-Next, in this order: comments on
-channel posts (the topics view serves), active sessions, translation,
+Next, in this order: active sessions, translation,
 t.me links opened inside Amigram, scheduled messages, contacts,
 password recovery by email, a richer ARexx port. The large ones (chat
 folders, profile editing, group administration, quoting part of a

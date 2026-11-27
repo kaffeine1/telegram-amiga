@@ -684,6 +684,10 @@ typedef struct tg_mtproto_message_text {
     /* How many buttons a bot put under the message (or offers in place of
        typing): their labels stand under its text, a row a line. */
     unsigned char button_count;
+    /* A channel's post that takes comments (its messageReplies says so),
+       and how many it has. */
+    unsigned char has_comments;
+    unsigned long comments;
 } tg_mtproto_message_text;
 
 /* --- polls ---------------------------------------------------------------
@@ -1345,6 +1349,17 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
                                        unsigned long body_length,
                                        tg_mtproto_read_participant *out,
                                        int max);
+/* The copy of a channel's post in its discussion group
+   (messages.getDiscussionMessage): what the comments answer. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_discussion_message(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id);
 /* A bot's keyboard: the buttons under one of its messages
    (replyInlineMarkup) or the ones it offers in place of typing
    (replyKeyboardMarkup). The reader keeps one at a time: the keyboard of

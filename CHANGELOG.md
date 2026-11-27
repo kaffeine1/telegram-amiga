@@ -132,6 +132,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   used to hide. A chat with a bot that holds no message yet says "Press
   Enter to start the bot": ENTER, or a click on Send, sends it `/start`,
   and the header says "bot" there too.
+- Comments on a channel's post. A post that takes comments says how
+  many it has in its time row, after the views, and "Comments..." in
+  its menu opens them in the transcript: the discussion group they are
+  written in is found (`messages.getDiscussionMessage`), kept among the
+  chats Amigram knows without a row in the list, and read as the thread
+  that answers the post (`messages.getReplies`), the way a forum's topic
+  is read. What is written there is a comment on the post; ESC goes
+  back to the channel, at the post.
 - Go to a date: a date typed in Find in chat (12/11/2026, 12.11.26 or
   2026-11-12) shows the chat from that day on, the first message of the
   day with what stands around it. The day is the one of the clock the

@@ -935,6 +935,13 @@ static unsigned long tg_mtproto_history_topic_id = 0UL;
 /* The open chat is a forum, and the topic its transcript shows (0 = none
    chosen yet): see "topics of a forum group" by the chat open. */
 static int tg_gui_forum = 0;
+/* The comments of a channel's post: its discussion group, read and written
+   as the one thread of it that answers the post, the way a forum's topic
+   is (tg_gui_forum and tg_gui_topic are set for it), with no list of
+   topics. tg_gui_thread_wanted asks the next chat opened for it. */
+static int tg_gui_thread = 0;
+static unsigned long tg_gui_thread_root = 0UL;
+static unsigned long tg_gui_thread_wanted = 0UL;
 static unsigned long tg_gui_topic = 0UL;
 static unsigned int tg_gui_session_changes; /* defined with the tick */
 
@@ -17754,6 +17761,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.has_views = texts.messages[i].has_views;
                 row.views = texts.messages[i].views;
                 row.buttons = (int)texts.messages[i].button_count;
+                row.has_comments = texts.messages[i].has_comments;
+                row.comments = texts.messages[i].comments;
                 row.has_time = (texts.messages[i].date != 0UL);
                 row.local_epoch =
                     row.has_time
@@ -17780,6 +17789,12 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.reply_to_id = (texts.messages[i].has_reply && !row.is_service)
                                       ? texts.messages[i].reply_to_msg_id
                                       : 0UL;
+                if (tg_gui_thread && row.reply_to_id == tg_gui_thread_root &&
+                    row.reply_quote == 0) {
+                    /* in the comments of a post every comment answers the
+                       post: that is where it stands, not a reply to show */
+                    row.reply_to_id = 0UL;
+                }
                 if (row.reply_to_id != 0UL && row.reply_quote == 0 &&
                     tg_chat_message_driver_override == 0) {
                     unsigned long rj;
@@ -29137,6 +29152,8 @@ static void tg_gui_topic_apply(void)
 static void tg_gui_topic_forget(void)
 {
     tg_gui_forum = 0;
+    tg_gui_thread = 0;
+    tg_gui_thread_root = 0UL;
     tg_gui_topic = 0UL;
     tg_gui_topic_wanted = 0UL;
     tg_gui_topics_shown = 0;
@@ -29275,10 +29292,11 @@ static void tg_gui_topic_subtitle(void)
     if (gst == 0) {
         return;
     }
-    gst->forum_open = tg_gui_forum;
-    gst->topic_open = tg_gui_forum ? tg_gui_topic : 0UL;
+    /* the comments of a post are a thread, not a forum to the window */
+    gst->forum_open = tg_gui_forum && !tg_gui_thread;
+    gst->topic_open = gst->forum_open ? tg_gui_topic : 0UL;
     gst->topic_title[0] = '\0';
-    if (!tg_gui_forum) {
+    if (!gst->forum_open) {
         return;
     }
     t = tg_gui_topic_find(tg_gui_topic);
@@ -29816,6 +29834,19 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
            others beside it: nothing to choose before one can read. */
         tg_gui_topic = TG_MTPROTO_TOPIC_GENERAL;
     }
+    /* The comments of a post: the discussion group opens on the thread
+       that answers it, and stays on it when it is opened again. */
+    if (tg_gui_thread_wanted != 0UL &&
+        tg_gui_session_state.open_peer_constructor ==
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        tg_gui_thread = 1;
+        tg_gui_thread_root = tg_gui_thread_wanted;
+    }
+    tg_gui_thread_wanted = 0UL;
+    if (tg_gui_thread) {
+        tg_gui_forum = 1;
+        tg_gui_topic = tg_gui_thread_root;
+    }
     tg_gui_topic_apply();
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(10UL); /* the recent history can stream */
@@ -29859,7 +29890,8 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
             printed = 0UL;
         }
     }
-    if (tg_gui_forum && tg_gui_topic == TG_MTPROTO_TOPIC_GENERAL &&
+    if (tg_gui_forum && !tg_gui_thread &&
+        tg_gui_topic == TG_MTPROTO_TOPIC_GENERAL &&
         printed == 0UL && tg_gui_session_state.gui_driver.state != 0 &&
         tg_gui_session_state.gui_driver.state->message_count == 0) {
         /* General gave nothing (empty, hidden away, or the link): the list
@@ -29890,7 +29922,17 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
                 ? 1 : 0;
     }
 #if !defined(TG_NO_GUI)
-    if (tg_gui_forum) {
+    if (tg_gui_thread && tg_gui_session_state.gui_driver.state != 0) {
+        /* the comments of a post: no topics, and the header says what
+           the transcript holds */
+        tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+
+        gst->forum_open = 0;
+        gst->topic_open = 0UL;
+        gst->topic_title[0] = '\0';
+        tg_locale_format(gst->subtitle, sizeof(gst->subtitle), "%s",
+                         TG_STR(MSG_G_COMMENTS_ON_A_POST));
+    } else if (tg_gui_forum) {
         tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
 
         if (tg_gui_topic == 0UL && gst != 0) {
@@ -29978,7 +30020,7 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
 /* --- forum topics: what the window and the text client ask -------------- */
 int tg_gui_session_forum_open(void)
 {
-    return tg_gui_session_state.open && tg_gui_forum;
+    return tg_gui_session_state.open && tg_gui_forum && !tg_gui_thread;
 }
 
 unsigned long tg_gui_session_topic(void)
@@ -34647,6 +34689,193 @@ int tg_gui_session_leave_chat(unsigned long peer_index, int both,
 }
 
 #if !defined(TG_NO_GUI) /* asked from a message's menu */
+/* The comments of a post: where they were opened from, to go back. */
+static unsigned long tg_gui_comments_from_index = 0UL;
+static unsigned long tg_gui_comments_post_id = 0UL;
+
+int tg_gui_session_in_comments(void)
+{
+    return tg_gui_session_state.open && tg_gui_thread;
+}
+
+/* Public: the comments of a post of the open channel. */
+int tg_gui_session_open_comments(unsigned long message_id, char *emsg,
+                                 unsigned long emsg_size, FILE *stream)
+{
+    static unsigned char query[64];
+    static const char label[] = "mtproto messages.getDiscussionMessage";
+    char known_label[TG_GUI_NAME_MAX];
+    const tg_mtproto_peer_cache_entry *group = 0;
+    tg_mtproto_dialog_peer dest;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    unsigned long from_index = 0UL;
+    unsigned long known_index = 0UL;
+    unsigned long index = 0UL;
+    unsigned long root = 0UL;
+    unsigned long group_hi = 0UL;
+    unsigned long group_lo = 0UL;
+    unsigned long pos = 0UL;
+    unsigned long i;
+    int was_known;
+    int hah;
+    int rc;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        message_id == 0UL || tg_gui_thread ||
+        tg_gui_session_state.open_peer_constructor !=
+            TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR ||
+        tg_mtproto_parse_ulong_arg(tg_gui_session_state.current_peer_index,
+                                   &from_index) != 0 ||
+        from_index == 0UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "comments peer") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_get_discussion_message(
+             &writer, pc, ph, pl, ahh, ahl, hah, message_id) ==
+                 TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "comments: Telegram gave no discussion"
+                           : "comments: asking for the discussion failed");
+        return rc;
+    }
+    if (result.result_constructor != 0xa6341782UL) {
+        /* messages.discussionMessage */
+        return 2;
+    }
+    /* The post's copy in the discussion group: the comments answer it. An
+       album has several copies, and the oldest is the one answered. */
+    while (tg_mtproto_next_message_text(result.result_body,
+                                        result.result_body_length, &pos,
+                                        &tg_gui_last_scratch, &dest)) {
+        if (dest.peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
+            (root == 0UL || tg_gui_last_scratch.id < root)) {
+            root = tg_gui_last_scratch.id;
+            group_hi = dest.id_hi;
+            group_lo = dest.id_lo;
+        }
+    }
+    /* ...and the group itself, from the chats of the answer */
+    tg_mtproto_parse_message_peers(result.result_body,
+                                   result.result_body_length,
+                                   &tg_chat_sender_cache);
+    for (i = 0UL; root != 0UL && i < tg_chat_sender_cache.count; ++i) {
+        const tg_mtproto_peer_cache_entry *e =
+            &tg_chat_sender_cache.entries[i];
+
+        if (e->peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR &&
+            e->id_hi == group_hi && e->id_lo == group_lo &&
+            e->has_access_hash) {
+            group = e;
+            break;
+        }
+    }
+    if (group == 0) {
+        tg_gui_log("comments: the discussion group is not in the answer");
+        return 2;
+    }
+    was_known = tg_mtproto_peer_cache_find_by_id(
+                    tg_gui_session_state.peer_cache_file, group_hi, group_lo,
+                    &known_index, known_label, sizeof(known_label)) == 0;
+    if (tg_gui_search_cache_entry(group, stream, 0, &index) != 0 ||
+        index == 0UL) {
+        tg_gui_log("comments: the discussion group could not be kept");
+        return 2;
+    }
+    if (!was_known) {
+        /* known to this client from now on, with no row in the list: the
+           user did not join it */
+        (void)tg_gui_hidden_add(group_hi, group_lo);
+    }
+    tg_gui_comments_from_index = from_index;
+    tg_gui_comments_post_id = message_id;
+    /* the transcript's chat is none of the list's rows now */
+    memset(&gst->open_chat, 0, sizeof(gst->open_chat));
+    tg_gui_driver_text_from_utf8(gst->open_chat.name,
+                                 sizeof(gst->open_chat.name), group->title);
+    gst->open_chat.index = index;
+    gst->open_chat.peer_id_hi = group_hi;
+    gst->open_chat.peer_id_lo = group_lo;
+    gst->open_chat.is_group = 1;
+    gst->open_chat_valid = 1;
+    gst->selected_chat = -1;
+    tg_locale_format(gst->title, sizeof(gst->title), "%s",
+                     gst->open_chat.name);
+    gst->message_count = 0;
+    gst->msg_gen++;
+    tg_gui_thread_wanted = root;
+    (void)tg_gui_session_open_chat(index, stream);
+    tg_gui_log(tg_gui_thread ? "comments: open"
+                             : "comments: the group did not open as a thread");
+    return tg_gui_thread ? 0 : 2;
+}
+
+/* Public: back from the comments to the channel, at the post. */
+int tg_gui_session_comments_back(FILE *stream)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    unsigned long index = tg_gui_comments_from_index;
+    unsigned long post = tg_gui_comments_post_id;
+    int r;
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        !tg_gui_thread) {
+        return 0;
+    }
+    tg_gui_comments_from_index = 0UL;
+    tg_gui_comments_post_id = 0UL;
+    if (index == 0UL) {
+        return -1;
+    }
+    for (r = 0; r < gst->chat_count; ++r) {
+        if (gst->chats[r].index == index) {
+            gst->selected_chat = r;
+            gst->chat_scroll_to_sel = 1;
+            tg_locale_format(gst->title, sizeof(gst->title), "%s",
+                             gst->chats[r].name);
+            tg_gui_note_open_chat(gst);
+            break;
+        }
+    }
+    gst->message_count = 0;
+    gst->msg_gen++;
+    (void)tg_gui_session_open_chat(index, stream);
+    if (post != 0UL) {
+        (void)tg_gui_session_jump_to_message(post, stream);
+    }
+    tg_gui_log("comments: back to the channel");
+    return 1;
+}
+
 /* Public: the buttons of a bot's message of the open chat, read again
    from Telegram; their labels as the window draws them. */
 int tg_gui_session_keys(unsigned long message_id, char *items,
