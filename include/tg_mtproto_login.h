@@ -1306,6 +1306,17 @@ unsigned long tg_mtproto_find_message_date(const unsigned char *body,
 
 /* Marks a chat read up to max_id: messages.readHistory, or
    channels.readHistory for a channel or a supergroup. */
+/* messages.setTyping with the typing action: "is typing..." for the
+   others in that chat (top_msg_id: a forum's topic, 0 = none). */
+tg_mtproto_tl_status tg_mtproto_build_messages_set_typing(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long top_msg_id);
 tg_mtproto_tl_status tg_mtproto_build_read_history_peer(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -1406,6 +1417,9 @@ tg_mtproto_tl_status tg_mtproto_peer_notify_keep(
 /* The next messages.sendMessage built clears the chat's draft too (on) or
    leaves it (off, the default). */
 void tg_mtproto_send_set_clear_draft(int on);
+/* The text messages sent from now on carry silent:flags.5 (no sound on
+   the other side) until this is called again with 0. */
+void tg_mtproto_send_set_silent(int on);
 
 /* The mentions by name the next messages.sendMessage built carries: where
    each name is in its text (UTF-16 units) and whose it is. None (0, 0)

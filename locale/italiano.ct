@@ -1377,6 +1377,18 @@ Le chat mostrano solo il nome
 MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS
 Impostazione anteprime non salvata
 ; Could not save the previews setting
+MSG_ST_TYPING_SHOWN
+Gli altri vedono quando scrivi
+; Others see when you are typing
+MSG_ST_TYPING_NOT_SHOWN
+Gli altri non vedono quando scrivi
+; Others do not see when you type
+MSG_ST_COULD_NOT_SAVE_THE_TYPING
+Impostazione scrittura non salvata
+; Could not save the typing setting
+MSG_ST_SENT_WITHOUT_SOUND
+Inviato senza suono
+; Sent without sound
 MSG_RQ_OK
 OK
 ; OK
@@ -1612,6 +1624,7 @@ Scelta della chat:\n\
 \n\
 ENTER        scrive un messaggio nella chat aperta\n\
 Shift+ENTER  a capo nel messaggio (ENTER invia)\n\
+Alt+ENTER    invia senza suono per gli altri\n\
 Clic msg     lo seleziona (A+C copia); doppio clic risponde\n\
 Canc / A+R   toglie dall'elenco la chat scelta\n\
 A+F          invia un file alla chat aperta\n\
@@ -2236,6 +2249,9 @@ ultimo accesso molto tempo fa
 MSG_G_SEEN_BOT
 bot
 ; bot
+MSG_SET_SHOW_WHEN_I_TYPE
+Mostra agli altri quando scrivo
+; Show others when I type
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -3880,3 +3896,9 @@ nov
 MSG_T_MON_DEC
 dic
 ; Dec
+MSG_T_HELP_SILENT_TEXT_SEND
+  /silent testo   invia il testo senza suono per gli altri
+;   /silent text    send the text without a sound for the others
+MSG_T_USE_SILENT_TEXT
+Uso: /silent <testo>
+; Use: /silent <text>

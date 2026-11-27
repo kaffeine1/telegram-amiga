@@ -944,6 +944,14 @@ MSG_ST_PREVIEWS_HIDDEN (505//)
 Chats show their name only
 MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS (506//)
 Could not save the previews setting
+MSG_ST_TYPING_SHOWN (507//)
+Others see when you are typing
+MSG_ST_TYPING_NOT_SHOWN (508//)
+Others do not see when you type
+MSG_ST_COULD_NOT_SAVE_THE_TYPING (509//)
+Could not save the typing setting
+MSG_ST_SENT_WITHOUT_SOUND (510//)
+Sent without sound
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1139,6 +1147,7 @@ Chat selection:\n\
 \n\
 ENTER        write a message to the open chat\n\
 Shift+ENTER  new line in the message (ENTER sends)\n\
+Alt+ENTER    send without sound for the others\n\
 Click msg    select it (A+C copies); double-click replies\n\
 Del / A+R    remove the selected chat from the list\n\
 A+F          send a file to the open chat\n\
@@ -1574,6 +1583,8 @@ MSG_G_SEEN_LONG_AGO (1446//)
 last seen a long time ago
 MSG_G_SEEN_BOT (1447//)
 bot
+MSG_SET_SHOW_WHEN_I_TYPE (1448//)
+Show others when I type
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2746,3 +2757,7 @@ MSG_T_MON_NOV (2343//)
 Nov
 MSG_T_MON_DEC (2344//)
 Dec
+MSG_T_HELP_SILENT_TEXT_SEND (2345//)
+  /silent text    send the text without a sound for the others
+MSG_T_USE_SILENT_TEXT (2346//)
+Use: /silent <text>

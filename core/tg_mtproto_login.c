@@ -1582,6 +1582,46 @@ static tg_mtproto_tl_status tg_write_input_channel(
     return status;
 }
 
+#if !defined(TG_NO_GUI) /* the window says it; the text client does not */
+/* messages.setTyping#58943ee2 flags:# peer:InputPeer
+   top_msg_id:flags.0?int action:SendMessageAction = Bool, with
+   sendMessageTypingAction#16bf744e (layer 214 schema): the others see
+   "is typing..." in that chat for a few seconds. top_msg_id names a
+   forum's topic, 0 = none. */
+tg_mtproto_tl_status tg_mtproto_build_messages_set_typing(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long top_msg_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x58943ee2UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, top_msg_id != 0UL ? 1UL : 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK && top_msg_id != 0UL) {
+        status = tg_mtproto_tl_write_u32(writer, top_msg_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0x16bf744eUL);
+    }
+    return status;
+}
+#endif
+
 /* Marks a chat read up to max_id (layer 214 schema, checked 2026-11-10):
    messages.readHistory#e306d3a peer:InputPeer max_id:int for a private chat
    or a basic group, channels.readHistory#cc104937 channel:InputChannel
@@ -2804,11 +2844,22 @@ void tg_mtproto_send_set_styles(const tg_mtproto_send_style *list, int count)
 
 static unsigned long tg_send_topic_top(void);
 
+/* silent:flags.5?true of messages.sendMessage (layer 214): the message
+   comes without a sound on the other side. Set for the sends that follow,
+   until cleared. */
+static int tg_send_silent = 0;
+
+void tg_mtproto_send_set_silent(int on)
+{
+    tg_send_silent = on ? 1 : 0;
+}
+
 static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
 {
     return ((reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL) ? 1UL
                                                                    : 0UL) |
            (tg_send_mention_count + tg_send_style_count > 0 ? 8UL : 0UL) |
+           (tg_send_silent ? 32UL : 0UL) |
            (tg_send_clear_draft ? 128UL : 0UL);
 }
 
@@ -19596,6 +19647,53 @@ int tg_mtproto_login_self_test(void)
                                         &kind, &when, &bot) != 0) {
             return 2;
         }
+    }
+#endif
+    /* A message sent without a sound carries silent:flags.5, and only
+       while it is asked for. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    tg_mtproto_send_set_silent(1);
+    if (tg_mtproto_build_messages_send_peer(&writer, TG_PEER_USER_CONSTRUCTOR,
+                                            0UL, 0x55UL, 0x11UL, 0x22UL, 1,
+                                            "ciao", 0UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(peer_rpc) != TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR ||
+        tg_read_u32_le(peer_rpc + 4) != 32UL) {
+        tg_mtproto_send_set_silent(0);
+        return 2;
+    }
+    tg_mtproto_send_set_silent(0);
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_send_peer(&writer, TG_PEER_USER_CONSTRUCTOR,
+                                            0UL, 0x55UL, 0x11UL, 0x22UL, 1,
+                                            "ciao", 0UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(peer_rpc + 4) != 0UL) {
+        return 2;
+    }
+#if !defined(TG_NO_GUI)
+    /* messages.setTyping: to a user with no topic (flags 0), and to a
+       forum's topic (flags 1, the topic before the action). */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_set_typing(&writer, TG_PEER_USER_CONSTRUCTOR,
+                                             0UL, 0x55UL, 0x11UL, 0x22UL, 1,
+                                             0UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 32UL ||
+        tg_read_u32_le(peer_rpc) != 0x58943ee2UL ||
+        tg_read_u32_le(peer_rpc + 4) != 0UL ||
+        tg_read_u32_le(peer_rpc + 12) != 0x55UL ||
+        tg_read_u32_le(peer_rpc + 28) != 0x16bf744eUL) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_set_typing(
+            &writer, TG_PEER_CHANNEL_CONSTRUCTOR, 0UL, 0x66UL, 0x11UL, 0x22UL,
+            1, 40UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 36UL ||
+        tg_read_u32_le(peer_rpc + 4) != 1UL ||
+        tg_read_u32_le(peer_rpc + 28) != 40UL ||
+        tg_read_u32_le(peer_rpc + 32) != 0x16bf744eUL) {
+        return 2;
     }
 #endif
     /* A user read field by field, to its end: the flags word of "seen

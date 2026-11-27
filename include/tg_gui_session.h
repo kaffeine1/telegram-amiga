@@ -450,6 +450,17 @@ int tg_gui_session_send_to(unsigned long peer_index, const char *text,
    mention as read: 1 = shown, 0 = none left, -1 = failed. */
 int tg_gui_session_next_mention(FILE *stream);
 
+/* The messages tg_gui_session_send sends from now on reach the others
+   without a sound (1), or with it again (0): set it around a send. */
+void tg_gui_session_send_silent(int on);
+
+/* The user is writing in the open chat: the others are told ("is
+   typing..."), once every few seconds while the composer's text keeps
+   changing. Call it from the poll while the composer holds text; it sends
+   one small request when one is due and does nothing otherwise. Not in
+   Saved Messages. 1 = one was sent. */
+int tg_gui_session_typing_step(FILE *stream);
+
 /* The chat list with (1) or without (0) each chat's newest message under
    its name. Without, nothing of it is kept, in memory or in
    data/telegram-last.txt. Call it before the session opens for a start

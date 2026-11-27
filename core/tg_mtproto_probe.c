@@ -617,6 +617,10 @@ typedef struct tg_chat_inbox_read_entry {
 static tg_chat_inbox_read_entry
     tg_chat_inbox_read_queue[TG_CHAT_INBOX_READ_QUEUE_MAX];
 static unsigned long tg_chat_inbox_read_count = 0UL;
+/* "is typing..." for the others (defined with the step that says it):
+   the opening of a chat starts it over. */
+static unsigned long tg_gui_typing_sum;
+static unsigned long tg_gui_typing_at;
 #if !defined(TG_NO_GUI)
 /* When someone was last here: what an update says (a person coming online
    or leaving) and what a chat's page says of its users, kept until the
@@ -14638,7 +14642,7 @@ static void tg_chat_history_add(const char *text)
     "          /history /forward /forwardto /react /reactions /ids\n" \
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
-    "          /voters /markread /markunread /topics /topic\n" \
+    "          /voters /markread /markunread /topics /topic /silent\n" \
     "          /help /update /logout /quit\n"
 
 /*
@@ -18779,6 +18783,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_GETFILE_DOWNLOAD_THE),
     TG_HELP(MSG_T_HELP_SENDFILE_PATH_SEND),
     TG_HELP(MSG_T_HELP_PHOTO_PATH_SEND),
+    TG_HELP(MSG_T_HELP_SILENT_TEXT_SEND),
     TG_HELP(MSG_T_HELP_WATCH_SEC_READ),
     TG_HELP(MSG_T_HELP_RESIZE_REDRAW_AFTER),
     TG_HELP(MSG_T_HELP_DIFF_BACKGROUND_CATCH),
@@ -22112,6 +22117,19 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
             continue;
         }
+        if (strcmp(line, "/silent") == 0) {
+            tg_mtproto_chat_print_system_line(stream,
+                                              TG_TSTR(MSG_T_USE_SILENT_TEXT));
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        if (strncmp(line, "/silent ", 8) == 0 && line[8] != '\0') {
+            /* "/silent text": the text reaches the others without a sound
+               (silent:flags.5 of the message sent below) */
+            memmove(line, line + 8, strlen(line + 8) + 1U);
+            tg_mtproto_send_set_silent(1);
+        }
         quiet = tg_mtproto_open_quiet_stream(stream);
         {
             const char *send_text = line;
@@ -22138,6 +22156,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     peer_cache_file, peer_index, send_text, 0UL,
                     &sent_message_id, quiet);
                 tg_mtproto_send_set_clear_draft(0);
+                tg_mtproto_send_set_silent(0);
                 if (rc == 0 && had_draft) {
                     tg_chat_draft_set_chat(dpc, dph, dpl, tg_chat_draft_topic_now(), "");
                 }
@@ -29259,6 +29278,8 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
     tg_gui_session_state.open_peer_id_lo = 0UL;
     tg_gui_session_state.open_peer_is_chat = 0;
     tg_gui_session_state.typing.active = 0;
+    tg_gui_typing_sum = 0UL; /* "is typing..." starts over in this chat */
+    tg_gui_typing_at = 0UL;
 #if !defined(TG_NO_GUI)
     /* ...and when this chat's person was last here is learnt again. */
     tg_gui_peer_seen_kind = TG_MTPROTO_USER_STATUS_UNKNOWN;
@@ -34238,6 +34259,112 @@ int tg_gui_session_presence(int online, FILE *stream)
     return 2;
 }
 
+/* --- "is typing..." for the others ----------------------------------------
+   While the user writes in the open chat the others are told, as every
+   client tells them: messages.setTyping with the typing action, which
+   Telegram shows for about six seconds. Said when the composer's text has
+   changed since the last time and that time is a few seconds ago, so a
+   text left standing says nothing; a 68k waits longer, each request being
+   a moment the keyboard waits. */
+#if defined(__m68k__)
+#define TG_GUI_TYPING_RENEW_SECONDS 8UL
+#else
+#define TG_GUI_TYPING_RENEW_SECONDS 5UL
+#endif
+static unsigned long tg_gui_typing_sum = 0UL; /* the text when last said */
+static unsigned long tg_gui_typing_at = 0UL;  /* and when that was */
+
+/* 1 = time to say it: there is text, it is not the text of the last time,
+   and the last time is long enough ago (or the clock went back). *sum is
+   the text's sum either way, 0 for no text. */
+static int tg_gui_typing_due(const char *text, unsigned long last_sum,
+                             unsigned long last_at, unsigned long now,
+                             unsigned long *sum)
+{
+    const unsigned char *p = (const unsigned char *)text;
+    unsigned long s = 2166136261UL;
+
+    *sum = 0UL;
+    if (text == 0 || text[0] == '\0') {
+        return 0;
+    }
+    for (; *p != 0U; ++p) {
+        s = ((s ^ *p) * 16777619UL) & 0xffffffffUL;
+    }
+    *sum = s != 0UL ? s : 1UL;
+    if (*sum == last_sum) {
+        return 0;
+    }
+    return last_at == 0UL || now < last_at ||
+           now - last_at >= TG_GUI_TYPING_RENEW_SECONDS;
+}
+
+int tg_gui_session_typing_step(FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)stream;
+    return 0;
+#else
+    unsigned char query[64];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    const tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    unsigned long now = (unsigned long)time(0);
+    unsigned long sum;
+    unsigned long prev_timeout;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || gst == 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0' ||
+        gst->edit_to_id != 0UL || /* a message changed in place: no news */
+        tg_gui_session_state.open_peer_constructor ==
+            TG_MTPROTO_PEER_SELF_CONSTRUCTOR || /* Saved Messages */
+        (tg_gui_forum && tg_gui_topic == 0UL)) {
+        return 0;
+    }
+    if (!tg_gui_typing_due(gst->input, tg_gui_typing_sum, tg_gui_typing_at,
+                           now, &sum)) {
+        return 0;
+    }
+    /* Said or not, this text and this moment are not tried again: a link
+       that does not answer must not hold every keystroke. */
+    tg_gui_typing_sum = sum;
+    tg_gui_typing_at = now != 0UL ? now : 1UL;
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "typing") != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_set_typing(
+            &writer, pc, ph, pl, ahh, ahl, hah,
+            (tg_gui_forum && tg_gui_topic != TG_MTPROTO_TOPIC_GENERAL)
+                ? tg_gui_topic : 0UL) != TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 0;
+    }
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(5UL);
+    rc = tg_gui_session_peer_request(query, writer.length, &result,
+                                     "mtproto messages.setTyping", 0, 0UL,
+                                     quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log(rc == 0 ? "typing: said" : "typing: not taken");
+    return rc == 0;
+#endif
+}
+
 int tg_gui_session_presence_online(void)
 {
     return tg_gui_presence_sent == 1;
@@ -34249,6 +34376,29 @@ static int tg_gui_presence_self_test(void)
     /* Online when the window comes to the front, again every three minutes
        while it stays there, offline when it leaves, nothing at the start
        while it is not in front, and a failure waits before the next try. */
+    {
+        /* "is typing...": said for a text that is new, not said again for
+           the same text, nor for a new one too soon, said once the wait is
+           over or the clock went back; never for no text. */
+        unsigned long sum = 9UL;
+        unsigned long hello;
+
+        if (tg_gui_typing_due("", 0UL, 0UL, 1000UL, &sum) != 0 ||
+            sum != 0UL || tg_gui_typing_due(0, 0UL, 0UL, 1000UL, &sum) != 0 ||
+            tg_gui_typing_due("hello", 0UL, 0UL, 1000UL, &hello) != 1 ||
+            hello == 0UL ||
+            tg_gui_typing_due("hello", hello, 1000UL, 1100UL, &sum) != 0 ||
+            sum != hello ||
+            tg_gui_typing_due("hello!", hello, 1000UL, 1001UL, &sum) != 0 ||
+            sum == hello ||
+            tg_gui_typing_due("hello!", hello, 1000UL,
+                              1000UL + TG_GUI_TYPING_RENEW_SECONDS,
+                              &sum) != 1 ||
+            tg_gui_typing_due("hello!", hello, 1000UL, 900UL, &sum) != 1) {
+            puts("gui session self-test: when to say that the user types");
+            return 2;
+        }
+    }
     if (tg_gui_presence_due(1, -1, 0UL, 0UL, 1000UL) != 1 ||
         tg_gui_presence_due(0, -1, 0UL, 0UL, 1000UL) != -1 ||
         tg_gui_presence_due(1, 1, 1000UL, 0UL, 1100UL) != -1 ||
@@ -34312,6 +34462,16 @@ void tg_gui_session_send_more(int more)
     tg_gui_send_more_parts = more != 0;
 }
 
+/* Public: the messages tg_gui_session_send sends from now on make no
+   sound on the other side (1), or do again (0). The window sets it around
+   one send. */
+static int tg_gui_send_silent = 0;
+
+void tg_gui_session_send_silent(int on)
+{
+    tg_gui_send_silent = on ? 1 : 0;
+}
+
 int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                         FILE *stream)
 {
@@ -34367,6 +34527,7 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     send_text = styled_text;
     /* The names picked from the "@" popup that are still in the text. */
     send_text = tg_gui_mentions_for_send(send_text);
+    tg_mtproto_send_set_silent(tg_gui_send_silent);
     rc = tg_mtproto_auth_send_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
@@ -34374,9 +34535,13 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, send_text, reply_to_msg_id,
         &sent_id, quiet);
+    tg_mtproto_send_set_silent(0);
     tg_gui_mentions_sent(rc == 0);
     tg_mtproto_send_set_styles(0, 0);
     tg_gui_draft_send_end(had_draft, rc == 0);
+    if (rc == 0) {
+        tg_gui_typing_sum = 0UL; /* the same words typed again are news */
+    }
 #if !defined(TG_NO_GUI)
     if (rc == 0 && styled) {
         /* The echo shows what was sent: the styles, not the markers. */

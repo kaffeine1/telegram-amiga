@@ -401,6 +401,7 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
    files. */
 #define TG_GUI_MARKDOWN_FILE "data/telegram-markdown.txt"
 #define TG_GUI_PREVIEWS_FILE "data/telegram-previews.txt"
+#define TG_GUI_TYPING_FILE "data/telegram-typing.txt"
 /* "Sticker pictures" of the settings, the same kind of line. On by
    default except on a classic Amiga below the 68040, where a datatype
    takes seconds for each sticker: the processor decides, not the screen
@@ -536,6 +537,7 @@ typedef struct tg_gui_state {
     int emoticon_replace; /* a typed :) becomes its emoji (on by default) */
     int markdown; /* **bold** and its kin are formatting when sent (on) */
     int list_previews; /* the chat list shows each chat's newest message (on) */
+    int typing_send;   /* the others see "is typing..." while the user writes */
     int stickers;    /* a sticker shows its picture, not its emoji */
     int sticker_can; /* this machine has a datatype that reads WEBP */
     int stickers_explicit; /* user saved an on/off choice */
@@ -1269,6 +1271,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_PLAYER 20      /* action: the program Play uses, or none */
 #define TG_GUI_SET_QUIET 21       /* choice: off, 5, 10, 30 s, 1 min */
 #define TG_GUI_SET_PREVIEWS 22    /* each chat's newest message in the list */
+#define TG_GUI_SET_TYPING 23      /* the others see "is typing..." */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2

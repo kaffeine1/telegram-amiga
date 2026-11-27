@@ -911,6 +911,14 @@
 #define MSG_ST_PREVIEWS_HIDDEN_STR "Chats show their name only"
 #define MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS 506
 #define MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS_STR "Could not save the previews setting"
+#define MSG_ST_TYPING_SHOWN 507
+#define MSG_ST_TYPING_SHOWN_STR "Others see when you are typing"
+#define MSG_ST_TYPING_NOT_SHOWN 508
+#define MSG_ST_TYPING_NOT_SHOWN_STR "Others do not see when you type"
+#define MSG_ST_COULD_NOT_SAVE_THE_TYPING 509
+#define MSG_ST_COULD_NOT_SAVE_THE_TYPING_STR "Could not save the typing setting"
+#define MSG_ST_SENT_WITHOUT_SOUND 510
+#define MSG_ST_SENT_WITHOUT_SOUND_STR "Sent without sound"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1026,7 +1034,7 @@
 #define MSG_HELP_TITLE 805
 #define MSG_HELP_TITLE_STR "Amigram Help"
 #define MSG_HELP_TEXT 806
-#define MSG_HELP_TEXT_STR "Chat selection:\n  F1 - F10          chats 1 to 10\n  Shift + F1 - F10  chats 11 to 20\n\nENTER        write a message to the open chat\nShift+ENTER  new line in the message (ENTER sends)\nClick msg    select it (A+C copies); double-click replies\nDel / A+R    remove the selected chat from the list\nA+F          send a file to the open chat\nA+P          send a JPEG as a photo\nA+I          iconify to an AppIcon (double-click it to return)\nA+T          settings: notifications, photos, emoji, ARexx\nESC          cancel\nQ            quit"
+#define MSG_HELP_TEXT_STR "Chat selection:\n  F1 - F10          chats 1 to 10\n  Shift + F1 - F10  chats 11 to 20\n\nENTER        write a message to the open chat\nShift+ENTER  new line in the message (ENTER sends)\nAlt+ENTER    send without sound for the others\nClick msg    select it (A+C copies); double-click replies\nDel / A+R    remove the selected chat from the list\nA+F          send a file to the open chat\nA+P          send a JPEG as a photo\nA+I          iconify to an AppIcon (double-click it to return)\nA+T          settings: notifications, photos, emoji, ARexx\nESC          cancel\nQ            quit"
 #define MSG_W_NEW_TOPIC 900
 #define MSG_W_NEW_TOPIC_STR "New topic"
 #define MSG_W_RENAME_TOPIC 901
@@ -1431,6 +1439,8 @@
 #define MSG_G_SEEN_LONG_AGO_STR "last seen a long time ago"
 #define MSG_G_SEEN_BOT 1447
 #define MSG_G_SEEN_BOT_STR "bot"
+#define MSG_SET_SHOW_WHEN_I_TYPE 1448
+#define MSG_SET_SHOW_WHEN_I_TYPE_STR "Show others when I type"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2573,8 +2583,12 @@
 #define MSG_T_MON_NOV_STR "Nov"
 #define MSG_T_MON_DEC 2344
 #define MSG_T_MON_DEC_STR "Dec"
+#define MSG_T_HELP_SILENT_TEXT_SEND 2345
+#define MSG_T_HELP_SILENT_TEXT_SEND_STR "  /silent text    send the text without a sound for the others"
+#define MSG_T_USE_SILENT_TEXT 2346
+#define MSG_T_USE_SILENT_TEXT_STR "Use: /silent <text>"
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2344
+#define TG_STRINGS_ID_MAX 2346
 
 #endif

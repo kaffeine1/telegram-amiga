@@ -9217,6 +9217,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {MSG_SET_PREVIEWS_IN_THE_CHAT_LIST, MSG_SET_PREVIEWS_IN_THE_CHAT_LIST_STR, TG_GUI_SET_PREVIEWS},
     {MSG_SET_WRITING, MSG_SET_WRITING_STR, 0},
     {MSG_SET_MARKDOWN_FORMATTING, MSG_SET_MARKDOWN_FORMATTING_STR, TG_GUI_SET_MARKDOWN},
+    {MSG_SET_SHOW_WHEN_I_TYPE, MSG_SET_SHOW_WHEN_I_TYPE_STR, TG_GUI_SET_TYPING},
     {MSG_SET_WINDOW_AND_FILES, MSG_SET_WINDOW_AND_FILES_STR, 0},
     {MSG_SET_USE_OWN_SCREEN, MSG_SET_USE_OWN_SCREEN_STR, TG_GUI_SET_OWN_SCREEN},
     {MSG_SET_DOWNLOAD_DRAWER, MSG_SET_DOWNLOAD_DRAWER_STR, TG_GUI_SET_DOWNLOAD},
@@ -9369,6 +9370,7 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     case TG_GUI_SET_EMOTICONS: on = state->emoticon_replace; break;
     case TG_GUI_SET_MARKDOWN: on = state->markdown; break;
     case TG_GUI_SET_PREVIEWS: on = state->list_previews; break;
+    case TG_GUI_SET_TYPING: on = state->typing_send; break;
     case TG_GUI_SET_STICKERS:
         on = state->sticker_can && state->stickers;
         break;
@@ -13992,7 +13994,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 27 && switches == 13 &&
+        ok_set = ok_set && lines == 28 && switches == 14 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&
@@ -14168,7 +14170,7 @@ int tg_gui_self_test(void)
            panel it is outside. */
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
-        rec.height = 520; /* tall enough for every line */
+        rec.height = 540; /* tall enough for every line */
         rec.watch_text[0] = TG_STR(MSG_SET_TITLE);
         rec.watch_text[1] = TG_STR(MSG_SET_PHOTOS_AND_EMOJI);
         rec.watch_text[2] = TG_STR(MSG_SET_BUILT_IN_CHIME);

@@ -7966,7 +7966,36 @@ static void tg_gui_history_add(tg_gui_state *state, const char *text)
    with whichever part holds it. At the first part that does not go, the
    parts still to go stay in the composer and the status line says why.
    0 = all sent; otherwise tg_gui_session_send's answer. */
-static int tg_gui_window_send_input(tg_gui_state *state)
+static int tg_gui_window_send_parts(tg_gui_state *state);
+
+/* The message just sent went without a sound for the others: the status
+   line says it once, in the place of the composer's usual line. */
+static int tg_gui_sent_quietly = 0;
+
+/* ...and without a sound for the others when `quiet` (Alt+ENTER, or Shift
+   held on the Send button). */
+static int tg_gui_window_send_input(tg_gui_state *state, int quiet)
+{
+    int rc;
+
+    tg_gui_session_send_silent(quiet);
+    rc = tg_gui_window_send_parts(state);
+    tg_gui_session_send_silent(0);
+    tg_gui_sent_quietly = rc == 0 && quiet;
+    return rc;
+}
+
+/* The status line of a composer that keeps the focus after a send. */
+static void tg_gui_window_sent_status(tg_gui_state *state)
+{
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       tg_gui_sent_quietly
+                           ? TG_STR(MSG_ST_SENT_WITHOUT_SOUND)
+                           : TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
+    tg_gui_sent_quietly = 0;
+}
+
+static int tg_gui_window_send_parts(tg_gui_state *state)
 {
     static char part[TG_GUI_MSG_TEXT_MAX];
     unsigned long total = (unsigned long)strlen(state->input);
@@ -14966,6 +14995,14 @@ static void tg_gui_window_poll_session(const tg_gui_state *state,
             tg_gui_update_offer = 1; /* the main loop offers to install */
         }
     }
+    /* The others see "is typing..." while the user writes in the open
+       chat: said again every few seconds, as long as the text changes. */
+    if (state->typing_send && state->composing &&
+        state->mode == TG_GUI_MODE_CHAT && state->input[0] != '\0' &&
+        !tg_gui_session_transfer_busy()) {
+        TG_GUI_PHASE("poll: typing");
+        (void)tg_gui_session_typing_step(stdout);
+    }
     if ((state->composing || tg_gui_session_transfer_busy()) &&
         now >= *last_receive_drain &&
         (unsigned long)(now - *last_receive_drain) >=
@@ -16407,6 +16444,18 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                 : state->markdown ? TG_STR(MSG_ST_MARKDOWN_BOLD_IS_SENT_AS)
                                   : TG_STR(MSG_ST_MARKDOWN_SENT_AS_TYPED));
         return 0;
+    case TG_GUI_SET_TYPING:
+        /* Read by the poll while the user writes. */
+        state->typing_send = !state->typing_send;
+        (void)mkdir("data", 0777);
+        tg_gui_window_copy(
+            state->status, sizeof(state->status),
+            tg_gui_emoji_preferences_save(TG_GUI_TYPING_FILE,
+                                          state->typing_send) != 0
+                ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_TYPING)
+                : state->typing_send ? TG_STR(MSG_ST_TYPING_SHOWN)
+                                     : TG_STR(MSG_ST_TYPING_NOT_SHOWN));
+        return 0;
     case TG_GUI_SET_PREVIEWS:
         /* The session keeps the lines, or forgets them and their file. */
         state->list_previews = !state->list_previews;
@@ -17840,7 +17889,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                             }
                             state->edit_to_id = 0UL;
                         } else {
-                            if (tg_gui_window_send_input(state) != 0) {
+                            if (tg_gui_window_send_input(
+                                    state,
+                                    (msg_qual & (IEQUALIFIER_LALT |
+                                                 IEQUALIFIER_RALT)) != 0) !=
+                                0) {
                                 /* Not sent: the text, or what is left of a
                                    long one, stays in the composer and the
                                    status line says why. */
@@ -17862,8 +17915,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     state->composing = 1;
                     state->cursor_on = 1;
                     caret_ticks = 0;
-                    tg_gui_window_copy(state->status, sizeof(state->status),
-                                       TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
+                    tg_gui_window_sent_status(state);
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == 27) {
                     state->input[0] = '\0';
@@ -20463,7 +20515,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 }
                                 state->edit_to_id = 0UL;
                             } else {
-                                if (tg_gui_window_send_input(state) != 0) {
+                                if (tg_gui_window_send_input(
+                                        state,
+                                        (msg_qual & (IEQUALIFIER_LSHIFT |
+                                                     IEQUALIFIER_RSHIFT)) !=
+                                            0) != 0) {
                                     /* Not sent: the text, or what is left
                                        of a long one, stays, and the status
                                        line says why. */
@@ -20484,8 +20540,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->composing = 1;
                         state->cursor_on = 1;
                         caret_ticks = 0;
-                        tg_gui_window_copy(state->status, sizeof(state->status),
-                                       TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
+                        tg_gui_window_sent_status(state);
                         tg_gui_window_paint(state, &backend);
                     } else if (hit == TG_GUI_HIT_INPUT && state->composing) {
                         /* F8: click places the caret in the composer text.
@@ -21879,6 +21934,20 @@ int tg_gui_run_window(tg_gui_state *state)
         state->markdown = 1;
         tg_gui_emoji_preferences_load(TG_GUI_MARKDOWN_FILE, &state->markdown,
                                       &markdown_explicit);
+    }
+    {
+        /* "is typing..." for the others is a small request every few
+           seconds of writing: on by default where that costs nothing, off
+           on a 68k, where each one holds the keyboard for a moment. */
+        int typing_explicit = 0;
+
+#if defined(__m68k__)
+        state->typing_send = 0;
+#else
+        state->typing_send = 1;
+#endif
+        tg_gui_emoji_preferences_load(TG_GUI_TYPING_FILE, &state->typing_send,
+                                      &typing_explicit);
     }
     {
         int previews_explicit = 0;

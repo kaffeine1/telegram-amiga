@@ -90,6 +90,16 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   bot is a bot. It comes with the chat's own page, so opening a chat
   costs no request, and follows the updates Telegram sends while the
   chat is open; "is typing..." still takes the line while it lasts.
+- The others see "is typing..." while a message is being written here,
+  as with every client: `messages.setTyping`, said again every few
+  seconds for as long as the text in the composer keeps changing, never
+  in Saved Messages. "Show others when I type", in the Settings, turns
+  it off; it starts off on a 68k, where each of those small requests
+  holds the keyboard for a moment.
+- A message can be sent without a sound for the others (`silent`):
+  Alt+ENTER in the composer, or Shift held while Send is clicked; the
+  status line says "Sent without sound". The text client has
+  `/silent text`.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message
