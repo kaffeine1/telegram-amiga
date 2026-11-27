@@ -2209,6 +2209,9 @@ MSG_G_TITLE_NEW_ONE
 MSG_SET_PREVIEWS_IN_THE_CHAT_LIST
 Anteprime nell'elenco chat
 ; Previews in the chat list
+MSG_G_DECIMAL_MARK
+,
+; .
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -2878,6 +2881,15 @@ MSG_S_DL_VOLUME_FULL
 MSG_S_YOU
 Tu
 ; You
+MSG_S_FORWARDED_FROM
+Inoltrato da %s
+; Forwarded from %s
+MSG_S_FORWARDED
+Messaggio inoltrato
+; Forwarded message
+MSG_S_EDITED
+modificato
+; edited
 MSG_T_CODE_IN_TELEGRAM
 Cerca il codice nelle altre app Telegram (telefono, desktop, web).
 ; Check your other Telegram apps (mobile/desktop/web) for the code.

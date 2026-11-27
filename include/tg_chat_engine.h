@@ -113,6 +113,12 @@ typedef struct tg_chat_message_row {
     unsigned long album_hi;    /* the album it is part of, 0 0 = none */
     unsigned long album_lo;
     int is_service;            /* a service line ("X joined"): text says it all */
+    const char *forward;       /* "Forwarded from Anna" (UTF-8) when the message
+                                  was forwarded in and this is where that is
+                                  said, else NULL */
+    int edited;                /* changed after it was sent */
+    int has_views;             /* a channel's post: `views` saw it */
+    unsigned long views;
     const tg_reactions *reactions;
     /* The reader stopped short of the reactions field (a media, a keyboard):
        reactions is 0 and the message's reactions are still to be asked. */

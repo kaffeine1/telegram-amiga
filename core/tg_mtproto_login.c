@@ -8326,6 +8326,68 @@ static tg_mtproto_tl_status tg_skip_message_fwd_header(
     return TG_MTPROTO_TL_OK;
 }
 
+/* The same header, keeping who the message is from: from_id:flags.0?Peer,
+   or from_name:flags.5?string for someone who hides the account
+   (messageFwdHeader#4e4df4bb, layer 214). */
+static tg_mtproto_tl_status tg_read_message_fwd_header(
+    tg_mtproto_tl_reader *reader, tg_mtproto_message_text *out)
+{
+    tg_mtproto_tl_reader peek = *reader;
+    tg_mtproto_dialog_peer peer;
+    unsigned long constructor;
+    unsigned long flags;
+
+    out->is_forward = 1U;
+    if (tg_mtproto_tl_read_u32(&peek, &constructor) == TG_MTPROTO_TL_OK &&
+        constructor == TG_MESSAGE_FWD_HEADER_CONSTRUCTOR &&
+        tg_mtproto_tl_read_u32(&peek, &flags) == TG_MTPROTO_TL_OK) {
+        memset(&peer, 0, sizeof(peer));
+        if ((flags & 1UL) == 0UL ||
+            tg_read_peer_ref(&peek, &peer) == TG_MTPROTO_TL_OK) {
+            out->fwd_constructor = peer.peer_constructor;
+            out->fwd_id_hi = peer.id_hi;
+            out->fwd_id_lo = peer.id_lo;
+            if ((flags & (1UL << 5)) != 0UL &&
+                tg_read_string_copy(&peek, out->fwd_name,
+                                    sizeof(out->fwd_name)) !=
+                    TG_MTPROTO_TL_OK) {
+                out->fwd_name[0] = '\0';
+            }
+        }
+    }
+    return tg_skip_message_fwd_header(reader);
+}
+
+/* views:flags.10?int, which stands after the media behind
+   reply_markup:flags.6?ReplyMarkup and entities:flags.7?Vector<MessageEntity>.
+   `reader` stands right after a media that was read to its last byte; the
+   fields are read on a copy. A keyboard, or entities that do not read,
+   leave the count unknown. */
+static void tg_read_views_after_media(const tg_mtproto_tl_reader *reader,
+                                      unsigned long flags,
+                                      tg_mtproto_message_text *out)
+{
+    tg_msg_entity ents[TG_MSG_ENTITY_MAX];
+    tg_mtproto_tl_reader trial;
+    unsigned long views;
+    int ent_count = 0;
+
+    if ((flags & (1UL << 10)) == 0UL || (flags & 64UL) != 0UL) {
+        return;
+    }
+    trial = *reader;
+    if ((flags & 128UL) != 0UL &&
+        tg_read_message_entity_vector(&trial, ents, TG_MSG_ENTITY_MAX,
+                                      &ent_count) != TG_MTPROTO_TL_OK) {
+        return;
+    }
+    if (tg_mtproto_tl_read_u32(&trial, &views) == TG_MTPROTO_TL_OK &&
+        views <= 0x7fffffffUL) {
+        out->views = views;
+        out->has_views = 1U;
+    }
+}
+
 /* Reaction constructors already used by the old skip walker. The optional
    lists follow core.telegram.org/constructor/messagePeerReaction and
    /constructor/messageReactor; none of those peers need to be retained. */
@@ -10734,6 +10796,8 @@ static tg_mtproto_tl_status tg_read_common_message_text(
     }
     out->flags = flags;
     out->is_out = (flags & 2UL) != 0UL;
+    out->edited = ((flags & (1UL << 15)) != 0UL &&
+                   (flags & (1UL << 21)) == 0UL) ? 1U : 0U;
     if ((flags & (1UL << 8)) != 0UL) {
         if (tg_read_peer_ref(reader, &peer) != TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_INVALID_DATA;
@@ -10759,7 +10823,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & 4UL) != 0UL &&
-        tg_skip_message_fwd_header(reader) != TG_MTPROTO_TL_OK) {
+        tg_read_message_fwd_header(reader, out) != TG_MTPROTO_TL_OK) {
         return TG_MTPROTO_TL_INVALID_DATA;
     }
     if ((flags & (1UL << 11)) != 0UL &&
@@ -10927,6 +10991,7 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         if (media_whole) {
             tg_read_album_id(reader, flags, &out->grouped_id_hi,
                              &out->grouped_id_lo);
+            tg_read_views_after_media(reader, flags, out);
         }
         return TG_MTPROTO_TL_OK;
     }
@@ -10949,11 +11014,16 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         }
     }
     if ((flags & (1UL << 10)) != 0UL) {
-        if (tg_mtproto_tl_read_u32(reader, &scratch_lo) !=
-                TG_MTPROTO_TL_OK ||
+        unsigned long views;
+
+        if (tg_mtproto_tl_read_u32(reader, &views) != TG_MTPROTO_TL_OK ||
             tg_mtproto_tl_read_u32(reader, &scratch_lo) !=
                 TG_MTPROTO_TL_OK) {
             return TG_MTPROTO_TL_OK;
+        }
+        if (views <= 0x7fffffffUL) {
+            out->views = views;
+            out->has_views = 1U;
         }
     }
     if ((flags & (1UL << 23)) != 0UL &&
@@ -19321,6 +19391,110 @@ int tg_mtproto_login_self_test(void)
         !text_list.messages[3].has_reply ||
         text_list.messages[3].reply_to_msg_id != 1002UL ||
         strcmp(text_list.messages[3].reply_quote, "reply quote") != 0) {
+        return 2;
+    }
+    /* What a message says of itself besides its text. The first one above
+       was forwarded in by a header that names nobody. */
+    if (text_list.messages[0].is_forward != 1U ||
+        text_list.messages[0].fwd_constructor != 0UL ||
+        text_list.messages[0].fwd_name[0] != '\0' ||
+        text_list.messages[0].edited || text_list.messages[0].has_views ||
+        text_list.messages[1].is_forward) {
+        return 2;
+    }
+    /* Forwarded from a user, edited and seen 1234 times; forwarded from
+       someone who gives a name alone, with an edit that is not to be shown
+       (edit_hide); a plain message. Layer 214: fwd_from:flags.2,
+       views:flags.10 forwards:flags.10, edit_date:flags.15,
+       edit_hide:flags.21. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                4UL | (1UL << 10) | (1UL << 15)) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2000UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                TG_MESSAGE_FWD_HEADER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x55UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1111UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3000UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "one") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1234UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 5UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3333UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                4UL | (1UL << 15) | (1UL << 21)) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2001UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer,
+                                TG_MESSAGE_FWD_HEADER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1UL << 5) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "Hidden Name") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 1112UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3001UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "two") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3334UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 2002UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 3002UL) != TG_MTPROTO_TL_OK ||
+        tg_write_string(&writer, "three") != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_message_text_list(TG_MESSAGES_MESSAGES_CONSTRUCTOR,
+                                           peer_rpc, writer.length,
+                                           &text_list) != TG_MTPROTO_TL_OK ||
+        text_list.count != 3UL ||
+        strcmp(text_list.messages[0].text, "one") != 0 ||
+        text_list.messages[0].is_forward != 1U ||
+        text_list.messages[0].fwd_constructor != TG_PEER_USER_CONSTRUCTOR ||
+        text_list.messages[0].fwd_id_hi != 0UL ||
+        text_list.messages[0].fwd_id_lo != 0x55UL ||
+        text_list.messages[0].fwd_name[0] != '\0' ||
+        text_list.messages[0].edited != 1U ||
+        text_list.messages[0].has_views != 1U ||
+        text_list.messages[0].views != 1234UL ||
+        strcmp(text_list.messages[1].text, "two") != 0 ||
+        text_list.messages[1].is_forward != 1U ||
+        text_list.messages[1].fwd_constructor != 0UL ||
+        strcmp(text_list.messages[1].fwd_name, "Hidden Name") != 0 ||
+        text_list.messages[1].edited != 0U ||
+        text_list.messages[1].has_views != 0U ||
+        strcmp(text_list.messages[2].text, "three") != 0 ||
+        text_list.messages[2].is_forward != 0U ||
+        text_list.messages[2].edited != 0U ||
+        text_list.messages[2].has_views != 0U) {
         return 2;
     }
 

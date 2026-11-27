@@ -54,6 +54,11 @@ typedef struct tg_gui_chat_driver {
                     unsigned long peer_id_lo, tg_chat_message_row *out);
 } tg_gui_chat_driver;
 
+/* The message was edited (an update said so): its time row says "edited".
+   1 = it changed. */
+int tg_gui_driver_mark_edited(tg_gui_chat_driver *gui,
+                              unsigned long message_id);
+
 /* The previews of the chat list read again from last_row, row by row: a
    chat that got news, an edit or a deletion shows it without the list
    being built again. Leaves alone the rows that are something else (search

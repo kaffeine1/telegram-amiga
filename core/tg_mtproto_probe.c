@@ -556,6 +556,7 @@ typedef struct tg_chat_edit_entry {
     char text[TG_GUI_MSG_TEXT_MAX];
     unsigned long pending_webpage_hi;
     unsigned long pending_webpage_lo;
+    unsigned char edited; /* the edit is one to show ("edited") */
 } tg_chat_edit_entry;
 typedef struct tg_chat_edit_sink {
     tg_chat_edit_entry queue[TG_CHAT_EDIT_QUEUE_MAX];
@@ -4741,6 +4742,7 @@ static void tg_chat_edit_parse_update(tg_mtproto_tl_reader *reader)
     entry->text[copy_length] = '\0';
     entry->pending_webpage_hi = message.pending_webpage_hi;
     entry->pending_webpage_lo = message.pending_webpage_lo;
+    entry->edited = message.edited;
 }
 
 static int tg_chat_edit_peer_matches_open(const tg_chat_edit_entry *entry,
@@ -15242,6 +15244,51 @@ static void tg_mtproto_print_reactions(FILE *stream, const tg_reactions *reactio
     }
 }
 
+/* "Forwarded from Anna": who a forwarded message is from, by the name the
+   page's users and chats give the peer its header names, or by the name
+   the header carries for someone who keeps the account out of forwards;
+   "Forwarded message" when it names nobody this client can name. UTF-8,
+   written into `out`. */
+static const char *tg_chat_forward_line(const tg_mtproto_message_text *m,
+                                        char *out, unsigned long size)
+{
+    const char *name = 0;
+    char clean[64];
+    unsigned long k;
+
+    if (m->fwd_constructor != 0UL) {
+        for (k = 0UL; k < tg_chat_sender_cache.count; ++k) {
+            const tg_mtproto_peer_cache_entry *e =
+                &tg_chat_sender_cache.entries[k];
+
+            if (e->peer_constructor == m->fwd_constructor &&
+                e->id_hi == m->fwd_id_hi && e->id_lo == m->fwd_id_lo) {
+                if (e->title[0] != '\0') {
+                    name = e->title;
+                } else if (e->username[0] != '\0') {
+                    name = e->username;
+                }
+                break;
+            }
+        }
+    }
+    if (name == 0 && m->fwd_name[0] != '\0') {
+        name = m->fwd_name;
+    }
+    if (name == 0) {
+        tg_mtproto_copy_utf8_name(out, size, TG_STR_U8(MSG_S_FORWARDED));
+        return out;
+    }
+    tg_mtproto_copy_utf8_name(clean, sizeof(clean), name);
+    for (k = 0UL; clean[k] != '\0'; ++k) {
+        if (clean[k] == '\n' || clean[k] == '\r' || clean[k] == '\t') {
+            clean[k] = ' ';
+        }
+    }
+    tg_locale_format(out, size, TG_STR_U8(MSG_S_FORWARDED_FROM), clean);
+    return out;
+}
+
 static void tg_mtproto_chat_render_message(FILE *stream,
                                            const tg_chat_message_row *row,
                                            unsigned long *day_shown)
@@ -15314,6 +15361,12 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         tg_console_ui_reset(stream);
         fputc(' ', stream);
     }
+    if (row->forward != 0 && row->forward[0] != '\0') {
+        /* Where it was forwarded from, bracketed like a quote (plain). */
+        fputc('[', stream);
+        tg_mtproto_print_message_text(stream, row->forward);
+        fputs("] ", stream);
+    }
     if (row->reply_quote != 0 && row->reply_quote[0] != '\0') {
         /* Quoted reference, ASCII-bracketed before the body (plain -- no SGR
            role so MorphOS stays safe even with colour on). */
@@ -15322,6 +15375,11 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         fputs("] ", stream);
     }
     tg_mtproto_print_message_text(stream, row->text);
+    if (row->edited) {
+        fputs(" (", stream);
+        fputs(TG_TSTR(MSG_S_EDITED), stream);
+        fputc(')', stream);
+    }
     tg_mtproto_print_reactions(stream, row->reactions);
     tg_console_ui_end_line(stream);
 }
@@ -15481,6 +15539,32 @@ static int tg_mtproto_styled_render_self_test(void)
     fclose(cap);
     if (strcmp(got, "#4821 Mario: ciao\nMario: ciao\nMario: ciao\n") != 0) {
         printf("chat render self-test: message id \"%s\"\n", got);
+        return 2;
+    }
+    /* Forwarded in, and edited: where it comes from stands before the
+       text, bracketed like a quote, and "(edited)" after it. */
+    cap = tmpfile();
+    if (cap == 0) {
+        puts("chat render self-test: no forward capture");
+        return 2;
+    }
+    memset(&row, 0, sizeof(row));
+    row.text = "ciao";
+    row.peer_label = "Mario";
+    row.forward = "Forwarded from Anna";
+    day = 0UL;
+    tg_mtproto_chat_render_message(cap, &row, &day);
+    row.forward = 0;
+    row.reply_quote = "prima";
+    row.edited = 1;
+    tg_mtproto_chat_render_message(cap, &row, &day);
+    rewind(cap);
+    n = fread(got, 1, sizeof(got) - 1U, cap);
+    got[n] = '\0';
+    fclose(cap);
+    if (strcmp(got, "Mario: [Forwarded from Anna] ciao\n"
+                    "Mario: [> prima] ciao (edited)\n") != 0) {
+        printf("chat render self-test: forwarded or edited \"%s\"\n", got);
         return 2;
     }
     /* /react without an id: the newest message from the others, never one's
@@ -17070,6 +17154,10 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
         tg_chat_console_driver console_drv;
         tg_chat_driver driver;
         long display_delta;
+        /* The album of the message before, so that the parts of a forwarded
+           album say where they come from once. */
+        unsigned long fwd_album_hi;
+        unsigned long fwd_album_lo;
 
         /* The history renderer hands each resolved row to a driver: the console
            one (wrapping this stream + the day-separator cursor) by default, or
@@ -17099,6 +17187,8 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                                             display_delta) /
                 86400UL;
         }
+        fwd_album_hi = 0UL;
+        fwd_album_lo = 0UL;
         while (i > 0UL) {
             --i;
             if (texts.messages[i].id > max_seen_message_id) {
@@ -17188,6 +17278,23 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                     row.text = service_line;
                     row.is_service = 1;
                 }
+                if (texts.messages[i].is_forward && !row.is_service &&
+                    tg_mtproto_history_search_query == 0 &&
+                    !((texts.messages[i].grouped_id_hi != 0UL ||
+                       texts.messages[i].grouped_id_lo != 0UL) &&
+                      texts.messages[i].grouped_id_hi == fwd_album_hi &&
+                      texts.messages[i].grouped_id_lo == fwd_album_lo)) {
+                    static char forward_line[128];
+
+                    row.forward = tg_chat_forward_line(
+                        &texts.messages[i], forward_line,
+                        sizeof(forward_line));
+                }
+                fwd_album_hi = texts.messages[i].grouped_id_hi;
+                fwd_album_lo = texts.messages[i].grouped_id_lo;
+                row.edited = texts.messages[i].edited && !row.is_service;
+                row.has_views = texts.messages[i].has_views;
+                row.views = texts.messages[i].views;
                 row.has_time = (texts.messages[i].date != 0UL);
                 row.local_epoch =
                     row.has_time
@@ -43602,6 +43709,10 @@ static int tg_gui_session_apply_edit_updates(void)
             tg_gui_driver_set_pending_webpage(&tg_gui_session_state.gui_driver,
                 entry->message_id, entry->pending_webpage_hi,
                 entry->pending_webpage_lo);
+            if (entry->edited) {
+                (void)tg_gui_driver_mark_edited(
+                    &tg_gui_session_state.gui_driver, entry->message_id);
+            }
             dirty = 1;
         }
     }

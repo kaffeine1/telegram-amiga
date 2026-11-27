@@ -445,10 +445,19 @@ int tg_gui_mute_mark_width(int lh);
 #define TG_GUI_READ_SENT 1 /* delivered, not yet read by the peer */
 #define TG_GUI_READ_SEEN 2 /* the peer has read it (id <= read_outbox_max) */
 
+/* What stands in a message's time row: the count of views of a channel's
+   post, "edited", the time. */
+#define TG_GUI_MSG_TIME_MAX 40
 typedef struct tg_gui_message {
     char sender[TG_GUI_NAME_MAX];
     char text[TG_GUI_MSG_TEXT_MAX];
-    char time[TG_GUI_TIME_MAX];
+    char time[TG_GUI_MSG_TIME_MAX];
+    char clock[6];                     /* "HH:MM" alone, to write `time` again */
+    unsigned char edited;              /* changed after it was sent */
+    unsigned char has_views;           /* a channel's post: `views` saw it */
+    unsigned char fwd_len;             /* letters of `text` that are the line
+                                          "Forwarded from ...", 0 = none */
+    unsigned long views;
     unsigned long day;   /* day of the shown time, + 1; 0 = no date */
     int sender_color;
     int is_own;

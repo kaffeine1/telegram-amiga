@@ -4203,6 +4203,43 @@ static void tg_gui_draw_checks(tg_gui_backend *backend, int x, int baseline,
     }
 }
 
+/* The eye before a channel post's count of views, in the time row: an
+   almond with its pupil, 9 by 5 (twice that under a big font), drawn with
+   the fills the backend has. */
+static int tg_gui_eye_scale(int lh)
+{
+    return (lh >= 22) ? 2 : 1;
+}
+
+static int tg_gui_eye_width(int lh)
+{
+    return 9 * tg_gui_eye_scale(lh) + 3;
+}
+
+static void tg_gui_draw_eye(tg_gui_backend *backend, int pen, int x,
+                            int baseline, int lh)
+{
+    static const signed char runs[7][3] = {
+        {0, 2, 5}, {1, 1, 1}, {1, 7, 1}, {2, 0, 1},
+        {2, 3, 3}, {2, 8, 1}, {4, 2, 5}
+    };
+    int s = tg_gui_eye_scale(lh);
+    int top = baseline - 6 * s;
+    int i;
+
+    for (i = 0; i < 7; ++i) {
+        backend->fill_rect(backend, pen,
+                           tg_gui_make_rect(x + runs[i][1] * s,
+                                            top + runs[i][0] * s,
+                                            runs[i][2] * s, s));
+    }
+    /* the lower lid mirrors the upper one */
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + 1 * s, top + 3 * s, s, s));
+    backend->fill_rect(backend, pen,
+                       tg_gui_make_rect(x + 7 * s, top + 3 * s, s, s));
+}
+
 /* Shared bubble geometry: the wrap, the bubble box and the header/reply
    bands, EXACTLY as the painter lays them out -- used by the painter, the
    char-level hit test and nothing else, so they can never drift apart. */
@@ -4445,9 +4482,11 @@ static int tg_gui_message_grouped(const tg_gui_state *state, int index)
 #define TG_GUI_PHOTO_PLACEHOLDER_MAX 24U
 static const char *tg_gui_photo_placeholder(const tg_gui_message *message)
 {
-    if (message->photo_only && message->text[0] == '[' &&
-        strlen(message->text) < TG_GUI_PHOTO_PLACEHOLDER_MAX) {
-        return message->text;
+    const char *label = message->text + message->fwd_len;
+
+    if (message->photo_only && label[0] == '[' &&
+        strlen(label) < TG_GUI_PHOTO_PLACEHOLDER_MAX) {
+        return label;
     }
     return TG_STR(MSG_S_LBL_PHOTO);
 }
@@ -4556,7 +4595,7 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
                               &geo->photo_w, &geo->photo_h);
     }
     geo->photo_gap = geo->photo_h > 0 ? 4 : 0;
-    if (message->photo_only && geo->photo_h > 0) {
+    if (message->photo_only && geo->photo_h > 0 && message->fwd_len == 0U) {
         geo->line_count = 0; /* the downloaded image replaces "[Photo]" */
     } else {
         geo->line_count = tg_gui_wrap(
@@ -4566,6 +4605,17 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
             geo->line_count = 1;
             geo->starts[0] = 0UL;
             geo->lengths[0] = 0UL;
+        }
+        if (message->photo_only && geo->photo_h > 0) {
+            /* ...but not the line that says where it was forwarded from:
+               the lines of that one stay, the label after it goes. */
+            int kept = 0;
+
+            while (kept < geo->line_count &&
+                   geo->starts[kept] < (unsigned long)message->fwd_len) {
+                ++kept;
+            }
+            geo->line_count = kept;
         }
     }
     widest = geo->photo_w;
@@ -4583,6 +4633,9 @@ static void tg_gui_bubble_geometry(tg_gui_backend *backend,
                             backend, message->time,
                             (unsigned long)strlen(message->time))
                       : 0;
+    if (has_time && message->has_views) {
+        time_w += tg_gui_eye_width(lh); /* the eye before the count */
+    }
     check_count = tg_gui_check_count(message);
     has_mark = (check_count > 0);
     read_mark_w = has_mark ? tg_gui_check_width(check_count, lh) : 0;
@@ -4694,6 +4747,7 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
     int time_pen;
     int has_time;
     int time_w;
+    int eye_w;
     int has_reply;
     int reply_h;
     int photo_w;
@@ -4741,6 +4795,8 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
     time_w = has_time ? backend->text_width(backend, message->time,
                                             (unsigned long)strlen(message->time))
                       : 0;
+    eye_w = (has_time && message->has_views) ? tg_gui_eye_width(lh) : 0;
+    time_w += eye_w;
     check_count = tg_gui_check_count(message);
     has_mark = (check_count > 0);
     read_mark_w = has_mark ? tg_gui_check_width(check_count, lh)
@@ -4938,9 +4994,13 @@ static int tg_gui_paint_bubble(tg_gui_backend *backend,
             status_x = bubble_x + pad;
         }
         if (status_top + status_h <= bottom && status_baseline - lh >= top) {
+            if (eye_w > 0) {
+                tg_gui_draw_eye(backend, time_pen, status_x, status_baseline,
+                                lh);
+            }
             if (has_time) {
-                backend->draw_text(backend, time_pen, status_x, status_baseline,
-                                   message->time,
+                backend->draw_text(backend, time_pen, status_x + eye_w,
+                                   status_baseline, message->time,
                                    (unsigned long)strlen(message->time));
             }
             if (has_mark) {
@@ -12832,6 +12892,70 @@ int tg_gui_self_test(void)
     backend.avatar_fill = tg_gui_rec_avatar;
     backend.draw_text = tg_gui_rec_text;
     backend.set_style = 0; /* recorder renders plain; markers are just skipped */
+    /* A channel's post says how many saw it: the eye before the count is
+       nine fills inside its box, at either size, and the time row (the
+       bubble with it, when that row is the widest thing) is that much
+       wider. */
+    {
+        static tg_gui_message post;
+        tg_gui_bubble_geom plain;
+        tg_gui_bubble_geom seen;
+        tg_gui_record rec;
+        tg_gui_backend vb = backend;
+        int big;
+
+        for (big = 0; big < 2; ++big) {
+            int lh = big ? 24 : 10;
+
+            memset(&rec, 0, sizeof(rec));
+            rec.width = 640;
+            rec.height = 480;
+            rec.min_x = rec.width;
+            rec.min_y = rec.height;
+            vb.context = &rec;
+            tg_gui_draw_eye(&vb, TG_GUI_PEN_TEXT, 100, 60, lh);
+            if (rec.fills != 9 || tg_gui_eye_width(lh) != (big ? 21 : 12) ||
+                rec.min_x < 100 || rec.max_x > 100 + tg_gui_eye_width(lh) ||
+                rec.min_y < 60 - 6 * (big ? 2 : 1) || rec.max_y > 60) {
+                printf("gui self-test: the views eye is %d fills, x %d-%d, "
+                       "y %d-%d (size %d)\n", rec.fills, rec.min_x,
+                       rec.max_x, rec.min_y, rec.max_y, big);
+                return 2;
+            }
+        }
+        memset(&post, 0, sizeof(post));
+        strcpy(post.text, "a");
+        strcpy(post.time, "1.2K  12:00");
+        tg_gui_bubble_geometry(&vb, &post, 0, 600, 10, 0, 0, &plain);
+        post.has_views = 1U;
+        tg_gui_bubble_geometry(&vb, &post, 0, 600, 10, 0, 0, &seen);
+        if (seen.bubble_w - plain.bubble_w != tg_gui_eye_width(10)) {
+            printf("gui self-test: the views eye widens the bubble by %d\n",
+                   seen.bubble_w - plain.bubble_w);
+            return 2;
+        }
+        /* A forwarded photo with no caption: the picture (here its
+           stand-in, the photos being off) takes the label's place, not
+           the line that says where it comes from; the stand-in is the
+           label itself. */
+        memset(&post, 0, sizeof(post));
+        strcpy(post.text, "\035" "Forwarded from Anna" "\035" "\n"
+                          "[Sticker :)]");
+        post.fwd_len = 22U;
+        post.has_photo = 1;
+        post.photo_only = 1;
+        tg_gui_bubble_geometry(&vb, &post, 0, 600, 10, 0, 0, &seen);
+        post.fwd_len = 0U;
+        tg_gui_bubble_geometry(&vb, &post, 0, 600, 10, 0, 0, &plain);
+        post.fwd_len = 22U;
+        if (seen.line_count != 1 || seen.starts[0] != 0UL ||
+            plain.line_count != 0 ||
+            strcmp(tg_gui_photo_placeholder(&post), "[Sticker :)]") != 0) {
+            printf("gui self-test: a forwarded photo keeps %d lines, a "
+                   "plain one %d\n", seen.line_count, plain.line_count);
+            return 2;
+        }
+    }
     /* Each message keeps its height: a repaint with the kept heights places
        every row exactly where one working everything out again does, after
        an edit, at another width and with the emoji off too, and a second

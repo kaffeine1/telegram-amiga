@@ -1413,6 +1413,8 @@
 #define MSG_G_TITLE_NEW_ONE_STR " new"
 #define MSG_SET_PREVIEWS_IN_THE_CHAT_LIST 1438
 #define MSG_SET_PREVIEWS_IN_THE_CHAT_LIST_STR "Previews in the chat list"
+#define MSG_G_DECIMAL_MARK 1439
+#define MSG_G_DECIMAL_MARK_STR "."
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -1859,6 +1861,12 @@
 #define MSG_S_DL_VOLUME_FULL_STR "%.20s is full, stopped at %lu KB"
 #define MSG_S_YOU 1822
 #define MSG_S_YOU_STR "You"
+#define MSG_S_FORWARDED_FROM 1823
+#define MSG_S_FORWARDED_FROM_STR "Forwarded from %s"
+#define MSG_S_FORWARDED 1824
+#define MSG_S_FORWARDED_STR "Forwarded message"
+#define MSG_S_EDITED 1825
+#define MSG_S_EDITED_STR "edited"
 #define MSG_T_CODE_IN_TELEGRAM 2000
 #define MSG_T_CODE_IN_TELEGRAM_STR "Check your other Telegram apps (mobile/desktop/web) for the code."
 #define MSG_T_CODE_BY_SMS 2001

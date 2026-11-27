@@ -593,6 +593,7 @@ typedef struct tg_mtproto_messages_summary {
    so the 8-message list stays cheap on the 8MB OS3 budget. */
 #define TG_MTPROTO_MESSAGE_REPLY_QUOTE_MAX 96U
 
+#define TG_MTPROTO_FWD_NAME_MAX 40
 typedef struct tg_mtproto_message_text {
     unsigned long id;
     unsigned long date;
@@ -651,6 +652,23 @@ typedef struct tg_mtproto_message_text {
        message that only names its topic is no reply: has_reply and
        reply_to_msg_id stay 0 for it. */
     unsigned long topic_id;
+    /* Forwarded in (flags.2): who wrote it first, as the forward header
+       names them: a peer (a user, a channel), or only a name when that
+       person keeps the account out of forwards. Neither when the header
+       names nobody. */
+    unsigned char is_forward;
+    unsigned long fwd_constructor; /* PEER_*, 0 = no peer named */
+    unsigned long fwd_id_hi;
+    unsigned long fwd_id_lo;
+    char fwd_name[TG_MTPROTO_FWD_NAME_MAX];
+    /* Changed after it was sent (edit_date:flags.15), unless Telegram says
+       the change is not one to show (edit_hide:flags.21: a keyboard, a
+       reaction). */
+    unsigned char edited;
+    /* How many saw it (views:flags.10, a channel's post): known when the
+       reader got as far as the field. */
+    unsigned char has_views;
+    unsigned long views;
 } tg_mtproto_message_text;
 
 /* --- polls ---------------------------------------------------------------

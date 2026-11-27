@@ -167,6 +167,58 @@ int tg_gui_driver_color_for(const char *name)
 }
 
 /* The bubble's HH:MM, from the row's local epoch when it has one. */
+/* A count as the official clients write it: 987, 1.2K, 45K, 1.2M, with the
+   decimal mark of the user's language. */
+static void tg_gui_driver_count_text(unsigned long n, char *out)
+{
+    const char *mark = TG_STR(MSG_G_DECIMAL_MARK);
+    char unit = 'K';
+    unsigned long whole;
+    unsigned long tenth;
+
+    if (n < 1000UL) {
+        sprintf(out, "%lu", n);
+        return;
+    }
+    if (n >= 1000000UL) {
+        unit = 'M';
+        n /= 1000UL;
+    }
+    whole = n / 1000UL;
+    tenth = (n % 1000UL) / 100UL;
+    if (whole >= 10UL || tenth == 0UL) {
+        sprintf(out, "%lu%c", whole % 100000UL, unit);
+    } else {
+        sprintf(out, "%lu%c%lu%c", whole % 10UL,
+                mark[0] != '\0' ? mark[0] : '.', tenth % 10UL, unit);
+    }
+}
+
+/* The message's time row, written from its parts: the count of views of a
+   channel's post (the painter draws an eye before it), "edited", the
+   time. Nothing while the message has no time yet (the echo of a message
+   just sent). */
+static void tg_gui_driver_compose_time(tg_gui_message *message)
+{
+    char views[16];
+    char word[20];
+
+    if (message->clock[0] == '\0') {
+        message->time[0] = '\0';
+        return;
+    }
+    views[0] = '\0';
+    word[0] = '\0';
+    if (message->has_views) {
+        tg_gui_driver_count_text(message->views, views);
+        strcat(views, "  ");
+    }
+    if (message->edited) {
+        sprintf(word, "%.16s ", TG_STR(MSG_S_EDITED));
+    }
+    sprintf(message->time, "%.13s%.18s%.5s", views, word, message->clock);
+}
+
 static void tg_gui_driver_set_time(tg_gui_message *message,
                                    const tg_chat_message_row *row)
 {
@@ -179,9 +231,55 @@ static void tg_gui_driver_set_time(tg_gui_message *message,
     when = (time_t)row->local_epoch;
     parts = gmtime(&when);
     if (parts != 0) {
-        sprintf(message->time, "%02d:%02d", parts->tm_hour, parts->tm_min);
+        sprintf(message->clock, "%02u:%02u",
+                (unsigned int)parts->tm_hour % 24U,
+                (unsigned int)parts->tm_min % 60U);
         message->day = row->local_epoch / TG_GUI_DAY_SECONDS + 1UL;
+        tg_gui_driver_compose_time(message);
     }
+}
+
+/* What the row says of the message besides its text: edited, seen by so
+   many. 1 = the time row changed. */
+static int tg_gui_driver_take_marks(tg_gui_message *message,
+                                    const tg_chat_message_row *row)
+{
+    unsigned char edited = row->edited ? 1U : 0U;
+    unsigned char has_views = row->has_views ? 1U : 0U;
+
+    if (message->edited == edited && message->has_views == has_views &&
+        (!has_views || message->views == row->views)) {
+        return 0;
+    }
+    message->edited = edited;
+    message->has_views = has_views;
+    message->views = has_views ? row->views : 0UL;
+    tg_gui_driver_compose_time(message);
+    return 1;
+}
+
+/* A forwarded message says where it is from on a line of its own, in
+   italics, before its text: `fwd_len` letters of the text are that line. */
+static void tg_gui_driver_forward_text(tg_gui_message *message,
+                                       const tg_chat_message_row *row)
+{
+    char head[96];
+    unsigned long n;
+
+    message->fwd_len = 0U;
+    tg_gui_driver_copy_latin1(head, sizeof(head), row->forward);
+    tg_gui_strip_markers(head, sizeof(head), head);
+    n = (unsigned long)strlen(head);
+    if (n == 0UL || n + 4UL >= sizeof(message->text)) {
+        return;
+    }
+    message->text[0] = TG_TEXT_MARKER_ITALIC;
+    memcpy(message->text + 1, head, n);
+    message->text[n + 1UL] = TG_TEXT_MARKER_ITALIC;
+    message->text[n + 2UL] = '\n';
+    message->fwd_len = (unsigned char)(n + 3UL);
+    tg_gui_driver_copy_latin1(message->text + n + 3UL,
+                              sizeof(message->text) - (n + 3UL), row->text);
 }
 
 /* A reply whose header carries no quote names its target only by id (the
@@ -196,7 +294,7 @@ static void tg_gui_driver_reply_from(tg_gui_message *reply,
     unsigned long n;
     unsigned long i;
 
-    tg_gui_strip_markers(body, sizeof(body), target->text);
+    tg_gui_strip_markers(body, sizeof(body), target->text + target->fwd_len);
     for (i = 0UL; body[i] != '\0'; ++i) {
         if (body[i] == '\n' || body[i] == '\r' || body[i] == '\t') {
             body[i] = ' ';
@@ -316,6 +414,10 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                    kept no time until the chat was opened again. */
                 if (m->time[0] == '\0' && row->has_time) {
                     tg_gui_driver_set_time(m, row);
+                    state->msg_gen++;
+                }
+                /* edited since, or seen by more */
+                if (tg_gui_driver_take_marks(m, row)) {
                     state->msg_gen++;
                 }
                 /* the mention as Telegram has it now: read elsewhere, the
@@ -458,7 +560,12 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     if (row->is_service) {
         tg_gui_strip_markers(message->text, sizeof(message->text),
                              message->text);
+    } else if (row->forward != 0 && row->forward[0] != '\0') {
+        tg_gui_driver_forward_text(message, row);
     }
+    message->edited = row->edited ? 1U : 0U;
+    message->has_views = row->has_views ? 1U : 0U;
+    message->views = row->has_views ? row->views : 0UL;
     if (row->reply_quote != 0 && row->reply_quote[0] != '\0') {
         tg_gui_driver_copy_latin1(message->reply_text,
                                   sizeof(message->reply_text), row->reply_quote);
@@ -698,11 +805,38 @@ int tg_gui_driver_update_text(tg_gui_chat_driver *gui, unsigned long message_id,
         if (gui->state->messages[i].id == message_id) {
             /* Latin-1 verbatim (the composer text is already Latin-1, like the
                optimistic echo); the bubble re-wraps on the next paint. */
-            if (strcmp(gui->state->messages[i].text, text) != 0) {
-                tg_gui_driver_copy(gui->state->messages[i].text,
-                                   sizeof(gui->state->messages[i].text), text);
+            tg_gui_message *m = &gui->state->messages[i];
+
+            /* the line that says where it was forwarded from stays */
+            if (strcmp(m->text + m->fwd_len, text) != 0) {
+                tg_gui_driver_copy(m->text + m->fwd_len,
+                                   sizeof(m->text) - m->fwd_len, text);
                 gui->state->msg_gen++;
             }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int tg_gui_driver_mark_edited(tg_gui_chat_driver *gui,
+                              unsigned long message_id)
+{
+    int i;
+
+    if (gui == 0 || gui->state == 0 || message_id == 0UL) {
+        return 0;
+    }
+    for (i = 0; i < gui->state->message_count; ++i) {
+        tg_gui_message *m = &gui->state->messages[i];
+
+        if (m->id == message_id) {
+            if (m->edited) {
+                return 0;
+            }
+            m->edited = 1U;
+            tg_gui_driver_compose_time(m);
+            gui->state->msg_gen++;
             return 1;
         }
     }
@@ -2188,6 +2322,143 @@ static int tg_gui_driver_test_offlist_yes(const tg_chat_notify_entry *entry,
    each topic with its title, newest message and who wrote it, its time,
    unread count, pin and colour; a list of chats drawn after them ends the
    topic view. News while they are on show. */
+/* What a message says of itself besides its text: where it was forwarded
+   from, that it was edited, how many saw it. */
+static int tg_gui_driver_marks_self_test(void)
+{
+    static const struct {
+        unsigned long n;
+        const char *whole; /* before the decimal mark, or all of it */
+        const char *rest;  /* after it, "" when there is none */
+    } counts[] = {
+        { 0UL, "0", "" }, { 999UL, "999", "" }, { 1000UL, "1K", "" },
+        { 1234UL, "1", "2K" }, { 9999UL, "9", "9K" }, { 10000UL, "10K", "" },
+        { 999999UL, "999K", "" }, { 1000000UL, "1M", "" },
+        { 1234567UL, "1", "2M" }, { 12345678UL, "12M", "" }
+    };
+    tg_gui_state *state = tg_gui_test_scratch_state();
+    tg_gui_chat_driver gui;
+    tg_chat_driver driver;
+    tg_chat_message_row row;
+    const char *mark = TG_STR(MSG_G_DECIMAL_MARK);
+    char want[96];
+    char got[16];
+    unsigned long generation;
+    unsigned int c;
+    int ok = 1;
+
+    for (c = 0U; c < sizeof(counts) / sizeof(counts[0]); ++c) {
+        tg_gui_driver_count_text(counts[c].n, got);
+        if (counts[c].rest[0] != '\0') {
+            sprintf(want, "%s%c%s", counts[c].whole, mark[0],
+                    counts[c].rest);
+        } else {
+            strcpy(want, counts[c].whole);
+        }
+        if (strcmp(got, want) != 0) {
+            printf("gui driver self-test: count %lu is \"%s\"\n",
+                   counts[c].n, got);
+            return 0;
+        }
+    }
+    memset(state, 0, sizeof(*state));
+    tg_gui_chat_driver_bind(&gui, state, &driver);
+    /* A forwarded message opens with where it is from, in italics, on a
+       line of its own; an edit changes the text under the line. */
+    memset(&row, 0, sizeof(row));
+    row.id = 10UL;
+    row.text = "the body \xc3\xa8";
+    row.forward = "Forwarded from Anna \xc3\xa8";
+    row.has_time = 1;
+    row.local_epoch = 9UL * 3600UL + 5UL * 60UL;
+    driver.on_message(driver.ctx, &row);
+    ok = state->message_count == 1 &&
+         state->messages[0].fwd_len == 24U &&
+         strcmp(state->messages[0].text,
+                "\035" "Forwarded from Anna \xe8" "\035" "\n"
+                "the body \xe8") == 0 &&
+         strcmp(state->messages[0].time, "09:05") == 0 &&
+         !state->messages[0].edited && !state->messages[0].has_views &&
+         tg_gui_driver_update_text(&gui, 10UL, "new body") == 1 &&
+         strcmp(state->messages[0].text,
+                "\035" "Forwarded from Anna \xe8" "\035" "\n"
+                "new body") == 0;
+    /* An update says it was edited: the time row says so, once. */
+    sprintf(want, "%.16s 09:05", TG_STR(MSG_S_EDITED));
+    generation = state->msg_gen;
+    ok = ok && tg_gui_driver_mark_edited(&gui, 10UL) == 1 &&
+         strcmp(state->messages[0].time, want) == 0 &&
+         state->msg_gen > generation &&
+         tg_gui_driver_mark_edited(&gui, 10UL) == 0 &&
+         tg_gui_driver_mark_edited(&gui, 99UL) == 0 &&
+         tg_gui_driver_mark_edited(0, 10UL) == 0;
+    /* A reply to it quotes its text, not the line it opens with. */
+    memset(&row, 0, sizeof(row));
+    row.id = 11UL;
+    row.text = "re";
+    row.reply_to_id = 10UL;
+    driver.on_message(driver.ctx, &row);
+    ok = ok && state->message_count == 2 &&
+         strstr(state->messages[1].reply_text, "new body") != 0 &&
+         strstr(state->messages[1].reply_text, "Forwarded") == 0 &&
+         state->messages[1].fwd_len == 0U;
+    /* A channel's post: how many saw it, written short, then "edited",
+       then the time; read again with more views, the row follows. */
+    memset(&row, 0, sizeof(row));
+    row.id = 12UL;
+    row.text = "post";
+    row.has_time = 1;
+    row.local_epoch = 9UL * 3600UL + 5UL * 60UL;
+    row.has_views = 1;
+    row.views = 1234UL;
+    row.edited = 1;
+    driver.on_message(driver.ctx, &row);
+    sprintf(want, "1%c2K  %.16s 09:05", mark[0], TG_STR(MSG_S_EDITED));
+    ok = ok && state->message_count == 3 &&
+         state->messages[2].has_views == 1U &&
+         state->messages[2].views == 1234UL &&
+         strcmp(state->messages[2].time, want) == 0;
+    row.views = 15000UL;
+    generation = state->msg_gen;
+    driver.on_message(driver.ctx, &row);
+    sprintf(want, "15K  %.16s 09:05", TG_STR(MSG_S_EDITED));
+    ok = ok && state->message_count == 3 &&
+         strcmp(state->messages[2].time, want) == 0 &&
+         state->msg_gen > generation;
+    generation = state->msg_gen;
+    driver.on_message(driver.ctx, &row); /* the same again: nothing moves */
+    ok = ok && state->msg_gen == generation;
+    /* A forwarded photo with no caption: the line, then its label, which
+       the painter gives up for the picture; a service line takes no such
+       line. */
+    memset(&row, 0, sizeof(row));
+    row.id = 13UL;
+    row.text = "[Photo]";
+    row.photo_only = 1;
+    row.has_photo = 1;
+    row.forward = "Forwarded message";
+    driver.on_message(driver.ctx, &row);
+    ok = ok && state->message_count == 4 &&
+         state->messages[3].photo_only == 1 &&
+         state->messages[3].fwd_len == 20U &&
+         strcmp(state->messages[3].text,
+                "\035" "Forwarded message" "\035" "\n" "[Photo]") == 0;
+    memset(&row, 0, sizeof(row));
+    row.id = 14UL;
+    row.text = "Anna joined";
+    row.is_service = 1;
+    row.forward = "Forwarded message";
+    driver.on_message(driver.ctx, &row);
+    ok = ok && state->message_count == 5 &&
+         state->messages[4].fwd_len == 0U &&
+         strcmp(state->messages[4].text, "Anna joined") == 0;
+    memset(state, 0, sizeof(*state));
+    if (!ok) {
+        puts("gui driver self-test: forwarded, edited or views wrong");
+    }
+    return ok;
+}
+
 static int tg_gui_driver_topics_self_test(void)
 {
     static tg_gui_state state;
@@ -2461,6 +2732,7 @@ int tg_gui_driver_self_test(void)
     int i;
 
     if (!tg_gui_driver_reactions_self_test()) return 2;
+    if (!tg_gui_driver_marks_self_test()) return 2;
     if (!tg_gui_driver_topics_self_test()) return 2;
     if (!tg_gui_driver_notify_mute_self_test()) {
         return 2;

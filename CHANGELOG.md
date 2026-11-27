@@ -70,6 +70,19 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   data/telegram-last.txt between runs, so the list does not start bare,
   and a log out removes them. A draft still goes first. "Previews in the
   chat list", in the Settings, switches them off: nothing is kept then.
+- A forwarded message says where it comes from: "Forwarded from Anna"
+  on a line of its own, in italics, before its text (the text client
+  writes it in brackets before the text). The name is the one of the
+  user or channel the forward names, or the name alone that someone who
+  keeps the account out of forwards lets through; the parts of a
+  forwarded album say it once. A reply to such a message quotes its
+  text, not that line.
+- An edited message says "edited" beside its time, in the window and in
+  the text client, also when the edit comes while the chat is open. An
+  edit Telegram marks as not to be shown (a keyboard that changed, a
+  reaction) leaves no mark.
+- A channel's post shows how many saw it, an eye and the count (1.2K,
+  45K, 1.2M) before the time.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message

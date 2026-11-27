@@ -1556,6 +1556,8 @@ MSG_G_TITLE_NEW_ONE (1437//)
  new
 MSG_SET_PREVIEWS_IN_THE_CHAT_LIST (1438//)
 Previews in the chat list
+MSG_G_DECIMAL_MARK (1439//)
+.
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2004,6 +2006,12 @@ MSG_S_DL_VOLUME_FULL (1821//)
 %.20s is full, stopped at %lu KB
 MSG_S_YOU (1822//)
 You
+MSG_S_FORWARDED_FROM (1823//)
+Forwarded from %s
+MSG_S_FORWARDED (1824//)
+Forwarded message
+MSG_S_EDITED (1825//)
+edited
 ; --- the text client (2000-3999) -------------------------------------------
 MSG_T_CODE_IN_TELEGRAM (2000//)
 Check your other Telegram apps (mobile/desktop/web) for the code.
