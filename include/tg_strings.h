@@ -55,6 +55,8 @@
 #define MSG_MENU_POLL_STR "Create poll..."
 #define MSG_MENU_EMOJI 22
 #define MSG_MENU_EMOJI_STR "Insert emoji..."
+#define MSG_MENU_DEVICES 23
+#define MSG_MENU_DEVICES_STR "Devices..."
 #define MSG_QR_STEP1 30
 #define MSG_QR_STEP1_STR "1. Open Telegram on your phone"
 #define MSG_QR_STEP2 31
@@ -961,6 +963,12 @@
 #define MSG_ST_THIS_POST_TAKES_NO_COMMENTS_STR "This post takes no comments"
 #define MSG_ST_BACK_TO_THE_CHANNEL 531
 #define MSG_ST_BACK_TO_THE_CHANNEL_STR "Back to the channel..."
+#define MSG_ST_READING_THE_DEVICES 532
+#define MSG_ST_READING_THE_DEVICES_STR "Reading the devices..."
+#define MSG_ST_OTHER_SESSIONS_ENDED 533
+#define MSG_ST_OTHER_SESSIONS_ENDED_STR "The other sessions are ended"
+#define MSG_ST_COULD_NOT_END_THEM 534
+#define MSG_ST_COULD_NOT_END_THEM_STR "Could not end them (network?)"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1077,6 +1085,12 @@
 #define MSG_RQ_OPEN_LINK_STR "Open link"
 #define MSG_RQ_OPEN_CANCEL 657
 #define MSG_RQ_OPEN_CANCEL_STR "Open|Cancel"
+#define MSG_RQ_DEVICES 658
+#define MSG_RQ_DEVICES_STR "Devices"
+#define MSG_RQ_END_THE_OTHERS_CLOSE 659
+#define MSG_RQ_END_THE_OTHERS_CLOSE_STR "End the others|Close"
+#define MSG_RQ_END_THEM_CANCEL 660
+#define MSG_RQ_END_THEM_CANCEL_STR "End them|Cancel"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1209,6 +1223,10 @@
 #define MSG_W_UNBLOCK_THEM_STR "\n\nUnblock them?"
 #define MSG_W_THE_BUTTON_OPENS_THIS_LINK 958
 #define MSG_W_THE_BUTTON_OPENS_THIS_LINK_STR "The button opens this link:\n\n"
+#define MSG_W_THIS_ACCOUNT_IS_OPEN_HERE 959
+#define MSG_W_THIS_ACCOUNT_IS_OPEN_HERE_STR "This account is open here:\n\n"
+#define MSG_W_END_EVERY_OTHER_SESSION 960
+#define MSG_W_END_EVERY_OTHER_SESSION_STR "End every other session?\n\nThe other devices are logged out of Telegram\nand have to log in again. This one stays."
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1983,6 +2001,8 @@
 #define MSG_S_READ_AND_1_MORE_STR "and 1 more"
 #define MSG_S_READ_AND_MORE 1828
 #define MSG_S_READ_AND_MORE_STR "and %lu more"
+#define MSG_S_THIS_DEVICE 1829
+#define MSG_S_THIS_DEVICE_STR "this device"
 #define MSG_T_CODE_IN_TELEGRAM 2000
 #define MSG_T_CODE_IN_TELEGRAM_STR "Check your other Telegram apps (mobile/desktop/web) for the code."
 #define MSG_T_CODE_BY_SMS 2001
@@ -2705,8 +2725,16 @@
 #define MSG_T_THE_BUTTON_LINK_STR "The button's link: "
 #define MSG_T_THE_BUTTON_TEXT 2360
 #define MSG_T_THE_BUTTON_TEXT_STR "The button's text: "
+#define MSG_T_HELP_DEVICES 2361
+#define MSG_T_HELP_DEVICES_STR "  /devices        where the account is open; /devices end yes ends the rest"
+#define MSG_T_THIS_ACCOUNT_IS_OPEN_HERE 2362
+#define MSG_T_THIS_ACCOUNT_IS_OPEN_HERE_STR "This account is open here:\n"
+#define MSG_T_USE_DEVICES_END_YES 2363
+#define MSG_T_USE_DEVICES_END_YES_STR "Use /devices end yes: every other device is logged out of Telegram."
+#define MSG_T_OTHER_SESSIONS_ENDED 2364
+#define MSG_T_OTHER_SESSIONS_ENDED_STR "The other sessions are ended."
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2360
+#define TG_STRINGS_ID_MAX 2364
 
 #endif

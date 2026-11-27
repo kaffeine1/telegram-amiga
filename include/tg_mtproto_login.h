@@ -1349,6 +1349,29 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
                                        unsigned long body_length,
                                        tg_mtproto_read_participant *out,
                                        int max);
+/* Where the account is logged in (account.getAuthorizations), every other
+   place logged out (auth.resetAuthorizations), and the answer read: up to
+   `max` devices are kept, the count read comes back, -1 when the body is
+   no such answer. The network address Telegram gives is not kept. */
+#define TG_MTPROTO_DEVICES_MAX 12
+typedef struct tg_mtproto_device {
+    int current;               /* the session that asks */
+    unsigned long hash_hi;
+    unsigned long hash_lo;
+    unsigned long date_active; /* Telegram's clock */
+    char app[40];              /* "Amigram 0.7" */
+    char device[40];
+    char system[32];           /* "AmigaOS 3.2" */
+    char country[32];
+} tg_mtproto_device;
+tg_mtproto_tl_status tg_mtproto_build_account_get_authorizations(
+    tg_mtproto_tl_writer *writer);
+tg_mtproto_tl_status tg_mtproto_build_auth_reset_authorizations(
+    tg_mtproto_tl_writer *writer);
+int tg_mtproto_parse_authorizations(unsigned long constructor,
+                                    const unsigned char *body,
+                                    unsigned long body_length,
+                                    tg_mtproto_device *out, int max);
 /* The copy of a channel's post in its discussion group
    (messages.getDiscussionMessage): what the comments answer. */
 tg_mtproto_tl_status tg_mtproto_build_messages_get_discussion_message(

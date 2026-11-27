@@ -70,6 +70,9 @@ Crea sondaggio...
 MSG_MENU_EMOJI
 Inserisci emoji...
 ; Insert emoji...
+MSG_MENU_DEVICES
+Dispositivi...
+; Devices...
 MSG_QR_STEP1
 1. Apri Telegram sul telefono
 ; 1. Open Telegram on your phone
@@ -1452,6 +1455,15 @@ Questo post non accetta commenti
 MSG_ST_BACK_TO_THE_CHANNEL
 Torno al canale...
 ; Back to the channel...
+MSG_ST_READING_THE_DEVICES
+Leggo i dispositivi...
+; Reading the devices...
+MSG_ST_OTHER_SESSIONS_ENDED
+Le altre sessioni sono chiuse
+; The other sessions are ended
+MSG_ST_COULD_NOT_END_THEM
+Chiusura non riuscita (rete?)
+; Could not end them (network?)
 MSG_RQ_OK
 OK
 ; OK
@@ -1654,6 +1666,15 @@ Apri il link
 MSG_RQ_OPEN_CANCEL
 Apri|Annulla
 ; Open|Cancel
+MSG_RQ_DEVICES
+Dispositivi
+; Devices
+MSG_RQ_END_THE_OTHERS_CLOSE
+Chiudi le altre|Chiudi
+; End the others|Close
+MSG_RQ_END_THEM_CANCEL
+Chiudile|Annulla
+; End them|Cancel
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -1908,6 +1929,14 @@ Vuoi sbloccarla?
 MSG_W_THE_BUTTON_OPENS_THIS_LINK
 Il bottone apre questo link:\n\
 \n
+MSG_W_THIS_ACCOUNT_IS_OPEN_HERE
+Questo account è aperto qui:\n\
+\n
+MSG_W_END_EVERY_OTHER_SESSION
+Chiudere tutte le altre sessioni?\n\
+\n\
+Gli altri dispositivi escono da Telegram\n\
+e dovranno rifare il login. Questo resta.
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -3069,6 +3098,9 @@ e 1 altro
 MSG_S_READ_AND_MORE
 e altri %lu
 ; and %lu more
+MSG_S_THIS_DEVICE
+questo dispositivo
+; this device
 MSG_T_CODE_IN_TELEGRAM
 Cerca il codice nelle altre app Telegram (telefono, desktop, web).
 ; Check your other Telegram apps (mobile/desktop/web) for the code.
@@ -4082,3 +4114,14 @@ Il link del bottone:
 MSG_T_THE_BUTTON_TEXT
 Il testo del bottone: 
 ; The button's text: 
+MSG_T_HELP_DEVICES
+  /devices        dove è aperto l'account; /devices end yes chiude gli altri
+;   /devices        where the account is open; /devices end yes ends the rest
+MSG_T_THIS_ACCOUNT_IS_OPEN_HERE
+Questo account è aperto qui:\n
+MSG_T_USE_DEVICES_END_YES
+Usa /devices end yes: tutti gli altri dispositivi escono da Telegram.
+; Use /devices end yes: every other device is logged out of Telegram.
+MSG_T_OTHER_SESSIONS_ENDED
+Le altre sessioni sono chiuse.
+; The other sessions are ended.

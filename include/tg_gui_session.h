@@ -467,6 +467,13 @@ int tg_gui_session_who_read(unsigned long message_id, char *out,
                             unsigned long size, char *emsg,
                             unsigned long emsg_size, FILE *stream);
 
+/* Where the account is logged in: the devices written to `out` as the
+   window draws text, a line each, this one marked; how many, -1 when
+   Telegram did not answer. tg_gui_session_devices_end_others logs every
+   other one out: 0 = done, 2 = failed. */
+int tg_gui_session_devices(char *out, unsigned long size, FILE *stream);
+int tg_gui_session_devices_end_others(FILE *stream);
+
 /* The comments of a channel's post (message_id, a message of the open
    channel): the discussion group they are written in is found, kept among
    the chats this client knows without a row in the list, and opened on

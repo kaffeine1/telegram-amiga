@@ -971,6 +971,10 @@ Window and screen
   to come back. With the tooltype ICONIFY on the icon you start
   Amigram from (Icons > Information... on Workbench), it starts that
   way: the window opens, connects and gives way to the icon.
+- "Devices..." lists where your account is logged in: the program, the
+  machine, the place and when it was last used, this one marked with a
+  star. "End the others" logs every other device out, after one more
+  question. In the text client: /devices, and /devices end yes.
 - "Log out..." ends the session at Telegram and removes what Amigram
   keeps of the account on this computer (telegram-auth.bin, chat list,
   hidden chats, avatars, cached photos; downloads and settings stay),
@@ -1359,6 +1363,11 @@ Finestra e schermo
   tornare. Con il tooltype ICONIFY nell'icona da cui avvii Amigram
   (Icone > Informazioni... sul Workbench) parte gia' cosi': la
   finestra si apre, si collega e lascia il posto all'icona.
+- "Devices..." elenca dove e' aperto il tuo account: il programma, la
+  macchina, il luogo e quando e' stato usato l'ultima volta, con una
+  stella su questo. "End the others" fa uscire tutti gli altri
+  dispositivi, dopo un'altra domanda. Nel client testuale: /devices, e
+  /devices end yes.
 - "Log out..." chiude la sessione presso Telegram e toglie quello che
   Amigram tiene dell'account su questo computer (telegram-auth.bin,
   elenco chat, chat nascoste, avatar, foto in cache; download e

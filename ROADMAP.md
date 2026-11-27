@@ -1499,12 +1499,22 @@ Then the middle-sized ones:
   post); a comment was not written, for want of a place to write one
   that is not somebody's public group.
 
+- Devices: account.getAuthorizations read into a short list (the
+  address Telegram gives is stepped over, not kept), shown from the
+  Amigram menu and by /devices; auth.resetAuthorizations ends every
+  other session after a second question. Reading was tried live;
+  ending the others was not, since it would end the test account's
+  sessions on the real machines.
+
 Tried live with the test account, two sessions of it for what one
 device tells another, and seen in a window on the OS4 VM in Italian.
 The 68000 text client grew by about 5 KB with its share of the small
-ones, and by 7 KB more with the bots' buttons.
+ones, by 7 KB more with the bots' buttons, by 1 KB with the comments'
+count and by 5 KB with the devices: 686 KB now, 18 KB more than before
+this round. Worth a look before a release: what of this the plain 68000
+needs.
 
-Next, in this order: active sessions, translation,
+Next, in this order: translation,
 t.me links opened inside Amigram, scheduled messages, contacts,
 password recovery by email, a richer ARexx port. The large ones (chat
 folders, profile editing, group administration, quoting part of a

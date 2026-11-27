@@ -13825,6 +13825,172 @@ static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
    message, poll and mask its answers). 0 = done, 2 = failed or refused
    (tg_mtproto_query_fail holds Telegram's word when it gave one), or the
    link's own soft failure. */
+/* Where the account is logged in, for the window and for the text client
+   alike: the devices read last (account.getAuthorizations). How many, -1
+   when Telegram did not answer (tg_devices_soft_fail: the connection is
+   to be opened again). */
+static tg_mtproto_device tg_devices[TG_MTPROTO_DEVICES_MAX];
+static int tg_device_count = 0;
+static int tg_devices_soft_fail = 0;
+
+static int tg_mtproto_devices_fetch_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, FILE *stream)
+{
+    static const char label[] = "mtproto account.getAuthorizations";
+    unsigned char query[8];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    int count;
+    int rc;
+
+    tg_device_count = 0;
+    tg_devices_soft_fail = 0;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_account_get_authorizations(&writer) !=
+        TG_MTPROTO_TL_OK) {
+        return -1;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_devices_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return -1;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return -1;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
+        return -1;
+    }
+    count = tg_mtproto_parse_authorizations(
+        result.result_constructor, result.result_body,
+        result.result_body_length, tg_devices, TG_MTPROTO_DEVICES_MAX);
+    if (count < 0) {
+        return -1;
+    }
+    tg_device_count = count > TG_MTPROTO_DEVICES_MAX
+                          ? TG_MTPROTO_DEVICES_MAX : count;
+    return tg_device_count;
+}
+
+/* Every device but this one logged out (auth.resetAuthorizations). 0 =
+   done, 2 = failed. */
+static int tg_mtproto_devices_end_others_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, FILE *stream)
+{
+    static const char label[] = "mtproto auth.resetAuthorizations";
+    unsigned char query[8];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    int rc;
+
+    tg_devices_soft_fail = 0;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_auth_reset_authorizations(&writer) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_devices_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 2;
+    }
+    return result.result_constructor == 0x997275b5UL ? 0 : 2; /* boolTrue */
+}
+
+/* The devices as text, in UTF-8, a line each: what runs there, on what,
+   where, and when it was last used, as the clock the times are shown in
+   has it (today a time, another day the date). The one that asks comes
+   with a star and `here` in the place of the time. With `two_lines` the
+   place and the time go on a line of their own, for a requester, which
+   does not wrap. A device that does not fit ends the list. */
+static void tg_devices_text(const tg_mtproto_device *list, int count,
+                            long delta, unsigned long local_now,
+                            const char *here, int two_lines, char *out,
+                            unsigned long size)
+{
+    unsigned long n = 0UL;
+    int k;
+
+    if (out == 0 || size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    for (k = 0; list != 0 && k < count; ++k) {
+        const tg_mtproto_device *d = &list[k];
+        char line[200];
+        char when[16];
+        unsigned long len;
+
+        when[0] = '\0';
+        if (!d->current && d->date_active != 0UL) {
+            time_t at = (time_t)tg_mtproto_chat_local_epoch(d->date_active,
+                                                            delta);
+            struct tm *parts = gmtime(&at);
+
+            if (parts != 0 &&
+                (unsigned long)at / 86400UL == local_now / 86400UL) {
+                sprintf(when, "%02u:%02u",
+                        (unsigned int)parts->tm_hour % 24U,
+                        (unsigned int)parts->tm_min % 60U);
+            } else if (parts != 0) {
+                sprintf(when, "%02u/%02u",
+                        (unsigned int)parts->tm_mday % 32U,
+                        (unsigned int)(parts->tm_mon + 1) % 13U);
+            }
+        }
+        sprintf(line, "%c %.39s", d->current ? '*' : ' ',
+                d->app[0] != '\0' ? d->app : "?");
+        if (d->device[0] != '\0') {
+            sprintf(line + strlen(line), ", %.39s", d->device);
+        }
+        if (d->system[0] != '\0') {
+            sprintf(line + strlen(line), " (%.31s)", d->system);
+        }
+        if (two_lines && (d->country[0] != '\0' || d->current ||
+                          when[0] != '\0')) {
+            strcat(line, "\n    ");
+            if (d->country[0] != '\0') {
+                sprintf(line + strlen(line), "%.31s", d->country);
+            }
+        } else if (d->country[0] != '\0') {
+            sprintf(line + strlen(line), ", %.31s", d->country);
+        }
+        if (d->current) {
+            sprintf(line + strlen(line), "%s%.24s",
+                    two_lines && d->country[0] == '\0' ? "" : ": ",
+                    here != 0 ? here : "");
+        } else if (when[0] != '\0') {
+            sprintf(line + strlen(line), "%s%s",
+                    two_lines && d->country[0] == '\0' ? "" : ": ", when);
+        }
+        len = (unsigned long)strlen(line);
+        if (n + len + 2UL > size) {
+            break;
+        }
+        if (n != 0UL) {
+            out[n++] = '\n';
+        }
+        memcpy(out + n, line, (size_t)len);
+        n += len;
+        out[n] = '\0';
+    }
+}
+
 /* A bot's buttons, for the window and for the text client alike.
    The keyboard of one message of this chat, read again from Telegram (a
    bot changes its buttons at will) and kept (tg_mtproto_keyboard_kept):
@@ -14993,7 +15159,8 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
-    "          /block /unblock /press /help /update /logout /quit\n"
+    "          /block /unblock /press /devices /help /update\n" \
+    "          /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -19160,6 +19327,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_MARKUNREAD_MARK_THIS),
     TG_HELP(MSG_T_HELP_BLOCK_UNBLOCK),
     TG_HELP(MSG_T_HELP_PRESS_N),
+    TG_HELP(MSG_T_HELP_DEVICES),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -22212,6 +22380,77 @@ int tg_mtproto_auth_chat_file(const char *host,
             continue;
         }
         cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/devices", &cmd_arg)) {
+            /* Where the account is logged in; "end yes" logs every other
+               device out. */
+            static char devices_text[TG_MTPROTO_DEVICES_MAX * 200];
+
+            if (cmd_arg[0] == '\0') {
+                int count;
+
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                count = tg_mtproto_devices_fetch_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (count <= 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                } else {
+                    long delta = tg_mtproto_display_delta(
+                        chat_context.server_time_delta_seconds,
+                        tg_mtproto_local_clock_skew());
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                    tg_devices_text(
+                        tg_devices, tg_device_count, delta,
+                        tg_mtproto_chat_local_epoch(
+                            tg_mtproto_context_time(&chat_context), delta),
+                        TG_STR_U8(MSG_S_THIS_DEVICE), 0, devices_text,
+                        sizeof(devices_text));
+                    fputs(TG_TSTR(MSG_T_THIS_ACCOUNT_IS_OPEN_HERE), tui_cap);
+                    {
+                        /* a line at a time: a text of several lines is
+                           indented from its second line on */
+                        char *at = devices_text;
+
+                        while (*at != '\0') {
+                            char *end = strchr(at, '\n');
+
+                            if (end != 0) {
+                                *end = '\0';
+                            }
+                            tg_mtproto_print_message_text(tui_cap, at);
+                            fputc('\n', tui_cap);
+                            if (end == 0) {
+                                break;
+                            }
+                            at = end + 1;
+                        }
+                    }
+                    tg_console_tui_capture_end(tui_cap, stream);
+                }
+            } else if (strcmp(cmd_arg, "end yes") == 0) {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_devices_end_others_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                tg_mtproto_chat_print_system_line(
+                    stream, rc == 0 ? TG_TSTR(MSG_T_OTHER_SESSIONS_ENDED)
+                                    : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+            } else {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_USE_DEVICES_END_YES));
+            }
+            if (tg_devices_soft_fail) {
+                tg_mtproto_close_auth_context(&chat_context);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
         if (tg_mtproto_chat_named_command_arg(line, "/press", &cmd_arg)) {
             /* The buttons of the newest message shown here that has some:
                listed, or one of them pressed. The message is read again
@@ -23378,6 +23617,7 @@ static int tg_gui_last_self_test(void);
 static int tg_gui_peer_seen_self_test(void);
 static int tg_gui_block_self_test(void);
 static int tg_gui_keys_self_test(void);
+static int tg_devices_text_self_test(void);
 static int tg_gui_day_start_self_test(void);
 static int tg_gui_who_read_self_test(void);
 static int tg_gui_topic_change_self_test(void);
@@ -25827,6 +26067,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_peer_seen_self_test() != 0 ||
         tg_gui_block_self_test() != 0 ||
         tg_gui_keys_self_test() != 0 ||
+        tg_devices_text_self_test() != 0 ||
         tg_gui_day_start_self_test() != 0 ||
         tg_gui_who_read_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
@@ -34687,6 +34928,76 @@ int tg_gui_session_leave_chat(unsigned long peer_index, int both,
     tg_gui_session_reload_chats();
     return 0;
 }
+
+#if !defined(TG_NO_GUI) /* asked from the Amigram menu */
+/* Public: where the account is logged in, as the window draws text. */
+int tg_gui_session_devices(char *out, unsigned long size, FILE *stream)
+{
+    static char utf8[TG_MTPROTO_DEVICES_MAX * 200];
+    unsigned long prev_timeout;
+    long delta;
+    FILE *quiet;
+    int count;
+
+    if (out == 0 || size == 0UL) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (!tg_gui_session_state.open || stream == 0) {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    count = tg_mtproto_devices_fetch_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (count <= 0) {
+        tg_gui_log("devices: Telegram did not say where the account is");
+        return -1;
+    }
+    delta = tg_mtproto_display_delta(
+        tg_gui_session_state.context.server_time_delta_seconds,
+        tg_mtproto_local_clock_skew());
+    tg_devices_text(
+        tg_devices, tg_device_count, delta,
+        tg_mtproto_chat_local_epoch(
+            tg_mtproto_context_time(&tg_gui_session_state.context), delta),
+        TG_STR_U8(MSG_S_THIS_DEVICE), 1, utf8, sizeof(utf8));
+    tg_gui_driver_text_from_utf8(out, size, utf8);
+    tg_gui_log("devices: read");
+    return count;
+}
+
+/* Public: every other device logged out. */
+int tg_gui_session_devices_end_others(FILE *stream)
+{
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_devices_end_others_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log(rc == 0 ? "devices: the others are logged out"
+                       : "devices: the others could not be logged out");
+    return rc;
+}
+#endif
 
 #if !defined(TG_NO_GUI) /* asked from a message's menu */
 /* The comments of a post: where they were opened from, to go back. */
@@ -46121,6 +46432,83 @@ static int tg_gui_peer_seen_self_test(void)
     tg_chat_edit_target = 0;
     if (!ok) {
         puts("probe self-test: what is kept of who was here wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
+#if !defined(TG_NO_SELFTEST)
+/* The devices as lines: this one starred and named as such, another used
+   today with its time, one used another day with the date, one that says
+   little of itself; a buffer too short ends the list at a whole line. */
+static int tg_devices_text_self_test(void)
+{
+    /* now: 10 Jan 1970 23:00; used today at 14:05, and on 2 Jan */
+    const unsigned long day = 86400UL;
+    const unsigned long now = 9UL * day + 23UL * 3600UL;
+    static tg_mtproto_device list[4];
+    char out[512];
+    char small[64];
+
+    memset(list, 0, sizeof(list));
+    list[0].current = 1;
+    strcpy(list[0].app, "Amigram 0.7");
+    strcpy(list[0].device, "A1200");
+    strcpy(list[0].system, "AmigaOS 3.2");
+    strcpy(list[0].country, "Italy");
+    list[0].date_active = now;
+    strcpy(list[1].app, "Telegram Android 11.2");
+    strcpy(list[1].device, "Pixel 8");
+    strcpy(list[1].system, "Android 14");
+    strcpy(list[1].country, "Italy");
+    list[1].date_active = 9UL * day + 14UL * 3600UL + 5UL * 60UL;
+    strcpy(list[2].app, "Telegram Desktop 5.1");
+    strcpy(list[2].device, "PC");
+    list[2].date_active = 1UL * day + 9UL * 3600UL;
+    strcpy(list[3].device, "Thing");
+    tg_devices_text(list, 4, 0L, now, "this device", 0, out, sizeof(out));
+    if (strcmp(out,
+               "* Amigram 0.7, A1200 (AmigaOS 3.2), Italy: this device\n"
+               "  Telegram Android 11.2, Pixel 8 (Android 14), Italy: 14:05\n"
+               "  Telegram Desktop 5.1, PC: 02/01\n"
+               "  ?, Thing") != 0) {
+        printf("probe self-test: the devices read \"%s\"\n", out);
+        return 2;
+    }
+    /* an hour east of Telegram's clock (delta -3600) the time is an hour
+       later */
+    tg_devices_text(list + 1, 1, -3600L, now, "x", 0, out, sizeof(out));
+    if (strstr(out, ": 15:05") == 0) {
+        puts("probe self-test: a device's time not in the user's clock");
+        return 2;
+    }
+    tg_devices_text(list, 4, 0L, now, "this device", 0, small,
+                    sizeof(small));
+    if (strcmp(small,
+               "* Amigram 0.7, A1200 (AmigaOS 3.2), Italy: this device") !=
+        0) {
+        puts("probe self-test: the devices do not end at a whole line");
+        return 2;
+    }
+    strcpy(small, "x");
+    tg_devices_text(list, 0, 0L, now, "x", 0, small, sizeof(small));
+    if (small[0] != '\0') {
+        puts("probe self-test: no device, yet a text");
+        return 2;
+    }
+    /* for a requester: the place and the time on a line of their own */
+    tg_devices_text(list, 4, 0L, now, "this device", 1, out, sizeof(out));
+    if (strcmp(out,
+               "* Amigram 0.7, A1200 (AmigaOS 3.2)\n"
+               "    Italy: this device\n"
+               "  Telegram Android 11.2, Pixel 8 (Android 14)\n"
+               "    Italy: 14:05\n"
+               "  Telegram Desktop 5.1, PC\n"
+               "    02/01\n"
+               "  ?, Thing") != 0) {
+        printf("probe self-test: the devices on two lines read \"%s\"\n",
+               out);
         return 2;
     }
     return 0;

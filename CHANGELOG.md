@@ -132,6 +132,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   used to hide. A chat with a bot that holds no message yet says "Press
   Enter to start the bot": ENTER, or a click on Send, sends it `/start`,
   and the header says "bot" there too.
+- Devices: "Devices..." in the Amigram menu lists where the account is
+  logged in (`account.getAuthorizations`): the program, the machine,
+  its system, the place and when it was last used, this one marked. The
+  requester offers to end every other session
+  (`auth.resetAuthorizations`), and asks once more before it does. The
+  text client has `/devices`, and `/devices end yes`. The network
+  address Telegram gives for each device is neither kept nor shown.
 - Comments on a channel's post. A post that takes comments says how
   many it has in its time row, after the views, and "Comments..." in
   its menu opens them in the transcript: the discussion group they are

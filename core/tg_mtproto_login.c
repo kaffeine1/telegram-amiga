@@ -10339,6 +10339,116 @@ int tg_mtproto_parse_user_full_blocked(unsigned long constructor,
 }
 #endif
 
+/* account.getAuthorizations#e320c158 = account.Authorizations and
+   auth.resetAuthorizations#9fab0d1a = Bool (layer 214 schema): where the
+   account is logged in, and every place but this one logged out. */
+tg_mtproto_tl_status tg_mtproto_build_account_get_authorizations(
+    tg_mtproto_tl_writer *writer)
+{
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_mtproto_tl_write_u32(writer, 0xe320c158UL);
+}
+
+tg_mtproto_tl_status tg_mtproto_build_auth_reset_authorizations(
+    tg_mtproto_tl_writer *writer)
+{
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_mtproto_tl_write_u32(writer, 0x9fab0d1aUL);
+}
+
+/* What another device says of itself is drawn here: no line break, no
+   mark of the painter. */
+static void tg_device_text_clean(char *text)
+{
+    for (; *text != '\0'; ++text) {
+        if ((unsigned char)*text < 0x20U) {
+            *text = ' ';
+        }
+    }
+}
+
+/* account.authorizations#4bff8ea0 authorization_ttl_days:int
+   authorizations:Vector<Authorization>, each authorization#ad01d61d
+   flags:# current:flags.0?true ... hash:long device_model:string
+   platform:string system_version:string api_id:int app_name:string
+   app_version:string date_created:int date_active:int ip:string
+   country:string region:string. */
+int tg_mtproto_parse_authorizations(unsigned long constructor,
+                                    const unsigned char *body,
+                                    unsigned long body_length,
+                                    tg_mtproto_device *out, int max)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long count;
+    unsigned long word;
+    unsigned long i;
+    int n = 0;
+
+    if (constructor != 0x4bff8ea0UL || body == 0 || out == 0 || max <= 0) {
+        return -1;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &word) != TG_MTPROTO_TL_OK ||
+        tg_read_vector_count(&reader, &count) != TG_MTPROTO_TL_OK ||
+        count > 1000UL) {
+        return -1;
+    }
+    for (i = 0UL; i < count; ++i) {
+        tg_mtproto_device one;
+        unsigned long flags;
+        char platform[16];
+        char version[16];
+        char name[24];
+        char release[16];
+
+        memset(&one, 0, sizeof(one));
+        if (tg_mtproto_tl_read_u32(&reader, &word) != TG_MTPROTO_TL_OK ||
+            word != 0xad01d61dUL ||
+            tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u64(&reader, &one.hash_hi, &one.hash_lo) !=
+                TG_MTPROTO_TL_OK ||
+            tg_read_string_copy(&reader, one.device, sizeof(one.device)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_read_string_copy(&reader, platform, sizeof(platform)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_read_string_copy(&reader, version, sizeof(version)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&reader, &word) != TG_MTPROTO_TL_OK ||
+            tg_read_string_copy(&reader, name, sizeof(name)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_read_string_copy(&reader, release, sizeof(release)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&reader, &word) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&reader, &one.date_active) !=
+                TG_MTPROTO_TL_OK ||
+            tg_skip_string(&reader) != TG_MTPROTO_TL_OK || /* ip */
+            tg_read_string_copy(&reader, one.country, sizeof(one.country)) !=
+                TG_MTPROTO_TL_OK ||
+            tg_skip_string(&reader) != TG_MTPROTO_TL_OK) { /* region */
+            return -1;
+        }
+        one.current = (flags & 1UL) != 0UL;
+        sprintf(one.app, "%.23s%s%.15s", name,
+                name[0] != '\0' && release[0] != '\0' ? " " : "", release);
+        sprintf(one.system, "%.15s%s%.15s", platform,
+                platform[0] != '\0' && version[0] != '\0' ? " " : "",
+                version);
+        tg_device_text_clean(one.app);
+        tg_device_text_clean(one.device);
+        tg_device_text_clean(one.system);
+        tg_device_text_clean(one.country);
+        if (n < max) {
+            out[n] = one;
+        }
+        ++n;
+    }
+    return n;
+}
+
 /* messages.getDiscussionMessage#446972fd peer:InputPeer msg_id:int =
    messages.DiscussionMessage (layer 214 schema): the copy of a channel's
    post in its discussion group, which the comments answer. */
@@ -20488,6 +20598,105 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #endif
+    /* Where the account is logged in: the two requests, and the answer
+       read: this device and another, their words put together; one more
+       than asked for is counted and left out; something else, or an
+       answer cut short, is none. */
+    {
+        tg_mtproto_device devices[2];
+
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_account_get_authorizations(&writer) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 4UL ||
+            tg_read_u32_le(peer_rpc) != 0xe320c158UL ||
+            tg_mtproto_build_auth_reset_authorizations(&writer) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 8UL ||
+            tg_read_u32_le(peer_rpc + 4) != 0x9fab0d1aUL) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, 180UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        {
+            static const struct {
+                unsigned long flags;
+                const char *device;
+                const char *platform;
+                const char *version;
+                const char *name;
+                const char *release;
+                unsigned long active;
+                const char *country;
+            } rows[3] = {
+                { 1UL, "A1200", "AmigaOS", "3.2", "Amigram", "0.7",
+                  1700000300UL, "Italy" },
+                { 2UL, "Pixel\n8", "Android", "14", "Telegram Android",
+                  "11.2", 1700000200UL, "Italy" },
+                { 0UL, "PC", "", "", "", "", 1700000100UL, "" }
+            };
+            int k;
+
+            for (k = 0; k < 3; ++k) {
+                if (tg_mtproto_tl_write_u32(&writer, 0xad01d61dUL) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&writer, rows[k].flags) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u64(&writer, 0UL,
+                                            0x900UL + (unsigned long)k) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, rows[k].device) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, rows[k].platform) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, rows[k].version) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&writer, 12345UL) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, rows[k].name) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, rows[k].release) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&writer, 1690000000UL) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_mtproto_tl_write_u32(&writer, rows[k].active) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, "203.0.113.7") !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, rows[k].country) !=
+                        TG_MTPROTO_TL_OK ||
+                    tg_write_string(&writer, "Lazio") != TG_MTPROTO_TL_OK) {
+                    return 2;
+                }
+            }
+        }
+        if (tg_mtproto_parse_authorizations(0x4bff8ea0UL, peer_rpc,
+                                            writer.length, devices, 2) !=
+                3 ||
+            devices[0].current != 1 || devices[0].hash_lo != 0x900UL ||
+            strcmp(devices[0].app, "Amigram 0.7") != 0 ||
+            strcmp(devices[0].device, "A1200") != 0 ||
+            strcmp(devices[0].system, "AmigaOS 3.2") != 0 ||
+            strcmp(devices[0].country, "Italy") != 0 ||
+            devices[0].date_active != 1700000300UL ||
+            devices[1].current != 0 ||
+            strcmp(devices[1].app, "Telegram Android 11.2") != 0 ||
+            strcmp(devices[1].device, "Pixel 8") != 0 ||
+            strcmp(devices[1].system, "Android 14") != 0 ||
+            tg_mtproto_parse_authorizations(0x12345678UL, peer_rpc,
+                                            writer.length, devices, 2) !=
+                -1 ||
+            tg_mtproto_parse_authorizations(0x4bff8ea0UL, peer_rpc,
+                                            writer.length - 8UL, devices,
+                                            2) != -1) {
+            return 2;
+        }
+    }
     /* The discussion of a post: the request's bytes; no post, no
        request. */
     tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));

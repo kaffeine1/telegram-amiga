@@ -1537,6 +1537,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_PLAYER 42
 #define TG_MENU_TOPIC_NEW 43
 #define TG_MENU_LOGOUT 44
+#define TG_MENU_DEVICES 45
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -8659,6 +8660,8 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_ITEM,  (STRPTR)"Support development...", 0, 0, 0,
       (APTR)TG_MENU_SUPPORT },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
+    { NM_ITEM,  (STRPTR)"Devices...", 0, 0, 0,
+      (APTR)TG_MENU_DEVICES },
     { NM_ITEM,  (STRPTR)"Log out...", 0, 0, 0,
       (APTR)TG_MENU_LOGOUT },
     { NM_ITEM,  (STRPTR)"Quit", (STRPTR)"Q", 0, 0,
@@ -8712,6 +8715,7 @@ static void tg_gui_window_localize_menu(void)
         { MSG_MENU_ABOUT_STR, MSG_MENU_ABOUT },
         { MSG_MENU_HELP_STR, MSG_MENU_HELP },
         { MSG_MENU_SUPPORT_STR, MSG_MENU_SUPPORT },
+        { MSG_MENU_DEVICES_STR, MSG_MENU_DEVICES },
         { MSG_MENU_LOGOUT_STR, MSG_MENU_LOGOUT },
         { MSG_MENU_QUIT_STR, MSG_MENU_QUIT },
         { MSG_MENU_EDIT_STR, MSG_MENU_EDIT },
@@ -15234,6 +15238,73 @@ static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
     return pick == 1L;
 }
 
+/* Devices... (the Amigram menu): where the account is logged in, in a
+   requester, which offers to log every other device out; that is asked
+   once more before it is done. */
+static void tg_gui_window_devices(struct Window *win, tg_gui_state *state,
+                                  tg_gui_backend *backend)
+{
+    static char got[TG_MTPROTO_DEVICES_MAX * 200];
+    static char body[sizeof(got) + 400];
+    struct EasyStruct es;
+    unsigned long n;
+    int max_lines;
+    int count;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open()) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_READING_THE_DEVICES));
+    tg_gui_window_paint(state, backend);
+    count = tg_gui_session_devices(got, sizeof(got), stdout);
+    if (count <= 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    max_lines = 12;
+    if (win->WScreen != 0 && win->WScreen->RastPort.TxHeight > 0) {
+        max_lines = ((int)win->WScreen->Height /
+                     (int)win->WScreen->RastPort.TxHeight) - 8;
+    }
+    if (max_lines < 6) {
+        max_lines = 6;
+    }
+    tg_gui_window_copy(body, sizeof(body),
+                       TG_STR(MSG_W_THIS_ACCOUNT_IS_OPEN_HERE));
+    n = (unsigned long)strlen(body);
+    tg_gui_requester_text(body + n, sizeof(body) - n, got, max_lines);
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems, UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_DEVICES);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)(count > 1 ? TG_STR(MSG_RQ_END_THE_OTHERS_CLOSE)
+                                          : TG_STR(MSG_RQ_OK));
+    if (count < 2) {
+        /* this device alone: nothing to end */
+        (void)tg_gui_amiga_easyreq_args(win, &es);
+        return;
+    }
+    if (tg_gui_amiga_easyreq_args(win, &es) != 1L) {
+        return; /* closed */
+    }
+    es.es_TextFormat = (APTR)TG_STR(MSG_W_END_EVERY_OTHER_SESSION);
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_END_THEM_CANCEL);
+    if (tg_gui_amiga_easyreq_args(win, &es) != 1L) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       tg_gui_session_devices_end_others(stdout) == 0
+                           ? TG_STR(MSG_ST_OTHER_SESSIONS_ENDED)
+                           : TG_STR(MSG_ST_COULD_NOT_END_THEM));
+    tg_gui_window_paint(state, backend);
+}
+
 /* Log out (the Amigram menu): a requester first, then auth.logOut. Once it
    has gone through the window quits, and the closing of the session
    removes the account's files: the next start shows the login. 1 = quit
@@ -19431,6 +19502,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                     (int)ctx.window->TopEdge,
                                                     want_own);
                             done = 3; /* reopen (no AppIcon) */
+                        } else if (ud == (APTR)TG_MENU_DEVICES) {
+                            tg_gui_window_devices(ctx.window, state,
+                                                  &backend);
                         } else if (ud == (APTR)TG_MENU_LOGOUT) {
                             if (tg_gui_window_log_out(ctx.window, state,
                                                       &backend)) {

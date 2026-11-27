@@ -54,6 +54,8 @@ Create poll...
 MSG_MENU_EMOJI (22//)
 Insert emoji...
 ;
+MSG_MENU_DEVICES (23//)
+Devices...
 ; --- the QR login screen (30-39) ---------------------------------------------
 MSG_QR_STEP1 (30//)
 1. Open Telegram on your phone
@@ -994,6 +996,12 @@ MSG_ST_THIS_POST_TAKES_NO_COMMENTS (530//)
 This post takes no comments
 MSG_ST_BACK_TO_THE_CHANNEL (531//)
 Back to the channel...
+MSG_ST_READING_THE_DEVICES (532//)
+Reading the devices...
+MSG_ST_OTHER_SESSIONS_ENDED (533//)
+The other sessions are ended
+MSG_ST_COULD_NOT_END_THEM (534//)
+Could not end them (network?)
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1150,6 +1158,12 @@ MSG_RQ_OPEN_LINK (656//)
 Open link
 MSG_RQ_OPEN_CANCEL (657//)
 Open|Cancel
+MSG_RQ_DEVICES (658//)
+Devices
+MSG_RQ_END_THE_OTHERS_CLOSE (659//)
+End the others|Close
+MSG_RQ_END_THEM_CANCEL (660//)
+End them|Cancel
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1352,6 +1366,14 @@ MSG_W_UNBLOCK_THEM (957//)
 MSG_W_THE_BUTTON_OPENS_THIS_LINK (958//)
 The button opens this link:\n\
 \n
+MSG_W_THIS_ACCOUNT_IS_OPEN_HERE (959//)
+This account is open here:\n\
+\n
+MSG_W_END_EVERY_OTHER_SESSION (960//)
+End every other session?\n\
+\n\
+The other devices are logged out of Telegram\n\
+and have to log in again. This one stays.
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -2130,6 +2152,8 @@ MSG_S_READ_AND_1_MORE (1827//)
 and 1 more
 MSG_S_READ_AND_MORE (1828//)
 and %lu more
+MSG_S_THIS_DEVICE (1829//)
+this device
 ; --- the text client (2000-3999) -------------------------------------------
 MSG_T_CODE_IN_TELEGRAM (2000//)
 Check your other Telegram apps (mobile/desktop/web) for the code.
@@ -2880,3 +2904,11 @@ MSG_T_THE_BUTTON_LINK (2359//)
 The button's link: 
 MSG_T_THE_BUTTON_TEXT (2360//)
 The button's text: 
+MSG_T_HELP_DEVICES (2361//)
+  /devices        where the account is open; /devices end yes ends the rest
+MSG_T_THIS_ACCOUNT_IS_OPEN_HERE (2362//)
+This account is open here:\n
+MSG_T_USE_DEVICES_END_YES (2363//)
+Use /devices end yes: every other device is logged out of Telegram.
+MSG_T_OTHER_SESSIONS_ENDED (2364//)
+The other sessions are ended.
