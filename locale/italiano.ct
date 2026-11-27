@@ -2194,6 +2194,9 @@ ENTER conferma   ESC esce
 MSG_G_NO_CODE_PRESS_S
 Niente codice? Premi S per averlo %.24s
 ; No code? Press S to get it %.24s
+MSG_G_TITLE_NEW_ONE
+ nuovo
+;  new
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -2860,6 +2863,9 @@ Servono %lu KB, solo %lu KB liberi in %.16s
 MSG_S_DL_VOLUME_FULL
 %.20s è pieno, fermo a %lu KB
 ; %.20s is full, stopped at %lu KB
+MSG_S_YOU
+Tu
+; You
 MSG_T_CODE_IN_TELEGRAM
 Cerca il codice nelle altre app Telegram (telefono, desktop, web).
 ; Check your other Telegram apps (mobile/desktop/web) for the code.
@@ -3775,3 +3781,54 @@ Questa versione non ha la finestra: è il pacchetto del client testuale.
 MSG_T_OLDER_SEPARATOR
 ---- messaggi più vecchi -- Shift+Giù: torna al presente --------------------------
 ; ---- older messages -- Shift+Down: back to live ----------------------------------
+MSG_T_LU_NEW_ONE
+ %lu nuovo
+;  %lu new
+MSG_T_LU_MORE_ONE
+(+%lu altro)
+; (+%lu more)
+MSG_T_TOPIC_NEW_ONE
+  (%lu nuovo)
+;   (%lu new)
+MSG_T_BYE
+Ciao.
+; Bye.
+MSG_T_YOU_COLON
+Tu:
+; You:
+MSG_T_MON_JAN
+gen
+; Jan
+MSG_T_MON_FEB
+feb
+; Feb
+MSG_T_MON_MAR
+mar
+; Mar
+MSG_T_MON_APR
+apr
+; Apr
+MSG_T_MON_MAY
+mag
+; May
+MSG_T_MON_JUN
+giu
+; Jun
+MSG_T_MON_JUL
+lug
+; Jul
+MSG_T_MON_AUG
+ago
+; Aug
+MSG_T_MON_SEP
+set
+; Sep
+MSG_T_MON_OCT
+ott
+; Oct
+MSG_T_MON_NOV
+nov
+; Nov
+MSG_T_MON_DEC
+dic
+; Dec

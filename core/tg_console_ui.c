@@ -204,8 +204,15 @@ const char *tg_console_ui_text(const char *latin1)
     if (latin1 == 0) {
         return 0;
     }
+#if defined(__amigaos3__) || defined(__amigaos4__) || defined(__AROS__) || \
+    defined(__MORPHOS__) || defined(__MORPHOS)
     return tg_ui_charset == TG_UI_CHARSET_UTF8 ? tg_locale_utf8(latin1)
                                                : latin1;
+#else
+    /* no Latin-1 console here: the messages go out as UTF-8 whatever the
+       charset says, and so does the catalog */
+    return tg_locale_utf8(latin1);
+#endif
 }
 
 void tg_console_ui_enter_screen(FILE *stream)

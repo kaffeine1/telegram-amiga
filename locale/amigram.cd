@@ -1546,6 +1546,8 @@ ENTER confirms   ESC quits
 MSG_G_NO_CODE_PRESS_S (1436//)
 No code? Press S to get it %.24s
 ;
+MSG_G_TITLE_NEW_ONE (1437//)
+ new
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -1992,6 +1994,8 @@ MSG_S_DL_NEED_ROOM (1820//)
 Need %lu KB, only %lu KB free in %.16s
 MSG_S_DL_VOLUME_FULL (1821//)
 %.20s is full, stopped at %lu KB
+MSG_S_YOU (1822//)
+You
 ; --- the text client (2000-3999) -------------------------------------------
 MSG_T_CODE_IN_TELEGRAM (2000//)
 Check your other Telegram apps (mobile/desktop/web) for the code.
@@ -2676,3 +2680,37 @@ MSG_T_NO_GUI_BUILD (2326//)
 This build has no GUI: it is the text-client package.
 MSG_T_OLDER_SEPARATOR (2327//)
 ---- older messages -- Shift+Down: back to live ----------------------------------
+MSG_T_LU_NEW_ONE (2328//)
+ %lu new
+MSG_T_LU_MORE_ONE (2329//)
+(+%lu more)
+MSG_T_TOPIC_NEW_ONE (2330//)
+  (%lu new)
+MSG_T_BYE (2331//)
+Bye.
+MSG_T_YOU_COLON (2332//)
+You:
+MSG_T_MON_JAN (2333//)
+Jan
+MSG_T_MON_FEB (2334//)
+Feb
+MSG_T_MON_MAR (2335//)
+Mar
+MSG_T_MON_APR (2336//)
+Apr
+MSG_T_MON_MAY (2337//)
+May
+MSG_T_MON_JUN (2338//)
+Jun
+MSG_T_MON_JUL (2339//)
+Jul
+MSG_T_MON_AUG (2340//)
+Aug
+MSG_T_MON_SEP (2341//)
+Sep
+MSG_T_MON_OCT (2342//)
+Oct
+MSG_T_MON_NOV (2343//)
+Nov
+MSG_T_MON_DEC (2344//)
+Dec

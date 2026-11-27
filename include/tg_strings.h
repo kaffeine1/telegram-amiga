@@ -1403,6 +1403,8 @@
 #define MSG_G_LOGIN_KEYS_STR "ENTER confirms   ESC quits"
 #define MSG_G_NO_CODE_PRESS_S 1436
 #define MSG_G_NO_CODE_PRESS_S_STR "No code? Press S to get it %.24s"
+#define MSG_G_TITLE_NEW_ONE 1437
+#define MSG_G_TITLE_NEW_ONE_STR " new"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -1847,6 +1849,8 @@
 #define MSG_S_DL_NEED_ROOM_STR "Need %lu KB, only %lu KB free in %.16s"
 #define MSG_S_DL_VOLUME_FULL 1821
 #define MSG_S_DL_VOLUME_FULL_STR "%.20s is full, stopped at %lu KB"
+#define MSG_S_YOU 1822
+#define MSG_S_YOU_STR "You"
 #define MSG_T_CODE_IN_TELEGRAM 2000
 #define MSG_T_CODE_IN_TELEGRAM_STR "Check your other Telegram apps (mobile/desktop/web) for the code."
 #define MSG_T_CODE_BY_SMS 2001
@@ -2503,5 +2507,42 @@
 #define MSG_T_NO_GUI_BUILD_STR "This build has no GUI: it is the text-client package."
 #define MSG_T_OLDER_SEPARATOR 2327
 #define MSG_T_OLDER_SEPARATOR_STR "---- older messages -- Shift+Down: back to live ----------------------------------"
+#define MSG_T_LU_NEW_ONE 2328
+#define MSG_T_LU_NEW_ONE_STR " %lu new"
+#define MSG_T_LU_MORE_ONE 2329
+#define MSG_T_LU_MORE_ONE_STR "(+%lu more)"
+#define MSG_T_TOPIC_NEW_ONE 2330
+#define MSG_T_TOPIC_NEW_ONE_STR "  (%lu new)"
+#define MSG_T_BYE 2331
+#define MSG_T_BYE_STR "Bye."
+#define MSG_T_YOU_COLON 2332
+#define MSG_T_YOU_COLON_STR "You:"
+#define MSG_T_MON_JAN 2333
+#define MSG_T_MON_JAN_STR "Jan"
+#define MSG_T_MON_FEB 2334
+#define MSG_T_MON_FEB_STR "Feb"
+#define MSG_T_MON_MAR 2335
+#define MSG_T_MON_MAR_STR "Mar"
+#define MSG_T_MON_APR 2336
+#define MSG_T_MON_APR_STR "Apr"
+#define MSG_T_MON_MAY 2337
+#define MSG_T_MON_MAY_STR "May"
+#define MSG_T_MON_JUN 2338
+#define MSG_T_MON_JUN_STR "Jun"
+#define MSG_T_MON_JUL 2339
+#define MSG_T_MON_JUL_STR "Jul"
+#define MSG_T_MON_AUG 2340
+#define MSG_T_MON_AUG_STR "Aug"
+#define MSG_T_MON_SEP 2341
+#define MSG_T_MON_SEP_STR "Sep"
+#define MSG_T_MON_OCT 2342
+#define MSG_T_MON_OCT_STR "Oct"
+#define MSG_T_MON_NOV 2343
+#define MSG_T_MON_NOV_STR "Nov"
+#define MSG_T_MON_DEC 2344
+#define MSG_T_MON_DEC_STR "Dec"
+
+/* the highest id above: the host build sizes its table by it */
+#define TG_STRINGS_ID_MAX 2344
 
 #endif

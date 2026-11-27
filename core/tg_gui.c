@@ -752,8 +752,11 @@ static void tg_gui_notify_label(const tg_gui_state *state, const char *base,
 void tg_gui_notify_title(const tg_gui_state *state, char *out,
                          unsigned long size)
 {
-    tg_gui_notify_label(state, TG_APP_TITLE, TG_STR(MSG_G_TITLE_NEW), out,
-                        size);
+    tg_gui_notify_label(state, TG_APP_TITLE,
+                        tg_gui_notify_total(state) == 1
+                            ? TG_STR(MSG_G_TITLE_NEW_ONE)
+                            : TG_STR(MSG_G_TITLE_NEW),
+                        out, size);
 }
 
 void tg_gui_notify_icon_label(const tg_gui_state *state, char *out,

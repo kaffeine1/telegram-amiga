@@ -122,7 +122,9 @@ const char *tg_locale_language(void)
 
 #else /* the host: a catalog file read by hand, for the self-tests */
 
-#define TG_LOCALE_HOST_MAX 2048
+/* every id of include/tg_strings.h: with a fixed size the texts past it
+   stayed English here, and only here */
+#define TG_LOCALE_HOST_MAX (TG_STRINGS_ID_MAX + 1)
 
 static unsigned char *tg_locale_data = 0;
 static const char *tg_locale_texts[TG_LOCALE_HOST_MAX];

@@ -11396,7 +11396,10 @@ static void tg_mtproto_chat_list_render_console(FILE *stream,
             }
             if (row->unread > 0UL) {
                 tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
-                fprintf(stream, TG_TSTR(MSG_T_LU_NEW), row->unread);
+                fprintf(stream,
+                        row->unread == 1UL ? TG_TSTR(MSG_T_LU_NEW_ONE)
+                                           : TG_TSTR(MSG_T_LU_NEW),
+                        row->unread);
                 tg_console_ui_reset(stream);
             }
             if (row->is_current) {
@@ -14734,7 +14737,7 @@ static void tg_mtproto_chat_render_message(FILE *stream,
            another alphabet came out as ":/ ?" on the 68000 tester's screen,
            and the reader knows who they are. */
         tg_console_ui_role(stream, TG_UI_ROLE_OWN);
-        fprintf(stream, "You:");
+        fputs(TG_TSTR(MSG_T_YOU_COLON), stream);
         tg_console_ui_reset(stream);
         fputc(' ', stream);
     } else {
@@ -16854,9 +16857,18 @@ static void tg_mtproto_chat_print_message_time(FILE *stream,
 static void tg_mtproto_chat_print_day_separator(FILE *stream,
                                                 unsigned long local_epoch)
 {
-    static const char *month_names[12] = {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    /* the months' short names: their numbers in the catalog, their
+       English forms */
+    static const long month_ids[12] = {
+        MSG_T_MON_JAN, MSG_T_MON_FEB, MSG_T_MON_MAR, MSG_T_MON_APR,
+        MSG_T_MON_MAY, MSG_T_MON_JUN, MSG_T_MON_JUL, MSG_T_MON_AUG,
+        MSG_T_MON_SEP, MSG_T_MON_OCT, MSG_T_MON_NOV, MSG_T_MON_DEC
+    };
+    static const char *const month_names[12] = {
+        MSG_T_MON_JAN_STR, MSG_T_MON_FEB_STR, MSG_T_MON_MAR_STR,
+        MSG_T_MON_APR_STR, MSG_T_MON_MAY_STR, MSG_T_MON_JUN_STR,
+        MSG_T_MON_JUL_STR, MSG_T_MON_AUG_STR, MSG_T_MON_SEP_STR,
+        MSG_T_MON_OCT_STR, MSG_T_MON_NOV_STR, MSG_T_MON_DEC_STR
     };
     time_t when;
     struct tm *parts;
@@ -16868,7 +16880,8 @@ static void tg_mtproto_chat_print_day_separator(FILE *stream,
     }
     tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
     fprintf(stream, "--- %d %s ---", parts->tm_mday,
-            month_names[parts->tm_mon]);
+            tg_tui_text(tg_str(month_ids[parts->tm_mon],
+                               month_names[parts->tm_mon])));
     tg_console_ui_reset(stream);
     tg_console_ui_end_line(stream);
 }
@@ -17863,7 +17876,10 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     }
     if (tg_chat_nq->dropped > 0UL) {
         tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
-        fprintf(stream, TG_TSTR(MSG_T_LU_MORE), tg_chat_nq->dropped);
+        fprintf(stream,
+                tg_chat_nq->dropped == 1UL ? TG_TSTR(MSG_T_LU_MORE_ONE)
+                                           : TG_TSTR(MSG_T_LU_MORE),
+                tg_chat_nq->dropped);
         tg_console_ui_reset(stream);
         tg_console_ui_end_line(stream);
     }
@@ -18510,10 +18526,15 @@ static void tg_mtproto_chat_print_topics(FILE *stream,
         const tg_mtproto_forum_topic *t = &tg_chat_topics.topics[k];
 
         fprintf(cap, "%3lu  ", k + 1UL);
-        tg_mtproto_print_cache_text(cap, t->title[0] != '\0' ? t->title
-                                                             : TG_TSTR(MSG_T_NO_TITLE));
+        /* the printer takes UTF-8, as a title is */
+        tg_mtproto_print_cache_text(cap, t->title[0] != '\0'
+                                             ? t->title
+                                             : TG_STR_U8(MSG_T_NO_TITLE));
         if (t->unread_count > 0UL) {
-            fprintf(cap, TG_TSTR(MSG_T_LU_NEW_2), t->unread_count % 100000UL);
+            fprintf(cap,
+                    t->unread_count == 1UL ? TG_TSTR(MSG_T_TOPIC_NEW_ONE)
+                                           : TG_TSTR(MSG_T_LU_NEW_2),
+                    t->unread_count % 100000UL);
         }
         if (t->closed) {
             fputs(TG_TSTR(MSG_T_CLOSED), cap);
@@ -19904,7 +19925,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             return 0;
         }
         if (strcmp(line, "/quit") == 0 || strcmp(line, "quit") == 0) {
-            tg_mtproto_chat_print_system_line(stream, "Bye.");
+            tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_BYE));
             tg_mtproto_close_quiet_stream(chat_quiet, stream);
             tg_mtproto_close_auth_context(&chat_context);
             tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -31561,7 +31582,7 @@ static int tg_gui_search_global_page(int more, FILE *stream)
 
         memset(&row, 0, sizeof(row));
         if (tg_mtproto_message_is_own(m, hit->peer_constructor)) {
-            who = e->is_self ? 0 : "You";
+            who = e->is_self ? 0 : TG_STR_U8(MSG_S_YOU);
         } else if (hit->peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
                    m->from_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
             who = tg_mtproto_cache_user_name(&tg_gui_search_results,

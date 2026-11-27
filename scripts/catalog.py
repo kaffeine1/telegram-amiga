@@ -254,7 +254,10 @@ def make_header(entries):
     for name, ident, text in entries:
         lines.append("#define %s %d" % (name, ident))
         lines.append("#define %s_STR %s" % (name, c_string(text)))
-    lines += ["", "#endif", ""]
+    lines += ["",
+              "/* the highest id above: the host build sizes its table by it */",
+              "#define TG_STRINGS_ID_MAX %d" % max(i for _, i, _ in entries),
+              "", "#endif", ""]
     return "\n".join(lines)
 
 
