@@ -9767,6 +9767,79 @@ tg_mtproto_tl_status tg_mtproto_build_messages_get_poll_votes(
     return status;
 }
 
+#if !defined(TG_NO_GUI) /* asked from a message's menu */
+/* messages.getMessageReadParticipants#31c1c44f peer:InputPeer msg_id:int
+   = Vector<ReadParticipantDate> (layer 214 schema): who read one of the
+   account's own messages in a small group, and when. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_read_participants(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x31c1c44fUL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    return status;
+}
+
+/* Its answer: readParticipantDate#4a4ff172 user_id:long date:int, a vector
+   of them. Up to `max` are given, newest reading first as Telegram sends
+   them. The count read, or -1 when the body is no such vector. */
+int tg_mtproto_parse_read_participants(unsigned long constructor,
+                                       const unsigned char *body,
+                                       unsigned long body_length,
+                                       tg_mtproto_read_participant *out,
+                                       int max)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long count;
+    unsigned long i;
+    int n = 0;
+
+    if (constructor != TG_VECTOR_CONSTRUCTOR || body == 0 || out == 0 ||
+        max <= 0) {
+        return -1;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &count) != TG_MTPROTO_TL_OK ||
+        count > (body_length - 4UL) / 16UL) {
+        return -1;
+    }
+    for (i = 0UL; i < count; ++i) {
+        tg_mtproto_read_participant one;
+        unsigned long item;
+
+        if (tg_mtproto_tl_read_u32(&reader, &item) != TG_MTPROTO_TL_OK ||
+            item != 0x4a4ff172UL ||
+            tg_mtproto_tl_read_u64(&reader, &one.id_hi, &one.id_lo) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&reader, &one.date) != TG_MTPROTO_TL_OK) {
+            return -1;
+        }
+        if (n < max) {
+            out[n++] = one;
+        }
+    }
+    return n;
+}
+#endif
+
 /* One vote of a votes list: who, and the answers chosen (bit 0 = the
    poll's first answer). */
 typedef struct tg_poll_vote {
@@ -19672,6 +19745,74 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #if !defined(TG_NO_GUI)
+    /* Who read a message: the request's bytes, and its answer read: two
+       readers in Telegram's order; one more than asked for is left out; a
+       vector of something else, or one that says it holds more than the
+       body can, is no answer. */
+    {
+        tg_mtproto_read_participant readers[2];
+
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_messages_get_read_participants(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+                4321UL) != TG_MTPROTO_TL_OK ||
+            writer.length != 20UL ||
+            tg_read_u32_le(peer_rpc) != 0x31c1c44fUL ||
+            tg_read_u32_le(peer_rpc + 8) != 0x77UL ||
+            tg_read_u32_le(peer_rpc + 16) != 4321UL ||
+            tg_mtproto_build_messages_get_read_participants(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+                0UL) == TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0x4a4ff172UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x501UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1700000300UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0x4a4ff172UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x502UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1700000200UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0x4a4ff172UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u64(&writer, 0UL, 0x503UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1700000100UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_read_participants(TG_VECTOR_CONSTRUCTOR,
+                                               peer_rpc, writer.length,
+                                               readers, 2) != 2 ||
+            readers[0].id_lo != 0x501UL ||
+            readers[0].date != 1700000300UL ||
+            readers[1].id_lo != 0x502UL ||
+            tg_mtproto_parse_read_participants(0x12345678UL, peer_rpc,
+                                               writer.length, readers,
+                                               2) != -1 ||
+            tg_mtproto_parse_read_participants(TG_VECTOR_CONSTRUCTOR,
+                                               peer_rpc, writer.length - 4UL,
+                                               readers, 2) != -1) {
+            return 2;
+        }
+        peer_rpc[4] ^= 0x01U; /* the first reader is something else */
+        if (tg_mtproto_parse_read_participants(TG_VECTOR_CONSTRUCTOR,
+                                               peer_rpc, writer.length,
+                                               readers, 2) != -1) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_read_participants(TG_VECTOR_CONSTRUCTOR,
+                                               peer_rpc, writer.length,
+                                               readers, 2) != 0) {
+            return 2;
+        }
+    }
     /* messages.setTyping: to a user with no topic (flags 0), and to a
        forum's topic (flags 1, the topic before the action). */
     tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));

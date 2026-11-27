@@ -952,6 +952,12 @@ MSG_ST_COULD_NOT_SAVE_THE_TYPING (509//)
 Could not save the typing setting
 MSG_ST_SENT_WITHOUT_SOUND (510//)
 Sent without sound
+MSG_ST_ASKING_WHO_READ (511//)
+Asking who read it...
+MSG_ST_WHO_READ_SMALL_GROUPS (512//)
+Telegram tells it in small groups only
+MSG_ST_WHO_READ_ONE_WEEK (513//)
+Telegram tells it for a week only
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1094,6 +1100,8 @@ This file could not be written:\n\
     %.80s\n\
 \n\
 Nothing was installed.
+MSG_RQ_WHO_READ (651//)
+Who read
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1585,6 +1593,8 @@ MSG_G_SEEN_BOT (1447//)
 bot
 MSG_SET_SHOW_WHEN_I_TYPE (1448//)
 Show others when I type
+MSG_G_WHO_READ (1449//)
+Who read...
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2039,6 +2049,12 @@ MSG_S_FORWARDED (1824//)
 Forwarded message
 MSG_S_EDITED (1825//)
 edited
+MSG_S_READ_BY_NOBODY (1826//)
+Nobody has read it yet.
+MSG_S_READ_AND_1_MORE (1827//)
+and 1 more
+MSG_S_READ_AND_MORE (1828//)
+and %lu more
 ; --- the text client (2000-3999) -------------------------------------------
 MSG_T_CODE_IN_TELEGRAM (2000//)
 Check your other Telegram apps (mobile/desktop/web) for the code.

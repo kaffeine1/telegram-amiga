@@ -22891,6 +22891,7 @@ static int tg_gui_channel_install_self_test(void);
 static int tg_gui_unread_self_test(void);
 static int tg_gui_last_self_test(void);
 static int tg_gui_peer_seen_self_test(void);
+static int tg_gui_who_read_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
@@ -25336,6 +25337,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_unread_self_test() != 0 ||
         tg_gui_last_self_test() != 0 ||
         tg_gui_peer_seen_self_test() != 0 ||
+        tg_gui_who_read_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
         return 2;
     }
@@ -36805,6 +36807,172 @@ int tg_gui_session_poll_voters(unsigned long message_id,
     return 0;
 }
 
+#if !defined(TG_NO_GUI)
+/* Who read a message, as lines for a requester (UTF-8): the time of each
+   reading (of today, or the day before it), two blanks, the name; newest
+   first, as Telegram gives them. Someone this client cannot name is
+   counted in a last line; nobody at all says so. `names` gives a reader's
+   name or 0; times are in the local frame. */
+#define TG_GUI_WHO_READ_MAX 40
+static void tg_gui_who_read_text(const tg_mtproto_read_participant *who,
+                                 int count,
+                                 const char *(*names)(unsigned long id_hi,
+                                                      unsigned long id_lo),
+                                 long display_delta, unsigned long local_now,
+                                 char *out, unsigned long size)
+{
+    unsigned long n = 0UL;
+    unsigned long unnamed = 0UL;
+    int i;
+
+    out[0] = '\0';
+    for (i = 0; i < count; ++i) {
+        const char *name = names != 0 ? names(who[i].id_hi, who[i].id_lo) : 0;
+        unsigned long local = tg_mtproto_chat_local_epoch(who[i].date,
+                                                          display_delta);
+        time_t when = (time_t)local;
+        struct tm *parts = gmtime(&when);
+        char clock[20];
+        char line[96];
+        unsigned long len;
+
+        if (name == 0 || name[0] == '\0') {
+            ++unnamed;
+            continue;
+        }
+        clock[0] = '\0';
+        if (parts != 0 && local / 86400UL == local_now / 86400UL) {
+            sprintf(clock, "%02u:%02u", (unsigned int)parts->tm_hour % 24U,
+                    (unsigned int)parts->tm_min % 60U);
+        } else if (parts != 0) {
+            sprintf(clock, "%02u/%02u %02u:%02u",
+                    (unsigned int)parts->tm_mday % 32U,
+                    (unsigned int)(parts->tm_mon + 1) % 13U,
+                    (unsigned int)parts->tm_hour % 24U,
+                    (unsigned int)parts->tm_min % 60U);
+        }
+        tg_mtproto_copy_utf8_name(line, 64UL, name);
+        len = (unsigned long)strlen(clock) + 2UL +
+              (unsigned long)strlen(line) + 1UL;
+        if (n + len + 24UL >= size) {
+            ++unnamed; /* no room: counted with the others */
+            continue;
+        }
+        sprintf(out + n, "%s  %s\n", clock, line);
+        n += len;
+    }
+    if (unnamed > 0UL && n + 32UL < size) {
+        if (unnamed == 1UL) {
+            tg_locale_format(out + n, size - n, "%s",
+                             TG_STR_U8(MSG_S_READ_AND_1_MORE));
+        } else {
+            tg_locale_format(out + n, size - n, TG_STR_U8(MSG_S_READ_AND_MORE),
+                             unnamed);
+        }
+    } else if (n == 0UL) {
+        tg_locale_format(out, size, "%s", TG_STR_U8(MSG_S_READ_BY_NOBODY));
+    } else if (n > 0UL) {
+        out[n - 1UL] = '\0'; /* no empty line at the end */
+    }
+}
+#endif
+
+int tg_gui_session_who_read(unsigned long message_id, char *out,
+                            unsigned long size, char *emsg,
+                            unsigned long emsg_size, FILE *stream)
+{
+#if defined(TG_NO_GUI)
+    (void)message_id;
+    (void)out;
+    (void)size;
+    (void)emsg;
+    (void)emsg_size;
+    (void)stream;
+    return 2;
+#else
+    static unsigned char query[64];
+    static tg_mtproto_read_participant who[TG_GUI_WHO_READ_MAX];
+    static char utf8[2048];
+    static const char label[] = "mtproto messages.getMessageReadParticipants";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    long delta;
+    int hah;
+    int count;
+    int rc;
+    FILE *quiet;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (out == 0 || size == 0UL) {
+        return 2;
+    }
+    out[0] = '\0';
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        tg_gui_session_state.open_peer_constructor == 0UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, &pc, &ph, &pl, &ahh,
+            &ahl, &hah, quiet, "who read") != 0 ||
+        !tg_gui_draft_is_open_peer(pc, ph, pl)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_messages_get_read_participants(
+             &writer, pc, ph, pl, ahh, ahl, hah, message_id) ==
+                 TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, emsg, emsg_size, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    count = rc == 0 ? tg_mtproto_parse_read_participants(
+                          result.result_constructor, result.result_body,
+                          result.result_body_length, who,
+                          TG_GUI_WHO_READ_MAX)
+                    : -1;
+    if (rc == 0 && count < 0) {
+        rc = 2;
+    }
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "read: Telegram did not say who read"
+                           : "read: asking who read failed");
+        return rc;
+    }
+    /* The names are the group's members': listed once for this chat. */
+    if (count > 0) {
+        tg_gui_session_ensure_members(stream);
+    }
+    delta = tg_mtproto_display_delta(
+        tg_gui_session_state.context.server_time_delta_seconds,
+        tg_mtproto_local_clock_skew());
+    tg_gui_who_read_text(
+        who, count, tg_gui_people_name, delta,
+        tg_mtproto_chat_local_epoch(
+            tg_mtproto_context_time(&tg_gui_session_state.context), delta),
+        utf8, sizeof(utf8));
+    tg_gui_driver_text_from_utf8(out, size, utf8);
+    tg_gui_log("read: who read it, read");
+    return 0;
+#endif
+}
+
 /* One text of a new poll as the wire wants it: UTF-8, from the keyboard's
    Latin-1 where that is what the composer holds. 0 when it does not fit. */
 static int tg_gui_poll_wire_text(const char *text, char *out,
@@ -44636,6 +44804,89 @@ static int tg_gui_session_chat_dialog(unsigned long peer_index,
     tg_gui_log(rc == 2 ? "dialog: no such chat" : "dialog: could not ask");
     return rc == 2 ? 2 : 1;
 }
+
+#if !defined(TG_NO_SELFTEST)
+/* The names of the test below: two readers this client knows. */
+static const char *tg_gui_who_read_test_name(unsigned long id_hi,
+                                             unsigned long id_lo)
+{
+    if (id_hi != 0UL) {
+        return 0;
+    }
+    return id_lo == 1UL ? "Anna" : id_lo == 2UL ? "Marco \xc3\xa8" : 0;
+}
+
+/* Who read a message, as the requester lists it. */
+static int tg_gui_who_read_self_test(void)
+{
+    /* now: 10 Jan 1970 23:00; a reading today at 14:05, one the day
+       before at 09:30 */
+    const unsigned long day = 86400UL;
+    const unsigned long now = 9UL * day + 23UL * 3600UL;
+    tg_mtproto_read_participant who[4];
+    char got[256];
+    char want[256];
+    char more[48];
+
+    memset(who, 0, sizeof(who));
+    who[0].id_lo = 1UL;
+    who[0].date = 9UL * day + 14UL * 3600UL + 5UL * 60UL;
+    who[1].id_lo = 2UL;
+    who[1].date = 8UL * day + 9UL * 3600UL + 30UL * 60UL;
+    who[2].id_lo = 3UL; /* nobody this client can name */
+    who[2].date = who[1].date;
+    who[3].id_lo = 4UL;
+    who[3].date = who[1].date;
+    /* everyone named: a line each, no line left empty at the end */
+    tg_gui_who_read_text(who, 2, tg_gui_who_read_test_name, 0L, now, got,
+                         sizeof(got));
+    if (strcmp(got, "14:05  Anna\n09/01 09:30  Marco \xc3\xa8") != 0) {
+        printf("probe self-test: who read, two readers: \"%s\"\n", got);
+        return 2;
+    }
+    /* one that has no name here, then two: counted in a last line */
+    tg_gui_who_read_text(who, 3, tg_gui_who_read_test_name, 0L, now, got,
+                         sizeof(got));
+    tg_locale_format(want, sizeof(want),
+                     "14:05  Anna\n09/01 09:30  Marco \xc3\xa8\n%s",
+                     TG_STR_U8(MSG_S_READ_AND_1_MORE));
+    if (strcmp(got, want) != 0) {
+        printf("probe self-test: who read, one more: \"%s\"\n", got);
+        return 2;
+    }
+    tg_gui_who_read_text(who, 4, tg_gui_who_read_test_name, 0L, now, got,
+                         sizeof(got));
+    tg_locale_format(more, sizeof(more), TG_STR_U8(MSG_S_READ_AND_MORE), 2UL);
+    tg_locale_format(want, sizeof(want),
+                     "14:05  Anna\n09/01 09:30  Marco \xc3\xa8\n%s", more);
+    if (strcmp(got, want) != 0) {
+        printf("probe self-test: who read, two more: \"%s\"\n", got);
+        return 2;
+    }
+    /* nobody yet; and names nobody can give: the count alone */
+    tg_gui_who_read_text(who, 0, tg_gui_who_read_test_name, 0L, now, got,
+                         sizeof(got));
+    if (strcmp(got, TG_STR_U8(MSG_S_READ_BY_NOBODY)) != 0) {
+        printf("probe self-test: who read, nobody: \"%s\"\n", got);
+        return 2;
+    }
+    tg_gui_who_read_text(who, 2, 0, 0L, now, got, sizeof(got));
+    if (strcmp(got, more) != 0) {
+        printf("probe self-test: who read, no names: \"%s\"\n", got);
+        return 2;
+    }
+    /* a room too small for every line: what does not fit is counted */
+    tg_gui_who_read_text(who, 2, tg_gui_who_read_test_name, 0L, now, got,
+                         48UL);
+    tg_locale_format(want, sizeof(want), "14:05  Anna\n%s",
+                     TG_STR_U8(MSG_S_READ_AND_1_MORE));
+    if (strcmp(got, want) != 0) {
+        printf("probe self-test: who read, little room: \"%s\"\n", got);
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 #if !defined(TG_NO_SELFTEST)
 /* When someone was last here: the header's words for each thing Telegram

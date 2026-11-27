@@ -919,6 +919,12 @@
 #define MSG_ST_COULD_NOT_SAVE_THE_TYPING_STR "Could not save the typing setting"
 #define MSG_ST_SENT_WITHOUT_SOUND 510
 #define MSG_ST_SENT_WITHOUT_SOUND_STR "Sent without sound"
+#define MSG_ST_ASKING_WHO_READ 511
+#define MSG_ST_ASKING_WHO_READ_STR "Asking who read it..."
+#define MSG_ST_WHO_READ_SMALL_GROUPS 512
+#define MSG_ST_WHO_READ_SMALL_GROUPS_STR "Telegram tells it in small groups only"
+#define MSG_ST_WHO_READ_ONE_WEEK 513
+#define MSG_ST_WHO_READ_ONE_WEEK_STR "Telegram tells it for a week only"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1021,6 +1027,8 @@
 #define MSG_RQ_WEBP_EXISTS_STR "A file is already there:\n\n    %.80s\n\nIt was left as it is, and nothing was installed.\nIf it is a WEBP datatype that does not work here,\ntake it out by hand and ask again."
 #define MSG_RQ_WEBP_UNWRITABLE 650
 #define MSG_RQ_WEBP_UNWRITABLE_STR "This file could not be written:\n\n    %.80s\n\nNothing was installed."
+#define MSG_RQ_WHO_READ 651
+#define MSG_RQ_WHO_READ_STR "Who read"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1441,6 +1449,8 @@
 #define MSG_G_SEEN_BOT_STR "bot"
 #define MSG_SET_SHOW_WHEN_I_TYPE 1448
 #define MSG_SET_SHOW_WHEN_I_TYPE_STR "Show others when I type"
+#define MSG_G_WHO_READ 1449
+#define MSG_G_WHO_READ_STR "Who read..."
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -1893,6 +1903,12 @@
 #define MSG_S_FORWARDED_STR "Forwarded message"
 #define MSG_S_EDITED 1825
 #define MSG_S_EDITED_STR "edited"
+#define MSG_S_READ_BY_NOBODY 1826
+#define MSG_S_READ_BY_NOBODY_STR "Nobody has read it yet."
+#define MSG_S_READ_AND_1_MORE 1827
+#define MSG_S_READ_AND_1_MORE_STR "and 1 more"
+#define MSG_S_READ_AND_MORE 1828
+#define MSG_S_READ_AND_MORE_STR "and %lu more"
 #define MSG_T_CODE_IN_TELEGRAM 2000
 #define MSG_T_CODE_IN_TELEGRAM_STR "Check your other Telegram apps (mobile/desktop/web) for the code."
 #define MSG_T_CODE_BY_SMS 2001

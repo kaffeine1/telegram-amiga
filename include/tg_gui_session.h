@@ -450,6 +450,17 @@ int tg_gui_session_send_to(unsigned long peer_index, const char *text,
    mention as read: 1 = shown, 0 = none left, -1 = failed. */
 int tg_gui_session_next_mention(FILE *stream);
 
+/* Who read a message of the user's own in the open group: one line a
+   reader in `out` (the window's text), newest first, the time and the
+   name; readers this client cannot name are counted in a last line.
+   Telegram tells it in small groups and for a week. 0 = done, 1 =
+   Telegram refused (*emsg says why: CHAT_TOO_BIG, MSG_TOO_OLD, or
+   MSG_ID_INVALID for a message that is not one's own), 2 = not asked or
+   no answer. */
+int tg_gui_session_who_read(unsigned long message_id, char *out,
+                            unsigned long size, char *emsg,
+                            unsigned long emsg_size, FILE *stream);
+
 /* The messages tg_gui_session_send sends from now on reach the others
    without a sound (1), or with it again (0): set it around a send. */
 void tg_gui_session_send_silent(int on);

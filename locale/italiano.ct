@@ -1389,6 +1389,15 @@ Impostazione scrittura non salvata
 MSG_ST_SENT_WITHOUT_SOUND
 Inviato senza suono
 ; Sent without sound
+MSG_ST_ASKING_WHO_READ
+Chiedo chi ha letto...
+; Asking who read it...
+MSG_ST_WHO_READ_SMALL_GROUPS
+Telegram lo dice solo nei gruppi piccoli
+; Telegram tells it in small groups only
+MSG_ST_WHO_READ_ONE_WEEK
+Telegram lo dice solo per una settimana
+; Telegram tells it for a week only
 MSG_RQ_OK
 OK
 ; OK
@@ -1570,6 +1579,9 @@ Impossibile scrivere questo file:\n\
     %.80s\n\
 \n\
 Non è stato installato niente.
+MSG_RQ_WHO_READ
+Chi ha letto
+; Who read
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -2252,6 +2264,9 @@ bot
 MSG_SET_SHOW_WHEN_I_TYPE
 Mostra agli altri quando scrivo
 ; Show others when I type
+MSG_G_WHO_READ
+Chi ha letto...
+; Who read...
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -2930,6 +2945,15 @@ Messaggio inoltrato
 MSG_S_EDITED
 modificato
 ; edited
+MSG_S_READ_BY_NOBODY
+Nessuno l'ha ancora letto.
+; Nobody has read it yet.
+MSG_S_READ_AND_1_MORE
+e 1 altro
+; and 1 more
+MSG_S_READ_AND_MORE
+e altri %lu
+; and %lu more
 MSG_T_CODE_IN_TELEGRAM
 Cerca il codice nelle altre app Telegram (telefono, desktop, web).
 ; Check your other Telegram apps (mobile/desktop/web) for the code.

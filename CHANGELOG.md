@@ -100,6 +100,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   Alt+ENTER in the composer, or Shift held while Send is clicked; the
   status line says "Sent without sound". The text client has
   `/silent text`.
+- Who read...: in the menu of one's own message in a group. Telegram
+  tells who read it and when (`messages.getMessageReadParticipants`),
+  in small groups and for a week; the names are the group's members',
+  and a reader the client cannot name is counted in a last line. Where
+  Telegram does not tell (a big group, an old message) the status line
+  says why.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message

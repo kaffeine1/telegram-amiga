@@ -12637,6 +12637,67 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* Who read...: asks Telegram who read this message of the user's own and
+   shows the answer, or says on the status line why there is none. */
+static void tg_gui_window_who_read(tg_gui_state *state, struct Window *win,
+                                   tg_gui_backend *backend,
+                                   const tg_gui_message *m)
+{
+    static char got[1024];
+    static char body[sizeof(got) + 320]; /* an emoticon outgrows its pair */
+    struct EasyStruct es;
+    char why[48];
+    int max_lines;
+    int rc;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_ASKING_WHO_READ));
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    rc = tg_gui_session_who_read(m->id, got, sizeof(got), why, sizeof(why),
+                                 stdout);
+    if (rc != 0) {
+        char line[96]; /* the status line is shorter: cut on the copy */
+
+        if (rc == 1 && strcmp(why, "CHAT_TOO_BIG") == 0) {
+            tg_gui_window_copy(line, sizeof(line),
+                               TG_STR(MSG_ST_WHO_READ_SMALL_GROUPS));
+        } else if (rc == 1 && (strcmp(why, "MSG_TOO_OLD") == 0 ||
+                               strcmp(why, "MESSAGE_TOO_OLD") == 0)) {
+            tg_gui_window_copy(line, sizeof(line),
+                               TG_STR(MSG_ST_WHO_READ_ONE_WEEK));
+        } else if (rc == 1) {
+            tg_locale_format(line, sizeof(line),
+                             TG_STR(MSG_ST_TELEGRAM_REFUSED_28S),
+                             why[0] != '\0' ? why
+                                            : TG_STR(MSG_ST_NO_REASON_GIVEN));
+        } else {
+            tg_gui_window_copy(line, sizeof(line),
+                               TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+        }
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    max_lines = 12;
+    if (win->WScreen != 0 && win->WScreen->RastPort.TxHeight > 0) {
+        max_lines = ((int)win->WScreen->Height /
+                     (int)win->WScreen->RastPort.TxHeight) - 8;
+    }
+    if (max_lines < 6) {
+        max_lines = 6;
+    }
+    tg_gui_requester_text(body, sizeof(body), got, max_lines);
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_WHO_READ);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OK);
+    (void)tg_gui_amiga_easyreq_args(win, &es);
+}
+
 /* 1 when this build can offer its WEBP datatype to this system: the
    release pinned its files, the system is one the datatype is built for
    (AROS has a webp.datatype of its own) and its picture.datatype can hand
@@ -19719,6 +19780,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->input_caret = (int)strlen(state->input);
                         state->cursor_on = 1;
                         caret_ticks = 0;
+                    } else if (it == TG_GUI_CTX_WHO_READ && m != 0 &&
+                               m->id != 0UL) {
+                        tg_gui_window_who_read(state, ctx.window, &backend,
+                                               m);
                     } else if (it == TG_GUI_CTX_DELETE && m != 0 &&
                                !m->is_system && m->id != 0UL) {
                         unsigned long del_id = m->id;

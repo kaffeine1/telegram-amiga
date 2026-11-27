@@ -1306,6 +1306,28 @@ unsigned long tg_mtproto_find_message_date(const unsigned char *body,
 
 /* Marks a chat read up to max_id: messages.readHistory, or
    channels.readHistory for a channel or a supergroup. */
+/* Who read one of the account's own messages in a small group
+   (messages.getMessageReadParticipants), and the answer read: each reader
+   with the time of the reading, on Telegram's clock. */
+typedef struct tg_mtproto_read_participant {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long date;
+} tg_mtproto_read_participant;
+tg_mtproto_tl_status tg_mtproto_build_messages_get_read_participants(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id);
+int tg_mtproto_parse_read_participants(unsigned long constructor,
+                                       const unsigned char *body,
+                                       unsigned long body_length,
+                                       tg_mtproto_read_participant *out,
+                                       int max);
 /* messages.setTyping with the typing action: "is typing..." for the
    others in that chat (top_msg_id: a forum's topic, 0 = none). */
 tg_mtproto_tl_status tg_mtproto_build_messages_set_typing(

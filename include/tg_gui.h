@@ -1201,6 +1201,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_HIDE 14 /* someone else's message in a group */
 #define TG_GUI_CTX_CHAT_SHOW_HIDDEN 15
 #define TG_GUI_CTX_POLL_VOTERS 16 /* Who voted...: a poll with public votes */
+#define TG_GUI_CTX_WHO_READ 20 /* Who read...: one's own message in a group */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
@@ -1234,7 +1235,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_REACTION_FIRST 64
 /* "Download drawer..." remains menu-only (issue #11): a preference, not a
    message action. TG_MENU_DLDIR carries that separate command. */
-#define TG_GUI_CTX_MENU_ITEMS 12 /* the longest message menu */
+#define TG_GUI_CTX_MENU_ITEMS 13 /* the longest message menu */
 #define TG_GUI_CTX_ITEMS_MAX TG_GUI_REACT_CHOICES_MAX /* the whole chooser */
 
 /* Attachment chooser: a file whose first bytes are a JPEG's or a PNG's gets

@@ -8209,6 +8209,15 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = TG_STR(MSG_G_DELETE);
             ids[n] = TG_GUI_CTX_DELETE;
             ++n;
+            if (m->is_own && !m->is_system &&
+                tg_gui_open_chat_row(state) != 0 &&
+                tg_gui_open_chat_row(state)->is_group) {
+                /* One's own message in a group: Telegram tells who read
+                   it, in a small group and for a week. */
+                labels[n] = TG_STR(MSG_G_WHO_READ);
+                ids[n] = TG_GUI_CTX_WHO_READ;
+                ++n;
+            }
         } else if (!m->is_system && tg_gui_open_chat_row(state) != 0 &&
                    tg_gui_open_chat_row(state)->is_group) {
             /* Telegram lets nobody delete someone else's message for
@@ -13162,11 +13171,63 @@ int tg_gui_self_test(void)
                 saw_open |= ids[i] == TG_GUI_CTX_FILE_OPEN ||
                             ids[i] == TG_GUI_CTX_FILE_SHOW;
             }
-            if (count != TG_GUI_CTX_MENU_ITEMS - 1 || !saw_download ||
+            if (count != TG_GUI_CTX_MENU_ITEMS - 2 || !saw_download ||
                 saw_open) {
                 puts("gui self-test: a file not saved must offer Download");
                 return 2;
             }
+        }
+        {
+            /* One's own message in a group also offers Who read..., right
+               under Delete, and that is the longest menu once its file is
+               saved; with one person, or on someone else's message, it is
+               not there. */
+            tg_gui_chat *open_row =
+                (tg_gui_chat *)tg_gui_open_chat_row(&state);
+            int was_group = open_row != 0 ? open_row->is_group : 0;
+            int at_delete = -1;
+            int at_read = -1;
+            int plain;
+
+            for (i = 0; i < count; ++i) {
+                at_read = ids[i] == TG_GUI_CTX_WHO_READ ? i : at_read;
+            }
+            plain = at_read < 0 && open_row != 0 && !was_group;
+            if (open_row != 0) {
+                open_row->is_group = 1;
+            }
+            state.ctx_file_saved = 1;
+            count = tg_gui_context_items(&state, labels, ids);
+            for (i = 0; i < count; ++i) {
+                if (ids[i] == TG_GUI_CTX_DELETE) {
+                    at_delete = i;
+                }
+                if (ids[i] == TG_GUI_CTX_WHO_READ &&
+                    strcmp(labels[i], TG_STR(MSG_G_WHO_READ)) == 0) {
+                    at_read = i;
+                }
+            }
+            if (!plain || count != TG_GUI_CTX_MENU_ITEMS || at_delete < 0 ||
+                at_read != at_delete + 1) {
+                printf("gui self-test: Who read... in a group's own message "
+                       "(%d items, at %d after %d, plain %d)\n", count,
+                       at_read, at_delete, plain);
+                return 2;
+            }
+            state.messages[0].is_own = 0;
+            count = tg_gui_context_items(&state, labels, ids);
+            for (i = 0; i < count; ++i) {
+                if (ids[i] == TG_GUI_CTX_WHO_READ) {
+                    puts("gui self-test: Who read... on someone else's "
+                         "message");
+                    return 2;
+                }
+            }
+            state.messages[0].is_own = 1;
+            if (open_row != 0) {
+                open_row->is_group = was_group;
+            }
+            state.ctx_file_saved = 0;
         }
         state.ctx_file_saved = 1;
         count = tg_gui_context_items(&state, labels, ids);
@@ -13221,7 +13282,8 @@ int tg_gui_self_test(void)
         state.messages[0].is_own = 0;
         state.messages[0].has_document = 0;
         state.messages[0].has_photo = 0;
-        if (count != TG_GUI_CTX_MENU_ITEMS || !saw_saved || !saw_picker ||
+        /* one short of the longest: this chat is no group (no Who read) */
+        if (count != TG_GUI_CTX_MENU_ITEMS - 1 || !saw_saved || !saw_picker ||
             !saw_photo_save || !saw_pin || !saw_unpin) {
             puts("gui self-test: forwarding context items missing");
             return 2;
