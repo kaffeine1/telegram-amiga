@@ -8036,6 +8036,51 @@ int tg_gui_may_start_iconified(int mode, int session_open)
     return mode == TG_GUI_MODE_CHAT && session_open != 0;
 }
 
+void tg_gui_wrap_text(char *dest, unsigned long size, const char *src,
+                      int width)
+{
+    unsigned long o = 0UL;
+    unsigned long line_start = 0UL; /* in dest */
+    unsigned long last_space = 0UL; /* in dest, 0 = none on this line */
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    if (width < 8) {
+        width = 8;
+    }
+    while (src != 0 && *src != '\0' && o + 2UL < size) {
+        char ch = *src++;
+
+        if (ch == '\n') {
+            dest[o++] = ch;
+            line_start = o;
+            last_space = 0UL;
+            continue;
+        }
+        if (o - line_start >= (unsigned long)width) {
+            if (last_space > line_start) {
+                /* back to the last space of the line: it becomes the
+                   break, and what followed it starts the next line */
+                dest[last_space] = '\n';
+                line_start = last_space + 1UL;
+            } else {
+                dest[o++] = '\n';
+                line_start = o;
+            }
+            last_space = 0UL;
+            if (ch == ' ' && o == line_start) {
+                continue; /* no line starts with the space it broke at */
+            }
+        }
+        if (ch == ' ') {
+            last_space = o;
+        }
+        dest[o++] = ch;
+    }
+    dest[o] = '\0';
+}
+
 /* `text` starts with `word`, whatever the case of its letters. */
 static int tg_gui_starts_nocase(const char *text, const char *word)
 {
@@ -8501,6 +8546,14 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         if (m->text[0] != '\0') {
             labels[n] = TG_STR(MSG_G_COPY_TEXT);
             ids[n] = TG_GUI_CTX_COPY;
+            ++n;
+        }
+        if (m->text[0] != '\0' && !m->is_own && !m->is_system &&
+            !tg_gui_open_chat_is_self(state)) {
+            /* Someone else's words: Telegram puts them in the language
+               this client speaks. */
+            labels[n] = TG_STR(MSG_G_TRANSLATE);
+            ids[n] = TG_GUI_CTX_TRANSLATE;
             ++n;
         }
         if (!m->is_system) {
@@ -11481,6 +11534,30 @@ static int tg_gui_notify_menu_self_test(void)
         puts("gui self-test: when a window may start iconified wrong");
         return 2;
     }
+    /* A text for a requester, which does not wrap: broken at the spaces,
+       a word longer than a line cut, the text's own breaks kept. */
+    {
+        char wrapped[96];
+
+        tg_gui_wrap_text(wrapped, sizeof(wrapped),
+                         "one two three four five six seven", 12);
+        if (strcmp(wrapped, "one two\nthree four\nfive six\nseven") != 0) {
+            printf("gui self-test: a text wrapped as \"%s\"\n", wrapped);
+            return 2;
+        }
+        tg_gui_wrap_text(wrapped, sizeof(wrapped),
+                         "abcdefghijklmnop\nxy z", 8);
+        if (strcmp(wrapped, "abcdefgh\nijklmnop\nxy z") != 0) {
+            printf("gui self-test: a long word wrapped as \"%s\"\n",
+                   wrapped);
+            return 2;
+        }
+        tg_gui_wrap_text(wrapped, 10UL, "one two three four", 12);
+        if (strlen(wrapped) > 9UL) {
+            puts("gui self-test: a wrapped text outgrew its buffer");
+            return 2;
+        }
+    }
     /* A link to a public chat on Telegram: with and without its scheme,
        with a message, as a web page, with a query; and the t.me links
        that are no chat's. */
@@ -13962,6 +14039,69 @@ int tg_gui_self_test(void)
         state.message_count = saved_count;
         if (!ok_keys) {
             puts("gui self-test: the menu of a bot's buttons is wrong");
+            return 2;
+        }
+    }
+
+    /* Translate: on someone else's text, right under Copy text; not on
+       one's own message, not on a service line, not where there is no
+       text to translate. */
+    {
+        const char *labels[TG_GUI_CTX_ITEMS_MAX];
+        int ids[TG_GUI_CTX_ITEMS_MAX];
+        tg_gui_message saved = state.messages[0];
+        int saved_count = state.message_count;
+        int count;
+        int at_copy = -1;
+        int at_translate = -1;
+        int kind;
+        int i;
+        int ok_translate;
+
+        if (state.message_count < 1) {
+            state.message_count = 1;
+        }
+        state.messages[0].id = 78UL;
+        state.messages[0].is_system = 0;
+        state.messages[0].is_own = 0;
+        state.messages[0].buttons = 0U;
+        state.messages[0].has_comments = 0U;
+        strcpy(state.messages[0].text, "ciao");
+        state.ctx_visible = 1;
+        state.ctx_chat = 0;
+        state.ctx_react = 0;
+        state.ctx_poll = 0;
+        state.ctx_attach = 0;
+        state.ctx_topic = 0UL;
+        state.ctx_msg = 0;
+        count = tg_gui_context_items(&state, labels, ids);
+        for (i = 0; i < count; ++i) {
+            if (ids[i] == TG_GUI_CTX_COPY) {
+                at_copy = i;
+            }
+            if (ids[i] == TG_GUI_CTX_TRANSLATE &&
+                strcmp(labels[i], TG_STR(MSG_G_TRANSLATE)) == 0) {
+                at_translate = i;
+            }
+        }
+        ok_translate = at_copy >= 0 && at_translate == at_copy + 1;
+        for (kind = 0; kind < 3; ++kind) {
+            state.messages[0].is_own = kind == 0;
+            state.messages[0].is_system = kind == 1;
+            strcpy(state.messages[0].text, kind == 2 ? "" : "ciao");
+            count = tg_gui_context_items(&state, labels, ids);
+            for (i = 0; i < count; ++i) {
+                if (ids[i] == TG_GUI_CTX_TRANSLATE) {
+                    ok_translate = 0;
+                }
+            }
+        }
+        state.ctx_visible = 0;
+        state.ctx_msg = -1;
+        state.messages[0] = saved;
+        state.message_count = saved_count;
+        if (!ok_translate) {
+            puts("gui self-test: Translate is not where it belongs");
             return 2;
         }
     }

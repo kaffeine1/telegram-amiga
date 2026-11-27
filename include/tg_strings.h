@@ -969,6 +969,10 @@
 #define MSG_ST_OTHER_SESSIONS_ENDED_STR "The other sessions are ended"
 #define MSG_ST_COULD_NOT_END_THEM 534
 #define MSG_ST_COULD_NOT_END_THEM_STR "Could not end them (network?)"
+#define MSG_ST_TRANSLATING 535
+#define MSG_ST_TRANSLATING_STR "Translating..."
+#define MSG_ST_COULD_NOT_TRANSLATE 536
+#define MSG_ST_COULD_NOT_TRANSLATE_STR "Telegram did not translate it"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1091,6 +1095,8 @@
 #define MSG_RQ_END_THE_OTHERS_CLOSE_STR "End the others|Close"
 #define MSG_RQ_END_THEM_CANCEL 660
 #define MSG_RQ_END_THEM_CANCEL_STR "End them|Cancel"
+#define MSG_RQ_TRANSLATION 661
+#define MSG_RQ_TRANSLATION_STR "Translation"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1543,6 +1549,8 @@
 #define MSG_G_D_COMMENTS_STR "%lu comments"
 #define MSG_G_COMMENTS_ON_A_POST 1457
 #define MSG_G_COMMENTS_ON_A_POST_STR "Comments on a post"
+#define MSG_G_TRANSLATE 1458
+#define MSG_G_TRANSLATE_STR "Translate"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2003,6 +2011,8 @@
 #define MSG_S_READ_AND_MORE_STR "and %lu more"
 #define MSG_S_THIS_DEVICE 1829
 #define MSG_S_THIS_DEVICE_STR "this device"
+#define MSG_S_LANGUAGE_CODE 1830
+#define MSG_S_LANGUAGE_CODE_STR "en"
 #define MSG_T_CODE_IN_TELEGRAM 2000
 #define MSG_T_CODE_IN_TELEGRAM_STR "Check your other Telegram apps (mobile/desktop/web) for the code."
 #define MSG_T_CODE_BY_SMS 2001
@@ -2733,8 +2743,16 @@
 #define MSG_T_USE_DEVICES_END_YES_STR "Use /devices end yes: every other device is logged out of Telegram."
 #define MSG_T_OTHER_SESSIONS_ENDED 2364
 #define MSG_T_OTHER_SESSIONS_ENDED_STR "The other sessions are ended."
+#define MSG_T_HELP_TRANSLATE 2365
+#define MSG_T_HELP_TRANSLATE_STR "  /translate      the last message received, in your language"
+#define MSG_T_TRANSLATION 2366
+#define MSG_T_TRANSLATION_STR "Translation: "
+#define MSG_T_NO_MESSAGE_TO_TRANSLATE 2367
+#define MSG_T_NO_MESSAGE_TO_TRANSLATE_STR "No message received here to translate yet."
+#define MSG_T_COULD_NOT_TRANSLATE 2368
+#define MSG_T_COULD_NOT_TRANSLATE_STR "Telegram did not translate it."
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2364
+#define TG_STRINGS_ID_MAX 2368
 
 #endif

@@ -467,6 +467,13 @@ int tg_gui_session_who_read(unsigned long message_id, char *out,
                             unsigned long size, char *emsg,
                             unsigned long emsg_size, FILE *stream);
 
+/* A message of the open chat translated by Telegram into the language
+   Amigram speaks: the text in `out`, as the window draws it. 0 = done,
+   1 = Telegram refused (*emsg says why), 2 = failed. */
+int tg_gui_session_translate(unsigned long message_id, char *out,
+                             unsigned long size, char *emsg,
+                             unsigned long emsg_size, FILE *stream);
+
 /* A public chat by its name (a t.me link clicked in a message): asked of
    Telegram by that exact name, added to the chats this client knows and
    opened; with a message id, shown around that message. 0 = opened, 1 =

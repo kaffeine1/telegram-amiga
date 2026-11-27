@@ -10339,6 +10339,83 @@ int tg_mtproto_parse_user_full_blocked(unsigned long constructor,
 }
 #endif
 
+/* messages.translateText#63183030 flags:# peer:flags.0?InputPeer
+   id:flags.0?Vector<int> text:flags.1?Vector<TextWithEntities>
+   to_lang:string = messages.TranslatedText (layer 214 schema): one
+   message of a chat, by its id. */
+tg_mtproto_tl_status tg_mtproto_build_messages_translate_message(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    const char *to_lang)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL || to_lang == 0 ||
+        to_lang[0] == '\0' || strlen(to_lang) > 8UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x63183030UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL); /* peer and id */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, to_lang);
+    }
+    return status;
+}
+
+/* Its answer: messages.translateResult#33db32f8
+   result:Vector<TextWithEntities>, textWithEntities#751f3146 text:string
+   entities:Vector<MessageEntity>. The first text is what was asked. */
+int tg_mtproto_parse_translate_result(unsigned long constructor,
+                                      const unsigned char *body,
+                                      unsigned long body_length, char *out,
+                                      unsigned long size)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long count;
+    unsigned long item;
+
+    if (out == 0 || size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (constructor != 0x33db32f8UL || body == 0) {
+        return 0;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_read_vector_count(&reader, &count) != TG_MTPROTO_TL_OK ||
+        count == 0UL ||
+        tg_mtproto_tl_read_u32(&reader, &item) != TG_MTPROTO_TL_OK ||
+        item != 0x751f3146UL ||
+        tg_read_string_copy(&reader, out, size) != TG_MTPROTO_TL_OK) {
+        out[0] = '\0';
+        return 0;
+    }
+    tg_msg_sanitize_markers(out);
+    return out[0] != '\0';
+}
+
 /* account.getAuthorizations#e320c158 = account.Authorizations and
    auth.resetAuthorizations#9fab0d1a = Bool (layer 214 schema): where the
    account is logged in, and every place but this one logged out. */
@@ -20598,6 +20675,62 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #endif
+    /* A message translated: the request's bytes (the chat, one id, the
+       language), and the answer read: the first text; nothing asked for
+       without a language or a message; an answer that is something else
+       or holds no text is none. */
+    {
+        char translated[32];
+
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_messages_translate_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+                4321UL, "it") != TG_MTPROTO_TL_OK ||
+            writer.length != 36UL ||
+            tg_read_u32_le(peer_rpc) != 0x63183030UL ||
+            tg_read_u32_le(peer_rpc + 4) != 1UL ||
+            tg_read_u32_le(peer_rpc + 12) != 0x77UL ||
+            tg_read_u32_le(peer_rpc + 20) != TG_VECTOR_CONSTRUCTOR ||
+            tg_read_u32_le(peer_rpc + 24) != 1UL ||
+            tg_read_u32_le(peer_rpc + 28) != 4321UL ||
+            peer_rpc[32] != 2U || peer_rpc[33] != 'i' ||
+            peer_rpc[34] != 't' ||
+            tg_mtproto_build_messages_translate_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+                4321UL, "") == TG_MTPROTO_TL_OK ||
+            tg_mtproto_build_messages_translate_message(
+                &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+                0UL, "it") == TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0x751f3146UL) !=
+                TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "buongiorno a tutti") !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_translate_result(0x33db32f8UL, peer_rpc,
+                                              writer.length, translated,
+                                              sizeof(translated)) != 1 ||
+            strcmp(translated, "buongiorno a tutti") != 0 ||
+            tg_mtproto_parse_translate_result(0x12345678UL, peer_rpc,
+                                              writer.length, translated,
+                                              sizeof(translated)) != 0 ||
+            translated[0] != '\0') {
+            return 2;
+        }
+        peer_rpc[4] = 0U; /* a vector of nothing */
+        if (tg_mtproto_parse_translate_result(0x33db32f8UL, peer_rpc,
+                                              writer.length, translated,
+                                              sizeof(translated)) != 0) {
+            return 2;
+        }
+    }
     /* Where the account is logged in: the two requests, and the answer
        read: this device and another, their words put together; one more
        than asked for is counted and left out; something else, or an

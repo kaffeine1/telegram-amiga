@@ -36,7 +36,10 @@ the program, replaces them. The Locale preferences choose the language.
    `MSG_SV_X` and `MSG_SV_X_YOU` are a service line said of someone
    (`%s` is the name) and of the reader: "Anna pinned a message", "You
    pinned a message". Put the words in the order your language wants.
-6. Run `python3 scripts/catalog.py all`. It refuses a text that changes
+6. `MSG_S_LANGUAGE_CODE` is not a text to translate: write the
+   two-letter code of your language there (`it`, `de`, `fr`). Telegram
+   translates messages into it when the user picks Translate.
+7. Run `python3 scripts/catalog.py all`. It refuses a text that changes
    the conversions, the number of buttons, the spaces or line breaks at
    its ends, the status line's width, or the 600 letters a text of the
    console and of the session may have (`MSG_T_`, `MSG_S_`, `MSG_SV_`),

@@ -132,6 +132,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   used to hide. A chat with a bot that holds no message yet says "Press
   Enter to start the bot": ENTER, or a click on Send, sends it `/start`,
   and the header says "bot" there too.
+- Translate: in the menu of someone else's message, Telegram puts its
+  text in the language Amigram speaks (`messages.translateText`) and a
+  requester shows it. The text client has `/translate` for the last
+  message received. A translation of Amigram names the language Telegram
+  is to translate into (a two-letter code in the catalog).
 - A link to a public chat on Telegram (`t.me/name`, `t.me/name/123`)
   clicked in a message opens that chat in Amigram, at the message the
   link names, instead of going to the browser. Invitations, sticker

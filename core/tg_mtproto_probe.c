@@ -13825,6 +13825,67 @@ static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
    message, poll and mask its answers). 0 = done, 2 = failed or refused
    (tg_mtproto_query_fail holds Telegram's word when it gave one), or the
    link's own soft failure. */
+/* A message of this chat translated by Telegram, for the window and for
+   the text client alike: the text in `out`, in UTF-8. 0 = done, 1 =
+   Telegram refused (tg_mtproto_query_fail says why), 2 = failed
+   (tg_translate_soft_fail: the connection is to be opened again). */
+static int tg_translate_soft_fail = 0;
+
+static int tg_mtproto_translate_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, unsigned long message_id,
+    const char *to_lang, char *out, unsigned long size, FILE *stream)
+{
+    static const char label[] = "mtproto messages.translateText";
+    unsigned char query[80];
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    int has_hash;
+    int rc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+
+    tg_translate_soft_fail = 0;
+    tg_mtproto_query_fail[0] = '\0';
+    if (out == 0 || size == 0UL) {
+        return 2;
+    }
+    out[0] = '\0';
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_translate_message(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash,
+            message_id, to_lang) != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_translate_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 1;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        !tg_mtproto_parse_translate_result(result.result_constructor,
+                                           result.result_body,
+                                           result.result_body_length, out,
+                                           size)) {
+        return 2;
+    }
+    return 0;
+}
+
 /* Where the account is logged in, for the window and for the text client
    alike: the devices read last (account.getAuthorizations). How many, -1
    when Telegram did not answer (tg_devices_soft_fail: the connection is
@@ -15159,8 +15220,8 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
-    "          /block /unblock /press /devices /help /update\n" \
-    "          /logout /quit\n"
+    "          /block /unblock /press /devices /translate\n" \
+    "          /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -19328,6 +19389,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_BLOCK_UNBLOCK),
     TG_HELP(MSG_T_HELP_PRESS_N),
     TG_HELP(MSG_T_HELP_DEVICES),
+    TG_HELP(MSG_T_HELP_TRANSLATE),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -22372,6 +22434,44 @@ int tg_mtproto_auth_chat_file(const char *host,
                     stream, rc == 0 ? done
                                     : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                    tg_mtproto_close_auth_context(&chat_context);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        if (strcmp(line, "/translate") == 0) {
+            /* The last message received here, in the language this client
+               speaks. */
+            static char translated[TG_MTPROTO_MESSAGE_TEXT_MAX];
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
+            } else if (tg_chat_last_incoming_id == 0UL) {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_NO_MESSAGE_TO_TRANSLATE));
+            } else {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_translate_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, tg_chat_last_incoming_id,
+                    TG_STR_U8(MSG_S_LANGUAGE_CODE), translated,
+                    sizeof(translated), quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (rc == 0) {
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                    fputs(TG_TSTR(MSG_T_TRANSLATION), tui_cap);
+                    tg_mtproto_print_message_text(tui_cap, translated);
+                    fputc('\n', tui_cap);
+                    tg_console_tui_capture_end(tui_cap, stream);
+                } else {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_COULD_NOT_TRANSLATE));
+                }
+                if (tg_translate_soft_fail) {
                     tg_mtproto_close_auth_context(&chat_context);
                 }
             }
@@ -34928,6 +35028,59 @@ int tg_gui_session_leave_chat(unsigned long peer_index, int both,
     tg_gui_session_reload_chats();
     return 0;
 }
+
+#if !defined(TG_NO_GUI) /* asked from a message's menu */
+/* Public: a message of the open chat in the language Amigram speaks. */
+int tg_gui_session_translate(unsigned long message_id, char *out,
+                             unsigned long size, char *emsg,
+                             unsigned long emsg_size, FILE *stream)
+{
+    static char utf8[TG_MTPROTO_MESSAGE_TEXT_MAX];
+    unsigned long prev_timeout;
+    unsigned long i;
+    FILE *quiet;
+    int rc;
+
+    if (emsg != 0 && emsg_size > 0UL) {
+        emsg[0] = '\0';
+    }
+    if (out == 0 || size == 0UL) {
+        return 2;
+    }
+    out[0] = '\0';
+    if (!tg_gui_session_state.open || stream == 0 || message_id == 0UL ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_translate_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, message_id,
+        TG_STR_U8(MSG_S_LANGUAGE_CODE), utf8, sizeof(utf8), quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 1 && emsg != 0 && emsg_size > 0UL) {
+        for (i = 0UL; i + 1UL < emsg_size &&
+                      tg_mtproto_query_fail[i] != '\0'; ++i) {
+            emsg[i] = tg_mtproto_query_fail[i];
+        }
+        emsg[i] = '\0';
+    }
+    if (rc != 0) {
+        tg_gui_log(rc == 1 ? "translate: Telegram refused"
+                           : "translate: no answer");
+        return rc;
+    }
+    tg_gui_driver_text_from_utf8(out, size, utf8);
+    tg_gui_log("translate: done");
+    return 0;
+}
+#endif
 
 #if !defined(TG_NO_GUI) /* asked from the Amigram menu */
 /* Public: where the account is logged in, as the window draws text. */

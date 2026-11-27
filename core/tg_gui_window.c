@@ -12766,6 +12766,60 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* Translate: Telegram puts someone else's message in the language this
+   client speaks, and a requester shows it. */
+static void tg_gui_window_translate(tg_gui_state *state, struct Window *win,
+                                    tg_gui_backend *backend,
+                                    const tg_gui_message *m)
+{
+    static char got[TG_GUI_MSG_TEXT_MAX];
+    static char lines[sizeof(got) + 256];
+    static char body[sizeof(lines) + 512];
+    struct EasyStruct es;
+    char why[48];
+    int max_lines;
+    int rc;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_TRANSLATING));
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    rc = tg_gui_session_translate(m->id, got, sizeof(got), why, sizeof(why),
+                                  stdout);
+    if (rc != 0) {
+        char line[96]; /* the status line is shorter: cut on the copy */
+
+        if (rc == 1 && why[0] != '\0') {
+            tg_locale_format(line, sizeof(line),
+                             TG_STR(MSG_ST_TELEGRAM_REFUSED_28S), why);
+        } else {
+            tg_gui_window_copy(line, sizeof(line),
+                               TG_STR(MSG_ST_COULD_NOT_TRANSLATE));
+        }
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    max_lines = 12;
+    if (win->WScreen != 0 && win->WScreen->RastPort.TxHeight > 0) {
+        max_lines = ((int)win->WScreen->Height /
+                     (int)win->WScreen->RastPort.TxHeight) - 8;
+    }
+    if (max_lines < 6) {
+        max_lines = 6;
+    }
+    tg_gui_wrap_text(lines, sizeof(lines), got, 60);
+    tg_gui_requester_text(body, sizeof(body), lines, max_lines);
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems, UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_TRANSLATION);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OK);
+    (void)tg_gui_amiga_easyreq_args(win, &es);
+}
+
 /* A click on a link to a public chat on Telegram opens that chat here, at
    the message the link names. 1 = opened here; 0 = no such link, or
    Telegram did not find the chat: the browser gets the link then. */
@@ -20030,6 +20084,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                             sizeof(state->status),
                             TG_STR(MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK));
+                    } else if (it == TG_GUI_CTX_TRANSLATE && m != 0 &&
+                               m->id != 0UL) {
+                        tg_gui_window_translate(state, ctx.window, &backend,
+                                                m);
                     } else if (it == TG_GUI_CTX_COMMENTS && m != 0 &&
                                m->id != 0UL) {
                         tg_gui_window_open_comments(state, &backend, m->id);

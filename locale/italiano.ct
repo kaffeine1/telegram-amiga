@@ -1464,6 +1464,12 @@ Le altre sessioni sono chiuse
 MSG_ST_COULD_NOT_END_THEM
 Chiusura non riuscita (rete?)
 ; Could not end them (network?)
+MSG_ST_TRANSLATING
+Traduco...
+; Translating...
+MSG_ST_COULD_NOT_TRANSLATE
+Telegram non l'ha tradotto
+; Telegram did not translate it
 MSG_RQ_OK
 OK
 ; OK
@@ -1675,6 +1681,9 @@ Chiudi le altre|Chiudi
 MSG_RQ_END_THEM_CANCEL
 Chiudile|Annulla
 ; End them|Cancel
+MSG_RQ_TRANSLATION
+Traduzione
+; Translation
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -2411,6 +2420,9 @@ MSG_G_D_COMMENTS
 MSG_G_COMMENTS_ON_A_POST
 Commenti a un post
 ; Comments on a post
+MSG_G_TRANSLATE
+Traduci
+; Translate
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -3101,6 +3113,9 @@ e altri %lu
 MSG_S_THIS_DEVICE
 questo dispositivo
 ; this device
+MSG_S_LANGUAGE_CODE
+it
+; en
 MSG_T_CODE_IN_TELEGRAM
 Cerca il codice nelle altre app Telegram (telefono, desktop, web).
 ; Check your other Telegram apps (mobile/desktop/web) for the code.
@@ -4125,3 +4140,15 @@ Usa /devices end yes: tutti gli altri dispositivi escono da Telegram.
 MSG_T_OTHER_SESSIONS_ENDED
 Le altre sessioni sono chiuse.
 ; The other sessions are ended.
+MSG_T_HELP_TRANSLATE
+  /translate      l'ultimo messaggio ricevuto, nella tua lingua
+;   /translate      the last message received, in your language
+MSG_T_TRANSLATION
+Traduzione: 
+; Translation: 
+MSG_T_NO_MESSAGE_TO_TRANSLATE
+Qui non c'è ancora un messaggio ricevuto da tradurre.
+; No message received here to translate yet.
+MSG_T_COULD_NOT_TRANSLATE
+Telegram non l'ha tradotto.
+; Telegram did not translate it.

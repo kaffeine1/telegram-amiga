@@ -1002,6 +1002,10 @@ MSG_ST_OTHER_SESSIONS_ENDED (533//)
 The other sessions are ended
 MSG_ST_COULD_NOT_END_THEM (534//)
 Could not end them (network?)
+MSG_ST_TRANSLATING (535//)
+Translating...
+MSG_ST_COULD_NOT_TRANSLATE (536//)
+Telegram did not translate it
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1164,6 +1168,8 @@ MSG_RQ_END_THE_OTHERS_CLOSE (659//)
 End the others|Close
 MSG_RQ_END_THEM_CANCEL (660//)
 End them|Cancel
+MSG_RQ_TRANSLATION (661//)
+Translation
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1692,6 +1698,8 @@ MSG_G_D_COMMENTS (1456//)
 %lu comments
 MSG_G_COMMENTS_ON_A_POST (1457//)
 Comments on a post
+MSG_G_TRANSLATE (1458//)
+Translate
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2154,6 +2162,8 @@ MSG_S_READ_AND_MORE (1828//)
 and %lu more
 MSG_S_THIS_DEVICE (1829//)
 this device
+MSG_S_LANGUAGE_CODE (1830//)
+en
 ; --- the text client (2000-3999) -------------------------------------------
 MSG_T_CODE_IN_TELEGRAM (2000//)
 Check your other Telegram apps (mobile/desktop/web) for the code.
@@ -2912,3 +2922,11 @@ MSG_T_USE_DEVICES_END_YES (2363//)
 Use /devices end yes: every other device is logged out of Telegram.
 MSG_T_OTHER_SESSIONS_ENDED (2364//)
 The other sessions are ended.
+MSG_T_HELP_TRANSLATE (2365//)
+  /translate      the last message received, in your language
+MSG_T_TRANSLATION (2366//)
+Translation: 
+MSG_T_NO_MESSAGE_TO_TRANSLATE (2367//)
+No message received here to translate yet.
+MSG_T_COULD_NOT_TRANSLATE (2368//)
+Telegram did not translate it.

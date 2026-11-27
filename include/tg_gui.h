@@ -1218,6 +1218,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_BLOCK 21 /* Block... / Unblock: a person's row */
 #define TG_GUI_CTX_KEYS 22 /* Buttons...: a bot's buttons take the menu */
 #define TG_GUI_CTX_COMMENTS 23 /* Comments...: the comments of a post */
+#define TG_GUI_CTX_TRANSLATE 24 /* Translate: someone else's text */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
@@ -1654,6 +1655,11 @@ void tg_gui_window_start_iconified(int on);
 /* Whether a window in this mode, with the session open or not, may do
    so. */
 int tg_gui_may_start_iconified(int mode, int session_open);
+/* A text broken into lines of at most `width` letters, at the spaces
+   where there are any (a longer word is cut): for a system requester,
+   which does not wrap. The line breaks of the text stay. */
+void tg_gui_wrap_text(char *dest, unsigned long size, const char *src,
+                      int width);
 /* A link to a public chat on Telegram: t.me/name, https://t.me/name/123,
    telegram.me/name, t.me/s/name. 1 = it is one: `name` holds the chat's
    public name and *message_id the message the link names, 0 when it

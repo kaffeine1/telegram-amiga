@@ -1349,6 +1349,24 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
                                        unsigned long body_length,
                                        tg_mtproto_read_participant *out,
                                        int max);
+/* One message of a chat translated by Telegram into a language, named
+   by its two-letter code (messages.translateText), and the answer read:
+   the translated text, cut to the buffer on a whole character. 1 when
+   the body is such an answer with a text in it. */
+tg_mtproto_tl_status tg_mtproto_build_messages_translate_message(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    const char *to_lang);
+int tg_mtproto_parse_translate_result(unsigned long constructor,
+                                      const unsigned char *body,
+                                      unsigned long body_length, char *out,
+                                      unsigned long size);
 /* Where the account is logged in (account.getAuthorizations), every other
    place logged out (auth.resetAuthorizations), and the answer read: up to
    `max` devices are kept, the count read comes back, -1 when the body is

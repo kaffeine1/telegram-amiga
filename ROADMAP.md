@@ -1513,6 +1513,12 @@ Then the middle-sized ones:
   Invitations, sticker sets, private chats' /c/ links and bots' web
   apps are left to the browser. Tried live on two public channels.
 
+- Translate: messages.translateText with the chat and one message id,
+  into the language named by a two-letter code that each catalog
+  carries (MSG_S_LANGUAGE_CODE: "en" built in, "it" in the Italian
+  one); the answer's first text goes into a requester, wrapped at 60
+  letters, and /translate prints it in the text client.
+
 Tried live with the test account, two sessions of it for what one
 device tells another, and seen in a window on the OS4 VM in Italian.
 The 68000 text client grew by about 5 KB with its share of the small
@@ -1521,7 +1527,7 @@ count and by 5 KB with the devices: 686 KB now, 18 KB more than before
 this round. Worth a look before a release: what of this the plain 68000
 needs.
 
-Next, in this order: translation, scheduled messages, contacts,
+Next, in this order: scheduled messages, contacts,
 password recovery by email, a richer ARexx port. The large ones (chat
 folders, profile editing, group administration, quoting part of a
 message, sending stickers, GIFs and a location, voice in the window,

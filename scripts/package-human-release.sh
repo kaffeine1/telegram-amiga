@@ -731,6 +731,10 @@ Messages
 - A click on a link to a public chat on Telegram (t.me/name) opens
   that chat in Amigram, at the message the link names; other links go
   to the browser as before.
+- "Translate", in the menu of a message somebody else wrote, asks
+  Telegram for its text in the language Amigram speaks and shows it in
+  a requester. In the text client /translate does it for the last
+  message received.
 - A chat with pinned messages shows the latest under its header,
   "Pinned:" and how it starts; a click shows the chat around it, and
   the next click the one pinned before. Pin and Unpin are in a
@@ -1111,6 +1115,10 @@ Messaggi
 - Un clic su un link a una chat pubblica di Telegram (t.me/nome) apre
   quella chat in Amigram, al messaggio che il link indica; gli altri
   link vanno al browser come prima.
+- "Translate", nel menu di un messaggio scritto da un altro, chiede a
+  Telegram il testo nella lingua che Amigram parla e lo mostra in un
+  requester. Nel client testuale /translate lo fa per l'ultimo
+  messaggio ricevuto.
 - Una chat con messaggi fissati mostra l'ultimo sotto l'intestazione,
   "Pinned:" e come comincia; un click mostra la chat attorno a quel
   messaggio, e il click dopo quello fissato prima. Pin e Unpin sono nel
