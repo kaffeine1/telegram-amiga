@@ -6105,9 +6105,13 @@ static void tg_gui_paint_input_row(const tg_gui_state *state,
                               text_base);
         }
     } else {
-        backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, area_x,
-                           text_base, TG_STR(MSG_G_WRITE_A_MESSAGE),
-                           (unsigned long)strlen(TG_STR(MSG_G_WRITE_A_MESSAGE)));
+        /* an empty chat with a bot offers to start it */
+        const char *hint = state->bot_start
+                               ? TG_STR(MSG_G_PRESS_ENTER_TO_START_THE_BOT)
+                               : TG_STR(MSG_G_WRITE_A_MESSAGE);
+
+        backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, area_x, text_base,
+                           hint, (unsigned long)strlen(hint));
     }
     backend->fill_rect(backend, TG_GUI_PEN_ACCENT,
                        tg_gui_make_rect(width - 64, box_top, 56, input_h - 4));
@@ -8132,6 +8136,19 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         }
         return n;
     }
+    /* A bot's buttons, one a line: they take the menu's place the way a
+       poll's answers do, and the same room holds their labels. */
+    if (state->ctx_poll == 2 && state->ctx_msg >= 0 &&
+        state->ctx_msg < state->message_count &&
+        state->messages[state->ctx_msg].id != 0UL &&
+        state->poll_item_count > 0) {
+        while (n < state->poll_item_count && n < TG_GUI_POLL_ITEMS_MAX) {
+            labels[n] = state->poll_items[n];
+            ids[n] = TG_GUI_CTX_POLL_FIRST + n;
+            ++n;
+        }
+        return n;
+    }
     /* A poll's answers, one a line; with several allowed, each carries
        its mark and a last line sends the vote. */
     if (state->ctx_poll && state->ctx_msg >= 0 &&
@@ -8199,6 +8216,11 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
                 labels[n] = TG_STR(MSG_RQ_STOP_POLL);
                 ids[n++] = TG_GUI_CTX_POLL_STOP;
             }
+        }
+        /* A bot's buttons, listed under the text: pressed from here. */
+        if (state->messages[state->ctx_msg].buttons > 0U) {
+            labels[n] = TG_STR(MSG_G_BUTTONS);
+            ids[n++] = TG_GUI_CTX_KEYS;
         }
     }
     labels[n] = TG_STR(MSG_G_REPLY);
@@ -13575,6 +13597,104 @@ int tg_gui_self_test(void)
         state.messages[0].is_own = was_own;
         if (!ok_poll) {
             puts("gui self-test: a poll's menu is wrong");
+            return 2;
+        }
+    }
+
+    /* A bot's buttons: a message that carries some offers "Buttons..."
+       right under React, a message without them does not; once read,
+       the buttons take the menu's place, one a line with the ids a
+       poll's answers have, and nothing else is on it. */
+    {
+        const char *labels[TG_GUI_CTX_ITEMS_MAX];
+        int ids[TG_GUI_CTX_ITEMS_MAX];
+        tg_gui_message saved = state.messages[0];
+        int saved_count = state.message_count;
+        int plain;
+        int count;
+        int ok_keys;
+
+        if (state.message_count < 1) {
+            state.message_count = 1;
+        }
+        state.messages[0].id = 77UL;
+        state.messages[0].is_system = 0;
+        state.messages[0].poll_id_hi = 0UL;
+        state.messages[0].poll_id_lo = 0UL;
+        state.messages[0].buttons = 0U;
+        state.ctx_visible = 1;
+        state.ctx_chat = 0;
+        state.ctx_react = 0;
+        state.ctx_poll = 0;
+        state.ctx_attach = 0;
+        state.ctx_topic = 0UL;
+        state.ctx_msg = 0;
+        plain = tg_gui_context_items(&state, labels, ids);
+        state.messages[0].buttons = 3U;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_keys = count == plain + 1 && ids[0] == TG_GUI_CTX_REACT &&
+                  ids[1] == TG_GUI_CTX_KEYS &&
+                  strcmp(labels[1], TG_STR(MSG_G_BUTTONS)) == 0 &&
+                  ids[2] == TG_GUI_CTX_REPLY;
+        strcpy(state.poll_items[0], "Yes");
+        strcpy(state.poll_items[1], "No");
+        strcpy(state.poll_items[2], "Site");
+        state.poll_item_count = 3;
+        state.poll_multiple = 0;
+        state.ctx_poll = 2;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_keys = ok_keys && count == 3 &&
+                  ids[0] == TG_GUI_CTX_POLL_FIRST &&
+                  ids[2] == TG_GUI_CTX_POLL_FIRST + 2 &&
+                  strcmp(labels[0], "Yes") == 0 &&
+                  strcmp(labels[2], "Site") == 0;
+        /* no button read: the message's own menu again */
+        state.poll_item_count = 0;
+        count = tg_gui_context_items(&state, labels, ids);
+        ok_keys = ok_keys && count == plain + 1 && ids[1] == TG_GUI_CTX_KEYS;
+        state.ctx_poll = 0;
+        state.ctx_visible = 0;
+        state.ctx_msg = -1;
+        state.messages[0] = saved;
+        state.message_count = saved_count;
+        if (!ok_keys) {
+            puts("gui self-test: the menu of a bot's buttons is wrong");
+            return 2;
+        }
+    }
+
+    /* An empty chat with a bot: the composer says that ENTER starts it,
+       in the place of its usual words; any other chat keeps those. */
+    {
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int saved_composing = state.composing;
+        int saved_start = state.bot_start;
+        char saved_first = state.input[0];
+        int pass;
+        int ok_start = 1;
+
+        state.composing = 0;
+        state.input[0] = '\0';
+        for (pass = 0; pass < 2; ++pass) {
+            memset(&rec, 0, sizeof(rec));
+            rec.width = 640;
+            rec.height = 480;
+            rec.watch_text[0] = TG_STR(MSG_G_PRESS_ENTER_TO_START_THE_BOT);
+            rec.watch_text[1] = TG_STR(MSG_G_WRITE_A_MESSAGE);
+            b.context = &rec;
+            state.bot_start = pass == 0;
+            tg_gui_paint(&state, &b);
+            ok_start = ok_start &&
+                       rec.watch_hits[0] == (pass == 0 ? 1 : 0) &&
+                       rec.watch_hits[1] == (pass == 0 ? 0 : 1);
+        }
+        state.composing = saved_composing;
+        state.bot_start = saved_start;
+        state.input[0] = saved_first;
+        if (!ok_start) {
+            puts("gui self-test: an empty chat with a bot does not offer "
+                 "to start it");
             return 2;
         }
     }

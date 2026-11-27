@@ -458,6 +458,8 @@ typedef struct tg_gui_message {
     unsigned char has_views;           /* a channel's post: `views` saw it */
     unsigned char fwd_len;             /* letters of `text` that are the line
                                           "Forwarded from ...", 0 = none */
+    unsigned char buttons;             /* a bot's buttons, listed under the
+                                          text: its menu offers them */
     unsigned long views;
     unsigned long day;   /* day of the shown time, + 1; 0 = no date */
     int sender_color;
@@ -516,6 +518,10 @@ typedef struct tg_gui_state {
     int selected_chat;
     char title[TG_GUI_NAME_MAX];
     char subtitle[TG_GUI_NAME_MAX];
+    /* The open chat is a bot's and holds no message yet: the composer
+       says that ENTER starts the bot, and ENTER on an empty line (or a
+       click on Send) sends it /start. The session sets it. */
+    int bot_start;
     /* The chat open in the transcript, as its sidebar row was when it was
        opened (tg_gui_note_open_chat). While the sidebar shows other rows (the
        local filter, online results, a forward picker) chats[selected_chat] is
@@ -835,7 +841,7 @@ typedef struct tg_gui_state {
     /* "Message <name>" of the message menu, "" when there is nobody to
        write to (tg_gui_context_sender_label). */
     char ctx_sender[40];
-    int ctx_poll;
+    int ctx_poll; /* 1 a poll's answers; 2 a bot's buttons, the same way */
     int poll_multiple;
     unsigned long poll_mask;
     int poll_item_count;
@@ -1207,6 +1213,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_POLL_VOTERS 16 /* Who voted...: a poll with public votes */
 #define TG_GUI_CTX_WHO_READ 20 /* Who read...: one's own message in a group */
 #define TG_GUI_CTX_CHAT_BLOCK 21 /* Block... / Unblock: a person's row */
+#define TG_GUI_CTX_KEYS 22 /* Buttons...: a bot's buttons take the menu */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */

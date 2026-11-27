@@ -880,6 +880,8 @@ static unsigned long tg_chat_last_incoming_id = 0UL;
 static unsigned long tg_chat_last_poll_message_id = 0UL;
 static unsigned long tg_chat_last_poll_id_hi = 0UL;
 static unsigned long tg_chat_last_poll_id_lo = 0UL;
+/* ...and the newest message with a bot's buttons: what /press presses. */
+static unsigned long tg_chat_last_keys_message_id = 0UL;
 /* Kind, two 32-bit id halves and a 32-bit local ring time, in bytes so the
    68000-like host profile grows by 156 bytes, not an LP64 struct array. */
 static unsigned char tg_chat_ring_history[TG_GUI_MAX_CHATS][13];
@@ -12672,6 +12674,40 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     return 0;
 }
 
+#if !defined(TG_NO_GUI)
+/* Whether the chat at this cache index is a bot's: the cache says it of
+   the people it lists. */
+static int tg_mtproto_peer_cache_is_bot(const char *path,
+                                        const char *peer_index_text)
+{
+    FILE *file;
+    char line[512];
+    unsigned long wanted_index;
+    int bot = 0;
+
+    if (path == 0 || peer_index_text == 0 ||
+        tg_mtproto_parse_ulong_arg(peer_index_text, &wanted_index) != 0 ||
+        wanted_index == 0UL) {
+        return 0;
+    }
+    file = fopen(path, "r");
+    if (file == 0) {
+        return 0;
+    }
+    while (fgets(line, sizeof(line), file) != 0) {
+        tg_mtproto_peer_line pl;
+
+        if (tg_mtproto_parse_peer_line(line, &pl) >= 1 &&
+            pl.index == wanted_index) {
+            bot = pl.is_bot;
+            break;
+        }
+    }
+    fclose(file);
+    return bot;
+}
+#endif
+
 static const char *tg_mtproto_peer_cache_entry_kind(
     const tg_mtproto_peer_cache_entry *entry)
 {
@@ -13782,6 +13818,170 @@ static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
    message, poll and mask its answers). 0 = done, 2 = failed or refused
    (tg_mtproto_query_fail holds Telegram's word when it gave one), or the
    link's own soft failure. */
+/* A bot's buttons, for the window and for the text client alike.
+   The keyboard of one message of this chat, read again from Telegram (a
+   bot changes its buttons at will) and kept (tg_mtproto_keyboard_kept):
+   how many buttons, 0 when the message has none now, -1 when it could not
+   be asked (tg_keys_soft_fail: the connection is to be opened again). */
+static int tg_keys_soft_fail = 0;
+
+static int tg_mtproto_keys_fetch_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, unsigned long message_id, FILE *stream)
+{
+    static const char label[] = "mtproto messages.getHistory (buttons)";
+    unsigned char query[96];
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    int has_hash;
+    int rc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+
+    tg_keys_soft_fail = 0;
+    if (message_id == 0UL ||
+        tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) {
+        return -1;
+    }
+    /* that one message: offset_id is the first left out, and add_offset
+       -1 brings the page one message nearer */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_history_peer_at(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash,
+            message_id, -1L, 1UL) != TG_MTPROTO_TL_OK) {
+        return -1;
+    }
+    memset(&result, 0, sizeof(result));
+    tg_mtproto_keyboard_want(message_id);
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0 ||
+        result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR ||
+        tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
+        tg_mtproto_keyboard_want(0UL);
+        tg_keys_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return -1;
+    }
+    (void)tg_mtproto_keyboard_scan(result.result_body,
+                                   result.result_body_length);
+    tg_mtproto_keyboard_want(0UL);
+    return tg_mtproto_keyboard_kept()->message_id == message_id
+               ? tg_mtproto_keyboard_kept()->count : 0;
+}
+
+/* Button `index` of the kept keyboard pressed, in this chat. What there
+   is to show comes back in `out`, in UTF-8, and what to do with it as the
+   result (TG_GUI_KEY_*). A callback goes to the bot and its answer comes
+   back; a link and a text to copy are handed over; a button of the bot's
+   own keyboard sends its text as a message. */
+static int tg_mtproto_key_press_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, int index, char *out, unsigned long size,
+    FILE *stream)
+{
+    static const char label[] = "mtproto messages.getBotCallbackAnswer";
+    static unsigned char query[64 + TG_MTPROTO_KEY_DATA_MAX];
+    static char link[TG_MTPROTO_KEY_DATA_MAX];
+    const tg_mtproto_keyboard *kb = tg_mtproto_keyboard_kept();
+    const tg_mtproto_key *key;
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    unsigned long sent_id = 0UL;
+    unsigned long n;
+    int has_hash;
+    int alert = 0;
+    int rc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+
+    tg_keys_soft_fail = 0;
+    if (out == 0 || size == 0UL) {
+        return TG_GUI_KEY_FAILED;
+    }
+    out[0] = '\0';
+    if (kb->message_id == 0UL || index < 0 || index >= kb->count) {
+        return TG_GUI_KEY_FAILED;
+    }
+    key = &kb->keys[index];
+    if (key->kind == TG_MTPROTO_KEY_OTHER || key->cut ||
+        (key->kind == TG_MTPROTO_KEY_CALLBACK && key->needs_password)) {
+        return TG_GUI_KEY_UNSERVED;
+    }
+    if (key->kind == TG_MTPROTO_KEY_URL || key->kind == TG_MTPROTO_KEY_COPY) {
+        for (n = 0UL; n + 1UL < size && key->data[n] != 0U; ++n) {
+            out[n] = (char)key->data[n];
+        }
+        out[n] = '\0';
+        return key->kind == TG_MTPROTO_KEY_URL ? TG_GUI_KEY_LINK
+                                               : TG_GUI_KEY_COPY;
+    }
+    if (key->kind == TG_MTPROTO_KEY_TEXT) {
+        if (key->data[0] == 0U) {
+            return TG_GUI_KEY_FAILED;
+        }
+        rc = tg_mtproto_auth_send_peer_on_context(
+            host, port, api_id, auth_file, dc_id_text, context,
+            peer_cache_file, peer_index_text, (const char *)key->data, 0UL,
+            &sent_id, stream);
+        tg_keys_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return rc == 0 ? TG_GUI_KEY_DONE : TG_GUI_KEY_FAILED;
+    }
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) {
+        return TG_GUI_KEY_FAILED;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_bot_callback_answer(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash,
+            kb->message_id, key->data, key->data_length) !=
+        TG_MTPROTO_TL_OK) {
+        return TG_GUI_KEY_FAILED;
+    }
+    memset(&result, 0, sizeof(result));
+    tg_mtproto_query_fail[0] = '\0';
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_keys_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return TG_GUI_KEY_FAILED;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        /* A bot that does its work and says nothing back: the press
+           arrived, Telegram only waited in vain for an answer. */
+        return strstr(tg_mtproto_query_fail, "BOT_RESPONSE_TIMEOUT") != 0
+                   ? TG_GUI_KEY_DONE : TG_GUI_KEY_FAILED;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        !tg_mtproto_parse_bot_callback_answer(
+            result.result_constructor, result.result_body,
+            result.result_body_length, &alert, out, size, link,
+            sizeof(link))) {
+        out[0] = '\0';
+        return TG_GUI_KEY_FAILED;
+    }
+    if (link[0] != '\0') {
+        for (n = 0UL; n + 1UL < size && link[n] != '\0'; ++n) {
+            out[n] = link[n];
+        }
+        out[n] = '\0';
+        return TG_GUI_KEY_LINK;
+    }
+    if (out[0] == '\0') {
+        return TG_GUI_KEY_DONE;
+    }
+    return alert ? TG_GUI_KEY_ALERT : TG_GUI_KEY_SAY;
+}
+
 #define TG_CHAT_CMD_MUTE 1
 #define TG_CHAT_CMD_READ 2
 #define TG_CHAT_CMD_UNREAD 3
@@ -14786,7 +14986,7 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
-    "          /block /unblock /help /update /logout /quit\n"
+    "          /block /unblock /press /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -15642,6 +15842,10 @@ static void tg_mtproto_chat_note_incoming(const tg_chat_message_row *row)
         tg_chat_last_poll_message_id = row->id;
         tg_chat_last_poll_id_hi = row->poll_id_hi;
         tg_chat_last_poll_id_lo = row->poll_id_lo;
+    }
+    if (row != 0 && row->buttons > 0 &&
+        row->id >= tg_chat_last_keys_message_id) {
+        tg_chat_last_keys_message_id = row->id;
     }
 }
 
@@ -17390,6 +17594,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     if (last_seen_message_id != 0 && *last_seen_message_id == 0UL &&
         tg_chat_message_driver_override == 0) {
         tg_chat_last_incoming_id = 0UL; /* a chat read from the start */
+        tg_chat_last_keys_message_id = 0UL;
         tg_chat_last_poll_message_id = 0UL;
         tg_chat_last_poll_id_hi = 0UL;
         tg_chat_last_poll_id_lo = 0UL;
@@ -17548,6 +17753,7 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 row.edited = texts.messages[i].edited && !row.is_service;
                 row.has_views = texts.messages[i].has_views;
                 row.views = texts.messages[i].views;
+                row.buttons = (int)texts.messages[i].button_count;
                 row.has_time = (texts.messages[i].date != 0UL);
                 row.local_epoch =
                     row.has_time
@@ -18938,6 +19144,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_MARKREAD_MARK_THIS),
     TG_HELP(MSG_T_HELP_MARKUNREAD_MARK_THIS),
     TG_HELP(MSG_T_HELP_BLOCK_UNBLOCK),
+    TG_HELP(MSG_T_HELP_PRESS_N),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -21989,6 +22196,91 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
             continue;
         }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/press", &cmd_arg)) {
+            /* The buttons of the newest message shown here that has some:
+               listed, or one of them pressed. The message is read again
+               first: a bot changes its buttons at will. */
+            static char said[TG_MTPROTO_KEY_DATA_MAX + 64];
+            long which = cmd_arg[0] != '\0' ? atol(cmd_arg) : 0L;
+            int count = 0;
+            int k;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
+            } else if (tg_chat_last_keys_message_id == 0UL) {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_NO_BUTTONS_SHOWN_HERE_YET));
+            } else {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                count = tg_mtproto_keys_fetch_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index,
+                    tg_chat_last_keys_message_id, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (count < 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                } else if (count == 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_THAT_MESSAGE_HAS_NO_BUTTONS));
+                } else if (cmd_arg[0] == '\0') {
+                    const tg_mtproto_keyboard *kb = tg_mtproto_keyboard_kept();
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                    fputs(TG_TSTR(MSG_T_BUTTONS_PRESS_ONE), tui_cap);
+                    for (k = 0; k < kb->count; ++k) {
+                        fprintf(tui_cap, "  %d  ", k + 1);
+                        tg_mtproto_print_message_text(tui_cap,
+                                                      kb->keys[k].label);
+                        fputc('\n', tui_cap);
+                    }
+                    tg_console_tui_capture_end(tui_cap, stream);
+                } else if (which < 1L || which > (long)count) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_NO_SUCH_BUTTON));
+                } else {
+                    const char *lead = 0;
+
+                    quiet = tg_mtproto_open_quiet_stream(stream);
+                    k = tg_mtproto_key_press_on_context(
+                        host, port, api_id, auth_file, dc_id_text,
+                        &chat_context, peer_cache_file, peer_index,
+                        (int)which - 1, said, sizeof(said), quiet);
+                    tg_mtproto_close_quiet_stream(quiet, stream);
+                    if (k == TG_GUI_KEY_SAY || k == TG_GUI_KEY_ALERT) {
+                        lead = TG_TSTR(MSG_T_THE_BOT_SAYS);
+                    } else if (k == TG_GUI_KEY_LINK) {
+                        lead = TG_TSTR(MSG_T_THE_BUTTON_LINK);
+                    } else if (k == TG_GUI_KEY_COPY) {
+                        lead = TG_TSTR(MSG_T_THE_BUTTON_TEXT);
+                    }
+                    if (lead != 0) {
+                        FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                        fputs(lead, tui_cap);
+                        tg_mtproto_print_message_text(tui_cap, said);
+                        fputc('\n', tui_cap);
+                        tg_console_tui_capture_end(tui_cap, stream);
+                    } else {
+                        tg_mtproto_chat_print_system_line(
+                            stream,
+                            k == TG_GUI_KEY_DONE
+                                ? TG_TSTR(MSG_T_BUTTON_PRESSED)
+                            : k == TG_GUI_KEY_UNSERVED
+                                ? TG_TSTR(MSG_T_BUTTON_NEEDS_TELEGRAM_APP)
+                                : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                    }
+                }
+                if (tg_keys_soft_fail) {
+                    tg_mtproto_close_auth_context(&chat_context);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
         if (strcmp(line, "/block") == 0 || strcmp(line, "/unblock") == 0) {
             /* The person of the open chat, blocked on Telegram or let back
                in: every device follows. */
@@ -23070,6 +23362,7 @@ static int tg_gui_unread_self_test(void);
 static int tg_gui_last_self_test(void);
 static int tg_gui_peer_seen_self_test(void);
 static int tg_gui_block_self_test(void);
+static int tg_gui_keys_self_test(void);
 static int tg_gui_who_read_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
@@ -25517,6 +25810,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_last_self_test() != 0 ||
         tg_gui_peer_seen_self_test() != 0 ||
         tg_gui_block_self_test() != 0 ||
+        tg_gui_keys_self_test() != 0 ||
         tg_gui_who_read_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
         return 2;
@@ -29494,6 +29788,15 @@ int tg_gui_session_open_chat(unsigned long peer_index, FILE *stream)
             tg_gui_session_state.open_peer_id_lo = pl;
             tg_gui_session_state.open_peer_is_chat =
                 (pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR) ? 1 : 0;
+#if !defined(TG_NO_GUI)
+            /* The cache says of a person whether it is a bot: in a chat
+               that holds no message yet nothing else does. */
+            if (pc == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+                tg_gui_peer_seen_bot = tg_mtproto_peer_cache_is_bot(
+                    tg_gui_session_state.peer_cache_file,
+                    tg_gui_session_state.current_peer_index);
+            }
+#endif
         }
     }
     /* A forum, as the chats Telegram sent this run said: it opens on its
@@ -34241,6 +34544,99 @@ int tg_gui_session_leave_chat(unsigned long peer_index, int both,
     tg_gui_session_reload_chats();
     return 0;
 }
+
+#if !defined(TG_NO_GUI) /* asked from a message's menu */
+/* Public: the buttons of a bot's message of the open chat, read again
+   from Telegram; their labels as the window draws them. */
+int tg_gui_session_keys(unsigned long message_id, char *items,
+                        unsigned long item_len, int max, FILE *stream)
+{
+    const tg_mtproto_keyboard *kb;
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int count;
+    int i;
+
+    if (!tg_gui_session_state.open || stream == 0 || items == 0 ||
+        item_len == 0UL || max <= 0 || message_id == 0UL ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    count = tg_mtproto_keys_fetch_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, message_id, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (count <= 0) {
+        tg_gui_log(count < 0 ? "keys: the message could not be read again"
+                             : "keys: the message has no buttons now");
+        return count;
+    }
+    kb = tg_mtproto_keyboard_kept();
+    if (count > max) {
+        count = max;
+    }
+    for (i = 0; i < count; ++i) {
+        tg_gui_driver_text_from_utf8(items + (unsigned long)i * item_len,
+                                     item_len, kb->keys[i].label);
+    }
+    tg_gui_log("keys: buttons read");
+    return count;
+}
+
+/* Public: one of those buttons pressed. `out` is what the window is to
+   show or to use, as it draws text (a link stays as it is). */
+int tg_gui_session_key_press(int index, char *out, unsigned long size,
+                             FILE *stream)
+{
+    static char utf8[TG_MTPROTO_KEY_DATA_MAX + 256];
+    unsigned long prev_timeout;
+    unsigned long n;
+    FILE *quiet;
+    int what;
+
+    if (out == 0 || size == 0UL) {
+        return TG_GUI_KEY_FAILED;
+    }
+    out[0] = '\0';
+    if (!tg_gui_session_state.open || stream == 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return TG_GUI_KEY_FAILED;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    /* a bot may take its time: Telegram waits for it before it answers */
+    tg_net_set_connect_timeout_seconds(15UL);
+    what = tg_mtproto_key_press_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, index, utf8, sizeof(utf8),
+        quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (what == TG_GUI_KEY_LINK) {
+        for (n = 0UL; n + 1UL < size && utf8[n] != '\0'; ++n) {
+            out[n] = utf8[n];
+        }
+        out[n] = '\0';
+    } else if (what == TG_GUI_KEY_SAY || what == TG_GUI_KEY_ALERT ||
+               what == TG_GUI_KEY_COPY) {
+        tg_gui_driver_text_from_utf8(out, size, utf8);
+    }
+    tg_gui_log(what == TG_GUI_KEY_FAILED ? "keys: the press failed"
+               : what == TG_GUI_KEY_UNSERVED ? "keys: a button not served"
+                                             : "keys: a button pressed");
+    return what;
+}
+#endif
 
 #if !defined(TG_NO_GUI) /* asked from a row's menu */
 /* Public: whether this account blocked the person of the chat at this
@@ -45075,6 +45471,27 @@ static int tg_gui_session_apply_peer_seen(void)
     return 1;
 }
 
+/* A bot's chat that holds no message yet offers to start the bot, and
+   stops offering with the first message. 1 = it changed. */
+static int tg_gui_session_apply_bot_start(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    int start;
+
+    if (gst == 0) {
+        return 0;
+    }
+    start = tg_gui_session_state.current_peer_index[0] != '\0' &&
+            tg_gui_session_state.open_peer_constructor ==
+                TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+            tg_gui_peer_seen_bot && gst->message_count == 0;
+    if (gst->bot_start == start) {
+        return 0;
+    }
+    gst->bot_start = start;
+    return 1;
+}
+
 /* Asks Telegram for the dialog of the chat at this 1-based cache index:
    its mute is stored where the mutes are kept, its unread count is given
    back. 0 = asked, 2 = no such chat, 1 = Telegram did not answer. */
@@ -45374,6 +45791,83 @@ static int tg_gui_peer_seen_self_test(void)
     tg_chat_edit_target = 0;
     if (!ok) {
         puts("probe self-test: what is kept of who was here wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
+#if !defined(TG_NO_SELFTEST)
+/* A bot's button pressed: what needs no network. A keyboard read off a
+   message and kept: the link and the text to copy are handed over, the
+   callback that wants the password and the kind this client does not
+   serve say so, a button that is not there fails; and with no keyboard
+   kept nothing is pressed. */
+static int tg_gui_keys_self_test(void)
+{
+    unsigned char body[320];
+    tg_mtproto_tl_writer writer;
+    char out[96];
+    int ok;
+
+#define TG_KEYS_W32(v) (void)tg_mtproto_tl_write_u32(&writer, (v))
+#define TG_KEYS_STR(s) \
+    (void)tg_mtproto_tl_write_bytes(&writer, (const unsigned char *)(s), \
+                                    (unsigned long)strlen(s))
+#define TG_KEYS_PRESS(i) \
+    tg_mtproto_key_press_on_context(0, 0, 0, 0, 0, 0, 0, 0, (i), out, \
+                                    sizeof(out), stdout)
+    tg_mtproto_tl_writer_init(&writer, body, sizeof(body));
+    TG_KEYS_W32(TG_MTPROTO_MESSAGE_CONSTRUCTOR);
+    TG_KEYS_W32(64UL); /* reply_markup */
+    TG_KEYS_W32(0UL);
+    TG_KEYS_W32(900UL);
+    TG_KEYS_W32(0x59511722UL);
+    (void)tg_mtproto_tl_write_u64(&writer, 0UL, 17UL);
+    TG_KEYS_W32(123UL);
+    TG_KEYS_STR("menu");
+    TG_KEYS_W32(0x48a30254UL); /* replyInlineMarkup, one row of four */
+    TG_KEYS_W32(0x1cb5c415UL);
+    TG_KEYS_W32(1UL);
+    TG_KEYS_W32(0x77608b83UL);
+    TG_KEYS_W32(0x1cb5c415UL);
+    TG_KEYS_W32(4UL);
+    TG_KEYS_W32(0x258aff05UL); /* a link */
+    TG_KEYS_STR("Site");
+    TG_KEYS_STR("https://example.org/a%20b");
+    TG_KEYS_W32(0x75d2698eUL); /* a text to copy */
+    TG_KEYS_STR("Code");
+    TG_KEYS_STR("ABC-123");
+    TG_KEYS_W32(0x35bbdb6bUL); /* a callback that wants the password */
+    TG_KEYS_W32(1UL);
+    TG_KEYS_STR("Pay");
+    TG_KEYS_STR("x");
+    TG_KEYS_W32(0x50f41ccfUL); /* a game */
+    TG_KEYS_STR("Play");
+    tg_mtproto_keyboard_want(900UL);
+    ok = tg_mtproto_keyboard_scan(body, writer.length) == 1;
+    tg_mtproto_keyboard_want(0UL);
+    ok = ok && tg_mtproto_keyboard_kept()->count == 4 &&
+         TG_KEYS_PRESS(0) == TG_GUI_KEY_LINK &&
+         strcmp(out, "https://example.org/a%20b") == 0 &&
+         TG_KEYS_PRESS(1) == TG_GUI_KEY_COPY &&
+         strcmp(out, "ABC-123") == 0 &&
+         TG_KEYS_PRESS(2) == TG_GUI_KEY_UNSERVED && out[0] == '\0' &&
+         TG_KEYS_PRESS(3) == TG_GUI_KEY_UNSERVED &&
+         TG_KEYS_PRESS(4) == TG_GUI_KEY_FAILED &&
+         TG_KEYS_PRESS(-1) == TG_GUI_KEY_FAILED;
+    /* a keyboard asked for and not in the answer: none is kept, and
+       nothing can be pressed */
+    tg_mtproto_keyboard_want(901UL);
+    ok = ok && tg_mtproto_keyboard_scan(body, writer.length) == 0;
+    tg_mtproto_keyboard_want(0UL);
+    ok = ok && tg_mtproto_keyboard_kept()->message_id == 0UL &&
+         TG_KEYS_PRESS(0) == TG_GUI_KEY_FAILED;
+#undef TG_KEYS_PRESS
+#undef TG_KEYS_STR
+#undef TG_KEYS_W32
+    if (!ok) {
+        puts("probe self-test: a bot's button pressed wrong");
         return 2;
     }
     return 0;
@@ -46706,6 +47200,10 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     if (tg_gui_session_apply_peer_seen()) {
         dirty = 1;
         tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_HEADER;
+    }
+    if (tg_gui_session_apply_bot_start()) {
+        dirty = 1; /* the composer's words change: the whole window */
+        tg_gui_session_changes |= TG_GUI_SESSION_CHANGE_FULL;
     }
 #endif
     return dirty;

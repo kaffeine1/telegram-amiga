@@ -461,6 +461,24 @@ int tg_gui_session_who_read(unsigned long message_id, char *out,
                             unsigned long size, char *emsg,
                             unsigned long emsg_size, FILE *stream);
 
+/* A bot's buttons. tg_gui_session_keys reads the message of the open chat
+   again (a bot changes its buttons at will) and writes their labels to
+   `items` (item_len bytes each, at most max), as the window draws them:
+   how many, 0 when the message has none now, -1 when Telegram did not
+   answer. tg_gui_session_key_press presses one of the buttons read last
+   and says what the window is to do with `out`. */
+#define TG_GUI_KEY_DONE 0     /* nothing to show */
+#define TG_GUI_KEY_SAY 1      /* the bot's answer, said in passing */
+#define TG_GUI_KEY_ALERT 2    /* the bot's answer, to be read and closed */
+#define TG_GUI_KEY_LINK 3     /* a link the button opens */
+#define TG_GUI_KEY_COPY 4     /* a text the button copies */
+#define TG_GUI_KEY_UNSERVED 5 /* a kind of button Amigram does not serve */
+#define TG_GUI_KEY_FAILED 6   /* Telegram, or the bot, did not take it */
+int tg_gui_session_keys(unsigned long message_id, char *items,
+                        unsigned long item_len, int max, FILE *stream);
+int tg_gui_session_key_press(int index, char *out, unsigned long size,
+                             FILE *stream);
+
 /* Whether this account blocked the person of the chat at this 1-based
    cache index: 1 blocked, 0 not (with ask = 0: not known to be), -1 the
    chat is no other person's or Telegram did not answer. With ask set,

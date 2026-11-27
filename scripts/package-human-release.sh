@@ -718,6 +718,13 @@ Messages
   is off until you turn it on.
 - On your own message in a group the menu has "Who read...": who read
   it and when. Telegram tells it in small groups, for a week.
+- A bot's buttons stand under its message, a row a line: [Yes] [No].
+  "Buttons..." in the message's menu puts them in the menu's place;
+  click one to press it. The bot's answer shows on the status line, or
+  in a requester; a button that opens a link asks first, and shows the
+  link. Buttons that need Telegram's own app (web apps, payments,
+  games) say so. In the text client /press lists the buttons of the
+  last message that has some, and /press 2 presses the second.
 - A chat with pinned messages shows the latest under its header,
   "Pinned:" and how it starts; a click shows the chat around it, and
   the next click the one pinned before. Pin and Unpin are in a
@@ -1078,6 +1085,14 @@ Messaggi
 - Su un tuo messaggio in un gruppo il menu ha "Who read...": chi l'ha
   letto e quando. Telegram lo dice nei gruppi piccoli, per una
   settimana.
+- I bottoni di un bot stanno sotto il suo messaggio, una riga per
+  fila: [Yes] [No]. "Buttons..." nel menu del messaggio li mette al
+  posto del menu; un clic ne preme uno. La risposta del bot compare
+  nella riga di stato, o in un requester; un bottone che apre un link
+  prima chiede, e mostra il link. I bottoni che vogliono l'app di
+  Telegram (web app, pagamenti, giochi) lo dicono. Nel client testuale
+  /press elenca i bottoni dell'ultimo messaggio che ne ha, e /press 2
+  preme il secondo.
 - Una chat con messaggi fissati mostra l'ultimo sotto l'intestazione,
   "Pinned:" e come comincia; un click mostra la chat attorno a quel
   messaggio, e il click dopo quello fissato prima. Pin e Unpin sono nel
@@ -1412,6 +1427,9 @@ stops the person of the open chat from writing to you, on all your
 devices, and /unblock lets them back in.
 A forwarded message starts with [Forwarded from ...], and an edited one
 ends with (edited).
+A bot's buttons stand under its message, [Yes] [No]: /press lists the
+ones of the last message that has some, and /press 2 presses the second.
+What the bot answers is printed; a button with a link prints the link.
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
@@ -1521,6 +1539,10 @@ impedisce alla persona della chat aperta di scriverti, su tutti i tuoi
 dispositivi, e /unblock la fa rientrare.
 Un messaggio inoltrato comincia con [Forwarded from ...], e uno
 modificato finisce con (edited).
+I bottoni di un bot stanno sotto il suo messaggio, [Yes] [No]: /press
+elenca quelli dell'ultimo messaggio che ne ha, e /press 2 preme il
+secondo. Quello che il bot risponde viene stampato; un bottone con un
+link stampa il link.
 Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga

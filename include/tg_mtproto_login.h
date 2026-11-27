@@ -681,6 +681,9 @@ typedef struct tg_mtproto_message_text {
        reader got as far as the field. */
     unsigned char has_views;
     unsigned long views;
+    /* How many buttons a bot put under the message (or offers in place of
+       typing): their labels stand under its text, a row a line. */
+    unsigned char button_count;
 } tg_mtproto_message_text;
 
 /* --- polls ---------------------------------------------------------------
@@ -1328,6 +1331,71 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
                                        unsigned long body_length,
                                        tg_mtproto_read_participant *out,
                                        int max);
+/* A bot's keyboard: the buttons under one of its messages
+   (replyInlineMarkup) or the ones it offers in place of typing
+   (replyKeyboardMarkup). The reader keeps one at a time: the keyboard of
+   the message asked for with tg_mtproto_keyboard_want, when that message
+   is read next. */
+#if defined(TG_LOWMEM)
+#define TG_MTPROTO_KEYBOARD_KEYS_MAX 8
+#define TG_MTPROTO_KEY_DATA_MAX 128
+#else
+#define TG_MTPROTO_KEYBOARD_KEYS_MAX 12
+#define TG_MTPROTO_KEY_DATA_MAX 256
+#endif
+#define TG_MTPROTO_KEY_LABEL_MAX 40
+#define TG_MTPROTO_KEY_OTHER 0    /* a kind this client does not serve */
+#define TG_MTPROTO_KEY_CALLBACK 1 /* data: what the bot is told */
+#define TG_MTPROTO_KEY_URL 2      /* data: the link, with its NUL */
+#define TG_MTPROTO_KEY_TEXT 3     /* its label is sent as a message */
+#define TG_MTPROTO_KEY_COPY 4     /* data: a text to copy, with its NUL */
+typedef struct tg_mtproto_key {
+    unsigned char kind;
+    unsigned char row;            /* the keyboard's row it stands on */
+    unsigned char needs_password; /* a callback that asks the 2FA password */
+    unsigned char cut;            /* its data is longer than is kept */
+    unsigned long data_length;
+    char label[TG_MTPROTO_KEY_LABEL_MAX];
+    unsigned char data[TG_MTPROTO_KEY_DATA_MAX];
+} tg_mtproto_key;
+typedef struct tg_mtproto_keyboard {
+    unsigned long message_id; /* 0 = none kept */
+    int count;
+    tg_mtproto_key keys[TG_MTPROTO_KEYBOARD_KEYS_MAX];
+} tg_mtproto_keyboard;
+/* The keyboard kept (message_id 0 when there is none). */
+const tg_mtproto_keyboard *tg_mtproto_keyboard_kept(void);
+/* Forgets the kept keyboard and asks for the one of this message: the
+   reader keeps it when it reads that message. 0 asks for none, and keeps
+   what is held. */
+void tg_mtproto_keyboard_want(unsigned long message_id);
+/* Reads the messages of an answer for the sake of that keyboard: 1 when
+   it is kept now. */
+int tg_mtproto_keyboard_scan(const unsigned char *body,
+                             unsigned long body_length);
+/* A button pressed: messages.getBotCallbackAnswer with the button's data,
+   and the bot's answer read: a message to show (*alert: in a requester
+   rather than in passing) and a link to open, either of them or neither.
+   1 when the body is such an answer. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_bot_callback_answer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    const unsigned char *data,
+    unsigned long data_length);
+int tg_mtproto_parse_bot_callback_answer(unsigned long constructor,
+                                         const unsigned char *body,
+                                         unsigned long body_length,
+                                         int *alert,
+                                         char *message,
+                                         unsigned long message_size,
+                                         char *url,
+                                         unsigned long url_size);
 /* Whether this account blocked a person (users.getFullUser, of which only
    that is read: 1 blocked, 0 not, -1 no such answer), and the block and
    unblock themselves (contacts.block, contacts.unblock: a person only). */

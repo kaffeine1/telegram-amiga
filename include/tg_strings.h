@@ -935,6 +935,18 @@
 #define MSG_ST_COULD_NOT_BLOCK_STR "Could not block (network?)"
 #define MSG_ST_COULD_NOT_UNBLOCK 518
 #define MSG_ST_COULD_NOT_UNBLOCK_STR "Could not unblock (network?)"
+#define MSG_ST_READING_THE_BUTTONS 519
+#define MSG_ST_READING_THE_BUTTONS_STR "Reading the buttons..."
+#define MSG_ST_NO_BUTTONS_ANY_MORE 520
+#define MSG_ST_NO_BUTTONS_ANY_MORE_STR "That message has no buttons any more"
+#define MSG_ST_ASKING_THE_BOT 521
+#define MSG_ST_ASKING_THE_BOT_STR "Asking the bot..."
+#define MSG_ST_BUTTON_PRESSED 522
+#define MSG_ST_BUTTON_PRESSED_STR "Button pressed"
+#define MSG_ST_BUTTON_NEEDS_TELEGRAM_APP 523
+#define MSG_ST_BUTTON_NEEDS_TELEGRAM_APP_STR "That button needs Telegram's own app"
+#define MSG_ST_THE_BOT_DID_NOT_ANSWER 524
+#define MSG_ST_THE_BOT_DID_NOT_ANSWER_STR "The bot did not take it. Try again."
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1045,6 +1057,12 @@
 #define MSG_RQ_BLOCK_CANCEL_STR "Block|Cancel"
 #define MSG_RQ_UNBLOCK_CANCEL 654
 #define MSG_RQ_UNBLOCK_CANCEL_STR "Unblock|Cancel"
+#define MSG_RQ_THE_BOT_SAYS 655
+#define MSG_RQ_THE_BOT_SAYS_STR "The bot says"
+#define MSG_RQ_OPEN_LINK 656
+#define MSG_RQ_OPEN_LINK_STR "Open link"
+#define MSG_RQ_OPEN_CANCEL 657
+#define MSG_RQ_OPEN_CANCEL_STR "Open|Cancel"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1175,6 +1193,8 @@
 #define MSG_W_ALREADY_BLOCKED_STR "You have already blocked this person:\n\n"
 #define MSG_W_UNBLOCK_THEM 957
 #define MSG_W_UNBLOCK_THEM_STR "\n\nUnblock them?"
+#define MSG_W_THE_BUTTON_OPENS_THIS_LINK 958
+#define MSG_W_THE_BUTTON_OPENS_THIS_LINK_STR "The button opens this link:\n\n"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1479,6 +1499,10 @@
 #define MSG_G_BLOCK_STR "Block..."
 #define MSG_G_UNBLOCK 1451
 #define MSG_G_UNBLOCK_STR "Unblock"
+#define MSG_G_BUTTONS 1452
+#define MSG_G_BUTTONS_STR "Buttons..."
+#define MSG_G_PRESS_ENTER_TO_START_THE_BOT 1453
+#define MSG_G_PRESS_ENTER_TO_START_THE_BOT_STR "Press Enter to start the bot"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2639,8 +2663,28 @@
 #define MSG_T_NOT_BLOCKED_ANY_MORE_STR "Not blocked any more."
 #define MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED 2350
 #define MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED_STR "Only the private chat with a person can be blocked."
+#define MSG_T_HELP_PRESS_N 2351
+#define MSG_T_HELP_PRESS_N_STR "  /press [n]      list a bot's buttons; /press 2 presses the second"
+#define MSG_T_NO_BUTTONS_SHOWN_HERE_YET 2352
+#define MSG_T_NO_BUTTONS_SHOWN_HERE_YET_STR "No message with buttons shown here yet (/history shows the last ones)."
+#define MSG_T_THAT_MESSAGE_HAS_NO_BUTTONS 2353
+#define MSG_T_THAT_MESSAGE_HAS_NO_BUTTONS_STR "That message has no buttons any more."
+#define MSG_T_BUTTONS_PRESS_ONE 2354
+#define MSG_T_BUTTONS_PRESS_ONE_STR "Buttons (press one with /press and its number):\n"
+#define MSG_T_NO_SUCH_BUTTON 2355
+#define MSG_T_NO_SUCH_BUTTON_STR "No such button: /press alone lists them."
+#define MSG_T_BUTTON_PRESSED 2356
+#define MSG_T_BUTTON_PRESSED_STR "Pressed."
+#define MSG_T_BUTTON_NEEDS_TELEGRAM_APP 2357
+#define MSG_T_BUTTON_NEEDS_TELEGRAM_APP_STR "That button needs Telegram's own app."
+#define MSG_T_THE_BOT_SAYS 2358
+#define MSG_T_THE_BOT_SAYS_STR "The bot says: "
+#define MSG_T_THE_BUTTON_LINK 2359
+#define MSG_T_THE_BUTTON_LINK_STR "The button's link: "
+#define MSG_T_THE_BUTTON_TEXT 2360
+#define MSG_T_THE_BUTTON_TEXT_STR "The button's text: "
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2350
+#define TG_STRINGS_ID_MAX 2360
 
 #endif

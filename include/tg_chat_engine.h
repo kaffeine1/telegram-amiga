@@ -119,6 +119,8 @@ typedef struct tg_chat_message_row {
     int edited;                /* changed after it was sent */
     int has_views;             /* a channel's post: `views` saw it */
     unsigned long views;
+    int buttons;               /* a bot's buttons, listed under the text:
+                                  how many */
     const tg_reactions *reactions;
     /* The reader stopped short of the reactions field (a media, a keyboard):
        reactions is 0 and the message's reactions are still to be asked. */

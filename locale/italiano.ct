@@ -1413,6 +1413,24 @@ Blocco non riuscito (rete?)
 MSG_ST_COULD_NOT_UNBLOCK
 Sblocco non riuscito (rete?)
 ; Could not unblock (network?)
+MSG_ST_READING_THE_BUTTONS
+Leggo i bottoni...
+; Reading the buttons...
+MSG_ST_NO_BUTTONS_ANY_MORE
+Quel messaggio non ha più bottoni
+; That message has no buttons any more
+MSG_ST_ASKING_THE_BOT
+Chiedo al bot...
+; Asking the bot...
+MSG_ST_BUTTON_PRESSED
+Bottone premuto
+; Button pressed
+MSG_ST_BUTTON_NEEDS_TELEGRAM_APP
+Quel bottone vuole l'app di Telegram
+; That button needs Telegram's own app
+MSG_ST_THE_BOT_DID_NOT_ANSWER
+Il bot non l'ha accettato. Riprova.
+; The bot did not take it. Try again.
 MSG_RQ_OK
 OK
 ; OK
@@ -1606,6 +1624,15 @@ Blocca|Annulla
 MSG_RQ_UNBLOCK_CANCEL
 Sblocca|Annulla
 ; Unblock|Cancel
+MSG_RQ_THE_BOT_SAYS
+Il bot dice
+; The bot says
+MSG_RQ_OPEN_LINK
+Apri il link
+; Open link
+MSG_RQ_OPEN_CANCEL
+Apri|Annulla
+; Open|Cancel
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -1842,17 +1869,24 @@ MSG_W_BTN_FILE
 File
 ; File
 MSG_W_BLOCK_THIS_PERSON
-Bloccare questa persona su Telegram?\n\n
-; Block this person on Telegram?\n\n
+Bloccare questa persona su Telegram?\n\
+\n
 MSG_W_BLOCKED_CANNOT_WRITE
-\n\nNon potrà più scriverti e non vedrà quando\nci sei, su tutti i tuoi dispositivi.\nLa chat resta nel tuo elenco.
-; \n\nThey can no longer write to you and do not\nsee when you are here, on all your devices.\nThe chat stays in your list.
+\n\
+\n\
+Non potrà più scriverti e non vedrà quando\n\
+ci sei, su tutti i tuoi dispositivi.\n\
+La chat resta nel tuo elenco.
 MSG_W_ALREADY_BLOCKED
-Hai già bloccato questa persona:\n\n
-; You have already blocked this person:\n\n
+Hai già bloccato questa persona:\n\
+\n
 MSG_W_UNBLOCK_THEM
-\n\nVuoi sbloccarla?
-; \n\nUnblock them?
+\n\
+\n\
+Vuoi sbloccarla?
+MSG_W_THE_BUTTON_OPENS_THIS_LINK
+Il bottone apre questo link:\n\
+\n
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -2309,6 +2343,12 @@ Blocca...
 MSG_G_UNBLOCK
 Sblocca
 ; Unblock
+MSG_G_BUTTONS
+Bottoni...
+; Buttons...
+MSG_G_PRESS_ENTER_TO_START_THE_BOT
+Premi Invio per avviare il bot
+; Press Enter to start the bot
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -3969,7 +4009,7 @@ MSG_T_USE_SILENT_TEXT
 Uso: /silent <testo>
 ; Use: /silent <text>
 MSG_T_HELP_BLOCK_UNBLOCK
-  /block /unblock  blocca su Telegram la persona di questa chat, o la sblocca
+  /block /unblock  blocca su Telegram la persona della chat, o la sblocca
 ;   /block /unblock  block this chat's person on Telegram, or take it back
 MSG_T_BLOCKED_ON_TELEGRAM
 Bloccato su Telegram: non potrà più scriverti. /unblock lo toglie.
@@ -3980,3 +4020,32 @@ Non è più bloccato.
 MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED
 Si può bloccare solo la chat privata con una persona.
 ; Only the private chat with a person can be blocked.
+MSG_T_HELP_PRESS_N
+  /press [n]      elenca i bottoni di un bot; /press 2 preme il secondo
+;   /press [n]      list a bot's buttons; /press 2 presses the second
+MSG_T_NO_BUTTONS_SHOWN_HERE_YET
+Nessun messaggio con bottoni mostrato qui finora (/history mostra gli ultimi).
+; No message with buttons shown here yet (/history shows the last ones).
+MSG_T_THAT_MESSAGE_HAS_NO_BUTTONS
+Quel messaggio non ha più bottoni.
+; That message has no buttons any more.
+MSG_T_BUTTONS_PRESS_ONE
+Bottoni (premine uno con /press e il suo numero):\n
+MSG_T_NO_SUCH_BUTTON
+Quel bottone non c'è: /press da solo li elenca.
+; No such button: /press alone lists them.
+MSG_T_BUTTON_PRESSED
+Premuto.
+; Pressed.
+MSG_T_BUTTON_NEEDS_TELEGRAM_APP
+Quel bottone vuole l'app di Telegram.
+; That button needs Telegram's own app.
+MSG_T_THE_BOT_SAYS
+Il bot dice: 
+; The bot says: 
+MSG_T_THE_BUTTON_LINK
+Il link del bottone: 
+; The button's link: 
+MSG_T_THE_BUTTON_TEXT
+Il testo del bottone: 
+; The button's text: 

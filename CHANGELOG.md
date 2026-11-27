@@ -115,6 +115,23 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the menu then reads "Unblock"; a block or an unblock made elsewhere
   while Amigram runs is heard of too. The text client has `/block` and
   `/unblock` for the open chat.
+- A bot's buttons. The buttons a bot puts under a message, and the
+  ones it offers in place of typing, are listed under the message's
+  text, a row a line: `[Yes] [No]`. "Buttons..." in the message's menu
+  reads them from Telegram as they are now and puts them in the menu's
+  place; a click presses one. A callback goes to the bot
+  (`messages.getBotCallbackAnswer`) and its answer is shown, on the
+  status line or in a requester when the bot wants it read; a link is
+  opened after a question that shows where it leads; a text to copy
+  goes to the clipboard; a button of the bot's own keyboard sends its
+  text. The kinds that need Telegram's own app (web apps, payments,
+  games, sharing a phone number or a place) say so. The text client
+  has `/press`: alone it lists the buttons of the last message that has
+  some, `/press 2` presses the second. A message with buttons now also
+  shows its views and keeps its place in an album, which the keyboard
+  used to hide. A chat with a bot that holds no message yet says "Press
+  Enter to start the bot": ENTER, or a click on Send, sends it `/start`,
+  and the header says "bot" there too.
 - Start iconified: with the tooltype `ICONIFY` on the icon Amigram is
   started from (or `--iconify` after `--gui-live` in a Shell), the
   window gives way to the AppIcon on Workbench as soon as it has

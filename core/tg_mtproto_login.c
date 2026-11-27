@@ -8544,12 +8544,375 @@ static tg_mtproto_tl_status tg_read_message_fwd_header(
     return tg_skip_message_fwd_header(reader);
 }
 
+/* --- a bot's keyboard (layer 214 schema) -------------------------------- */
+static tg_mtproto_keyboard tg_keyboard_kept;
+static tg_mtproto_keyboard tg_keyboard_scratch;
+static unsigned long tg_keyboard_wanted = 0UL;
+
+const tg_mtproto_keyboard *tg_mtproto_keyboard_kept(void)
+{
+    return &tg_keyboard_kept;
+}
+
+void tg_mtproto_keyboard_want(unsigned long message_id)
+{
+    tg_keyboard_wanted = message_id;
+    if (message_id != 0UL) {
+        tg_keyboard_kept.message_id = 0UL;
+        tg_keyboard_kept.count = 0;
+    }
+}
+
+/* A button's text that comes with it (a link, a text to copy): kept with
+   its NUL, and marked when it was longer than is kept. */
+static tg_mtproto_tl_status tg_read_key_text(tg_mtproto_tl_reader *reader,
+                                             tg_mtproto_key *key)
+{
+    const unsigned char *bytes;
+    unsigned long length;
+
+    if (tg_mtproto_tl_read_bytes(reader, &bytes, &length) !=
+        TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (length >= (unsigned long)TG_MTPROTO_KEY_DATA_MAX) {
+        key->cut = 1U;
+        length = 0UL; /* half a link is no link */
+    }
+    if (length > 0UL) {
+        memcpy(key->data, bytes, (size_t)length);
+    }
+    key->data[length] = 0U;
+    key->data_length = length;
+    return TG_MTPROTO_TL_OK;
+}
+
+/* One KeyboardButton. Every kind the layer has is stepped over; the ones
+   this client serves keep what they need. A constructor that is none of
+   them (or keyboardButtonRequestPeer, whose peer type is a tree of its
+   own) ends the reading: the message then shows no keyboard. */
+static tg_mtproto_tl_status tg_read_keyboard_button(
+    tg_mtproto_tl_reader *reader, tg_mtproto_key *key)
+{
+    const unsigned char *bytes;
+    tg_mtproto_tl_reader text_at;
+    unsigned long constructor;
+    unsigned long flags = 0UL;
+    unsigned long length;
+    unsigned long count;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long i;
+
+    memset(key, 0, sizeof(*key));
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    switch (constructor) {
+    case 0x35bbdb6bUL: /* keyboardButtonCallback flags:#
+                          requires_password:flags.0?true text data:bytes */
+    case 0x93b9fbb5UL: /* keyboardButtonSwitchInline flags:#
+                          same_peer:flags.0?true text query
+                          peer_types:flags.1?Vector<InlineQueryPeerType> */
+    case 0x10b78d29UL: /* keyboardButtonUrlAuth flags:# text
+                          fwd_text:flags.0?string url button_id:int */
+    case 0xbbc7515dUL: /* keyboardButtonRequestPoll flags:#
+                          quiz:flags.0?Bool text */
+        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        break;
+    case 0xa2fa4880UL: /* keyboardButton text */
+    case 0x258aff05UL: /* keyboardButtonUrl text url */
+    case 0xb16a6c29UL: /* keyboardButtonRequestPhone text */
+    case 0xfc796b3fUL: /* keyboardButtonRequestGeoLocation text */
+    case 0x50f41ccfUL: /* keyboardButtonGame text */
+    case 0xafd93fbbUL: /* keyboardButtonBuy text */
+    case 0x308660c1UL: /* keyboardButtonUserProfile text user_id:long */
+    case 0x13767230UL: /* keyboardButtonWebView text url */
+    case 0xa0c0505cUL: /* keyboardButtonSimpleWebView text url */
+    case 0x75d2698eUL: /* keyboardButtonCopy text copy_text */
+        break;
+    default:
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (constructor == 0xbbc7515dUL && (flags & 1UL) != 0UL &&
+        tg_mtproto_tl_read_u32(reader, &lo) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA; /* quiz: a Bool before the text */
+    }
+    text_at = *reader;
+    if (tg_read_string_copy(reader, key->label, sizeof(key->label)) !=
+        TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    for (i = 0UL; key->label[i] != '\0'; ++i) {
+        if ((unsigned char)key->label[i] < 0x20U) {
+            key->label[i] = ' '; /* no line break, no mark of the painter */
+        }
+    }
+    switch (constructor) {
+    case 0xa2fa4880UL:
+        /* what is sent is the whole text, which the label may cut */
+        key->kind = (unsigned char)TG_MTPROTO_KEY_TEXT;
+        return tg_read_key_text(&text_at, key);
+    case 0x258aff05UL:
+        key->kind = (unsigned char)TG_MTPROTO_KEY_URL;
+        return tg_read_key_text(reader, key);
+    case 0x75d2698eUL:
+        key->kind = (unsigned char)TG_MTPROTO_KEY_COPY;
+        return tg_read_key_text(reader, key);
+    case 0x35bbdb6bUL:
+        key->kind = (unsigned char)TG_MTPROTO_KEY_CALLBACK;
+        key->needs_password = (flags & 1UL) != 0UL ? 1U : 0U;
+        if (tg_mtproto_tl_read_bytes(reader, &bytes, &length) !=
+            TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if (length > (unsigned long)TG_MTPROTO_KEY_DATA_MAX) {
+            key->cut = 1U;
+            length = 0UL;
+        }
+        if (length > 0UL) {
+            memcpy(key->data, bytes, (size_t)length);
+        }
+        key->data_length = length;
+        break;
+    case 0x10b78d29UL:
+        /* a login link: opened as the plain link it also is */
+        key->kind = (unsigned char)TG_MTPROTO_KEY_URL;
+        if (((flags & 1UL) != 0UL &&
+             tg_skip_string(reader) != TG_MTPROTO_TL_OK) ||
+            tg_read_key_text(reader, key) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(reader, &lo) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        break;
+    case 0x93b9fbb5UL:
+        if (tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        if ((flags & 2UL) != 0UL) {
+            /* each a bare constructor of four bytes */
+            if (tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+                count > 16UL) {
+                return TG_MTPROTO_TL_INVALID_DATA;
+            }
+            for (i = 0UL; i < count; ++i) {
+                if (tg_mtproto_tl_read_u32(reader, &lo) !=
+                    TG_MTPROTO_TL_OK) {
+                    return TG_MTPROTO_TL_INVALID_DATA;
+                }
+            }
+        }
+        break;
+    case 0x308660c1UL:
+        if (tg_mtproto_tl_read_u64(reader, &hi, &lo) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        break;
+    case 0x13767230UL:
+    case 0xa0c0505cUL:
+        if (tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        break;
+    default:
+        break; /* the text was all of it */
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* reply_markup:flags.6?ReplyMarkup, read to its last byte into `kb` (no
+   button for the two kinds that only hide a keyboard or ask for a reply):
+   replyInlineMarkup#48a30254 rows:Vector<KeyboardButtonRow>
+   replyKeyboardMarkup#85dd99d1 flags:# ... rows placeholder:flags.3?string
+   replyKeyboardHide#a03e5b85 flags:#
+   replyKeyboardForceReply#86b40b08 flags:# ... placeholder:flags.3?string
+   keyboardButtonRow#77608b83 buttons:Vector<KeyboardButton>. The buttons
+   past the ones kept are read and left out. */
+static tg_mtproto_tl_status tg_read_reply_markup(tg_mtproto_tl_reader *reader,
+                                                 tg_mtproto_keyboard *kb)
+{
+    static tg_mtproto_key spare; /* a button there is no room for */
+    unsigned long constructor;
+    unsigned long flags = 0UL;
+    unsigned long rows;
+    unsigned long count;
+    unsigned long row;
+    unsigned long r;
+    unsigned long i;
+
+    kb->count = 0;
+    kb->message_id = 0UL;
+    if (tg_mtproto_tl_read_u32(reader, &constructor) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (constructor == 0xa03e5b85UL) {
+        return tg_mtproto_tl_read_u32(reader, &flags) == TG_MTPROTO_TL_OK
+                   ? TG_MTPROTO_TL_OK : TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (constructor == 0x86b40b08UL) {
+        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+            ((flags & 8UL) != 0UL &&
+             tg_skip_string(reader) != TG_MTPROTO_TL_OK)) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        return TG_MTPROTO_TL_OK;
+    }
+    if (constructor == 0x85dd99d1UL) {
+        if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+    } else if (constructor != 0x48a30254UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    if (tg_read_vector_count(reader, &rows) != TG_MTPROTO_TL_OK ||
+        rows > 64UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    for (r = 0UL; r < rows; ++r) {
+        if (tg_mtproto_tl_read_u32(reader, &row) != TG_MTPROTO_TL_OK ||
+            row != 0x77608b83UL ||
+            tg_read_vector_count(reader, &count) != TG_MTPROTO_TL_OK ||
+            count > 32UL) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+        for (i = 0UL; i < count; ++i) {
+            tg_mtproto_key *key =
+                kb->count < TG_MTPROTO_KEYBOARD_KEYS_MAX
+                    ? &kb->keys[kb->count] : &spare;
+
+            if (tg_read_keyboard_button(reader, key) != TG_MTPROTO_TL_OK) {
+                kb->count = 0;
+                return TG_MTPROTO_TL_INVALID_DATA;
+            }
+            if (key != &spare) {
+                key->row = (unsigned char)(r > 255UL ? 255UL : r);
+                ++kb->count;
+            }
+        }
+    }
+    if (constructor == 0x85dd99d1UL && (flags & 8UL) != 0UL &&
+        tg_skip_string(reader) != TG_MTPROTO_TL_OK) {
+        kb->count = 0;
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    return TG_MTPROTO_TL_OK;
+}
+
+/* The keyboard's labels under the message's text, a row a line:
+   "[Yes] [No]". What does not fit is left out. */
+static void tg_append_keyboard_lines(const tg_mtproto_keyboard *kb,
+                                     char *text, unsigned long size)
+{
+    unsigned long n = (unsigned long)strlen(text);
+    int i;
+
+    for (i = 0; i < kb->count; ++i) {
+        const char *label = kb->keys[i].label;
+        unsigned long len = (unsigned long)strlen(label);
+        int new_row = i == 0 || kb->keys[i].row != kb->keys[i - 1].row;
+
+        if (n + len + 4UL >= size) {
+            break;
+        }
+        if (n != 0UL) {
+            text[n++] = new_row ? '\n' : ' ';
+        }
+        text[n++] = '[';
+        memcpy(text + n, label, (size_t)len);
+        n += len;
+        text[n++] = ']';
+    }
+    text[n] = '\0';
+}
+
+/* messages.getBotCallbackAnswer#9342ca07 flags:# game:flags.1?true
+   peer:InputPeer msg_id:int data:flags.0?bytes
+   password:flags.2?InputCheckPasswordSRP = messages.BotCallbackAnswer: a
+   button of a bot's message pressed, with the data the button carries. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_bot_callback_answer(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id,
+    const unsigned char *data,
+    unsigned long data_length)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL ||
+        (data == 0 && data_length != 0UL)) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x9342ca07UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL); /* data follows */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_bytes(writer, data, data_length);
+    }
+    return status;
+}
+
+/* Its answer: messages.botCallbackAnswer#36585ea4 flags:#
+   alert:flags.1?true has_url:flags.3?true native_ui:flags.4?true
+   message:flags.0?string url:flags.2?string cache_time:int. */
+int tg_mtproto_parse_bot_callback_answer(unsigned long constructor,
+                                         const unsigned char *body,
+                                         unsigned long body_length,
+                                         int *alert,
+                                         char *message,
+                                         unsigned long message_size,
+                                         char *url,
+                                         unsigned long url_size)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long flags;
+    unsigned long cache_time;
+
+    if (constructor != 0x36585ea4UL || body == 0 || alert == 0 ||
+        message == 0 || message_size == 0UL || url == 0 ||
+        url_size == 0UL) {
+        return 0;
+    }
+    *alert = 0;
+    message[0] = '\0';
+    url[0] = '\0';
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK ||
+        ((flags & 1UL) != 0UL &&
+         tg_read_string_copy(&reader, message, message_size) !=
+             TG_MTPROTO_TL_OK) ||
+        ((flags & 4UL) != 0UL &&
+         tg_read_string_copy(&reader, url, url_size) != TG_MTPROTO_TL_OK) ||
+        tg_mtproto_tl_read_u32(&reader, &cache_time) != TG_MTPROTO_TL_OK) {
+        message[0] = '\0';
+        url[0] = '\0';
+        return 0;
+    }
+    *alert = (flags & 2UL) != 0UL;
+    return 1;
+}
+
 #if !defined(TG_NO_GUI) /* the window alone shows the count */
 /* views:flags.10?int, which stands after the media behind
    reply_markup:flags.6?ReplyMarkup and entities:flags.7?Vector<MessageEntity>.
    `reader` stands right after a media that was read to its last byte; the
-   fields are read on a copy. A keyboard, or entities that do not read,
-   leave the count unknown. */
+   fields are read on a copy. A keyboard the caller has not read past, or
+   entities that do not read, leave the count unknown. */
 static void tg_read_views_after_media(const tg_mtproto_tl_reader *reader,
                                       unsigned long flags,
                                       tg_mtproto_message_text *out)
@@ -10901,7 +11264,8 @@ static void tg_mtproto_append_document_label(
    edit_date:flags.15?int post_author:flags.16?string. `reader` stands
    right after a media that was read to its last byte. The fields before
    the id are read on a copy, exactly; one that does not read, or a
-   keyboard, leaves the message without an album. Layer 214. */
+   keyboard the caller has not read past, leaves the message without an
+   album. Layer 214. */
 static void tg_read_album_id(const tg_mtproto_tl_reader *reader,
                              unsigned long flags, unsigned long *id_hi,
                              unsigned long *id_lo)
@@ -11332,6 +11696,41 @@ static tg_mtproto_tl_status tg_read_common_message_text(
         if (out->poll_id_hi == 0UL && out->poll_id_lo == 0UL) {
             tg_read_late_entities(reader, out->text, sizeof(out->text),
                                   caption_bytes, text_cut, kept_units);
+        }
+        if ((flags & 64UL) != 0UL &&
+            ((flags & 512UL) == 0UL || media_whole)) {
+            /* A keyboard right behind the text, or behind a media read to
+               its last byte: its labels go under the text, a row a line,
+               and what stands behind it (the album, the views) can be
+               read after all. A keyboard that does not read leaves the
+               message as it was without this. */
+            tg_mtproto_tl_reader behind = *reader;
+
+            if (tg_read_reply_markup(&behind, &tg_keyboard_scratch) ==
+                TG_MTPROTO_TL_OK) {
+                if (tg_keyboard_scratch.count > 0) {
+                    tg_append_keyboard_lines(&tg_keyboard_scratch,
+                                             out->text, sizeof(out->text));
+                    out->has_text = out->text[0] != '\0';
+                    out->photo_only = 0; /* the picture does not say them */
+                    out->button_count =
+                        (unsigned char)tg_keyboard_scratch.count;
+                    if (tg_keyboard_wanted != 0UL &&
+                        out->id == tg_keyboard_wanted) {
+                        tg_keyboard_kept = tg_keyboard_scratch;
+                        tg_keyboard_kept.message_id = out->id;
+                    }
+                }
+                if (media_whole) {
+                    tg_read_album_id(&behind, flags & ~64UL,
+                                     &out->grouped_id_hi,
+                                     &out->grouped_id_lo);
+                }
+#if !defined(TG_NO_GUI)
+                tg_read_views_after_media(&behind, flags & ~64UL, out);
+#endif
+                return TG_MTPROTO_TL_OK;
+            }
         }
         if (media_whole) {
             tg_read_album_id(reader, flags, &out->grouped_id_hi,
@@ -14208,9 +14607,9 @@ static void tg_album_test_message(tg_mtproto_tl_writer *w, unsigned long id,
 
 /* The album a message belongs to stands behind its media and whatever
    else the message carries before it: it is read behind a photo and a
-   file, through every field that can stand in between, and never from a
-   message with a keyboard, from one whose media is not read whole, or
-   from one that announces none. */
+   file, through every field that can stand in between, a keyboard among
+   them, and never from a message whose media is not read whole, or from
+   one that announces none. */
 static int tg_album_id_self_test(void)
 {
     static unsigned char rpc[1536];
@@ -14230,7 +14629,7 @@ static int tg_album_id_self_test(void)
     /* a file, with its timestamp and its ttl */
     tg_album_test_message(&w, 2005UL, 512UL | (1UL << 17), 0x52d8ccd9UL,
                           1UL | 4UL | 1024UL, 0x73UL);
-    /* a keyboard: left alone */
+    /* a keyboard, which is read through to the id behind it */
     tg_album_test_message(&w, 2004UL, 512UL | 64UL | (1UL << 17),
                           0x695150d7UL, 0UL, 0x74UL);
     /* a media that is not read (a geo point): no id is looked for */
@@ -14271,9 +14670,13 @@ static int tg_album_id_self_test(void)
         puts("login self-test: a file's album is not read");
         return 2;
     }
-    if (list.messages[3].grouped_id_lo != 0UL ||
-        list.messages[3].grouped_id_hi != 0UL ||
-        list.messages[4].grouped_id_lo != 0UL ||
+    if (list.messages[3].grouped_id_hi != 0xabcdUL ||
+        list.messages[3].grouped_id_lo != 0x74UL ||
+        list.messages[3].button_count != 0U) {
+        puts("login self-test: the album behind a keyboard is not read");
+        return 2;
+    }
+    if (list.messages[4].grouped_id_lo != 0UL ||
         list.messages[5].grouped_id_lo != 0UL ||
         list.messages[5].grouped_id_hi != 0UL ||
         list.messages[6].grouped_id_lo != 0UL) {
@@ -20131,6 +20534,232 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 
+    /* A bot's keyboard, reply_markup:flags.6 right behind the text: two
+       rows of buttons under a message, with a callback's data and a link;
+       the bot's own keyboard, with its placeholder, before the views of a
+       post; a button of no known kind, which leaves the text alone. The
+       keyboard asked for is the one kept. */
+    {
+        static const unsigned char key_data[3] = { 0x01U, 0x02U, 0x03U };
+        const tg_mtproto_keyboard *kb;
+        char answer[64];
+        char link[64];
+        int alert = 0;
+        int pass;
+
+        for (pass = 0; pass < 2; ++pass) {
+            tg_mtproto_keyboard_want(pass == 0 ? 2101UL : 2102UL);
+            tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+            if (
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 3UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 64UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2102UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 3002UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "pick") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x48a30254UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x77608b83UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x35bbdb6bUL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Yes") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_bytes(&writer, key_data, 3UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x35bbdb6bUL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "No") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_bytes(&writer, key_data, 0UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x77608b83UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x258aff05UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Site") != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "https://example.org/x") !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 64UL | (1UL << 10)) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2101UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 3001UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "post") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x85dd99d1UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 8UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x77608b83UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0xa2fa4880UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Hello") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x75d2698eUL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Code") != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "ABC-123") != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "type here") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 77UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_MESSAGE_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 64UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2100UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_PEER_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL, 0x12345678UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 3000UL) != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "odd") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x48a30254UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x77608b83UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 1UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0x12345678UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "What") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_parse_message_text_list(
+                    TG_MESSAGES_MESSAGES_CONSTRUCTOR, peer_rpc, writer.length,
+                    &text_list) != TG_MTPROTO_TL_OK ||
+                text_list.count != 3UL ||
+                strcmp(text_list.messages[0].text,
+                       "pick\n[Yes] [No]\n[Site]") != 0 ||
+                text_list.messages[0].button_count != 3U ||
+                strcmp(text_list.messages[1].text,
+                       "post\n[Hello] [Code]") != 0 ||
+                text_list.messages[1].button_count != 2U ||
+#if !defined(TG_NO_GUI)
+                text_list.messages[1].has_views != 1U ||
+                text_list.messages[1].views != 77UL ||
+#endif
+                strcmp(text_list.messages[2].text, "odd") != 0 ||
+                text_list.messages[2].button_count != 0U) {
+                return 2;
+            }
+            tg_mtproto_keyboard_want(0UL); /* held, nothing more asked */
+            kb = tg_mtproto_keyboard_kept();
+            if (pass == 0 &&
+                (kb->message_id != 2101UL || kb->count != 2 ||
+                 kb->keys[0].kind != TG_MTPROTO_KEY_TEXT ||
+                 strcmp(kb->keys[0].label, "Hello") != 0 ||
+                 kb->keys[1].kind != TG_MTPROTO_KEY_COPY ||
+                 kb->keys[1].row != 0U ||
+                 strcmp((const char *)kb->keys[1].data, "ABC-123") != 0)) {
+                return 2;
+            }
+            if (pass == 1 &&
+                (kb->message_id != 2102UL || kb->count != 3 ||
+                 kb->keys[0].kind != TG_MTPROTO_KEY_CALLBACK ||
+                 kb->keys[0].needs_password != 0U ||
+                 kb->keys[0].data_length != 3UL ||
+                 memcmp(kb->keys[0].data, key_data, 3U) != 0 ||
+                 kb->keys[1].kind != TG_MTPROTO_KEY_CALLBACK ||
+                 kb->keys[1].needs_password != 1U ||
+                 kb->keys[1].data_length != 0UL ||
+                 kb->keys[1].row != 0U ||
+                 kb->keys[2].kind != TG_MTPROTO_KEY_URL ||
+                 kb->keys[2].row != 1U || kb->keys[2].cut != 0U ||
+                 strcmp((const char *)kb->keys[2].data,
+                        "https://example.org/x") != 0)) {
+                return 2;
+            }
+        }
+        /* the button pressed: the request's bytes, and the bot's answer
+           read: an alert with a text, a link alone, something else */
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_messages_get_bot_callback_answer(
+                &writer, TG_PEER_USER_CONSTRUCTOR, 0UL, 0x55UL, 0x11UL,
+                0x22UL, 1, 2102UL, key_data, 3UL) != TG_MTPROTO_TL_OK ||
+            writer.length != 36UL ||
+            tg_read_u32_le(peer_rpc) != 0x9342ca07UL ||
+            tg_read_u32_le(peer_rpc + 4) != 1UL ||
+            tg_read_u32_le(peer_rpc + 12) != 0x55UL ||
+            tg_read_u32_le(peer_rpc + 28) != 2102UL ||
+            peer_rpc[32] != 3U || peer_rpc[33] != 0x01U ||
+            peer_rpc[35] != 0x03U ||
+            tg_mtproto_build_messages_get_bot_callback_answer(
+                &writer, TG_PEER_USER_CONSTRUCTOR, 0UL, 0x55UL, 0x11UL,
+                0x22UL, 1, 0UL, key_data, 3UL) == TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, 1UL | 2UL) != TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "Done") != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_bot_callback_answer(0x36585ea4UL, peer_rpc,
+                                                 writer.length, &alert,
+                                                 answer, sizeof(answer),
+                                                 link, sizeof(link)) != 1 ||
+            alert != 1 || strcmp(answer, "Done") != 0 || link[0] != '\0' ||
+            tg_mtproto_parse_bot_callback_answer(0x12345678UL, peer_rpc,
+                                                 writer.length, &alert,
+                                                 answer, sizeof(answer),
+                                                 link, sizeof(link)) != 0 ||
+            tg_mtproto_parse_bot_callback_answer(0x36585ea4UL, peer_rpc,
+                                                 writer.length - 4UL, &alert,
+                                                 answer, sizeof(answer),
+                                                 link, sizeof(link)) != 0) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_tl_write_u32(&writer, 4UL | 8UL) != TG_MTPROTO_TL_OK ||
+            tg_write_string(&writer, "https://example.org/go") !=
+                TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_write_u32(&writer, 30UL) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_parse_bot_callback_answer(0x36585ea4UL, peer_rpc,
+                                                 writer.length, &alert,
+                                                 answer, sizeof(answer),
+                                                 link, sizeof(link)) != 1 ||
+            alert != 0 || answer[0] != '\0' ||
+            strcmp(link, "https://example.org/go") != 0) {
+            return 2;
+        }
+        tg_mtproto_keyboard_want(1UL); /* nothing kept past the test */
+        tg_mtproto_keyboard_want(0UL);
+    }
+
     tg_mtproto_tl_writer_init(&writer, rpc, sizeof(rpc));
     if (tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
         tg_mtproto_tl_write_u32(&writer, 44UL) != TG_MTPROTO_TL_OK ||
@@ -20316,6 +20945,32 @@ int tg_mtproto_next_message_text(const unsigned char *body,
     return 0;
 }
 #endif /* !TG_NO_GUI */
+
+/* Reads the messages of an answer for the sake of the keyboard asked for
+   (tg_mtproto_keyboard_want): 1 when it is kept now. */
+int tg_mtproto_keyboard_scan(const unsigned char *body,
+                             unsigned long body_length)
+{
+    tg_mtproto_message_text probe; /* as the resync's: read and let go */
+    tg_mtproto_tl_reader reader;
+    unsigned long pos;
+
+    if (body == 0 || tg_keyboard_wanted == 0UL) {
+        return 0;
+    }
+    for (pos = 0UL; pos + 16UL <= body_length; pos += 4UL) {
+        if (tg_read_u32_le(body + pos) != TG_MESSAGE_CONSTRUCTOR) {
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&reader, body, body_length);
+        reader.offset = pos;
+        (void)tg_read_common_message_text(&reader, &probe, 0, 0);
+        if (tg_keyboard_kept.message_id == tg_keyboard_wanted) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 int tg_mtproto_resync_message_text(tg_mtproto_tl_reader *reader,
                                    unsigned long fallback_offset)

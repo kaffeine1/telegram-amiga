@@ -420,6 +420,9 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
                 if (tg_gui_driver_take_marks(m, row)) {
                     state->msg_gen++;
                 }
+                /* the buttons a bot has on it now: what its menu offers */
+                m->buttons = row->buttons > 255 ? 255U
+                                                : (unsigned char)row->buttons;
                 /* the mention as Telegram has it now: read elsewhere, the
                    mark goes */
                 m->mention_unread =
@@ -566,6 +569,8 @@ static void tg_gui_driver_on_message(void *ctx, const tg_chat_message_row *row)
     message->edited = row->edited ? 1U : 0U;
     message->has_views = row->has_views ? 1U : 0U;
     message->views = row->has_views ? row->views : 0UL;
+    message->buttons = row->buttons > 255 ? 255U
+                                          : (unsigned char)row->buttons;
     if (row->reply_quote != 0 && row->reply_quote[0] != '\0') {
         tg_gui_driver_copy_latin1(message->reply_text,
                                   sizeof(message->reply_text), row->reply_quote);

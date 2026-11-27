@@ -968,6 +968,18 @@ MSG_ST_COULD_NOT_BLOCK (517//)
 Could not block (network?)
 MSG_ST_COULD_NOT_UNBLOCK (518//)
 Could not unblock (network?)
+MSG_ST_READING_THE_BUTTONS (519//)
+Reading the buttons...
+MSG_ST_NO_BUTTONS_ANY_MORE (520//)
+That message has no buttons any more
+MSG_ST_ASKING_THE_BOT (521//)
+Asking the bot...
+MSG_ST_BUTTON_PRESSED (522//)
+Button pressed
+MSG_ST_BUTTON_NEEDS_TELEGRAM_APP (523//)
+That button needs Telegram's own app
+MSG_ST_THE_BOT_DID_NOT_ANSWER (524//)
+The bot did not take it. Try again.
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1118,6 +1130,12 @@ MSG_RQ_BLOCK_CANCEL (653//)
 Block|Cancel
 MSG_RQ_UNBLOCK_CANCEL (654//)
 Unblock|Cancel
+MSG_RQ_THE_BOT_SAYS (655//)
+The bot says
+MSG_RQ_OPEN_LINK (656//)
+Open link
+MSG_RQ_OPEN_CANCEL (657//)
+Open|Cancel
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1317,6 +1335,9 @@ MSG_W_ALREADY_BLOCKED (956//)
 You have already blocked this person:\n\n
 MSG_W_UNBLOCK_THEM (957//)
 \n\nUnblock them?
+MSG_W_THE_BUTTON_OPENS_THIS_LINK (958//)
+The button opens this link:\n\
+\n
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -1623,6 +1644,10 @@ MSG_G_BLOCK (1450//)
 Block...
 MSG_G_UNBLOCK (1451//)
 Unblock
+MSG_G_BUTTONS (1452//)
+Buttons...
+MSG_G_PRESS_ENTER_TO_START_THE_BOT (1453//)
+Press Enter to start the bot
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2813,3 +2838,23 @@ MSG_T_NOT_BLOCKED_ANY_MORE (2349//)
 Not blocked any more.
 MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED (2350//)
 Only the private chat with a person can be blocked.
+MSG_T_HELP_PRESS_N (2351//)
+  /press [n]      list a bot's buttons; /press 2 presses the second
+MSG_T_NO_BUTTONS_SHOWN_HERE_YET (2352//)
+No message with buttons shown here yet (/history shows the last ones).
+MSG_T_THAT_MESSAGE_HAS_NO_BUTTONS (2353//)
+That message has no buttons any more.
+MSG_T_BUTTONS_PRESS_ONE (2354//)
+Buttons (press one with /press and its number):\n
+MSG_T_NO_SUCH_BUTTON (2355//)
+No such button: /press alone lists them.
+MSG_T_BUTTON_PRESSED (2356//)
+Pressed.
+MSG_T_BUTTON_NEEDS_TELEGRAM_APP (2357//)
+That button needs Telegram's own app.
+MSG_T_THE_BOT_SAYS (2358//)
+The bot says: 
+MSG_T_THE_BUTTON_LINK (2359//)
+The button's link: 
+MSG_T_THE_BUTTON_TEXT (2360//)
+The button's text: 

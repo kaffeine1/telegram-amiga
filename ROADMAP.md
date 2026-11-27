@@ -1457,11 +1457,31 @@ self-test for each thing). The small ones first, one commit each:
 - The ICONIFY tooltype (and --iconify from a Shell): the window opens,
   connects and gives way to the AppIcon.
 
+Then the middle-sized ones:
+
+- A bot's buttons. The message reader reads reply_markup where it stands
+  right behind the text, or behind a media read to its last byte
+  (replyInlineMarkup and replyKeyboardMarkup, every KeyboardButton of
+  the layer stepped over; keyboardButtonRequestPeer, whose peer type is
+  a tree of its own, leaves the message without buttons). The labels go
+  under the text, a row a line, and one keyboard at a time is kept: the
+  one of the message asked for. "Buttons..." in a message's menu reads
+  the message again (a bot changes its buttons at will) and puts them
+  in the menu's place, the way a poll's answers are. A callback goes to
+  the bot (messages.getBotCallbackAnswer; BOT_RESPONSE_TIMEOUT, a bot
+  that does its work and says nothing, counts as pressed), a link asks
+  first, a text to copy goes to the clipboard, a button of the bot's
+  own keyboard sends its whole text. /press in the text client. A chat
+  with a bot that holds no message yet offers to start it: ENTER sends
+  /start. Reading the keyboard also gives the views and the album of a
+  message that has one, which used to be lost behind it.
+
 Tried live with the test account, two sessions of it for what one
 device tells another, and seen in a window on the OS4 VM in Italian.
-The 68000 text client grew by about 5 KB with its share of them.
+The 68000 text client grew by about 5 KB with its share of the small
+ones, and by 7 KB more with the bots' buttons.
 
-Next, in this order: bot buttons and Start, jump to a date, comments on
+Next, in this order: jump to a date, comments on
 channel posts (the topics view serves), active sessions, translation,
 t.me links opened inside Amigram, scheduled messages, contacts,
 password recovery by email, a richer ARexx port. The large ones (chat

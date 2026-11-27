@@ -7994,6 +7994,28 @@ static int tg_gui_window_send_input(tg_gui_state *state, int quiet)
 }
 
 /* The status line of a composer that keeps the focus after a send. */
+static void tg_gui_window_sent_status(tg_gui_state *state);
+
+/* An empty chat with a bot: /start goes to it, as the Start button of the
+   other clients does. Not sent, it stays in the composer and the status
+   line says why. */
+static void tg_gui_window_bot_start(tg_gui_state *state,
+                                    tg_gui_backend *backend)
+{
+    strcpy(state->input, "/start");
+    state->input_caret = 6;
+    state->composing = 1;
+    state->cursor_on = 1;
+    if (tg_gui_window_send_input(state, 0) == 0) {
+        state->input[0] = '\0';
+        state->input_caret = 0;
+        state->history_pos = -1;
+        state->history_draft[0] = '\0';
+        tg_gui_window_sent_status(state);
+    }
+    tg_gui_window_paint(state, backend);
+}
+
 static void tg_gui_window_sent_status(tg_gui_state *state)
 {
     tg_gui_window_copy(state->status, sizeof(state->status),
@@ -12738,6 +12760,95 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     es.es_TextFormat = (APTR)body;
     es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OK);
     (void)tg_gui_amiga_easyreq_args(win, &es);
+}
+
+/* A bot's button chosen from the menu: pressed, and what comes of it
+   shown. The bot's word goes on the status line, or in a requester when
+   the bot wants it read; a link is opened after a question, because the
+   button's label does not say where it leads; a text goes to the
+   clipboard. */
+static void tg_gui_window_key_press(tg_gui_state *state, struct Window *win,
+                                    tg_gui_backend *backend, int index)
+{
+    static char got[768];
+    static char lines[sizeof(got) + 32];
+    static char body[sizeof(lines) + 400];
+    struct EasyStruct es;
+    unsigned long i;
+    unsigned long o;
+    unsigned long n;
+    int what;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_ASKING_THE_BOT));
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    what = tg_gui_session_key_press(index, got, sizeof(got), stdout);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    if (what == TG_GUI_KEY_ALERT) {
+        tg_gui_requester_text(body, sizeof(body), got, 12);
+        tg_gui_window_copy(state->status, sizeof(state->status), "");
+        tg_gui_window_paint(state, backend);
+        /* APTR: the fields are STRPTR on some systems, UBYTE * on others. */
+        es.es_Title = (APTR)TG_STR(MSG_RQ_THE_BOT_SAYS);
+        es.es_TextFormat = (APTR)body;
+        es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OK);
+        (void)tg_gui_amiga_easyreq_args(win, &es);
+        return;
+    }
+    if (what == TG_GUI_KEY_LINK) {
+        /* the link, sixty letters a line: a requester does not wrap */
+        o = 0UL;
+        for (i = 0UL; got[i] != '\0' && o + 2UL < sizeof(lines); ++i) {
+            if (i != 0UL && i % 60UL == 0UL) {
+                lines[o++] = '\n';
+            }
+            lines[o++] = got[i];
+        }
+        lines[o] = '\0';
+        tg_gui_window_copy(body, sizeof(body),
+                           TG_STR(MSG_W_THE_BUTTON_OPENS_THIS_LINK));
+        n = (unsigned long)strlen(body);
+        tg_gui_requester_text(body + n, sizeof(body) - n, lines, 8);
+        tg_gui_window_copy(state->status, sizeof(state->status), "");
+        tg_gui_window_paint(state, backend);
+        es.es_Title = (APTR)TG_STR(MSG_RQ_OPEN_LINK);
+        es.es_TextFormat = (APTR)body;
+        es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OPEN_CANCEL);
+        if (tg_gui_amiga_easyreq_args(win, &es) != 1L) {
+            return; /* cancelled */
+        }
+        /* as a link in a message: the browser, or the clipboard when no
+           OpenURL/URLOpen command is around */
+        if (tg_platform_open_url(got) == 0) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               TG_STR(MSG_ST_OPENING_URL_IN_THE_BROWSER));
+        } else if (tg_gui_clip_write_text(got)) {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               TG_STR(MSG_ST_URL_COPIED_NO_OPENURL_COMMAND));
+        } else {
+            tg_gui_window_copy(state->status, sizeof(state->status),
+                               TG_STR(MSG_ST_COULD_NOT_OPEN_THE_URL));
+        }
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (what == TG_GUI_KEY_SAY) {
+        tg_gui_window_copy(state->status, sizeof(state->status), got);
+    } else if (what == TG_GUI_KEY_COPY) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           tg_gui_clip_write_text(got)
+                               ? TG_STR(MSG_ST_COPIED_TO_CLIPBOARD)
+                               : TG_STR(MSG_ST_COPY_FAILED));
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           what == TG_GUI_KEY_DONE
+                               ? TG_STR(MSG_ST_BUTTON_PRESSED)
+                           : what == TG_GUI_KEY_UNSERVED
+                               ? TG_STR(MSG_ST_BUTTON_NEEDS_TELEGRAM_APP)
+                               : TG_STR(MSG_ST_THE_BOT_DID_NOT_ANSWER));
+    }
+    tg_gui_window_paint(state, backend);
 }
 
 /* Who read...: asks Telegram who read this message of the user's own and
@@ -18049,6 +18160,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     (void)tg_gui_composer_emoticon(
                         state, (unsigned long)strlen(state->input));
                     state->emoticon_undo_at = -1;
+                    if (state->input[0] == '\0' && state->bot_start &&
+                        state->edit_to_id == 0UL) {
+                        /* ENTER on an empty line starts the bot */
+                        tg_gui_window_bot_start(state, &backend);
+                        continue;
+                    }
                     if (state->input[0] != '\0') {
                         if (state->edit_to_id != 0UL) {
                             state->in_sel_active = 0;
@@ -18217,6 +18334,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     /* RETURN opens the arrow-focused chat. */
                     tg_gui_window_open_selection(state, state->nav_chat,
                                                  &backend);
+                } else if ((msg_code == 13 || msg_code == 10) &&
+                           tg_gui_session_is_open() && state->bot_start &&
+                           state->input[0] == '\0') {
+                    /* RETURN in an empty chat with a bot starts the bot. */
+                    tg_gui_window_bot_start(state, &backend);
                 } else if ((msg_code == 13 || msg_code == 10) &&
                            tg_gui_session_is_open()) {
                     /* RETURN starts composing a message for the open chat. */
@@ -19712,6 +19834,43 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->status,
                             sizeof(state->status),
                             TG_STR(MSG_ST_CLICK_TO_SELECT_SHIFT_CLICK));
+                    } else if (it == TG_GUI_CTX_KEYS && m != 0 &&
+                               m->id != 0UL) {
+                        /* Buttons...: the bot's buttons take the menu,
+                           read from Telegram as they are now. */
+                        tg_gui_window_copy(state->status,
+                                           sizeof(state->status),
+                                           TG_STR(MSG_ST_READING_THE_BUTTONS));
+                        tg_gui_window_paint(state, &backend);
+                        state->poll_mask = 0UL;
+                        state->poll_multiple = 0;
+                        state->poll_item_count = tg_gui_session_keys(
+                            m->id, &state->poll_items[0][0],
+                            TG_GUI_POLL_ITEM_LEN, TG_GUI_POLL_ITEMS_MAX,
+                            stdout);
+                        if (state->poll_item_count > 0) {
+                            state->ctx_react = 0;
+                            state->ctx_poll = 2;
+                            state->ctx_visible = 1;
+                            state->ctx_hover = -1;
+                            state->ctx_w = tg_gui_context_menu_measure(
+                                state, &backend);
+                            tg_gui_window_copy(state->status,
+                                               sizeof(state->status), "");
+                        } else {
+                            tg_gui_window_copy(
+                                state->status, sizeof(state->status),
+                                state->poll_item_count == 0
+                                    ? TG_STR(MSG_ST_NO_BUTTONS_ANY_MORE)
+                                    : TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+                            state->poll_item_count = 0;
+                        }
+                    } else if (was_poll == 2 && m != 0 && m->id != 0UL &&
+                               it >= TG_GUI_CTX_POLL_FIRST &&
+                               it < TG_GUI_CTX_POLL_FIRST +
+                                        state->poll_item_count) {
+                        tg_gui_window_key_press(state, ctx.window, &backend,
+                                                it - TG_GUI_CTX_POLL_FIRST);
                     } else if (it == TG_GUI_CTX_POLL && m != 0 &&
                                m->id != 0UL) {
                         /* Vote...: the poll's answers take the menu. */
@@ -19735,7 +19894,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                 sizeof(state->status),
                                 TG_STR(MSG_ST_OPEN_THE_CHAT_AGAIN_TO));
                         }
-                    } else if (was_poll && m != 0 && m->id != 0UL &&
+                    } else if (was_poll == 1 && m != 0 && m->id != 0UL &&
                                it >= TG_GUI_CTX_POLL_FIRST &&
                                it < TG_GUI_CTX_POLL_FIRST +
                                         state->poll_item_count) {
@@ -19762,7 +19921,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         } else {
                             tg_gui_window_poll_vote(state, &backend, m, bit);
                         }
-                    } else if (was_poll && m != 0 && m->id != 0UL &&
+                    } else if (was_poll == 1 && m != 0 && m->id != 0UL &&
                                it == TG_GUI_CTX_POLL_SEND) {
                         if (state->poll_mask == 0UL) {
                             tg_gui_window_copy(state->status,
@@ -20695,6 +20854,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                            when the box opens empty (it paints either way). */
                         tg_gui_window_filter_chats(state, &backend);
                         }
+                    } else if (hit == TG_GUI_HIT_SEND && state->bot_start &&
+                               state->input[0] == '\0' &&
+                               state->edit_to_id == 0UL) {
+                        /* Send in an empty chat with a bot starts it. */
+                        tg_gui_window_bot_start(state, &backend);
                     } else if (hit == TG_GUI_HIT_SEND && state->composing) {
                         state->in_sel_active = 0; /* input is consumed below */
                         if (state->input[0] != '\0') {
