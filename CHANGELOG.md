@@ -132,6 +132,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   used to hide. A chat with a bot that holds no message yet says "Press
   Enter to start the bot": ENTER, or a click on Send, sends it `/start`,
   and the header says "bot" there too.
+- A link to a public chat on Telegram (`t.me/name`, `t.me/name/123`)
+  clicked in a message opens that chat in Amigram, at the message the
+  link names, instead of going to the browser. Invitations, sticker
+  sets and the other kinds of `t.me` link still go to the browser.
 - Devices: "Devices..." in the Amigram menu lists where the account is
   logged in (`account.getAuthorizations`): the program, the machine,
   its system, the place and when it was last used, this one marked. The

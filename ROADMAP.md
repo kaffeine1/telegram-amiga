@@ -1506,6 +1506,13 @@ Then the middle-sized ones:
   ending the others was not, since it would end the test account's
   sessions on the real machines.
 
+- t.me links: a click on a link to a public chat (t.me/name,
+  t.me/name/123, telegram.me, t.me/s/name) asks Telegram for that exact
+  name (contacts.resolveUsername) and opens the chat through what a
+  search result opens with, then shows the message the link names.
+  Invitations, sticker sets, private chats' /c/ links and bots' web
+  apps are left to the browser. Tried live on two public channels.
+
 Tried live with the test account, two sessions of it for what one
 device tells another, and seen in a window on the OS4 VM in Italian.
 The 68000 text client grew by about 5 KB with its share of the small
@@ -1514,8 +1521,7 @@ count and by 5 KB with the devices: 686 KB now, 18 KB more than before
 this round. Worth a look before a release: what of this the plain 68000
 needs.
 
-Next, in this order: translation,
-t.me links opened inside Amigram, scheduled messages, contacts,
+Next, in this order: translation, scheduled messages, contacts,
 password recovery by email, a richer ARexx port. The large ones (chat
 folders, profile editing, group administration, quoting part of a
 message, sending stickers, GIFs and a location, voice in the window,

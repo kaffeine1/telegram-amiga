@@ -1654,6 +1654,13 @@ void tg_gui_window_start_iconified(int on);
 /* Whether a window in this mode, with the session open or not, may do
    so. */
 int tg_gui_may_start_iconified(int mode, int session_open);
+/* A link to a public chat on Telegram: t.me/name, https://t.me/name/123,
+   telegram.me/name, t.me/s/name. 1 = it is one: `name` holds the chat's
+   public name and *message_id the message the link names, 0 when it
+   names none. An invitation, a sticker set, a share, the link of a
+   private chat (t.me/c/...) or of a bot's web app are not: 0. */
+int tg_gui_tme_link(const char *url, char *name, unsigned long name_size,
+                    unsigned long *message_id);
 /* A date typed where words are searched: day, month and year in that
    order with '/', '.' or '-' between them (12/11/2026, 12.11.26), or the
    year first (2026-11-12). 1 = a day that exists, from 2013 on; anything

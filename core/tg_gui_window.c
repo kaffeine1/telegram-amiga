@@ -12766,6 +12766,36 @@ static void tg_gui_window_poll_voters(tg_gui_state *state, struct Window *win,
     (void)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* A click on a link to a public chat on Telegram opens that chat here, at
+   the message the link names. 1 = opened here; 0 = no such link, or
+   Telegram did not find the chat: the browser gets the link then. */
+static int tg_gui_window_open_tme(tg_gui_state *state,
+                                  tg_gui_backend *backend, const char *url)
+{
+    char name[40];
+    unsigned long message_id = 0UL;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        !tg_gui_tme_link(url, name, sizeof(name), &message_id)) {
+        return 0;
+    }
+    tg_gui_chat_touched = 1;
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_OPENING_THE_CHAT));
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_open_username(name, message_id, stdout) != 0) {
+        return 0;
+    }
+    state->nav_chat = -1;
+    if (message_id == 0UL) {
+        state->selected_msg = -1;
+        state->transcript_scroll = 0;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
+    return 1;
+}
+
 /* Comments...: the comments of a channel's post take the transcript, and
    what is written there is a comment. ESC comes back to the post. */
 static void tg_gui_window_open_comments(tg_gui_state *state,
@@ -20508,7 +20538,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                       clicked_url,
                                                       sizeof(clicked_url))) {
                                         dbl_last_id = 0UL; /* never a reply */
-                                        if (tg_platform_open_url(
+                                        if (tg_gui_window_open_tme(
+                                                state, &backend,
+                                                clicked_url)) {
+                                            /* a chat on Telegram: opened
+                                               here, not in the browser */
+                                        } else if (tg_platform_open_url(
                                                 clicked_url) == 0) {
                                             tg_gui_window_copy(
                                                 state->status,

@@ -8036,6 +8036,123 @@ int tg_gui_may_start_iconified(int mode, int session_open)
     return mode == TG_GUI_MODE_CHAT && session_open != 0;
 }
 
+/* `text` starts with `word`, whatever the case of its letters. */
+static int tg_gui_starts_nocase(const char *text, const char *word)
+{
+    while (*word != '\0') {
+        char a = *text++;
+        char b = *word++;
+
+        if (a >= 'A' && a <= 'Z') {
+            a = (char)(a - 'A' + 'a');
+        }
+        if (a != b) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int tg_gui_tme_link(const char *url, char *name, unsigned long name_size,
+                    unsigned long *message_id)
+{
+    /* first words of a t.me path that are not a chat's name */
+    static const char *const other[] = {
+        "joinchat", "addstickers", "addemoji", "share", "proxy", "socks",
+        "login", "setlanguage", "addtheme", "confirmphone", "invoice",
+        "giftcode", "boost", "addlist", "contact", "nft", "stars"
+    };
+    const char *p = url;
+    unsigned long n = 0UL;
+    unsigned long id = 0UL;
+    unsigned int k;
+    int digits = 0;
+
+    if (url == 0 || name == 0 || name_size < 6UL || message_id == 0) {
+        return 0;
+    }
+    name[0] = '\0';
+    *message_id = 0UL;
+    if (tg_gui_starts_nocase(p, "https://")) {
+        p += 8;
+    } else if (tg_gui_starts_nocase(p, "http://")) {
+        p += 7;
+    }
+    if (tg_gui_starts_nocase(p, "www.")) {
+        p += 4;
+    }
+    if (tg_gui_starts_nocase(p, "t.me/")) {
+        p += 5;
+    } else if (tg_gui_starts_nocase(p, "telegram.me/")) {
+        p += 12;
+    } else {
+        return 0;
+    }
+    if (p[0] == 's' && p[1] == '/') {
+        p += 2; /* t.me/s/name: the same channel, as a web page */
+    }
+    /* a public name: a letter, then letters, digits and '_', 4 to 32 */
+    if (!((p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z'))) {
+        return 0;
+    }
+    while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+           (*p >= '0' && *p <= '9') || *p == '_') {
+        if (n + 1UL >= name_size || n >= 32UL) {
+            name[0] = '\0';
+            return 0;
+        }
+        name[n++] = *p++;
+    }
+    name[n] = '\0';
+    if (n < 4UL) {
+        name[0] = '\0';
+        return 0;
+    }
+    for (k = 0U; k < sizeof(other) / sizeof(other[0]); ++k) {
+        if (strlen(other[k]) == n && tg_gui_starts_nocase(name, other[k])) {
+            name[0] = '\0';
+            return 0;
+        }
+    }
+    if (*p == '/') {
+        ++p;
+        while (*p >= '0' && *p <= '9' && digits < 10) {
+            id = id * 10UL + (unsigned long)(*p - '0');
+            ++digits;
+            ++p;
+        }
+        if (*p == '/') {
+            /* name/thread/message: the message is the last number */
+            unsigned long last = 0UL;
+            int more = 0;
+
+            ++p;
+            while (*p >= '0' && *p <= '9' && more < 10) {
+                last = last * 10UL + (unsigned long)(*p - '0');
+                ++more;
+                ++p;
+            }
+            if (digits == 0 || more == 0) {
+                name[0] = '\0';
+                return 0;
+            }
+            id = last;
+        }
+    }
+    /* what may follow: the end, a query, an anchor; anything else is a
+       link of another kind (a bot's web app, a path this client does
+       not know) */
+    if (*p != '\0' && *p != '?' && *p != '#') {
+        name[0] = '\0';
+        return 0;
+    }
+    if (id > 0x7fffffffUL) {
+        id = 0UL;
+    }
+    *message_id = id;
+    return 1;
+}
+
 int tg_gui_parse_date(const char *text, int *year, int *month, int *day)
 {
     static const int month_days[12] = { 31, 28, 31, 30, 31, 30,
@@ -11363,6 +11480,52 @@ static int tg_gui_notify_menu_self_test(void)
         tg_gui_may_start_iconified(TG_GUI_MODE_LOGIN_QR, 0)) {
         puts("gui self-test: when a window may start iconified wrong");
         return 2;
+    }
+    /* A link to a public chat on Telegram: with and without its scheme,
+       with a message, as a web page, with a query; and the t.me links
+       that are no chat's. */
+    {
+        static const struct {
+            const char *url;
+            int ok;
+            const char *name;
+            unsigned long id;
+        } links[] = {
+            { "https://t.me/amigram1", 1, "amigram1", 0UL },
+            { "t.me/amigram1/42", 1, "amigram1", 42UL },
+            { "HTTP://T.ME/Durov", 1, "Durov", 0UL },
+            { "https://telegram.me/telegram/457", 1, "telegram", 457UL },
+            { "https://t.me/s/telegram", 1, "telegram", 0UL },
+            { "https://t.me/some_bot?start=abc", 1, "some_bot", 0UL },
+            { "https://t.me/forum_chat/7/1234", 1, "forum_chat", 1234UL },
+            { "https://www.t.me/name_1#x", 1, "name_1", 0UL },
+            { "https://t.me/+AbCdEf123", 0, "", 0UL },
+            { "https://t.me/joinchat/AbCdEf", 0, "", 0UL },
+            { "https://t.me/addstickers/Animals", 0, "", 0UL },
+            { "https://t.me/c/1234567/89", 0, "", 0UL },
+            { "https://t.me/share/url?url=x", 0, "", 0UL },
+            { "https://t.me/some_bot/app", 0, "", 0UL },
+            { "https://t.me/abc", 0, "", 0UL },
+            { "https://t.me/1name", 0, "", 0UL },
+            { "https://t.me/", 0, "", 0UL },
+            { "https://example.org/t.me/name", 0, "", 0UL },
+            { "https://t.me/name with space", 0, "", 0UL },
+            { "", 0, "", 0UL }
+        };
+        unsigned int k;
+
+        for (k = 0U; k < sizeof(links) / sizeof(links[0]); ++k) {
+            char got[40];
+            unsigned long id = 99UL;
+            int ok = tg_gui_tme_link(links[k].url, got, sizeof(got), &id);
+
+            if (ok != links[k].ok || strcmp(got, links[k].name) != 0 ||
+                id != links[k].id) {
+                printf("gui self-test: the link \"%s\" read wrong\n",
+                       links[k].url);
+                return 2;
+            }
+        }
     }
     /* A date typed where words are searched: the three orders it is
        written in, a day that does not exist, and what is only words. */

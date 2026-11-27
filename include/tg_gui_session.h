@@ -467,6 +467,13 @@ int tg_gui_session_who_read(unsigned long message_id, char *out,
                             unsigned long size, char *emsg,
                             unsigned long emsg_size, FILE *stream);
 
+/* A public chat by its name (a t.me link clicked in a message): asked of
+   Telegram by that exact name, added to the chats this client knows and
+   opened; with a message id, shown around that message. 0 = opened, 1 =
+   Telegram knows no such name, 2 = failed. */
+int tg_gui_session_open_username(const char *username,
+                                 unsigned long message_id, FILE *stream);
+
 /* Where the account is logged in: the devices written to `out` as the
    window draws text, a line each, this one marked; how many, -1 when
    Telegram did not answer. tg_gui_session_devices_end_others logs every

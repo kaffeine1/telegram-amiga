@@ -728,6 +728,9 @@ Messages
 - A channel's post that takes comments says how many it has beside its
   views, and "Comments..." in its menu opens them. What you write
   there is a comment on the post; Esc goes back to the channel.
+- A click on a link to a public chat on Telegram (t.me/name) opens
+  that chat in Amigram, at the message the link names; other links go
+  to the browser as before.
 - A chat with pinned messages shows the latest under its header,
   "Pinned:" and how it starts; a click shows the chat around it, and
   the next click the one pinned before. Pin and Unpin are in a
@@ -1105,6 +1108,9 @@ Messaggi
 - Un post di un canale che accetta commenti dice quanti ne ha accanto
   alle visualizzazioni, e "Comments..." nel suo menu li apre. Quello
   che scrivi li' e' un commento al post; Esc torna al canale.
+- Un clic su un link a una chat pubblica di Telegram (t.me/nome) apre
+  quella chat in Amigram, al messaggio che il link indica; gli altri
+  link vanno al browser come prima.
 - Una chat con messaggi fissati mostra l'ultimo sotto l'intestazione,
   "Pinned:" e come comincia; un click mostra la chat attorno a quel
   messaggio, e il click dopo quello fissato prima. Pin e Unpin sono nel

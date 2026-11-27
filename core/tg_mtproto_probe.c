@@ -35512,6 +35512,97 @@ int tg_gui_session_search_open(const char *query, FILE *stream)
     return tg_gui_session_search_open_result(0, stream) == 0 ? 0 : 1;
 }
 
+#if !defined(TG_NO_GUI) /* a link clicked in the window */
+/* Public: a public chat opened by its name. */
+int tg_gui_session_open_username(const char *username,
+                                 unsigned long message_id, FILE *stream)
+{
+    static unsigned char query[160];
+    static tg_mtproto_peer_cache_entry found; /* out of the scratch below */
+    static const char label[] = "mtproto contacts.resolveUsername";
+    char why[48];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long prev_timeout;
+    unsigned long i;
+    int have = 0;
+    int rc;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || username == 0 ||
+        username[0] == '\0' || strlen(username) > 64UL) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    /* the layer's own form first; the older one where a server refuses
+       it for a reason that is not the name's */
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    rc = tg_mtproto_build_contacts_resolve_username_flags(&writer,
+                                                          username) ==
+                 TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, why, sizeof(why), quiet)
+             : 2;
+    if (rc == 1 && strstr(why, "USERNAME") == 0) {
+        tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+        rc = tg_mtproto_build_contacts_resolve_username(&writer, username) ==
+                     TG_MTPROTO_TL_OK
+                 ? tg_gui_session_peer_request(query, writer.length, &result,
+                                               label, why, sizeof(why),
+                                               quiet)
+                 : 2;
+    }
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    if (rc == 0 &&
+        tg_mtproto_parse_resolved_peer_cache(
+            result.result_constructor, result.result_body,
+            result.result_body_length, &tg_peer_work_a) == TG_MTPROTO_TL_OK) {
+        /* the chat of that name, among what the answer lists */
+        for (i = 0UL; i < tg_peer_work_a.count && !have; ++i) {
+            const char *a = tg_peer_work_a.entries[i].username;
+            const char *b = username;
+
+            while (*a != '\0' && *b != '\0' &&
+                   (*a | 0x20) == (*b | 0x20)) {
+                ++a;
+                ++b;
+            }
+            if (*a == '\0' && *b == '\0') {
+                found = tg_peer_work_a.entries[i];
+                have = 1;
+            }
+        }
+        if (!have && tg_peer_work_a.count > 0UL) {
+            found = tg_peer_work_a.entries[0];
+            have = 1;
+        }
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 1) {
+        tg_gui_log("link: Telegram knows no chat of that name");
+        return 1;
+    }
+    if (rc != 0 || !have) {
+        tg_gui_log("link: the name could not be asked");
+        return 2;
+    }
+    if (tg_gui_search_open_entry(&found, stream) != 0) {
+        tg_gui_log("link: the chat could not be opened");
+        return 2;
+    }
+    if (message_id != 0UL) {
+        (void)tg_gui_session_jump_to_message(message_id, stream);
+    }
+    tg_gui_log("link: a chat opened by its name");
+    return 0;
+}
+#endif
+
 /* What Play can hand to a player: a video, an animation, a voice message or
    an audio file. Not a sticker, a photo or any other file. */
 static int tg_gui_doc_playable(const tg_mtproto_document_meta *doc)
