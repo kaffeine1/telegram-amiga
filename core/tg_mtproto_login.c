@@ -19429,6 +19429,87 @@ unsigned long tg_mtproto_find_message_date(const unsigned char *body,
     return 0UL;
 }
 
+#if !defined(TG_NO_GUI) /* the chat list's lines: the window's alone */
+/* The same scan, giving the message itself: its text (or the label of what
+   it carries), who wrote it, its date. 1 = found and `out` holds it; 0 =
+   not in the body, `out` zeroed. */
+int tg_mtproto_find_message_text(const unsigned char *body,
+                                 unsigned long body_length,
+                                 unsigned long peer_constructor,
+                                 unsigned long peer_id_hi,
+                                 unsigned long peer_id_lo,
+                                 unsigned long message_id,
+                                 tg_mtproto_message_text *out)
+{
+    tg_mtproto_dialog_peer dest;
+    tg_mtproto_tl_reader reader;
+    unsigned long pos;
+
+    if (out == 0) {
+        return 0;
+    }
+    if (body != 0 && message_id != 0UL) {
+        for (pos = 0UL; pos + 16UL <= body_length; pos += 4UL) {
+            unsigned long constructor = tg_read_u32_le(body + pos);
+
+            if (constructor != TG_MESSAGE_CONSTRUCTOR &&
+                constructor != TG_MESSAGE_SERVICE_CONSTRUCTOR) {
+                continue;
+            }
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = pos;
+            memset(out, 0, sizeof(*out));
+            memset(&dest, 0, sizeof(dest));
+            (void)tg_read_common_message_text(&reader, out, &dest, 0);
+            if (out->id == message_id && out->date != 0UL &&
+                dest.peer_constructor == peer_constructor &&
+                dest.id_hi == peer_id_hi && dest.id_lo == peer_id_lo) {
+                return 1;
+            }
+        }
+    }
+    memset(out, 0, sizeof(*out));
+    return 0;
+}
+
+/* The messages of a reply body one after the other, wherever they stand
+   (a page of dialogs carries the top message of each chat): looks from
+   *pos on, 1 = `out` holds the next one and `dest` its chat, *pos moved
+   past its start; 0 = no more. */
+int tg_mtproto_next_message_text(const unsigned char *body,
+                                 unsigned long body_length,
+                                 unsigned long *pos,
+                                 tg_mtproto_message_text *out,
+                                 tg_mtproto_dialog_peer *dest)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long at;
+
+    if (body == 0 || pos == 0 || out == 0 || dest == 0) {
+        return 0;
+    }
+    for (at = (*pos + 3UL) & ~3UL; at + 16UL <= body_length; at += 4UL) {
+        unsigned long constructor = tg_read_u32_le(body + at);
+
+        if (constructor != TG_MESSAGE_CONSTRUCTOR &&
+            constructor != TG_MESSAGE_SERVICE_CONSTRUCTOR) {
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&reader, body, body_length);
+        reader.offset = at;
+        memset(dest, 0, sizeof(*dest));
+        (void)tg_read_common_message_text(&reader, out, dest, 0);
+        if (out->id != 0UL && out->date != 0UL &&
+            dest->peer_constructor != 0UL) {
+            *pos = at + 4UL;
+            return 1;
+        }
+    }
+    *pos = body_length;
+    return 0;
+}
+#endif /* !TG_NO_GUI */
+
 int tg_mtproto_resync_message_text(tg_mtproto_tl_reader *reader,
                                    unsigned long fallback_offset)
 {

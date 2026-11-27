@@ -938,6 +938,12 @@ MSG_ST_GETTING_CODE (502//)
 Getting a code from Telegram...
 MSG_ST_CONNECTING (503//)
 Connecting to Telegram...
+MSG_ST_PREVIEWS_SHOWN (504//)
+Chats show their last message
+MSG_ST_PREVIEWS_HIDDEN (505//)
+Chats show their name only
+MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS (506//)
+Could not save the previews setting
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1548,6 +1554,8 @@ No code? Press S to get it %.24s
 ;
 MSG_G_TITLE_NEW_ONE (1437//)
  new
+MSG_SET_PREVIEWS_IN_THE_CHAT_LIST (1438//)
+Previews in the chat list
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

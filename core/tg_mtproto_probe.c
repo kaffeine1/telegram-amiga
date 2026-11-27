@@ -4076,6 +4076,420 @@ static int tg_chat_notify_gunzip(const unsigned char *body,
    cannot parse; in practice the new-message update leads the vector. The
    message body is parsed by the same reader the /history transcript uses,
    which also yields the destination peer (the chat the message belongs to). */
+#if !defined(TG_NO_GUI)
+/* --- the newest message of each chat ---------------------------------------
+   What the chat list shows under a chat's name, as the official clients
+   do: who wrote last and what. Kept by peer, one entry a chat, as many as
+   the list has rows; the texts are UTF-8 as Telegram sent them, cut to the
+   entry on a whole letter, on one line. It is learnt from what comes by
+   anyway: the dialog asked about each chat in the background (its answer
+   carries the chat's top message), the messages pushed while the window is
+   open, what is sent from here; an edit changes it, a deletion takes it
+   away. Kept in data/telegram-last.txt between runs, so the list does not
+   start bare. */
+#define TG_GUI_LAST_FILE "data/telegram-last.txt"
+#define TG_GUI_LAST_WHO 32
+#if defined(__m68k__)
+#define TG_GUI_LAST_TEXT 72
+#else
+#define TG_GUI_LAST_TEXT 120
+#endif
+#define TG_GUI_LAST_USER 0
+#define TG_GUI_LAST_CHAT 1
+#define TG_GUI_LAST_CHANNEL 2
+typedef struct tg_gui_last_entry {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long msg_id;
+    unsigned long date; /* Telegram's clock */
+    unsigned char kind; /* TG_GUI_LAST_USER, _CHAT, _CHANNEL */
+    unsigned char is_out;
+    unsigned char is_service;
+    char who[TG_GUI_LAST_WHO];
+    char text[TG_GUI_LAST_TEXT];
+} tg_gui_last_entry;
+static tg_gui_last_entry tg_gui_last[TG_GUI_MAX_CHATS];
+static int tg_gui_last_count = 0;
+static int tg_gui_last_loaded = 0;
+static int tg_gui_last_dirty = 0;   /* a row's preview is to be drawn again */
+static int tg_gui_last_unsaved = 0; /* the file is behind the table */
+static int tg_gui_last_off = 0;     /* the setting: no previews in the list */
+static const char *tg_gui_last_file = TG_GUI_LAST_FILE;
+/* One message read off an answer, for the lines below (too big a thing for
+   the stack). */
+static tg_mtproto_message_text tg_gui_last_scratch;
+/* The account's own user (defined with the drafts, which need it too):
+   Telegram names Saved Messages by it. */
+static int tg_gui_self_known;
+static unsigned long tg_gui_self_hi;
+static unsigned long tg_gui_self_lo;
+
+static unsigned char tg_gui_last_kind(unsigned long peer_constructor)
+{
+    if (peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        return TG_GUI_LAST_CHANNEL;
+    }
+    if (peer_constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR) {
+        return TG_GUI_LAST_CHAT;
+    }
+    return TG_GUI_LAST_USER;
+}
+
+/* One line, cut on a whole UTF-8 letter: line breaks and tabs are blanks. */
+static void tg_gui_last_copy(char *dest, unsigned long size, const char *src)
+{
+    unsigned long i;
+
+    tg_mtproto_copy_utf8_name(dest, size, src != 0 ? src : "");
+    for (i = 0UL; dest[i] != '\0'; ++i) {
+        if (dest[i] == '\n' || dest[i] == '\r' || dest[i] == '\t') {
+            dest[i] = ' ';
+        }
+    }
+}
+
+/* The entry of a chat by its kind, -1 when it has none. */
+static int tg_gui_last_find_kind(unsigned char kind, unsigned long id_hi,
+                                 unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_last_count; ++i) {
+        if (tg_gui_last[i].kind == kind && tg_gui_last[i].id_hi == id_hi &&
+            tg_gui_last[i].id_lo == id_lo) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* The entry of a row: a user, or a group of either kind (a row does not
+   say which; a basic group and a channel with the same number are rare
+   enough, and the channel goes first, as the rows' own lookups do). */
+static int tg_gui_last_find_row(int is_user, unsigned long id_hi,
+                                unsigned long id_lo)
+{
+    int at;
+
+    if (is_user) {
+        return tg_gui_last_find_kind(TG_GUI_LAST_USER, id_hi, id_lo);
+    }
+    at = tg_gui_last_find_kind(TG_GUI_LAST_CHANNEL, id_hi, id_lo);
+    return at >= 0 ? at
+                   : tg_gui_last_find_kind(TG_GUI_LAST_CHAT, id_hi, id_lo);
+}
+
+/* The newest messages kept from the last run: one line a chat,
+   "<kind> <id hi> <id lo> <message> <date> <own> <service>", a tab, who, a
+   tab, the text. A line that does not read is skipped. */
+static void tg_gui_last_load(void)
+{
+    static char line[TG_GUI_LAST_WHO + TG_GUI_LAST_TEXT + 96];
+    FILE *f;
+
+    if (tg_gui_last_loaded) {
+        return;
+    }
+    tg_gui_last_loaded = 1;
+    tg_gui_last_count = 0;
+    tg_gui_last_unsaved = 0;
+    f = fopen(tg_gui_last_file, "r");
+    if (f == 0) {
+        return;
+    }
+    while (tg_gui_last_count < TG_GUI_MAX_CHATS &&
+           fgets(line, (int)sizeof(line), f) != 0) {
+        tg_gui_last_entry *e = &tg_gui_last[tg_gui_last_count];
+        unsigned int kind;
+        unsigned int is_out;
+        unsigned int is_service;
+        char *who;
+        char *text;
+        unsigned long n = (unsigned long)strlen(line);
+
+        while (n > 0UL && (line[n - 1UL] == '\n' || line[n - 1UL] == '\r')) {
+            line[--n] = '\0';
+        }
+        who = strchr(line, '\t');
+        text = who != 0 ? strchr(who + 1, '\t') : 0;
+        if (text == 0) {
+            continue;
+        }
+        *who++ = '\0';
+        *text++ = '\0';
+        memset(e, 0, sizeof(*e));
+        if (sscanf(line, "%u %lx %lx %lu %lu %u %u", &kind, &e->id_hi,
+                   &e->id_lo, &e->msg_id, &e->date, &is_out,
+                   &is_service) != 7 ||
+            kind > TG_GUI_LAST_CHANNEL || e->msg_id == 0UL ||
+            (e->id_hi == 0UL && e->id_lo == 0UL) || text[0] == '\0') {
+            continue;
+        }
+        e->kind = (unsigned char)kind;
+        e->is_out = is_out ? 1U : 0U;
+        e->is_service = is_service ? 1U : 0U;
+        tg_gui_last_copy(e->who, sizeof(e->who), who);
+        tg_gui_last_copy(e->text, sizeof(e->text), text);
+        ++tg_gui_last_count;
+    }
+    fclose(f);
+}
+
+static void tg_gui_last_save(void)
+{
+    FILE *f;
+    int i;
+
+    if (!tg_gui_last_unsaved) {
+        return;
+    }
+    tg_gui_last_unsaved = 0;
+    if (tg_gui_last_count == 0 || tg_gui_last_off) {
+        (void)remove(tg_gui_last_file);
+        return;
+    }
+    (void)mkdir("data", 0777);
+    f = tg_file_fopen_replace(tg_gui_last_file, "w");
+    if (f == 0) {
+        return;
+    }
+    for (i = 0; i < tg_gui_last_count; ++i) {
+        const tg_gui_last_entry *e = &tg_gui_last[i];
+
+        fprintf(f, "%u %08lx %08lx %lu %lu %u %u\t%s\t%s\n",
+                (unsigned int)e->kind, e->id_hi, e->id_lo, e->msg_id,
+                e->date, (unsigned int)e->is_out,
+                (unsigned int)e->is_service, e->who, e->text);
+    }
+    fclose(f);
+}
+
+/* Nothing is kept of the newest messages: a log out, or the setting
+   switched off. */
+static void tg_gui_last_forget(void)
+{
+    tg_gui_last_count = 0;
+    tg_gui_last_loaded = 1;
+    tg_gui_last_unsaved = 0;
+    tg_gui_last_dirty = 1;
+    (void)remove(tg_gui_last_file);
+}
+
+/* A chat's newest message as it is known now. A message older than the one
+   held is not news (a page read late, a push that comes twice); the same
+   message again is an edit. A full table gives up the chat whose newest
+   message is the oldest. 1 = the table changed. */
+static int tg_gui_last_take(unsigned long peer_constructor,
+                            unsigned long id_hi, unsigned long id_lo,
+                            unsigned long msg_id, unsigned long date,
+                            int is_out, int is_service, const char *who,
+                            const char *text)
+{
+    tg_gui_last_entry fresh;
+    unsigned char kind = tg_gui_last_kind(peer_constructor);
+    int at;
+
+    if (msg_id == 0UL || (id_hi == 0UL && id_lo == 0UL) || text == 0 ||
+        text[0] == '\0') {
+        return 0;
+    }
+    tg_gui_last_load(); /* the lines of the last run first, then the news */
+    at = tg_gui_last_find_kind(kind, id_hi, id_lo);
+    if (at >= 0 && tg_gui_last[at].msg_id > msg_id) {
+        return 0;
+    }
+    memset(&fresh, 0, sizeof(fresh));
+    fresh.id_hi = id_hi;
+    fresh.id_lo = id_lo;
+    fresh.msg_id = msg_id;
+    fresh.date = date;
+    fresh.kind = kind;
+    fresh.is_out = is_out ? 1U : 0U;
+    fresh.is_service = is_service ? 1U : 0U;
+    tg_gui_last_copy(fresh.who, sizeof(fresh.who), who);
+    tg_gui_last_copy(fresh.text, sizeof(fresh.text), text);
+    if (at >= 0) {
+        if (fresh.date == 0UL) {
+            fresh.date = tg_gui_last[at].date; /* an edit keeps the time */
+        }
+        if (tg_gui_last[at].msg_id == fresh.msg_id &&
+            tg_gui_last[at].date == fresh.date &&
+            tg_gui_last[at].is_out == fresh.is_out &&
+            tg_gui_last[at].is_service == fresh.is_service &&
+            strcmp(tg_gui_last[at].who, fresh.who) == 0 &&
+            strcmp(tg_gui_last[at].text, fresh.text) == 0) {
+            return 0;
+        }
+    } else if (tg_gui_last_count < TG_GUI_MAX_CHATS) {
+        at = tg_gui_last_count++;
+    } else {
+        int i;
+
+        at = 0;
+        for (i = 1; i < tg_gui_last_count; ++i) {
+            if (tg_gui_last[i].date < tg_gui_last[at].date) {
+                at = i;
+            }
+        }
+    }
+    tg_gui_last[at] = fresh;
+    tg_gui_last_dirty = 1;
+    tg_gui_last_unsaved = 1;
+    return 1;
+}
+
+/* A message was edited: the chat's line follows when it is that message. */
+static int tg_gui_last_edit(unsigned long peer_constructor,
+                            unsigned long id_hi, unsigned long id_lo,
+                            unsigned long msg_id, const char *text)
+{
+    int at = tg_gui_last_find_kind(tg_gui_last_kind(peer_constructor), id_hi,
+                                   id_lo);
+
+    if (at < 0 || msg_id == 0UL || tg_gui_last[at].msg_id != msg_id ||
+        tg_gui_last[at].is_service || text == 0 || text[0] == '\0') {
+        return 0;
+    }
+    return tg_gui_last_take(peer_constructor, id_hi, id_lo, msg_id, 0UL,
+                            tg_gui_last[at].is_out, 0, tg_gui_last[at].who,
+                            text);
+}
+
+/* A message was deleted: the chat whose newest it was has no line until
+   its next message, or until its dialog is asked again. A channel's
+   message is named with its channel; the other ids are the account's own
+   sequence, shared by private chats and basic groups. 1 = a line went. */
+static int tg_gui_last_drop(unsigned long channel_hi,
+                            unsigned long channel_lo, unsigned long msg_id)
+{
+    int channel = channel_hi != 0UL || channel_lo != 0UL;
+    int i;
+
+    tg_gui_last_load();
+    for (i = 0; i < tg_gui_last_count; ++i) {
+        const tg_gui_last_entry *e = &tg_gui_last[i];
+
+        if (e->msg_id != msg_id ||
+            (e->kind == TG_GUI_LAST_CHANNEL) != (channel ? 1 : 0) ||
+            (channel && (e->id_hi != channel_hi || e->id_lo != channel_lo))) {
+            continue;
+        }
+        tg_gui_last[i] = tg_gui_last[--tg_gui_last_count];
+        tg_gui_last_dirty = 1;
+        tg_gui_last_unsaved = 1;
+        return 1;
+    }
+    return 0;
+}
+
+/* A message of this chat deleted from here (Telegram tells the other
+   devices, not the one that asked). */
+static void tg_gui_last_drop_in(unsigned long peer_constructor,
+                                unsigned long id_hi, unsigned long id_lo,
+                                unsigned long msg_id)
+{
+    if (peer_constructor == TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
+        (void)tg_gui_last_drop(id_hi, id_lo, msg_id);
+    } else {
+        (void)tg_gui_last_drop(0UL, 0UL, msg_id);
+    }
+}
+
+/* A message read off the wire becomes its chat's line: who wrote it in a
+   group (a name from the users that came with it, or one already known),
+   what it says, or what a service message reads as. */
+static int tg_gui_last_take_message(const tg_mtproto_message_text *m,
+                                    unsigned long peer_constructor,
+                                    unsigned long id_hi, unsigned long id_lo,
+                                    const unsigned char *container,
+                                    unsigned long container_length)
+{
+    char who[64];
+    char text[TG_GUI_LAST_TEXT];
+    int is_out;
+    int is_service = 0;
+
+    if (tg_gui_last_off || m == 0 || m->id == 0UL) {
+        return 0;
+    }
+    is_out = tg_mtproto_message_is_own(m, peer_constructor);
+    if (peer_constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+        /* Saved Messages: the account's own user, once it is known */
+        if (!tg_gui_self_known) {
+            return 0;
+        }
+        peer_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        id_hi = tg_gui_self_hi;
+        id_lo = tg_gui_self_lo;
+    }
+    who[0] = '\0';
+    if (!is_out && peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+        (m->flags & (1UL << 14)) == 0UL &&
+        m->from_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+        if (container == 0 ||
+            !tg_mtproto_find_user_name(container, container_length,
+                                       m->from_id_hi, m->from_id_lo, who,
+                                       sizeof(who))) {
+            const char *name = tg_chat_notify_cached_sender_name(
+                m->from_id_hi, m->from_id_lo);
+
+            who[0] = '\0';
+            if (name != 0) {
+                tg_mtproto_copy_utf8_name(who, sizeof(who), name);
+            }
+        }
+    }
+    if (m->service_action != 0UL) {
+        tg_mtproto_service_text(m, who, is_out, 0, text, sizeof(text));
+        is_service = 1;
+    } else if (m->has_text && m->text[0] != '\0') {
+        tg_gui_last_copy(text, sizeof(text), m->text);
+    } else {
+        tg_gui_last_copy(text, sizeof(text), TG_STR_U8(MSG_S_LBL_MEDIA));
+    }
+    return tg_gui_last_take(peer_constructor, id_hi, id_lo, m->id, m->date,
+                            is_out, is_service, who, text);
+}
+/* A page of the chat list carries the top message of each chat: the lines
+   of all of them, in one pass over the reply. `cache` is the page read as
+   a chat list. */
+static void tg_gui_last_take_page(const unsigned char *body,
+                                  unsigned long length,
+                                  const tg_mtproto_peer_cache *cache)
+{
+    tg_mtproto_dialog_peer dest;
+    unsigned long pos = 0UL;
+    unsigned long i;
+
+    if (tg_gui_last_off || body == 0 || cache == 0 || cache->count == 0UL) {
+        return;
+    }
+    while (tg_mtproto_next_message_text(body, length, &pos,
+                                        &tg_gui_last_scratch, &dest)) {
+        for (i = 0UL; i < cache->count; ++i) {
+            const tg_mtproto_peer_cache_entry *e = &cache->entries[i];
+
+            /* A chat's top message; Saved Messages is the account's own
+               user, whose entry need not say which message is on top:
+               the newest of the page stays. */
+            if (((e->from_dialog &&
+                  e->top_message == tg_gui_last_scratch.id &&
+                  e->peer_constructor == dest.peer_constructor) ||
+                 (e->is_self &&
+                  dest.peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR)) &&
+                e->id_hi == dest.id_hi && e->id_lo == dest.id_lo) {
+                (void)tg_gui_last_take_message(
+                    &tg_gui_last_scratch,
+                    e->is_self ? TG_MTPROTO_PEER_USER_CONSTRUCTOR
+                               : e->peer_constructor,
+                    e->id_hi, e->id_lo, body, length);
+                break;
+            }
+        }
+    }
+}
+#endif /* !TG_NO_GUI */
+
 /* Filters one parsed Message and, when it is a fresh inbound text, fills a
    notify-queue slot. Shared by the live-push collector and the
    updates.getDifference drain. */
@@ -4087,6 +4501,22 @@ static void tg_chat_notify_push_message(const tg_mtproto_message_text *message,
     tg_chat_notify_entry *entry;
     unsigned long copy_length;
 
+#if !defined(TG_NO_GUI)
+    /* The chat list's line for that chat: every message counts, one's own
+       from another device and a service message too. */
+    if (message != 0 && tg_chat_delete_target != 0) {
+        if (dest != 0 && dest->peer_constructor != 0UL) {
+            (void)tg_gui_last_take_message(message, dest->peer_constructor,
+                                           dest->id_hi, dest->id_lo,
+                                           container, container_length);
+        } else if (!message->is_out) {
+            (void)tg_gui_last_take_message(
+                message, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                message->from_id_hi, message->from_id_lo, container,
+                container_length);
+        }
+    }
+#endif
     /* A service message ("Anna joined the group") never notified: the parser
        used to stop on it, and its line needs the names it is shown with. */
     if (message == 0 || !message->has_text || message->is_out ||
@@ -10871,6 +11301,11 @@ static int tg_mtproto_list_peers_page(const char *host,
             last->top_message);
         tg_list_peers_cursor.valid = tg_list_peers_cursor.date != 0UL;
     }
+#if !defined(TG_NO_GUI)
+    /* ...and each chat's line under its name comes with the page. */
+    tg_gui_last_take_page(result.result_body, result.result_body_length,
+                          &cache);
+#endif
     if (tg_list_peers_make_room != 0) {
         /* With no list yet, the page goes into an empty one, so every chat
            it brings counts as read in this run. */
@@ -13578,6 +14013,21 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
                 dialogs.peers[i].unread_mentions_count;
             tg_chat_dialog_last = dialogs.peers[i];
             tg_chat_dialog_last_valid = 1;
+#if !defined(TG_NO_GUI)
+            if (tg_chat_delete_target != 0 && !tg_gui_last_off &&
+                dialogs.peers[i].top_message != 0UL) {
+                /* the window's session: the chat list's line, for free */
+                if (tg_mtproto_find_message_text(
+                        result.result_body, result.result_body_length,
+                        peer_constructor, peer_id_hi, peer_id_lo,
+                        dialogs.peers[i].top_message, &tg_gui_last_scratch)) {
+                    (void)tg_gui_last_take_message(
+                        &tg_gui_last_scratch, peer_constructor, peer_id_hi,
+                        peer_id_lo, result.result_body,
+                        result.result_body_length);
+                }
+            }
+#endif
             break;
         }
     }
@@ -16575,6 +17025,28 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
     tg_mtproto_parse_message_peers(result.result_body,
                                    result.result_body_length,
                                    &tg_chat_sender_cache);
+#if !defined(TG_NO_GUI)
+    if (tg_chat_delete_target != 0 && texts.count != 0UL &&
+        tg_mtproto_history_search_query == 0 &&
+        tg_mtproto_history_topic_id == 0UL &&
+        tg_mtproto_history_offset_id_override == 0UL &&
+        tg_mtproto_history_add_offset_override == 0) {
+        /* The window's session reading a chat's newest page: its newest
+           message is the chat list's line (Saved Messages and the chats
+           whose dialog is never asked get theirs here). */
+        unsigned long newest = 0UL;
+        unsigned long j;
+
+        for (j = 1UL; j < texts.count; ++j) {
+            if (texts.messages[j].id > texts.messages[newest].id) {
+                newest = j;
+            }
+        }
+        (void)tg_gui_last_take_message(&texts.messages[newest],
+                                       peer_constructor, peer_id_hi,
+                                       peer_id_lo, 0, 0UL);
+    }
+#endif
 
     max_seen_message_id = last_seen_message_id != 0 ?
         *last_seen_message_id : 0UL;
@@ -22185,6 +22657,7 @@ static int tg_gui_batch_self_test(void);
 static int tg_gui_update_self_test(void);
 static int tg_gui_channel_install_self_test(void);
 static int tg_gui_unread_self_test(void);
+static int tg_gui_last_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
@@ -24628,6 +25101,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_update_self_test() != 0 ||
         tg_gui_channel_install_self_test() != 0 ||
         tg_gui_unread_self_test() != 0 ||
+        tg_gui_last_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
         return 2;
     }
@@ -26154,6 +26628,79 @@ static const char *tg_gui_draft_for_row(int is_user, unsigned long id_hi,
     return tg_gui_draft_lookup(is_user, id_hi, id_lo);
 }
 
+/* The chat list asks a row's newest message (the driver's last_row). Saved
+   Messages asks as user 0 0: Telegram names it by the account's own user,
+   which the session knows once it has asked. */
+static int tg_gui_last_for_row(int is_user, unsigned long id_hi,
+                               unsigned long id_lo, tg_chat_message_row *out)
+{
+    const tg_gui_last_entry *e;
+    int at;
+
+    if (out == 0 || tg_gui_last_off) {
+        return 0;
+    }
+    tg_gui_last_load();
+    if (is_user && id_hi == 0UL && id_lo == 0UL) {
+        if (!tg_gui_self_known) {
+            return 0;
+        }
+        id_hi = tg_gui_self_hi;
+        id_lo = tg_gui_self_lo;
+    }
+    at = tg_gui_last_find_row(is_user, id_hi, id_lo);
+    if (at < 0) {
+        return 0;
+    }
+    e = &tg_gui_last[at];
+    memset(out, 0, sizeof(*out));
+    out->id = e->msg_id;
+    out->text = e->text;
+    out->is_out = e->is_out;
+    out->is_service = e->is_service;
+    out->sender = e->who[0] != '\0' ? e->who : 0;
+    if (e->date != 0UL) {
+        out->has_time = 1;
+        out->local_epoch = tg_mtproto_chat_local_epoch(
+            e->date,
+            tg_mtproto_display_delta(
+                tg_gui_session_state.context.server_time_delta_seconds,
+                tg_mtproto_local_clock_skew()));
+    }
+    return 1;
+}
+
+/* Public: the chat list with or without each chat's newest message under
+   its name (the setting). Off, nothing of it is kept, in memory or in the
+   file. */
+void tg_gui_session_set_previews(int on)
+{
+    int off = on ? 0 : 1;
+
+    if (off == tg_gui_last_off) {
+        return;
+    }
+    tg_gui_last_off = off;
+    if (off) {
+        tg_gui_last_forget();
+    } else {
+        tg_gui_last_dirty = 1;
+    }
+}
+
+/* The rows take the lines that changed since the last tick. */
+static int tg_gui_session_apply_last_updates(void)
+{
+    if (!tg_gui_last_dirty) {
+        return 0;
+    }
+    tg_gui_last_dirty = 0;
+    if (tg_gui_session_state.gui_driver.state == 0) {
+        return 0;
+    }
+    return tg_gui_driver_refresh_previews(&tg_gui_session_state.gui_driver);
+}
+
 /* Whether the composer holds something a draft could be: a chat is shown
    and no message is being edited in place. */
 static int tg_gui_draft_composer_free(const tg_gui_state *gst)
@@ -26304,6 +26851,7 @@ static void tg_gui_session_learn_self(FILE *stream)
         tg_gui_self_hi = user.id_hi;
         tg_gui_self_lo = user.id_lo;
         tg_gui_self_known = 1;
+        tg_gui_last_dirty = 1; /* Saved Messages has its line now */
         tg_gui_log("self: known");
     } else {
         tg_gui_log("self: not known");
@@ -27672,6 +28220,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
 #if !defined(TG_NO_GUI)
     tg_gui_session_state.gui_driver.draft_text = tg_gui_draft_for_row;
     tg_gui_session_state.gui_driver.offlist_news = tg_gui_offlist_news;
+    tg_gui_session_state.gui_driver.last_row = tg_gui_last_for_row;
     tg_gui_draft_count = 0;
     tg_gui_drafts_changed = 0;
     tg_gui_draft_follow = 0;
@@ -30359,6 +30908,21 @@ static int tg_gui_session_fetch_pins(FILE *stream)
         tg_gui_pins[tg_gui_pin_count].id_lo = pinned.peers[i].id_lo;
         tg_gui_pins[tg_gui_pin_count].unread = pinned.peers[i].unread_count;
         ++tg_gui_pin_count;
+#if !defined(TG_NO_GUI)
+        /* ...and its newest message, for the chat list's line: the pinned
+           chats are never asked about one by one. */
+        if (!tg_gui_last_off && pinned.peers[i].top_message != 0UL &&
+            tg_mtproto_find_message_text(
+                result.result_body, result.result_body_length,
+                pinned.peers[i].peer_constructor, pinned.peers[i].id_hi,
+                pinned.peers[i].id_lo, pinned.peers[i].top_message,
+                &tg_gui_last_scratch)) {
+            (void)tg_gui_last_take_message(
+                &tg_gui_last_scratch, pinned.peers[i].peer_constructor,
+                pinned.peers[i].id_hi, pinned.peers[i].id_lo,
+                result.result_body, result.result_body_length);
+        }
+#endif
     }
     tg_gui_pins_fresh = 1;
     /* Every caller draws the list again next, the joined chats with it. */
@@ -33604,6 +34168,26 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
 #else
     (void)styled;
 #endif
+#if !defined(TG_NO_GUI)
+    if (rc == 0 && sent_id != 0UL && !tg_gui_last_off &&
+        !(tg_gui_forum && tg_gui_topic != 0UL)) {
+        /* ...and it is the chat's newest message: its line in the list.
+           Saved Messages is the account's own user there. */
+        unsigned long pc = tg_gui_session_state.open_peer_constructor;
+        unsigned long ph = tg_gui_session_state.open_peer_id_hi;
+        unsigned long pl = tg_gui_session_state.open_peer_id_lo;
+
+        if (pc == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+            pc = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+            ph = tg_gui_self_known ? tg_gui_self_hi : 0UL;
+            pl = tg_gui_self_known ? tg_gui_self_lo : 0UL;
+        }
+        (void)tg_gui_last_take(
+            pc, ph, pl, sent_id,
+            tg_mtproto_context_time(&tg_gui_session_state.context), 1, 0, "",
+            send_text);
+    }
+#endif
     if (rc == 0) {
         /* Show the sent message at once, optimistically, with no extra network
            round-trip -- a confirm-poll is slow and unreliable on MorphOS (it
@@ -34053,6 +34637,11 @@ int tg_gui_session_delete(unsigned long message_id, FILE *stream)
     if (rc == 0) {
         (void)tg_gui_driver_remove_by_id(&tg_gui_session_state.gui_driver,
                                          message_id);
+#if !defined(TG_NO_GUI)
+        tg_gui_last_drop_in(tg_gui_session_state.open_peer_constructor,
+                            tg_gui_session_state.open_peer_id_hi,
+                            tg_gui_session_state.open_peer_id_lo, message_id);
+#endif
     }
     tg_net_set_connect_timeout_seconds(prev_timeout);
     tg_mtproto_close_quiet_stream(quiet, stream);
@@ -34088,6 +34677,12 @@ int tg_gui_session_delete_list(const unsigned long *message_ids, int count,
         for (i = 0; i < count; ++i) {
             (void)tg_gui_driver_remove_by_id(&tg_gui_session_state.gui_driver,
                                              message_ids[i]);
+#if !defined(TG_NO_GUI)
+            tg_gui_last_drop_in(tg_gui_session_state.open_peer_constructor,
+                                tg_gui_session_state.open_peer_id_hi,
+                                tg_gui_session_state.open_peer_id_lo,
+                                message_ids[i]);
+#endif
         }
     }
     tg_net_set_connect_timeout_seconds(prev_timeout);
@@ -42990,6 +43585,11 @@ static int tg_gui_session_apply_edit_updates(void)
         int peer_match;
 
         entry = &tg_gui_session_state.edit_sink.queue[i];
+#if !defined(TG_NO_GUI)
+        (void)tg_gui_last_edit(entry->peer_constructor, entry->peer_id_hi,
+                               entry->peer_id_lo, entry->message_id,
+                               entry->text);
+#endif
         peer_match = tg_chat_edit_peer_matches_open(
             entry, tg_gui_session_state.open_peer_constructor,
             tg_gui_session_state.open_peer_id_hi,
@@ -43024,6 +43624,10 @@ static int tg_gui_session_apply_delete_updates(void)
             &tg_gui_session_state.delete_sink.queue[i];
         int channel = entry->channel_hi != 0UL || entry->channel_lo != 0UL;
 
+#if !defined(TG_NO_GUI)
+        (void)tg_gui_last_drop(entry->channel_hi, entry->channel_lo,
+                               entry->message_id);
+#endif
         if (tg_gui_session_state.current_peer_index[0] == '\0' ||
             channel != open_channel ||
             (channel &&
@@ -43534,6 +44138,209 @@ static int tg_gui_session_chat_dialog(unsigned long peer_index,
     tg_gui_log(rc == 2 ? "dialog: no such chat" : "dialog: could not ask");
     return rc == 2 ? 2 : 1;
 }
+
+#if !defined(TG_NO_SELFTEST)
+/* The newest message of each chat: what is news and what is not, an edit,
+   a deletion, a full table, the kinds of chat, what a message read off the
+   wire becomes, the file. */
+static int tg_gui_last_self_test(void)
+{
+    static const char file[] = "tg-last-selftest.txt";
+    static tg_mtproto_message_text m;
+    const char *keep_file = tg_gui_last_file;
+    tg_chat_message_row row;
+    int ok;
+    int i;
+
+    tg_gui_last_count = 0;
+    tg_gui_last_loaded = 1;
+    tg_gui_last_dirty = 0;
+    tg_gui_last_unsaved = 0;
+    tg_gui_last_off = 0;
+    tg_gui_last_file = file;
+    (void)remove(file);
+    /* a chat's first line; an older message is not news; the same message
+       again is an edit and keeps its time; a newer one replaces it; the
+       same thing twice changes nothing */
+    ok = tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 50UL,
+                          1000UL, 0, 0, "", "hello\nthere") == 1 &&
+         tg_gui_last_count == 1 && tg_gui_last_dirty == 1 &&
+         strcmp(tg_gui_last[0].text, "hello there") == 0 &&
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 49UL,
+                          900UL, 0, 0, "", "older") == 0 &&
+         strcmp(tg_gui_last[0].text, "hello there") == 0 &&
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 50UL,
+                          1000UL, 0, 0, "", "hello\nthere") == 0 &&
+         tg_gui_last_edit(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 49UL,
+                          "not that one") == 0 &&
+         tg_gui_last_edit(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 50UL,
+                          "hello again") == 1 &&
+         strcmp(tg_gui_last[0].text, "hello again") == 0 &&
+         tg_gui_last[0].date == 1000UL &&
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 51UL,
+                          1100UL, 1, 0, "", "mine") == 1 &&
+         tg_gui_last_count == 1 && tg_gui_last[0].is_out == 1 &&
+         /* nothing without a message, a chat or a text */
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 0UL,
+                          1UL, 0, 0, "", "x") == 0 &&
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 0UL, 9UL,
+                          1UL, 0, 0, "", "x") == 0 &&
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 7UL, 99UL,
+                          1UL, 0, 0, "", "") == 0;
+    /* a user, a basic group and a channel with the same number are three
+       chats; a group's row finds the channel first */
+    ok = ok &&
+         tg_gui_last_take(TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL, 7UL, 10UL,
+                          500UL, 0, 0, "Anna", "in the group") == 1 &&
+         tg_gui_last_find_row(0, 0UL, 7UL) == 1 &&
+         tg_gui_last_take(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 7UL, 3UL,
+                          600UL, 0, 1, "", "Anna joined") == 1 &&
+         tg_gui_last_count == 3 && tg_gui_last_find_row(0, 0UL, 7UL) == 2 &&
+         tg_gui_last_find_row(1, 0UL, 7UL) == 0 &&
+         tg_gui_last_find_row(1, 0UL, 8UL) == -1 &&
+         /* a service line is not edited */
+         tg_gui_last_edit(TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR, 0UL, 7UL, 3UL,
+                          "x") == 0;
+    /* a deletion: the channel's message by its channel, the others by the
+       id alone, and never the channel's by an id of the shared sequence */
+    ok = ok && tg_gui_last_drop(0UL, 0UL, 3UL) == 0 &&
+         tg_gui_last_drop(0UL, 8UL, 3UL) == 0 &&
+         tg_gui_last_drop(0UL, 7UL, 3UL) == 1 && tg_gui_last_count == 2 &&
+         tg_gui_last_drop(0UL, 7UL, 10UL) == 0 &&
+         tg_gui_last_drop(0UL, 0UL, 10UL) == 1 && tg_gui_last_count == 1 &&
+         tg_gui_last_find_row(1, 0UL, 7UL) == 0;
+    if (!ok) {
+        tg_gui_last_count = 0;
+        tg_gui_last_file = keep_file;
+        puts("probe self-test: the newest message of a chat wrong");
+        return 2;
+    }
+    /* a cut never splits a letter, and a long name is cut too */
+    {
+        char long_text[TG_GUI_LAST_TEXT + 8];
+        unsigned long n;
+
+        memset(long_text, 'a', sizeof(long_text));
+        long_text[TG_GUI_LAST_TEXT - 2] = (char)0xc3; /* e-grave, across */
+        long_text[TG_GUI_LAST_TEXT - 1] = (char)0xa8; /* the entry's end */
+        long_text[sizeof(long_text) - 1U] = '\0';
+        ok = tg_gui_last_take(
+                 TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 9UL, 5UL, 1UL, 0, 0,
+                 "A very long name that does not fit the entry at all",
+                 long_text) == 1;
+        i = tg_gui_last_find_row(1, 0UL, 9UL);
+        n = i >= 0 ? (unsigned long)strlen(tg_gui_last[i].text) : 0UL;
+        ok = ok && i >= 0 && n == TG_GUI_LAST_TEXT - 2UL &&
+             tg_gui_last[i].text[n - 1UL] == 'a' &&
+             strlen(tg_gui_last[i].who) == TG_GUI_LAST_WHO - 1U;
+    }
+    /* the file: written, forgotten, read back the same */
+    {
+        tg_gui_last_entry first = tg_gui_last[0];
+        int count = tg_gui_last_count;
+
+        tg_gui_last_save();
+        tg_gui_last_count = 0;
+        tg_gui_last_loaded = 0;
+        tg_gui_last_load();
+        ok = ok && tg_gui_last_count == count && count == 2 &&
+             tg_gui_last[0].msg_id == first.msg_id &&
+             tg_gui_last[0].date == first.date &&
+             tg_gui_last[0].kind == first.kind &&
+             tg_gui_last[0].is_out == first.is_out &&
+             strcmp(tg_gui_last[0].text, first.text) == 0 &&
+             strcmp(tg_gui_last[1].who,
+                    "A very long name that does not ") == 0 &&
+             tg_gui_last_unsaved == 0;
+        /* what the row is given */
+        memset(&row, 0, sizeof(row));
+        ok = ok && tg_gui_last_for_row(1, 0UL, 7UL, &row) == 1 &&
+             row.id == 51UL && row.is_out == 1 && row.is_service == 0 &&
+             row.sender == 0 && row.has_time == 1 &&
+             strcmp(row.text, "mine") == 0 &&
+             tg_gui_last_for_row(0, 0UL, 7UL, &row) == 0 &&
+             tg_gui_last_for_row(1, 0UL, 9UL, &row) == 1 &&
+             row.sender != 0;
+    }
+    if (!ok) {
+        tg_gui_last_count = 0;
+        tg_gui_last_file = keep_file;
+        (void)remove(file);
+        puts("probe self-test: the file of the newest messages wrong");
+        return 2;
+    }
+    /* a full table gives up the chat with the oldest message */
+    tg_gui_last_count = 0;
+    for (i = 0; ok && i < TG_GUI_MAX_CHATS; ++i) {
+        ok = tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+                              100UL + (unsigned long)i, 1UL,
+                              i == 3 ? 5UL : 1000UL + (unsigned long)i, 0, 0,
+                              "", "x") == 1;
+    }
+    ok = ok && tg_gui_last_count == TG_GUI_MAX_CHATS &&
+         tg_gui_last_take(TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 9000UL, 1UL,
+                          2000UL, 0, 0, "", "new") == 1 &&
+         tg_gui_last_count == TG_GUI_MAX_CHATS &&
+         tg_gui_last_find_row(1, 0UL, 103UL) == -1 &&
+         tg_gui_last_find_row(1, 0UL, 9000UL) == 3 &&
+         tg_gui_last_find_row(1, 0UL, 100UL) == 0;
+    /* a message read off the wire: one's own, a group's with a name not
+       known, a service message, one with nothing to say; and nothing at
+       all with the setting off */
+    tg_gui_last_count = 0;
+    memset(&m, 0, sizeof(m));
+    m.id = 70UL;
+    m.date = 3000UL;
+    m.is_out = 1;
+    m.has_text = 1;
+    strcpy(m.text, "sent from the phone");
+    ok = ok &&
+         tg_gui_last_take_message(&m, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+                                  21UL, 0, 0UL) == 1 &&
+         tg_gui_last[0].is_out == 1 && tg_gui_last[0].who[0] == '\0' &&
+         strcmp(tg_gui_last[0].text, "sent from the phone") == 0;
+    m.id = 71UL;
+    m.is_out = 0;
+    m.from_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+    m.from_id_lo = 0x7fff1234UL; /* nobody this client knows */
+    ok = ok &&
+         tg_gui_last_take_message(&m, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL,
+                                  22UL, 0, 0UL) == 1 &&
+         tg_gui_last_count == 2 && tg_gui_last[1].is_out == 0 &&
+         tg_gui_last[1].who[0] == '\0' && tg_gui_last[1].is_service == 0;
+    m.id = 72UL;
+    m.has_text = 0;
+    m.text[0] = '\0';
+    ok = ok &&
+         tg_gui_last_take_message(&m, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL,
+                                  22UL, 0, 0UL) == 1 &&
+         strcmp(tg_gui_last[1].text, TG_STR_U8(MSG_S_LBL_MEDIA)) == 0;
+    m.id = 73UL;
+    m.service_action = 0x1UL; /* one this client has no wording for */
+    ok = ok &&
+         tg_gui_last_take_message(&m, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL,
+                                  22UL, 0, 0UL) == 1 &&
+         tg_gui_last[1].is_service == 1 && tg_gui_last[1].text[0] != '\0';
+    tg_gui_session_set_previews(0);
+    m.id = 74UL;
+    ok = ok && tg_gui_last_count == 0 &&
+         tg_gui_last_take_message(&m, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 0UL,
+                                  22UL, 0, 0UL) == 0 &&
+         tg_gui_last_for_row(1, 0UL, 21UL, &row) == 0;
+    tg_gui_session_set_previews(1);
+    tg_gui_last_count = 0;
+    tg_gui_last_loaded = 0;
+    tg_gui_last_dirty = 0;
+    tg_gui_last_unsaved = 0;
+    tg_gui_last_file = keep_file;
+    (void)remove(file);
+    if (!ok) {
+        puts("probe self-test: a message as its chat's line wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
 
 #if !defined(TG_NO_SELFTEST)
 /* The badge that follows Telegram's count: every row but the open one. */
@@ -44505,6 +45312,9 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     if (tg_gui_session_apply_inbox_read_updates()) {
         dirty = 1;
     }
+    if (tg_gui_session_apply_last_updates()) {
+        dirty = 1;
+    }
 #endif
     if (tg_gui_session_apply_webpage_updates()) {
         dirty = 1;
@@ -44881,6 +45691,7 @@ static void tg_mtproto_logout_remove_files(const char *auth_file,
     (void)remove(TG_NOTIFY_OVERRIDE_FILE);
     (void)remove("data/telegram-thumbs.bin");
 #if !defined(TG_NO_GUI)
+    tg_gui_last_forget(); /* the chat list's lines: messages, after all */
     tg_gui_window_clear_drawer("avatars");
     tg_gui_window_clear_drawer("photos");
 #endif
@@ -45021,6 +45832,9 @@ void tg_gui_session_close(void)
     tg_gui_closed_reason[0] = '\0';
     if (!tg_gui_logged_out) {
         tg_mtproto_avatar_store_save(); /* keep the previews for next run */
+#if !defined(TG_NO_GUI)
+        tg_gui_last_save(); /* and each chat's newest message */
+#endif
     }
     tg_gui_photo_queue_reset();
     tg_gui_topic_forget(); /* no topic outlives the session */

@@ -1368,6 +1368,15 @@ Chiedo un codice a Telegram...
 MSG_ST_CONNECTING
 Mi collego a Telegram...
 ; Connecting to Telegram...
+MSG_ST_PREVIEWS_SHOWN
+Le chat mostrano l'ultimo messaggio
+; Chats show their last message
+MSG_ST_PREVIEWS_HIDDEN
+Le chat mostrano solo il nome
+; Chats show their name only
+MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS
+Impostazione anteprime non salvata
+; Could not save the previews setting
 MSG_RQ_OK
 OK
 ; OK
@@ -2197,6 +2206,9 @@ Niente codice? Premi S per averlo %.24s
 MSG_G_TITLE_NEW_ONE
  nuovo
 ;  new
+MSG_SET_PREVIEWS_IN_THE_CHAT_LIST
+Anteprime nell'elenco chat
+; Previews in the chat list
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]

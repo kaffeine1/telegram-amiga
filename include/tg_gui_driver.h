@@ -44,7 +44,22 @@ typedef struct tg_gui_chat_driver {
        Set by the session after the bind; 0 = none (the tests). */
     int (*offlist_news)(const tg_chat_notify_entry *entry, char *name,
                         unsigned long size);
+    /* The newest message a chat is known to hold: who wrote it, its text
+       (UTF-8, as Telegram sent it) and its time, shown under the chat's
+       name as the official clients do. 1 = `out` is filled (its texts stay
+       good until the next call); 0 = not known. Saved Messages asks as
+       user 0 0. Set by the session after the bind; 0 = no previews (the
+       tests, the demo, the setting switched off). A draft goes before it. */
+    int (*last_row)(int is_user, unsigned long peer_id_hi,
+                    unsigned long peer_id_lo, tg_chat_message_row *out);
 } tg_gui_chat_driver;
+
+/* The previews of the chat list read again from last_row, row by row: a
+   chat that got news, an edit or a deletion shows it without the list
+   being built again. Leaves alone the rows that are something else (search
+   results, a forum's topics, the list being filtered) and the drafts.
+   1 = a row changed. */
+int tg_gui_driver_refresh_previews(tg_gui_chat_driver *gui);
 
 /* Binds chat_driver (the engine-facing vtable) so its on_message appends to
    `state` through `gui`. After this, hand chat_driver to the engine; every row

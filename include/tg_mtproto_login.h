@@ -1958,6 +1958,24 @@ void tg_mtproto_parse_message_peers(const unsigned char *body,
 
 /* A single sender from the users carried by an updates/difference container.
    No cache is filled. Names are UTF-8 and always cut on a character boundary. */
+/* The message `message_id` of the chat `peer` inside a reply body (a page
+   of dialogs carries the top message of each one): 1 = found, `out` holds
+   it; 0 = not there, `out` zeroed. */
+int tg_mtproto_find_message_text(const unsigned char *body,
+                                 unsigned long body_length,
+                                 unsigned long peer_constructor,
+                                 unsigned long peer_id_hi,
+                                 unsigned long peer_id_lo,
+                                 unsigned long message_id,
+                                 tg_mtproto_message_text *out);
+/* The messages of a reply body one after the other: looks from *pos on,
+   1 = `out` holds the next one and `dest` its chat (and *pos is past its
+   start), 0 = no more. */
+int tg_mtproto_next_message_text(const unsigned char *body,
+                                 unsigned long body_length,
+                                 unsigned long *pos,
+                                 tg_mtproto_message_text *out,
+                                 tg_mtproto_dialog_peer *dest);
 int tg_mtproto_find_user_name(const unsigned char *body,
                               unsigned long body_length,
                               unsigned long id_hi, unsigned long id_lo,

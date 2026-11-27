@@ -905,6 +905,12 @@
 #define MSG_ST_GETTING_CODE_STR "Getting a code from Telegram..."
 #define MSG_ST_CONNECTING 503
 #define MSG_ST_CONNECTING_STR "Connecting to Telegram..."
+#define MSG_ST_PREVIEWS_SHOWN 504
+#define MSG_ST_PREVIEWS_SHOWN_STR "Chats show their last message"
+#define MSG_ST_PREVIEWS_HIDDEN 505
+#define MSG_ST_PREVIEWS_HIDDEN_STR "Chats show their name only"
+#define MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS 506
+#define MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS_STR "Could not save the previews setting"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1405,6 +1411,8 @@
 #define MSG_G_NO_CODE_PRESS_S_STR "No code? Press S to get it %.24s"
 #define MSG_G_TITLE_NEW_ONE 1437
 #define MSG_G_TITLE_NEW_ONE_STR " new"
+#define MSG_SET_PREVIEWS_IN_THE_CHAT_LIST 1438
+#define MSG_SET_PREVIEWS_IN_THE_CHAT_LIST_STR "Previews in the chat list"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

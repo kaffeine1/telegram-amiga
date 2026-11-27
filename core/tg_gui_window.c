@@ -16407,6 +16407,19 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                 : state->markdown ? TG_STR(MSG_ST_MARKDOWN_BOLD_IS_SENT_AS)
                                   : TG_STR(MSG_ST_MARKDOWN_SENT_AS_TYPED));
         return 0;
+    case TG_GUI_SET_PREVIEWS:
+        /* The session keeps the lines, or forgets them and their file. */
+        state->list_previews = !state->list_previews;
+        tg_gui_session_set_previews(state->list_previews);
+        (void)mkdir("data", 0777);
+        tg_gui_window_copy(
+            state->status, sizeof(state->status),
+            tg_gui_emoji_preferences_save(TG_GUI_PREVIEWS_FILE,
+                                          state->list_previews) != 0
+                ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_PREVIEWS)
+                : state->list_previews ? TG_STR(MSG_ST_PREVIEWS_SHOWN)
+                                       : TG_STR(MSG_ST_PREVIEWS_HIDDEN));
+        return 0;
     case TG_GUI_SET_AREXX_PORT:
     case TG_GUI_SET_AREXX_SEND:
         /* The two ARexx switches never had a menu item: set here. The
@@ -21866,6 +21879,15 @@ int tg_gui_run_window(tg_gui_state *state)
         state->markdown = 1;
         tg_gui_emoji_preferences_load(TG_GUI_MARKDOWN_FILE, &state->markdown,
                                       &markdown_explicit);
+    }
+    {
+        int previews_explicit = 0;
+
+        state->list_previews = 1;
+        tg_gui_emoji_preferences_load(TG_GUI_PREVIEWS_FILE,
+                                      &state->list_previews,
+                                      &previews_explicit);
+        tg_gui_session_set_previews(state->list_previews);
     }
     /* Sticker pictures: the choice saved, when there is one. The
        machine's own default (off below the 68040) and the look for a WEBP

@@ -450,6 +450,12 @@ int tg_gui_session_send_to(unsigned long peer_index, const char *text,
    mention as read: 1 = shown, 0 = none left, -1 = failed. */
 int tg_gui_session_next_mention(FILE *stream);
 
+/* The chat list with (1) or without (0) each chat's newest message under
+   its name. Without, nothing of it is kept, in memory or in
+   data/telegram-last.txt. Call it before the session opens for a start
+   without them, or at any time. */
+void tg_gui_session_set_previews(int on);
+
 /* The open chat is in front of the user and shows its newest message: mark
    what it shows as read on Telegram, unless this visit already has. Call
    it from the idle path while that holds; it sends one small request per

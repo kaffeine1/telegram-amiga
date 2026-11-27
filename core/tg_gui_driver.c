@@ -943,6 +943,131 @@ static void tg_gui_driver_draft_preview(char *dest, unsigned long size,
     dest[o] = '\0';
 }
 
+/* A row's second line and its time from the newest message of what the
+   row stands for (a chat, a forum's topic): "Anna: the text" in one line,
+   "You: " before one's own, a service line as it is; the time is HH:MM
+   today and the date otherwise. */
+static void tg_gui_driver_row_preview(const tg_gui_state *state,
+                                      tg_gui_chat *row,
+                                      const tg_chat_message_row *m)
+{
+    char line[TG_GUI_TEXT_MAX];
+    char who[TG_GUI_NAME_MAX];
+    unsigned long i;
+
+    row->preview[0] = '\0';
+    row->time[0] = '\0';
+    if (m == 0 || m->text == 0) {
+        return;
+    }
+    who[0] = '\0';
+    if (m->is_service) {
+        who[0] = '\0';
+    } else if (m->is_out) {
+        sprintf(who, "%.40s", TG_STR(MSG_S_YOU));
+    } else if (m->sender != 0) {
+        tg_gui_driver_copy_latin1(who, sizeof(who), m->sender);
+        tg_gui_strip_markers(who, sizeof(who), who);
+    }
+    tg_gui_driver_copy_latin1(line, sizeof(line), m->text);
+    if (who[0] != '\0') {
+        char joined[TG_GUI_TEXT_MAX];
+        unsigned long j;
+
+        sprintf(joined, "%.40s: ", who);
+        i = (unsigned long)strlen(joined);
+        for (j = 0UL; line[j] != '\0' && i + 1UL < sizeof(joined); ++j) {
+            joined[i++] = line[j];
+        }
+        joined[i] = '\0';
+        tg_gui_strip_markers(row->preview, sizeof(row->preview), joined);
+    } else {
+        tg_gui_strip_markers(row->preview, sizeof(row->preview), line);
+    }
+    for (i = 0UL; row->preview[i] != '\0'; ++i) {
+        if (row->preview[i] == '\n' || row->preview[i] == '\r' ||
+            row->preview[i] == '\t') {
+            row->preview[i] = ' ';
+        }
+    }
+    if (m->has_time) {
+        time_t when = (time_t)m->local_epoch;
+        struct tm *parts = gmtime(&when);
+        unsigned long day = m->local_epoch / TG_GUI_DAY_SECONDS + 1UL;
+
+        if (parts != 0) {
+            if (state != 0 && state->today != 0UL && day == state->today) {
+                sprintf(row->time, "%02d:%02d", parts->tm_hour % 24,
+                        parts->tm_min % 60);
+            } else {
+                sprintf(row->time, "%02d/%02d", parts->tm_mday % 32,
+                        (parts->tm_mon + 1) % 13);
+            }
+        }
+    }
+}
+
+/* The newest message of a chat's row, asked of the session: 1 when the row
+   has one now. A row that holds a draft keeps it. */
+static int tg_gui_driver_chat_last(const tg_gui_chat_driver *gui,
+                                   const tg_gui_state *state,
+                                   tg_gui_chat *chat)
+{
+    tg_chat_message_row last;
+    int known;
+
+    if (gui->last_row == 0 || chat->draft || chat->index == 0UL ||
+        chat->index == TG_GUI_ARCHIVE_MORE_INDEX) {
+        return 0;
+    }
+    memset(&last, 0, sizeof(last));
+    known = chat->index == TG_GUI_SAVED_PEER_INDEX
+                ? gui->last_row(1, 0UL, 0UL, &last)
+                : gui->last_row(chat->is_group ? 0 : 1, chat->peer_id_hi,
+                                chat->peer_id_lo, &last);
+    if (!known || last.text == 0 || last.text[0] == '\0') {
+        chat->preview[0] = '\0';
+        chat->time[0] = '\0';
+        return 0;
+    }
+    tg_gui_driver_row_preview(state, chat, &last);
+    return 1;
+}
+
+int tg_gui_driver_refresh_previews(tg_gui_chat_driver *gui)
+{
+    tg_gui_state *state;
+    int changed = 0;
+    int k;
+
+    if (gui == 0 || gui->state == 0 || gui->last_row == 0) {
+        return 0;
+    }
+    state = gui->state;
+    if (state->in_search || state->in_filter || state->forward_pick_active ||
+        state->topic_view) {
+        return 0;
+    }
+    for (k = 0; k < state->chat_count; ++k) {
+        tg_gui_chat *chat = &state->chats[k];
+        char was[TG_GUI_TEXT_MAX];
+        char was_time[TG_GUI_TIME_MAX];
+
+        if (chat->draft || chat->index == 0UL ||
+            chat->index == TG_GUI_ARCHIVE_MORE_INDEX) {
+            continue;
+        }
+        memcpy(was, chat->preview, sizeof(was));
+        memcpy(was_time, chat->time, sizeof(was_time));
+        (void)tg_gui_driver_chat_last(gui, state, chat);
+        if (strcmp(was, chat->preview) != 0 ||
+            strcmp(was_time, chat->time) != 0) {
+            changed = 1;
+        }
+    }
+    return changed;
+}
+
 static void tg_gui_driver_on_chat_list_changed(void *ctx,
                                                const tg_chat_list_row *rows,
                                                int count)
@@ -1014,6 +1139,8 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
                 chat->draft = chat->preview[0] != '\0';
             }
         }
+        /* ...and the chat's newest message otherwise, when it is known. */
+        (void)tg_gui_driver_chat_last(gui, state, chat);
         if (rows[i].is_current) {
             state->selected_chat = state->chat_count;
         }
@@ -1211,6 +1338,7 @@ void tg_gui_chat_driver_bind(tg_gui_chat_driver *gui, tg_gui_state *state,
     gui->prepend_allow_drop = 0;
     gui->draft_text = 0;
     gui->offlist_news = 0;
+    gui->last_row = 0;
     chat_driver->ctx = gui;
     chat_driver->on_message = tg_gui_driver_on_message;
     chat_driver->on_chat_list_changed = tg_gui_driver_on_chat_list_changed;
@@ -1335,9 +1463,6 @@ void tg_gui_driver_show_topics(tg_gui_state *state,
                                const tg_chat_topic_row *rows, int count)
 {
     tg_gui_chat *row;
-    char line[TG_GUI_TEXT_MAX];
-    char who[TG_GUI_NAME_MAX];
-    unsigned long i;
     int k;
 
     if (state == 0) {
@@ -1370,54 +1495,7 @@ void tg_gui_driver_show_topics(tg_gui_state *state,
                              TG_STR(MSG_S_TOPIC_NUMBER), t->id % 1000000UL);
         }
         if (m->text != 0) {
-            who[0] = '\0';
-            if (m->is_service) {
-                who[0] = '\0';
-            } else if (m->is_out) {
-                strcpy(who, "You");
-            } else if (m->sender != 0) {
-                tg_gui_driver_copy_latin1(who, sizeof(who), m->sender);
-                tg_gui_strip_markers(who, sizeof(who), who);
-            }
-            tg_gui_driver_copy_latin1(line, sizeof(line), m->text);
-            if (who[0] != '\0') {
-                char joined[TG_GUI_TEXT_MAX];
-
-                unsigned long j;
-
-                sprintf(joined, "%.40s: ", who);
-                i = (unsigned long)strlen(joined);
-                for (j = 0UL; line[j] != '\0' && i + 1UL < sizeof(joined);
-                     ++j) {
-                    joined[i++] = line[j];
-                }
-                joined[i] = '\0';
-                tg_gui_strip_markers(row->preview, sizeof(row->preview),
-                                     joined);
-            } else {
-                tg_gui_strip_markers(row->preview, sizeof(row->preview), line);
-            }
-            for (i = 0UL; row->preview[i] != '\0'; ++i) {
-                if (row->preview[i] == '\n' || row->preview[i] == '\r' ||
-                    row->preview[i] == '\t') {
-                    row->preview[i] = ' ';
-                }
-            }
-            if (m->has_time) {
-                time_t when = (time_t)m->local_epoch;
-                struct tm *parts = gmtime(&when);
-                unsigned long day = m->local_epoch / TG_GUI_DAY_SECONDS + 1UL;
-
-                if (parts != 0) {
-                    if (state->today != 0UL && day == state->today) {
-                        sprintf(row->time, "%02d:%02d", parts->tm_hour % 24,
-                                parts->tm_min % 60);
-                    } else {
-                        sprintf(row->time, "%02d/%02d", parts->tm_mday % 32,
-                                (parts->tm_mon + 1) % 13);
-                    }
-                }
-            }
+            tg_gui_driver_row_preview(state, row, m);
         } else if (t->closed) {
             sprintf(row->preview, "%.47s", TG_STR(MSG_S_TOPIC_CLOSED));
         }
@@ -2042,6 +2120,50 @@ static const char *tg_gui_driver_test_draft(int is_user,
     return 0;
 }
 
+/* The newest messages of the self-test: the group 0x100 has Anna's, of two
+   lines and of "today" (day 101); user 0x200 has one of the account's own
+   (and a draft, in the drafts above); user 0x300 one of the account's own,
+   of an older day; user 0x400 a service line. */
+static int tg_gui_driver_test_last_gone = 0;
+static int tg_gui_driver_test_last(int is_user, unsigned long peer_id_hi,
+                                   unsigned long peer_id_lo,
+                                   tg_chat_message_row *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (peer_id_hi != 0UL) {
+        return 0;
+    }
+    if (!is_user && peer_id_lo == 0x100UL) {
+        if (tg_gui_driver_test_last_gone) {
+            return 0;
+        }
+        out->text = "ciao\na tutti";
+        out->sender = "Anna B";
+        out->has_time = 1;
+        out->local_epoch = 100UL * 86400UL + 9UL * 3600UL + 5UL * 60UL;
+        return 1;
+    }
+    if (is_user && peer_id_lo == 0x200UL) {
+        out->text = "from me";
+        out->is_out = 1;
+        return 1;
+    }
+    if (is_user && peer_id_lo == 0x300UL) {
+        out->text = "mine \xc3\xa8";
+        out->is_out = 1;
+        out->has_time = 1;
+        out->local_epoch = 40UL * 86400UL;
+        return 1;
+    }
+    if (is_user && peer_id_lo == 0x400UL) {
+        out->text = "Carla joined Telegram";
+        out->sender = "Carla";
+        out->is_service = 1;
+        return 1;
+    }
+    return 0;
+}
+
 static int tg_gui_driver_test_offlist_no(const tg_chat_notify_entry *entry,
                                          char *name, unsigned long size)
 {
@@ -2079,6 +2201,7 @@ static int tg_gui_driver_topics_self_test(void)
     tg_chat_driver driver;
     char title[8];
     char topic_name[48];
+    char own_line[64];
     int k;
 
     for (k = 0; k < 6; ++k) {
@@ -2148,8 +2271,10 @@ static int tg_gui_driver_topics_self_test(void)
                state.chats[1].avatar_color, state.chats[1].initials);
         return 0;
     }
+    tg_locale_format(own_line, sizeof(own_line), "%s: mine",
+                     TG_STR(MSG_S_YOU));
     if (state.chats[2].index != 40UL ||
-        strcmp(state.chats[2].preview, "You: mine") != 0 ||
+        strcmp(state.chats[2].preview, own_line) != 0 ||
         strcmp(state.chats[2].time, "03/11") != 0 || !state.chats[2].pinned ||
         state.chats[2].avatar_color != 1 ||
         strcmp(state.chats[2].initials, "N") != 0) {
@@ -2179,7 +2304,7 @@ static int tg_gui_driver_topics_self_test(void)
     rows[1].draft = 0;
     rows[2].draft = 0;
     if (state.chats[2].draft ||
-        strcmp(state.chats[2].preview, "You: mine") != 0 ||
+        strcmp(state.chats[2].preview, own_line) != 0 ||
         !state.chats[3].draft ||
         strcmp(state.chats[3].preview, "half typed") != 0 ||
         state.chats[1].draft || state.chats[4].draft) {
@@ -2770,6 +2895,68 @@ int tg_gui_driver_self_test(void)
                 puts("gui driver self-test: text_from_utf8 cut wrong");
                 return 2;
             }
+        }
+        {
+            /* A chat whose newest message is known shows it under its
+               name: who wrote in a group, "You" before one's own, a
+               service line as it is, the time of today or the date. A
+               draft goes before it, and a line no longer known goes
+               away when the previews are read again. */
+            char own_line[64];
+            unsigned long keep_today = state.today;
+
+            tg_locale_format(own_line, sizeof(own_line), "%s: mine \xe8",
+                             TG_STR(MSG_S_YOU));
+            state.today = 101UL;
+            gui.draft_text = tg_gui_driver_test_draft;
+            gui.last_row = tg_gui_driver_test_last;
+            driver.on_chat_list_changed(driver.ctx, list, 4);
+            if (strcmp(state.chats[0].preview, "Anna B: ciao a tutti") != 0 ||
+                strcmp(state.chats[0].time, "09:05") != 0 ||
+                !state.chats[1].draft ||
+                strcmp(state.chats[1].preview, "due righe \x80! fine") != 0 ||
+                strcmp(state.chats[2].preview, own_line) != 0 ||
+                strcmp(state.chats[2].time, "10/02") != 0 ||
+                state.chats[2].draft ||
+                strcmp(state.chats[3].preview, "Carla joined Telegram") != 0 ||
+                state.chats[3].time[0] != '\0') {
+                printf("gui driver self-test: newest message in the chat "
+                       "list [%s] [%s] [%s] [%s] [%s] [%s]\n",
+                       state.chats[0].preview, state.chats[0].time,
+                       state.chats[1].preview, state.chats[2].preview,
+                       state.chats[2].time, state.chats[3].preview);
+                return 2;
+            }
+            if (tg_gui_driver_refresh_previews(&gui) != 0) {
+                puts("gui driver self-test: previews changed by themselves");
+                return 2;
+            }
+            tg_gui_driver_test_last_gone = 1;
+            if (tg_gui_driver_refresh_previews(&gui) != 1 ||
+                state.chats[0].preview[0] != '\0' ||
+                state.chats[0].time[0] != '\0' || !state.chats[1].draft ||
+                strcmp(state.chats[2].preview, own_line) != 0 ||
+                tg_gui_driver_refresh_previews(&gui) != 0) {
+                puts("gui driver self-test: a line that went stayed");
+                return 2;
+            }
+            tg_gui_driver_test_last_gone = 0;
+            /* not while the rows are something else */
+            state.in_search = 1;
+            if (tg_gui_driver_refresh_previews(&gui) != 0 ||
+                state.chats[0].preview[0] != '\0') {
+                puts("gui driver self-test: previews read under a search");
+                return 2;
+            }
+            state.in_search = 0;
+            if (tg_gui_driver_refresh_previews(&gui) != 1 ||
+                strcmp(state.chats[0].preview, "Anna B: ciao a tutti") != 0) {
+                puts("gui driver self-test: a line that came back missing");
+                return 2;
+            }
+            gui.last_row = 0;
+            gui.draft_text = 0;
+            state.today = keep_today;
         }
         driver.on_chat_list_changed(driver.ctx, list, 4);
 

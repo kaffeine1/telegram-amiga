@@ -58,6 +58,18 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   (`updateReadHistoryInbox`, `updateReadChannelInbox`) and the row, the
   title, the Archive's line and the saved list take that count. The chat
   open in the window keeps its own.
+- The chat list shows each chat's last message under its name, as the
+  official clients do: who wrote it in a group, "You:" before one's own,
+  a photo or a file by its label, a service line as it reads, and the
+  time on the right (the date, when it is not of today). The lines come
+  from what the program receives anyway (the answer about each chat that
+  the list already asks in the background, the pinned chats' answer, the
+  messages that arrive while the window is open, what is sent from here
+  and the chat that is opened), so it costs no request; an edit changes
+  the line and a deletion takes it away. They are kept in
+  data/telegram-last.txt between runs, so the list does not start bare,
+  and a log out removes them. A draft still goes first. "Previews in the
+  chat list", in the Settings, switches them off: nothing is kept then.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message
