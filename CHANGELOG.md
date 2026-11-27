@@ -66,7 +66,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   the list already asks in the background, the pinned chats' answer, the
   messages that arrive while the window is open, what is sent from here
   and the chat that is opened), so it costs no request; an edit changes
-  the line and a deletion takes it away. They are kept in
+  the line and a deletion takes it away, and what Telegram states as a
+  chat's newest message stands also against a newer one still held here
+  (one deleted elsewhere without the news of it coming). They are kept in
   data/telegram-last.txt between runs, so the list does not start bare,
   and a log out removes them. A draft still goes first. "Previews in the
   chat list", in the Settings, switches them off: nothing is kept then.

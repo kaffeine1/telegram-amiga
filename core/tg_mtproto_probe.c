@@ -4532,6 +4532,45 @@ static int tg_gui_last_take_message(const tg_mtproto_message_text *m,
     return tg_gui_last_take(peer_constructor, id_hi, id_lo, m->id, m->date,
                             is_out, is_service, who, text);
 }
+
+/* The chat's newest message as Telegram states it (the chat's own page,
+   its dialog, a page of the chat list): it stands, also against a newer
+   message this client still holds. That one was deleted without the
+   client hearing of it (the deletion's update does not always come), and
+   as the newer of the two it would keep its place for ever. */
+static int tg_gui_last_take_top_message(const tg_mtproto_message_text *m,
+                                        unsigned long peer_constructor,
+                                        unsigned long id_hi,
+                                        unsigned long id_lo,
+                                        const unsigned char *container,
+                                        unsigned long container_length)
+{
+    unsigned long pc = peer_constructor;
+    unsigned long hi = id_hi;
+    unsigned long lo = id_lo;
+    int at;
+
+    if (tg_gui_last_off || m == 0 || m->id == 0UL) {
+        return 0;
+    }
+    if (pc == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
+        if (!tg_gui_self_known) {
+            return 0;
+        }
+        pc = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+        hi = tg_gui_self_hi;
+        lo = tg_gui_self_lo;
+    }
+    tg_gui_last_load();
+    at = tg_gui_last_find_kind(tg_gui_last_kind(pc), hi, lo);
+    if (at >= 0 && tg_gui_last[at].msg_id > m->id) {
+        tg_gui_last[at] = tg_gui_last[--tg_gui_last_count];
+        tg_gui_last_dirty = 1;
+        tg_gui_last_unsaved = 1;
+    }
+    return tg_gui_last_take_message(m, peer_constructor, id_hi, id_lo,
+                                    container, container_length);
+}
 /* A page of the chat list carries the top message of each chat: the lines
    of all of them, in one pass over the reply. `cache` is the page read as
    a chat list. */
@@ -4560,7 +4599,7 @@ static void tg_gui_last_take_page(const unsigned char *body,
                  (e->is_self &&
                   dest.peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR)) &&
                 e->id_hi == dest.id_hi && e->id_lo == dest.id_lo) {
-                (void)tg_gui_last_take_message(
+                (void)tg_gui_last_take_top_message(
                     &tg_gui_last_scratch,
                     e->is_self ? TG_MTPROTO_PEER_USER_CONSTRUCTOR
                                : e->peer_constructor,
@@ -14116,7 +14155,7 @@ static int tg_mtproto_chat_fetch_read_outbox_on_context(
                         result.result_body, result.result_body_length,
                         peer_constructor, peer_id_hi, peer_id_lo,
                         dialogs.peers[i].top_message, &tg_gui_last_scratch)) {
-                    (void)tg_gui_last_take_message(
+                    (void)tg_gui_last_take_top_message(
                         &tg_gui_last_scratch, peer_constructor, peer_id_hi,
                         peer_id_lo, result.result_body,
                         result.result_body_length);
@@ -17219,9 +17258,9 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                 newest = j;
             }
         }
-        (void)tg_gui_last_take_message(&texts.messages[newest],
-                                       peer_constructor, peer_id_hi,
-                                       peer_id_lo, 0, 0UL);
+        (void)tg_gui_last_take_top_message(&texts.messages[newest],
+                                           peer_constructor, peer_id_hi,
+                                           peer_id_lo, 0, 0UL);
     }
     if (tg_chat_delete_target != 0 &&
         peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
@@ -31161,7 +31200,7 @@ static int tg_gui_session_fetch_pins(FILE *stream)
                 pinned.peers[i].peer_constructor, pinned.peers[i].id_hi,
                 pinned.peers[i].id_lo, pinned.peers[i].top_message,
                 &tg_gui_last_scratch)) {
-            (void)tg_gui_last_take_message(
+            (void)tg_gui_last_take_top_message(
                 &tg_gui_last_scratch, pinned.peers[i].peer_constructor,
                 pinned.peers[i].id_hi, pinned.peers[i].id_lo,
                 result.result_body, result.result_body_length);
@@ -45233,6 +45272,22 @@ static int tg_gui_last_self_test(void)
                                   21UL, 0, 0UL) == 1 &&
          tg_gui_last[0].is_out == 1 && tg_gui_last[0].who[0] == '\0' &&
          strcmp(tg_gui_last[0].text, "sent from the phone") == 0;
+    /* An older message pushed late is not news; the same one stated by
+       Telegram as the chat's newest takes the place of the newer one
+       held, which was deleted without this client hearing of it. */
+    m.id = 60UL;
+    strcpy(m.text, "the one before");
+    ok = ok &&
+         tg_gui_last_take_message(&m, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL,
+                                  21UL, 0, 0UL) == 0 &&
+         strcmp(tg_gui_last[0].text, "sent from the phone") == 0 &&
+         tg_gui_last_take_top_message(&m, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                      0UL, 21UL, 0, 0UL) == 1 &&
+         tg_gui_last_count == 1 && tg_gui_last[0].msg_id == 60UL &&
+         strcmp(tg_gui_last[0].text, "the one before") == 0 &&
+         /* stated again: nothing changes */
+         tg_gui_last_take_top_message(&m, TG_MTPROTO_PEER_USER_CONSTRUCTOR,
+                                      0UL, 21UL, 0, 0UL) == 0;
     m.id = 71UL;
     m.is_out = 0;
     m.from_constructor = TG_MTPROTO_PEER_USER_CONSTRUCTOR;
