@@ -8,6 +8,7 @@
  */
 
 #include "tg_gui_driver.h"
+#include "tg_locale.h"
 #include "tg_mtproto_probe.h"
 #include "tg_gui_session.h"
 #include "tg_text_style.h"
@@ -1350,8 +1351,8 @@ void tg_gui_driver_show_topics(tg_gui_state *state,
     state->topic_view = 1;
     row = &state->chats[state->chat_count++];
     memset(row, 0, sizeof(*row));
-    sprintf(row->name, "%.31s", "All chats");
-    sprintf(row->preview, "%.47s", "Back to the chat list");
+    sprintf(row->name, "%.31s", TG_STR(MSG_S_ALL_CHATS));
+    sprintf(row->preview, "%.47s", TG_STR(MSG_S_BACK_TO_LIST));
     row->initials[0] = '<';
     row->index = TG_GUI_TOPIC_BACK_INDEX;
     for (k = 0; rows != 0 && k < count && state->chat_count < TG_GUI_MAX_CHATS;
@@ -1365,7 +1366,8 @@ void tg_gui_driver_show_topics(tg_gui_state *state,
                                   t->title != 0 ? t->title : "");
         tg_gui_strip_markers(row->name, sizeof(row->name), row->name);
         if (row->name[0] == '\0') {
-            sprintf(row->name, "Topic %lu", t->id % 1000000UL);
+            tg_locale_format(row->name, sizeof(row->name),
+                             TG_STR(MSG_S_TOPIC_NUMBER), t->id % 1000000UL);
         }
         if (m->text != 0) {
             who[0] = '\0';
@@ -1417,7 +1419,7 @@ void tg_gui_driver_show_topics(tg_gui_state *state,
                 }
             }
         } else if (t->closed) {
-            sprintf(row->preview, "%.47s", "Closed");
+            sprintf(row->preview, "%.47s", TG_STR(MSG_S_TOPIC_CLOSED));
         }
         /* A topic that holds a draft shows it, as a chat's row does; the
            time stays the newest message's. */
@@ -2076,6 +2078,7 @@ static int tg_gui_driver_topics_self_test(void)
     tg_gui_chat_driver gui;
     tg_chat_driver driver;
     char title[8];
+    char topic_name[48];
     int k;
 
     for (k = 0; k < 6; ++k) {
@@ -2129,7 +2132,7 @@ static int tg_gui_driver_topics_self_test(void)
     if (state.chat_count != 5 || !state.topic_view ||
         !tg_gui_topics_listed(&state) ||
         state.chats[0].index != TG_GUI_TOPIC_BACK_INDEX ||
-        strcmp(state.chats[0].name, "All chats") != 0) {
+        strcmp(state.chats[0].name, TG_STR(MSG_S_ALL_CHATS)) != 0) {
         puts("gui driver self-test: topic list head");
         return 0;
     }
@@ -2158,8 +2161,10 @@ static int tg_gui_driver_topics_self_test(void)
     if (((unsigned char)state.chats[3].name[0] != 0x80U &&
          (unsigned char)state.chats[3].name[0] != 0x81U) ||
         strcmp(state.chats[3].initials, "X") != 0 ||
-        strcmp(state.chats[3].preview, "Closed") != 0 ||
-        strcmp(state.chats[4].name, "Topic 42") != 0 ||
+        strcmp(state.chats[3].preview, TG_STR(MSG_S_TOPIC_CLOSED)) != 0 ||
+        strcmp(state.chats[4].name,
+               tg_locale_format(topic_name, sizeof(topic_name),
+                                TG_STR(MSG_S_TOPIC_NUMBER), 42UL)) != 0 ||
         strcmp(state.chats[4].preview, "Ann created the topic") != 0) {
         printf("gui driver self-test: topic rows [%s] [%s] [%s] [%s]\n",
                state.chats[3].initials, state.chats[3].preview,
@@ -2185,7 +2190,7 @@ static int tg_gui_driver_topics_self_test(void)
     }
     tg_gui_driver_show_topics(&state, rows, 4);
     if (state.chats[3].draft ||
-        strcmp(state.chats[3].preview, "Closed") != 0) {
+        strcmp(state.chats[3].preview, TG_STR(MSG_S_TOPIC_CLOSED)) != 0) {
         puts("gui driver self-test: a topic's draft outlives it");
         return 0;
     }

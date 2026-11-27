@@ -4418,7 +4418,7 @@ static const char *tg_gui_photo_placeholder(const tg_gui_message *message)
         strlen(message->text) < TG_GUI_PHOTO_PLACEHOLDER_MAX) {
         return message->text;
     }
-    return "[Photo]";
+    return TG_STR(MSG_S_LBL_PHOTO);
 }
 
 /* One layout for measuring and painting the reaction chips. A narrow window
@@ -15122,7 +15122,7 @@ int tg_gui_self_test(void)
             st_record.height = 320;
             st_record.min_x = st_record.width;
             st_record.min_y = st_record.height;
-            st_record.forbidden = "[Photo]";
+            st_record.forbidden = TG_STR(MSG_S_LBL_PHOTO);
             backend.context = &st_record;
             tg_gui_paint(&state, &backend);
             strcpy(state.messages[1].text, kept);

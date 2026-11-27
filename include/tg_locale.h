@@ -32,6 +32,23 @@ const char *tg_str(long id, const char *builtin);
 #define TG_STR(name) tg_str((long)(name), name##_STR)
 #endif
 
+/* A catalog text as UTF-8, for what is joined to Telegram's own text (a
+   media label, a service line, a chat's name): that text is UTF-8 until
+   the window or the console turns it into Latin-1, and a catalog letter
+   above 127 would be read there as the start of a UTF-8 sequence. A text
+   with no such letter comes back as it is; another one is written into
+   one of a few buffers used in turn, good until four more are asked for,
+   and cut at TG_LOCALE_UTF8_MAX - 1 bytes. */
+#define TG_LOCALE_UTF8_MAX 640
+const char *tg_locale_utf8(const char *latin1);
+#if defined(TG_LOCALE_CHECK_FORMATS)
+#define TG_STR_U8(name) (name##_STR)
+#else
+/* (the name is pasted here, not handed to TG_STR: an argument passed on
+   would be replaced by its number first) */
+#define TG_STR_U8(name) tg_locale_utf8(tg_str((long)(name), name##_STR))
+#endif
+
 /* sprintf of a catalog text, bounded by size: a translation may be longer
    than the English text the buffer was sized for, and what does not fit
    is cut. %s %c %d %i %u %x %X %%, with -, 0, width, .precision and l

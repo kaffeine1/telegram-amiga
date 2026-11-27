@@ -2020,5 +2020,7 @@ int tg_mtproto_login_token_url(const unsigned char *token,
                                unsigned long out_size);
 
 int tg_mtproto_login_self_test(void);
+/* What the session says in the catalog's language: fit and whole letters. */
+int tg_mtproto_session_texts_self_test(void);
 
 #endif

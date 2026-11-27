@@ -136,4 +136,9 @@ void tg_console_ui_end_line(FILE *stream);
 void tg_console_ui_set_charset(int charset);
 int tg_console_ui_charset(void);
 
+/* A text of the catalog (Latin-1) made ready for the console: as it is on
+   a Latin-1 console, as UTF-8 where the charset is UTF-8 (in a buffer of
+   tg_locale_utf8, good for a few calls). 0 stays 0. */
+const char *tg_console_ui_text(const char *latin1);
+
 #endif

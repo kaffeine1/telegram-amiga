@@ -813,6 +813,98 @@
 #define MSG_ST_FIND_ALL_PROMPT_STR "All chats: type, ENTER searches (ESC ends)"
 #define MSG_ST_FIND_CHAT_PROMPT 457
 #define MSG_ST_FIND_CHAT_PROMPT_STR "Find in chat: type, ENTER searches (ESC ends)"
+#define MSG_ST_CODE_IN_TELEGRAM 458
+#define MSG_ST_CODE_IN_TELEGRAM_STR "Code sent in Telegram on your phone"
+#define MSG_ST_CODE_BY_SMS 459
+#define MSG_ST_CODE_BY_SMS_STR "Code sent by SMS"
+#define MSG_ST_CODE_BY_CALL 460
+#define MSG_ST_CODE_BY_CALL_STR "Telegram is calling with the code"
+#define MSG_ST_CODE_FLASH_CALL 461
+#define MSG_ST_CODE_FLASH_CALL_STR "Read the code from the incoming call"
+#define MSG_ST_CODE_BY_EMAIL 462
+#define MSG_ST_CODE_BY_EMAIL_STR "Code sent to your email"
+#define MSG_ST_CODE_WANTS_EMAIL 463
+#define MSG_ST_CODE_WANTS_EMAIL_STR "Telegram wants a login email first"
+#define MSG_ST_CODE_UNKNOWN 464
+#define MSG_ST_CODE_UNKNOWN_STR "Telegram did not say where it sent the code"
+#define MSG_ST_REACT_NOT_ALLOWED 465
+#define MSG_ST_REACT_NOT_ALLOWED_STR "This chat does not allow that reaction."
+#define MSG_ST_REACT_TOO_MANY 466
+#define MSG_ST_REACT_TOO_MANY_STR "This message has too many different reactions."
+#define MSG_ST_REACT_CANNOT 467
+#define MSG_ST_REACT_CANNOT_STR "You cannot react in this chat."
+#define MSG_ST_REACT_MESSAGE_GONE 468
+#define MSG_ST_REACT_MESSAGE_GONE_STR "This message is no longer available."
+#define MSG_ST_REACT_PREMIUM 469
+#define MSG_ST_REACT_PREMIUM_STR "That reaction requires Telegram Premium."
+#define MSG_ST_REACT_WAIT 470
+#define MSG_ST_REACT_WAIT_STR "Please wait before reacting again."
+#define MSG_ST_REACT_FAILED 471
+#define MSG_ST_REACT_FAILED_STR "Could not change the reaction. Please try again."
+#define MSG_ST_REACTION_REMOVED 472
+#define MSG_ST_REACTION_REMOVED_STR "Reaction removed"
+#define MSG_ST_REACTION_SENT 473
+#define MSG_ST_REACTION_SENT_STR "Reaction sent"
+#define MSG_ST_LG_NUMBER_INVALID 474
+#define MSG_ST_LG_NUMBER_INVALID_STR "That number is not valid"
+#define MSG_ST_LG_NUMBER_BANNED 475
+#define MSG_ST_LG_NUMBER_BANNED_STR "Telegram has banned this number"
+#define MSG_ST_LG_TOO_MANY_CODES 476
+#define MSG_ST_LG_TOO_MANY_CODES_STR "Too many codes asked for this number"
+#define MSG_ST_LG_TOO_MANY_PASSWORDS 477
+#define MSG_ST_LG_TOO_MANY_PASSWORDS_STR "Too many password attempts"
+#define MSG_ST_LG_WRONG_CODE 478
+#define MSG_ST_LG_WRONG_CODE_STR "Wrong code - try again"
+#define MSG_ST_LG_CODE_FIRST 479
+#define MSG_ST_LG_CODE_FIRST_STR "Type the code first"
+#define MSG_ST_LG_CODE_EXPIRED 480
+#define MSG_ST_LG_CODE_EXPIRED_STR "That code has expired"
+#define MSG_ST_LG_NO_ACCOUNT 481
+#define MSG_ST_LG_NO_ACCOUNT_STR "No Telegram account for this number"
+#define MSG_ST_LG_WRONG_PASSWORD 482
+#define MSG_ST_LG_WRONG_PASSWORD_STR "Wrong password - try again"
+#define MSG_ST_LG_START_OVER 483
+#define MSG_ST_LG_START_OVER_STR "Telegram asks to start over"
+#define MSG_ST_LG_CODE_NOT_SENT 484
+#define MSG_ST_LG_CODE_NOT_SENT_STR "Telegram could not send the code"
+#define MSG_ST_LG_NO_OTHER_WAY 485
+#define MSG_ST_LG_NO_OTHER_WAY_STR "No other way to send this code"
+#define MSG_ST_LG_KEY_REFUSED 486
+#define MSG_ST_LG_KEY_REFUSED_STR "Telegram refused this program's key"
+#define MSG_ST_LG_LIMITING 487
+#define MSG_ST_LG_LIMITING_STR "Telegram is limiting logins from this app"
+#define MSG_ST_LG_NEWER_APP 488
+#define MSG_ST_LG_NEWER_APP_STR "Telegram wants a newer app to log in"
+#define MSG_ST_LG_TOO_MANY_ATTEMPTS 489
+#define MSG_ST_LG_TOO_MANY_ATTEMPTS_STR "Too many attempts"
+#define MSG_ST_LG_REFUSED 490
+#define MSG_ST_LG_REFUSED_STR "Telegram refused the login"
+#define MSG_ST_LG_NO_REACH 491
+#define MSG_ST_LG_NO_REACH_STR "Could not reach Telegram"
+#define MSG_ST_LG_NO_KEY_FILE 492
+#define MSG_ST_LG_NO_KEY_FILE_STR "This program's key file is missing"
+#define MSG_ST_LG_TYPE_NUMBER 493
+#define MSG_ST_LG_TYPE_NUMBER_STR "Type your phone number"
+#define MSG_ST_UPDATE_OUT 494
+#define MSG_ST_UPDATE_OUT_STR "%.16s %s is out: you have %s. See About"
+#define MSG_ST_OFFLINE_WHY 495
+#define MSG_ST_OFFLINE_WHY_STR "Offline: %.38s"
+#define MSG_ST_OFFLINE_CACHE 496
+#define MSG_ST_OFFLINE_CACHE_STR "Offline (cache) - Amiga+Q quits"
+#define MSG_ST_OPENING 497
+#define MSG_ST_OPENING_STR "Opening %.40s..."
+#define MSG_ST_LIVE 498
+#define MSG_ST_LIVE_STR "Live - F1-F10 chats, Amiga+Q quits"
+#define MSG_ST_READ_ONLY 499
+#define MSG_ST_READ_ONLY_STR "Read-only - F1-F10 chats, Amiga+Q quits"
+#define MSG_ST_NO_CHAT_CACHE 500
+#define MSG_ST_NO_CHAT_CACHE_STR "Chat cache not found"
+#define MSG_ST_CHAT_CACHE_EMPTY 501
+#define MSG_ST_CHAT_CACHE_EMPTY_STR "No chats in the cache"
+#define MSG_ST_GETTING_CODE 502
+#define MSG_ST_GETTING_CODE_STR "Getting a code from Telegram..."
+#define MSG_ST_CONNECTING 503
+#define MSG_ST_CONNECTING_STR "Connecting to Telegram..."
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1311,5 +1403,1105 @@
 #define MSG_G_LOGIN_KEYS_STR "ENTER confirms   ESC quits"
 #define MSG_G_NO_CODE_PRESS_S 1436
 #define MSG_G_NO_CODE_PRESS_S_STR "No code? Press S to get it %.24s"
+#define MSG_S_LBL_PHOTO 1600
+#define MSG_S_LBL_PHOTO_STR "[Photo]"
+#define MSG_S_LBL_FILE 1601
+#define MSG_S_LBL_FILE_STR "[File]"
+#define MSG_S_LBL_LOCATION 1602
+#define MSG_S_LBL_LOCATION_STR "[Location]"
+#define MSG_S_LBL_LINK 1603
+#define MSG_S_LBL_LINK_STR "[Link]"
+#define MSG_S_LBL_MEDIA 1604
+#define MSG_S_LBL_MEDIA_STR "[Media]"
+#define MSG_S_W_STICKER 1605
+#define MSG_S_W_STICKER_STR "Sticker"
+#define MSG_S_W_GIF 1606
+#define MSG_S_W_GIF_STR "GIF"
+#define MSG_S_W_VIDEO 1607
+#define MSG_S_W_VIDEO_STR "Video"
+#define MSG_S_W_VOICE 1608
+#define MSG_S_W_VOICE_STR "Voice"
+#define MSG_S_W_AUDIO 1609
+#define MSG_S_W_AUDIO_STR "Audio"
+#define MSG_S_W_FILE 1610
+#define MSG_S_W_FILE_STR "File"
+#define MSG_S_W_LINK 1611
+#define MSG_S_W_LINK_STR "Link"
+#define MSG_S_W_POLL 1612
+#define MSG_S_W_POLL_STR "Poll"
+#define MSG_S_W_QUIZ 1613
+#define MSG_S_W_QUIZ_STR "Quiz"
+#define MSG_S_POLL_YOUR_RIGHT 1614
+#define MSG_S_POLL_YOUR_RIGHT_STR " (your answer, right)"
+#define MSG_S_POLL_YOUR_ANSWER 1615
+#define MSG_S_POLL_YOUR_ANSWER_STR " (your answer)"
+#define MSG_S_POLL_YOUR_VOTE 1616
+#define MSG_S_POLL_YOUR_VOTE_STR " (your vote)"
+#define MSG_S_POLL_RIGHT 1617
+#define MSG_S_POLL_RIGHT_STR " (right)"
+#define MSG_S_POLL_VOTES_1 1618
+#define MSG_S_POLL_VOTES_1_STR "%lu vote"
+#define MSG_S_POLL_VOTES 1619
+#define MSG_S_POLL_VOTES_STR "%lu votes"
+#define MSG_S_POLL_NO_RESULTS 1620
+#define MSG_S_POLL_NO_RESULTS_STR "No results"
+#define MSG_S_POLL_VOTE_TO_SEE 1621
+#define MSG_S_POLL_VOTE_TO_SEE_STR "Vote to see the results"
+#define MSG_S_POLL_CLOSED 1622
+#define MSG_S_POLL_CLOSED_STR ", closed"
+#define MSG_S_POLL_SEVERAL 1623
+#define MSG_S_POLL_SEVERAL_STR ", several answers allowed"
+#define MSG_S_POLL_PUBLIC 1624
+#define MSG_S_POLL_PUBLIC_STR ", votes are public"
+#define MSG_S_POLL_WHY 1625
+#define MSG_S_POLL_WHY_STR "Why: "
+#define MSG_S_POLL_SOMEONE 1626
+#define MSG_S_POLL_SOMEONE_STR "someone"
+#define MSG_S_POLL_A_CHANNEL 1627
+#define MSG_S_POLL_A_CHANNEL_STR "a channel"
+#define MSG_S_POLL_NOBODY_SO_FAR 1628
+#define MSG_S_POLL_NOBODY_SO_FAR_STR " nobody so far"
+#define MSG_S_POLL_NOBODY 1629
+#define MSG_S_POLL_NOBODY_STR " nobody"
+#define MSG_S_POLL_LATEST 1630
+#define MSG_S_POLL_LATEST_STR "The latest %lu of %lu votes."
+#define MSG_SV_SOMEONE 1631
+#define MSG_SV_SOMEONE_STR "Someone"
+#define MSG_SV_CREATED_GROUP 1632
+#define MSG_SV_CREATED_GROUP_STR "%s created the group \"%s\""
+#define MSG_SV_CREATED_GROUP_YOU 1633
+#define MSG_SV_CREATED_GROUP_YOU_STR "You created the group \"%s\""
+#define MSG_SV_CHANNEL_RENAMED 1634
+#define MSG_SV_CHANNEL_RENAMED_STR "Channel renamed to \"%s\""
+#define MSG_SV_GROUP_NAME 1635
+#define MSG_SV_GROUP_NAME_STR "%s changed the group name to \"%s\""
+#define MSG_SV_GROUP_NAME_YOU 1636
+#define MSG_SV_GROUP_NAME_YOU_STR "You changed the group name to \"%s\""
+#define MSG_SV_CHANNEL_PHOTO 1637
+#define MSG_SV_CHANNEL_PHOTO_STR "Channel photo updated"
+#define MSG_SV_GROUP_PHOTO 1638
+#define MSG_SV_GROUP_PHOTO_STR "%s changed the group photo"
+#define MSG_SV_GROUP_PHOTO_YOU 1639
+#define MSG_SV_GROUP_PHOTO_YOU_STR "You changed the group photo"
+#define MSG_SV_CHANNEL_PHOTO_GONE 1640
+#define MSG_SV_CHANNEL_PHOTO_GONE_STR "Channel photo removed"
+#define MSG_SV_GROUP_PHOTO_GONE 1641
+#define MSG_SV_GROUP_PHOTO_GONE_STR "%s removed the group photo"
+#define MSG_SV_GROUP_PHOTO_GONE_YOU 1642
+#define MSG_SV_GROUP_PHOTO_GONE_YOU_STR "You removed the group photo"
+#define MSG_SV_JOINED 1643
+#define MSG_SV_JOINED_STR "%s joined the group"
+#define MSG_SV_JOINED_YOU 1644
+#define MSG_SV_JOINED_YOU_STR "You joined the group"
+#define MSG_SV_ADDED 1645
+#define MSG_SV_ADDED_STR "%s added %s"
+#define MSG_SV_ADDED_YOU 1646
+#define MSG_SV_ADDED_YOU_STR "You added %s"
+#define MSG_SV_ADDED_MORE_1 1647
+#define MSG_SV_ADDED_MORE_1_STR "%s added %s and 1 more"
+#define MSG_SV_ADDED_MORE_1_YOU 1648
+#define MSG_SV_ADDED_MORE_1_YOU_STR "You added %s and 1 more"
+#define MSG_SV_ADDED_MORE 1649
+#define MSG_SV_ADDED_MORE_STR "%s added %s and %lu more"
+#define MSG_SV_ADDED_MORE_YOU 1650
+#define MSG_SV_ADDED_MORE_YOU_STR "You added %s and %lu more"
+#define MSG_SV_ADDED_MEMBERS 1651
+#define MSG_SV_ADDED_MEMBERS_STR "%s added %lu members"
+#define MSG_SV_ADDED_MEMBERS_YOU 1652
+#define MSG_SV_ADDED_MEMBERS_YOU_STR "You added %lu members"
+#define MSG_SV_ADDED_A_MEMBER 1653
+#define MSG_SV_ADDED_A_MEMBER_STR "%s added a member"
+#define MSG_SV_ADDED_A_MEMBER_YOU 1654
+#define MSG_SV_ADDED_A_MEMBER_YOU_STR "You added a member"
+#define MSG_SV_LEFT 1655
+#define MSG_SV_LEFT_STR "%s left the group"
+#define MSG_SV_LEFT_YOU 1656
+#define MSG_SV_LEFT_YOU_STR "You left the group"
+#define MSG_SV_REMOVED 1657
+#define MSG_SV_REMOVED_STR "%s removed %s"
+#define MSG_SV_REMOVED_YOU 1658
+#define MSG_SV_REMOVED_YOU_STR "You removed %s"
+#define MSG_SV_REMOVED_A_MEMBER 1659
+#define MSG_SV_REMOVED_A_MEMBER_STR "%s removed a member"
+#define MSG_SV_REMOVED_A_MEMBER_YOU 1660
+#define MSG_SV_REMOVED_A_MEMBER_YOU_STR "You removed a member"
+#define MSG_SV_JOINED_LINK 1661
+#define MSG_SV_JOINED_LINK_STR "%s joined the group via invite link"
+#define MSG_SV_JOINED_LINK_YOU 1662
+#define MSG_SV_JOINED_LINK_YOU_STR "You joined the group via invite link"
+#define MSG_SV_CHANNEL_CREATED 1663
+#define MSG_SV_CHANNEL_CREATED_STR "Channel \"%s\" created"
+#define MSG_SV_UPGRADED 1664
+#define MSG_SV_UPGRADED_STR "The group was upgraded to a supergroup"
+#define MSG_SV_PINNED_QUOTE 1665
+#define MSG_SV_PINNED_QUOTE_STR "%s pinned \"%s\""
+#define MSG_SV_PINNED_QUOTE_YOU 1666
+#define MSG_SV_PINNED_QUOTE_YOU_STR "You pinned \"%s\""
+#define MSG_SV_PINNED 1667
+#define MSG_SV_PINNED_STR "%s pinned a message"
+#define MSG_SV_PINNED_YOU 1668
+#define MSG_SV_PINNED_YOU_STR "You pinned a message"
+#define MSG_SV_HISTORY_CLEARED 1669
+#define MSG_SV_HISTORY_CLEARED_STR "History was cleared"
+#define MSG_SV_SCORED 1670
+#define MSG_SV_SCORED_STR "%s scored %lu"
+#define MSG_SV_SCORED_YOU 1671
+#define MSG_SV_SCORED_YOU_STR "You scored %lu"
+#define MSG_SV_CALL_OUT 1672
+#define MSG_SV_CALL_OUT_STR "Outgoing call (%s)"
+#define MSG_SV_CALL_IN 1673
+#define MSG_SV_CALL_IN_STR "Incoming call (%s)"
+#define MSG_SV_VIDEO_CALL_OUT 1674
+#define MSG_SV_VIDEO_CALL_OUT_STR "Outgoing video call (%s)"
+#define MSG_SV_VIDEO_CALL_IN 1675
+#define MSG_SV_VIDEO_CALL_IN_STR "Incoming video call (%s)"
+#define MSG_SV_CALL_CANCELLED 1676
+#define MSG_SV_CALL_CANCELLED_STR "Cancelled call"
+#define MSG_SV_VIDEO_CALL_CANCELLED 1677
+#define MSG_SV_VIDEO_CALL_CANCELLED_STR "Cancelled video call"
+#define MSG_SV_CALL_MISSED 1678
+#define MSG_SV_CALL_MISSED_STR "Missed call"
+#define MSG_SV_VIDEO_CALL_MISSED 1679
+#define MSG_SV_VIDEO_CALL_MISSED_STR "Missed video call"
+#define MSG_SV_SCREENSHOT 1680
+#define MSG_SV_SCREENSHOT_STR "%s took a screenshot"
+#define MSG_SV_SCREENSHOT_YOU 1681
+#define MSG_SV_SCREENSHOT_YOU_STR "You took a screenshot"
+#define MSG_SV_BOT_ALLOWED 1682
+#define MSG_SV_BOT_ALLOWED_STR "You allowed this bot to message you"
+#define MSG_SV_JOINED_TELEGRAM 1683
+#define MSG_SV_JOINED_TELEGRAM_STR "%s joined Telegram"
+#define MSG_SV_JOINED_TELEGRAM_YOU 1684
+#define MSG_SV_JOINED_TELEGRAM_YOU_STR "You joined Telegram"
+#define MSG_SV_VIDEO_CHAT_ENDED 1685
+#define MSG_SV_VIDEO_CHAT_ENDED_STR "Video chat ended (%s)"
+#define MSG_SV_LIVE_STARTED 1686
+#define MSG_SV_LIVE_STARTED_STR "Live stream started"
+#define MSG_SV_VIDEO_CHAT_STARTED 1687
+#define MSG_SV_VIDEO_CHAT_STARTED_STR "%s started a video chat"
+#define MSG_SV_VIDEO_CHAT_STARTED_YOU 1688
+#define MSG_SV_VIDEO_CHAT_STARTED_YOU_STR "You started a video chat"
+#define MSG_SV_INVITED 1689
+#define MSG_SV_INVITED_STR "%s invited %s to the video chat"
+#define MSG_SV_INVITED_YOU 1690
+#define MSG_SV_INVITED_YOU_STR "You invited %s to the video chat"
+#define MSG_SV_INVITED_MEMBERS 1691
+#define MSG_SV_INVITED_MEMBERS_STR "%s invited members to the video chat"
+#define MSG_SV_INVITED_MEMBERS_YOU 1692
+#define MSG_SV_INVITED_MEMBERS_YOU_STR "You invited members to the video chat"
+#define MSG_SV_TTL_OFF 1693
+#define MSG_SV_TTL_OFF_STR "%s turned off auto-delete"
+#define MSG_SV_TTL_OFF_YOU 1694
+#define MSG_SV_TTL_OFF_YOU_STR "You turned off auto-delete"
+#define MSG_SV_TTL_SET 1695
+#define MSG_SV_TTL_SET_STR "%s set messages to auto-delete after %s"
+#define MSG_SV_TTL_SET_YOU 1696
+#define MSG_SV_TTL_SET_YOU_STR "You set messages to auto-delete after %s"
+#define MSG_SV_PERIOD_MONTH 1697
+#define MSG_SV_PERIOD_MONTH_STR "1 month"
+#define MSG_SV_PERIOD_WEEK_1 1698
+#define MSG_SV_PERIOD_WEEK_1_STR "1 week"
+#define MSG_SV_PERIOD_WEEKS 1699
+#define MSG_SV_PERIOD_WEEKS_STR "%lu weeks"
+#define MSG_SV_PERIOD_DAY_1 1700
+#define MSG_SV_PERIOD_DAY_1_STR "1 day"
+#define MSG_SV_PERIOD_DAYS 1701
+#define MSG_SV_PERIOD_DAYS_STR "%lu days"
+#define MSG_SV_PERIOD_HOUR_1 1702
+#define MSG_SV_PERIOD_HOUR_1_STR "1 hour"
+#define MSG_SV_PERIOD_HOURS 1703
+#define MSG_SV_PERIOD_HOURS_STR "%lu hours"
+#define MSG_SV_PERIOD_MINUTE_1 1704
+#define MSG_SV_PERIOD_MINUTE_1_STR "1 minute"
+#define MSG_SV_PERIOD_MINUTES 1705
+#define MSG_SV_PERIOD_MINUTES_STR "%lu minutes"
+#define MSG_SV_PERIOD_SECOND_1 1706
+#define MSG_SV_PERIOD_SECOND_1_STR "1 second"
+#define MSG_SV_PERIOD_SECONDS 1707
+#define MSG_SV_PERIOD_SECONDS_STR "%lu seconds"
+#define MSG_SV_VIDEO_CHAT_SCHEDULED 1708
+#define MSG_SV_VIDEO_CHAT_SCHEDULED_STR "%s scheduled a video chat"
+#define MSG_SV_VIDEO_CHAT_SCHEDULED_YOU 1709
+#define MSG_SV_VIDEO_CHAT_SCHEDULED_YOU_STR "You scheduled a video chat"
+#define MSG_SV_THEME 1710
+#define MSG_SV_THEME_STR "%s changed the chat theme"
+#define MSG_SV_THEME_YOU 1711
+#define MSG_SV_THEME_YOU_STR "You changed the chat theme"
+#define MSG_SV_WALLPAPER 1712
+#define MSG_SV_WALLPAPER_STR "%s changed the chat wallpaper"
+#define MSG_SV_WALLPAPER_YOU 1713
+#define MSG_SV_WALLPAPER_YOU_STR "You changed the chat wallpaper"
+#define MSG_SV_TOPIC_CREATED 1714
+#define MSG_SV_TOPIC_CREATED_STR "%s created the topic \"%s\""
+#define MSG_SV_TOPIC_CREATED_YOU 1715
+#define MSG_SV_TOPIC_CREATED_YOU_STR "You created the topic \"%s\""
+#define MSG_SV_TOPIC_RENAMED 1716
+#define MSG_SV_TOPIC_RENAMED_STR "%s renamed the topic to \"%s\""
+#define MSG_SV_TOPIC_RENAMED_YOU 1717
+#define MSG_SV_TOPIC_RENAMED_YOU_STR "You renamed the topic to \"%s\""
+#define MSG_SV_TOPIC_CLOSED 1718
+#define MSG_SV_TOPIC_CLOSED_STR "%s closed the topic"
+#define MSG_SV_TOPIC_CLOSED_YOU 1719
+#define MSG_SV_TOPIC_CLOSED_YOU_STR "You closed the topic"
+#define MSG_SV_TOPIC_REOPENED 1720
+#define MSG_SV_TOPIC_REOPENED_STR "%s reopened the topic"
+#define MSG_SV_TOPIC_REOPENED_YOU 1721
+#define MSG_SV_TOPIC_REOPENED_YOU_STR "You reopened the topic"
+#define MSG_SV_TOPIC_HID 1722
+#define MSG_SV_TOPIC_HID_STR "%s hid the topic"
+#define MSG_SV_TOPIC_HID_YOU 1723
+#define MSG_SV_TOPIC_HID_YOU_STR "You hid the topic"
+#define MSG_SV_TOPIC_SHOWED 1724
+#define MSG_SV_TOPIC_SHOWED_STR "%s showed the topic again"
+#define MSG_SV_TOPIC_SHOWED_YOU 1725
+#define MSG_SV_TOPIC_SHOWED_YOU_STR "You showed the topic again"
+#define MSG_SV_TOPIC_EDITED 1726
+#define MSG_SV_TOPIC_EDITED_STR "%s edited the topic"
+#define MSG_SV_TOPIC_EDITED_YOU 1727
+#define MSG_SV_TOPIC_EDITED_YOU_STR "You edited the topic"
+#define MSG_SV_PROFILE_PHOTO 1728
+#define MSG_SV_PROFILE_PHOTO_STR "%s suggested a profile photo"
+#define MSG_SV_PROFILE_PHOTO_YOU 1729
+#define MSG_SV_PROFILE_PHOTO_YOU_STR "You suggested a profile photo"
+#define MSG_SV_BOOSTED 1730
+#define MSG_SV_BOOSTED_STR "%s boosted the group"
+#define MSG_SV_BOOSTED_YOU 1731
+#define MSG_SV_BOOSTED_YOU_STR "You boosted the group"
+#define MSG_SV_BOOSTED_TIMES 1732
+#define MSG_SV_BOOSTED_TIMES_STR "%s boosted the group %lu times"
+#define MSG_SV_BOOSTED_TIMES_YOU 1733
+#define MSG_SV_BOOSTED_TIMES_YOU_STR "You boosted the group %lu times"
+#define MSG_SV_DATA_SENT 1734
+#define MSG_SV_DATA_SENT_STR "Data sent to the bot"
+#define MSG_SV_GIFT 1735
+#define MSG_SV_GIFT_STR "%s sent a gift"
+#define MSG_SV_GIFT_YOU 1736
+#define MSG_SV_GIFT_YOU_STR "You sent a gift"
+#define MSG_SV_GIVEAWAY 1737
+#define MSG_SV_GIVEAWAY_STR "%s started a giveaway"
+#define MSG_SV_GIVEAWAY_YOU 1738
+#define MSG_SV_GIVEAWAY_YOU_STR "You started a giveaway"
+#define MSG_SV_GIVEAWAY_RESULTS 1739
+#define MSG_SV_GIVEAWAY_RESULTS_STR "Giveaway results"
+#define MSG_SV_PAYMENT_SENT 1740
+#define MSG_SV_PAYMENT_SENT_STR "Payment sent"
+#define MSG_SV_PAYMENT_RECEIVED 1741
+#define MSG_SV_PAYMENT_RECEIVED_STR "Payment received"
+#define MSG_SV_PAYMENT_REFUNDED 1742
+#define MSG_SV_PAYMENT_REFUNDED_STR "Payment refunded"
+#define MSG_SV_GROUP_CALL 1743
+#define MSG_SV_GROUP_CALL_STR "Group call"
+#define MSG_SV_CHECKLIST 1744
+#define MSG_SV_CHECKLIST_STR "%s updated a checklist"
+#define MSG_SV_CHECKLIST_YOU 1745
+#define MSG_SV_CHECKLIST_YOU_STR "You updated a checklist"
+#define MSG_SV_SERVICE 1746
+#define MSG_SV_SERVICE_STR "Service message"
+#define MSG_S_ROUTE_SMS 1747
+#define MSG_S_ROUTE_SMS_STR "by SMS"
+#define MSG_S_ROUTE_CALL 1748
+#define MSG_S_ROUTE_CALL_STR "by phone call"
+#define MSG_S_ROUTE_FLASH_CALL 1749
+#define MSG_S_ROUTE_FLASH_CALL_STR "by a flash call"
+#define MSG_S_ROUTE_MISSED_CALL 1750
+#define MSG_S_ROUTE_MISSED_CALL_STR "by a missed call"
+#define MSG_S_ROUTE_FRAGMENT 1751
+#define MSG_S_ROUTE_FRAGMENT_STR "via fragment.com"
+#define MSG_S_LGH_COUNTRY_CODE 1752
+#define MSG_S_LGH_COUNTRY_CODE_STR "Type it with the country code, e.g. +39 3331234567"
+#define MSG_S_LGH_ONLY_TELEGRAM 1753
+#define MSG_S_LGH_ONLY_TELEGRAM_STR "Only Telegram can lift the ban"
+#define MSG_S_LGH_TRY_TOMORROW 1754
+#define MSG_S_LGH_TRY_TOMORROW_STR "Telegram blocks new codes for a while: try tomorrow"
+#define MSG_S_LGH_WAIT_A_WHILE 1755
+#define MSG_S_LGH_WAIT_A_WHILE_STR "Wait a while, then try again"
+#define MSG_S_LGH_LATEST_CODE 1756
+#define MSG_S_LGH_LATEST_CODE_STR "Type the latest code Telegram sent you"
+#define MSG_S_LGH_SENT_ELSEWHERE 1757
+#define MSG_S_LGH_SENT_ELSEWHERE_STR "Telegram sent it to your other devices or by SMS"
+#define MSG_S_LGH_ENTER_FOR_NEW 1758
+#define MSG_S_LGH_ENTER_FOR_NEW_STR "Press ENTER on your number for a new code"
+#define MSG_S_LGH_CREATE_ON_PHONE 1759
+#define MSG_S_LGH_CREATE_ON_PHONE_STR "Create one in the Telegram app on a phone first"
+#define MSG_S_LGH_TWO_STEP 1760
+#define MSG_S_LGH_TWO_STEP_STR "It is your Telegram two-step verification password"
+#define MSG_S_LGH_NUMBER_AGAIN 1761
+#define MSG_S_LGH_NUMBER_AGAIN_STR "Type your number again"
+#define MSG_S_LGH_FEW_MINUTES 1762
+#define MSG_S_LGH_FEW_MINUTES_STR "Try again in a few minutes"
+#define MSG_S_LGH_LOOK_IN_APP 1763
+#define MSG_S_LGH_LOOK_IN_APP_STR "Look for it in the Telegram app on your phone"
+#define MSG_S_LGH_REMOVE_API_FILE 1764
+#define MSG_S_LGH_REMOVE_API_FILE_STR "Remove data/telegram-api.txt if you made one, or update"
+#define MSG_S_LGH_CHECK_API_FILE 1765
+#define MSG_S_LGH_CHECK_API_FILE_STR "Check the api_id and api_hash in data/telegram-api.txt"
+#define MSG_S_LGH_TRY_LATER 1766
+#define MSG_S_LGH_TRY_LATER_STR "Try again later"
+#define MSG_S_LGH_NEW_RELEASE 1767
+#define MSG_S_LGH_NEW_RELEASE_STR "Look for a new release of Amigram"
+#define MSG_S_LGH_WAIT_SECONDS 1768
+#define MSG_S_LGH_WAIT_SECONDS_STR "Telegram asks to wait %lu seconds"
+#define MSG_S_LGH_WAIT_MINUTES 1769
+#define MSG_S_LGH_WAIT_MINUTES_STR "Telegram asks to wait %lu minutes"
+#define MSG_S_LGH_WAIT_HOURS 1770
+#define MSG_S_LGH_WAIT_HOURS_STR "Telegram asks to wait %lu hours"
+#define MSG_S_LGH_TRY_LATER_NAME 1771
+#define MSG_S_LGH_TRY_LATER_NAME_STR "Try again later (%.24s)"
+#define MSG_S_LGH_CHECK_NETWORK 1772
+#define MSG_S_LGH_CHECK_NETWORK_STR "Check the network connection and try again"
+#define MSG_S_LGH_PUT_API_FILE 1773
+#define MSG_S_LGH_PUT_API_FILE_STR "Put your api_id and api_hash in data/telegram-api.txt"
+#define MSG_S_LGH_WITH_COUNTRY_CODE 1774
+#define MSG_S_LGH_WITH_COUNTRY_CODE_STR "With the country code, e.g. +39 3331234567"
+#define MSG_S_HIDDEN_MARK 1775
+#define MSG_S_HIDDEN_MARK_STR " (hidden)"
+#define MSG_S_IS_TYPING 1776
+#define MSG_S_IS_TYPING_STR " is typing..."
+#define MSG_S_SOMEONE_IS_TYPING 1777
+#define MSG_S_SOMEONE_IS_TYPING_STR "someone is typing..."
+#define MSG_S_A_MESSAGE_FURTHER_UP 1778
+#define MSG_S_A_MESSAGE_FURTHER_UP_STR "a message further up"
+#define MSG_S_MESSAGE 1779
+#define MSG_S_MESSAGE_STR "Message"
+#define MSG_S_TOPIC_GENERAL 1780
+#define MSG_S_TOPIC_GENERAL_STR "General"
+#define MSG_S_TOPIC 1781
+#define MSG_S_TOPIC_STR "Topic"
+#define MSG_S_TOPICS_CHOOSE 1782
+#define MSG_S_TOPICS_CHOOSE_STR "Topics: choose one on the left"
+#define MSG_S_CHOOSE_A_TOPIC 1783
+#define MSG_S_CHOOSE_A_TOPIC_STR "Choose a topic in the list on the left"
+#define MSG_S_MORE_RESULTS 1784
+#define MSG_S_MORE_RESULTS_STR "More results..."
+#define MSG_S_OLDER_THAT_MATCH 1785
+#define MSG_S_OLDER_THAT_MATCH_STR "Older messages that match"
+#define MSG_S_SAVED_MESSAGES 1786
+#define MSG_S_SAVED_MESSAGES_STR "Saved Messages"
+#define MSG_S_MORE_ARCHIVED 1787
+#define MSG_S_MORE_ARCHIVED_STR "More archived chats..."
+#define MSG_S_ALL_CHATS 1788
+#define MSG_S_ALL_CHATS_STR "All chats"
+#define MSG_S_BACK_TO_LIST 1789
+#define MSG_S_BACK_TO_LIST_STR "Back to the chat list"
+#define MSG_S_TOPIC_CLOSED 1790
+#define MSG_S_TOPIC_CLOSED_STR "Closed"
+#define MSG_S_OPEN_NO_AUTH 1791
+#define MSG_S_OPEN_NO_AUTH_STR "cannot read telegram-auth.bin"
+#define MSG_S_OPEN_NO_REACH 1792
+#define MSG_S_OPEN_NO_REACH_STR "cannot reach Telegram"
+#define MSG_S_OPEN_NO_ANSWER 1793
+#define MSG_S_OPEN_NO_ANSWER_STR "Telegram did not answer"
+#define MSG_S_OPEN_DROPPED 1794
+#define MSG_S_OPEN_DROPPED_STR "the connection dropped"
+#define MSG_S_UP_PHOTO_SIZE 1795
+#define MSG_S_UP_PHOTO_SIZE_STR "Telegram refused the photo's size (width + height over 10000, or over 20:1)"
+#define MSG_S_UP_PHOTO_FORMAT 1796
+#define MSG_S_UP_PHOTO_FORMAT_STR "Telegram does not take this image format as a photo"
+#define MSG_S_UP_PHOTO_DECODE 1797
+#define MSG_S_UP_PHOTO_DECODE_STR "Telegram could not decode the image"
+#define MSG_S_UP_PHOTO_SAVE 1798
+#define MSG_S_UP_PHOTO_SAVE_STR "Telegram could not save the photo"
+#define MSG_S_IMG_NO_SIZE 1799
+#define MSG_S_IMG_NO_SIZE_STR "image has no size"
+#define MSG_S_IMG_TOO_LARGE 1800
+#define MSG_S_IMG_TOO_LARGE_STR "image too large for a photo (width + height over 10000)"
+#define MSG_S_IMG_TOO_LONG 1801
+#define MSG_S_IMG_TOO_LONG_STR "image too elongated for a photo (over 20:1)"
+#define MSG_S_IMG_NOT_VALID 1802
+#define MSG_S_IMG_NOT_VALID_STR "not a valid JPEG or PNG"
+#define MSG_S_IMG_BAD_JPEG 1803
+#define MSG_S_IMG_BAD_JPEG_STR "not a valid JPEG (truncated or damaged)"
+#define MSG_S_IMG_BAD_PNG 1804
+#define MSG_S_IMG_BAD_PNG_STR "not a valid PNG (truncated or damaged)"
+#define MSG_S_UPD_NONE 1805
+#define MSG_S_UPD_NONE_STR "No update to install"
+#define MSG_S_UPD_NOT_IN_CHANNEL 1806
+#define MSG_S_UPD_NOT_IN_CHANNEL_STR "The update is not in the channel yet"
+#define MSG_S_UPD_NOT_SIGNED 1807
+#define MSG_S_UPD_NOT_SIGNED_STR "The update is not signed by its author"
+#define MSG_S_UPD_BAD_MANIFEST 1808
+#define MSG_S_UPD_BAD_MANIFEST_STR "The update's manifest is not right"
+#define MSG_S_UPD_NOT_FOR_SYSTEM 1809
+#define MSG_S_UPD_NOT_FOR_SYSTEM_STR "No update for this system in that version"
+#define MSG_S_UPD_PROGRAM_MISSING 1810
+#define MSG_S_UPD_PROGRAM_MISSING_STR "The program is not in the channel yet"
+#define MSG_S_UPD_PROGRAM_WRONG 1811
+#define MSG_S_UPD_PROGRAM_WRONG_STR "The program that came is not the signed one"
+#define MSG_S_UPD_OTHER_NAME 1812
+#define MSG_S_UPD_OTHER_NAME_STR "The program is not called Amigram here: update it by hand"
+#define MSG_S_UPD_OLD_NOT_KEPT 1813
+#define MSG_S_UPD_OLD_NOT_KEPT_STR "Could not keep the old program as Amigram.old"
+#define MSG_S_UPD_NOT_WRITTEN 1814
+#define MSG_S_UPD_NOT_WRITTEN_STR "Could not write the new program: the old one is back"
+#define MSG_S_UPD_NOT_CONNECTED 1815
+#define MSG_S_UPD_NOT_CONNECTED_STR "Not connected to Telegram"
+#define MSG_S_NO_RECENT_FILE 1816
+#define MSG_S_NO_RECENT_FILE_STR "no recent file in this chat"
+#define MSG_T_ANOTHER_ALPHABET 1817
+#define MSG_T_ANOTHER_ALPHABET_STR "(another alphabet)"
+#define MSG_T_EMOJI 1818
+#define MSG_T_EMOJI_STR "(emoji)"
+#define MSG_S_TOPIC_NUMBER 1819
+#define MSG_S_TOPIC_NUMBER_STR "Topic %lu"
+#define MSG_S_DL_NEED_ROOM 1820
+#define MSG_S_DL_NEED_ROOM_STR "Need %lu KB, only %lu KB free in %.16s"
+#define MSG_S_DL_VOLUME_FULL 1821
+#define MSG_S_DL_VOLUME_FULL_STR "%.20s is full, stopped at %lu KB"
+#define MSG_T_CODE_IN_TELEGRAM 2000
+#define MSG_T_CODE_IN_TELEGRAM_STR "Check your other Telegram apps (mobile/desktop/web) for the code."
+#define MSG_T_CODE_BY_SMS 2001
+#define MSG_T_CODE_BY_SMS_STR "Telegram is sending the code by SMS to your phone."
+#define MSG_T_CODE_BY_CALL 2002
+#define MSG_T_CODE_BY_CALL_STR "Telegram will call your phone and speak the code."
+#define MSG_T_CODE_FLASH_CALL 2003
+#define MSG_T_CODE_FLASH_CALL_STR "Telegram is calling: the last digits of the caller ID are the code."
+#define MSG_T_CODE_BY_EMAIL 2004
+#define MSG_T_CODE_BY_EMAIL_STR "Check your email for the code."
+#define MSG_T_CODE_WANTS_EMAIL 2005
+#define MSG_T_CODE_WANTS_EMAIL_STR "No code is coming: Telegram wants this account to add and verify a login email. Do that once in an official Telegram app, then sign in here again."
+#define MSG_T_CODE_UNKNOWN_TYPE 2006
+#define MSG_T_CODE_UNKNOWN_TYPE_STR "Telegram did not say where it sent the code (delivery type 0x%08lx).\n"
+#define MSG_T_REACTION_REMOVED 2007
+#define MSG_T_REACTION_REMOVED_STR "Reaction removed."
+#define MSG_T_REACTION_SENT 2008
+#define MSG_T_REACTION_SENT_STR "Reaction sent."
+#define MSG_T_HELP_EVERY_DAY 2009
+#define MSG_T_HELP_EVERY_DAY_STR "Every day:"
+#define MSG_T_HELP_TEXT_ENTER_SEND 2010
+#define MSG_T_HELP_TEXT_ENTER_SEND_STR "  text + Enter    send a message"
+#define MSG_T_HELP_ENTER_READ_NEW 2011
+#define MSG_T_HELP_ENTER_READ_NEW_STR "  Enter           read new messages now"
+#define MSG_T_HELP_1_2_3 2012
+#define MSG_T_HELP_1_2_3_STR "  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)"
+#define MSG_T_HELP_F1_F10_KEEP 2013
+#define MSG_T_HELP_F1_F10_KEEP_STR "                  F1..F10 keep text typed as the draft of the chat left"
+#define MSG_T_HELP_0_SAVED_MESSAGES 2014
+#define MSG_T_HELP_0_SAVED_MESSAGES_STR "  0               Saved Messages, your cloud drawer"
+#define MSG_T_HELP_TAB_BACK_TO 2015
+#define MSG_T_HELP_TAB_BACK_TO_STR "  Tab             back to the previous chat"
+#define MSG_T_HELP_SHIFT_UP_DOWN 2016
+#define MSG_T_HELP_SHIFT_UP_DOWN_STR "  Shift+Up/Down   older messages, and back"
+#define MSG_T_HELP_LIST_YOUR_CHATS 2017
+#define MSG_T_HELP_LIST_YOUR_CHATS_STR "  /list           your chats"
+#define MSG_T_HELP_HELP_KEY_THIS 2018
+#define MSG_T_HELP_HELP_KEY_THIS_STR "  Help key        this list"
+#define MSG_T_HELP_QUIT_EXIT 2019
+#define MSG_T_HELP_QUIT_EXIT_STR "  /quit           exit"
+#define MSG_T_HELP_MORE 2020
+#define MSG_T_HELP_MORE_STR "More:"
+#define MSG_T_HELP_SEARCH_TEXT_FIND 2021
+#define MSG_T_HELP_SEARCH_TEXT_FIND_STR "  /search text    find a chat in the list by name or username"
+#define MSG_T_HELP_ADD_NAME_SEARCH 2022
+#define MSG_T_HELP_ADD_NAME_SEARCH_STR "  /add name       search Telegram and add a chat to the list"
+#define MSG_T_HELP_MOVE_5_1 2023
+#define MSG_T_HELP_MOVE_5_1_STR "  /move 5 1       chat 5 becomes number 1, the one F1 opens"
+#define MSG_T_HELP_REMOVE_N_REMOVE 2024
+#define MSG_T_HELP_REMOVE_N_REMOVE_STR "  /remove n       remove chat n from the list"
+#define MSG_T_HELP_HISTORY_SHOW_THE 2025
+#define MSG_T_HELP_HISTORY_SHOW_THE_STR "  /history        show the recent messages again"
+#define MSG_T_HELP_FIND_WORDS_FIND 2026
+#define MSG_T_HELP_FIND_WORDS_FIND_STR "  /find words     find messages in this chat, the newest ten"
+#define MSG_T_HELP_FORWARD_ID_FORWARD 2027
+#define MSG_T_HELP_FORWARD_ID_FORWARD_STR "  /forward [id]   forward the latest (or that id) to Saved Messages"
+#define MSG_T_HELP_FORWARDTO_N_ID 2028
+#define MSG_T_HELP_FORWARDTO_N_ID_STR "  /forwardto n [id]  forward the latest (or that id) to chat n"
+#define MSG_T_HELP_REACT_ID_NAME 2029
+#define MSG_T_HELP_REACT_ID_NAME_STR "  /react [id] name   react to the last one received (or that id):"
+#define MSG_T_HELP_UP_HEART_FIRE 2030
+#define MSG_T_HELP_UP_HEART_FIRE_STR "                  up heart fire laugh surprise sad party pray"
+#define MSG_T_HELP_CLAP_OK_NONE 2031
+#define MSG_T_HELP_CLAP_OK_NONE_STR "                  clap ok; none removes your reactions"
+#define MSG_T_HELP_REACTIONS_EVERY_NAME 2032
+#define MSG_T_HELP_REACTIONS_EVERY_NAME_STR "  /reactions      every name /react takes"
+#define MSG_T_HELP_IDS_MESSAGE_IDS 2033
+#define MSG_T_HELP_IDS_MESSAGE_IDS_STR "  /ids            message ids before each message, on or off"
+#define MSG_T_HELP_HIDE_ID_HIDE 2034
+#define MSG_T_HELP_HIDE_ID_HIDE_STR "  /hide [id]      hide the last one received (or that id) in a group"
+#define MSG_T_HELP_UNHIDE_BRING_BACK 2035
+#define MSG_T_HELP_UNHIDE_BRING_BACK_STR "  /unhide         bring back this chat's hidden messages"
+#define MSG_T_HELP_GETFILE_DOWNLOAD_THE 2036
+#define MSG_T_HELP_GETFILE_DOWNLOAD_THE_STR "  /getfile        download the newest file here to downloads/"
+#define MSG_T_HELP_SENDFILE_PATH_SEND 2037
+#define MSG_T_HELP_SENDFILE_PATH_SEND_STR "  /sendfile path  send a file"
+#define MSG_T_HELP_PHOTO_PATH_SEND 2038
+#define MSG_T_HELP_PHOTO_PATH_SEND_STR "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)"
+#define MSG_T_HELP_WATCH_SEC_READ 2039
+#define MSG_T_HELP_WATCH_SEC_READ_STR "  /watch sec      read new messages every sec seconds (off: never)"
+#define MSG_T_HELP_RESIZE_REDRAW_AFTER 2040
+#define MSG_T_HELP_RESIZE_REDRAW_AFTER_STR "  /resize         redraw after the window changed size"
+#define MSG_T_HELP_DIFF_BACKGROUND_CATCH 2041
+#define MSG_T_HELP_DIFF_BACKGROUND_CATCH_STR "  /diff           background catch-up, on or off"
+#define MSG_T_HELP_COLOR_COLOURS_ON 2042
+#define MSG_T_HELP_COLOR_COLOURS_ON_STR "  /color          colours, on or off"
+#define MSG_T_HELP_BELL_FLASH_ON 2043
+#define MSG_T_HELP_BELL_FLASH_ON_STR "  /bell           flash on new messages, on or off"
+#define MSG_T_HELP_RING_DOES_THIS 2044
+#define MSG_T_HELP_RING_DOES_THIS_STR "  /ring           does this chat ring? /ring on or off changes it"
+#define MSG_T_HELP_MUTE_1H_8H 2045
+#define MSG_T_HELP_MUTE_1H_8H_STR "  /mute [1h|8h|2d]  mute this chat on Telegram, for good or for a while"
+#define MSG_T_HELP_UNMUTE_TAKE_THE 2046
+#define MSG_T_HELP_UNMUTE_TAKE_THE_STR "  /unmute         take the mute back"
+#define MSG_T_HELP_MARKREAD_MARK_THIS 2047
+#define MSG_T_HELP_MARKREAD_MARK_THIS_STR "  /markread       mark this chat as read on every device"
+#define MSG_T_HELP_MARKUNREAD_MARK_THIS 2048
+#define MSG_T_HELP_MARKUNREAD_MARK_THIS_STR "  /markunread     mark this chat as unread"
+#define MSG_T_HELP_VOTE_N_N 2049
+#define MSG_T_HELP_VOTE_N_N_STR "  /vote n [n..]   vote the last poll shown here; /vote none takes it back"
+#define MSG_T_HELP_VOTERS_WHO_VOTED 2050
+#define MSG_T_HELP_VOTERS_WHO_VOTED_STR "  /voters         who voted in that poll, when its votes are public"
+#define MSG_T_HELP_TOPICS_THE_TOPICS 2051
+#define MSG_T_HELP_TOPICS_THE_TOPICS_STR "  /topics         the topics of this group, when it is a forum"
+#define MSG_T_HELP_TOPIC_N_ONLY 2052
+#define MSG_T_HELP_TOPIC_N_ONLY_STR "  /topic n        only topic n of that list; /topic alone: all again"
+#define MSG_T_HELP_TOPIC_NEW_X 2053
+#define MSG_T_HELP_TOPIC_NEW_X_STR "  /topic new x    a new topic x; rename x, close, reopen: the chosen one"
+#define MSG_T_HELP_UPDATE_A_NEW 2054
+#define MSG_T_HELP_UPDATE_A_NEW_STR "  /update         a new version? /update yes installs it"
+#define MSG_T_HELP_LOGOUT_LOG_OUT 2055
+#define MSG_T_HELP_LOGOUT_LOG_OUT_STR "  /logout         log out on this computer (/logout yes)"
+#define MSG_T_HELP_SWAP_SAVED_PEERS 2056
+#define MSG_T_HELP_SWAP_SAVED_PEERS_STR "  /swap /saved /peers  the same as Tab, 0 and /list"
+#define MSG_T_HELP_SUPPORT_MY_WORK 2057
+#define MSG_T_HELP_SUPPORT_MY_WORK_STR "Support my work on Patreon: www.patreon.com/c/kaffeine1"
+#define MSG_T_HELP_OR_WITH_A 2058
+#define MSG_T_HELP_OR_WITH_A_STR "or with a one-time tip on Ko-fi: ko-fi.com/kaffeine1"
+#define MSG_T_HELP_CONTRIBUTIONS_ARE_VOLUNTARY 2059
+#define MSG_T_HELP_CONTRIBUTIONS_ARE_VOLUNTARY_STR "Contributions are voluntary; no subscription is required."
+#define MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_NO_CODE 2060
+#define MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_NO_CODE_STR "Telegram knows this computer: no code needed.\n"
+#define MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_SIGNED_IN 2061
+#define MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_SIGNED_IN_STR "Telegram knows this computer: signed in without a code.\n"
+#define MSG_T_LOGIN_CODE_SENT 2062
+#define MSG_T_LOGIN_CODE_SENT_STR "Login code sent.\n"
+#define MSG_T_RESEND_FAILED_NO_OTHER_WAY_TO 2063
+#define MSG_T_RESEND_FAILED_NO_OTHER_WAY_TO_STR "Resend failed: no other way to send it\n"
+#define MSG_T_RESEND_FAILED_THE_CODE_EXPIRED_PRESS 2064
+#define MSG_T_RESEND_FAILED_THE_CODE_EXPIRED_PRESS_STR "Resend failed: the code expired, press ESC\n"
+#define MSG_T_RESEND_FAILED_TOO_MANY_TRIES_WAIT 2065
+#define MSG_T_RESEND_FAILED_TOO_MANY_TRIES_WAIT_STR "Resend failed: too many tries, wait %.10s s\n"
+#define MSG_T_LOGIN_CODE_SENT_AGAIN 2066
+#define MSG_T_LOGIN_CODE_SENT_AGAIN_STR "Login code sent again.\n"
+#define MSG_T_VERIFYING_PASSWORD 2067
+#define MSG_T_VERIFYING_PASSWORD_STR "Verifying password"
+#define MSG_T_KEY_READY_ASKING_TELEGRAM_TO_CHECK 2068
+#define MSG_T_KEY_READY_ASKING_TELEGRAM_TO_CHECK_STR "Key ready. Asking Telegram to check it.\n"
+#define MSG_T_THE_ACCOUNT_S_PASSWORD_CHANGED_WHILE 2069
+#define MSG_T_THE_ACCOUNT_S_PASSWORD_CHANGED_WHILE_STR "The account's password changed while this one was being checked. Sign in again with the new one.\n"
+#define MSG_T_GETTING_A_QR_CODE_FROM_TELEGRAM 2070
+#define MSG_T_GETTING_A_QR_CODE_FROM_TELEGRAM_STR "Getting a QR code from Telegram.\n"
+#define MSG_T_THE_QR_CODE_CANNOT_BE_SHOWN 2071
+#define MSG_T_THE_QR_CODE_CANNOT_BE_SHOWN_STR "The QR code cannot be shown here.\n"
+#define MSG_T_SCAN_THE_QR_CODE_WITH_TELEGRAM 2072
+#define MSG_T_SCAN_THE_QR_CODE_WITH_TELEGRAM_STR "Scan the QR code with Telegram on your phone: Settings > Devices > Link Desktop Device.\nIt is renewed every 30 seconds. Type P and press Return to use your phone number instead.\n"
+#define MSG_T_NO_SCAN_IN_TEN_MINUTES 2073
+#define MSG_T_NO_SCAN_IN_TEN_MINUTES_STR "No scan in ten minutes.\n"
+#define MSG_T_SCANNED_YOUR_ACCOUNT_LIVES_ON_TELEGRAM 2074
+#define MSG_T_SCANNED_YOUR_ACCOUNT_LIVES_ON_TELEGRAM_STR "Scanned. Your account lives on Telegram DC %s.\n"
+#define MSG_T_STOPPED 2075
+#define MSG_T_STOPPED_STR "Stopped.\n"
+#define MSG_T_SIGNED_IN_WITH_THE_QR_CODE 2076
+#define MSG_T_SIGNED_IN_WITH_THE_QR_CODE_STR "Signed in with the QR code.\n"
+#define MSG_T_SCANNED 2077
+#define MSG_T_SCANNED_STR "Scanned.\n"
+#define MSG_T_CONNECTING_TO_TELEGRAM 2078
+#define MSG_T_CONNECTING_TO_TELEGRAM_STR "Connecting to Telegram.\n"
+#define MSG_T_YOU_NEED_A_TELEGRAM_ACCOUNT_TO 2079
+#define MSG_T_YOU_NEED_A_TELEGRAM_ACCOUNT_TO_STR "You need a Telegram account to sign in here.\n%s.\n"
+#define MSG_T_PHONE_NUMBER 2080
+#define MSG_T_PHONE_NUMBER_STR "Phone number: "
+#define MSG_T_USING_PHONE_NUMBER_S 2081
+#define MSG_T_USING_PHONE_NUMBER_S_STR "Using phone number %s.\n"
+#define MSG_T_SENDING_LOGIN_CODE_REQUEST 2082
+#define MSG_T_SENDING_LOGIN_CODE_REQUEST_STR "Sending login code request.\n"
+#define MSG_T_USING_TELEGRAM_DC_S 2083
+#define MSG_T_USING_TELEGRAM_DC_S_STR "Using Telegram DC %s.\n"
+#define MSG_T_TYPE_THE_NUMBER_AGAIN_EMPTY_INPUT 2084
+#define MSG_T_TYPE_THE_NUMBER_AGAIN_EMPTY_INPUT_STR "Type the number again (empty input aborts).\n"
+#define MSG_T_TELEGRAM_LOGIN_CODE_RECEIVED 2085
+#define MSG_T_TELEGRAM_LOGIN_CODE_RECEIVED_STR "\nTelegram login code received.\n"
+#define MSG_T_TYPE_THE_TELEGRAM_CODE_AND_PRESS 2086
+#define MSG_T_TYPE_THE_TELEGRAM_CODE_AND_PRESS_STR "Type the Telegram code and press Return.\n"
+#define MSG_T_NO_CODE_TYPE_S_AND_PRESS 2087
+#define MSG_T_NO_CODE_TYPE_S_AND_PRESS_STR "No code? Type S and press Return to get it %s.\n"
+#define MSG_T_TELEGRAM_CODE_EMPTY_TO_ABORT 2088
+#define MSG_T_TELEGRAM_CODE_EMPTY_TO_ABORT_STR "Telegram code (empty to abort): "
+#define MSG_T_TELEGRAM_OFFERED_NO_OTHER_WAY_TO 2089
+#define MSG_T_TELEGRAM_OFFERED_NO_OTHER_WAY_TO_STR "Telegram offered no other way to send this code.\n"
+#define MSG_T_TELEGRAM_ALLOWS_THAT_IN_LU_SECONDS 2090
+#define MSG_T_TELEGRAM_ALLOWS_THAT_IN_LU_SECONDS_STR "Telegram allows that in %lu seconds: type S again then.\n"
+#define MSG_T_ASKING_TELEGRAM_TO_SEND_THE_CODE 2091
+#define MSG_T_ASKING_TELEGRAM_TO_SEND_THE_CODE_STR "Asking Telegram to send the code %s.\n"
+#define MSG_T_CHECKING_TELEGRAM_CODE 2092
+#define MSG_T_CHECKING_TELEGRAM_CODE_STR "Checking Telegram code.\n"
+#define MSG_T_THAT_CODE_HAS_EXPIRED_ASKING_TELEGRAM 2093
+#define MSG_T_THAT_CODE_HAS_EXPIRED_ASKING_TELEGRAM_STR "That code has expired. Asking Telegram for a new one.\n"
+#define MSG_T_THAT_CODE_WAS_NOT_ACCEPTED_CHECK 2094
+#define MSG_T_THAT_CODE_WAS_NOT_ACCEPTED_CHECK_STR "That code was not accepted. Check the latest Telegram message and try again.\n"
+#define MSG_T_2FA_PASSWORD_REQUIRED_CHECKING_IT_DERIVE 2095
+#define MSG_T_2FA_PASSWORD_REQUIRED_CHECKING_IT_DERIVE_STR "2FA password required.\nChecking it derives a key with PBKDF2 (100000 rounds of SHA-512). On a slow 68k, such as a stock 14 MHz 68020, that takes half an hour or more; the dots show it working. Once the key is ready the client asks Telegram for a fresh challenge, so the wait does not lose the login. Enter the password (empty to abort).\n"
+#define MSG_T_2FA_PASSWORD_EMPTY_TO_ABORT 2096
+#define MSG_T_2FA_PASSWORD_EMPTY_TO_ABORT_STR "2FA password, empty to abort: "
+#define MSG_T_THAT_PASSWORD_WAS_NOT_ACCEPTED_TRY 2097
+#define MSG_T_THAT_PASSWORD_WAS_NOT_ACCEPTED_TRY_STR "That password was not accepted. Try again (empty to abort).\n"
+#define MSG_T_LOGIN_COMPLETE 2098
+#define MSG_T_LOGIN_COMPLETE_STR "Login complete.\n"
+#define MSG_T_NO_CHATS_AVAILABLE 2099
+#define MSG_T_NO_CHATS_AVAILABLE_STR "No chats available.\n"
+#define MSG_T_SINGLE_CHATS 2100
+#define MSG_T_SINGLE_CHATS_STR "Single chats:"
+#define MSG_T_GROUPS_AND_CHANNELS 2101
+#define MSG_T_GROUPS_AND_CHANNELS_STR "Groups and channels:"
+#define MSG_T_LU_NEW 2102
+#define MSG_T_LU_NEW_STR " %lu new"
+#define MSG_T_NO_CACHED_CHATS_YET 2103
+#define MSG_T_NO_CACHED_CHATS_YET_STR "No cached chats yet.\n"
+#define MSG_T_0_SAVED_MESSAGES_YOUR_CLOUD_DRAWER 2104
+#define MSG_T_0_SAVED_MESSAGES_YOUR_CLOUD_DRAWER_STR "0. Saved Messages (your cloud drawer)\n"
+#define MSG_T_TYPE_SOMETHING_TO_SEARCH_FOR 2105
+#define MSG_T_TYPE_SOMETHING_TO_SEARCH_FOR_STR "Type something to search for.\n"
+#define MSG_T_NO_CACHED_CHATS_YET_ADD_ONE 2106
+#define MSG_T_NO_CACHED_CHATS_YET_ADD_ONE_STR "No cached chats yet. Add one with /add @username.\n"
+#define MSG_T_MATCHES 2107
+#define MSG_T_MATCHES_STR "Matches:\n"
+#define MSG_T_NO_CACHED_CHAT_MATCHES_THAT_NAME 2108
+#define MSG_T_NO_CACHED_CHAT_MATCHES_THAT_NAME_STR "No cached chat matches that name.\n"
+#define MSG_T_TYPE_THE_NUMBER_TO_SWITCH_CHAT 2109
+#define MSG_T_TYPE_THE_NUMBER_TO_SWITCH_CHAT_STR "Type the number to switch chat.\n"
+#define MSG_T_USE_REMOVE_NUMBER 2110
+#define MSG_T_USE_REMOVE_NUMBER_STR "Use /remove <number>.\n"
+#define MSG_T_NO_CACHED_CHATS_TO_REMOVE 2111
+#define MSG_T_NO_CACHED_CHATS_TO_REMOVE_STR "No cached chats to remove.\n"
+#define MSG_T_CHAT_NUMBER_NOT_FOUND 2112
+#define MSG_T_CHAT_NUMBER_NOT_FOUND_STR "Chat number not found.\n"
+#define MSG_T_COULD_NOT_UPDATE_CACHED_CHATS 2113
+#define MSG_T_COULD_NOT_UPDATE_CACHED_CHATS_STR "Could not update cached chats.\n"
+#define MSG_T_NO_CACHED_CHATS_TO_REORDER 2114
+#define MSG_T_NO_CACHED_CHATS_TO_REORDER_STR "No cached chats to reorder.\n"
+#define MSG_T_COULD_NOT_SAVE_CHAT_ORDER 2115
+#define MSG_T_COULD_NOT_SAVE_CHAT_ORDER_STR "Could not save chat order.\n"
+#define MSG_T_CANNOT_OPEN 2116
+#define MSG_T_CANNOT_OPEN_STR ", cannot open"
+#define MSG_T_THIS_CHAT_IS_NOT_IN_THE 2117
+#define MSG_T_THIS_CHAT_IS_NOT_IN_THE_STR "This chat is not in the chat list."
+#define MSG_T_ONLY_MESSAGES_IN_GROUPS_AND_CHANNELS 2118
+#define MSG_T_ONLY_MESSAGES_IN_GROUPS_AND_CHANNELS_STR "Only messages in groups and channels can be hidden."
+#define MSG_T_NO_HIDDEN_MESSAGES_IN_THIS_CHAT 2119
+#define MSG_T_NO_HIDDEN_MESSAGES_IN_THIS_CHAT_STR "No hidden messages in this chat."
+#define MSG_T_COULD_NOT_SAVE_THE_HIDDEN_MESSAGE 2120
+#define MSG_T_COULD_NOT_SAVE_THE_HIDDEN_MESSAGE_STR "Could not save the hidden message."
+#define MSG_T_SAVED_MESSAGES_NEVER_RING 2121
+#define MSG_T_SAVED_MESSAGES_NEVER_RING_STR "Saved Messages never ring."
+#define MSG_T_THIS_CHAT_STAYS_QUIET_RING_ON 2122
+#define MSG_T_THIS_CHAT_STAYS_QUIET_RING_ON_STR "This chat stays quiet; /ring on lets it ring."
+#define MSG_T_THIS_CHAT_STAYS_QUIET_IT_IS 2123
+#define MSG_T_THIS_CHAT_STAYS_QUIET_IT_IS_STR "This chat stays quiet: it is muted in Telegram, here or on another device."
+#define MSG_T_THIS_CHAT_RINGS_BUT_BELL_IS 2124
+#define MSG_T_THIS_CHAT_RINGS_BUT_BELL_IS_STR "This chat rings, but /bell is off for every chat."
+#define MSG_T_THIS_CHAT_RINGS_WHEN_A_MESSAGE 2125
+#define MSG_T_THIS_CHAT_RINGS_WHEN_A_MESSAGE_STR "This chat rings when a message arrives while another chat is open."
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_RING 2126
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_RING_STR "Choose a chat before /ring."
+#define MSG_T_USE_RING_TO_SEE_WHAT_THIS 2127
+#define MSG_T_USE_RING_TO_SEE_WHAT_THIS_STR "Use /ring to see what this chat does, /ring on or /ring off to change it."
+#define MSG_T_COULD_NOT_SAVE_THIS_CHAT_S 2128
+#define MSG_T_COULD_NOT_SAVE_THIS_CHAT_S_STR "Could not save this chat's ring choice."
+#define MSG_T_GROUP 2129
+#define MSG_T_GROUP_STR " (group)"
+#define MSG_T_GROUP_MESSAGE 2130
+#define MSG_T_GROUP_MESSAGE_STR "group message"
+#define MSG_T_NEW_MESSAGE 2131
+#define MSG_T_NEW_MESSAGE_STR "new message"
+#define MSG_T_LU_MORE 2132
+#define MSG_T_LU_MORE_STR "(+%lu more)"
+#define MSG_T_LU_ELSEWHERE 2133
+#define MSG_T_LU_ELSEWHERE_STR "(+%lu elsewhere)"
+#define MSG_T_REACTIONS_FOR_REACT_MESSAGE_ID_NAME 2134
+#define MSG_T_REACTIONS_FOR_REACT_MESSAGE_ID_NAME_STR "\nReactions for /react [message-id] <name>:\n"
+#define MSG_T_NONE_REMOVES_YOUR_REACTIONS 2135
+#define MSG_T_NONE_REMOVES_YOUR_REACTIONS_STR "  none removes your reactions\n"
+#define MSG_T_FILE_DRAG_AND_DROP_S 2136
+#define MSG_T_FILE_DRAG_AND_DROP_S_STR "  file drag-and-drop: %s"
+#define MSG_T_TOPICS_TOPIC_N_READS_ONE 2137
+#define MSG_T_TOPICS_TOPIC_N_READS_ONE_STR "Topics (/topic n reads one):\n"
+#define MSG_T_NO_TITLE 2138
+#define MSG_T_NO_TITLE_STR "(no title)"
+#define MSG_T_LU_NEW_2 2139
+#define MSG_T_LU_NEW_2_STR "  (%lu new)"
+#define MSG_T_CLOSED 2140
+#define MSG_T_CLOSED_STR "  [closed]"
+#define MSG_T_DRAFT 2141
+#define MSG_T_DRAFT_STR "  [draft]"
+#define MSG_T_READING 2142
+#define MSG_T_READING_STR "  <- reading"
+#define MSG_T_LU_READ_LU_OF_LU 2143
+#define MSG_T_LU_READ_LU_OF_LU_STR "  #%lu read %lu of %lu"
+#define MSG_T_THE_LU_MOST_ACTIVE_OF_LU 2144
+#define MSG_T_THE_LU_MOST_ACTIVE_OF_LU_STR "(the %lu most active of %lu)\n"
+#define MSG_T_OPENING_CHAT 2145
+#define MSG_T_OPENING_CHAT_STR "Opening chat"
+#define MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS 2146
+#define MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_STR "No reply yet (slow link). Press Enter to retry reading.\n"
+#define MSG_T_COULD_NOT_LOAD_RECENT_MESSAGES_NOW 2147
+#define MSG_T_COULD_NOT_LOAD_RECENT_MESSAGES_NOW_STR "Could not load recent messages now (error %d).\n"
+#define MSG_T_REACTIONS_ON_MESSAGE_LU 2148
+#define MSG_T_REACTIONS_ON_MESSAGE_LU_STR "Reactions on message %lu:"
+#define MSG_T_USAGE_TOPIC_NEW_NAME 2149
+#define MSG_T_USAGE_TOPIC_NEW_NAME_STR "Usage: /topic new <name>"
+#define MSG_T_USAGE_TOPIC_RENAME_NAME 2150
+#define MSG_T_USAGE_TOPIC_RENAME_NAME_STR "Usage: /topic rename <name>"
+#define MSG_T_CHOOSE_THE_TOPIC_FIRST_WITH_TOPIC 2151
+#define MSG_T_CHOOSE_THE_TOPIC_FIRST_WITH_TOPIC_STR "Choose the topic first with /topic and its number."
+#define MSG_T_THIS_CHAT_HAS_NO_TOPICS 2152
+#define MSG_T_THIS_CHAT_HAS_NO_TOPICS_STR "This chat has no topics."
+#define MSG_T_NO_ANSWER_FROM_TELEGRAM_TRY_AGAIN 2153
+#define MSG_T_NO_ANSWER_FROM_TELEGRAM_TRY_AGAIN_STR "No answer from Telegram. Try again."
+#define MSG_T_TOPIC_MADE 2154
+#define MSG_T_TOPIC_MADE_STR "Topic made."
+#define MSG_T_TOPIC_RENAMED 2155
+#define MSG_T_TOPIC_RENAMED_STR "Topic renamed."
+#define MSG_T_TOPIC_CLOSED_ONLY_ADMINS_CAN_WRITE 2156
+#define MSG_T_TOPIC_CLOSED_ONLY_ADMINS_CAN_WRITE_STR "Topic closed: only admins can write in it."
+#define MSG_T_TOPIC_OPEN_AGAIN 2157
+#define MSG_T_TOPIC_OPEN_AGAIN_STR "Topic open again."
+#define MSG_T_KEPT_AS_A_DRAFT_IN 2158
+#define MSG_T_KEPT_AS_A_DRAFT_IN_STR "Kept as a draft in "
+#define MSG_T_COULD_NOT_KEEP_THE_TEXT_AS 2159
+#define MSG_T_COULD_NOT_KEEP_THE_TEXT_AS_STR "Could not keep the text as a draft (network?)."
+#define MSG_T_DRAFT_2 2160
+#define MSG_T_DRAFT_2_STR "Draft: "
+#define MSG_T_SENDFILE_PATH_SEND_A_FILE 2161
+#define MSG_T_SENDFILE_PATH_SEND_A_FILE_STR "/sendfile path: send a file"
+#define MSG_T_LOADING_CHATS 2162
+#define MSG_T_LOADING_CHATS_STR "Loading chats..."
+#define MSG_T_NO_CACHED_CHATS_YET_2 2163
+#define MSG_T_NO_CACHED_CHATS_YET_2_STR "No cached chats yet."
+#define MSG_T_USE_ADD_NAME_TO_SEARCH_USERS 2164
+#define MSG_T_USE_ADD_NAME_TO_SEARCH_USERS_STR "Use /add name to search users or groups."
+#define MSG_T_USING_CACHED_CHATS 2165
+#define MSG_T_USING_CACHED_CHATS_STR "Using cached chats."
+#define MSG_T_OPENING_SESSION 2166
+#define MSG_T_OPENING_SESSION_STR "Opening session..."
+#define MSG_T_SLOW_START_RETRYING_ONCE 2167
+#define MSG_T_SLOW_START_RETRYING_ONCE_STR "Slow start, retrying once..."
+#define MSG_T_LOADING_PROFILE 2168
+#define MSG_T_LOADING_PROFILE_STR "Loading profile..."
+#define MSG_T_CHOOSE_A_CHAT 2169
+#define MSG_T_CHOOSE_A_CHAT_STR "Choose a chat:"
+#define MSG_T_CHAT_NUMBER 2170
+#define MSG_T_CHAT_NUMBER_STR "\nChat number: "
+#define MSG_T_TYPE_ADD_NAME_TO_FIND_A 2171
+#define MSG_T_TYPE_ADD_NAME_TO_FIND_A_STR "Type /add name to find a chat."
+#define MSG_T_INPUT_CLOSED 2172
+#define MSG_T_INPUT_CLOSED_STR "Input closed."
+#define MSG_T_CHOOSE_A_CHAT_FIRST_WITH_ADD 2173
+#define MSG_T_CHOOSE_A_CHAT_FIRST_WITH_ADD_STR "Choose a chat first with /add name."
+#define MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_2 2174
+#define MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_2_STR "No reply yet (slow link). Press Enter to retry.\n"
+#define MSG_T_COULD_NOT_READ_MESSAGES_NOW_ERROR 2175
+#define MSG_T_COULD_NOT_READ_MESSAGES_NOW_ERROR_STR "Could not read messages now (error %d).\n"
+#define MSG_T_THIS_SYSTEM_HAS_NO_UPDATE_TO 2176
+#define MSG_T_THIS_SYSTEM_HAS_NO_UPDATE_TO_STR "This system has no update to install."
+#define MSG_T_UPDATE_SAYS_WHETHER_A_NEW_VERSION 2177
+#define MSG_T_UPDATE_SAYS_WHETHER_A_NEW_VERSION_STR "/update says whether a new version is out; /update yes installs it."
+#define MSG_T_LOOKING_FOR_A_NEW_VERSION 2178
+#define MSG_T_LOOKING_FOR_A_NEW_VERSION_STR "Looking for a new version..."
+#define MSG_T_LOGGING_OUT 2179
+#define MSG_T_LOGGING_OUT_STR "Logging out..."
+#define MSG_T_TELEGRAM_COULD_NOT_BE_REACHED_NOTHING 2180
+#define MSG_T_TELEGRAM_COULD_NOT_BE_REACHED_NOTHING_STR "Telegram could not be reached: nothing was removed. /logout here removes the files on this computer anyway; the session then stays in Telegram's list of devices until you end it from another device."
+#define MSG_T_LOGOUT_YES_LOGS_OUT_OF_TELEGRAM 2181
+#define MSG_T_LOGOUT_YES_LOGS_OUT_OF_TELEGRAM_STR "/logout yes logs out of Telegram on this computer: it ends this session at Telegram, removes telegram-auth.bin and what is kept here of the account (the chat list, hidden chats; downloads stay) and quits. The next start shows the login."
+#define MSG_T_LOGGED_OUT_THE_NEXT_START_SHOWS 2182
+#define MSG_T_LOGGED_OUT_THE_NEXT_START_SHOWS_STR "Logged out. The next start shows the login."
+#define MSG_T_THE_FILES_ARE_REMOVED_FROM_THIS 2183
+#define MSG_T_THE_FILES_ARE_REMOVED_FROM_THIS_STR "The files are removed from this computer. The next start shows the login."
+#define MSG_T_COLORS_ON 2184
+#define MSG_T_COLORS_ON_STR "Colors on."
+#define MSG_T_COLORS_OFF 2185
+#define MSG_T_COLORS_OFF_STR "Colors off."
+#define MSG_T_BELL_ON 2186
+#define MSG_T_BELL_ON_STR "Bell on."
+#define MSG_T_BELL_OFF 2187
+#define MSG_T_BELL_OFF_STR "Bell off."
+#define MSG_T_MESSAGE_IDS_ON_REACT_FORWARD_AND 2188
+#define MSG_T_MESSAGE_IDS_ON_REACT_FORWARD_AND_STR "Message ids on: /react, /forward and /forwardto take the number after #."
+#define MSG_T_MESSAGE_IDS_OFF 2189
+#define MSG_T_MESSAGE_IDS_OFF_STR "Message ids off."
+#define MSG_T_NO_PREVIOUS_CHAT_YET 2190
+#define MSG_T_NO_PREVIOUS_CHAT_YET_STR "No previous chat yet."
+#define MSG_T_CURRENT_CHAT 2191
+#define MSG_T_CURRENT_CHAT_STR "Current chat: "
+#define MSG_T_CHOOSE_A_CHAT_2 2192
+#define MSG_T_CHOOSE_A_CHAT_2_STR "\nChoose a chat:\n\n"
+#define MSG_T_TYPE_A_NUMBER_SEARCH_TEXT_OR 2193
+#define MSG_T_TYPE_A_NUMBER_SEARCH_TEXT_OR_STR "Type a number, /search text, or /add name.\n"
+#define MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST 2194
+#define MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST_STR "Choose a chat first with /list or /add name."
+#define MSG_T_USE_FIND_WORDS_IT_SEARCHES_THIS 2195
+#define MSG_T_USE_FIND_WORDS_IT_SEARCHES_THIS_STR "Use /find words: it searches this chat's messages."
+#define MSG_T_COULD_NOT_SEARCH_NOW 2196
+#define MSG_T_COULD_NOT_SEARCH_NOW_STR "Could not search now.\n"
+#define MSG_T_NO_MESSAGE_FOUND 2197
+#define MSG_T_NO_MESSAGE_FOUND_STR "No message found.\n"
+#define MSG_T_EVERY_TOPIC_AGAIN_HISTORY_SHOWS_THEM 2198
+#define MSG_T_EVERY_TOPIC_AGAIN_HISTORY_SHOWS_THEM_STR "Every topic again: /history shows them."
+#define MSG_T_USE_TOPIC_AND_A_NUMBER_FROM 2199
+#define MSG_T_USE_TOPIC_AND_A_NUMBER_FROM_STR "Use /topic and a number from /topics."
+#define MSG_T_TELEGRAM_DID_NOT_GIVE_THE_TOPICS 2200
+#define MSG_T_TELEGRAM_DID_NOT_GIVE_THE_TOPICS_STR "Telegram did not give the topics. Try again."
+#define MSG_T_NO_TOPIC_WITH_THAT_NUMBER_TOPICS 2201
+#define MSG_T_NO_TOPIC_WITH_THAT_NUMBER_TOPICS_STR "No topic with that number: /topics lists them."
+#define MSG_T_TOPIC 2202
+#define MSG_T_TOPIC_STR "Topic: "
+#define MSG_T_WHAT_YOU_WRITE_GOES_THERE_TOPIC 2203
+#define MSG_T_WHAT_YOU_WRITE_GOES_THERE_TOPIC_STR " (what you write goes there; /topic alone: every topic)\n"
+#define MSG_T_COULD_NOT_READ_MESSAGE_HISTORY_NOW 2204
+#define MSG_T_COULD_NOT_READ_MESSAGE_HISTORY_NOW_STR "Could not read message history now.\n"
+#define MSG_T_DOWNLOADING 2205
+#define MSG_T_DOWNLOADING_STR "Downloading..."
+#define MSG_T_SAVED_TO_S 2206
+#define MSG_T_SAVED_TO_S_STR "Saved to %s\n"
+#define MSG_T_FILE_IS_ON_ANOTHER_SERVER_NOT 2207
+#define MSG_T_FILE_IS_ON_ANOTHER_SERVER_NOT_STR "File is on another server - not supported yet.\n"
+#define MSG_T_120S_THE_PART_WAS_REMOVED 2208
+#define MSG_T_120S_THE_PART_WAS_REMOVED_STR "%.120s, the part was removed.\n"
+#define MSG_T_COULD_NOT_WRITE_TO_DOWNLOADS 2209
+#define MSG_T_COULD_NOT_WRITE_TO_DOWNLOADS_STR "Could not write to downloads/.\n"
+#define MSG_T_NOT_ENOUGH_ROOM_FOR_THAT_FILE 2210
+#define MSG_T_NOT_ENOUGH_ROOM_FOR_THAT_FILE_STR "Not enough room for that file"
+#define MSG_T_TRANSFER_FAILED_110S 2211
+#define MSG_T_TRANSFER_FAILED_110S_STR "Transfer failed: %.110s\n"
+#define MSG_T_TRANSFER_FAILED_SERVER_ERROR 2212
+#define MSG_T_TRANSFER_FAILED_SERVER_ERROR_STR "Transfer failed (server error).\n"
+#define MSG_T_NO_FILE_120S 2213
+#define MSG_T_NO_FILE_120S_STR "No file: %.120s\n"
+#define MSG_T_DOWNLOAD_FAILED 2214
+#define MSG_T_DOWNLOAD_FAILED_STR "Download failed.\n"
+#define MSG_T_USAGE_PHOTO_JPEG_OR_PNG_PATH 2215
+#define MSG_T_USAGE_PHOTO_JPEG_OR_PNG_PATH_STR "Usage: /photo <jpeg-or-png-path> [caption]"
+#define MSG_T_USAGE_SENDFILE_PATH 2216
+#define MSG_T_USAGE_SENDFILE_PATH_STR "Usage: /sendfile <path>"
+#define MSG_T_UPLOADING_PHOTO 2217
+#define MSG_T_UPLOADING_PHOTO_STR "Uploading photo..."
+#define MSG_T_UPLOADING 2218
+#define MSG_T_UPLOADING_STR "Uploading..."
+#define MSG_T_FILE_SENT_PHOTO_WAS_OVER_10 2219
+#define MSG_T_FILE_SENT_PHOTO_WAS_OVER_10_STR "File sent (photo was over 10 MiB).\n"
+#define MSG_T_PHOTO_SENT 2220
+#define MSG_T_PHOTO_SENT_STR "Photo sent.\n"
+#define MSG_T_FILE_SENT 2221
+#define MSG_T_FILE_SENT_STR "File sent.\n"
+#define MSG_T_FILE_TOO_BIG_LU_MIB_LIMIT 2222
+#define MSG_T_FILE_TOO_BIG_LU_MIB_LIMIT_STR "File too big (%lu MiB limit on this build).\n"
+#define MSG_T_COULD_NOT_READ_THAT_PHOTO 2223
+#define MSG_T_COULD_NOT_READ_THAT_PHOTO_STR "Could not read that photo.\n"
+#define MSG_T_COULD_NOT_READ_THAT_FILE 2224
+#define MSG_T_COULD_NOT_READ_THAT_FILE_STR "Could not read that file.\n"
+#define MSG_T_THAT_FILE_IS_EMPTY_0_BYTES 2225
+#define MSG_T_THAT_FILE_IS_EMPTY_0_BYTES_STR "That file is empty (0 bytes).\n"
+#define MSG_T_NOT_SENT_AS_A_PHOTO_100S 2226
+#define MSG_T_NOT_SENT_AS_A_PHOTO_100S_STR "Not sent as a photo: %.100s.\n"
+#define MSG_T_UPLOAD_FAILED_100S 2227
+#define MSG_T_UPLOAD_FAILED_100S_STR "Upload failed: %.100s\n"
+#define MSG_T_UPLOAD_FAILED 2228
+#define MSG_T_UPLOAD_FAILED_STR "Upload failed.\n"
+#define MSG_T_CURRENT_CHAT_SAVED_MESSAGES 2229
+#define MSG_T_CURRENT_CHAT_SAVED_MESSAGES_STR "Current chat: Saved Messages\n"
+#define MSG_T_BACKGROUND_CATCH_UP_ON 2230
+#define MSG_T_BACKGROUND_CATCH_UP_ON_STR "Background catch-up on."
+#define MSG_T_BACKGROUND_CATCH_UP_OFF 2231
+#define MSG_T_BACKGROUND_CATCH_UP_OFF_STR "Background catch-up off."
+#define MSG_T_WINDOW_SIZE_UNCHANGED 2232
+#define MSG_T_WINDOW_SIZE_UNCHANGED_STR "Window size unchanged."
+#define MSG_T_FULL_SCREEN_MODE_IS_NOT_ACTIVE 2233
+#define MSG_T_FULL_SCREEN_MODE_IS_NOT_ACTIVE_STR "Full-screen mode is not active."
+#define MSG_T_SEARCH 2234
+#define MSG_T_SEARCH_STR "Search: "
+#define MSG_T_USAGE_MOVE_5_1_MAKES_CHAT 2235
+#define MSG_T_USAGE_MOVE_5_1_MAKES_CHAT_STR "Usage: /move 5 1 makes chat 5 number 1, on F1."
+#define MSG_T_NO_SUCH_CHAT_NUMBER_LIST_SHOWS 2236
+#define MSG_T_NO_SUCH_CHAT_NUMBER_LIST_SHOWS_STR "No such chat number: /list shows them."
+#define MSG_T_MOVED 2237
+#define MSG_T_MOVED_STR "Moved "
+#define MSG_T_THE_CHAT 2238
+#define MSG_T_THE_CHAT_STR "the chat"
+#define MSG_T_TO_NUMBER_LU 2239
+#define MSG_T_TO_NUMBER_LU_STR " to number %lu"
+#define MSG_T_REMOVE_CHAT_NUMBER 2240
+#define MSG_T_REMOVE_CHAT_NUMBER_STR "Remove chat number: "
+#define MSG_T_REMOVED 2241
+#define MSG_T_REMOVED_STR "Removed "
+#define MSG_T_NO_CACHED_CHATS_ADD_ONE_WITH 2242
+#define MSG_T_NO_CACHED_CHATS_ADD_ONE_WITH_STR "No cached chats. Add one with /add name."
+#define MSG_T_CHAT_NUMBER_2 2243
+#define MSG_T_CHAT_NUMBER_2_STR "Chat number: "
+#define MSG_T_NAME_USERNAME_OR_T_ME_LINK 2244
+#define MSG_T_NAME_USERNAME_OR_T_ME_LINK_STR "Name, username or t.me link: "
+#define MSG_T_COULD_NOT_ADD_THAT_CHAT_TRY 2245
+#define MSG_T_COULD_NOT_ADD_THAT_CHAT_TRY_STR "Could not add that chat. Try @username or a t.me link."
+#define MSG_T_CHAT_ADDED_CACHED_CHATS 2246
+#define MSG_T_CHAT_ADDED_CACHED_CHATS_STR "\nChat added. Cached chats:\n\n"
+#define MSG_T_TYPE_A_NUMBER_TO_SWITCH 2247
+#define MSG_T_TYPE_A_NUMBER_TO_SWITCH_STR "Type a number to switch.\n"
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_FORWARDING_A 2248
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_FORWARDING_A_STR "Choose a chat before forwarding a message."
+#define MSG_T_USE_FORWARDTO_CHAT_NUMBER_MESSAGE_ID 2249
+#define MSG_T_USE_FORWARDTO_CHAT_NUMBER_MESSAGE_ID_STR "Use /forwardto <chat-number> [message-id]."
+#define MSG_T_NO_RECENT_MESSAGE_IS_AVAILABLE_TO 2250
+#define MSG_T_NO_RECENT_MESSAGE_IS_AVAILABLE_TO_STR "No recent message is available to forward."
+#define MSG_T_FORWARDED_TO 2251
+#define MSG_T_FORWARDED_TO_STR "Forwarded to "
+#define MSG_T_SAVED_MESSAGES_HAS_NO_MUTE_AND 2252
+#define MSG_T_SAVED_MESSAGES_HAS_NO_MUTE_AND_STR "Saved Messages has no mute and no read mark."
+#define MSG_T_USE_MUTE_OR_MUTE_WITH_A 2253
+#define MSG_T_USE_MUTE_OR_MUTE_WITH_A_STR "Use /mute, or /mute with a time: 30m, 1h, 8h, 2d. /unmute takes it back."
+#define MSG_T_MARKED_AS_UNREAD 2254
+#define MSG_T_MARKED_AS_UNREAD_STR "Marked as unread."
+#define MSG_T_MUTED_ON_TELEGRAM_UNTIL_UNMUTE 2255
+#define MSG_T_MUTED_ON_TELEGRAM_UNTIL_UNMUTE_STR "Muted on Telegram, until /unmute."
+#define MSG_T_MUTED_ON_TELEGRAM_FOR_THAT_LONG 2256
+#define MSG_T_MUTED_ON_TELEGRAM_FOR_THAT_LONG_STR "Muted on Telegram for that long."
+#define MSG_T_NOT_MUTED_ANY_MORE 2257
+#define MSG_T_NOT_MUTED_ANY_MORE_STR "Not muted any more."
+#define MSG_T_MARKED_AS_READ 2258
+#define MSG_T_MARKED_AS_READ_STR "Marked as read."
+#define MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY 2259
+#define MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY_STR "Telegram did not take it. Try again."
+#define MSG_T_NO_POLL_SHOWN_HERE_YET_HISTORY 2260
+#define MSG_T_NO_POLL_SHOWN_HERE_YET_HISTORY_STR "No poll shown here yet: /history shows the recent messages again."
+#define MSG_T_THE_VOTES_OF_THAT_POLL_ARE 2261
+#define MSG_T_THE_VOTES_OF_THAT_POLL_ARE_STR "The votes of that poll are anonymous."
+#define MSG_T_WHO_VOTED 2262
+#define MSG_T_WHO_VOTED_STR "Who voted:\n"
+#define MSG_T_VOTE_FIRST_VOTE_THEN_TELEGRAM_SAYS 2263
+#define MSG_T_VOTE_FIRST_VOTE_THEN_TELEGRAM_SAYS_STR "Vote first (/vote): then Telegram says who voted."
+#define MSG_T_TELEGRAM_DID_NOT_SAY_WHO_VOTED 2264
+#define MSG_T_TELEGRAM_DID_NOT_SAY_WHO_VOTED_STR "Telegram did not say who voted. Try again."
+#define MSG_T_THAT_POLL_IS_CLOSED 2265
+#define MSG_T_THAT_POLL_IS_CLOSED_STR "That poll is closed."
+#define MSG_T_USE_VOTE_WITH_THE_NUMBERS_OF 2266
+#define MSG_T_USE_VOTE_WITH_THE_NUMBERS_OF_STR "Use /vote with the numbers of your answers (/vote 1 3), or /vote none."
+#define MSG_T_USE_VOTE_WITH_THE_NUMBER_OF 2267
+#define MSG_T_USE_VOTE_WITH_THE_NUMBER_OF_STR "Use /vote with the number of one answer, or /vote none."
+#define MSG_T_VOTED 2268
+#define MSG_T_VOTED_STR "Voted."
+#define MSG_T_VOTE_TAKEN_BACK 2269
+#define MSG_T_VOTE_TAKEN_BACK_STR "Vote taken back."
+#define MSG_T_THIS_POLL_DOES_NOT_LET_A 2270
+#define MSG_T_THIS_POLL_DOES_NOT_LET_A_STR "This poll does not let a vote be changed."
+#define MSG_T_TELEGRAM_DID_NOT_TAKE_THE_VOTE 2271
+#define MSG_T_TELEGRAM_DID_NOT_TAKE_THE_VOTE_STR "Telegram did not take the vote. Try again."
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_REACTING_TO 2272
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_REACTING_TO_STR "Choose a chat before reacting to a message."
+#define MSG_T_USE_REACT_MESSAGE_ID_NAME_OR 2273
+#define MSG_T_USE_REACT_MESSAGE_ID_NAME_OR_STR "Use /react [message-id] <name>, or /react [message-id] none; /reactions lists the names, /ids shows the ids."
+#define MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO 2274
+#define MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO_STR "No message from the others to react to yet."
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_HIDING_A 2275
+#define MSG_T_CHOOSE_A_CHAT_BEFORE_HIDING_A_STR "Choose a chat before hiding a message."
+#define MSG_T_USE_HIDE_OR_HIDE_MESSAGE_ID 2276
+#define MSG_T_USE_HIDE_OR_HIDE_MESSAGE_ID_STR "Use /hide or /hide <message-id>; /unhide brings them back."
+#define MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO_2 2277
+#define MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO_2_STR "No message from the others to hide yet."
+#define MSG_T_CHOOSE_A_CHAT_FIRST 2278
+#define MSG_T_CHOOSE_A_CHAT_FIRST_STR "Choose a chat first."
+#define MSG_T_USE_FORWARD_OR_FORWARD_MESSAGE_ID 2279
+#define MSG_T_USE_FORWARD_OR_FORWARD_MESSAGE_ID_STR "Use /forward or /forward <message-id>."
+#define MSG_T_FORWARDED_TO_SAVED_MESSAGES 2280
+#define MSG_T_FORWARDED_TO_SAVED_MESSAGES_STR "Forwarded to Saved Messages."
+#define MSG_T_USE_WATCH_SECONDS_3600_OR_WATCH 2281
+#define MSG_T_USE_WATCH_SECONDS_3600_OR_WATCH_STR "Use /watch <seconds <= 3600> or /watch off."
+#define MSG_T_AUTO_READ_DISABLED 2282
+#define MSG_T_AUTO_READ_DISABLED_STR "Auto-read disabled."
+#define MSG_T_MESSAGE_NOT_CONFIRMED_PRESS_ENTER_TO 2283
+#define MSG_T_MESSAGE_NOT_CONFIRMED_PRESS_ENTER_TO_STR "Message not confirmed. Press Enter to refresh."
+#define MSG_T_COULD_NOT_SEND_MESSAGE 2284
+#define MSG_T_COULD_NOT_SEND_MESSAGE_STR "Could not send message."
+#define MSG_T_DROPPED 2285
+#define MSG_T_DROPPED_STR "Dropped: %.280s"
+#define MSG_T_LINE_FULL 2286
+#define MSG_T_LINE_FULL_STR "That is %u characters, the most one message holds."
+#define MSG_T_ELSEWHERE_STATUS 2287
+#define MSG_T_ELSEWHERE_STATUS_STR "(+%lu elsewhere) "
+#define MSG_T_HIDDEN_BACK_1 2288
+#define MSG_T_HIDDEN_BACK_1_STR "%lu hidden message back; /history shows it."
+#define MSG_T_HIDDEN_BACK 2289
+#define MSG_T_HIDDEN_BACK_STR "%lu hidden messages back; /history shows them."
+#define MSG_T_HIDDEN_FROM_NOW 2290
+#define MSG_T_HIDDEN_FROM_NOW_STR "#%lu hidden from now on; /unhide brings back the %lu hidden here."
+#define MSG_T_TELEGRAM_REFUSED 2291
+#define MSG_T_TELEGRAM_REFUSED_STR "Telegram refused: %.48s"
+#define MSG_T_TOPIC_MADE_NUMBER 2292
+#define MSG_T_TOPIC_MADE_NUMBER_STR "Topic made, number %lu: what you write goes there."
+#define MSG_T_UPD_COULD_NOT_ASK 2293
+#define MSG_T_UPD_COULD_NOT_ASK_STR "Could not ask @%.32s%s%.60s."
+#define MSG_T_UPD_NEWEST 2294
+#define MSG_T_UPD_NEWEST_STR "You have the newest version, %s."
+#define MSG_T_UPD_IS_OUT 2295
+#define MSG_T_UPD_IS_OUT_STR "%s %.15s is out: you have %s. /update yes installs it: it comes from @%.32s, signed by its author, and this version is kept as Amigram.old."
+#define MSG_T_UPD_FETCHING 2296
+#define MSG_T_UPD_FETCHING_STR "Fetching %s %.15s..."
+#define MSG_T_UPD_INSTALLED 2297
+#define MSG_T_UPD_INSTALLED_STR "%s %.15s is installed. Quit with /quit and start Amigram again to use it."
+#define MSG_T_UPD_FAILED 2298
+#define MSG_T_UPD_FAILED_STR "The update failed"
+#define MSG_T_CAPTION_MAX 2299
+#define MSG_T_CAPTION_MAX_STR "A caption holds %u characters at most."
+#define MSG_T_USE_PEER_NUMBER 2300
+#define MSG_T_USE_PEER_NUMBER_STR "%.64s: use /peer <number>"
+#define MSG_T_COULD_NOT_FORWARD 2301
+#define MSG_T_COULD_NOT_FORWARD_STR "Could not forward message: %.80s"
+#define MSG_T_NO_REPLY 2302
+#define MSG_T_NO_REPLY_STR "no reply"
+#define MSG_T_AUTO_READ_1 2303
+#define MSG_T_AUTO_READ_1_STR "Auto-read every %lu second."
+#define MSG_T_AUTO_READ 2304
+#define MSG_T_AUTO_READ_STR "Auto-read every %lu seconds."
+#define MSG_T_SOMEONE_COLON 2305
+#define MSG_T_SOMEONE_COLON_STR "someone:"
+#define MSG_T_THEM_COLON 2306
+#define MSG_T_THEM_COLON_STR "them:"
+#define MSG_T_QUICK_SEND 2307
+#define MSG_T_QUICK_SEND_STR "Type a message and press Enter to send it."
+#define MSG_T_QUICK_CHATS 2308
+#define MSG_T_QUICK_CHATS_STR "F1-F10 or a chat number: change chat. 0: Saved Messages. Tab: back."
+#define MSG_T_QUICK_COMMANDS 2309
+#define MSG_T_QUICK_COMMANDS_STR "/list: your chats.  /help: all commands.  /quit: exit."
+#define MSG_T_SETUP_CANNOT_READ 2310
+#define MSG_T_SETUP_CANNOT_READ_STR "Login setup required: cannot read %s (%s).\n"
+#define MSG_T_SETUP_NOT_FOUND 2311
+#define MSG_T_SETUP_NOT_FOUND_STR "Login setup: %s was not found.\n"
+#define MSG_T_SETUP_WILL_CREATE 2312
+#define MSG_T_SETUP_WILL_CREATE_STR "%s will create it now.\n"
+#define MSG_T_SETUP_ENTER_API 2313
+#define MSG_T_SETUP_ENTER_API_STR "Enter the Telegram API credentials for this client."
+#define MSG_T_SETUP_SAVED 2314
+#define MSG_T_SETUP_SAVED_STR "Saved %s.\n"
+#define MSG_T_SIGNED_IN_RENAME 2315
+#define MSG_T_SIGNED_IN_RENAME_STR "Signed in, but %s could not be written: rename %s to it.\n"
+#define MSG_T_NO_SAVED_LOGIN 2316
+#define MSG_T_NO_SAVED_LOGIN_STR "No saved login found. Starting login wizard."
+#define MSG_T_SAVED_LOGIN_UNUSABLE 2317
+#define MSG_T_SAVED_LOGIN_UNUSABLE_STR "Saved login is not usable. Starting login wizard."
+#define MSG_T_68000_LOGIN_WHY 2318
+#define MSG_T_68000_LOGIN_WHY_STR "--------------------------------------------------------\nFIRST LOGIN ON A 68000: PLEASE READ\n\nSigning in for the first time needs a Diffie-Hellman key\nexchange. On a plain 68000 that takes a very long time and\nmay run out of stack. Do it once elsewhere instead:\n"
+#define MSG_T_68000_LOGIN_STEPS 2319
+#define MSG_T_68000_LOGIN_STEPS_STR " 1. Run %s on a faster Amiga (68020 or better)\n    or in an emulator (WinUAE, FS-UAE, vAmiga) using the\n    standard package, and log in there.\n 2. Copy telegram-auth.bin from that drawer into THIS\n    drawer, next to %s. Copying\n    data/telegram-peers.txt too brings your chat list.\n 3. Start this program again: it reuses that login and\n    goes straight to the chats.\n"
+#define MSG_T_68000_LOGIN_PRESS 2320
+#define MSG_T_68000_LOGIN_PRESS_STR "The login then works on both machines, one at a time:\nTelegram closes a login it sees in two places at once.\n\nPress RETURN to attempt the login here anyway,\nor Ctrl+C to quit and follow the steps above.\n--------------------------------------------------------\n"
+#define MSG_T_START_LOGIN_COMPLETE 2321
+#define MSG_T_START_LOGIN_COMPLETE_STR "Login complete."
+#define MSG_T_START_NO_CHAT_LIST 2322
+#define MSG_T_START_NO_CHAT_LIST_STR "No cached chat list found."
+#define MSG_T_START_USE_ADD 2323
+#define MSG_T_START_USE_ADD_STR "Use /add name inside %s to search users or groups.\n"
+#define MSG_T_START_OPENING_CHAT 2324
+#define MSG_T_START_OPENING_CHAT_STR "Opening chat."
+#define MSG_T_NO_MEMORY_FOR_WINDOW 2325
+#define MSG_T_NO_MEMORY_FOR_WINDOW_STR "Not enough free memory for the window."
+#define MSG_T_NO_GUI_BUILD 2326
+#define MSG_T_NO_GUI_BUILD_STR "This build has no GUI: it is the text-client package."
+#define MSG_T_OLDER_SEPARATOR 2327
+#define MSG_T_OLDER_SEPARATOR_STR "---- older messages -- Shift+Down: back to live ----------------------------------"
 
 #endif

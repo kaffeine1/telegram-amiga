@@ -1230,6 +1230,144 @@ Tutte le chat: scrivi, ENTER cerca (ESC chiude)
 MSG_ST_FIND_CHAT_PROMPT
 Nella chat: scrivi, ENTER cerca (ESC chiude)
 ; Find in chat: type, ENTER searches (ESC ends)
+MSG_ST_CODE_IN_TELEGRAM
+Codice mandato in Telegram sul telefono
+; Code sent in Telegram on your phone
+MSG_ST_CODE_BY_SMS
+Codice mandato via SMS
+; Code sent by SMS
+MSG_ST_CODE_BY_CALL
+Telegram ti chiama per dirti il codice
+; Telegram is calling with the code
+MSG_ST_CODE_FLASH_CALL
+Leggi il codice dalla chiamata in arrivo
+; Read the code from the incoming call
+MSG_ST_CODE_BY_EMAIL
+Codice mandato alla tua email
+; Code sent to your email
+MSG_ST_CODE_WANTS_EMAIL
+Telegram vuole prima un'email di accesso
+; Telegram wants a login email first
+MSG_ST_CODE_UNKNOWN
+Telegram non ha detto dove ha mandato il codice
+; Telegram did not say where it sent the code
+MSG_ST_REACT_NOT_ALLOWED
+Questa chat non permette quella reazione.
+; This chat does not allow that reaction.
+MSG_ST_REACT_TOO_MANY
+Questo messaggio ha troppe reazioni diverse.
+; This message has too many different reactions.
+MSG_ST_REACT_CANNOT
+Non puoi reagire in questa chat.
+; You cannot react in this chat.
+MSG_ST_REACT_MESSAGE_GONE
+Questo messaggio non c'è più.
+; This message is no longer available.
+MSG_ST_REACT_PREMIUM
+Quella reazione richiede Telegram Premium.
+; That reaction requires Telegram Premium.
+MSG_ST_REACT_WAIT
+Aspetta prima di reagire di nuovo.
+; Please wait before reacting again.
+MSG_ST_REACT_FAILED
+Reazione non cambiata. Riprova.
+; Could not change the reaction. Please try again.
+MSG_ST_REACTION_REMOVED
+Reazione tolta
+; Reaction removed
+MSG_ST_REACTION_SENT
+Reazione inviata
+; Reaction sent
+MSG_ST_LG_NUMBER_INVALID
+Quel numero non è valido
+; That number is not valid
+MSG_ST_LG_NUMBER_BANNED
+Telegram ha bloccato questo numero
+; Telegram has banned this number
+MSG_ST_LG_TOO_MANY_CODES
+Troppi codici chiesti per questo numero
+; Too many codes asked for this number
+MSG_ST_LG_TOO_MANY_PASSWORDS
+Troppi tentativi con la password
+; Too many password attempts
+MSG_ST_LG_WRONG_CODE
+Codice sbagliato - riprova
+; Wrong code - try again
+MSG_ST_LG_CODE_FIRST
+Scrivi prima il codice
+; Type the code first
+MSG_ST_LG_CODE_EXPIRED
+Quel codice è scaduto
+; That code has expired
+MSG_ST_LG_NO_ACCOUNT
+Nessun account Telegram per questo numero
+; No Telegram account for this number
+MSG_ST_LG_WRONG_PASSWORD
+Password sbagliata - riprova
+; Wrong password - try again
+MSG_ST_LG_START_OVER
+Telegram chiede di ricominciare
+; Telegram asks to start over
+MSG_ST_LG_CODE_NOT_SENT
+Telegram non ha potuto mandare il codice
+; Telegram could not send the code
+MSG_ST_LG_NO_OTHER_WAY
+Nessun altro modo per mandare il codice
+; No other way to send this code
+MSG_ST_LG_KEY_REFUSED
+Telegram ha rifiutato la chiave del programma
+; Telegram refused this program's key
+MSG_ST_LG_LIMITING
+Telegram limita gli accessi da questa app
+; Telegram is limiting logins from this app
+MSG_ST_LG_NEWER_APP
+Telegram vuole un'app più nuova per entrare
+; Telegram wants a newer app to log in
+MSG_ST_LG_TOO_MANY_ATTEMPTS
+Troppi tentativi
+; Too many attempts
+MSG_ST_LG_REFUSED
+Telegram ha rifiutato l'accesso
+; Telegram refused the login
+MSG_ST_LG_NO_REACH
+Telegram non raggiungibile
+; Could not reach Telegram
+MSG_ST_LG_NO_KEY_FILE
+Manca il file della chiave del programma
+; This program's key file is missing
+MSG_ST_LG_TYPE_NUMBER
+Scrivi il tuo numero di telefono
+; Type your phone number
+MSG_ST_UPDATE_OUT
+%.16s %s è uscito, hai la %s: Informazioni
+; %.16s %s is out: you have %s. See About
+MSG_ST_OFFLINE_WHY
+Non in linea: %.38s
+; Offline: %.38s
+MSG_ST_OFFLINE_CACHE
+Non in linea (cache) - Amiga+Q esce
+; Offline (cache) - Amiga+Q quits
+MSG_ST_OPENING
+Apro %.40s...
+; Opening %.40s...
+MSG_ST_LIVE
+In linea - F1-F10 chat, Amiga+Q esce
+; Live - F1-F10 chats, Amiga+Q quits
+MSG_ST_READ_ONLY
+Sola lettura - F1-F10 chat, Amiga+Q esce
+; Read-only - F1-F10 chats, Amiga+Q quits
+MSG_ST_NO_CHAT_CACHE
+Cache delle chat non trovata
+; Chat cache not found
+MSG_ST_CHAT_CACHE_EMPTY
+Nessuna chat nella cache
+; No chats in the cache
+MSG_ST_GETTING_CODE
+Chiedo un codice a Telegram...
+; Getting a code from Telegram...
+MSG_ST_CONNECTING
+Mi collego a Telegram...
+; Connecting to Telegram...
 MSG_RQ_OK
 OK
 ; OK
@@ -2056,3 +2194,1584 @@ ENTER conferma   ESC esce
 MSG_G_NO_CODE_PRESS_S
 Niente codice? Premi S per averlo %.24s
 ; No code? Press S to get it %.24s
+MSG_S_LBL_PHOTO
+[Foto]
+; [Photo]
+MSG_S_LBL_FILE
+[File]
+; [File]
+MSG_S_LBL_LOCATION
+[Posizione]
+; [Location]
+MSG_S_LBL_LINK
+[Link]
+; [Link]
+MSG_S_LBL_MEDIA
+[Media]
+; [Media]
+MSG_S_W_STICKER
+Sticker
+; Sticker
+MSG_S_W_GIF
+GIF
+; GIF
+MSG_S_W_VIDEO
+Video
+; Video
+MSG_S_W_VOICE
+Vocale
+; Voice
+MSG_S_W_AUDIO
+Audio
+; Audio
+MSG_S_W_FILE
+File
+; File
+MSG_S_W_LINK
+Link
+; Link
+MSG_S_W_POLL
+Sondaggio
+; Poll
+MSG_S_W_QUIZ
+Quiz
+; Quiz
+MSG_S_POLL_YOUR_RIGHT
+ (la tua risposta, giusta)
+;  (your answer, right)
+MSG_S_POLL_YOUR_ANSWER
+ (la tua risposta)
+;  (your answer)
+MSG_S_POLL_YOUR_VOTE
+ (il tuo voto)
+;  (your vote)
+MSG_S_POLL_RIGHT
+ (giusta)
+;  (right)
+MSG_S_POLL_VOTES_1
+%lu voto
+; %lu vote
+MSG_S_POLL_VOTES
+%lu voti
+; %lu votes
+MSG_S_POLL_NO_RESULTS
+Nessun risultato
+; No results
+MSG_S_POLL_VOTE_TO_SEE
+Vota per vedere i risultati
+; Vote to see the results
+MSG_S_POLL_CLOSED
+, chiuso
+; , closed
+MSG_S_POLL_SEVERAL
+, più risposte possibili
+; , several answers allowed
+MSG_S_POLL_PUBLIC
+, voti pubblici
+; , votes are public
+MSG_S_POLL_WHY
+Perché: 
+; Why: 
+MSG_S_POLL_SOMEONE
+qualcuno
+; someone
+MSG_S_POLL_A_CHANNEL
+un canale
+; a channel
+MSG_S_POLL_NOBODY_SO_FAR
+ ancora nessuno
+;  nobody so far
+MSG_S_POLL_NOBODY
+ nessuno
+;  nobody
+MSG_S_POLL_LATEST
+Gli ultimi %lu voti di %lu.
+; The latest %lu of %lu votes.
+MSG_SV_SOMEONE
+Qualcuno
+; Someone
+MSG_SV_CREATED_GROUP
+%s ha creato il gruppo \"%s\"
+; %s created the group "%s"
+MSG_SV_CREATED_GROUP_YOU
+Hai creato il gruppo \"%s\"
+; You created the group "%s"
+MSG_SV_CHANNEL_RENAMED
+Canale rinominato in \"%s\"
+; Channel renamed to "%s"
+MSG_SV_GROUP_NAME
+%s ha cambiato il nome del gruppo in \"%s\"
+; %s changed the group name to "%s"
+MSG_SV_GROUP_NAME_YOU
+Hai cambiato il nome del gruppo in \"%s\"
+; You changed the group name to "%s"
+MSG_SV_CHANNEL_PHOTO
+Foto del canale aggiornata
+; Channel photo updated
+MSG_SV_GROUP_PHOTO
+%s ha cambiato la foto del gruppo
+; %s changed the group photo
+MSG_SV_GROUP_PHOTO_YOU
+Hai cambiato la foto del gruppo
+; You changed the group photo
+MSG_SV_CHANNEL_PHOTO_GONE
+Foto del canale rimossa
+; Channel photo removed
+MSG_SV_GROUP_PHOTO_GONE
+%s ha rimosso la foto del gruppo
+; %s removed the group photo
+MSG_SV_GROUP_PHOTO_GONE_YOU
+Hai rimosso la foto del gruppo
+; You removed the group photo
+MSG_SV_JOINED
+%s si è unito al gruppo
+; %s joined the group
+MSG_SV_JOINED_YOU
+Ti sei unito al gruppo
+; You joined the group
+MSG_SV_ADDED
+%s ha aggiunto %s
+; %s added %s
+MSG_SV_ADDED_YOU
+Hai aggiunto %s
+; You added %s
+MSG_SV_ADDED_MORE_1
+%s ha aggiunto %s e un altro membro
+; %s added %s and 1 more
+MSG_SV_ADDED_MORE_1_YOU
+Hai aggiunto %s e un altro membro
+; You added %s and 1 more
+MSG_SV_ADDED_MORE
+%s ha aggiunto %s e altri %lu
+; %s added %s and %lu more
+MSG_SV_ADDED_MORE_YOU
+Hai aggiunto %s e altri %lu
+; You added %s and %lu more
+MSG_SV_ADDED_MEMBERS
+%s ha aggiunto %lu membri
+; %s added %lu members
+MSG_SV_ADDED_MEMBERS_YOU
+Hai aggiunto %lu membri
+; You added %lu members
+MSG_SV_ADDED_A_MEMBER
+%s ha aggiunto un membro
+; %s added a member
+MSG_SV_ADDED_A_MEMBER_YOU
+Hai aggiunto un membro
+; You added a member
+MSG_SV_LEFT
+%s ha lasciato il gruppo
+; %s left the group
+MSG_SV_LEFT_YOU
+Hai lasciato il gruppo
+; You left the group
+MSG_SV_REMOVED
+%s ha rimosso %s
+; %s removed %s
+MSG_SV_REMOVED_YOU
+Hai rimosso %s
+; You removed %s
+MSG_SV_REMOVED_A_MEMBER
+%s ha rimosso un membro
+; %s removed a member
+MSG_SV_REMOVED_A_MEMBER_YOU
+Hai rimosso un membro
+; You removed a member
+MSG_SV_JOINED_LINK
+%s si è unito al gruppo con un link d'invito
+; %s joined the group via invite link
+MSG_SV_JOINED_LINK_YOU
+Ti sei unito al gruppo con un link d'invito
+; You joined the group via invite link
+MSG_SV_CHANNEL_CREATED
+Canale \"%s\" creato
+; Channel "%s" created
+MSG_SV_UPGRADED
+Il gruppo è diventato un supergruppo
+; The group was upgraded to a supergroup
+MSG_SV_PINNED_QUOTE
+%s ha fissato \"%s\"
+; %s pinned "%s"
+MSG_SV_PINNED_QUOTE_YOU
+Hai fissato \"%s\"
+; You pinned "%s"
+MSG_SV_PINNED
+%s ha fissato un messaggio
+; %s pinned a message
+MSG_SV_PINNED_YOU
+Hai fissato un messaggio
+; You pinned a message
+MSG_SV_HISTORY_CLEARED
+La cronologia è stata cancellata
+; History was cleared
+MSG_SV_SCORED
+%s ha fatto %lu punti
+; %s scored %lu
+MSG_SV_SCORED_YOU
+Hai fatto %lu punti
+; You scored %lu
+MSG_SV_CALL_OUT
+Chiamata in uscita (%s)
+; Outgoing call (%s)
+MSG_SV_CALL_IN
+Chiamata in arrivo (%s)
+; Incoming call (%s)
+MSG_SV_VIDEO_CALL_OUT
+Videochiamata in uscita (%s)
+; Outgoing video call (%s)
+MSG_SV_VIDEO_CALL_IN
+Videochiamata in arrivo (%s)
+; Incoming video call (%s)
+MSG_SV_CALL_CANCELLED
+Chiamata annullata
+; Cancelled call
+MSG_SV_VIDEO_CALL_CANCELLED
+Videochiamata annullata
+; Cancelled video call
+MSG_SV_CALL_MISSED
+Chiamata persa
+; Missed call
+MSG_SV_VIDEO_CALL_MISSED
+Videochiamata persa
+; Missed video call
+MSG_SV_SCREENSHOT
+%s ha fatto uno screenshot
+; %s took a screenshot
+MSG_SV_SCREENSHOT_YOU
+Hai fatto uno screenshot
+; You took a screenshot
+MSG_SV_BOT_ALLOWED
+Hai permesso a questo bot di scriverti
+; You allowed this bot to message you
+MSG_SV_JOINED_TELEGRAM
+%s si è unito a Telegram
+; %s joined Telegram
+MSG_SV_JOINED_TELEGRAM_YOU
+Ti sei unito a Telegram
+; You joined Telegram
+MSG_SV_VIDEO_CHAT_ENDED
+Chat video terminata (%s)
+; Video chat ended (%s)
+MSG_SV_LIVE_STARTED
+Diretta iniziata
+; Live stream started
+MSG_SV_VIDEO_CHAT_STARTED
+%s ha avviato una chat video
+; %s started a video chat
+MSG_SV_VIDEO_CHAT_STARTED_YOU
+Hai avviato una chat video
+; You started a video chat
+MSG_SV_INVITED
+%s ha invitato %s alla chat video
+; %s invited %s to the video chat
+MSG_SV_INVITED_YOU
+Hai invitato %s alla chat video
+; You invited %s to the video chat
+MSG_SV_INVITED_MEMBERS
+%s ha invitato dei membri alla chat video
+; %s invited members to the video chat
+MSG_SV_INVITED_MEMBERS_YOU
+Hai invitato dei membri alla chat video
+; You invited members to the video chat
+MSG_SV_TTL_OFF
+%s ha disattivato l'eliminazione automatica
+; %s turned off auto-delete
+MSG_SV_TTL_OFF_YOU
+Hai disattivato l'eliminazione automatica
+; You turned off auto-delete
+MSG_SV_TTL_SET
+%s ha impostato l'eliminazione automatica dopo %s
+; %s set messages to auto-delete after %s
+MSG_SV_TTL_SET_YOU
+Hai impostato l'eliminazione automatica dopo %s
+; You set messages to auto-delete after %s
+MSG_SV_PERIOD_MONTH
+1 mese
+; 1 month
+MSG_SV_PERIOD_WEEK_1
+1 settimana
+; 1 week
+MSG_SV_PERIOD_WEEKS
+%lu settimane
+; %lu weeks
+MSG_SV_PERIOD_DAY_1
+1 giorno
+; 1 day
+MSG_SV_PERIOD_DAYS
+%lu giorni
+; %lu days
+MSG_SV_PERIOD_HOUR_1
+1 ora
+; 1 hour
+MSG_SV_PERIOD_HOURS
+%lu ore
+; %lu hours
+MSG_SV_PERIOD_MINUTE_1
+1 minuto
+; 1 minute
+MSG_SV_PERIOD_MINUTES
+%lu minuti
+; %lu minutes
+MSG_SV_PERIOD_SECOND_1
+1 secondo
+; 1 second
+MSG_SV_PERIOD_SECONDS
+%lu secondi
+; %lu seconds
+MSG_SV_VIDEO_CHAT_SCHEDULED
+%s ha programmato una chat video
+; %s scheduled a video chat
+MSG_SV_VIDEO_CHAT_SCHEDULED_YOU
+Hai programmato una chat video
+; You scheduled a video chat
+MSG_SV_THEME
+%s ha cambiato il tema della chat
+; %s changed the chat theme
+MSG_SV_THEME_YOU
+Hai cambiato il tema della chat
+; You changed the chat theme
+MSG_SV_WALLPAPER
+%s ha cambiato lo sfondo della chat
+; %s changed the chat wallpaper
+MSG_SV_WALLPAPER_YOU
+Hai cambiato lo sfondo della chat
+; You changed the chat wallpaper
+MSG_SV_TOPIC_CREATED
+%s ha creato l'argomento \"%s\"
+; %s created the topic "%s"
+MSG_SV_TOPIC_CREATED_YOU
+Hai creato l'argomento \"%s\"
+; You created the topic "%s"
+MSG_SV_TOPIC_RENAMED
+%s ha rinominato l'argomento in \"%s\"
+; %s renamed the topic to "%s"
+MSG_SV_TOPIC_RENAMED_YOU
+Hai rinominato l'argomento in \"%s\"
+; You renamed the topic to "%s"
+MSG_SV_TOPIC_CLOSED
+%s ha chiuso l'argomento
+; %s closed the topic
+MSG_SV_TOPIC_CLOSED_YOU
+Hai chiuso l'argomento
+; You closed the topic
+MSG_SV_TOPIC_REOPENED
+%s ha riaperto l'argomento
+; %s reopened the topic
+MSG_SV_TOPIC_REOPENED_YOU
+Hai riaperto l'argomento
+; You reopened the topic
+MSG_SV_TOPIC_HID
+%s ha nascosto l'argomento
+; %s hid the topic
+MSG_SV_TOPIC_HID_YOU
+Hai nascosto l'argomento
+; You hid the topic
+MSG_SV_TOPIC_SHOWED
+%s ha mostrato di nuovo l'argomento
+; %s showed the topic again
+MSG_SV_TOPIC_SHOWED_YOU
+Hai mostrato di nuovo l'argomento
+; You showed the topic again
+MSG_SV_TOPIC_EDITED
+%s ha modificato l'argomento
+; %s edited the topic
+MSG_SV_TOPIC_EDITED_YOU
+Hai modificato l'argomento
+; You edited the topic
+MSG_SV_PROFILE_PHOTO
+%s ha suggerito una foto profilo
+; %s suggested a profile photo
+MSG_SV_PROFILE_PHOTO_YOU
+Hai suggerito una foto profilo
+; You suggested a profile photo
+MSG_SV_BOOSTED
+%s ha potenziato il gruppo
+; %s boosted the group
+MSG_SV_BOOSTED_YOU
+Hai potenziato il gruppo
+; You boosted the group
+MSG_SV_BOOSTED_TIMES
+%s ha potenziato il gruppo %lu volte
+; %s boosted the group %lu times
+MSG_SV_BOOSTED_TIMES_YOU
+Hai potenziato il gruppo %lu volte
+; You boosted the group %lu times
+MSG_SV_DATA_SENT
+Dati inviati al bot
+; Data sent to the bot
+MSG_SV_GIFT
+%s ha inviato un regalo
+; %s sent a gift
+MSG_SV_GIFT_YOU
+Hai inviato un regalo
+; You sent a gift
+MSG_SV_GIVEAWAY
+%s ha avviato un giveaway
+; %s started a giveaway
+MSG_SV_GIVEAWAY_YOU
+Hai avviato un giveaway
+; You started a giveaway
+MSG_SV_GIVEAWAY_RESULTS
+Risultati del giveaway
+; Giveaway results
+MSG_SV_PAYMENT_SENT
+Pagamento inviato
+; Payment sent
+MSG_SV_PAYMENT_RECEIVED
+Pagamento ricevuto
+; Payment received
+MSG_SV_PAYMENT_REFUNDED
+Pagamento rimborsato
+; Payment refunded
+MSG_SV_GROUP_CALL
+Chiamata di gruppo
+; Group call
+MSG_SV_CHECKLIST
+%s ha aggiornato una lista
+; %s updated a checklist
+MSG_SV_CHECKLIST_YOU
+Hai aggiornato una lista
+; You updated a checklist
+MSG_SV_SERVICE
+Messaggio di servizio
+; Service message
+MSG_S_ROUTE_SMS
+via SMS
+; by SMS
+MSG_S_ROUTE_CALL
+con una telefonata
+; by phone call
+MSG_S_ROUTE_FLASH_CALL
+con una chiamata lampo
+; by a flash call
+MSG_S_ROUTE_MISSED_CALL
+con una chiamata persa
+; by a missed call
+MSG_S_ROUTE_FRAGMENT
+via fragment.com
+; via fragment.com
+MSG_S_LGH_COUNTRY_CODE
+Scrivilo col prefisso, es. +39 3331234567
+; Type it with the country code, e.g. +39 3331234567
+MSG_S_LGH_ONLY_TELEGRAM
+Solo Telegram può togliere il blocco
+; Only Telegram can lift the ban
+MSG_S_LGH_TRY_TOMORROW
+Telegram blocca i nuovi codici per un po': riprova domani
+; Telegram blocks new codes for a while: try tomorrow
+MSG_S_LGH_WAIT_A_WHILE
+Aspetta un po', poi riprova
+; Wait a while, then try again
+MSG_S_LGH_LATEST_CODE
+Scrivi l'ultimo codice mandato da Telegram
+; Type the latest code Telegram sent you
+MSG_S_LGH_SENT_ELSEWHERE
+Telegram l'ha mandato agli altri dispositivi o via SMS
+; Telegram sent it to your other devices or by SMS
+MSG_S_LGH_ENTER_FOR_NEW
+Premi ENTER sul numero per un codice nuovo
+; Press ENTER on your number for a new code
+MSG_S_LGH_CREATE_ON_PHONE
+Creane uno prima nell'app Telegram su un telefono
+; Create one in the Telegram app on a phone first
+MSG_S_LGH_TWO_STEP
+È la password della verifica in due passaggi
+; It is your Telegram two-step verification password
+MSG_S_LGH_NUMBER_AGAIN
+Scrivi di nuovo il numero
+; Type your number again
+MSG_S_LGH_FEW_MINUTES
+Riprova fra qualche minuto
+; Try again in a few minutes
+MSG_S_LGH_LOOK_IN_APP
+Cercalo nell'app Telegram sul telefono
+; Look for it in the Telegram app on your phone
+MSG_S_LGH_REMOVE_API_FILE
+Togli data/telegram-api.txt se l'hai creato, o aggiorna
+; Remove data/telegram-api.txt if you made one, or update
+MSG_S_LGH_CHECK_API_FILE
+Controlla api_id e api_hash in data/telegram-api.txt
+; Check the api_id and api_hash in data/telegram-api.txt
+MSG_S_LGH_TRY_LATER
+Riprova più tardi
+; Try again later
+MSG_S_LGH_NEW_RELEASE
+Cerca una versione nuova di Amigram
+; Look for a new release of Amigram
+MSG_S_LGH_WAIT_SECONDS
+Telegram chiede di aspettare %lu secondi
+; Telegram asks to wait %lu seconds
+MSG_S_LGH_WAIT_MINUTES
+Telegram chiede di aspettare %lu minuti
+; Telegram asks to wait %lu minutes
+MSG_S_LGH_WAIT_HOURS
+Telegram chiede di aspettare %lu ore
+; Telegram asks to wait %lu hours
+MSG_S_LGH_TRY_LATER_NAME
+Riprova più tardi (%.24s)
+; Try again later (%.24s)
+MSG_S_LGH_CHECK_NETWORK
+Controlla la connessione di rete e riprova
+; Check the network connection and try again
+MSG_S_LGH_PUT_API_FILE
+Metti api_id e api_hash in data/telegram-api.txt
+; Put your api_id and api_hash in data/telegram-api.txt
+MSG_S_LGH_WITH_COUNTRY_CODE
+Col prefisso, es. +39 3331234567
+; With the country code, e.g. +39 3331234567
+MSG_S_HIDDEN_MARK
+ (nascosta)
+;  (hidden)
+MSG_S_IS_TYPING
+ sta scrivendo...
+;  is typing...
+MSG_S_SOMEONE_IS_TYPING
+qualcuno sta scrivendo...
+; someone is typing...
+MSG_S_A_MESSAGE_FURTHER_UP
+un messaggio più su
+; a message further up
+MSG_S_MESSAGE
+Messaggio
+; Message
+MSG_S_TOPIC_GENERAL
+Generale
+; General
+MSG_S_TOPIC
+Argomento
+; Topic
+MSG_S_TOPICS_CHOOSE
+Argomenti: scegline uno a sinistra
+; Topics: choose one on the left
+MSG_S_CHOOSE_A_TOPIC
+Scegli un argomento nell'elenco a sinistra
+; Choose a topic in the list on the left
+MSG_S_MORE_RESULTS
+Altri risultati...
+; More results...
+MSG_S_OLDER_THAT_MATCH
+Messaggi più vecchi che corrispondono
+; Older messages that match
+MSG_S_SAVED_MESSAGES
+Messaggi salvati
+; Saved Messages
+MSG_S_MORE_ARCHIVED
+Altre chat archiviate...
+; More archived chats...
+MSG_S_ALL_CHATS
+Tutte le chat
+; All chats
+MSG_S_BACK_TO_LIST
+Torna all'elenco delle chat
+; Back to the chat list
+MSG_S_TOPIC_CLOSED
+Chiuso
+; Closed
+MSG_S_OPEN_NO_AUTH
+telegram-auth.bin non si legge
+; cannot read telegram-auth.bin
+MSG_S_OPEN_NO_REACH
+Telegram non raggiungibile
+; cannot reach Telegram
+MSG_S_OPEN_NO_ANSWER
+Telegram non ha risposto
+; Telegram did not answer
+MSG_S_OPEN_DROPPED
+la connessione è caduta
+; the connection dropped
+MSG_S_UP_PHOTO_SIZE
+Telegram ha rifiutato le dimensioni della foto (larghezza + altezza oltre 10000, o oltre 20:1)
+; Telegram refused the photo's size (width + height over 10000, or over 20:1)
+MSG_S_UP_PHOTO_FORMAT
+Telegram non accetta questo formato come foto
+; Telegram does not take this image format as a photo
+MSG_S_UP_PHOTO_DECODE
+Telegram non è riuscito a leggere l'immagine
+; Telegram could not decode the image
+MSG_S_UP_PHOTO_SAVE
+Telegram non è riuscito a salvare la foto
+; Telegram could not save the photo
+MSG_S_IMG_NO_SIZE
+l'immagine non ha dimensioni
+; image has no size
+MSG_S_IMG_TOO_LARGE
+immagine troppo grande per una foto (larghezza + altezza oltre 10000)
+; image too large for a photo (width + height over 10000)
+MSG_S_IMG_TOO_LONG
+immagine troppo allungata per una foto (oltre 20:1)
+; image too elongated for a photo (over 20:1)
+MSG_S_IMG_NOT_VALID
+non è un JPEG o PNG valido
+; not a valid JPEG or PNG
+MSG_S_IMG_BAD_JPEG
+non è un JPEG valido (troncato o rovinato)
+; not a valid JPEG (truncated or damaged)
+MSG_S_IMG_BAD_PNG
+non è un PNG valido (troncato o rovinato)
+; not a valid PNG (truncated or damaged)
+MSG_S_UPD_NONE
+Nessun aggiornamento da installare
+; No update to install
+MSG_S_UPD_NOT_IN_CHANNEL
+L'aggiornamento non è ancora nel canale
+; The update is not in the channel yet
+MSG_S_UPD_NOT_SIGNED
+L'aggiornamento non è firmato dal suo autore
+; The update is not signed by its author
+MSG_S_UPD_BAD_MANIFEST
+Il manifesto dell'aggiornamento non è valido
+; The update's manifest is not right
+MSG_S_UPD_NOT_FOR_SYSTEM
+In quella versione manca l'aggiornamento per questo sistema
+; No update for this system in that version
+MSG_S_UPD_PROGRAM_MISSING
+Il programma non è ancora nel canale
+; The program is not in the channel yet
+MSG_S_UPD_PROGRAM_WRONG
+Il programma arrivato non è quello firmato
+; The program that came is not the signed one
+MSG_S_UPD_OTHER_NAME
+Qui il programma non si chiama Amigram: aggiornalo a mano
+; The program is not called Amigram here: update it by hand
+MSG_S_UPD_OLD_NOT_KEPT
+Non ho potuto conservare il vecchio programma come Amigram.old
+; Could not keep the old program as Amigram.old
+MSG_S_UPD_NOT_WRITTEN
+Non ho potuto scrivere il nuovo programma: è tornato il vecchio
+; Could not write the new program: the old one is back
+MSG_S_UPD_NOT_CONNECTED
+Non collegato a Telegram
+; Not connected to Telegram
+MSG_S_NO_RECENT_FILE
+nessun file recente in questa chat
+; no recent file in this chat
+MSG_T_ANOTHER_ALPHABET
+(altro alfabeto)
+; (another alphabet)
+MSG_T_EMOJI
+(emoji)
+; (emoji)
+MSG_S_TOPIC_NUMBER
+Argomento %lu
+; Topic %lu
+MSG_S_DL_NEED_ROOM
+Servono %lu KB, solo %lu KB liberi in %.16s
+; Need %lu KB, only %lu KB free in %.16s
+MSG_S_DL_VOLUME_FULL
+%.20s è pieno, fermo a %lu KB
+; %.20s is full, stopped at %lu KB
+MSG_T_CODE_IN_TELEGRAM
+Cerca il codice nelle altre app Telegram (telefono, desktop, web).
+; Check your other Telegram apps (mobile/desktop/web) for the code.
+MSG_T_CODE_BY_SMS
+Telegram manda il codice via SMS al tuo telefono.
+; Telegram is sending the code by SMS to your phone.
+MSG_T_CODE_BY_CALL
+Telegram chiamerà il tuo telefono e dirà il codice a voce.
+; Telegram will call your phone and speak the code.
+MSG_T_CODE_FLASH_CALL
+Telegram sta chiamando: le ultime cifre del numero che chiama sono il codice.
+; Telegram is calling: the last digits of the caller ID are the code.
+MSG_T_CODE_BY_EMAIL
+Cerca il codice nella tua email.
+; Check your email for the code.
+MSG_T_CODE_WANTS_EMAIL
+Non arriverà nessun codice: Telegram vuole che questo account aggiunga e verifichi un'email di accesso. Fallo una volta in un'app Telegram ufficiale, poi accedi di nuovo da qui.
+; No code is coming: Telegram wants this account to add and verify a login email. Do that once in an official Telegram app, then sign in here again.
+MSG_T_CODE_UNKNOWN_TYPE
+Telegram non ha detto dove ha mandato il codice (tipo di consegna 0x%08lx).\n
+MSG_T_REACTION_REMOVED
+Reazione tolta.
+; Reaction removed.
+MSG_T_REACTION_SENT
+Reazione inviata.
+; Reaction sent.
+MSG_T_HELP_EVERY_DAY
+Ogni giorno:
+; Every day:
+MSG_T_HELP_TEXT_ENTER_SEND
+  testo + Invio   manda un messaggio
+;   text + Enter    send a message
+MSG_T_HELP_ENTER_READ_NEW
+  Invio           leggi subito i nuovi messaggi
+;   Enter           read new messages now
+MSG_T_HELP_1_2_3
+  1, 2, 3 ...     apri la chat 1, 2, 3 (o F1..F10, con shift 11..20)
+;   1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)
+MSG_T_HELP_F1_F10_KEEP
+                  F1..F10 tengono il testo scritto come bozza della chat
+;                   F1..F10 keep text typed as the draft of the chat left
+MSG_T_HELP_0_SAVED_MESSAGES
+  0               Messaggi salvati, il tuo cassetto nel cloud
+;   0               Saved Messages, your cloud drawer
+MSG_T_HELP_TAB_BACK_TO
+  Tab             torna alla chat di prima
+;   Tab             back to the previous chat
+MSG_T_HELP_SHIFT_UP_DOWN
+  Shift+Su/Giù    messaggi più vecchi, e ritorno
+;   Shift+Up/Down   older messages, and back
+MSG_T_HELP_LIST_YOUR_CHATS
+  /list           le tue chat
+;   /list           your chats
+MSG_T_HELP_HELP_KEY_THIS
+  Tasto Help      questo elenco
+;   Help key        this list
+MSG_T_HELP_QUIT_EXIT
+  /quit           esci
+;   /quit           exit
+MSG_T_HELP_MORE
+Altro:
+; More:
+MSG_T_HELP_SEARCH_TEXT_FIND
+  /search testo   trova una chat dell'elenco per nome o username
+;   /search text    find a chat in the list by name or username
+MSG_T_HELP_ADD_NAME_SEARCH
+  /add nome       cerca su Telegram e aggiungi una chat all'elenco
+;   /add name       search Telegram and add a chat to the list
+MSG_T_HELP_MOVE_5_1
+  /move 5 1       la chat 5 diventa la numero 1, quella di F1
+;   /move 5 1       chat 5 becomes number 1, the one F1 opens
+MSG_T_HELP_REMOVE_N_REMOVE
+  /remove n       togli la chat n dall'elenco
+;   /remove n       remove chat n from the list
+MSG_T_HELP_HISTORY_SHOW_THE
+  /history        mostra di nuovo i messaggi recenti
+;   /history        show the recent messages again
+MSG_T_HELP_FIND_WORDS_FIND
+  /find parole    trova messaggi in questa chat, i dieci più recenti
+;   /find words     find messages in this chat, the newest ten
+MSG_T_HELP_FORWARD_ID_FORWARD
+  /forward [id]   inoltra l'ultimo (o quell'id) ai Messaggi salvati
+;   /forward [id]   forward the latest (or that id) to Saved Messages
+MSG_T_HELP_FORWARDTO_N_ID
+  /forwardto n [id]  inoltra l'ultimo (o quell'id) alla chat n
+;   /forwardto n [id]  forward the latest (or that id) to chat n
+MSG_T_HELP_REACT_ID_NAME
+  /react [id] nome   reagisci all'ultimo ricevuto (o a quell'id):
+;   /react [id] name   react to the last one received (or that id):
+MSG_T_HELP_UP_HEART_FIRE
+                  up heart fire laugh surprise sad party pray
+;                   up heart fire laugh surprise sad party pray
+MSG_T_HELP_CLAP_OK_NONE
+                  clap ok; none toglie le tue reazioni
+;                   clap ok; none removes your reactions
+MSG_T_HELP_REACTIONS_EVERY_NAME
+  /reactions      tutti i nomi che /react accetta
+;   /reactions      every name /react takes
+MSG_T_HELP_IDS_MESSAGE_IDS
+  /ids            id davanti a ogni messaggio, sì o no
+;   /ids            message ids before each message, on or off
+MSG_T_HELP_HIDE_ID_HIDE
+  /hide [id]      nascondi l'ultimo ricevuto (o quell'id) in un gruppo
+;   /hide [id]      hide the last one received (or that id) in a group
+MSG_T_HELP_UNHIDE_BRING_BACK
+  /unhide         rimostra i messaggi nascosti di questa chat
+;   /unhide         bring back this chat's hidden messages
+MSG_T_HELP_GETFILE_DOWNLOAD_THE
+  /getfile        scarica il file più recente di qui in downloads/
+;   /getfile        download the newest file here to downloads/
+MSG_T_HELP_SENDFILE_PATH_SEND
+  /sendfile file  manda un file
+;   /sendfile path  send a file
+MSG_T_HELP_PHOTO_PATH_SEND
+  /photo file     manda un JPEG come foto (oltre 10 MiB: come file)
+;   /photo path     send a JPEG as a photo (over 10 MiB: as a file)
+MSG_T_HELP_WATCH_SEC_READ
+  /watch sec      leggi i nuovi messaggi ogni sec secondi (off: mai)
+;   /watch sec      read new messages every sec seconds (off: never)
+MSG_T_HELP_RESIZE_REDRAW_AFTER
+  /resize         ridisegna dopo un cambio di misura della finestra
+;   /resize         redraw after the window changed size
+MSG_T_HELP_DIFF_BACKGROUND_CATCH
+  /diff           recupero in sottofondo, sì o no
+;   /diff           background catch-up, on or off
+MSG_T_HELP_COLOR_COLOURS_ON
+  /color          colori, sì o no
+;   /color          colours, on or off
+MSG_T_HELP_BELL_FLASH_ON
+  /bell           lampo ai nuovi messaggi, sì o no
+;   /bell           flash on new messages, on or off
+MSG_T_HELP_RING_DOES_THIS
+  /ring           questa chat suona? /ring on o off lo cambia
+;   /ring           does this chat ring? /ring on or off changes it
+MSG_T_HELP_MUTE_1H_8H
+  /mute [1h|8h|2d]  silenzia la chat su Telegram, per sempre o per un po'
+;   /mute [1h|8h|2d]  mute this chat on Telegram, for good or for a while
+MSG_T_HELP_UNMUTE_TAKE_THE
+  /unmute         togli il silenzio
+;   /unmute         take the mute back
+MSG_T_HELP_MARKREAD_MARK_THIS
+  /markread       segna questa chat come letta su ogni dispositivo
+;   /markread       mark this chat as read on every device
+MSG_T_HELP_MARKUNREAD_MARK_THIS
+  /markunread     segna questa chat come non letta
+;   /markunread     mark this chat as unread
+MSG_T_HELP_VOTE_N_N
+  /vote n [n..]   vota l'ultimo sondaggio mostrato; /vote none lo ritira
+;   /vote n [n..]   vote the last poll shown here; /vote none takes it back
+MSG_T_HELP_VOTERS_WHO_VOTED
+  /voters         chi ha votato in quel sondaggio, se i voti sono pubblici
+;   /voters         who voted in that poll, when its votes are public
+MSG_T_HELP_TOPICS_THE_TOPICS
+  /topics         gli argomenti di questo gruppo, se è un forum
+;   /topics         the topics of this group, when it is a forum
+MSG_T_HELP_TOPIC_N_ONLY
+  /topic n        solo l'argomento n dell'elenco; /topic da solo: tutti
+;   /topic n        only topic n of that list; /topic alone: all again
+MSG_T_HELP_TOPIC_NEW_X
+  /topic new x    argomento nuovo x; rename x, close, reopen: quello scelto
+;   /topic new x    a new topic x; rename x, close, reopen: the chosen one
+MSG_T_HELP_UPDATE_A_NEW
+  /update         c'è una versione nuova? /update yes la installa
+;   /update         a new version? /update yes installs it
+MSG_T_HELP_LOGOUT_LOG_OUT
+  /logout         esci dall'account su questo computer (/logout yes)
+;   /logout         log out on this computer (/logout yes)
+MSG_T_HELP_SWAP_SAVED_PEERS
+  /swap /saved /peers  come Tab, 0 e /list
+;   /swap /saved /peers  the same as Tab, 0 and /list
+MSG_T_HELP_SUPPORT_MY_WORK
+Sostieni il mio lavoro su Patreon: www.patreon.com/c/kaffeine1
+; Support my work on Patreon: www.patreon.com/c/kaffeine1
+MSG_T_HELP_OR_WITH_A
+o con una mancia una tantum su Ko-fi: ko-fi.com/kaffeine1
+; or with a one-time tip on Ko-fi: ko-fi.com/kaffeine1
+MSG_T_HELP_CONTRIBUTIONS_ARE_VOLUNTARY
+I contributi sono volontari; non serve nessun abbonamento.
+; Contributions are voluntary; no subscription is required.
+MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_NO_CODE
+Telegram conosce questo computer: non serve il codice.\n
+MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_SIGNED_IN
+Telegram conosce questo computer: accesso fatto senza codice.\n
+MSG_T_LOGIN_CODE_SENT
+Codice di accesso inviato.\n
+MSG_T_RESEND_FAILED_NO_OTHER_WAY_TO
+Nuovo invio fallito: non c'è un altro modo per mandarlo\n
+MSG_T_RESEND_FAILED_THE_CODE_EXPIRED_PRESS
+Nuovo invio fallito: il codice è scaduto, premi ESC\n
+MSG_T_RESEND_FAILED_TOO_MANY_TRIES_WAIT
+Nuovo invio fallito: troppi tentativi, aspetta %.10s s\n
+MSG_T_LOGIN_CODE_SENT_AGAIN
+Codice di accesso inviato di nuovo.\n
+MSG_T_VERIFYING_PASSWORD
+Verifico la password
+; Verifying password
+MSG_T_KEY_READY_ASKING_TELEGRAM_TO_CHECK
+Chiave pronta. Chiedo a Telegram di controllarla.\n
+MSG_T_THE_ACCOUNT_S_PASSWORD_CHANGED_WHILE
+La password dell'account è cambiata mentre questa veniva controllata. Accedi di nuovo con quella nuova.\n
+MSG_T_GETTING_A_QR_CODE_FROM_TELEGRAM
+Chiedo un codice QR a Telegram.\n
+MSG_T_THE_QR_CODE_CANNOT_BE_SHOWN
+Qui il codice QR non si può mostrare.\n
+MSG_T_SCAN_THE_QR_CODE_WITH_TELEGRAM
+Inquadra il codice QR con Telegram sul telefono: Impostazioni > Dispositivi > Collega dispositivo desktop.\n\
+Si rinnova ogni 30 secondi. Scrivi P e premi Invio per usare invece il numero di telefono.\n
+MSG_T_NO_SCAN_IN_TEN_MINUTES
+Nessuna scansione in dieci minuti.\n
+MSG_T_SCANNED_YOUR_ACCOUNT_LIVES_ON_TELEGRAM
+Scansionato. Il tuo account sta sul DC %s di Telegram.\n
+MSG_T_STOPPED
+Interrotto.\n
+MSG_T_SIGNED_IN_WITH_THE_QR_CODE
+Accesso fatto col codice QR.\n
+MSG_T_SCANNED
+Scansionato.\n
+MSG_T_CONNECTING_TO_TELEGRAM
+Mi collego a Telegram.\n
+MSG_T_YOU_NEED_A_TELEGRAM_ACCOUNT_TO
+Per accedere qui serve un account Telegram.\n\
+%s.\n
+MSG_T_PHONE_NUMBER
+Numero di telefono: 
+; Phone number: 
+MSG_T_USING_PHONE_NUMBER_S
+Uso il numero di telefono %s.\n
+MSG_T_SENDING_LOGIN_CODE_REQUEST
+Mando la richiesta del codice di accesso.\n
+MSG_T_USING_TELEGRAM_DC_S
+Uso il DC %s di Telegram.\n
+MSG_T_TYPE_THE_NUMBER_AGAIN_EMPTY_INPUT
+Scrivi di nuovo il numero (riga vuota: rinuncia).\n
+MSG_T_TELEGRAM_LOGIN_CODE_RECEIVED
+\n\
+Codice di accesso di Telegram ricevuto.\n
+MSG_T_TYPE_THE_TELEGRAM_CODE_AND_PRESS
+Scrivi il codice di Telegram e premi Invio.\n
+MSG_T_NO_CODE_TYPE_S_AND_PRESS
+Niente codice? Scrivi S e premi Invio per averlo %s.\n
+MSG_T_TELEGRAM_CODE_EMPTY_TO_ABORT
+Codice di Telegram (vuoto: rinuncia): 
+; Telegram code (empty to abort): 
+MSG_T_TELEGRAM_OFFERED_NO_OTHER_WAY_TO
+Telegram non offre un altro modo per mandare questo codice.\n
+MSG_T_TELEGRAM_ALLOWS_THAT_IN_LU_SECONDS
+Telegram lo permette fra %lu secondi: scrivi di nuovo S allora.\n
+MSG_T_ASKING_TELEGRAM_TO_SEND_THE_CODE
+Chiedo a Telegram di mandare il codice %s.\n
+MSG_T_CHECKING_TELEGRAM_CODE
+Controllo il codice di Telegram.\n
+MSG_T_THAT_CODE_HAS_EXPIRED_ASKING_TELEGRAM
+Quel codice è scaduto. Ne chiedo uno nuovo a Telegram.\n
+MSG_T_THAT_CODE_WAS_NOT_ACCEPTED_CHECK
+Quel codice non è stato accettato. Guarda l'ultimo messaggio di Telegram e riprova.\n
+MSG_T_2FA_PASSWORD_REQUIRED_CHECKING_IT_DERIVE
+Serve la password della verifica in due passaggi.\n\
+Per controllarla si ricava una chiave con PBKDF2 (100000 giri di SHA-512). Su un 68k lento, come un 68020 a 14 MHz, ci vuole mezz'ora o più; i puntini mostrano che lavora. Quando la chiave è pronta il client chiede a Telegram una sfida nuova, così l'attesa non fa perdere l'accesso. Scrivi la password (vuota: rinuncia).\n
+MSG_T_2FA_PASSWORD_EMPTY_TO_ABORT
+Password in due passaggi, vuota per rinunciare: 
+; 2FA password, empty to abort: 
+MSG_T_THAT_PASSWORD_WAS_NOT_ACCEPTED_TRY
+Quella password non è stata accettata. Riprova (vuota: rinuncia).\n
+MSG_T_LOGIN_COMPLETE
+Accesso completato.\n
+MSG_T_NO_CHATS_AVAILABLE
+Nessuna chat disponibile.\n
+MSG_T_SINGLE_CHATS
+Chat singole:
+; Single chats:
+MSG_T_GROUPS_AND_CHANNELS
+Gruppi e canali:
+; Groups and channels:
+MSG_T_LU_NEW
+ %lu nuovi
+;  %lu new
+MSG_T_NO_CACHED_CHATS_YET
+Ancora nessuna chat in elenco.\n
+MSG_T_0_SAVED_MESSAGES_YOUR_CLOUD_DRAWER
+0. Messaggi salvati (il tuo cassetto nel cloud)\n
+MSG_T_TYPE_SOMETHING_TO_SEARCH_FOR
+Scrivi qualcosa da cercare.\n
+MSG_T_NO_CACHED_CHATS_YET_ADD_ONE
+Ancora nessuna chat in elenco. Aggiungine una con /add @username.\n
+MSG_T_MATCHES
+Trovate:\n
+MSG_T_NO_CACHED_CHAT_MATCHES_THAT_NAME
+Nessuna chat dell'elenco ha quel nome.\n
+MSG_T_TYPE_THE_NUMBER_TO_SWITCH_CHAT
+Scrivi il numero per cambiare chat.\n
+MSG_T_USE_REMOVE_NUMBER
+Usa /remove <numero>.\n
+MSG_T_NO_CACHED_CHATS_TO_REMOVE
+Nessuna chat da togliere dall'elenco.\n
+MSG_T_CHAT_NUMBER_NOT_FOUND
+Numero di chat non trovato.\n
+MSG_T_COULD_NOT_UPDATE_CACHED_CHATS
+Non ho potuto aggiornare l'elenco delle chat.\n
+MSG_T_NO_CACHED_CHATS_TO_REORDER
+Nessuna chat da riordinare.\n
+MSG_T_COULD_NOT_SAVE_CHAT_ORDER
+Non ho potuto salvare l'ordine delle chat.\n
+MSG_T_CANNOT_OPEN
+, non si apre
+; , cannot open
+MSG_T_THIS_CHAT_IS_NOT_IN_THE
+Questa chat non è nell'elenco.
+; This chat is not in the chat list.
+MSG_T_ONLY_MESSAGES_IN_GROUPS_AND_CHANNELS
+Si nascondono solo i messaggi di gruppi e canali.
+; Only messages in groups and channels can be hidden.
+MSG_T_NO_HIDDEN_MESSAGES_IN_THIS_CHAT
+Nessun messaggio nascosto in questa chat.
+; No hidden messages in this chat.
+MSG_T_COULD_NOT_SAVE_THE_HIDDEN_MESSAGE
+Non ho potuto salvare il messaggio nascosto.
+; Could not save the hidden message.
+MSG_T_SAVED_MESSAGES_NEVER_RING
+I Messaggi salvati non suonano mai.
+; Saved Messages never ring.
+MSG_T_THIS_CHAT_STAYS_QUIET_RING_ON
+Questa chat tace; /ring on la fa suonare.
+; This chat stays quiet; /ring on lets it ring.
+MSG_T_THIS_CHAT_STAYS_QUIET_IT_IS
+Questa chat tace: è silenziata in Telegram, qui o da un altro dispositivo.
+; This chat stays quiet: it is muted in Telegram, here or on another device.
+MSG_T_THIS_CHAT_RINGS_BUT_BELL_IS
+Questa chat suona, ma /bell è spento per tutte le chat.
+; This chat rings, but /bell is off for every chat.
+MSG_T_THIS_CHAT_RINGS_WHEN_A_MESSAGE
+Questa chat suona se arriva un messaggio mentre è aperta un'altra chat.
+; This chat rings when a message arrives while another chat is open.
+MSG_T_CHOOSE_A_CHAT_BEFORE_RING
+Scegli una chat prima di /ring.
+; Choose a chat before /ring.
+MSG_T_USE_RING_TO_SEE_WHAT_THIS
+Usa /ring per vedere cosa fa questa chat, /ring on o /ring off per cambiarlo.
+; Use /ring to see what this chat does, /ring on or /ring off to change it.
+MSG_T_COULD_NOT_SAVE_THIS_CHAT_S
+Non ho potuto salvare la scelta di /ring per questa chat.
+; Could not save this chat's ring choice.
+MSG_T_GROUP
+ (gruppo)
+;  (group)
+MSG_T_GROUP_MESSAGE
+messaggio di gruppo
+; group message
+MSG_T_NEW_MESSAGE
+nuovo messaggio
+; new message
+MSG_T_LU_MORE
+(+%lu altri)
+; (+%lu more)
+MSG_T_LU_ELSEWHERE
+(+%lu altrove)
+; (+%lu elsewhere)
+MSG_T_REACTIONS_FOR_REACT_MESSAGE_ID_NAME
+\n\
+Reazioni per /react [id-messaggio] <nome>:\n
+MSG_T_NONE_REMOVES_YOUR_REACTIONS
+  none toglie le tue reazioni\n
+MSG_T_FILE_DRAG_AND_DROP_S
+  trascinamento dei file: %s
+;   file drag-and-drop: %s
+MSG_T_TOPICS_TOPIC_N_READS_ONE
+Argomenti (/topic n ne legge uno):\n
+MSG_T_NO_TITLE
+(senza titolo)
+; (no title)
+MSG_T_LU_NEW_2
+  (%lu nuovi)
+;   (%lu new)
+MSG_T_CLOSED
+  [chiuso]
+;   [closed]
+MSG_T_DRAFT
+  [bozza]
+;   [draft]
+MSG_T_READING
+  <- in lettura
+;   <- reading
+MSG_T_LU_READ_LU_OF_LU
+  #%lu letti %lu di %lu
+;   #%lu read %lu of %lu
+MSG_T_THE_LU_MOST_ACTIVE_OF_LU
+(i %lu più attivi di %lu)\n
+MSG_T_OPENING_CHAT
+Apro la chat
+; Opening chat
+MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS
+Ancora nessuna risposta (linea lenta). Premi Invio per riprovare a leggere.\n
+MSG_T_COULD_NOT_LOAD_RECENT_MESSAGES_NOW
+Ora non riesco a caricare i messaggi recenti (errore %d).\n
+MSG_T_REACTIONS_ON_MESSAGE_LU
+Reazioni al messaggio %lu:
+; Reactions on message %lu:
+MSG_T_USAGE_TOPIC_NEW_NAME
+Uso: /topic new <nome>
+; Usage: /topic new <name>
+MSG_T_USAGE_TOPIC_RENAME_NAME
+Uso: /topic rename <nome>
+; Usage: /topic rename <name>
+MSG_T_CHOOSE_THE_TOPIC_FIRST_WITH_TOPIC
+Scegli prima l'argomento con /topic e il suo numero.
+; Choose the topic first with /topic and its number.
+MSG_T_THIS_CHAT_HAS_NO_TOPICS
+Questa chat non ha argomenti.
+; This chat has no topics.
+MSG_T_NO_ANSWER_FROM_TELEGRAM_TRY_AGAIN
+Nessuna risposta da Telegram. Riprova.
+; No answer from Telegram. Try again.
+MSG_T_TOPIC_MADE
+Argomento creato.
+; Topic made.
+MSG_T_TOPIC_RENAMED
+Argomento rinominato.
+; Topic renamed.
+MSG_T_TOPIC_CLOSED_ONLY_ADMINS_CAN_WRITE
+Argomento chiuso: ci scrivono solo gli amministratori.
+; Topic closed: only admins can write in it.
+MSG_T_TOPIC_OPEN_AGAIN
+Argomento riaperto.
+; Topic open again.
+MSG_T_KEPT_AS_A_DRAFT_IN
+Tenuto come bozza in 
+; Kept as a draft in 
+MSG_T_COULD_NOT_KEEP_THE_TEXT_AS
+Non ho potuto tenere il testo come bozza (rete?).
+; Could not keep the text as a draft (network?).
+MSG_T_DRAFT_2
+Bozza: 
+; Draft: 
+MSG_T_SENDFILE_PATH_SEND_A_FILE
+/sendfile file: manda un file
+; /sendfile path: send a file
+MSG_T_LOADING_CHATS
+Carico le chat...
+; Loading chats...
+MSG_T_NO_CACHED_CHATS_YET_2
+Ancora nessuna chat in elenco.
+; No cached chats yet.
+MSG_T_USE_ADD_NAME_TO_SEARCH_USERS
+Usa /add nome per cercare utenti o gruppi.
+; Use /add name to search users or groups.
+MSG_T_USING_CACHED_CHATS
+Uso l'elenco delle chat salvato.
+; Using cached chats.
+MSG_T_OPENING_SESSION
+Apro la sessione...
+; Opening session...
+MSG_T_SLOW_START_RETRYING_ONCE
+Avvio lento, riprovo una volta...
+; Slow start, retrying once...
+MSG_T_LOADING_PROFILE
+Carico il profilo...
+; Loading profile...
+MSG_T_CHOOSE_A_CHAT
+Scegli una chat:
+; Choose a chat:
+MSG_T_CHAT_NUMBER
+\n\
+Numero della chat: 
+MSG_T_TYPE_ADD_NAME_TO_FIND_A
+Scrivi /add nome per trovare una chat.
+; Type /add name to find a chat.
+MSG_T_INPUT_CLOSED
+Ingresso chiuso.
+; Input closed.
+MSG_T_CHOOSE_A_CHAT_FIRST_WITH_ADD
+Scegli prima una chat con /add nome.
+; Choose a chat first with /add name.
+MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_2
+Ancora nessuna risposta (linea lenta). Premi Invio per riprovare.\n
+MSG_T_COULD_NOT_READ_MESSAGES_NOW_ERROR
+Ora non riesco a leggere i messaggi (errore %d).\n
+MSG_T_THIS_SYSTEM_HAS_NO_UPDATE_TO
+Su questo sistema non c'è un aggiornamento da installare.
+; This system has no update to install.
+MSG_T_UPDATE_SAYS_WHETHER_A_NEW_VERSION
+/update dice se è uscita una versione nuova; /update yes la installa.
+; /update says whether a new version is out; /update yes installs it.
+MSG_T_LOOKING_FOR_A_NEW_VERSION
+Cerco una versione nuova...
+; Looking for a new version...
+MSG_T_LOGGING_OUT
+Esco dall'account...
+; Logging out...
+MSG_T_TELEGRAM_COULD_NOT_BE_REACHED_NOTHING
+Telegram non è raggiungibile: non ho tolto niente. /logout here toglie comunque i file da questo computer; la sessione resta poi nell'elenco dei dispositivi di Telegram finché non la chiudi da un altro dispositivo.
+; Telegram could not be reached: nothing was removed. /logout here removes the files on this computer anyway; the session then stays in Telegram's list of devices until you end it from another device.
+MSG_T_LOGOUT_YES_LOGS_OUT_OF_TELEGRAM
+/logout yes esce da Telegram su questo computer: chiude questa sessione su Telegram, toglie telegram-auth.bin e ciò che qui resta dell'account (elenco delle chat, chat nascoste; i download restano) ed esce. Al prossimo avvio compare l'accesso.
+; /logout yes logs out of Telegram on this computer: it ends this session at Telegram, removes telegram-auth.bin and what is kept here of the account (the chat list, hidden chats; downloads stay) and quits. The next start shows the login.
+MSG_T_LOGGED_OUT_THE_NEXT_START_SHOWS
+Uscito dall'account. Al prossimo avvio compare l'accesso.
+; Logged out. The next start shows the login.
+MSG_T_THE_FILES_ARE_REMOVED_FROM_THIS
+I file sono stati tolti da questo computer. Al prossimo avvio compare l'accesso.
+; The files are removed from this computer. The next start shows the login.
+MSG_T_COLORS_ON
+Colori accesi.
+; Colors on.
+MSG_T_COLORS_OFF
+Colori spenti.
+; Colors off.
+MSG_T_BELL_ON
+Lampo acceso.
+; Bell on.
+MSG_T_BELL_OFF
+Lampo spento.
+; Bell off.
+MSG_T_MESSAGE_IDS_ON_REACT_FORWARD_AND
+Id dei messaggi accesi: /react, /forward e /forwardto prendono il numero dopo #.
+; Message ids on: /react, /forward and /forwardto take the number after #.
+MSG_T_MESSAGE_IDS_OFF
+Id dei messaggi spenti.
+; Message ids off.
+MSG_T_NO_PREVIOUS_CHAT_YET
+Ancora nessuna chat precedente.
+; No previous chat yet.
+MSG_T_CURRENT_CHAT
+Chat attuale: 
+; Current chat: 
+MSG_T_CHOOSE_A_CHAT_2
+\n\
+Scegli una chat:\n\
+\n
+MSG_T_TYPE_A_NUMBER_SEARCH_TEXT_OR
+Scrivi un numero, /search testo, o /add nome.\n
+MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST
+Scegli prima una chat con /list o /add nome.
+; Choose a chat first with /list or /add name.
+MSG_T_USE_FIND_WORDS_IT_SEARCHES_THIS
+Usa /find parole: cerca nei messaggi di questa chat.
+; Use /find words: it searches this chat's messages.
+MSG_T_COULD_NOT_SEARCH_NOW
+Ora non riesco a cercare.\n
+MSG_T_NO_MESSAGE_FOUND
+Nessun messaggio trovato.\n
+MSG_T_EVERY_TOPIC_AGAIN_HISTORY_SHOWS_THEM
+Di nuovo tutti gli argomenti: /history li mostra.
+; Every topic again: /history shows them.
+MSG_T_USE_TOPIC_AND_A_NUMBER_FROM
+Usa /topic e un numero preso da /topics.
+; Use /topic and a number from /topics.
+MSG_T_TELEGRAM_DID_NOT_GIVE_THE_TOPICS
+Telegram non ha dato gli argomenti. Riprova.
+; Telegram did not give the topics. Try again.
+MSG_T_NO_TOPIC_WITH_THAT_NUMBER_TOPICS
+Nessun argomento con quel numero: /topics li elenca.
+; No topic with that number: /topics lists them.
+MSG_T_TOPIC
+Argomento: 
+; Topic: 
+MSG_T_WHAT_YOU_WRITE_GOES_THERE_TOPIC
+ (ciò che scrivi va lì; /topic da solo: tutti gli argomenti)\n
+MSG_T_COULD_NOT_READ_MESSAGE_HISTORY_NOW
+Ora non riesco a leggere la cronologia dei messaggi.\n
+MSG_T_DOWNLOADING
+Scarico...
+; Downloading...
+MSG_T_SAVED_TO_S
+Salvato in %s\n
+MSG_T_FILE_IS_ON_ANOTHER_SERVER_NOT
+Il file è su un altro server: non ancora gestito.\n
+MSG_T_120S_THE_PART_WAS_REMOVED
+%.120s, la parte scaricata è stata tolta.\n
+MSG_T_COULD_NOT_WRITE_TO_DOWNLOADS
+Non riesco a scrivere in downloads/.\n
+MSG_T_NOT_ENOUGH_ROOM_FOR_THAT_FILE
+Non c'è abbastanza spazio per quel file
+; Not enough room for that file
+MSG_T_TRANSFER_FAILED_110S
+Trasferimento fallito: %.110s\n
+MSG_T_TRANSFER_FAILED_SERVER_ERROR
+Trasferimento fallito (errore del server).\n
+MSG_T_NO_FILE_120S
+Nessun file: %.120s\n
+MSG_T_DOWNLOAD_FAILED
+Download fallito.\n
+MSG_T_USAGE_PHOTO_JPEG_OR_PNG_PATH
+Uso: /photo <file-jpeg-o-png> [didascalia]
+; Usage: /photo <jpeg-or-png-path> [caption]
+MSG_T_USAGE_SENDFILE_PATH
+Uso: /sendfile <file>
+; Usage: /sendfile <path>
+MSG_T_UPLOADING_PHOTO
+Carico la foto...
+; Uploading photo...
+MSG_T_UPLOADING
+Carico...
+; Uploading...
+MSG_T_FILE_SENT_PHOTO_WAS_OVER_10
+File inviato (la foto superava i 10 MiB).\n
+MSG_T_PHOTO_SENT
+Foto inviata.\n
+MSG_T_FILE_SENT
+File inviato.\n
+MSG_T_FILE_TOO_BIG_LU_MIB_LIMIT
+File troppo grande (limite di %lu MiB in questa versione).\n
+MSG_T_COULD_NOT_READ_THAT_PHOTO
+Non riesco a leggere quella foto.\n
+MSG_T_COULD_NOT_READ_THAT_FILE
+Non riesco a leggere quel file.\n
+MSG_T_THAT_FILE_IS_EMPTY_0_BYTES
+Quel file è vuoto (0 byte).\n
+MSG_T_NOT_SENT_AS_A_PHOTO_100S
+Non inviata come foto: %.100s.\n
+MSG_T_UPLOAD_FAILED_100S
+Caricamento fallito: %.100s\n
+MSG_T_UPLOAD_FAILED
+Caricamento fallito.\n
+MSG_T_CURRENT_CHAT_SAVED_MESSAGES
+Chat attuale: Messaggi salvati\n
+MSG_T_BACKGROUND_CATCH_UP_ON
+Recupero in sottofondo acceso.
+; Background catch-up on.
+MSG_T_BACKGROUND_CATCH_UP_OFF
+Recupero in sottofondo spento.
+; Background catch-up off.
+MSG_T_WINDOW_SIZE_UNCHANGED
+Misura della finestra invariata.
+; Window size unchanged.
+MSG_T_FULL_SCREEN_MODE_IS_NOT_ACTIVE
+La modalità a tutto schermo non è attiva.
+; Full-screen mode is not active.
+MSG_T_SEARCH
+Cerca: 
+; Search: 
+MSG_T_USAGE_MOVE_5_1_MAKES_CHAT
+Uso: /move 5 1 fa della chat 5 la numero 1, su F1.
+; Usage: /move 5 1 makes chat 5 number 1, on F1.
+MSG_T_NO_SUCH_CHAT_NUMBER_LIST_SHOWS
+Quel numero di chat non c'è: /list li mostra.
+; No such chat number: /list shows them.
+MSG_T_MOVED
+Spostata 
+; Moved 
+MSG_T_THE_CHAT
+la chat
+; the chat
+MSG_T_TO_NUMBER_LU
+ al numero %lu
+;  to number %lu
+MSG_T_REMOVE_CHAT_NUMBER
+Numero della chat da togliere: 
+; Remove chat number: 
+MSG_T_REMOVED
+Tolta 
+; Removed 
+MSG_T_NO_CACHED_CHATS_ADD_ONE_WITH
+Nessuna chat in elenco. Aggiungine una con /add nome.
+; No cached chats. Add one with /add name.
+MSG_T_CHAT_NUMBER_2
+Numero della chat: 
+; Chat number: 
+MSG_T_NAME_USERNAME_OR_T_ME_LINK
+Nome, username o link t.me: 
+; Name, username or t.me link: 
+MSG_T_COULD_NOT_ADD_THAT_CHAT_TRY
+Non ho potuto aggiungere quella chat. Prova @username o un link t.me.
+; Could not add that chat. Try @username or a t.me link.
+MSG_T_CHAT_ADDED_CACHED_CHATS
+\n\
+Chat aggiunta. Chat in elenco:\n\
+\n
+MSG_T_TYPE_A_NUMBER_TO_SWITCH
+Scrivi un numero per cambiare.\n
+MSG_T_CHOOSE_A_CHAT_BEFORE_FORWARDING_A
+Scegli una chat prima di inoltrare un messaggio.
+; Choose a chat before forwarding a message.
+MSG_T_USE_FORWARDTO_CHAT_NUMBER_MESSAGE_ID
+Usa /forwardto <numero-chat> [id-messaggio].
+; Use /forwardto <chat-number> [message-id].
+MSG_T_NO_RECENT_MESSAGE_IS_AVAILABLE_TO
+Non c'è un messaggio recente da inoltrare.
+; No recent message is available to forward.
+MSG_T_FORWARDED_TO
+Inoltrato a 
+; Forwarded to 
+MSG_T_SAVED_MESSAGES_HAS_NO_MUTE_AND
+I Messaggi salvati non hanno né silenzio né segno di lettura.
+; Saved Messages has no mute and no read mark.
+MSG_T_USE_MUTE_OR_MUTE_WITH_A
+Usa /mute, o /mute con un tempo: 30m, 1h, 8h, 2d. /unmute lo toglie.
+; Use /mute, or /mute with a time: 30m, 1h, 8h, 2d. /unmute takes it back.
+MSG_T_MARKED_AS_UNREAD
+Segnata come non letta.
+; Marked as unread.
+MSG_T_MUTED_ON_TELEGRAM_UNTIL_UNMUTE
+Silenziata su Telegram, fino a /unmute.
+; Muted on Telegram, until /unmute.
+MSG_T_MUTED_ON_TELEGRAM_FOR_THAT_LONG
+Silenziata su Telegram per quel tempo.
+; Muted on Telegram for that long.
+MSG_T_NOT_MUTED_ANY_MORE
+Non più silenziata.
+; Not muted any more.
+MSG_T_MARKED_AS_READ
+Segnata come letta.
+; Marked as read.
+MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY
+Telegram non l'ha accettato. Riprova.
+; Telegram did not take it. Try again.
+MSG_T_NO_POLL_SHOWN_HERE_YET_HISTORY
+Qui non è ancora apparso nessun sondaggio: /history rimostra i messaggi recenti.
+; No poll shown here yet: /history shows the recent messages again.
+MSG_T_THE_VOTES_OF_THAT_POLL_ARE
+I voti di quel sondaggio sono anonimi.
+; The votes of that poll are anonymous.
+MSG_T_WHO_VOTED
+Chi ha votato:\n
+MSG_T_VOTE_FIRST_VOTE_THEN_TELEGRAM_SAYS
+Prima vota (/vote): poi Telegram dice chi ha votato.
+; Vote first (/vote): then Telegram says who voted.
+MSG_T_TELEGRAM_DID_NOT_SAY_WHO_VOTED
+Telegram non ha detto chi ha votato. Riprova.
+; Telegram did not say who voted. Try again.
+MSG_T_THAT_POLL_IS_CLOSED
+Quel sondaggio è chiuso.
+; That poll is closed.
+MSG_T_USE_VOTE_WITH_THE_NUMBERS_OF
+Usa /vote coi numeri delle tue risposte (/vote 1 3), o /vote none.
+; Use /vote with the numbers of your answers (/vote 1 3), or /vote none.
+MSG_T_USE_VOTE_WITH_THE_NUMBER_OF
+Usa /vote col numero di una risposta, o /vote none.
+; Use /vote with the number of one answer, or /vote none.
+MSG_T_VOTED
+Votato.
+; Voted.
+MSG_T_VOTE_TAKEN_BACK
+Voto ritirato.
+; Vote taken back.
+MSG_T_THIS_POLL_DOES_NOT_LET_A
+Questo sondaggio non lascia cambiare il voto.
+; This poll does not let a vote be changed.
+MSG_T_TELEGRAM_DID_NOT_TAKE_THE_VOTE
+Telegram non ha accettato il voto. Riprova.
+; Telegram did not take the vote. Try again.
+MSG_T_CHOOSE_A_CHAT_BEFORE_REACTING_TO
+Scegli una chat prima di reagire a un messaggio.
+; Choose a chat before reacting to a message.
+MSG_T_USE_REACT_MESSAGE_ID_NAME_OR
+Usa /react [id-messaggio] <nome>, o /react [id-messaggio] none; /reactions elenca i nomi, /ids mostra gli id.
+; Use /react [message-id] <name>, or /react [message-id] none; /reactions lists the names, /ids shows the ids.
+MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO
+Ancora nessun messaggio degli altri a cui reagire.
+; No message from the others to react to yet.
+MSG_T_CHOOSE_A_CHAT_BEFORE_HIDING_A
+Scegli una chat prima di nascondere un messaggio.
+; Choose a chat before hiding a message.
+MSG_T_USE_HIDE_OR_HIDE_MESSAGE_ID
+Usa /hide o /hide <id-messaggio>; /unhide li rimostra.
+; Use /hide or /hide <message-id>; /unhide brings them back.
+MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO_2
+Ancora nessun messaggio degli altri da nascondere.
+; No message from the others to hide yet.
+MSG_T_CHOOSE_A_CHAT_FIRST
+Scegli prima una chat.
+; Choose a chat first.
+MSG_T_USE_FORWARD_OR_FORWARD_MESSAGE_ID
+Usa /forward o /forward <id-messaggio>.
+; Use /forward or /forward <message-id>.
+MSG_T_FORWARDED_TO_SAVED_MESSAGES
+Inoltrato ai Messaggi salvati.
+; Forwarded to Saved Messages.
+MSG_T_USE_WATCH_SECONDS_3600_OR_WATCH
+Usa /watch <secondi <= 3600> o /watch off.
+; Use /watch <seconds <= 3600> or /watch off.
+MSG_T_AUTO_READ_DISABLED
+Lettura automatica spenta.
+; Auto-read disabled.
+MSG_T_MESSAGE_NOT_CONFIRMED_PRESS_ENTER_TO
+Messaggio non confermato. Premi Invio per aggiornare.
+; Message not confirmed. Press Enter to refresh.
+MSG_T_COULD_NOT_SEND_MESSAGE
+Non ho potuto inviare il messaggio.
+; Could not send message.
+MSG_T_DROPPED
+Trascinato: %.280s
+; Dropped: %.280s
+MSG_T_LINE_FULL
+Sono %u caratteri, il massimo per un messaggio.
+; That is %u characters, the most one message holds.
+MSG_T_ELSEWHERE_STATUS
+(+%lu altrove) 
+; (+%lu elsewhere) 
+MSG_T_HIDDEN_BACK_1
+%lu messaggio nascosto è tornato; /history lo mostra.
+; %lu hidden message back; /history shows it.
+MSG_T_HIDDEN_BACK
+%lu messaggi nascosti sono tornati; /history li mostra.
+; %lu hidden messages back; /history shows them.
+MSG_T_HIDDEN_FROM_NOW
+#%lu nascosto da ora; /unhide rimostra i %lu nascosti qui.
+; #%lu hidden from now on; /unhide brings back the %lu hidden here.
+MSG_T_TELEGRAM_REFUSED
+Telegram ha rifiutato: %.48s
+; Telegram refused: %.48s
+MSG_T_TOPIC_MADE_NUMBER
+Argomento creato, numero %lu: ciò che scrivi va lì.
+; Topic made, number %lu: what you write goes there.
+MSG_T_UPD_COULD_NOT_ASK
+Non ho potuto chiedere a @%.32s%s%.60s.
+; Could not ask @%.32s%s%.60s.
+MSG_T_UPD_NEWEST
+Hai la versione più recente, %s.
+; You have the newest version, %s.
+MSG_T_UPD_IS_OUT
+È uscito %s %.15s: hai la %s. /update yes lo installa: arriva da @%.32s, firmato dal suo autore, e questa versione resta come Amigram.old.
+; %s %.15s is out: you have %s. /update yes installs it: it comes from @%.32s, signed by its author, and this version is kept as Amigram.old.
+MSG_T_UPD_FETCHING
+Scarico %s %.15s...
+; Fetching %s %.15s...
+MSG_T_UPD_INSTALLED
+%s %.15s è installato. Esci con /quit e riavvia Amigram per usarlo.
+; %s %.15s is installed. Quit with /quit and start Amigram again to use it.
+MSG_T_UPD_FAILED
+Aggiornamento fallito
+; The update failed
+MSG_T_CAPTION_MAX
+Una didascalia tiene al massimo %u caratteri.
+; A caption holds %u characters at most.
+MSG_T_USE_PEER_NUMBER
+%.64s: usa /peer <numero>
+; %.64s: use /peer <number>
+MSG_T_COULD_NOT_FORWARD
+Non ho potuto inoltrare il messaggio: %.80s
+; Could not forward message: %.80s
+MSG_T_NO_REPLY
+nessuna risposta
+; no reply
+MSG_T_AUTO_READ_1
+Lettura automatica ogni %lu secondo.
+; Auto-read every %lu second.
+MSG_T_AUTO_READ
+Lettura automatica ogni %lu secondi.
+; Auto-read every %lu seconds.
+MSG_T_SOMEONE_COLON
+qualcuno:
+; someone:
+MSG_T_THEM_COLON
+l'altro:
+; them:
+MSG_T_QUICK_SEND
+Scrivi un messaggio e premi Invio per mandarlo.
+; Type a message and press Enter to send it.
+MSG_T_QUICK_CHATS
+F1-F10 o un numero: cambia chat. 0: Messaggi salvati. Tab: indietro.
+; F1-F10 or a chat number: change chat. 0: Saved Messages. Tab: back.
+MSG_T_QUICK_COMMANDS
+/list: le tue chat.  /help: tutti i comandi.  /quit: esci.
+; /list: your chats.  /help: all commands.  /quit: exit.
+MSG_T_SETUP_CANNOT_READ
+Serve la configurazione dell'accesso: non riesco a leggere %s (%s).\n
+MSG_T_SETUP_NOT_FOUND
+Configurazione dell'accesso: %s non trovato.\n
+MSG_T_SETUP_WILL_CREATE
+%s lo crea adesso.\n
+MSG_T_SETUP_ENTER_API
+Scrivi le credenziali API di Telegram per questo client.
+; Enter the Telegram API credentials for this client.
+MSG_T_SETUP_SAVED
+Salvato %s.\n
+MSG_T_SIGNED_IN_RENAME
+Accesso fatto, ma non ho potuto scrivere %s: rinomina %s con quel nome.\n
+MSG_T_NO_SAVED_LOGIN
+Nessun accesso salvato. Parte la procedura di accesso.
+; No saved login found. Starting login wizard.
+MSG_T_SAVED_LOGIN_UNUSABLE
+L'accesso salvato non è utilizzabile. Parte la procedura di accesso.
+; Saved login is not usable. Starting login wizard.
+MSG_T_68000_LOGIN_WHY
+--------------------------------------------------------\n\
+PRIMO ACCESSO SU UN 68000: DA LEGGERE\n\
+\n\
+Il primo accesso richiede uno scambio di chiavi\n\
+Diffie-Hellman. Su un 68000 liscio dura moltissimo e può\n\
+esaurire lo stack. Fallo una volta altrove:\n
+MSG_T_68000_LOGIN_STEPS
+ 1. Avvia %s su un Amiga più veloce (68020 o meglio)\n\
+    o in un emulatore (WinUAE, FS-UAE, vAmiga) col\n\
+    pacchetto standard, e accedi lì.\n\
+ 2. Copia telegram-auth.bin da quel cassetto in QUESTO\n\
+    cassetto, accanto a %s. Copiando anche\n\
+    data/telegram-peers.txt porti con te l'elenco delle chat.\n\
+ 3. Riavvia questo programma: riusa quell'accesso e\n\
+    va dritto alle chat.\n
+MSG_T_68000_LOGIN_PRESS
+L'accesso funziona poi su tutte e due le macchine, una alla\n\
+volta: Telegram chiude un accesso che vede in due posti insieme.\n\
+\n\
+Premi INVIO per tentare comunque l'accesso qui,\n\
+o Ctrl+C per uscire e seguire i passi qui sopra.\n\
+--------------------------------------------------------\n
+MSG_T_START_LOGIN_COMPLETE
+Accesso completato.
+; Login complete.
+MSG_T_START_NO_CHAT_LIST
+Nessun elenco di chat salvato.
+; No cached chat list found.
+MSG_T_START_USE_ADD
+Usa /add nome dentro %s per cercare utenti o gruppi.\n
+MSG_T_START_OPENING_CHAT
+Apro la chat.
+; Opening chat.
+MSG_T_NO_MEMORY_FOR_WINDOW
+Non c'è abbastanza memoria libera per la finestra.
+; Not enough free memory for the window.
+MSG_T_NO_GUI_BUILD
+Questa versione non ha la finestra: è il pacchetto del client testuale.
+; This build has no GUI: it is the text-client package.
+MSG_T_OLDER_SEPARATOR
+---- messaggi più vecchi -- Shift+Giù: torna al presente --------------------------
+; ---- older messages -- Shift+Down: back to live ----------------------------------

@@ -193,6 +193,12 @@ static int tg_main_body(int argc, char **argv)
         return 20;
     }
 #endif
+    /* The user's language before the first word of the program is shown;
+       English stands where there is no catalog. After the processor check
+       on purpose: on a plain 68000 that check has to be the first thing
+       this build does, and what it says stays English. The window and the
+       text client both read the catalog, the 68000 package included. */
+    tg_locale_open();
     if (argc == 0) {
         /* Workbench: pick GUI vs TUI from the launch icon's name. A tool icon
            for the binary launches the GUI; the TUI ships as a project icon
@@ -304,16 +310,7 @@ int main(int argc, char **argv)
 {
     int rc;
 
-    /* The user's language before the first word is shown; English stands
-       where there is no catalog. Only the window's texts are translated so
-       far: the text-only builds (the 68000 one) leave locale.library shut
-       and keep its memory. */
-#if !defined(TG_NO_GUI)
-    tg_locale_open();
-#endif
     rc = tg_platform_run_with_safe_stack(tg_main_body, argc, argv);
-#if !defined(TG_NO_GUI)
-    tg_locale_close();
-#endif
+    tg_locale_close(); /* opened in tg_main_body, past the processor check */
     return rc;
 }

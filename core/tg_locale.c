@@ -239,6 +239,43 @@ const char *tg_locale_language(void)
 
 #endif
 
+const char *tg_locale_utf8(const char *latin1)
+{
+    static char ring[4][TG_LOCALE_UTF8_MAX];
+    static int next;
+    const unsigned char *p = (const unsigned char *)latin1;
+    char *out;
+    size_t n = 0U;
+
+    if (latin1 == 0) {
+        return "";
+    }
+    while (*p != '\0' && *p < 0x80U) {
+        ++p;
+    }
+    if (*p == '\0') {
+        return latin1; /* plain ASCII is the same in both */
+    }
+    out = ring[next];
+    next = (next + 1) % 4;
+    for (p = (const unsigned char *)latin1; *p != '\0'; ++p) {
+        if (*p < 0x80U) {
+            if (n + 1U >= (size_t)TG_LOCALE_UTF8_MAX) {
+                break;
+            }
+            out[n++] = (char)*p;
+        } else {
+            if (n + 2U >= (size_t)TG_LOCALE_UTF8_MAX) {
+                break; /* never half a letter */
+            }
+            out[n++] = (char)(0xc0U | (*p >> 6));
+            out[n++] = (char)(0x80U | (*p & 0x3fU));
+        }
+    }
+    out[n] = '\0';
+    return out;
+}
+
 /* tg_locale_format: sprintf bounded by size, for the texts of a catalog,
    which may be longer than the English ones a buffer was sized for. Ours,
    since snprintf is not on every system's C library alike: %s %c %d %i %u
@@ -417,6 +454,35 @@ int tg_locale_self_test(void)
         }
         if (small[0] != '\0') {
             puts("locale self-test: a null string was not empty");
+            return 2;
+        }
+    }
+    /* Latin-1 to UTF-8: ASCII untouched and not copied, a letter above
+       127 as two bytes, a long text cut between letters */
+    {
+        static const char plain[] = "Photo";
+        char longer[TG_LOCALE_UTF8_MAX + 40];
+        const char *u;
+        size_t i;
+
+        if (tg_locale_utf8(plain) != plain || tg_locale_utf8(0)[0] != '\0') {
+            puts("locale self-test: an ASCII text was not passed through");
+            return 2;
+        }
+        u = tg_locale_utf8("perch\xe9 pi\xf9");
+        if (strcmp(u, "perch\xc3\xa9 pi\xc3\xb9") != 0) {
+            puts("locale self-test: Latin-1 did not become UTF-8");
+            return 2;
+        }
+        for (i = 0U; i + 1U < sizeof(longer); ++i) {
+            longer[i] = (char)0xe8;
+        }
+        longer[i] = '\0';
+        u = tg_locale_utf8(longer);
+        i = strlen(u);
+        if (i >= (size_t)TG_LOCALE_UTF8_MAX || (i % 2U) != 0U ||
+            (unsigned char)u[i - 1U] != 0xa8U) {
+            puts("locale self-test: a long UTF-8 text was cut in a letter");
             return 2;
         }
     }

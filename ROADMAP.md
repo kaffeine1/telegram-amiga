@@ -553,17 +553,25 @@ are in locale/amigram.cd, the Italian catalog in locale/italiano.ct, and
 scripts/catalog.py, ours, writes include/tg_strings.h (each text's id
 and its English form) and Catalogs/<language>/amigram.catalog, checking
 that a translation keeps every printf conversion of the English text
-in the same order, its number of requester buttons and the 47 letters
-of the status line. The window is translated: menus, context menus,
-Settings, status lines, requesters, dialogs, the login and QR screens,
-dates (some 650 texts, Italian complete). The GUI self-test runs with a
-catalog too (TG_CATALOG=Catalogs/italiano/amigram.catalog on the host),
-so a translation that breaks the layout shows there. Next: what the
-session layer says (Telegram's reasons, chat names, media labels such as
-[Photo]), then the text client and the login wizard (the 68000 build
-leaves locale.library shut until then, to keep its memory). Still open: the update from
-inside Amigram replaces the program alone, so a new catalog reaches
-those who update that way only once the manifest carries catalogs too.
+in the same order, its number of requester buttons, the spaces and line
+breaks at its ends and the 47 letters of the status line. Translated:
+the window (menus, context menus, Settings, status lines, requesters,
+dialogs, the login and QR screens, dates), what the session says in the
+window and in the text client (media labels, polls, service lines as
+whole sentences with a form for the reader's own, Saved Messages, the
+reasons of a failed login, photo or update) and the text client itself
+(the login, the chat list, /help, every command's answers), some 1250
+texts, Italian complete. The catalog is Latin-1; a text joined to
+Telegram's own goes in as UTF-8, and the text client turns its texts
+into UTF-8 under --charset utf8. The 68000 package opens locale.library
+too and carries a smaller catalog, with only what the text client says.
+The self-tests run with a catalog as well
+(TG_CATALOG=Catalogs/italiano/amigram.catalog on the host): the window's
+layout checks, and for the session a check that every service line fits
+and ends on a whole letter. Not yet seen on a real Amiga in Italian.
+Still open: the update from inside Amigram replaces the program alone,
+so a new catalog reaches those who update that way only once the
+manifest carries catalogs too.
 
 ## Done for 0.0.95: two-step verification on slow 68k
 

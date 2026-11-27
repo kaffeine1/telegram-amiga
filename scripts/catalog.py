@@ -7,6 +7,8 @@
     python3 scripts/catalog.py catalog <x.ct>    Catalogs/<language>/amigram.catalog from a translation
     python3 scripts/catalog.py all               the header and every locale/*.ct
     python3 scripts/catalog.py check             the header is up to date, every translation is sound
+    python3 scripts/catalog.py text-client <dir> <dir>/<language>/amigram.catalog with only what the
+                                                 text client says (the plain-68000 package's catalogs)
 
 locale/amigram.cd is a catalog description in the CatComp/FlexCat form:
 a line "MSG_NAME (id//)" and the English text on the next line(s); ";"
@@ -33,6 +35,14 @@ HEADER = os.path.join(ROOT, "include", "tg_strings.h")
 OUTDIR = os.path.join(ROOT, "Catalogs")
 CATALOG_NAME = "amigram.catalog"
 STATUS_WIDTH = 47  # the window's status line (TG_GUI_NAME_MAX - 1)
+# the console's and the session's texts: may be turned into UTF-8 in a buffer
+# of TG_LOCALE_UTF8_MAX (640) bytes
+CONSOLE_PREFIXES = ("MSG_T_", "MSG_S_", "MSG_SV_")
+CONSOLE_MAX = 600
+# what the text client says: its own texts, the session's, and the lines of
+# the login and of the reactions it shares with the window
+TEXT_CLIENT_PREFIXES = ("MSG_T_", "MSG_S_", "MSG_SV_", "MSG_ST_LG_",
+                        "MSG_ST_CODE_", "MSG_ST_REACT")
 
 NAME_RE = re.compile(r"^(MSG_[A-Z0-9_]+)\s*\((\d+)/(\d*)/(\d*)\)\s*$")
 CT_NAME_RE = re.compile(r"^(MSG_[A-Z0-9_]+)\s*$")
@@ -186,8 +196,22 @@ def check_translation(entries, meta, texts, path):
         if formats(text) != formats(known[name]):
             problems.append("%s: %s changes the conversions %s -> %s"
                             % (path, name, formats(known[name]), formats(text)))
-        if text != text.strip("\n") and known[name] == known[name].strip("\n"):
-            problems.append("%s: %s adds a line break at an end" % (path, name))
+        en = known[name]
+        if (len(text) - len(text.lstrip("\n")) != len(en) - len(en.lstrip("\n"))
+                or len(text) - len(text.rstrip("\n")) != len(en) - len(en.rstrip("\n"))):
+            problems.append("%s: %s changes the line breaks at its ends"
+                            % (path, name))
+        # what the console and the session say may be turned into UTF-8,
+        # in a buffer of 640 bytes
+        if name.startswith(CONSOLE_PREFIXES) and len(text) > CONSOLE_MAX:
+            problems.append("%s: %s is %d letters, a text of the console "
+                            "holds %d" % (path, name, len(text), CONSOLE_MAX))
+        # a text that starts or ends with a space is joined to others
+        # there: the translation keeps those spaces
+        if (len(text) - len(text.lstrip(" ")) != len(en) - len(en.lstrip(" "))
+                or len(text) - len(text.rstrip(" ")) != len(en) - len(en.rstrip(" "))):
+            problems.append("%s: %s changes the spaces at its ends (it is "
+                            "joined to other text there)" % (path, name))
     missing = [name for name, _, _ in entries if name not in texts]
     return problems, missing
 
@@ -291,17 +315,19 @@ def read_catalog(data):
     return language, strings
 
 
-def write_catalog(entries, ct_path):
+def write_catalog(entries, ct_path, outdir=None, prefixes=None):
     meta, texts = parse_ct(ct_path)
     problems, missing = check_translation(entries, meta, texts, ct_path)
     if problems:
         raise CatalogError("\n".join(problems))
+    if prefixes is not None:
+        texts = {n: t for n, t in texts.items() if n.startswith(prefixes)}
     language, data = make_catalog(entries, meta, texts)
     lang2, strings = read_catalog(data)
     by_name = {name: ident for name, ident, _ in entries}
     if lang2 != language or any(strings[by_name[n]] != t for n, t in texts.items()):
         raise CatalogError("%s: the catalog does not read back" % ct_path)
-    out = os.path.join(OUTDIR, language, CATALOG_NAME)
+    out = os.path.join(outdir or OUTDIR, language, CATALOG_NAME)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "wb") as f:
         f.write(data)
@@ -328,6 +354,16 @@ def main(argv):
                 os.path.relpath(out, ROOT), n, len(entries),
                 "" if not missing else " (missing: %s)" % ", ".join(missing[:8])
                 + (" ..." if len(missing) > 8 else "")))
+    if cmd == "text-client":
+        if len(argv) < 3:
+            print(__doc__)
+            return 2
+        for n in sorted(os.listdir(SRCDIR)):
+            if n.endswith(".ct"):
+                out, count, _ = write_catalog(
+                    entries, os.path.join(SRCDIR, n), outdir=argv[2],
+                    prefixes=TEXT_CLIENT_PREFIXES)
+                print("%s: %d texts of the text client" % (out, count))
     if cmd == "check":
         with open(HEADER) as f:
             if f.read() != make_header(entries):

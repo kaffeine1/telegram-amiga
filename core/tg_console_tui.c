@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "tg_console_tui.h"
+#include "tg_locale.h"
 #include "tg_console_ui.h"
 #include "tg_platform.h"
 #include "tg_version.h"
@@ -1082,9 +1083,8 @@ static void tg_tui_paint_separator(FILE *stream)
     tg_tui_goto(stream, tg_tui_separator_row(), 1U);
     tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
     if (tg_tui_view_offset > 0UL) {
-        tg_tui_clipped_line(stream,
-                            "---- older messages -- Shift+Down: back to "
-                            "live ----------------------------------");
+        tg_tui_clipped_line(
+            stream, tg_console_ui_text(TG_STR(MSG_T_OLDER_SEPARATOR)));
         tg_console_ui_reset(stream);
         return;
     }

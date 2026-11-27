@@ -18,6 +18,7 @@
  */
 
 #include "tg_console_ui.h"
+#include "tg_locale.h"
 
 /* MorphOS: SGR colour output to the console reproducibly froze the whole
    machine (no ping) during the chat-list load on real hardware, while the
@@ -196,6 +197,15 @@ void tg_console_ui_set_charset(int charset)
 int tg_console_ui_charset(void)
 {
     return tg_ui_charset;
+}
+
+const char *tg_console_ui_text(const char *latin1)
+{
+    if (latin1 == 0) {
+        return 0;
+    }
+    return tg_ui_charset == TG_UI_CHARSET_UTF8 ? tg_locale_utf8(latin1)
+                                               : latin1;
 }
 
 void tg_console_ui_enter_screen(FILE *stream)

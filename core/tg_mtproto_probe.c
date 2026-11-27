@@ -30,6 +30,7 @@
 #include "tg_chat_engine.h"
 #include "tg_mtproto_message_id.h"
 #include "tg_mtproto_probe.h"
+#include "tg_locale.h"
 #include "tg_qr.h"
 #include "tg_update.h"
 #include "tg_emoji_sheet.h"
@@ -155,6 +156,21 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
 #if TG_MTPROTO_DISPLAY_LATIN1
 static int tg_mtproto_latin1_to_utf8(const char *src, char *dst,
                                      unsigned long dst_size);
+#endif
+
+/* A catalog text for the console. An Amiga console is Latin-1, as the
+   catalog is, and the text goes out as it is; where --charset utf8 says
+   the terminal is a UTF-8 one (the client driven over ssh) it goes out
+   as UTF-8, like the messages do. TG_TSTR(MSG_NAME) is the text of the
+   catalog made ready for the console. */
+static const char *tg_tui_text(const char *latin1)
+{
+    return tg_console_ui_text(latin1);
+}
+#if defined(TG_LOCALE_CHECK_FORMATS)
+#define TG_TSTR(name) (name##_STR)
+#else
+#define TG_TSTR(name) tg_tui_text(tg_str((long)(name), name##_STR))
 #endif
 
 /*
@@ -2642,42 +2658,38 @@ static const char *tg_mtproto_sent_code_text(unsigned long type_constructor,
 {
     switch (type_constructor) {
     case 0x3dbb5986UL: /* auth.sentCodeTypeApp */
-        return brief ? "Code sent in Telegram on your phone"
-                     : "Check your other Telegram apps (mobile/desktop/web)"
-                       " for the code.";
+        return brief ? TG_STR(MSG_ST_CODE_IN_TELEGRAM)
+                     : TG_STR(MSG_T_CODE_IN_TELEGRAM);
     case 0xc000bba2UL: /* auth.sentCodeTypeSms */
     case 0xa416ac81UL: /* auth.sentCodeTypeSmsWord */
     case 0xb37794afUL: /* auth.sentCodeTypeSmsPhrase */
     case 0xd9565c39UL: /* auth.sentCodeTypeFragmentSms */
     case 0x009fd736UL: /* auth.sentCodeTypeFirebaseSms */
-        return brief ? "Code sent by SMS"
-                     : "Telegram is sending the code by SMS to your phone.";
+        return brief ? TG_STR(MSG_ST_CODE_BY_SMS)
+                     : TG_STR(MSG_T_CODE_BY_SMS);
     case 0x5353e5a7UL: /* auth.sentCodeTypeCall */
-        return brief ? "Telegram is calling with the code"
-                     : "Telegram will call your phone and speak the code.";
+        return brief ? TG_STR(MSG_ST_CODE_BY_CALL)
+                     : TG_STR(MSG_T_CODE_BY_CALL);
     case 0xab03c6d9UL: /* auth.sentCodeTypeFlashCall */
     case 0x82006484UL: /* auth.sentCodeTypeMissedCall */
-        return brief ? "Read the code from the incoming call"
-                     : "Telegram is calling: the last digits of the caller ID"
-                       " are the code.";
+        return brief ? TG_STR(MSG_ST_CODE_FLASH_CALL)
+                     : TG_STR(MSG_T_CODE_FLASH_CALL);
     case 0xf450f59bUL: /* auth.sentCodeTypeEmailCode */
-        return brief ? "Code sent to your email"
-                     : "Check your email for the code.";
+        return brief ? TG_STR(MSG_ST_CODE_BY_EMAIL)
+                     : TG_STR(MSG_T_CODE_BY_EMAIL);
     case 0xa5491deaUL: /* auth.sentCodeTypeSetUpEmailRequired */
         /* Telegram sends NOTHING here: the account must add and verify a
            login email before it will hand out codes again. A field report
            (AROS, 0.0.92) waited for a code that was never coming, because
            this answer used to fall into the default below and read like any
            other "enter the code". */
-        return brief ? "Telegram wants a login email first"
-                     : "No code is coming: Telegram wants this account to add"
-                       " and verify a login email. Do that once in an official"
-                       " Telegram app, then sign in here again.";
+        return brief ? TG_STR(MSG_ST_CODE_WANTS_EMAIL)
+                     : TG_STR(MSG_T_CODE_WANTS_EMAIL);
     default:
         /* A delivery type this build does not know. Say so: pretending a
            code is on its way is what wasted a tester's afternoon. The
            console prints the constructor as well, from the caller. */
-        return brief ? "Telegram did not say where it sent the code" : 0;
+        return brief ? TG_STR(MSG_ST_CODE_UNKNOWN) : 0;
     }
 }
 
@@ -2687,15 +2699,15 @@ static const char *tg_mtproto_code_route_text(unsigned long code_type)
 {
     switch (code_type) {
     case 0x72a3158cUL: /* auth.codeTypeSms */
-        return "by SMS";
+        return TG_STR(MSG_S_ROUTE_SMS);
     case 0x741cd3e3UL: /* auth.codeTypeCall */
-        return "by phone call";
+        return TG_STR(MSG_S_ROUTE_CALL);
     case 0x226ccefbUL: /* auth.codeTypeFlashCall */
-        return "by a flash call";
+        return TG_STR(MSG_S_ROUTE_FLASH_CALL);
     case 0xd61ad6eeUL: /* auth.codeTypeMissedCall */
-        return "by a missed call";
+        return TG_STR(MSG_S_ROUTE_MISSED_CALL);
     case 0x06ed998cUL: /* auth.codeTypeFragmentSms */
-        return "via fragment.com";
+        return TG_STR(MSG_S_ROUTE_FRAGMENT);
     default:
         return 0;
     }
@@ -2713,11 +2725,10 @@ static void tg_mtproto_print_login_code_hint(FILE *stream,
     if (hint == 0) {
         /* Unknown type: the number is the only useful thing we have, and it
            is what turns "no code arrived" into a five minute diagnosis. */
-        fprintf(stream, "Telegram did not say where it sent the code"
-                        " (delivery type 0x%08lx).\n", type_constructor);
+        fprintf(stream, TG_TSTR(MSG_T_CODE_UNKNOWN_TYPE), type_constructor);
         return;
     }
-    fprintf(stream, "%s\n", hint);
+    fprintf(stream, "%s\n", tg_tui_text(hint));
 }
 
 
@@ -6214,7 +6225,7 @@ static int tg_mtproto_auth_send_code_run(const char *host,
                         tg_mtproto_session_status_name(session_status));
                 return 2;
             }
-            fprintf(stream, "Telegram knows this computer: no code needed.\n");
+            fputs(TG_TSTR(MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_NO_CODE), stream);
             fflush(stream);
             return TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED;
         }
@@ -6252,8 +6263,7 @@ static int tg_mtproto_auth_send_code_run(const char *host,
         }
         tg_mtproto_future_token_note(result.result_body + 4U,
                                      result.result_body_length - 4UL);
-        fprintf(stream, "Telegram knows this computer: signed in without "
-                        "a code.\n");
+        fputs(TG_TSTR(MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_SIGNED_IN), stream);
         fflush(stream);
         return TG_MTPROTO_SEND_CODE_SIGNED_IN;
     }
@@ -6298,7 +6308,7 @@ static int tg_mtproto_auth_send_code_run(const char *host,
         return 2;
     }
 
-    fprintf(stream, "Login code sent.\n");
+    fputs(TG_TSTR(MSG_T_LOGIN_CODE_SENT), stream);
     tg_mtproto_print_login_code_hint(stream, sent_code.type_constructor);
     fflush(stream);
     return 0;
@@ -6826,16 +6836,16 @@ int tg_mtproto_auth_resend_code(const char *host,
                their name for the window all the same */
             sprintf(tg_mtproto_query_fail, "%.63s", resend_error);
             if (strcmp(resend_error, "SEND_CODE_UNAVAILABLE") == 0) {
-                fputs("Resend failed: no other way to send it\n", stream);
+                fputs(TG_TSTR(MSG_T_RESEND_FAILED_NO_OTHER_WAY_TO), stream);
                 return 2;
             }
             if (strcmp(resend_error, "PHONE_CODE_EXPIRED") == 0) {
-                fputs("Resend failed: the code expired, press ESC\n",
+                fputs(TG_TSTR(MSG_T_RESEND_FAILED_THE_CODE_EXPIRED_PRESS),
                       stream);
                 return 2;
             }
             if (strncmp(resend_error, "FLOOD_WAIT_", 11) == 0) {
-                fprintf(stream, "Resend failed: too many tries, wait %.10s s\n",
+                fprintf(stream, TG_TSTR(MSG_T_RESEND_FAILED_TOO_MANY_TRIES_WAIT),
                         resend_error + 11);
                 return 2;
             }
@@ -6877,7 +6887,7 @@ int tg_mtproto_auth_resend_code(const char *host,
                 tg_file_status_name(file_status));
         return 2;
     }
-    fprintf(stream, "Login code sent again.\n");
+    fputs(TG_TSTR(MSG_T_LOGIN_CODE_SENT_AGAIN), stream);
     tg_mtproto_print_login_code_hint(stream, sent_code.type_constructor);
     fflush(stream);
     return 0;
@@ -7418,7 +7428,7 @@ static int tg_mtproto_auth_check_password_text(const char *host,
                 tg_mtproto_session_status_name(session_status));
         return 2;
     }
-    fprintf(stream, "Verifying password");
+    fputs(TG_TSTR(MSG_T_VERIFYING_PASSWORD), stream);
     fflush(stream);
     tg_login_progress_stream = stream;
     tg_mtproto_set_progress_hook(tg_login_progress_dot);
@@ -7436,7 +7446,7 @@ static int tg_mtproto_auth_check_password_text(const char *host,
         fprintf(stream, "%s: srp-proof-build-failed\n", label);
         return 2;
     }
-    fprintf(stream, "Key ready. Asking Telegram to check it.\n");
+    fputs(TG_TSTR(MSG_T_KEY_READY_ASKING_TELEGRAM_TO_CHECK), stream);
     fflush(stream);
     if (tg_mtproto_load_auth_context(host, port, auth_file, &context, stream,
                                      label) != 0) {
@@ -7452,8 +7462,7 @@ static int tg_mtproto_auth_check_password_text(const char *host,
     if (!tg_mtproto_srp_same_password(&prepared, &password)) {
         tg_mtproto_close_auth_context(&context);
         tg_mtproto_secure_zero(&prepared, sizeof(prepared));
-        fprintf(stream, "The account's password changed while this one was "
-                "being checked. Sign in again with the new one.\n");
+        fputs(TG_TSTR(MSG_T_THE_ACCOUNT_S_PASSWORD_CHANGED_WHILE), stream);
         return 2;
     }
     srp_status = tg_mtproto_srp_finish(&prepared, &password, &proof);
@@ -7607,7 +7616,8 @@ static void tg_mtproto_print_login_failure(FILE *stream)
 
     tg_mtproto_login_failure_text(tg_mtproto_query_fail, why, sizeof(why),
                                   what, sizeof(what));
-    fprintf(stream, "%s. %s.\n", why, what);
+    fprintf(stream, "%s. ", tg_tui_text(why));
+    fprintf(stream, "%s.\n", tg_tui_text(what));
     fflush(stream);
 }
 
@@ -7647,7 +7657,7 @@ static int tg_mtproto_login_qr_console(const char *host,
                                         label) != 0) {
         return 2;
     }
-    fprintf(stream, "Getting a QR code from Telegram.\n");
+    fputs(TG_TSTR(MSG_T_GETTING_A_QR_CODE_FROM_TELEGRAM), stream);
     fflush(stream);
     /* Ctrl+C is ours while the code's window is open: the C library would
        otherwise end the program inside a stdio call and leave the window
@@ -7670,25 +7680,21 @@ static int tg_mtproto_login_qr_console(const char *host,
                 tg_qr_encode((const unsigned char *)link,
                              (unsigned long)strlen(link), -1, &code) != 0 ||
                 tg_qr_view_show(&code, stream) != 0) {
-                fprintf(stream, "The QR code cannot be shown here.\n");
+                fputs(TG_TSTR(MSG_T_THE_QR_CODE_CANNOT_BE_SHOWN), stream);
                 tg_qr_view_close();
                 tg_platform_break_return();
                 tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
                 return 2;
             }
             if (shown_length == 0UL) {
-                fprintf(stream,
-                        "Scan the QR code with Telegram on your phone: "
-                        "Settings > Devices > Link Desktop Device.\n"
-                        "It is renewed every 30 seconds. Type P and press "
-                        "Return to use your phone number instead.\n");
+                fputs(TG_TSTR(MSG_T_SCAN_THE_QR_CODE_WITH_TELEGRAM), stream);
                 fflush(stream);
             }
             memcpy(shown, lt.token, (size_t)lt.token_length);
             shown_length = lt.token_length;
         }
         if (asks >= 120) {
-            fprintf(stream, "No scan in ten minutes.\n");
+            fputs(TG_TSTR(MSG_T_NO_SCAN_IN_TEN_MINUTES), stream);
             rc = 1;
             break;
         }
@@ -7729,7 +7735,7 @@ static int tg_mtproto_login_qr_console(const char *host,
                 rc = 2;
                 break;
             }
-            fprintf(stream, "Scanned. Your account lives on Telegram DC %s.\n",
+            fprintf(stream, TG_TSTR(MSG_T_SCANNED_YOUR_ACCOUNT_LIVES_ON_TELEGRAM),
                     migrate_dc);
             fflush(stream);
             memcpy(token, lt.token, (size_t)token_length);
@@ -7749,7 +7755,7 @@ static int tg_mtproto_login_qr_console(const char *host,
         (rc != TG_MTPROTO_QR_SIGNED_IN && tg_platform_break_pending())) {
         /* Ctrl+C stays ours, and pending: the program ends by its own way
            out, not by the C library's break inside some stdio call. */
-        fprintf(stream, "Stopped.\n");
+        fputs(TG_TSTR(MSG_T_STOPPED), stream);
         fflush(stream);
         return 3;
     }
@@ -7760,11 +7766,11 @@ static int tg_mtproto_login_qr_console(const char *host,
        so the login is kept (the key becomes telegram-auth.bin) and the
        chat that follows ends at its first prompt. */
     if (rc == TG_MTPROTO_QR_SIGNED_IN) {
-        fprintf(stream, "Signed in with the QR code.\n");
+        fputs(TG_TSTR(MSG_T_SIGNED_IN_WITH_THE_QR_CODE), stream);
         return 0;
     }
     if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
-        fprintf(stream, "Scanned.\n");
+        fputs(TG_TSTR(MSG_T_SCANNED), stream);
         return rc;
     }
     if (rc == 2) {
@@ -7805,7 +7811,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
         return 2;
     }
     fprintf(stream, "%s\n%s\n\n", TG_APP_TITLE, TG_APP_INTRO_NOTE);
-    fprintf(stream, "Connecting to Telegram.\n");
+    fputs(TG_TSTR(MSG_T_CONNECTING_TO_TELEGRAM), stream);
     fflush(stream);
 
     saved_timeout = tg_net_connect_timeout_seconds();
@@ -7850,13 +7856,13 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
 
         /* The same note as the GUI's number screen: this client signs in
            to an account, it cannot create one yet. */
-        fprintf(stream, "You need a Telegram account to sign in here.\n%s.\n",
+        fprintf(stream, TG_TSTR(MSG_T_YOU_NEED_A_TELEGRAM_ACCOUNT_TO),
                 TG_APP_ACCOUNT_NOTE);
         rc = 2;
         for (phone_attempt = 0; phone_attempt < 3; ++phone_attempt) {
             current_host = host;
             current_dc_id_text = dc_id_text;
-            if (tg_mtproto_prompt_line("Phone number: ", phone, sizeof(phone),
+            if (tg_mtproto_prompt_line(TG_TSTR(MSG_T_PHONE_NUMBER), phone, sizeof(phone),
                                        1, stream, label) != 0) {
                 if (restore_timeout) {
                     tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -7873,8 +7879,8 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             }
             /* Echo the digits actually sent: the one honest way to spot a
                console keymap mangling the input. */
-            fprintf(stream, "Using phone number %s.\n", phone);
-            fprintf(stream, "Sending login code request.\n");
+            fprintf(stream, TG_TSTR(MSG_T_USING_PHONE_NUMBER_S), phone);
+            fputs(TG_TSTR(MSG_T_SENDING_LOGIN_CODE_REQUEST), stream);
             fflush(stream);
             tg_mtproto_query_fail[0] = '\0';
             rc = tg_mtproto_auth_send_code_file(current_host, port,
@@ -7895,10 +7901,10 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                        handshake. (We tried making this silent but the
                        resulting one-long-gap-before-dots looked like a freeze
                        on slow CPUs / flaky links.) */
-                    fprintf(stream, "Using Telegram DC %s.\n", migrate_dc_text);
+                    fprintf(stream, TG_TSTR(MSG_T_USING_TELEGRAM_DC_S), migrate_dc_text);
                     current_host = migrate_host;
                     current_dc_id_text = migrate_dc_text;
-                    fprintf(stream, "Sending login code request.\n");
+                    fputs(TG_TSTR(MSG_T_SENDING_LOGIN_CODE_REQUEST), stream);
                     fflush(stream);
                     rc = tg_mtproto_auth_send_code_file(current_host, port,
                                                         current_dc_id_text,
@@ -7916,8 +7922,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                number" for a dead network or a flood wait as well. */
             tg_mtproto_print_login_failure(stream);
             if (phone_attempt < 2) {
-                fprintf(stream, "Type the number again (empty input "
-                                "aborts).\n");
+                fputs(TG_TSTR(MSG_T_TYPE_THE_NUMBER_AGAIN_EMPTY_INPUT), stream);
             }
         }
     }
@@ -7938,22 +7943,22 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
         return rc;
     }
 
-    fprintf(stream, "\nTelegram login code received.\n");
+    fputs(TG_TSTR(MSG_T_TELEGRAM_LOGIN_CODE_RECEIVED), stream);
     fflush(stream);
     /* Re-prompt when Telegram rejects the code instead of mistaking it for a
        2FA challenge (which then failed confusingly on checkPassword). */
     rc = TG_MTPROTO_SIGN_IN_CODE_INVALID;
     while (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID) {
-        const char *route =
-            tg_mtproto_code_route_text(tg_mtproto_sent_code_next);
+        const char *route = tg_tui_text(
+            tg_mtproto_code_route_text(tg_mtproto_sent_code_next));
 
-        fprintf(stream, "Type the Telegram code and press Return.\n");
+        fputs(TG_TSTR(MSG_T_TYPE_THE_TELEGRAM_CODE_AND_PRESS), stream);
         if (route != 0) {
-            fprintf(stream, "No code? Type S and press Return to get it %s.\n",
+            fprintf(stream, TG_TSTR(MSG_T_NO_CODE_TYPE_S_AND_PRESS),
                     route);
         }
         fflush(stream);
-        if (tg_mtproto_prompt_line("Telegram code (empty to abort): ", code,
+        if (tg_mtproto_prompt_line(TG_TSTR(MSG_T_TELEGRAM_CODE_EMPTY_TO_ABORT), code,
                                    sizeof(code), 0, stream, label) != 0) {
             tg_mtproto_secure_zero(phone, sizeof(phone));
             return 2;
@@ -7970,13 +7975,11 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
 
             tg_mtproto_secure_zero(code, sizeof(code));
             if (route == 0) {
-                fprintf(stream,
-                        "Telegram offered no other way to send this code.\n");
+                fputs(TG_TSTR(MSG_T_TELEGRAM_OFFERED_NO_OTHER_WAY_TO), stream);
             } else if (wait > 0UL) {
-                fprintf(stream, "Telegram allows that in %lu seconds: "
-                                "type S again then.\n", wait);
+                fprintf(stream, TG_TSTR(MSG_T_TELEGRAM_ALLOWS_THAT_IN_LU_SECONDS), wait);
             } else {
-                fprintf(stream, "Asking Telegram to send the code %s.\n",
+                fprintf(stream, TG_TSTR(MSG_T_ASKING_TELEGRAM_TO_SEND_THE_CODE),
                         route);
                 fflush(stream);
                 (void)tg_mtproto_auth_resend_code_file(
@@ -7985,7 +7988,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             }
             continue;
         }
-        fprintf(stream, "Checking Telegram code.\n");
+        fputs(TG_TSTR(MSG_T_CHECKING_TELEGRAM_CODE), stream);
         fflush(stream);
         tg_mtproto_query_fail[0] = '\0';
         rc = tg_mtproto_auth_sign_in_file(current_host, port, api_file,
@@ -7996,8 +7999,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
             strcmp(tg_mtproto_query_fail, "PHONE_CODE_EXPIRED") == 0) {
             /* Retyping an expired code cannot work: ask for a new one with
                the number already given, and go on waiting for that. */
-            fprintf(stream, "That code has expired. Asking Telegram for a "
-                            "new one.\n");
+            fputs(TG_TSTR(MSG_T_THAT_CODE_HAS_EXPIRED_ASKING_TELEGRAM), stream);
             fflush(stream);
             tg_mtproto_query_fail[0] = '\0';
             rc = tg_mtproto_auth_send_code_file(current_host, port,
@@ -8017,25 +8019,16 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
                 return 2;
             }
             rc = TG_MTPROTO_SIGN_IN_CODE_INVALID;
-            fprintf(stream, "\nTelegram login code received.\n");
+            fputs(TG_TSTR(MSG_T_TELEGRAM_LOGIN_CODE_RECEIVED), stream);
         } else if (rc == TG_MTPROTO_SIGN_IN_CODE_INVALID) {
-            fprintf(stream,
-                    "That code was not accepted. Check the latest Telegram "
-                    "message and try again.\n");
+            fputs(TG_TSTR(MSG_T_THAT_CODE_WAS_NOT_ACCEPTED_CHECK), stream);
         }
     }
 password_step:
     if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
-        fprintf(stream,
-                "2FA password required.\n"
-                "Checking it derives a key with PBKDF2 (100000 rounds of "
-                "SHA-512). On a slow 68k, such as a stock 14 MHz 68020, that "
-                "takes half an hour or more; the dots show it working. Once "
-                "the key is ready the client asks Telegram for a fresh "
-                "challenge, so the wait does not lose the login. Enter the "
-                "password (empty to abort).\n");
+        fputs(TG_TSTR(MSG_T_2FA_PASSWORD_REQUIRED_CHECKING_IT_DERIVE), stream);
         for (;;) {
-            if (tg_mtproto_prompt_hidden_line("2FA password, empty to abort: ",
+            if (tg_mtproto_prompt_hidden_line(TG_TSTR(MSG_T_2FA_PASSWORD_EMPTY_TO_ABORT),
                                               password, sizeof(password),
                                               stream, label) != 0) {
                 tg_mtproto_secure_zero(phone, sizeof(phone));
@@ -8058,9 +8051,7 @@ password_step:
                 break;
             }
             /* Wrong password: re-prompt instead of dropping out of the wizard. */
-            fprintf(stream,
-                    "That password was not accepted. Try again "
-                    "(empty to abort).\n");
+            fputs(TG_TSTR(MSG_T_THAT_PASSWORD_WAS_NOT_ACCEPTED_TRY), stream);
         }
         if (rc != 0) {
             tg_mtproto_print_login_failure(stream);
@@ -8088,7 +8079,7 @@ password_step:
     if (rc != 0) {
         return rc;
     }
-    fprintf(stream, "Login complete.\n");
+    fputs(TG_TSTR(MSG_T_LOGIN_COMPLETE), stream);
     return 0;
 }
 
@@ -9240,7 +9231,7 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
         return;
     }
     if (tg_mtproto_display_text_unreadable(text)) {
-        fputs("(another alphabet)", stream);
+        fputs(TG_TSTR(MSG_T_ANOTHER_ALPHABET), stream);
         return;
     }
     i = 0UL;
@@ -9301,7 +9292,7 @@ static void tg_mtproto_print_latin1_text(FILE *stream, const char *text,
         in_unknown = 1;
     }
     if (!shown && omitted) {
-        fputs("(emoji)", stream);
+        fputs(TG_TSTR(MSG_T_EMOJI), stream);
     }
 }
 #endif
@@ -11360,7 +11351,7 @@ static void tg_mtproto_chat_list_render_console(FILE *stream,
         return;
     }
     if (count <= 0) {
-        fprintf(stream, "No chats available.\n");
+        fputs(TG_TSTR(MSG_T_NO_CHATS_AVAILABLE), stream);
         return;
     }
     printed_single = 0;
@@ -11379,7 +11370,7 @@ static void tg_mtproto_chat_list_render_console(FILE *stream,
             }
             if (row->is_user) {
                 if (!printed_single) {
-                    fputs("Single chats:", stream);
+                    fputs(TG_TSTR(MSG_T_SINGLE_CHATS), stream);
                     tg_console_ui_end_line(stream);
                     printed_single = 1;
                 }
@@ -11388,7 +11379,7 @@ static void tg_mtproto_chat_list_render_console(FILE *stream,
                     if (printed_single) {
                         tg_console_ui_end_line(stream);
                     }
-                    fputs("Groups and channels:", stream);
+                    fputs(TG_TSTR(MSG_T_GROUPS_AND_CHANNELS), stream);
                     tg_console_ui_end_line(stream);
                     printed_group = 1;
                 }
@@ -11405,7 +11396,7 @@ static void tg_mtproto_chat_list_render_console(FILE *stream,
             }
             if (row->unread > 0UL) {
                 tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
-                fprintf(stream, " %lu new", row->unread);
+                fprintf(stream, TG_TSTR(MSG_T_LU_NEW), row->unread);
                 tg_console_ui_reset(stream);
             }
             if (row->is_current) {
@@ -11444,7 +11435,7 @@ static void tg_mtproto_print_peer_cache_public(const char *path, FILE *stream,
     count = tg_mtproto_chat_list_parse(path, current_index, rows,
                                        TG_CHAT_LIST_MAX, &file_missing);
     if (file_missing) {
-        fprintf(stream, "No cached chats yet.\n");
+        fputs(TG_TSTR(MSG_T_NO_CACHED_CHATS_YET), stream);
         return;
     }
     /* The chats the window keeps in Telegram's Archive stay out of this
@@ -11469,7 +11460,7 @@ static void tg_mtproto_print_peer_cache_public(const char *path, FILE *stream,
     /* The GUI pins Saved Messages as the last sidebar row; the console pins
        it as row 0 (cache indexes are 1-based, so 0 is forever free): it reads
        and picks like every other row, at startup and in-chat alike. */
-    fprintf(stream, "0. Saved Messages (your cloud drawer)\n");
+    fputs(TG_TSTR(MSG_T_0_SAVED_MESSAGES_YOUR_CLOUD_DRAWER), stream);
 }
 
 #if !defined(TG_NO_SELFTEST)
@@ -11619,7 +11610,8 @@ static int tg_mtproto_load_peer_cache_label(const char *path,
 
     if (peer_index_text != 0 && strcmp(peer_index_text, "self") == 0) {
         if (label_buffer_size > 0UL) {
-            strncpy(label_buffer, "Saved Messages", label_buffer_size - 1UL);
+            strncpy(label_buffer, TG_STR_U8(MSG_S_SAVED_MESSAGES),
+                    label_buffer_size - 1UL);
             label_buffer[label_buffer_size - 1UL] = '\0';
         }
         return 0;
@@ -11752,12 +11744,12 @@ static unsigned long tg_mtproto_peer_cache_search_public(
                                      query);
     tg_mtproto_trim_line(trimmed_query);
     if (trimmed_query[0] == '\0') {
-        fprintf(stream, "Type something to search for.\n");
+        fputs(TG_TSTR(MSG_T_TYPE_SOMETHING_TO_SEARCH_FOR), stream);
         return 0UL;
     }
     if (tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0 ||
         tg_mtproto_peer_cache_public_count(&tg_peer_cache_scratch) == 0UL) {
-        fprintf(stream, "No cached chats yet. Add one with /add @username.\n");
+        fputs(TG_TSTR(MSG_T_NO_CACHED_CHATS_YET_ADD_ONE), stream);
         return 0UL;
     }
     public_index = 0UL;
@@ -11773,15 +11765,15 @@ static unsigned long tg_mtproto_peer_cache_search_public(
             continue;
         }
         if (match_count == 0UL) {
-            fprintf(stream, "Matches:\n");
+            fputs(TG_TSTR(MSG_T_MATCHES), stream);
         }
         tg_mtproto_print_peer_cache_entry_line(stream, public_index, entry);
         ++match_count;
     }
     if (match_count == 0UL) {
-        fprintf(stream, "No cached chat matches that name.\n");
+        fputs(TG_TSTR(MSG_T_NO_CACHED_CHAT_MATCHES_THAT_NAME), stream);
     } else {
-        fprintf(stream, "Type the number to switch chat.\n");
+        fputs(TG_TSTR(MSG_T_TYPE_THE_NUMBER_TO_SWITCH_CHAT), stream);
     }
     return match_count;
 }
@@ -11804,11 +11796,11 @@ static int tg_mtproto_peer_cache_remove_public_index(
     if (path == 0 || peer_index_text == 0 ||
         tg_mtproto_parse_ulong_arg(peer_index_text, &wanted_index) != 0 ||
         wanted_index == 0UL) {
-        fprintf(stream, "Use /remove <number>.\n");
+        fputs(TG_TSTR(MSG_T_USE_REMOVE_NUMBER), stream);
         return 2;
     }
     if (tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0) {
-        fprintf(stream, "No cached chats to remove.\n");
+        fputs(TG_TSTR(MSG_T_NO_CACHED_CHATS_TO_REMOVE), stream);
         return 2;
     }
     public_index = 0UL;
@@ -11824,7 +11816,7 @@ static int tg_mtproto_peer_cache_remove_public_index(
         }
     }
     if (remove_index >= tg_peer_cache_scratch.count) {
-        fprintf(stream, "Chat number not found.\n");
+        fputs(TG_TSTR(MSG_T_CHAT_NUMBER_NOT_FOUND), stream);
         return 2;
     }
     tg_mtproto_peer_cache_entry_label(
@@ -11838,7 +11830,7 @@ static int tg_mtproto_peer_cache_remove_public_index(
     tg_mtproto_recount_peer_cache(&tg_peer_cache_scratch);
     if (tg_mtproto_save_peer_cache_file(path, &tg_peer_cache_scratch, 0,
                                         "chat cache") != 0) {
-        fprintf(stream, "Could not update cached chats.\n");
+        fputs(TG_TSTR(MSG_T_COULD_NOT_UPDATE_CACHED_CHATS), stream);
         return 2;
     }
     return 0;
@@ -11870,7 +11862,7 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     }
     if (tg_mtproto_load_peer_cache_file(path, &tg_peer_cache_scratch) != 0) {
         if (stream != 0) {
-            fprintf(stream, "No cached chats to reorder.\n");
+            fputs(TG_TSTR(MSG_T_NO_CACHED_CHATS_TO_REORDER), stream);
         }
         return 2;
     }
@@ -11908,7 +11900,7 @@ static int tg_mtproto_peer_cache_reorder_public_index(
     if (tg_mtproto_save_peer_cache_file(path, &tg_peer_cache_scratch, 0,
                                         "chat cache") != 0) {
         if (stream != 0) {
-            fprintf(stream, "Could not save chat order.\n");
+            fputs(TG_TSTR(MSG_T_COULD_NOT_SAVE_CHAT_ORDER), stream);
         }
         return 2;
     }
@@ -11971,7 +11963,7 @@ static void tg_mtproto_print_search_result_line(
     }
     fprintf(stream, " [%s", tg_mtproto_peer_cache_entry_kind(entry));
     if (!tg_mtproto_peer_cache_entry_is_openable(entry)) {
-        fprintf(stream, ", cannot open");
+        fputs(TG_TSTR(MSG_T_CANNOT_OPEN), stream);
     }
     fprintf(stream, "]\n");
 }
@@ -12920,20 +12912,20 @@ static const char *tg_mtproto_reaction_failure_text(const char *raw)
 {
     if (strcmp(raw, "REACTION_INVALID") == 0 ||
         strcmp(raw, "REACTION_EMPTY") == 0)
-        return "This chat does not allow that reaction.";
+        return TG_STR(MSG_ST_REACT_NOT_ALLOWED);
     if (strcmp(raw, "REACTIONS_TOO_MANY") == 0)
-        return "This message has too many different reactions.";
+        return TG_STR(MSG_ST_REACT_TOO_MANY);
     if (strcmp(raw, "CHAT_WRITE_FORBIDDEN") == 0 ||
         strcmp(raw, "USER_BANNED_IN_CHANNEL") == 0)
-        return "You cannot react in this chat.";
+        return TG_STR(MSG_ST_REACT_CANNOT);
     if (strcmp(raw, "MESSAGE_ID_INVALID") == 0 ||
         strcmp(raw, "MSG_ID_INVALID") == 0)
-        return "This message is no longer available.";
+        return TG_STR(MSG_ST_REACT_MESSAGE_GONE);
     if (strcmp(raw, "PREMIUM_ACCOUNT_REQUIRED") == 0)
-        return "That reaction requires Telegram Premium.";
+        return TG_STR(MSG_ST_REACT_PREMIUM);
     if (strncmp(raw, "FLOOD_WAIT_", 11U) == 0)
-        return "Please wait before reacting again.";
-    return "Could not change the reaction. Please try again.";
+        return TG_STR(MSG_ST_REACT_WAIT);
+    return TG_STR(MSG_ST_REACT_FAILED);
 }
 
 static int tg_mtproto_auth_poll_reactions_on_context(
@@ -14060,7 +14052,8 @@ static int tg_mtproto_chat_read_line_edit(char *line,
                 /* Visible proof in the transcript that the drop ARRIVED (a
                    field report can then separate "never delivered" from
                    "injection failed"). */
-                sprintf(drop_note, "Dropped: %.280s", drop);
+                tg_locale_format(drop_note, sizeof(drop_note),
+                                 TG_TSTR(MSG_T_DROPPED), drop);
                 tg_console_tui_line(tg_chat_tui_stream, drop_note);
 
                 for (di = 0UL; drop[di] != '\0'; ++di) {
@@ -14496,8 +14489,8 @@ static int tg_mtproto_chat_read_line_edit(char *line,
         char note[96];
 
         tg_chat_line_full_noted = 1;
-        sprintf(note, "That is %u characters, the most one message holds.",
-                (unsigned int)TG_CONSOLE_TUI_MESSAGE_MAX);
+        tg_locale_format(note, sizeof(note), TG_TSTR(MSG_T_LINE_FULL),
+                         (unsigned int)TG_CONSOLE_TUI_MESSAGE_MAX);
         if (tg_console_tui_active() && tg_chat_tui_stream != 0) {
             tg_mtproto_chat_print_system_line(stream, note);
             tg_console_tui_input_caret(
@@ -14757,9 +14750,9 @@ static void tg_mtproto_chat_render_message(FILE *stream,
         } else if (row->is_group) {
             /* Group sender we could not resolve; the [group] prefix is already
                shown, so just mark the unknown author, in words. */
-            fprintf(stream, "someone:");
+            fputs(TG_TSTR(MSG_T_SOMEONE_COLON), stream);
         } else {
-            fprintf(stream, "them:");
+            fputs(TG_TSTR(MSG_T_THEM_COLON), stream);
         }
         tg_console_ui_reset(stream);
         fputc(' ', stream);
@@ -16799,13 +16792,13 @@ static void tg_mtproto_chat_print_input_prompt(FILE *stream,
 /* One status/info line in the system colour. */
 static void tg_mtproto_chat_print_system_line(FILE *stream, const char *text)
 {
-    char line[256];
+    char line[640]; /* a sentence of the catalog, which may be a long one */
 
     if (stream == 0 || text == 0) {
         return;
     }
     if (tg_console_tui_active() && tg_chat_tui_stream != 0) {
-        sprintf(line, "%.16s%.200s%.16s",
+        sprintf(line, "%.16s%.600s%.16s",
                 tg_console_ui_role_string(TG_UI_ROLE_SYSTEM), text,
                 tg_console_ui_role_string(TG_UI_ROLE_RESET));
         tg_console_tui_line(tg_chat_tui_stream, line);
@@ -17019,8 +17012,9 @@ static void tg_mtproto_chat_tui_status_draw(void)
     }
     more[0] = '\0';
     if (tg_chat_unlisted_news > 0UL) {
-        sprintf(more, "(+%lu elsewhere) ",
-                tg_chat_unlisted_news > 999UL ? 999UL : tg_chat_unlisted_news);
+        tg_locale_format(more, sizeof(more), TG_TSTR(MSG_T_ELSEWHERE_STATUS),
+                         tg_chat_unlisted_news > 999UL
+                             ? 999UL : tg_chat_unlisted_news);
     }
     if (tg_chat_status_shown[0] != '\0') {
         sprintf(status, " " TG_APP_TITLE " - %.60s %.31s",
@@ -17354,30 +17348,32 @@ static void tg_mtproto_chat_hide_command(
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (rc != 0) {
         tg_mtproto_chat_print_system_line(
-            stream, "This chat is not in the chat list.");
+            stream, TG_TSTR(MSG_T_THIS_CHAT_IS_NOT_IN_THE));
         return;
     }
     if (constructor != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
         constructor != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR) {
         tg_mtproto_chat_print_system_line(
-            stream, "Only messages in groups and channels can be hidden.");
+            stream, TG_TSTR(MSG_T_ONLY_MESSAGES_IN_GROUPS_AND_CHANNELS));
         return;
     }
     if (unhide) {
         n = tg_hidden_msgs_forget_chat(id_hi, id_lo);
         if (n == 0UL) {
             tg_mtproto_chat_print_system_line(
-                stream, "No hidden messages in this chat.");
+                stream, TG_TSTR(MSG_T_NO_HIDDEN_MESSAGES_IN_THIS_CHAT));
         } else {
-            sprintf(note, "%lu hidden message%s back; /history shows them.",
-                    n > 999UL ? 999UL : n, n == 1UL ? "" : "s");
+            tg_locale_format(note, sizeof(note),
+                             n == 1UL ? TG_TSTR(MSG_T_HIDDEN_BACK_1)
+                                      : TG_TSTR(MSG_T_HIDDEN_BACK),
+                             n > 999UL ? 999UL : n);
             tg_mtproto_chat_print_system_line(stream, note);
         }
         return;
     }
     if (tg_hidden_msgs_add(id_hi, id_lo, message_id) != 0) {
         tg_mtproto_chat_print_system_line(
-            stream, "Could not save the hidden message.");
+            stream, TG_TSTR(MSG_T_COULD_NOT_SAVE_THE_HIDDEN_MESSAGE));
         return;
     }
     if (constructor == TG_MTPROTO_PEER_CHAT_CONSTRUCTOR) {
@@ -17392,10 +17388,9 @@ static void tg_mtproto_chat_hide_command(
         }
     }
     n = tg_hidden_msgs_count_chat(id_hi, id_lo);
-    sprintf(note, "#%lu hidden from now on; /unhide brings back the %lu "
-                  "hidden here.",
-            message_id > 2147483647UL ? 0UL : message_id,
-            n > 999UL ? 999UL : n);
+    tg_locale_format(note, sizeof(note), TG_TSTR(MSG_T_HIDDEN_FROM_NOW),
+                     message_id > 2147483647UL ? 0UL : message_id,
+                     n > 999UL ? 999UL : n);
     tg_mtproto_chat_print_system_line(stream, note);
 }
 
@@ -17416,23 +17411,21 @@ static const char *tg_mtproto_chat_ring_state(
     unsigned long server_now, int bell)
 {
     if (peer_constructor == TG_MTPROTO_PEER_SELF_CONSTRUCTOR) {
-        return "Saved Messages never ring.";
+        return TG_TSTR(MSG_T_SAVED_MESSAGES_NEVER_RING);
     }
     if (choice == TG_NOTIFY_MUTE ||
         (peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
          choice != TG_NOTIFY_RING)) {
-        return "This chat stays quiet; /ring on lets it ring.";
+        return TG_TSTR(MSG_T_THIS_CHAT_STAYS_QUIET_RING_ON);
     }
     if (settings != 0 &&
         (settings->silent || settings->mute_until > server_now)) {
-        return "This chat stays quiet: it is muted in Telegram, here or "
-               "on another device.";
+        return TG_TSTR(MSG_T_THIS_CHAT_STAYS_QUIET_IT_IS);
     }
     if (!bell) {
-        return "This chat rings, but /bell is off for every chat.";
+        return TG_TSTR(MSG_T_THIS_CHAT_RINGS_BUT_BELL_IS);
     }
-    return "This chat rings when a message arrives while another chat "
-           "is open.";
+    return TG_TSTR(MSG_T_THIS_CHAT_RINGS_WHEN_A_MESSAGE);
 }
 
 static void tg_mtproto_chat_ring_command(
@@ -17452,14 +17445,13 @@ static void tg_mtproto_chat_ring_command(
 
     if (peer_index == 0 || peer_index[0] == '\0') {
         tg_mtproto_chat_print_system_line(
-            stream, "Choose a chat before /ring.");
+            stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_BEFORE_RING));
         return;
     }
     if (arg != 0 && arg[0] != '\0' && strcmp(arg, "on") != 0 &&
         strcmp(arg, "off") != 0) {
         tg_mtproto_chat_print_system_line(
-            stream, "Use /ring to see what this chat does, /ring on or "
-                    "/ring off to change it.");
+            stream, TG_TSTR(MSG_T_USE_RING_TO_SEE_WHAT_THIS));
         return;
     }
     quiet = tg_mtproto_open_quiet_stream(stream);
@@ -17470,7 +17462,7 @@ static void tg_mtproto_chat_ring_command(
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (rc != 0) {
         tg_mtproto_chat_print_system_line(
-            stream, "This chat is not in the chat list.");
+            stream, TG_TSTR(MSG_T_THIS_CHAT_IS_NOT_IN_THE));
         return;
     }
     memset(&settings, 0, sizeof(settings));
@@ -17484,7 +17476,7 @@ static void tg_mtproto_chat_ring_command(
             if (tg_notify_override_set(TG_NOTIFY_OVERRIDE_FILE, id_hi, id_lo,
                                        &value) != 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Could not save this chat's ring choice.");
+                    stream, TG_TSTR(MSG_T_COULD_NOT_SAVE_THIS_CHAT_S));
                 return;
             }
         }
@@ -17859,10 +17851,10 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
         if (label[0] != '\0') {
             tg_mtproto_print_cache_text(stream, label);
             if (entry->is_chat) {
-                fputs(" (group)", stream);
+                fputs(TG_TSTR(MSG_T_GROUP), stream);
             }
         } else {
-            fputs(entry->is_chat ? "group message" : "new message", stream);
+            fputs(entry->is_chat ? TG_TSTR(MSG_T_GROUP_MESSAGE) : TG_TSTR(MSG_T_NEW_MESSAGE), stream);
         }
         fputs(": ", stream);
         tg_mtproto_print_cache_text(stream, entry->text);
@@ -17871,7 +17863,7 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
     }
     if (tg_chat_nq->dropped > 0UL) {
         tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
-        fprintf(stream, "(+%lu more)", tg_chat_nq->dropped);
+        fprintf(stream, TG_TSTR(MSG_T_LU_MORE), tg_chat_nq->dropped);
         tg_console_ui_reset(stream);
         tg_console_ui_end_line(stream);
     }
@@ -17882,7 +17874,7 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
         } else {
             /* No status line on a plain console: one line for the lot. */
             tg_console_ui_role(stream, TG_UI_ROLE_NOTIFY);
-            fprintf(stream, "(+%lu elsewhere)", unlisted);
+            fprintf(stream, TG_TSTR(MSG_T_LU_ELSEWHERE), unlisted);
             tg_console_ui_reset(stream);
             tg_console_ui_end_line(stream);
         }
@@ -17899,21 +17891,20 @@ static void tg_mtproto_chat_print_notify_lines(FILE *stream,
    to fill an A600's screen at every start (the 68000 tester, 2026-10). */
 static void tg_mtproto_chat_print_quick_help(FILE *stream)
 {
-    static const char *const quick_lines[] = {
-        "",
-        "Type a message and press Enter to send it.",
-        "F1-F10 or a chat number: change chat. 0: Saved Messages. Tab: back.",
-        "/list: your chats.  /help: all commands.  /quit: exit.",
-        0
-    };
+    const char *quick_lines[5];
     unsigned long i;
 
     if (stream == 0) {
         return;
     }
+    quick_lines[0] = "";
+    quick_lines[1] = TG_STR(MSG_T_QUICK_SEND);
+    quick_lines[2] = TG_STR(MSG_T_QUICK_CHATS);
+    quick_lines[3] = TG_STR(MSG_T_QUICK_COMMANDS);
+    quick_lines[4] = 0;
     tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
     for (i = 0UL; quick_lines[i] != 0; ++i) {
-        fputs(quick_lines[i], stream);
+        fputs(tg_tui_text(quick_lines[i]), stream);
         tg_console_ui_end_line(stream);
     }
     tg_console_ui_reset(stream);
@@ -17927,7 +17918,7 @@ static void tg_mtproto_chat_print_reaction_names(FILE *stream)
     int i;
     unsigned long col = 0UL;
 
-    fputs("\nReactions for /react [message-id] <name>:\n", stream);
+    fputs(TG_TSTR(MSG_T_REACTIONS_FOR_REACT_MESSAGE_ID_NAME), stream);
     for (i = 0; i < TG_REACTION_STANDARD; ++i) {
         const char *name = tg_reaction_standard_name(i);
         unsigned long len = (unsigned long)strlen(name);
@@ -17941,66 +17932,73 @@ static void tg_mtproto_chat_print_reaction_names(FILE *stream)
         col += (col == 0UL ? 2UL : 1UL) + len;
     }
     tg_console_ui_end_line(stream);
-    fputs("  none removes your reactions\n", stream);
+    fputs(TG_TSTR(MSG_T_NONE_REMOVES_YOUR_REACTIONS), stream);
 }
 
-static const char *const tg_chat_help_lines[] = {
-    "",
-    "Every day:",
-    "  text + Enter    send a message",
-    "  Enter           read new messages now",
-    "  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)",
-    "                  F1..F10 keep text typed as the draft of the chat left",
-    "  0               Saved Messages, your cloud drawer",
-    "  Tab             back to the previous chat",
-    "  Shift+Up/Down   older messages, and back",
-    "  /list           your chats",
-    "  Help key        this list",
-    "  /quit           exit",
-    "",
-    "More:",
-    "  /search text    find a chat in the list by name or username",
-    "  /add name       search Telegram and add a chat to the list",
-    "  /move 5 1       chat 5 becomes number 1, the one F1 opens",
-    "  /remove n       remove chat n from the list",
-    "  /history        show the recent messages again",
-    "  /find words     find messages in this chat, the newest ten",
-    "  /forward [id]   forward the latest (or that id) to Saved Messages",
-    "  /forwardto n [id]  forward the latest (or that id) to chat n",
-    "  /react [id] name   react to the last one received (or that id):",
-    "                  up heart fire laugh surprise sad party pray",
-    "                  clap ok; none removes your reactions",
-    "  /reactions      every name /react takes",
-    "  /ids            message ids before each message, on or off",
-    "  /hide [id]      hide the last one received (or that id) in a group",
-    "  /unhide         bring back this chat's hidden messages",
-    "  /getfile        download the newest file here to downloads/",
-    "  /sendfile path  send a file",
-    "  /photo path     send a JPEG as a photo (over 10 MiB: as a file)",
-    "  /watch sec      read new messages every sec seconds (off: never)",
-    "  /resize         redraw after the window changed size",
-    "  /diff           background catch-up, on or off",
-    "  /color          colours, on or off",
-    "  /bell           flash on new messages, on or off",
-    "  /ring           does this chat ring? /ring on or off changes it",
-    "  /mute [1h|8h|2d]  mute this chat on Telegram, for good or for a while",
-    "  /unmute         take the mute back",
-    "  /markread       mark this chat as read on every device",
-    "  /markunread     mark this chat as unread",
-    "  /vote n [n..]   vote the last poll shown here; /vote none takes it back",
-    "  /voters         who voted in that poll, when its votes are public",
-    "  /topics         the topics of this group, when it is a forum",
-    "  /topic n        only topic n of that list; /topic alone: all again",
-    "  /topic new x    a new topic x; rename x, close, reopen: the chosen one",
-    "  /update         a new version? /update yes installs it",
-    "  /logout         log out on this computer (/logout yes)",
-    "  /swap /saved /peers  the same as Tab, 0 and /list",
-    "",
-    "Support my work on Patreon: www.patreon.com/c/kaffeine1",
-    "or with a one-time tip on Ko-fi: ko-fi.com/kaffeine1",
-    "Contributions are voluntary; no subscription is required.",
-    0
+/* The help, line by line: each one a text of the catalog, by its number
+   and its English form. An empty line has no number. */
+#define TG_HELP(name) {(long)(name), name##_STR}
+static const struct {
+    long id;
+    const char *text;
+} tg_chat_help_lines[] = {
+    {0L, ""},
+    TG_HELP(MSG_T_HELP_EVERY_DAY),
+    TG_HELP(MSG_T_HELP_TEXT_ENTER_SEND),
+    TG_HELP(MSG_T_HELP_ENTER_READ_NEW),
+    TG_HELP(MSG_T_HELP_1_2_3),
+    TG_HELP(MSG_T_HELP_F1_F10_KEEP),
+    TG_HELP(MSG_T_HELP_0_SAVED_MESSAGES),
+    TG_HELP(MSG_T_HELP_TAB_BACK_TO),
+    TG_HELP(MSG_T_HELP_SHIFT_UP_DOWN),
+    TG_HELP(MSG_T_HELP_LIST_YOUR_CHATS),
+    TG_HELP(MSG_T_HELP_HELP_KEY_THIS),
+    TG_HELP(MSG_T_HELP_QUIT_EXIT),
+    {0L, ""},
+    TG_HELP(MSG_T_HELP_MORE),
+    TG_HELP(MSG_T_HELP_SEARCH_TEXT_FIND),
+    TG_HELP(MSG_T_HELP_ADD_NAME_SEARCH),
+    TG_HELP(MSG_T_HELP_MOVE_5_1),
+    TG_HELP(MSG_T_HELP_REMOVE_N_REMOVE),
+    TG_HELP(MSG_T_HELP_HISTORY_SHOW_THE),
+    TG_HELP(MSG_T_HELP_FIND_WORDS_FIND),
+    TG_HELP(MSG_T_HELP_FORWARD_ID_FORWARD),
+    TG_HELP(MSG_T_HELP_FORWARDTO_N_ID),
+    TG_HELP(MSG_T_HELP_REACT_ID_NAME),
+    TG_HELP(MSG_T_HELP_UP_HEART_FIRE),
+    TG_HELP(MSG_T_HELP_CLAP_OK_NONE),
+    TG_HELP(MSG_T_HELP_REACTIONS_EVERY_NAME),
+    TG_HELP(MSG_T_HELP_IDS_MESSAGE_IDS),
+    TG_HELP(MSG_T_HELP_HIDE_ID_HIDE),
+    TG_HELP(MSG_T_HELP_UNHIDE_BRING_BACK),
+    TG_HELP(MSG_T_HELP_GETFILE_DOWNLOAD_THE),
+    TG_HELP(MSG_T_HELP_SENDFILE_PATH_SEND),
+    TG_HELP(MSG_T_HELP_PHOTO_PATH_SEND),
+    TG_HELP(MSG_T_HELP_WATCH_SEC_READ),
+    TG_HELP(MSG_T_HELP_RESIZE_REDRAW_AFTER),
+    TG_HELP(MSG_T_HELP_DIFF_BACKGROUND_CATCH),
+    TG_HELP(MSG_T_HELP_COLOR_COLOURS_ON),
+    TG_HELP(MSG_T_HELP_BELL_FLASH_ON),
+    TG_HELP(MSG_T_HELP_RING_DOES_THIS),
+    TG_HELP(MSG_T_HELP_MUTE_1H_8H),
+    TG_HELP(MSG_T_HELP_UNMUTE_TAKE_THE),
+    TG_HELP(MSG_T_HELP_MARKREAD_MARK_THIS),
+    TG_HELP(MSG_T_HELP_MARKUNREAD_MARK_THIS),
+    TG_HELP(MSG_T_HELP_VOTE_N_N),
+    TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
+    TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
+    TG_HELP(MSG_T_HELP_TOPIC_N_ONLY),
+    TG_HELP(MSG_T_HELP_TOPIC_NEW_X),
+    TG_HELP(MSG_T_HELP_UPDATE_A_NEW),
+    TG_HELP(MSG_T_HELP_LOGOUT_LOG_OUT),
+    TG_HELP(MSG_T_HELP_SWAP_SAVED_PEERS),
+    {0L, ""},
+    TG_HELP(MSG_T_HELP_SUPPORT_MY_WORK),
+    TG_HELP(MSG_T_HELP_OR_WITH_A),
+    TG_HELP(MSG_T_HELP_CONTRIBUTIONS_ARE_VOLUNTARY),
+    {0L, 0}
 };
+#undef TG_HELP
 
 #if !defined(TG_NO_SELFTEST)
 /* The '/' cheat-sheet names every command /help starts a line with, and
@@ -18024,8 +18022,8 @@ static int tg_mtproto_chat_slash_hint_self_test(void)
             return 2;
         }
     }
-    for (i = 0UL; tg_chat_help_lines[i] != 0; ++i) {
-        p = tg_chat_help_lines[i];
+    for (i = 0UL; tg_chat_help_lines[i].text != 0; ++i) {
+        p = tg_chat_help_lines[i].text; /* the English one names the commands */
         if (strncmp(p, "  /", 3) != 0) {
             continue;
         }
@@ -18144,14 +18142,18 @@ static void tg_mtproto_chat_print_help(FILE *stream)
         return;
     }
     tg_console_ui_role(stream, TG_UI_ROLE_SYSTEM);
-    for (i = 0UL; tg_chat_help_lines[i] != 0; ++i) {
-        fputs(tg_chat_help_lines[i], stream);
+    for (i = 0UL; tg_chat_help_lines[i].text != 0; ++i) {
+        if (tg_chat_help_lines[i].text[0] != '\0') {
+            fputs(tg_tui_text(tg_str(tg_chat_help_lines[i].id,
+                                     tg_chat_help_lines[i].text)),
+                  stream);
+        }
         tg_console_ui_end_line(stream);
     }
     /* Live status of the console drag-and-drop (the startup print is wiped by
        the TUI screen clear, so /help is where a field report can read WHY a
        drop does nothing). */
-    fprintf(stream, "  file drag-and-drop: %s",
+    fprintf(stream, TG_TSTR(MSG_T_FILE_DRAG_AND_DROP_S),
             tg_platform_console_drop_diag());
     tg_console_ui_end_line(stream);
     tg_console_ui_reset(stream);
@@ -18503,35 +18505,35 @@ static void tg_mtproto_chat_print_topics(FILE *stream,
         tg_mtproto_close_quiet_stream(quiet, stream);
     }
     cap = tg_console_tui_capture_begin(stream);
-    fprintf(cap, "Topics (/topic n reads one):\n");
+    fputs(TG_TSTR(MSG_T_TOPICS_TOPIC_N_READS_ONE), cap);
     for (k = 0UL; k < tg_chat_topics.count; ++k) {
         const tg_mtproto_forum_topic *t = &tg_chat_topics.topics[k];
 
         fprintf(cap, "%3lu  ", k + 1UL);
         tg_mtproto_print_cache_text(cap, t->title[0] != '\0' ? t->title
-                                                             : "(no title)");
+                                                             : TG_TSTR(MSG_T_NO_TITLE));
         if (t->unread_count > 0UL) {
-            fprintf(cap, "  (%lu new)", t->unread_count % 100000UL);
+            fprintf(cap, TG_TSTR(MSG_T_LU_NEW_2), t->unread_count % 100000UL);
         }
         if (t->closed) {
-            fprintf(cap, "  [closed]");
+            fputs(TG_TSTR(MSG_T_CLOSED), cap);
         }
         if (tg_chat_topic_has_draft(pc, ph, pl, t->id)) {
-            fprintf(cap, "  [draft]");
+            fputs(TG_TSTR(MSG_T_DRAFT), cap);
         }
         if (t->id == tg_mtproto_history_topic_id) {
-            fprintf(cap, "  <- reading");
+            fputs(TG_TSTR(MSG_T_READING), cap);
         }
         if (tg_chat_ids_shown) {
             /* /ids on: the topic's id and how far it is read, as Telegram
                says them (what a report about its counts needs) */
-            fprintf(cap, "  #%lu read %lu of %lu", t->id,
+            fprintf(cap, TG_TSTR(MSG_T_LU_READ_LU_OF_LU), t->id,
                     t->read_inbox_max_id, t->top_message);
         }
         fprintf(cap, "\n");
     }
     if (tg_chat_topics.count < tg_chat_topics.total) {
-        fprintf(cap, "(the %lu most active of %lu)\n", tg_chat_topics.count,
+        fprintf(cap, TG_TSTR(MSG_T_THE_LU_MOST_ACTIVE_OF_LU), tg_chat_topics.count,
                 tg_chat_topics.total);
     }
     tg_console_tui_capture_end(cap, stream);
@@ -18567,7 +18569,7 @@ static int tg_mtproto_chat_open_history(FILE *stream,
        must travel through the transcript region; a direct print would land
        on the pinned input row and scroll the whole window. */
     note = tg_console_tui_capture_begin(stream);
-    fprintf(note, "Opening chat");
+    fputs(TG_TSTR(MSG_T_OPENING_CHAT), note);
     fflush(note);
     for (attempt = 0; attempt < TG_MTPROTO_CHAT_OPEN_HISTORY_ATTEMPTS;
          ++attempt) {
@@ -18599,10 +18601,9 @@ static int tg_mtproto_chat_open_history(FILE *stream,
     }
     fprintf(note, "\n");
     if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
-        fprintf(note,
-                "No reply yet (slow link). Press Enter to retry reading.\n");
+        fputs(TG_TSTR(MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS), note);
     } else {
-        fprintf(note, "Could not load recent messages now (error %d).\n", rc);
+        fprintf(note, TG_TSTR(MSG_T_COULD_NOT_LOAD_RECENT_MESSAGES_NOW), rc);
     }
     tg_console_tui_capture_end(note, stream);
     return rc;
@@ -18689,7 +18690,7 @@ static int tg_mtproto_tui_apply_reactions(FILE *stream, const char *cache,
 
             if (!tg_chat_reactions_peer_matches(&entry->peer, constructor, hi, lo))
                 continue;
-            fprintf(capture, "Reactions on message %lu:", entry->message_id);
+            fprintf(capture, TG_TSTR(MSG_T_REACTIONS_ON_MESSAGE_LU), entry->message_id);
             if (entry->reactions.count == 0) fputs(" none", capture);
             tg_mtproto_print_reactions(capture, &entry->reactions);
             tg_console_ui_end_line(capture);
@@ -18858,15 +18859,15 @@ static int tg_chat_topic_command(const char *arg, const char *host,
         }
         if (title[0] == '\0') {
             tg_mtproto_chat_print_system_line(
-                stream, create ? "Usage: /topic new <name>"
-                               : "Usage: /topic rename <name>");
+                stream, create ? TG_TSTR(MSG_T_USAGE_TOPIC_NEW_NAME)
+                               : TG_TSTR(MSG_T_USAGE_TOPIC_RENAME_NAME));
             return 1;
         }
     }
     if (!create && (tg_mtproto_history_topic_id == 0UL ||
                     strcmp(tg_chat_topic_peer, peer_index) != 0)) {
         tg_mtproto_chat_print_system_line(
-            stream, "Choose the topic first with /topic and its number.");
+            stream, TG_TSTR(MSG_T_CHOOSE_THE_TOPIC_FIRST_WITH_TOPIC));
         return 1;
     }
     quiet = tg_mtproto_open_quiet_stream(stream);
@@ -18875,7 +18876,7 @@ static int tg_chat_topic_command(const char *arg, const char *host,
                                         "topic") != 0 ||
         pc != TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR || !hah) {
         tg_mtproto_close_quiet_stream(quiet, stream);
-        tg_mtproto_chat_print_system_line(stream, "This chat has no topics.");
+        tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_THIS_CHAT_HAS_NO_TOPICS));
         return 1;
     }
 #if TG_MTPROTO_DISPLAY_LATIN1
@@ -18895,13 +18896,14 @@ static int tg_chat_topic_command(const char *arg, const char *host,
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
     if (rc == 1) {
-        sprintf(line, "Telegram refused: %.48s", why);
+        tg_locale_format(line, sizeof(line), TG_TSTR(MSG_T_TELEGRAM_REFUSED),
+                         why);
         tg_mtproto_chat_print_system_line(stream, line);
         return 1;
     }
     if (rc != 0) {
         tg_mtproto_chat_print_system_line(
-            stream, "No answer from Telegram. Try again.");
+            stream, TG_TSTR(MSG_T_NO_ANSWER_FROM_TELEGRAM_TRY_AGAIN));
         return 1;
     }
     if (create) {
@@ -18911,19 +18913,19 @@ static int tg_chat_topic_command(const char *arg, const char *host,
         }
         for (k = 0UL; k < tg_chat_topics.count; ++k) {
             if (tg_chat_topics.topics[k].id == new_id) {
-                sprintf(line, "Topic made, number %lu: what you write goes "
-                              "there.", k + 1UL);
+                tg_locale_format(line, sizeof(line),
+                                 TG_TSTR(MSG_T_TOPIC_MADE_NUMBER), k + 1UL);
                 tg_mtproto_chat_print_system_line(stream, line);
                 return 1;
             }
         }
-        tg_mtproto_chat_print_system_line(stream, "Topic made.");
+        tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_TOPIC_MADE));
         return 1;
     }
     tg_mtproto_chat_print_system_line(
-        stream, title != 0 ? "Topic renamed."
-                : closed ? "Topic closed: only admins can write in it."
-                         : "Topic open again.");
+        stream, title != 0 ? TG_TSTR(MSG_T_TOPIC_RENAMED)
+                : closed ? TG_TSTR(MSG_T_TOPIC_CLOSED_ONLY_ADMINS_CAN_WRITE)
+                         : TG_TSTR(MSG_T_TOPIC_OPEN_AGAIN));
     return 1;
 }
 
@@ -19080,11 +19082,11 @@ static void tg_chat_draft_keep_left(const char *host, const char *port,
     tui_cap = tg_console_tui_capture_begin(stream);
     tg_console_ui_role(tui_cap, TG_UI_ROLE_SYSTEM);
     if (ok) {
-        fputs("Kept as a draft in ", tui_cap);
+        fputs(TG_TSTR(MSG_T_KEPT_AS_A_DRAFT_IN), tui_cap);
         tg_mtproto_print_cache_text(tui_cap, peer_label);
         fputc('.', tui_cap);
     } else {
-        fputs("Could not keep the text as a draft (network?).", tui_cap);
+        fputs(TG_TSTR(MSG_T_COULD_NOT_KEEP_THE_TEXT_AS), tui_cap);
     }
     tg_console_ui_reset(tui_cap);
     fputc('\n', tui_cap);
@@ -19140,7 +19142,7 @@ static void tg_chat_draft_show(const char *host, const char *port,
     }
     tui_cap = tg_console_tui_capture_begin(stream);
     tg_console_ui_role(tui_cap, TG_UI_ROLE_SYSTEM);
-    fputs("Draft: ", tui_cap);
+    fputs(TG_TSTR(MSG_T_DRAFT_2), tui_cap);
     tg_console_ui_reset(tui_cap);
     tg_mtproto_print_message_text(tui_cap, tg_chat_drafts[at].text);
     fputc('\n', tui_cap);
@@ -19326,7 +19328,7 @@ int tg_mtproto_auth_chat_file(const char *host,
     tg_chat_tabs_stale = 1;
     tg_chat_tab_news = 0U;
     tg_console_tui_tabs_wanted(1);
-    tg_console_tui_set_hint("/sendfile path: send a file");
+    tg_console_tui_set_hint(TG_TSTR(MSG_T_SENDFILE_PATH_SEND_A_FILE));
     if (!chat_raw || !tg_console_tui_enter(stream, " " TG_APP_NAME " ")) {
         /* No full-screen layout: when the mini-termcap marks the console
            CSI-deaf (the probe sequence went to the screen as glyphs),
@@ -19365,7 +19367,7 @@ int tg_mtproto_auth_chat_file(const char *host,
        the name of the call that never returned. */
     tg_gui_log("diag: chat console ready");
 #endif
-    tg_mtproto_chat_print_system_line(stream, "Loading chats...");
+    tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_LOADING_CHATS));
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: loading-chats printed, peers parse begin");
 #endif
@@ -19396,19 +19398,19 @@ int tg_mtproto_auth_chat_file(const char *host,
         tg_mtproto_close_quiet_stream(quiet, stream);
     }
     if (rc != 0 && !tg_mtproto_peer_cache_available(peer_cache_file)) {
-        tg_mtproto_chat_print_system_line(stream, "No cached chats yet.");
+        tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_NO_CACHED_CHATS_YET_2));
         tg_mtproto_chat_print_system_line(
-            stream, "Use /add name to search users or groups.");
+            stream, TG_TSTR(MSG_T_USE_ADD_NAME_TO_SEARCH_USERS));
         rc = 0;
     }
     if (rc != 0) {
-        tg_mtproto_chat_print_system_line(stream, "Using cached chats.");
+        tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_USING_CACHED_CHATS));
     }
     TG_MTPROTO_BOOTSTRAP_BREATHER();
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: printing opening-session");
 #endif
-    tg_mtproto_chat_print_system_line(stream, "Opening session...");
+    tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_OPENING_SESSION));
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: opening-session printed");
 #endif
@@ -19427,7 +19429,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_close_auth_context(&chat_context);
             tg_mtproto_reset_quiet_stream(quiet, stream);
             tg_mtproto_chat_print_system_line(stream,
-                                              "Slow start, retrying once...");
+                                              TG_TSTR(MSG_T_SLOW_START_RETRYING_ONCE));
             rc = tg_mtproto_ensure_saved_auth_context(host, port, auth_file,
                                                       dc_id_text,
                                                       &chat_context, quiet,
@@ -19445,7 +19447,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         return 2;
     }
     tg_mtproto_close_quiet_stream(quiet, stream);
-    tg_mtproto_chat_print_system_line(stream, "Loading profile...");
+    tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_LOADING_PROFILE));
     tg_mtproto_chat_load_own_label(host, port, api_id, auth_file, dc_id_text,
                                    &chat_context, peer_cache_file,
                                    own_label, sizeof(own_label), stream);
@@ -19453,7 +19455,7 @@ int tg_mtproto_auth_chat_file(const char *host,
        at session start); the drain tick primes it lazily (one query) so the
        fragile session-open phase on slow links stays as light as before. */
     if (tg_mtproto_peer_cache_available(peer_cache_file)) {
-        tg_mtproto_chat_print_system_line(stream, "Choose a chat:");
+        tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT));
         fputc('\n', stream);
         {
             FILE *tui_cap = tg_console_tui_capture_begin(stream);
@@ -19461,7 +19463,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-        if (tg_mtproto_chat_prompt_chat_number("\nChat number: ", peer_index,
+        if (tg_mtproto_chat_prompt_chat_number(TG_TSTR(MSG_T_CHAT_NUMBER), peer_index,
                                                sizeof(peer_index), stream,
                                                label, peer_index) != 0) {
             tg_mtproto_close_auth_context(&chat_context);
@@ -19489,7 +19491,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         peer_index[0] = '\0';
         peer_label[0] = '\0';
         tg_mtproto_chat_print_system_line(stream,
-                                          "Type /add name to find a chat.");
+                                          TG_TSTR(MSG_T_TYPE_ADD_NAME_TO_FIND_A));
     }
     last_seen_message_id = 0UL;
     /* Auto-read cadence: every poll costs a full slow-link round trip on
@@ -19713,7 +19715,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             continue;
         }
         if (rc < 0) {
-            tg_mtproto_chat_print_system_line(stream, "Input closed.");
+            tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_INPUT_CLOSED));
             tg_mtproto_close_quiet_stream(chat_quiet, stream);
             tg_mtproto_close_auth_context(&chat_context);
             tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -19727,7 +19729,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         if (line[0] == '\0') {
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_ADD));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
                 continue;
@@ -19739,11 +19741,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                     peer_cache_file, peer_index, "5", tui_cap,
                     &last_seen_message_id, 0, 1, 0, 0, peer_label, own_label);
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
-                    fprintf(tui_cap,
-                            "No reply yet (slow link). Press Enter to retry.\n");
+                    fputs(TG_TSTR(MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_2), tui_cap);
                 } else if (rc != 0) {
                     fprintf(tui_cap,
-                            "Could not read messages now (error %d).\n", rc);
+                            TG_TSTR(MSG_T_COULD_NOT_READ_MESSAGES_NOW_ERROR), rc);
                 }
                 tg_console_tui_capture_end(tui_cap, stream);
             }
@@ -19784,7 +19785,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             unsigned long own[3];
             char newer[16];
             char why[96];
-            char say[240];
+            char say[400];
             int urc;
 
             ufc.host = host;
@@ -19797,54 +19798,57 @@ int tg_mtproto_auth_chat_file(const char *host,
             ufc.peer_index = peer_index;
             if (!tg_gui_session_update_can_install()) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "This system has no update to install.");
+                    stream, TG_TSTR(MSG_T_THIS_SYSTEM_HAS_NO_UPDATE_TO));
             } else if (cmd_arg[0] != '\0' && strcmp(cmd_arg, "yes") != 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "/update says whether a new version is out; "
-                            "/update yes installs it.");
+                    stream, TG_TSTR(MSG_T_UPDATE_SAYS_WHETHER_A_NEW_VERSION));
             } else {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Looking for a new version...");
+                    stream, TG_TSTR(MSG_T_LOOKING_FOR_A_NEW_VERSION));
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 urc = tg_mtproto_update_newest_on(
                     &ufc, TG_UPDATE_FILES_CHANNEL, TG_UPDATE_WORD, newer,
                     sizeof(newer), why, sizeof(why), quiet);
                 tg_mtproto_close_quiet_stream(quiet, stream);
                 if (urc != 0) {
-                    sprintf(say, "Could not ask @%.32s%s%.60s.",
-                            TG_UPDATE_FILES_CHANNEL, why[0] != '\0' ? ": " : "",
-                            why);
+                    tg_locale_format(say, sizeof(say),
+                                     TG_TSTR(MSG_T_UPD_COULD_NOT_ASK),
+                                     TG_UPDATE_FILES_CHANNEL,
+                                     why[0] != '\0' ? ": " : "", why);
                     tg_mtproto_chat_print_system_line(stream, say);
                 } else if (newer[0] == '\0' ||
                            !tg_update_parse(newer, want, 0) ||
                            !tg_update_parse(TG_VERSION, own, 0) ||
                            tg_update_cmp(want, own) <= 0) {
-                    tg_mtproto_chat_print_system_line(
-                        stream, "You have the newest version, " TG_VERSION
-                                ".");
+                    tg_locale_format(say, sizeof(say),
+                                     TG_TSTR(MSG_T_UPD_NEWEST), TG_VERSION);
+                    tg_mtproto_chat_print_system_line(stream, say);
                 } else if (cmd_arg[0] == '\0') {
-                    sprintf(say,
-                            TG_APP_NAME " %.15s is out: you have " TG_VERSION
-                            ". /update yes installs it: it comes from "
-                            "@%.32s, signed by its author, and this version "
-                            "is kept as Amigram.old.",
-                            newer, TG_UPDATE_FILES_CHANNEL);
+                    tg_locale_format(say, sizeof(say),
+                                     TG_TSTR(MSG_T_UPD_IS_OUT), TG_APP_NAME,
+                                     newer, TG_VERSION,
+                                     TG_UPDATE_FILES_CHANNEL);
                     tg_mtproto_chat_print_system_line(stream, say);
                 } else {
-                    sprintf(say, "Fetching " TG_APP_NAME " %.15s...", newer);
+                    tg_locale_format(say, sizeof(say),
+                                     TG_TSTR(MSG_T_UPD_FETCHING), TG_APP_NAME,
+                                     newer);
                     tg_mtproto_chat_print_system_line(stream, say);
                     quiet = tg_mtproto_open_quiet_stream(stream);
                     urc = tg_mtproto_update_install_on(&ufc, &ufc, newer, why,
                                                        sizeof(why), quiet);
                     tg_mtproto_close_quiet_stream(quiet, stream);
                     if (urc == 0) {
-                        sprintf(say,
-                                TG_APP_NAME " %.15s is installed. Quit with "
-                                "/quit and start Amigram again to use it.",
-                                newer);
+                        tg_locale_format(say, sizeof(say),
+                                         TG_TSTR(MSG_T_UPD_INSTALLED),
+                                         TG_APP_NAME, newer);
                     } else {
-                        sprintf(say, "%.150s.",
-                                why[0] != '\0' ? why : "The update failed");
+                        /* the reason is a text of the catalog, as the
+                           window shows it */
+                        tg_locale_format(say, sizeof(say), "%.150s.",
+                                         why[0] != '\0'
+                                             ? tg_tui_text(why)
+                                             : TG_TSTR(MSG_T_UPD_FAILED));
                     }
                     tg_mtproto_chat_print_system_line(stream, say);
                 }
@@ -19862,7 +19866,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             int logged_out = 0;
 
             if (strcmp(cmd_arg, "yes") == 0) {
-                tg_mtproto_chat_print_system_line(stream, "Logging out...");
+                tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_LOGGING_OUT));
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 logged_out = tg_mtproto_log_out_on_context(
                                  host, port, api_id, auth_file, dc_id_text,
@@ -19871,10 +19875,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 if (!logged_out) {
                     tg_mtproto_chat_print_system_line(
                         stream,
-                        "Telegram could not be reached: nothing was removed. "
-                        "/logout here removes the files on this computer "
-                        "anyway; the session then stays in Telegram's list "
-                        "of devices until you end it from another device.");
+                        TG_TSTR(MSG_T_TELEGRAM_COULD_NOT_BE_REACHED_NOTHING));
                     tg_mtproto_chat_show_prompt(stream, own_label,
                                                 peer_label, 0, 0UL,
                                                 tg_chat_input_raw);
@@ -19883,20 +19884,15 @@ int tg_mtproto_auth_chat_file(const char *host,
             } else if (strcmp(cmd_arg, "here") != 0) {
                 tg_mtproto_chat_print_system_line(
                     stream,
-                    "/logout yes logs out of Telegram on this computer: it "
-                    "ends this session at Telegram, removes telegram-auth.bin "
-                    "and what is kept here of the account (the chat list, "
-                    "hidden chats; downloads stay) and quits. The next start "
-                    "shows the login.");
+                    TG_TSTR(MSG_T_LOGOUT_YES_LOGS_OUT_OF_TELEGRAM));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
             }
             tg_mtproto_chat_print_system_line(
                 stream, logged_out
-                            ? "Logged out. The next start shows the login."
-                            : "The files are removed from this computer. The "
-                              "next start shows the login.");
+                            ? TG_TSTR(MSG_T_LOGGED_OUT_THE_NEXT_START_SHOWS)
+                            : TG_TSTR(MSG_T_THE_FILES_ARE_REMOVED_FROM_THIS));
             tg_mtproto_close_quiet_stream(chat_quiet, stream);
             tg_mtproto_close_auth_context(&chat_context);
             tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -19950,7 +19946,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             tg_mtproto_chat_print_system_line(
                 stream,
-                tg_console_ui_color_active() ? "Colors on." : "Colors off.");
+                tg_console_ui_color_active() ? TG_TSTR(MSG_T_COLORS_ON) : TG_TSTR(MSG_T_COLORS_OFF));
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -19966,7 +19962,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 tg_chat_bell_enabled = !tg_chat_bell_enabled;
             }
             tg_mtproto_chat_print_system_line(
-                stream, tg_chat_bell_enabled ? "Bell on." : "Bell off.");
+                stream, tg_chat_bell_enabled ? TG_TSTR(MSG_T_BELL_ON) : TG_TSTR(MSG_T_BELL_OFF));
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -19990,9 +19986,8 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             tg_mtproto_chat_print_system_line(
                 stream, tg_chat_ids_shown
-                            ? "Message ids on: /react, /forward and /forwardto "
-                              "take the number after #."
-                            : "Message ids off.");
+                            ? TG_TSTR(MSG_T_MESSAGE_IDS_ON_REACT_FORWARD_AND)
+                            : TG_TSTR(MSG_T_MESSAGE_IDS_OFF));
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -20000,7 +19995,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         if (strcmp(line, "/swap") == 0 || strcmp(line, "swap") == 0) {
             if (prev_peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(stream,
-                                                  "No previous chat yet.");
+                                                  TG_TSTR(MSG_T_NO_PREVIOUS_CHAT_YET));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
                 continue;
@@ -20015,7 +20010,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             peer_history_ready = 0;
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
-                fprintf(tui_cap, "Current chat: ");
+                fputs(TG_TSTR(MSG_T_CURRENT_CHAT), tui_cap);
                 tg_mtproto_print_cache_text(tui_cap, peer_label);
                 fprintf(tui_cap, "\n");
                 tg_console_tui_capture_end(tui_cap, stream);
@@ -20036,11 +20031,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                                            stream);
             {
             FILE *tui_cap = tg_console_tui_capture_begin(stream);
-            fprintf(tui_cap, "\nChoose a chat:\n\n");
+            fputs(TG_TSTR(MSG_T_CHOOSE_A_CHAT_2), tui_cap);
             tg_mtproto_print_peer_cache_public(peer_cache_file, tui_cap,
                                                peer_index);
-            fprintf(tui_cap,
-                    "Type a number, /search text, or /add name.\n");
+            fputs(TG_TSTR(MSG_T_TYPE_A_NUMBER_SEARCH_TEXT_OR), tui_cap);
             tg_console_tui_capture_end(tui_cap, stream);
         }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -20052,10 +20046,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                chat, the hits printed like a page of history, oldest first. */
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             } else if (cmd_arg == 0 || cmd_arg[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Use /find words: it searches this chat's messages.");
+                    stream, TG_TSTR(MSG_T_USE_FIND_WORDS_IT_SEARCHES_THIS));
             } else {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
                 unsigned long found = 0UL;
@@ -20075,9 +20069,9 @@ int tg_mtproto_auth_chat_file(const char *host,
                     0, &found, 0, 1, 0, peer_label, own_label);
                 tg_mtproto_history_search_query = 0;
                 if (rc != 0) {
-                    fprintf(tui_cap, "Could not search now.\n");
+                    fputs(TG_TSTR(MSG_T_COULD_NOT_SEARCH_NOW), tui_cap);
                 } else if (found == 0UL) {
-                    fprintf(tui_cap, "No message found.\n");
+                    fputs(TG_TSTR(MSG_T_NO_MESSAGE_FOUND), tui_cap);
                 }
                 tg_console_tui_capture_end(tui_cap, stream);
             }
@@ -20094,13 +20088,13 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             } else if (!listing && (cmd_arg == 0 || cmd_arg[0] == '\0' ||
                                     strcmp(cmd_arg, "0") == 0)) {
                 tg_mtproto_history_topic_id = 0UL;
                 tg_mtproto_send_set_topic(0UL);
                 tg_mtproto_chat_print_system_line(
-                    stream, "Every topic again: /history shows them.");
+                    stream, TG_TSTR(MSG_T_EVERY_TOPIC_AGAIN_HISTORY_SHOWS_THEM));
             } else if (!listing && tg_chat_topic_command(
                                        cmd_arg, host, port, api_id, auth_file,
                                        dc_id_text, &chat_context,
@@ -20115,7 +20109,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                        (tg_mtproto_parse_ulong_arg(cmd_arg, &n) != 0 ||
                         n == 0UL)) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Use /topic and a number from /topics.");
+                    stream, TG_TSTR(MSG_T_USE_TOPIC_AND_A_NUMBER_FROM));
             } else {
                 if (listing || tg_chat_topics.count == 0UL ||
                     strcmp(tg_chat_topic_peer, peer_index) != 0) {
@@ -20127,17 +20121,16 @@ int tg_mtproto_auth_chat_file(const char *host,
                 }
                 if (frc == 1) {
                     tg_mtproto_chat_print_system_line(
-                        stream, "This chat has no topics.");
+                        stream, TG_TSTR(MSG_T_THIS_CHAT_HAS_NO_TOPICS));
                 } else if (frc != 0) {
                     tg_mtproto_chat_print_system_line(
-                        stream, "Telegram did not give the topics. Try again.");
+                        stream, TG_TSTR(MSG_T_TELEGRAM_DID_NOT_GIVE_THE_TOPICS));
                 } else if (listing) {
                     tg_mtproto_chat_print_topics(stream, peer_cache_file,
                                                  peer_index);
                 } else if (n > tg_chat_topics.count) {
                     tg_mtproto_chat_print_system_line(
-                        stream, "No topic with that number: /topics lists "
-                                "them.");
+                        stream, TG_TSTR(MSG_T_NO_TOPIC_WITH_THAT_NUMBER_TOPICS));
                 } else {
                     const tg_mtproto_forum_topic *t =
                         &tg_chat_topics.topics[n - 1UL];
@@ -20145,10 +20138,9 @@ int tg_mtproto_auth_chat_file(const char *host,
 
                     tg_mtproto_history_topic_id = t->id;
                     tg_mtproto_send_set_topic(t->id);
-                    fprintf(cap, "Topic: ");
+                    fputs(TG_TSTR(MSG_T_TOPIC), cap);
                     tg_mtproto_print_cache_text(cap, t->title);
-                    fprintf(cap, " (what you write goes there; /topic alone: "
-                                 "every topic)\n");
+                    fputs(TG_TSTR(MSG_T_WHAT_YOU_WRITE_GOES_THERE_TOPIC), cap);
                     tg_console_tui_capture_end(cap, stream);
                     last_seen_message_id = 0UL;
                     peer_history_ready = 0; /* its messages, from the top */
@@ -20161,7 +20153,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         if (strcmp(line, "/history") == 0) {
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
                 continue;
@@ -20173,7 +20165,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     peer_cache_file, peer_index, "10", tui_cap,
                     0, 0, 0, 1, 1, peer_label, own_label);
                 if (rc != 0) {
-                    fprintf(tui_cap, "Could not read message history now.\n");
+                    fputs(TG_TSTR(MSG_T_COULD_NOT_READ_MESSAGE_HISTORY_NOW), tui_cap);
                 }
                 tg_console_tui_capture_end(tui_cap, stream);
             }
@@ -20186,7 +20178,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                the open chat into downloads/ (same machinery as the GUI). */
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             } else {
                 tg_mtproto_file_ctx fc;
                 char saved_path[160];
@@ -20198,36 +20190,38 @@ int tg_mtproto_auth_chat_file(const char *host,
                 fc.context = &chat_context;
                 fc.peer_cache_file = peer_cache_file;
                 fc.peer_index = peer_index;
-                tg_mtproto_chat_print_system_line(stream, "Downloading...");
+                tg_mtproto_chat_print_system_line(stream, TG_TSTR(MSG_T_DOWNLOADING));
                 frc = tg_mtproto_file_download(&fc, 0UL, saved_path,
                                                sizeof(saved_path), stream,
                                                0, 0); /* TUI: no % hook (yet) */
                 tui_cap = tg_console_tui_capture_begin(stream);
                 if (frc == 0) {
-                    fprintf(tui_cap, "Saved to %s\n", saved_path);
+                    fprintf(tui_cap, TG_TSTR(MSG_T_SAVED_TO_S), saved_path);
                 } else if (frc == 2) {
-                    fprintf(tui_cap,
-                            "File is on another server - not supported yet.\n");
+                    fputs(TG_TSTR(MSG_T_FILE_IS_ON_ANOTHER_SERVER_NOT), tui_cap);
                 } else if (frc == 3 && saved_path[0] != '\0') {
-                    fprintf(tui_cap, "%.120s, the part was removed.\n",
-                            saved_path); /* "<volume> is full, stopped at" */
+                    fprintf(tui_cap, TG_TSTR(MSG_T_120S_THE_PART_WAS_REMOVED),
+                            tg_tui_text(saved_path)); /* "<volume> is full,
+                                                         stopped at" */
                 } else if (frc == 3) {
-                    fprintf(tui_cap, "Could not write to downloads/.\n");
+                    fputs(TG_TSTR(MSG_T_COULD_NOT_WRITE_TO_DOWNLOADS), tui_cap);
                 } else if (frc == 6) {
-                    fprintf(tui_cap, "%.120s.\n", saved_path[0] != '\0'
-                                                    ? saved_path
-                                                    : "Not enough room for that file");
+                    fprintf(tui_cap, "%.120s.\n",
+                            saved_path[0] != '\0'
+                                ? tg_tui_text(saved_path)
+                                : TG_TSTR(MSG_T_NOT_ENOUGH_ROOM_FOR_THAT_FILE));
                 } else if (frc == 4) {
                     if (saved_path[0] != '\0') {
-                        fprintf(tui_cap, "Transfer failed: %.110s\n",
-                                saved_path);
+                        fprintf(tui_cap, TG_TSTR(MSG_T_TRANSFER_FAILED_110S),
+                                tg_tui_text(saved_path));
                     } else {
-                        fprintf(tui_cap, "Transfer failed (server error).\n");
+                        fputs(TG_TSTR(MSG_T_TRANSFER_FAILED_SERVER_ERROR), tui_cap);
                     }
                 } else if (saved_path[0] != '\0') {
-                    fprintf(tui_cap, "No file: %.120s\n", saved_path);
+                    fprintf(tui_cap, TG_TSTR(MSG_T_NO_FILE_120S),
+                            tg_tui_text(saved_path));
                 } else {
-                    fprintf(tui_cap, "Download failed.\n");
+                    fputs(TG_TSTR(MSG_T_DOWNLOAD_FAILED), tui_cap);
                 }
                 tg_console_tui_capture_end(tui_cap, stream);
             }
@@ -20303,21 +20297,21 @@ int tg_mtproto_auth_chat_file(const char *host,
                 }
                 if (peer_index[0] == '\0') {
                     tg_mtproto_chat_print_system_line(
-                        stream, "Choose a chat first with /list or /add name.");
+                        stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
                 } else if (*fpath == '\0') {
                     tg_mtproto_chat_print_system_line(
                         stream, send_as_photo
-                            ? "Usage: /photo <jpeg-or-png-path> [caption]"
-                            : "Usage: /sendfile <path>");
+                            ? TG_TSTR(MSG_T_USAGE_PHOTO_JPEG_OR_PNG_PATH)
+                            : TG_TSTR(MSG_T_USAGE_SENDFILE_PATH));
                 } else if (send_as_photo && fcaption != 0 &&
                            strlen(fcaption) > TG_MTPROTO_CAPTION_MAX) {
                     /* said before the upload, not after every part has
                        gone up and Telegram has refused the caption */
                     char cap_note[80];
 
-                    sprintf(cap_note,
-                            "A caption holds %u characters at most.",
-                            (unsigned int)TG_MTPROTO_CAPTION_MAX);
+                    tg_locale_format(cap_note, sizeof(cap_note),
+                                     TG_TSTR(MSG_T_CAPTION_MAX),
+                                     (unsigned int)TG_MTPROTO_CAPTION_MAX);
                     tg_mtproto_chat_print_system_line(stream, cap_note);
                 } else {
                     tg_mtproto_file_ctx fc;
@@ -20330,8 +20324,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                     fc.peer_cache_file = peer_cache_file;
                     fc.peer_index = peer_index;
                     tg_mtproto_chat_print_system_line(
-                        stream, send_as_photo ? "Uploading photo..."
-                                              : "Uploading...");
+                        stream, send_as_photo ? TG_TSTR(MSG_T_UPLOADING_PHOTO)
+                                              : TG_TSTR(MSG_T_UPLOADING));
                     frc = tg_mtproto_file_send(&fc, fpath, stream, 0, 0,
                                                send_as_photo,
                                                send_as_photo ? fcaption : 0);
@@ -20339,33 +20333,35 @@ int tg_mtproto_auth_chat_file(const char *host,
                     if (frc == 0) {
                         if (send_as_photo &&
                             tg_gui_session_transfer_photo_fallback()) {
-                            fprintf(tui_cap,
-                                    "File sent (photo was over 10 MiB).\n");
+                            fputs(TG_TSTR(MSG_T_FILE_SENT_PHOTO_WAS_OVER_10), tui_cap);
                         } else {
-                            fprintf(tui_cap, send_as_photo ? "Photo sent.\n"
-                                                          : "File sent.\n");
+                            fputs(send_as_photo ? TG_TSTR(MSG_T_PHOTO_SENT)
+                                                : TG_TSTR(MSG_T_FILE_SENT),
+                                  tui_cap);
                         }
                     } else if (frc == 2) {
                         fprintf(tui_cap,
-                                "File too big (%lu MiB limit on this build).\n",
+                                TG_TSTR(MSG_T_FILE_TOO_BIG_LU_MIB_LIMIT),
                                 tg_gui_session_upload_limit_mib());
                     } else if (frc == 3) {
-                        fprintf(tui_cap, send_as_photo
-                                             ? "Could not read that photo.\n"
-                                             : "Could not read that file.\n");
+                        fputs(send_as_photo
+                                  ? TG_TSTR(MSG_T_COULD_NOT_READ_THAT_PHOTO)
+                                  : TG_TSTR(MSG_T_COULD_NOT_READ_THAT_FILE),
+                              tui_cap);
                     } else if (frc == 5) {
-                        fprintf(tui_cap, "That file is empty (0 bytes).\n");
+                        fputs(TG_TSTR(MSG_T_THAT_FILE_IS_EMPTY_0_BYTES), tui_cap);
                     } else if (frc == 7) {
-                        fprintf(tui_cap, "Not sent as a photo: %.100s.\n",
-                                tg_mtproto_query_fail[0] != '\0'
-                                    ? tg_mtproto_query_fail
-                                    : "not a valid JPEG or PNG");
+                        fprintf(tui_cap, TG_TSTR(MSG_T_NOT_SENT_AS_A_PHOTO_100S),
+                                tg_tui_text(
+                                    tg_mtproto_query_fail[0] != '\0'
+                                        ? tg_mtproto_query_fail
+                                        : TG_STR(MSG_S_IMG_NOT_VALID)));
                     } else if (tg_mtproto_query_fail[0] != '\0') {
-                        fprintf(tui_cap, "Upload failed: %.100s\n",
-                                tg_mtproto_upload_failure_text(
-                                    tg_mtproto_query_fail));
+                        fprintf(tui_cap, TG_TSTR(MSG_T_UPLOAD_FAILED_100S),
+                                tg_tui_text(tg_mtproto_upload_failure_text(
+                                    tg_mtproto_query_fail)));
                     } else {
-                        fprintf(tui_cap, "Upload failed.\n");
+                        fputs(TG_TSTR(MSG_T_UPLOAD_FAILED), tui_cap);
                     }
                     tg_console_tui_capture_end(tui_cap, stream);
                 }
@@ -20382,13 +20378,14 @@ int tg_mtproto_auth_chat_file(const char *host,
                 strcpy(prev_peer_label, peer_label);
             }
             strcpy(peer_index, "self");
-            strcpy(peer_label, "Saved Messages");
+            tg_locale_format(peer_label, sizeof(peer_label), "%s",
+                             TG_STR_U8(MSG_S_SAVED_MESSAGES));
             last_seen_message_id = 0UL;
             peer_history_ready = 0;
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
 
-                fprintf(tui_cap, "Current chat: Saved Messages\n");
+                fputs(TG_TSTR(MSG_T_CURRENT_CHAT_SAVED_MESSAGES), tui_cap);
                 tg_console_tui_capture_end(tui_cap, stream);
             }
             tg_mtproto_chat_tui_status(peer_index, peer_label);
@@ -20405,8 +20402,8 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             tg_mtproto_chat_print_system_line(
                 stream, chat_engine.diff_enabled
-                            ? "Background catch-up on."
-                            : "Background catch-up off.");
+                            ? TG_TSTR(MSG_T_BACKGROUND_CATCH_UP_ON)
+                            : TG_TSTR(MSG_T_BACKGROUND_CATCH_UP_OFF));
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -20453,11 +20450,11 @@ int tg_mtproto_auth_chat_file(const char *host,
                     tg_mtproto_chat_tui_status(peer_index, peer_label);
                 } else {
                     tg_mtproto_chat_print_system_line(
-                        stream, "Window size unchanged.");
+                        stream, TG_TSTR(MSG_T_WINDOW_SIZE_UNCHANGED));
                 }
             } else {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Full-screen mode is not active.");
+                    stream, TG_TSTR(MSG_T_FULL_SCREEN_MODE_IS_NOT_ACTIVE));
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
@@ -20469,7 +20466,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_chat_named_command_arg(line, "/find", &search_arg) ||
             tg_mtproto_chat_named_command_arg(line, "find", &search_arg)) {
             if (search_arg == 0 || search_arg[0] == '\0') {
-                if (tg_mtproto_chat_prompt_line("Search: ", line,
+                if (tg_mtproto_chat_prompt_line(TG_TSTR(MSG_T_SEARCH), line,
                                                 sizeof(line), 1, stream,
                                                 label) != 0) {
                     tg_mtproto_close_quiet_stream(chat_quiet, stream);
@@ -20521,7 +20518,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             if (*p != '\0' || move_from == 0UL || move_to == 0UL) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Usage: /move 5 1 makes chat 5 number 1, on F1.");
+                    stream, TG_TSTR(MSG_T_USAGE_MOVE_5_1_MAKES_CHAT));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -20532,7 +20529,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_close_quiet_stream(quiet, stream);
             if (rc != 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "No such chat number: /list shows them.");
+                    stream, TG_TSTR(MSG_T_NO_SUCH_CHAT_NUMBER_LIST_SHOWS));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -20553,14 +20550,14 @@ int tg_mtproto_auth_chat_file(const char *host,
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
 
-                fputs("Moved ", tui_cap);
+                fputs(TG_TSTR(MSG_T_MOVED), tui_cap);
                 if (requested_peer_label[0] != '\0') {
                     tg_mtproto_print_cache_text(tui_cap,
                                                 requested_peer_label);
                 } else {
-                    fputs("the chat", tui_cap);
+                    fputs(TG_TSTR(MSG_T_THE_CHAT), tui_cap);
                 }
-                fprintf(tui_cap, " to number %lu", move_to);
+                fprintf(tui_cap, TG_TSTR(MSG_T_TO_NUMBER_LU), move_to);
                 if (move_to <= TG_CONSOLE_TUI_TABS) {
                     fprintf(tui_cap, ", on F%lu", move_to);
                 }
@@ -20578,7 +20575,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_chat_named_command_arg(line, "/delete", &remove_arg) ||
             tg_mtproto_chat_named_command_arg(line, "delete", &remove_arg)) {
             if (remove_arg == 0 || remove_arg[0] == '\0') {
-                if (tg_mtproto_chat_prompt_line("Remove chat number: ", line,
+                if (tg_mtproto_chat_prompt_line(TG_TSTR(MSG_T_REMOVE_CHAT_NUMBER), line,
                                                 sizeof(line), 1, stream,
                                                 label) != 0) {
                     tg_mtproto_close_quiet_stream(chat_quiet, stream);
@@ -20603,7 +20600,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 tg_mtproto_chat_index_number(remove_arg), 0UL);
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
-                fprintf(tui_cap, "Removed ");
+                fputs(TG_TSTR(MSG_T_REMOVED), tui_cap);
                 if (removed_label[0] != '\0') {
                     tg_mtproto_print_cache_text(tui_cap, removed_label);
                 } else {
@@ -20617,19 +20614,19 @@ int tg_mtproto_auth_chat_file(const char *host,
                 peer_label[0] = '\0';
                 peer_history_ready = 0;
                 tg_mtproto_chat_print_system_line(
-                    stream, "No cached chats. Add one with /add name.");
+                    stream, TG_TSTR(MSG_T_NO_CACHED_CHATS_ADD_ONE_WITH));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
                 continue;
             }
             {
             FILE *tui_cap = tg_console_tui_capture_begin(stream);
-            fprintf(tui_cap, "\nChoose a chat:\n\n");
+            fputs(TG_TSTR(MSG_T_CHOOSE_A_CHAT_2), tui_cap);
             tg_mtproto_print_peer_cache_public(peer_cache_file, tui_cap,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-            if (tg_mtproto_chat_prompt_chat_number("Chat number: ",
+            if (tg_mtproto_chat_prompt_chat_number(TG_TSTR(MSG_T_CHAT_NUMBER_2),
                                                    requested_peer_text,
                                                    sizeof(requested_peer_text),
                                                    stream, label,
@@ -20662,7 +20659,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 peer_history_ready = 0;
                 {
                     FILE *tui_cap = tg_console_tui_capture_begin(stream);
-                    fprintf(tui_cap, "Current chat: ");
+                    fputs(TG_TSTR(MSG_T_CURRENT_CHAT), tui_cap);
                     tg_mtproto_print_cache_text(tui_cap, peer_label);
                     fprintf(tui_cap, "\n");
                     tg_console_tui_capture_end(tui_cap, stream);
@@ -20678,7 +20675,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         if (tg_mtproto_chat_named_command_arg(line, "/add", &username_arg) ||
             tg_mtproto_chat_named_command_arg(line, "add", &username_arg)) {
             if (username_arg == 0 || username_arg[0] == '\0') {
-                if (tg_mtproto_chat_prompt_line("Name, username or t.me link: ",
+                if (tg_mtproto_chat_prompt_line(TG_TSTR(MSG_T_NAME_USERNAME_OR_T_ME_LINK),
                                                 line, sizeof(line), 1,
                                                 stream, label) != 0) {
                     tg_mtproto_close_quiet_stream(chat_quiet, stream);
@@ -20731,7 +20728,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             if (rc != 0) {
                 tg_mtproto_chat_print_system_line(
                     stream,
-                    "Could not add that chat. Try @username or a t.me link.");
+                    TG_TSTR(MSG_T_COULD_NOT_ADD_THAT_CHAT_TRY));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
                 continue;
@@ -20757,7 +20754,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 peer_history_ready = 0;
                 {
                     FILE *tui_cap = tg_console_tui_capture_begin(stream);
-                    fprintf(tui_cap, "Current chat: ");
+                    fputs(TG_TSTR(MSG_T_CURRENT_CHAT), tui_cap);
                     if (peer_label[0] != '\0') {
                         tg_mtproto_print_cache_text(tui_cap, peer_label);
                     } else {
@@ -20771,10 +20768,10 @@ int tg_mtproto_auth_chat_file(const char *host,
             } else {
                 {
             FILE *tui_cap = tg_console_tui_capture_begin(stream);
-            fprintf(tui_cap, "\nChat added. Cached chats:\n\n");
+            fputs(TG_TSTR(MSG_T_CHAT_ADDED_CACHED_CHATS), tui_cap);
             tg_mtproto_print_peer_cache_public(peer_cache_file, tui_cap,
                                                peer_index);
-            fprintf(tui_cap, "Type a number to switch.\n");
+            fputs(TG_TSTR(MSG_T_TYPE_A_NUMBER_TO_SWITCH), tui_cap);
             tg_console_tui_capture_end(tui_cap, stream);
         }
             }
@@ -20791,7 +20788,9 @@ int tg_mtproto_auth_chat_file(const char *host,
                         sizeof(requested_peer_index), line) != 0) {
                     {
                         char peer_note[160];
-                        sprintf(peer_note, "%.64s: use /peer <number>", label);
+                        tg_locale_format(peer_note, sizeof(peer_note),
+                                         TG_TSTR(MSG_T_USE_PEER_NUMBER),
+                                         label);
                         tg_mtproto_chat_print_system_line(stream, peer_note);
                     }
                     tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -20801,13 +20800,13 @@ int tg_mtproto_auth_chat_file(const char *host,
             } else if (peer_arg[0] == '\0') {
                 {
             FILE *tui_cap = tg_console_tui_capture_begin(stream);
-            fprintf(tui_cap, "\nChoose a chat:\n\n");
+            fputs(TG_TSTR(MSG_T_CHOOSE_A_CHAT_2), tui_cap);
             tg_mtproto_print_peer_cache_public(peer_cache_file, tui_cap,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
                 if (tg_mtproto_chat_prompt_chat_number(
-                        "Chat number: ", requested_peer_text,
+                        TG_TSTR(MSG_T_CHAT_NUMBER_2), requested_peer_text,
                         sizeof(requested_peer_text), stream, label,
                         peer_index) != 0) {
                     tg_mtproto_close_quiet_stream(chat_quiet, stream);
@@ -20824,7 +20823,9 @@ int tg_mtproto_auth_chat_file(const char *host,
                         requested_peer_text) != 0) {
                     {
                         char peer_note[160];
-                        sprintf(peer_note, "%.64s: use /peer <number>", label);
+                        tg_locale_format(peer_note, sizeof(peer_note),
+                                         TG_TSTR(MSG_T_USE_PEER_NUMBER),
+                                         label);
                         tg_mtproto_chat_print_system_line(stream, peer_note);
                     }
                     tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -20836,7 +20837,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                            sizeof(requested_peer_index), peer_arg) != 0) {
                 {
                     char peer_note[160];
-                    sprintf(peer_note, "%.64s: use /peer <number>", label);
+                    tg_locale_format(peer_note, sizeof(peer_note),
+                                     TG_TSTR(MSG_T_USE_PEER_NUMBER), label);
                     tg_mtproto_chat_print_system_line(stream, peer_note);
                 }
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -20868,7 +20870,7 @@ int tg_mtproto_auth_chat_file(const char *host,
             peer_history_ready = 0;
             {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
-                fprintf(tui_cap, "Current chat: ");
+                fputs(TG_TSTR(MSG_T_CURRENT_CHAT), tui_cap);
                 tg_mtproto_print_cache_text(tui_cap, peer_label);
                 fprintf(tui_cap, "\n");
                 tg_console_tui_capture_end(tui_cap, stream);
@@ -20884,11 +20886,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                     peer_cache_file, peer_index, "5", tui_cap,
                     &last_seen_message_id, 0, 0, 1, 1, peer_label, own_label);
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
-                    fprintf(tui_cap,
-                            "No reply yet (slow link). Press Enter to retry.\n");
+                    fputs(TG_TSTR(MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_2), tui_cap);
                 } else if (rc != 0) {
                     fprintf(tui_cap,
-                            "Could not read messages now (error %d).\n", rc);
+                            TG_TSTR(MSG_T_COULD_NOT_READ_MESSAGES_NOW_ERROR), rc);
                 }
                 tg_console_tui_capture_end(tui_cap, stream);
             }
@@ -20903,7 +20904,7 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat before forwarding a message.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_BEFORE_FORWARDING_A));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -20925,7 +20926,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                     requested_peer_label, sizeof(requested_peer_label)) != 0) {
                 tg_mtproto_chat_print_system_line(
                     stream,
-                    "Use /forwardto <chat-number> [message-id].");
+                    TG_TSTR(MSG_T_USE_FORWARDTO_CHAT_NUMBER_MESSAGE_ID));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -20937,14 +20938,14 @@ int tg_mtproto_auth_chat_file(const char *host,
                  forward_message_id == 0UL)) {
                 tg_mtproto_chat_print_system_line(
                     stream,
-                    "Use /forwardto <chat-number> [message-id].");
+                    TG_TSTR(MSG_T_USE_FORWARDTO_CHAT_NUMBER_MESSAGE_ID));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
             }
             if (forward_message_id == 0UL) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "No recent message is available to forward.");
+                    stream, TG_TSTR(MSG_T_NO_RECENT_MESSAGE_IS_AVAILABLE_TO));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -20958,14 +20959,16 @@ int tg_mtproto_auth_chat_file(const char *host,
             if (rc == 0) {
                 FILE *tui_cap = tg_console_tui_capture_begin(stream);
 
-                fprintf(tui_cap, "Forwarded to ");
+                fputs(TG_TSTR(MSG_T_FORWARDED_TO), tui_cap);
                 tg_mtproto_print_cache_text(tui_cap, requested_peer_label);
                 fprintf(tui_cap, ".\n");
                 tg_console_tui_capture_end(tui_cap, stream);
             } else {
-                sprintf(forward_note, "Could not forward message: %.80s",
-                        tg_mtproto_query_fail[0] != '\0'
-                            ? tg_mtproto_query_fail : "no reply");
+                tg_locale_format(forward_note, sizeof(forward_note),
+                                 TG_TSTR(MSG_T_COULD_NOT_FORWARD),
+                                 tg_mtproto_query_fail[0] != '\0'
+                                     ? tg_mtproto_query_fail
+                                     : TG_TSTR(MSG_T_NO_REPLY));
                 tg_mtproto_chat_print_system_line(stream, forward_note);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -20987,30 +20990,29 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             } else if (strcmp(peer_index, "self") == 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Saved Messages has no mute and no read mark.");
+                    stream, TG_TSTR(MSG_T_SAVED_MESSAGES_HAS_NO_MUTE_AND));
             } else if (span < 0L) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Use /mute, or /mute with a time: 30m, 1h, 8h, "
-                            "2d. /unmute takes it back.");
+                    stream, TG_TSTR(MSG_T_USE_MUTE_OR_MUTE_WITH_A));
             } else {
                 unsigned long until = 0UL;
-                const char *done = "Marked as unread.";
+                const char *done = TG_TSTR(MSG_T_MARKED_AS_UNREAD);
 
                 if (what == TG_CHAT_CMD_MUTE) {
                     until = span == 0L
                                 ? 0x7fffffffUL
                                 : tg_mtproto_context_time(&chat_context) +
                                       (unsigned long)span;
-                    done = span == 0L ? "Muted on Telegram, until /unmute."
-                                      : "Muted on Telegram for that long.";
+                    done = span == 0L ? TG_TSTR(MSG_T_MUTED_ON_TELEGRAM_UNTIL_UNMUTE)
+                                      : TG_TSTR(MSG_T_MUTED_ON_TELEGRAM_FOR_THAT_LONG);
                 } else if (what == 0) {
                     what = TG_CHAT_CMD_MUTE;
-                    done = "Not muted any more.";
+                    done = TG_TSTR(MSG_T_NOT_MUTED_ANY_MORE);
                 } else if (what == TG_CHAT_CMD_READ) {
-                    done = "Marked as read.";
+                    done = TG_TSTR(MSG_T_MARKED_AS_READ);
                 }
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_chat_command_on_context(
@@ -21019,7 +21021,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 tg_mtproto_close_quiet_stream(quiet, stream);
                 tg_mtproto_chat_print_system_line(
                     stream, rc == 0 ? done
-                                    : "Telegram did not take it. Try again.");
+                                    : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
                     tg_mtproto_close_auth_context(&chat_context);
                 }
@@ -21038,14 +21040,13 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             } else if (poll == 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "No poll shown here yet: /history shows the "
-                            "recent messages again.");
+                    stream, TG_TSTR(MSG_T_NO_POLL_SHOWN_HERE_YET_HISTORY));
             } else if (!poll->public_voters) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "The votes of that poll are anonymous.");
+                    stream, TG_TSTR(MSG_T_THE_VOTES_OF_THAT_POLL_ARE));
             } else {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_chat_command_on_context(
@@ -21056,7 +21057,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 if (rc == 0) {
                     FILE *tui_cap = tg_console_tui_capture_begin(stream);
 
-                    fputs("Who voted:\n", tui_cap);
+                    fputs(TG_TSTR(MSG_T_WHO_VOTED), tui_cap);
                     tg_mtproto_print_message_text(tui_cap,
                                                   tg_chat_voters_text);
                     fputc('\n', tui_cap);
@@ -21065,9 +21066,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                     tg_mtproto_chat_print_system_line(
                         stream,
                         strcmp(tg_mtproto_query_fail, "POLL_VOTE_REQUIRED") == 0
-                            ? "Vote first (/vote): then Telegram says who "
-                              "voted."
-                            : "Telegram did not say who voted. Try again.");
+                            ? TG_TSTR(MSG_T_VOTE_FIRST_VOTE_THEN_TELEGRAM_SAYS)
+                            : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_SAY_WHO_VOTED));
                     if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
                         tg_mtproto_close_auth_context(&chat_context);
                     }
@@ -21092,21 +21092,18 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat first with /list or /add name.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             } else if (poll == 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "No poll shown here yet: /history shows the "
-                            "recent messages again.");
+                    stream, TG_TSTR(MSG_T_NO_POLL_SHOWN_HERE_YET_HISTORY));
             } else if (poll->closed) {
                 tg_mtproto_chat_print_system_line(stream,
-                                                  "That poll is closed.");
+                                                  TG_TSTR(MSG_T_THAT_POLL_IS_CLOSED));
             } else if (mask < 0L) {
                 tg_mtproto_chat_print_system_line(
                     stream, poll->multiple
-                                ? "Use /vote with the numbers of your "
-                                  "answers (/vote 1 3), or /vote none."
-                                : "Use /vote with the number of one "
-                                  "answer, or /vote none.");
+                                ? TG_TSTR(MSG_T_USE_VOTE_WITH_THE_NUMBERS_OF)
+                                : TG_TSTR(MSG_T_USE_VOTE_WITH_THE_NUMBER_OF));
             } else {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_chat_command_on_context(
@@ -21122,8 +21119,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                     /* the poll as it stands now, with the votes */
                     poll = tg_mtproto_poll_find(tg_chat_last_poll_id_hi,
                                                 tg_chat_last_poll_id_lo);
-                    fprintf(tui_cap, "%s\n", mask != 0L ? "Voted."
-                                                        : "Vote taken back.");
+                    fprintf(tui_cap, "%s\n", mask != 0L ? TG_TSTR(MSG_T_VOTED)
+                                                        : TG_TSTR(MSG_T_VOTE_TAKEN_BACK));
                     if (poll != 0) {
                         tg_mtproto_poll_text(poll, poll_text,
                                              sizeof(poll_text));
@@ -21135,8 +21132,8 @@ int tg_mtproto_auth_chat_file(const char *host,
                     tg_mtproto_chat_print_system_line(
                         stream,
                         strcmp(tg_mtproto_query_fail, "REVOTE_NOT_ALLOWED") == 0
-                            ? "This poll does not let a vote be changed."
-                            : "Telegram did not take the vote. Try again.");
+                            ? TG_TSTR(MSG_T_THIS_POLL_DOES_NOT_LET_A)
+                            : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_THE_VOTE));
                     if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
                         tg_mtproto_close_auth_context(&chat_context);
                     }
@@ -21153,19 +21150,18 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Choose a chat before reacting to a message.");
+                    TG_TSTR(MSG_T_CHOOSE_A_CHAT_BEFORE_REACTING_TO));
             } else if (!tg_mtproto_chat_reaction_arg(cmd_arg, &reaction_id,
                                                       &reaction_cp)) {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Use /react [message-id] <name>, or /react [message-id] none; "
-                    "/reactions lists the names, /ids shows the ids.");
+                    TG_TSTR(MSG_T_USE_REACT_MESSAGE_ID_NAME_OR));
             } else if (reaction_id == 0UL &&
                        (last_seen_message_id == 0UL ||
                         (reaction_id = tg_chat_last_incoming_id) == 0UL)) {
                 /* last_seen is 0 right after a chat switch, before its
                    history is read: the id kept is the previous chat's. */
                 tg_mtproto_chat_print_system_line(
-                    stream, "No message from the others to react to yet.");
+                    stream, TG_TSTR(MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO));
             } else {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_react_peer_on_context(host, port, api_id,
@@ -21173,8 +21169,10 @@ int tg_mtproto_auth_chat_file(const char *host,
                     peer_index, reaction_id, reaction_cp, quiet);
                 tg_mtproto_close_quiet_stream(quiet, stream);
                 tg_mtproto_chat_print_system_line(stream, rc == 0 ?
-                    (reaction_cp == 0UL ? "Reaction removed." : "Reaction sent.") :
-                    tg_mtproto_reaction_failure_text(tg_mtproto_query_fail));
+                    (reaction_cp == 0UL ? TG_TSTR(MSG_T_REACTION_REMOVED)
+                                        : TG_TSTR(MSG_T_REACTION_SENT)) :
+                    tg_tui_text(tg_mtproto_reaction_failure_text(
+                        tg_mtproto_query_fail)));
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL)
                     tg_mtproto_close_auth_context(&chat_context);
             }
@@ -21188,18 +21186,17 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Choose a chat before hiding a message.");
+                    TG_TSTR(MSG_T_CHOOSE_A_CHAT_BEFORE_HIDING_A));
             } else if (cmd_arg[0] != '\0' &&
                        (tg_mtproto_parse_ulong_arg(cmd_arg, &hide_id) != 0 ||
                         hide_id == 0UL || hide_id > 2147483647UL)) {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Use /hide or /hide <message-id>; /unhide brings them "
-                    "back.");
+                    TG_TSTR(MSG_T_USE_HIDE_OR_HIDE_MESSAGE_ID));
             } else if (hide_id == 0UL &&
                        (last_seen_message_id == 0UL ||
                         (hide_id = tg_chat_last_incoming_id) == 0UL)) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "No message from the others to hide yet.");
+                    stream, TG_TSTR(MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO_2));
             } else {
                 tg_mtproto_chat_hide_command(stream, host, port, api_id,
                     auth_file, dc_id_text, &chat_context, peer_cache_file,
@@ -21212,7 +21209,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         if (strcmp(line, "/unhide") == 0) {
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(stream,
-                    "Choose a chat first.");
+                    TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST));
             } else {
                 tg_mtproto_chat_hide_command(stream, host, port, api_id,
                     auth_file, dc_id_text, &chat_context, peer_cache_file,
@@ -21228,7 +21225,7 @@ int tg_mtproto_auth_chat_file(const char *host,
 
             if (peer_index[0] == '\0') {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Choose a chat before forwarding a message.");
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_BEFORE_FORWARDING_A));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -21238,14 +21235,14 @@ int tg_mtproto_auth_chat_file(const char *host,
                 (tg_mtproto_parse_ulong_arg(cmd_arg, &forward_message_id) != 0 ||
                  forward_message_id == 0UL)) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Use /forward or /forward <message-id>.");
+                    stream, TG_TSTR(MSG_T_USE_FORWARD_OR_FORWARD_MESSAGE_ID));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
             }
             if (forward_message_id == 0UL) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "No recent message is available to forward.");
+                    stream, TG_TSTR(MSG_T_NO_RECENT_MESSAGE_IS_AVAILABLE_TO));
                 tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                             0UL, tg_chat_input_raw);
                 continue;
@@ -21258,11 +21255,13 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_close_quiet_stream(quiet, stream);
             if (rc == 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Forwarded to Saved Messages.");
+                    stream, TG_TSTR(MSG_T_FORWARDED_TO_SAVED_MESSAGES));
             } else {
-                sprintf(forward_note, "Could not forward message: %.80s",
-                        tg_mtproto_query_fail[0] != '\0'
-                            ? tg_mtproto_query_fail : "no reply");
+                tg_locale_format(forward_note, sizeof(forward_note),
+                                 TG_TSTR(MSG_T_COULD_NOT_FORWARD),
+                                 tg_mtproto_query_fail[0] != '\0'
+                                     ? tg_mtproto_query_fail
+                                     : TG_TSTR(MSG_T_NO_REPLY));
                 tg_mtproto_chat_print_system_line(stream, forward_note);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -21276,17 +21275,20 @@ int tg_mtproto_auth_chat_file(const char *host,
             if (tg_console_parse_watch_command(line, &parsed_watch_seconds) !=
                 0) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Use /watch <seconds <= 3600> or /watch off.");
+                    stream, TG_TSTR(MSG_T_USE_WATCH_SECONDS_3600_OR_WATCH));
                 continue;
             }
             watch_seconds = parsed_watch_seconds;
             if (watch_seconds == 0UL) {
                 tg_mtproto_chat_print_system_line(stream,
-                                                  "Auto-read disabled.");
+                                                  TG_TSTR(MSG_T_AUTO_READ_DISABLED));
             } else {
                 char watch_note[64];
-                sprintf(watch_note, "Auto-read every %lu second(s).",
-                        watch_seconds);
+                tg_locale_format(watch_note, sizeof(watch_note),
+                                 watch_seconds == 1UL
+                                     ? TG_TSTR(MSG_T_AUTO_READ_1)
+                                     : TG_TSTR(MSG_T_AUTO_READ),
+                                 watch_seconds);
                 tg_mtproto_chat_print_system_line(stream, watch_note);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
@@ -21295,7 +21297,7 @@ int tg_mtproto_auth_chat_file(const char *host,
         }
         if (peer_index[0] == '\0') {
             tg_mtproto_chat_print_system_line(
-                stream, "Choose a chat first with /list or /add name.");
+                stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
             continue;
@@ -21346,10 +21348,10 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_close_quiet_stream(quiet, stream);
             if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
                 tg_mtproto_chat_print_system_line(
-                    stream, "Message not confirmed. Press Enter to refresh.");
+                    stream, TG_TSTR(MSG_T_MESSAGE_NOT_CONFIRMED_PRESS_ENTER_TO));
             } else {
                 tg_mtproto_chat_print_system_line(stream,
-                                                  "Could not send message.");
+                                                  TG_TSTR(MSG_T_COULD_NOT_SEND_MESSAGE));
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
@@ -23107,6 +23109,9 @@ static int tg_mtproto_reactions_error_self_test(void)
     tg_mtproto_rpc_result result;
     int ok;
 
+    if (tg_locale_language()[0] != '\0') {
+        return 0; /* the words below are the English ones */
+    }
     for (i = 0UL; i < sizeof(errors) / sizeof(errors[0]); ++i) {
         if (strcmp(tg_mtproto_reaction_failure_text(errors[i]), expected[i]) != 0) {
             puts("probe self-test: reaction error mapping failed");
@@ -25044,7 +25049,8 @@ static tg_mtproto_peer_cache tg_gui_probe_cache;
 
 static void tg_gui_hidden_mark_name(char *name)
 {
-    static const char suffix[] = " (hidden)";
+    /* the name is UTF-8 here, and so is its mark */
+    const char *suffix = TG_STR_U8(MSG_S_HIDDEN_MARK);
     unsigned long display_max;
     unsigned long name_len;
     unsigned long suffix_len;
@@ -25061,9 +25067,12 @@ static void tg_gui_hidden_mark_name(char *name)
     }
     name_len = (unsigned long)strlen(name);
     suffix_len = (unsigned long)strlen(suffix);
+    if (suffix_len >= display_max) {
+        return; /* a mark longer than a name's room: none */
+    }
     if (name_len + suffix_len > display_max) {
         keep = display_max - suffix_len;
-        /* Do not leave a partial UTF-8 character before the ASCII suffix. */
+        /* Do not leave a partial UTF-8 character before the suffix. */
         while (keep > 0UL &&
                (((unsigned char)name[keep] & 0xc0U) == 0x80U)) {
             --keep;
@@ -25399,17 +25408,17 @@ static void tg_gui_session_note_open_failure(const char *line)
         return;
     }
     if (strstr(line, "auth-file-load-failed") != 0) {
-        text = "cannot read telegram-auth.bin";
+        text = TG_STR(MSG_S_OPEN_NO_AUTH);
     } else if (strstr(line, "connect-failed") != 0 ||
                strstr(line, "resolve-failed") != 0) {
-        text = "cannot reach Telegram";
+        text = TG_STR(MSG_S_OPEN_NO_REACH);
     } else if (strstr(line, "imeout") != 0) {
-        text = "Telegram did not answer";
+        text = TG_STR(MSG_S_OPEN_NO_ANSWER);
     } else if (strstr(line, "transport-init") != 0 ||
                strstr(line, "closed") != 0 ||
                strstr(line, "recv-failed") != 0 ||
                strstr(line, "send-failed") != 0) {
-        text = "the connection dropped";
+        text = TG_STR(MSG_S_OPEN_DROPPED);
     } else {
         text = strstr(line, ": "); /* drop the "gui session: " label */
         text = text != 0 ? text + 2 : line;
@@ -25923,7 +25932,8 @@ static void tg_gui_draft_reply_into(tg_gui_state *gst, unsigned long id)
     }
     if (gst->reply_snippet[0] == '\0') {
         /* not loaded, or a message without words: still a reply */
-        strcpy(gst->reply_snippet, "a message further up");
+        tg_locale_format(gst->reply_snippet, sizeof(gst->reply_snippet),
+                         "%s", TG_STR(MSG_S_A_MESSAGE_FURTHER_UP));
     }
 }
 
@@ -26285,7 +26295,9 @@ static int tg_gui_pinned_put(unsigned long id, const char *line)
     }
     tg_gui_pinned_list[p].text[i] = '\0';
     if (tg_gui_pinned_list[p].text[0] == '\0') {
-        strcpy(tg_gui_pinned_list[p].text, "Message");
+        tg_locale_format(tg_gui_pinned_list[p].text,
+                         sizeof(tg_gui_pinned_list[p].text), "%s",
+                         TG_STR_U8(MSG_S_MESSAGE));
     }
     return p;
 }
@@ -26489,7 +26501,8 @@ static int tg_gui_session_fetch_pinned(FILE *stream)
             slot->id = m->id;
             tg_gui_pinned_line(slot->text, sizeof(slot->text), m->text);
             if (slot->text[0] == '\0') {
-                strcpy(slot->text, "Message");
+                tg_locale_format(slot->text, sizeof(slot->text), "%s",
+                                 TG_STR_U8(MSG_S_MESSAGE));
             }
             ++tg_gui_pinned_count;
         }
@@ -27685,13 +27698,16 @@ static void tg_gui_topic_subtitle(void)
         tg_gui_strip_markers(gst->topic_title, sizeof(gst->topic_title),
                              gst->topic_title);
     } else if (tg_gui_topic == TG_MTPROTO_TOPIC_GENERAL) {
-        strcpy(gst->topic_title, "General");
+        tg_locale_format(gst->topic_title, sizeof(gst->topic_title), "%s",
+                         TG_STR(MSG_S_TOPIC_GENERAL));
     }
     if (tg_gui_topic != 0UL) {
-        sprintf(gst->subtitle, "%.60s",
-                gst->topic_title[0] != '\0' ? gst->topic_title : "Topic");
+        tg_locale_format(gst->subtitle, sizeof(gst->subtitle), "%s",
+                         gst->topic_title[0] != '\0' ? gst->topic_title
+                                                     : TG_STR(MSG_S_TOPIC));
     } else {
-        sprintf(gst->subtitle, "%.60s", "Topics: choose one on the left");
+        tg_locale_format(gst->subtitle, sizeof(gst->subtitle), "%s",
+                         TG_STR(MSG_S_TOPICS_CHOOSE));
     }
 }
 
@@ -28025,7 +28041,7 @@ static void tg_gui_topic_hint(void)
     row.is_service = 1;
     row.is_group = 1;
     /* short: the pill is cut where the column is narrow or the font wide */
-    row.text = "Choose a topic in the list on the left";
+    row.text = TG_STR_U8(MSG_S_CHOOSE_A_TOPIC);
     tg_gui_session_state.driver.on_message(tg_gui_session_state.driver.ctx,
                                            &row);
 }
@@ -28813,8 +28829,8 @@ static void tg_gui_search_more_row(tg_gui_state *gst)
     }
     row = &gst->chats[gst->chat_count++];
     memset(row, 0, sizeof(*row));
-    sprintf(row->name, "%.31s", "More results...");
-    sprintf(row->preview, "%.47s", "Older messages that match");
+    sprintf(row->name, "%.31s", TG_STR(MSG_S_MORE_RESULTS));
+    sprintf(row->preview, "%.47s", TG_STR(MSG_S_OLDER_THAT_MATCH));
     row->initials[0] = '+';
     row->index = TG_GUI_MORE_HITS_INDEX;
 }
@@ -30681,7 +30697,8 @@ void tg_gui_saved_messages_row(tg_chat_list_row *rows, int *count, int max)
     memset(row, 0, sizeof(*row));
     row->index = TG_GUI_SAVED_PEER_INDEX;
     row->is_user = 1;
-    strcpy(row->name, "Saved Messages");
+    tg_locale_format(row->name, sizeof(row->name), "%s",
+                     TG_STR_U8(MSG_S_SAVED_MESSAGES));
     *count += 1;
 }
 
@@ -30700,7 +30717,8 @@ void tg_gui_archive_more_row(tg_chat_list_row *rows, int *count, int max)
     row = &rows[*count];
     memset(row, 0, sizeof(*row));
     row->index = TG_GUI_ARCHIVE_MORE_INDEX;
-    strcpy(row->name, "More archived chats...");
+    tg_locale_format(row->name, sizeof(row->name), "%s",
+                     TG_STR_U8(MSG_S_MORE_ARCHIVED));
     *count += 1;
 }
 
@@ -31553,7 +31571,7 @@ static int tg_gui_search_global_page(int more, FILE *stream)
         row.id = (unsigned long)k; /* the hit's number, not a message id */
         row.text = line;
         row.sender = e->is_self
-                         ? "Saved Messages"
+                         ? TG_STR_U8(MSG_S_SAVED_MESSAGES)
                          : (e->title[0] != '\0' ? e->title : e->username);
         row.has_time = (m->date != 0UL);
         row.local_epoch =
@@ -33506,7 +33524,7 @@ int tg_gui_session_react(unsigned long message_id, unsigned long reaction_cp,
                 message_id & 0x7fffffffUL, applied);
         tg_gui_log(line);
         sprintf(state->status, "%.47s", reaction_cp == 0UL ?
-            "Reaction removed" : "Reaction sent");
+            TG_STR(MSG_ST_REACTION_REMOVED) : TG_STR(MSG_ST_REACTION_SENT));
     } else {
         char line[96];
 
@@ -36059,7 +36077,7 @@ static int tg_mtproto_file_find_document(const tg_mtproto_file_ctx *fc,
     }
     tg_shared_message_texts_busy = 0;
     strcpy(tg_dl_diag, msg_id != 0UL ? "message not in history page"
-                                     : "no recent file in this chat");
+                                     : TG_STR(MSG_S_NO_RECENT_FILE));
     return 1;
 #undef texts
 }
@@ -36354,15 +36372,15 @@ static int tg_mtproto_photo_dims_ok(unsigned long w, unsigned long h,
                                     const char **why)
 {
     if (w == 0UL || h == 0UL) {
-        *why = "image has no size";
+        *why = TG_STR(MSG_S_IMG_NO_SIZE);
         return 0;
     }
     if (w + h > 10000UL) {
-        *why = "image too large for a photo (width + height over 10000)";
+        *why = TG_STR(MSG_S_IMG_TOO_LARGE);
         return 0;
     }
     if (w > h * 20UL || h > w * 20UL) {
-        *why = "image too elongated for a photo (over 20:1)";
+        *why = TG_STR(MSG_S_IMG_TOO_LONG);
         return 0;
     }
     return 1;
@@ -36448,7 +36466,7 @@ static int tg_mtproto_photo_file_valid(FILE *f, const char **why)
     unsigned long w = 0UL;
     unsigned long h = 0UL;
 
-    *why = "not a valid JPEG or PNG";
+    *why = TG_STR(MSG_S_IMG_NOT_VALID);
     if (f == 0 || fseek(f, 0L, SEEK_SET) != 0 ||
         fread(magic, 1, 4, f) != 4) {
         if (f != 0) {
@@ -36458,7 +36476,7 @@ static int tg_mtproto_photo_file_valid(FILE *f, const char **why)
     }
     if (magic[0] == 0xffU && magic[1] == 0xd8U) {
         if (!tg_mtproto_jpeg_file_valid(f)) {
-            *why = "not a valid JPEG (truncated or damaged)";
+            *why = TG_STR(MSG_S_IMG_BAD_JPEG);
             return 0;
         }
         return 1; /* the JPEG walk already refused an empty frame */
@@ -36466,7 +36484,7 @@ static int tg_mtproto_photo_file_valid(FILE *f, const char **why)
     if (magic[0] == 0x89U && magic[1] == 'P' && magic[2] == 'N' &&
         magic[3] == 'G') {
         if (!tg_mtproto_png_file_valid(f, &w, &h)) {
-            *why = "not a valid PNG (truncated or damaged)";
+            *why = TG_STR(MSG_S_IMG_BAD_PNG);
             return 0;
         }
         return tg_mtproto_photo_dims_ok(w, h, why) ? 2 : 0;
@@ -36533,17 +36551,16 @@ static const char *tg_mtproto_upload_failure_text(const char *raw)
         return 0;
     }
     if (strcmp(raw, "PHOTO_INVALID_DIMENSIONS") == 0) {
-        return "Telegram refused the photo's size (width + height over "
-               "10000, or over 20:1)";
+        return TG_STR(MSG_S_UP_PHOTO_SIZE);
     }
     if (strcmp(raw, "PHOTO_EXT_INVALID") == 0) {
-        return "Telegram does not take this image format as a photo";
+        return TG_STR(MSG_S_UP_PHOTO_FORMAT);
     }
     if (strcmp(raw, "IMAGE_PROCESS_FAILED") == 0) {
-        return "Telegram could not decode the image";
+        return TG_STR(MSG_S_UP_PHOTO_DECODE);
     }
     if (strcmp(raw, "PHOTO_SAVE_FILE_INVALID") == 0) {
-        return "Telegram could not save the photo";
+        return TG_STR(MSG_S_UP_PHOTO_SAVE);
     }
     return raw;
 }
@@ -36558,53 +36575,58 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
                                           char *hint,
                                           unsigned long hint_size)
 {
+    /* each failure's line (the login screen's status: 47 letters) and
+       its hint, by their numbers in the catalog and their English texts */
+#define TG_LG(line, hint) (long)(line), line##_STR, (long)(hint), hint##_STR
     static const struct {
         const char *name;
+        long line_id;
         const char *line;
+        long hint_id;
         const char *hint;
     } known[] = {
-        {"PHONE_NUMBER_INVALID", "That number is not valid",
-         "Type it with the country code, e.g. +39 3331234567"},
-        {"PHONE_NUMBER_BANNED", "Telegram has banned this number",
-         "Only Telegram can lift the ban"},
-        {"PHONE_NUMBER_FLOOD", "Too many codes asked for this number",
-         "Telegram blocks new codes for a while: try tomorrow"},
-        {"PHONE_PASSWORD_FLOOD", "Too many password attempts",
-         "Wait a while, then try again"},
-        {"PHONE_CODE_INVALID", "Wrong code - try again",
-         "Type the latest code Telegram sent you"},
-        {"PHONE_CODE_EMPTY", "Type the code first",
-         "Telegram sent it to your other devices or by SMS"},
-        {"PHONE_CODE_EXPIRED", "That code has expired",
-         "Press ENTER on your number for a new code"},
-        {"PHONE_NUMBER_UNOCCUPIED", "No Telegram account for this number",
-         "Create one in the Telegram app on a phone first"},
+        {"PHONE_NUMBER_INVALID",
+         TG_LG(MSG_ST_LG_NUMBER_INVALID, MSG_S_LGH_COUNTRY_CODE)},
+        {"PHONE_NUMBER_BANNED",
+         TG_LG(MSG_ST_LG_NUMBER_BANNED, MSG_S_LGH_ONLY_TELEGRAM)},
+        {"PHONE_NUMBER_FLOOD",
+         TG_LG(MSG_ST_LG_TOO_MANY_CODES, MSG_S_LGH_TRY_TOMORROW)},
+        {"PHONE_PASSWORD_FLOOD",
+         TG_LG(MSG_ST_LG_TOO_MANY_PASSWORDS, MSG_S_LGH_WAIT_A_WHILE)},
+        {"PHONE_CODE_INVALID",
+         TG_LG(MSG_ST_LG_WRONG_CODE, MSG_S_LGH_LATEST_CODE)},
+        {"PHONE_CODE_EMPTY",
+         TG_LG(MSG_ST_LG_CODE_FIRST, MSG_S_LGH_SENT_ELSEWHERE)},
+        {"PHONE_CODE_EXPIRED",
+         TG_LG(MSG_ST_LG_CODE_EXPIRED, MSG_S_LGH_ENTER_FOR_NEW)},
+        {"PHONE_NUMBER_UNOCCUPIED",
+         TG_LG(MSG_ST_LG_NO_ACCOUNT, MSG_S_LGH_CREATE_ON_PHONE)},
         {"PHONE_NUMBER_APP_SIGNUP_FORBIDDEN",
-         "No Telegram account for this number",
-         "Create one in the Telegram app on a phone first"},
-        {"PASSWORD_HASH_INVALID", "Wrong password - try again",
-         "It is your Telegram two-step verification password"},
-        {"AUTH_RESTART", "Telegram asks to start over",
-         "Type your number again"},
-        {"SMS_CODE_CREATE_FAILED", "Telegram could not send the code",
-         "Try again in a few minutes"},
-        {"SEND_CODE_UNAVAILABLE", "No other way to send this code",
-         "Look for it in the Telegram app on your phone"},
-        {"API_ID_INVALID", "Telegram refused this program's key",
+         TG_LG(MSG_ST_LG_NO_ACCOUNT, MSG_S_LGH_CREATE_ON_PHONE)},
+        {"PASSWORD_HASH_INVALID",
+         TG_LG(MSG_ST_LG_WRONG_PASSWORD, MSG_S_LGH_TWO_STEP)},
+        {"AUTH_RESTART",
+         TG_LG(MSG_ST_LG_START_OVER, MSG_S_LGH_NUMBER_AGAIN)},
+        {"SMS_CODE_CREATE_FAILED",
+         TG_LG(MSG_ST_LG_CODE_NOT_SENT, MSG_S_LGH_FEW_MINUTES)},
+        {"SEND_CODE_UNAVAILABLE",
+         TG_LG(MSG_ST_LG_NO_OTHER_WAY, MSG_S_LGH_LOOK_IN_APP)},
+        {"API_ID_INVALID",
 #if defined(TG_API_HAS_DEFAULT)
-         "Remove data/telegram-api.txt if you made one, or update"},
+         TG_LG(MSG_ST_LG_KEY_REFUSED, MSG_S_LGH_REMOVE_API_FILE)},
 #else
-         "Check the api_id and api_hash in data/telegram-api.txt"},
+         TG_LG(MSG_ST_LG_KEY_REFUSED, MSG_S_LGH_CHECK_API_FILE)},
 #endif
-        {"API_ID_PUBLISHED_FLOOD", "Telegram is limiting logins from this app",
-         "Try again later"},
-        {"UPDATE_APP_TO_LOGIN", "Telegram wants a newer app to log in",
-         "Look for a new release of " TG_APP_NAME}
+        {"API_ID_PUBLISHED_FLOOD",
+         TG_LG(MSG_ST_LG_LIMITING, MSG_S_LGH_TRY_LATER)},
+        {"UPDATE_APP_TO_LOGIN",
+         TG_LG(MSG_ST_LG_NEWER_APP, MSG_S_LGH_NEW_RELEASE)}
     };
+#undef TG_LG
     unsigned long i;
     const char *l;
     const char *h;
-    char wait[48];
+    char wait[96];
 
     if (line == 0 || line_size == 0UL || hint == 0 || hint_size == 0UL) {
         return;
@@ -36616,8 +36638,8 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
     h = 0;
     for (i = 0UL; i < sizeof(known) / sizeof(known[0]); ++i) {
         if (strcmp(raw, known[i].name) == 0) {
-            l = known[i].line;
-            h = known[i].hint;
+            l = tg_str(known[i].line_id, known[i].line);
+            h = tg_str(known[i].hint_id, known[i].hint);
             break;
         }
     }
@@ -36626,15 +36648,18 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
 
         /* rounded up: "wait 1 minute" must not come back too early */
         if (s < 120UL) {
-            sprintf(wait, "Telegram asks to wait %lu seconds", s);
+            tg_locale_format(wait, sizeof(wait),
+                             TG_STR(MSG_S_LGH_WAIT_SECONDS), s);
         } else if (s < 7200UL) {
-            sprintf(wait, "Telegram asks to wait %lu minutes",
-                    (s + 59UL) / 60UL);
+            tg_locale_format(wait, sizeof(wait),
+                             TG_STR(MSG_S_LGH_WAIT_MINUTES),
+                             (s + 59UL) / 60UL);
         } else {
-            sprintf(wait, "Telegram asks to wait %lu hours",
-                    ((s + 3599UL) / 3600UL) % 1000UL);
+            tg_locale_format(wait, sizeof(wait),
+                             TG_STR(MSG_S_LGH_WAIT_HOURS),
+                             ((s + 3599UL) / 3600UL) % 1000UL);
         }
-        l = "Too many attempts";
+        l = TG_STR(MSG_ST_LG_TOO_MANY_ATTEMPTS);
         h = wait;
     }
     if (l == 0) {
@@ -36647,13 +36672,14 @@ static void tg_mtproto_login_failure_text(const char *raw, char *line,
             }
         }
         if (rpc_name) {
-            l = "Telegram refused the login";
-            sprintf(wait, "Try again later (%.24s)", raw);
+            l = TG_STR(MSG_ST_LG_REFUSED);
+            tg_locale_format(wait, sizeof(wait),
+                             TG_STR(MSG_S_LGH_TRY_LATER_NAME), raw);
             h = wait;
         } else {
             /* a transport reason, or nothing at all: the exchange broke */
-            l = "Could not reach Telegram";
-            h = "Check the network connection and try again";
+            l = TG_STR(MSG_ST_LG_NO_REACH);
+            h = TG_STR(MSG_S_LGH_CHECK_NETWORK);
         }
     }
     strncpy(line, l, (size_t)(line_size - 1UL));
@@ -36692,6 +36718,9 @@ static int tg_mtproto_login_failure_text_self_test(void)
     for (i = 0UL; i < sizeof(c) / sizeof(c[0]); ++i) {
         tg_mtproto_login_failure_text(c[i].raw, line, sizeof(line), hint,
                                       sizeof(hint));
+        if (tg_locale_language()[0] != '\0') {
+            continue; /* the words below are the English ones */
+        }
         if (strcmp(line, c[i].line) != 0 || strstr(hint, c[i].hint_has) == 0) {
             printf("mtproto self-test: login failure \"%s\" reads \"%s\" / "
                    "\"%s\"\n", c[i].raw, line, hint);
@@ -38114,8 +38143,9 @@ static int tg_mtproto_download_begin_at(const tg_mtproto_file_ctx *fc,
                 known, free_kb, tg_gui_dl.doc.size_hi, tg_gui_dl.doc.size_lo);
 
             if (need_kb != 0UL) {
-                sprintf(tg_gui_dl.fail, "Need %lu KB, only %lu KB free in %.16s",
-                        need_kb, free_kb, dir);
+                tg_locale_format(tg_gui_dl.fail, sizeof(tg_gui_dl.fail),
+                                 TG_STR(MSG_S_DL_NEED_ROOM), need_kb,
+                                 free_kb, dir);
                 tg_gui_log("download: not enough room on the volume");
                 tg_mtproto_close_quiet_stream(tg_gui_dl.quiet, stream);
                 tg_gui_dl.quiet = 0;
@@ -38249,8 +38279,9 @@ static void tg_mtproto_download_note_full(void)
 
     if (tg_platform_volume_free_kb(dir, &free_kb) == 0 &&
         free_kb < TG_GUI_DL_FULL_KB) {
-        sprintf(tg_gui_dl.fail, "%.20s is full, stopped at %lu KB", dir,
-                tg_gui_dl.offset / 1024UL);
+        tg_locale_format(tg_gui_dl.fail, sizeof(tg_gui_dl.fail),
+                         TG_STR(MSG_S_DL_VOLUME_FULL), dir,
+                         tg_gui_dl.offset / 1024UL);
     }
 }
 
@@ -40599,7 +40630,7 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
         !tg_update_parse(version, want, 0) ||
         !tg_update_parse(tg_update_own_version, own, 0) ||
         tg_update_cmp(want, own) <= 0) {
-        tg_gui_install_say(emsg, emsg_size, "No update to install");
+        tg_gui_install_say(emsg, emsg_size, TG_STR(MSG_S_UPD_NONE));
         return 5;
     }
     tg_update_manifest_name(version, name, sizeof(name));
@@ -40611,7 +40642,7 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
     if (rc != 0) {
         if (rc == 3) {
             tg_gui_install_say(emsg, emsg_size,
-                               "The update is not in the channel yet");
+                               TG_STR(MSG_S_UPD_NOT_IN_CHANNEL));
         }
         return rc;
     }
@@ -40630,14 +40661,14 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
                        : "update: the manifest is not one for this version");
         tg_gui_install_say(emsg, emsg_size,
                            rc == TG_UPDATE_BAD_SIGNATURE
-                               ? "The update is not signed by its author"
-                               : "The update's manifest is not right");
+                               ? TG_STR(MSG_S_UPD_NOT_SIGNED)
+                               : TG_STR(MSG_S_UPD_BAD_MANIFEST));
         return 5;
     }
     e = tg_update_manifest_lane(&m, tg_update_lane());
     if (e == 0) {
         tg_gui_install_say(emsg, emsg_size,
-                           "No update for this system in that version");
+                           TG_STR(MSG_S_UPD_NOT_FOR_SYSTEM));
         return 3;
     }
     (void)remove(tg_gui_update_program_new);
@@ -40649,10 +40680,10 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
     if (rc != 0) {
         if (rc == 3) {
             tg_gui_install_say(emsg, emsg_size,
-                               "The program is not in the channel yet");
+                               TG_STR(MSG_S_UPD_PROGRAM_MISSING));
         } else if (rc == 4) {
             tg_gui_install_say(emsg, emsg_size,
-                               "The program that came is not the signed one");
+                               TG_STR(MSG_S_UPD_PROGRAM_WRONG));
         }
         return rc;
     }
@@ -40660,8 +40691,7 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
     if (!tg_gui_file_sha256_hex(tg_gui_update_program, old_hex)) {
         (void)remove(tg_gui_update_program_new);
         tg_gui_install_say(emsg, emsg_size,
-                           "The program is not called Amigram here: "
-                           "update it by hand");
+                           TG_STR(MSG_S_UPD_OTHER_NAME));
         return 6;
     }
     (void)remove(tg_gui_update_program_old);
@@ -40669,7 +40699,7 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
                             old_hex) != 0) {
         (void)remove(tg_gui_update_program_new);
         tg_gui_install_say(emsg, emsg_size,
-                           "Could not keep the old program as Amigram.old");
+                           TG_STR(MSG_S_UPD_OLD_NOT_KEPT));
         return 6;
     }
     /* The new one in its place; the old one back if that fails. */
@@ -40682,8 +40712,7 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
         (void)remove(tg_gui_update_program_new);
         tg_gui_log("update: the new program could not be written, old back");
         tg_gui_install_say(emsg, emsg_size,
-                           "Could not write the new program: the old one "
-                           "is back");
+                           TG_STR(MSG_S_UPD_NOT_WRITTEN));
         return 6;
     }
     (void)remove(tg_gui_update_program_new);
@@ -41222,7 +41251,7 @@ int tg_gui_session_update_install(const char *version, char *emsg,
     tg_mtproto_file_ctx fc;
 
     if (!tg_gui_session_state.open || tg_gui_dl.active) {
-        tg_gui_install_say(emsg, emsg_size, "Not connected to Telegram");
+        tg_gui_install_say(emsg, emsg_size, TG_STR(MSG_S_UPD_NOT_CONNECTED));
         return 2;
     }
     tg_gui_session_query_ctx(&q);
@@ -41335,8 +41364,8 @@ int tg_gui_session_update_look(char *line, unsigned long size, FILE *stream)
     if (tg_update_parse(tg_gui_update_own, own_v, 0)) {
         tg_update_format(own, own_v);
     }
-    sprintf(text, "%.16s %s is out: you have %s. See About",
-            tg_gui_update_name, newer, own);
+    tg_locale_format(text, sizeof(text), TG_STR(MSG_ST_UPDATE_OUT),
+                     tg_gui_update_name, newer, own);
     for (i = 0UL; i + 1UL < size && text[i] != '\0'; ++i) {
         line[i] = text[i];
     }
@@ -42734,24 +42763,24 @@ static int tg_gui_session_apply_typing(FILE *stream, int allow_member_fetch)
             }
         }
         if (name != 0) {
-            static const char suffix[] = " is typing...";
+            /* the name gives way to the words: they are what says it */
+            const char *suffix = TG_STR(MSG_S_IS_TYPING);
+            unsigned long slen = (unsigned long)strlen(suffix);
             unsigned long di;
             unsigned long si;
 
             di = 0UL;
-            while (di + sizeof(suffix) < sizeof(built) &&
-                   name[di] != '\0') {
+            while (di + slen + 1UL < sizeof(built) && name[di] != '\0') {
                 built[di] = name[di];
                 ++di;
             }
-            for (si = 0UL; si + 1UL < sizeof(suffix) &&
-                           di + 1UL < sizeof(built); ++si) {
+            for (si = 0UL; si < slen && di + 1UL < sizeof(built); ++si) {
                 built[di++] = suffix[si];
             }
             built[di] = '\0';
             want = built;
         } else {
-            want = "someone is typing...";
+            want = TG_STR(MSG_S_SOMEONE_IS_TYPING);
         }
     }
     if (strcmp(gs->typing, want) != 0) {
@@ -43688,7 +43717,9 @@ int tg_gui_session_pin_message_as(unsigned long message_id, int pin,
         tg_gui_pinned_line_shown(tg_gui_pinned_want_text,
                                  sizeof(tg_gui_pinned_want_text), shown);
         if (tg_gui_pinned_want_text[0] == '\0') {
-            strcpy(tg_gui_pinned_want_text, "Message");
+            tg_locale_format(tg_gui_pinned_want_text,
+                             sizeof(tg_gui_pinned_want_text), "%s",
+                             TG_STR_U8(MSG_S_MESSAGE));
         }
         tg_gui_pinned_want_id = message_id;
         if (tg_gui_pinned_gone_id == message_id) {
@@ -44574,14 +44605,13 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
                                         sizeof(api_hash), stream, label) != 0) {
         tg_gui_login_copy(tg_gui_session_state.login.last_error,
                           sizeof(tg_gui_session_state.login.last_error),
-                          "This program's key file is missing");
+                          TG_STR(MSG_ST_LG_NO_KEY_FILE));
         tg_gui_login_copy(tg_gui_session_state.login.last_hint,
                           sizeof(tg_gui_session_state.login.last_hint),
                           /* Only a build without a pair of its own gets
                              here; packages carry one, so it is a self-made
                              build that needs the file. */
-                          "Put your api_id and api_hash in "
-                          "data/telegram-api.txt");
+                          TG_STR(MSG_S_LGH_PUT_API_FILE));
         return TG_GUI_LOGIN_ERROR;
     }
     tg_gui_login_copy(tg_gui_session_state.login.phone,
@@ -44592,10 +44622,10 @@ int tg_gui_session_login_send_code(const char *phone, FILE *stream)
     if (tg_gui_session_state.login.phone[0] == '\0') {
         tg_gui_login_copy(tg_gui_session_state.login.last_error,
                           sizeof(tg_gui_session_state.login.last_error),
-                          "Type your phone number");
+                          TG_STR(MSG_ST_LG_TYPE_NUMBER));
         tg_gui_login_copy(tg_gui_session_state.login.last_hint,
                           sizeof(tg_gui_session_state.login.last_hint),
-                          "With the country code, e.g. +39 3331234567");
+                          TG_STR(MSG_S_LGH_WITH_COUNTRY_CODE));
         tg_mtproto_secure_zero(api_hash, sizeof(api_hash));
         return TG_GUI_LOGIN_BAD_PHONE;
     }
@@ -44717,11 +44747,10 @@ int tg_gui_session_login_qr_step(FILE *stream)
                                         sizeof(api_hash), stream, label) != 0) {
         tg_gui_login_copy(tg_gui_session_state.login.last_error,
                           sizeof(tg_gui_session_state.login.last_error),
-                          "This program's key file is missing");
+                          TG_STR(MSG_ST_LG_NO_KEY_FILE));
         tg_gui_login_copy(tg_gui_session_state.login.last_hint,
                           sizeof(tg_gui_session_state.login.last_hint),
-                          "Put your api_id and api_hash in "
-                          "data/telegram-api.txt");
+                          TG_STR(MSG_S_LGH_PUT_API_FILE));
         return TG_GUI_LOGIN_ERROR;
     }
     tg_gui_login_copy(tg_gui_session_state.login.api_id,
@@ -44933,6 +44962,6 @@ int tg_gui_session_login_activate(tg_gui_state *state, FILE *stream)
         tg_gui_login_copy(state->title, sizeof(state->title), TG_APP_TITLE);
     }
     tg_gui_login_copy(state->status, sizeof(state->status),
-                      "Live - F1-F10 chats, Amiga+Q quits");
+                      TG_STR(MSG_ST_LIVE));
     return 0;
 }

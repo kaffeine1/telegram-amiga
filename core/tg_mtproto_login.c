@@ -9,6 +9,7 @@
 #include "tg_mtproto_login.h"
 #include "tg_avatar.h"
 #include "tg_file.h"
+#include "tg_locale.h"
 #include "tg_text_style.h"
 
 #define TG_MTPROTO_CURRENT_LAYER 214UL
@@ -9304,7 +9305,11 @@ void tg_mtproto_poll_text(const tg_mtproto_poll *poll, char *out,
     if (poll == 0) {
         return;
     }
-    tg_poll_text_add(out, size, &n, poll->quiz ? "[Quiz] " : "[Poll] ");
+    tg_poll_text_add(out, size, &n, "[");
+    tg_poll_text_add(out, size, &n,
+                     poll->quiz ? TG_STR_U8(MSG_S_W_QUIZ)
+                                : TG_STR_U8(MSG_S_W_POLL));
+    tg_poll_text_add(out, size, &n, "] ");
     tg_poll_text_add(out, size, &n, poll->question);
     for (k = 0; k < (int)poll->answer_count; ++k) {
         const tg_mtproto_poll_answer *a = &poll->answers[k];
@@ -9327,33 +9332,40 @@ void tg_mtproto_poll_text(const tg_mtproto_poll *poll, char *out,
         tg_poll_text_add(out, size, &n, number);
         tg_poll_text_add(out, size, &n, a->text);
         if (a->chosen && a->correct) {
-            tg_poll_text_add(out, size, &n, " (your answer, right)");
+            tg_poll_text_add(out, size, &n,
+                             TG_STR_U8(MSG_S_POLL_YOUR_RIGHT));
         } else if (a->chosen) {
             tg_poll_text_add(out, size, &n,
-                             poll->quiz ? " (your answer)" : " (your vote)");
+                             poll->quiz ? TG_STR_U8(MSG_S_POLL_YOUR_ANSWER)
+                                        : TG_STR_U8(MSG_S_POLL_YOUR_VOTE));
         } else if (a->correct) {
-            tg_poll_text_add(out, size, &n, " (right)");
+            tg_poll_text_add(out, size, &n, TG_STR_U8(MSG_S_POLL_RIGHT));
         }
     }
+    tg_poll_text_add(out, size, &n, "\n");
     if (poll->has_results) {
-        sprintf(number, "\n%lu %s", poll->total_voters,
-                poll->total_voters == 1UL ? "vote" : "votes");
+        tg_locale_format(number, sizeof(number),
+                         poll->total_voters == 1UL
+                             ? TG_STR_U8(MSG_S_POLL_VOTES_1)
+                             : TG_STR_U8(MSG_S_POLL_VOTES),
+                         poll->total_voters);
         tg_poll_text_add(out, size, &n, number);
     } else {
         tg_poll_text_add(out, size, &n,
-                         poll->closed ? "\nNo results"
-                                      : "\nVote to see the results");
+                         poll->closed ? TG_STR_U8(MSG_S_POLL_NO_RESULTS)
+                                      : TG_STR_U8(MSG_S_POLL_VOTE_TO_SEE));
     }
     if (poll->closed) {
-        tg_poll_text_add(out, size, &n, ", closed");
+        tg_poll_text_add(out, size, &n, TG_STR_U8(MSG_S_POLL_CLOSED));
     } else if (poll->multiple && !poll->voted) {
-        tg_poll_text_add(out, size, &n, ", several answers allowed");
+        tg_poll_text_add(out, size, &n, TG_STR_U8(MSG_S_POLL_SEVERAL));
     }
     if (poll->public_voters) {
-        tg_poll_text_add(out, size, &n, ", votes are public");
+        tg_poll_text_add(out, size, &n, TG_STR_U8(MSG_S_POLL_PUBLIC));
     }
     if (poll->solution[0] != '\0') {
-        tg_poll_text_add(out, size, &n, "\nWhy: ");
+        tg_poll_text_add(out, size, &n, "\n");
+        tg_poll_text_add(out, size, &n, TG_STR_U8(MSG_S_POLL_WHY));
         tg_poll_text_add(out, size, &n, poll->solution);
     }
     tg_poll_text_whole(out, size, n);
@@ -9682,8 +9694,10 @@ int tg_mtproto_poll_voters_text(const tg_mtproto_poll *poll,
                                            tg_poll_votes[v].id_hi,
                                            tg_poll_votes[v].id_lo, name,
                                            sizeof(name))) {
-                strcpy(name, tg_poll_votes[v].is_user ? "someone"
-                                                      : "a channel");
+                tg_locale_format(name, sizeof(name), "%s",
+                                 tg_poll_votes[v].is_user
+                                     ? TG_STR_U8(MSG_S_POLL_SOMEONE)
+                                     : TG_STR_U8(MSG_S_POLL_A_CHANNEL));
             }
             tg_msg_sanitize_markers(name);
             len = tg_poll_chars(name);
@@ -9710,11 +9724,15 @@ int tg_mtproto_poll_voters_text(const tg_mtproto_poll *poll,
         if (!named) {
             /* part of a longer list says nothing about the rest of it */
             tg_poll_text_add(out, size, &n,
-                             count > listed ? " nobody so far" : " nobody");
+                             count > listed
+                                 ? TG_STR_U8(MSG_S_POLL_NOBODY_SO_FAR)
+                                 : TG_STR_U8(MSG_S_POLL_NOBODY));
         }
     }
     if (count > listed) {
-        sprintf(number, "\nThe latest %lu of %lu votes.", listed, count);
+        tg_poll_text_add(out, size, &n, "\n");
+        tg_locale_format(number, sizeof(number),
+                         TG_STR_U8(MSG_S_POLL_LATEST), listed, count);
         tg_poll_text_add(out, size, &n, number);
     }
     tg_poll_text_whole(out, size, n);
@@ -9978,15 +9996,15 @@ static const char *tg_mtproto_media_label(unsigned long constructor)
 {
     switch (constructor) {
     case 0x695150d7UL: /* messageMediaPhoto */
-        return "[Photo]";
+        return TG_STR_U8(MSG_S_LBL_PHOTO);
     case 0x52d8ccd9UL: /* messageMediaDocument (file/video/voice/sticker/gif) */
-        return "[File]";
+        return TG_STR_U8(MSG_S_LBL_FILE);
     case 0x56e0d474UL: /* messageMediaGeo */
-        return "[Location]";
+        return TG_STR_U8(MSG_S_LBL_LOCATION);
     case 0xddf10c3bUL: /* messageMediaWebPage: a link the server previewed */
-        return "[Link]";
+        return TG_STR_U8(MSG_S_LBL_LINK);
     default:
-        return "[Media]";
+        return TG_STR_U8(MSG_S_LBL_MEDIA);
     }
 }
 
@@ -10050,7 +10068,8 @@ static void tg_mtproto_format_document_label(
        .webp behind it has a name nobody wants to read and a size nobody cares
        about, so neither appears. */
     if (doc->kind == (unsigned char)TG_MTPROTO_DOC_KIND_STICKER) {
-        tg_label_append(text, text_size, &n, "[Sticker");
+        tg_label_append(text, text_size, &n, "[");
+        tg_label_append(text, text_size, &n, TG_STR_U8(MSG_S_W_STICKER));
         if (doc->alt[0] != '\0') {
             tg_label_append(text, text_size, &n, " ");
             tg_label_append(text, text_size, &n, doc->alt);
@@ -10086,9 +10105,11 @@ static void tg_mtproto_format_document_label(
     case TG_MTPROTO_DOC_KIND_GIF:
         /* A clip is its length and its shape, not its camera filename. The
            GIF keeps the size because it is the one people forward blind. */
+        tg_label_append(text, text_size, &n, "[");
         tg_label_append(text, text_size, &n,
                         (doc->kind == TG_MTPROTO_DOC_KIND_GIF)
-                            ? "[GIF" : "[Video");
+                            ? TG_STR_U8(MSG_S_W_GIF)
+                            : TG_STR_U8(MSG_S_W_VIDEO));
         if (dur_buf[0] != '\0') {
             tg_label_append(text, text_size, &n, " ");
             tg_label_append(text, text_size, &n, dur_buf);
@@ -10103,7 +10124,8 @@ static void tg_mtproto_format_document_label(
         return;
     case TG_MTPROTO_DOC_KIND_VOICE:
         /* A voice note has no name worth showing: it is a length. */
-        tg_label_append(text, text_size, &n, "[Voice");
+        tg_label_append(text, text_size, &n, "[");
+        tg_label_append(text, text_size, &n, TG_STR_U8(MSG_S_W_VOICE));
         if (dur_buf[0] != '\0') {
             tg_label_append(text, text_size, &n, " ");
             tg_label_append(text, text_size, &n, dur_buf);
@@ -10114,8 +10136,11 @@ static void tg_mtproto_format_document_label(
         return;
     case TG_MTPROTO_DOC_KIND_AUDIO:
         /* Music keeps its filename: it is how you know which track it is. */
-        name = (doc->file_name[0] != '\0') ? doc->file_name : "Audio";
-        tg_label_append(text, text_size, &n, "[Audio: ");
+        name = (doc->file_name[0] != '\0') ? doc->file_name
+                                           : TG_STR_U8(MSG_S_W_AUDIO);
+        tg_label_append(text, text_size, &n, "[");
+        tg_label_append(text, text_size, &n, TG_STR_U8(MSG_S_W_AUDIO));
+        tg_label_append(text, text_size, &n, ": ");
         tg_label_append(text, text_size, &n, name);
         if (dur_buf[0] != '\0') {
             tg_label_append(text, text_size, &n, " ");
@@ -10128,8 +10153,14 @@ static void tg_mtproto_format_document_label(
     default:
         break;
     }
-    name = (doc->file_name[0] != '\0') ? doc->file_name : "File";
-    for (p = "[File: "; *p != '\0' && n + 1UL < text_size; ++p) {
+    name = (doc->file_name[0] != '\0') ? doc->file_name
+                                       : TG_STR_U8(MSG_S_W_FILE);
+    text[n++] = '[';
+    for (p = TG_STR_U8(MSG_S_W_FILE); *p != '\0' && n + 1UL < text_size;
+         ++p) {
+        text[n++] = *p;
+    }
+    for (p = ": "; *p != '\0' && n + 1UL < text_size; ++p) {
         text[n++] = *p;
     }
     for (p = name; *p != '\0' && n + 1UL < text_size; ++p) {
@@ -10277,7 +10308,10 @@ tg_mtproto_tl_status tg_mtproto_read_web_page(tg_mtproto_tl_reader *reader,
             out->text[n++] = '\n';
             out->text[n] = '\0';
         }
-        tg_label_append(out->text, sizeof(out->text), &n, "[Link: ");
+        tg_label_append(out->text, sizeof(out->text), &n, "[");
+        tg_label_append(out->text, sizeof(out->text), &n,
+                        TG_STR_U8(MSG_S_W_LINK));
+        tg_label_append(out->text, sizeof(out->text), &n, ": ");
         if (site[0] != '\0') {
             tg_label_append(out->text, sizeof(out->text), &n, site);
             if (title[0] != '\0') {
@@ -11496,35 +11530,107 @@ static void tg_service_duration(char *out, unsigned long seconds)
     }
 }
 
+/* The whole of a text into out, cut where the buffer ends. */
+static void tg_service_set(char *out, unsigned long out_size,
+                           const char *text)
+{
+    unsigned long length = 0UL;
+
+    if (out_size == 0UL) {
+        return;
+    }
+    out[0] = '\0';
+    tg_service_put(out, out_size, &length, text);
+}
+
 /* An auto-delete period the way the clients offer it: 1 day, 1 week... */
-static void tg_service_period(char *out, unsigned long period)
+static void tg_service_period(char *out, unsigned long out_size,
+                              unsigned long period)
 {
     unsigned long n;
-    const char *unit;
+    const char *one;
+    const char *many;
 
     if (period % 86400UL == 0UL &&
         (period / 86400UL == 30UL || period / 86400UL == 31UL)) {
-        strcpy(out, "1 month");
+        tg_service_set(out, out_size, TG_STR_U8(MSG_SV_PERIOD_MONTH));
         return;
     }
     if (period % 604800UL == 0UL) {
         n = period / 604800UL;
-        unit = "week";
+        one = TG_STR_U8(MSG_SV_PERIOD_WEEK_1);
+        many = TG_STR_U8(MSG_SV_PERIOD_WEEKS);
     } else if (period % 86400UL == 0UL) {
         n = period / 86400UL;
-        unit = "day";
+        one = TG_STR_U8(MSG_SV_PERIOD_DAY_1);
+        many = TG_STR_U8(MSG_SV_PERIOD_DAYS);
     } else if (period % 3600UL == 0UL) {
         n = period / 3600UL;
-        unit = "hour";
+        one = TG_STR_U8(MSG_SV_PERIOD_HOUR_1);
+        many = TG_STR_U8(MSG_SV_PERIOD_HOURS);
     } else if (period % 60UL == 0UL) {
         n = period / 60UL;
-        unit = "minute";
+        one = TG_STR_U8(MSG_SV_PERIOD_MINUTE_1);
+        many = TG_STR_U8(MSG_SV_PERIOD_MINUTES);
     } else {
         n = period;
-        unit = "second";
+        one = TG_STR_U8(MSG_SV_PERIOD_SECOND_1);
+        many = TG_STR_U8(MSG_SV_PERIOD_SECONDS);
     }
-    sprintf(out, "%lu %s%s", n % 100000UL, unit, n == 1UL ? "" : "s");
+    if (n == 1UL) {
+        tg_service_set(out, out_size, one);
+    } else {
+        tg_locale_format(out, (size_t)out_size, many, n % 100000UL);
+    }
 }
+
+/* A service line is a whole sentence of the catalog, since a language may
+   want the words in another order or none before the verb. MSG_SV_X takes
+   who did it first; MSG_SV_X_YOU is the reader's own ("You pinned a
+   message", "Hai fissato un messaggio"). The texts are joined to names
+   that are UTF-8, so the catalog's go in as UTF-8 too. */
+/* (each text's name is pasted in the macro that takes it: handed on as
+   it is to another macro, it would be replaced by its number first) */
+#if defined(TG_LOCALE_CHECK_FORMATS)
+#define TG_SV_F(id, text) (text)
+#else
+#define TG_SV_F(id, text) tg_locale_utf8(tg_str((long)(id), (text)))
+#endif
+#define TG_SV(name) \
+    do { \
+        if (actor_is_self) { \
+            tg_service_set(out, out_size, \
+                           TG_SV_F(name##_YOU, name##_YOU_STR)); \
+        } else { \
+            tg_locale_format(out, (size_t)out_size, \
+                             TG_SV_F(name, name##_STR), who); \
+        } \
+    } while (0)
+#define TG_SV1(name, a) \
+    do { \
+        if (actor_is_self) { \
+            tg_locale_format(out, (size_t)out_size, \
+                             TG_SV_F(name##_YOU, name##_YOU_STR), (a)); \
+        } else { \
+            tg_locale_format(out, (size_t)out_size, \
+                             TG_SV_F(name, name##_STR), who, (a)); \
+        } \
+    } while (0)
+#define TG_SV2(name, a, b) \
+    do { \
+        if (actor_is_self) { \
+            tg_locale_format(out, (size_t)out_size, \
+                             TG_SV_F(name##_YOU, name##_YOU_STR), (a), \
+                             (b)); \
+        } else { \
+            tg_locale_format(out, (size_t)out_size, \
+                             TG_SV_F(name, name##_STR), who, (a), (b)); \
+        } \
+    } while (0)
+#define TG_SVT(name) \
+    tg_service_set(out, out_size, TG_SV_F(name, name##_STR))
+#define TG_SVT1(name, a) \
+    tg_locale_format(out, (size_t)out_size, TG_SV_F(name, name##_STR), (a))
 
 void tg_mtproto_service_text(const tg_mtproto_message_text *message,
                              const char *actor, int actor_is_self,
@@ -11536,7 +11642,6 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
     int post;
     int self_named;
     int video;
-    unsigned long length = 0UL;
     char number[40];
 
     if (out == 0 || out_size == 0UL) {
@@ -11546,8 +11651,8 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
     if (message == 0) {
         return;
     }
-    who = actor_is_self ? "You"
-          : (actor != 0 && actor[0] != '\0') ? actor : "Someone";
+    who = (actor != 0 && actor[0] != '\0') ? actor
+                                           : TG_STR_U8(MSG_SV_SOMEONE);
     whom = (target != 0 && target[0] != '\0') ? target : 0;
     post = (message->flags & (1UL << 14)) != 0UL; /* a channel's own post */
     /* the one user the action names is the one who acted: joined, left */
@@ -11556,212 +11661,188 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
                  message->from_id_hi == message->service_user_hi &&
                  message->from_id_lo == message->service_user_lo;
     video = (message->service_flags & 4UL) != 0UL;
-#define TG_SERVICE_PUT(s) tg_service_put(out, out_size, &length, (s))
     switch (message->service_action) {
     case TG_ACTION_CHAT_CREATE:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" created the group \"");
-        TG_SERVICE_PUT(message->text);
-        TG_SERVICE_PUT("\"");
+        TG_SV1(MSG_SV_CREATED_GROUP, message->text);
         break;
     case TG_ACTION_CHAT_EDIT_TITLE:
         if (post) {
-            TG_SERVICE_PUT("Channel renamed to \"");
+            TG_SVT1(MSG_SV_CHANNEL_RENAMED, message->text);
         } else {
-            TG_SERVICE_PUT(who);
-            TG_SERVICE_PUT(" changed the group name to \"");
+            TG_SV1(MSG_SV_GROUP_NAME, message->text);
         }
-        TG_SERVICE_PUT(message->text);
-        TG_SERVICE_PUT("\"");
         break;
     case TG_ACTION_CHAT_EDIT_PHOTO:
         if (post) {
-            TG_SERVICE_PUT("Channel photo updated");
+            TG_SVT(MSG_SV_CHANNEL_PHOTO);
         } else {
-            TG_SERVICE_PUT(who);
-            TG_SERVICE_PUT(" changed the group photo");
+            TG_SV(MSG_SV_GROUP_PHOTO);
         }
         break;
     case TG_ACTION_CHAT_DELETE_PHOTO:
         if (post) {
-            TG_SERVICE_PUT("Channel photo removed");
+            TG_SVT(MSG_SV_CHANNEL_PHOTO_GONE);
         } else {
-            TG_SERVICE_PUT(who);
-            TG_SERVICE_PUT(" removed the group photo");
+            TG_SV(MSG_SV_GROUP_PHOTO_GONE);
         }
         break;
     case TG_ACTION_CHAT_ADD_USER:
-        TG_SERVICE_PUT(who);
         if (self_named || message->service_user_count == 0UL) {
-            TG_SERVICE_PUT(" joined the group");
+            TG_SV(MSG_SV_JOINED);
+        } else if (whom != 0 && message->service_user_count == 2UL) {
+            TG_SV1(MSG_SV_ADDED_MORE_1, whom);
+        } else if (whom != 0 && message->service_user_count > 2UL) {
+            TG_SV2(MSG_SV_ADDED_MORE, whom,
+                   (message->service_user_count - 1UL) % 10000UL);
         } else if (whom != 0) {
-            TG_SERVICE_PUT(" added ");
-            TG_SERVICE_PUT(whom);
-            if (message->service_user_count > 1UL) {
-                sprintf(number, " and %lu more",
-                        (message->service_user_count - 1UL) % 10000UL);
-                TG_SERVICE_PUT(number);
-            }
+            TG_SV1(MSG_SV_ADDED, whom);
         } else if (message->service_user_count > 1UL) {
-            sprintf(number, " added %lu members",
-                    message->service_user_count % 10000UL);
-            TG_SERVICE_PUT(number);
+            TG_SV1(MSG_SV_ADDED_MEMBERS,
+                   message->service_user_count % 10000UL);
         } else {
-            TG_SERVICE_PUT(" added a member");
+            TG_SV(MSG_SV_ADDED_A_MEMBER);
         }
         break;
     case TG_ACTION_CHAT_DELETE_USER:
-        TG_SERVICE_PUT(who);
         if (self_named) {
-            TG_SERVICE_PUT(" left the group");
+            TG_SV(MSG_SV_LEFT);
+        } else if (whom != 0) {
+            TG_SV1(MSG_SV_REMOVED, whom);
         } else {
-            TG_SERVICE_PUT(" removed ");
-            TG_SERVICE_PUT(whom != 0 ? whom : "a member");
+            TG_SV(MSG_SV_REMOVED_A_MEMBER);
         }
         break;
     case TG_ACTION_CHAT_JOINED_BY_LINK:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" joined the group via invite link");
+        TG_SV(MSG_SV_JOINED_LINK);
         break;
     case TG_ACTION_CHAT_JOINED_BY_REQUEST:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" joined the group");
+        TG_SV(MSG_SV_JOINED);
         break;
     case TG_ACTION_CHANNEL_CREATE:
-        TG_SERVICE_PUT("Channel \"");
-        TG_SERVICE_PUT(message->text);
-        TG_SERVICE_PUT("\" created");
+        TG_SVT1(MSG_SV_CHANNEL_CREATED, message->text);
         break;
     case TG_ACTION_CHAT_MIGRATE_TO:
     case TG_ACTION_CHANNEL_MIGRATE_FROM:
-        TG_SERVICE_PUT("The group was upgraded to a supergroup");
+        TG_SVT(MSG_SV_UPGRADED);
         break;
     case TG_ACTION_PIN_MESSAGE:
-        TG_SERVICE_PUT(who);
         if (message->reply_quote[0] != '\0') {
-            TG_SERVICE_PUT(" pinned \"");
-            TG_SERVICE_PUT(message->reply_quote);
-            TG_SERVICE_PUT("\"");
+            TG_SV1(MSG_SV_PINNED_QUOTE, message->reply_quote);
         } else {
-            TG_SERVICE_PUT(" pinned a message");
+            TG_SV(MSG_SV_PINNED);
         }
         break;
     case TG_ACTION_HISTORY_CLEAR:
-        TG_SERVICE_PUT("History was cleared");
+        TG_SVT(MSG_SV_HISTORY_CLEARED);
         break;
     case TG_ACTION_GAME_SCORE:
-        TG_SERVICE_PUT(who);
-        sprintf(number, " scored %lu", message->service_value % 1000000000UL);
-        TG_SERVICE_PUT(number);
+        TG_SV1(MSG_SV_SCORED, message->service_value % 1000000000UL);
         break;
     case TG_ACTION_PHONE_CALL:
         if ((message->service_flags & 2UL) != 0UL &&
             message->service_value > 0UL) {
-            TG_SERVICE_PUT(message->is_out ? "Outgoing " : "Incoming ");
-            TG_SERVICE_PUT(video ? "video call (" : "call (");
             tg_service_duration(number, message->service_value);
-            TG_SERVICE_PUT(number);
-            TG_SERVICE_PUT(")");
+            if (message->is_out) {
+                if (video) {
+                    TG_SVT1(MSG_SV_VIDEO_CALL_OUT, number);
+                } else {
+                    TG_SVT1(MSG_SV_CALL_OUT, number);
+                }
+            } else if (video) {
+                TG_SVT1(MSG_SV_VIDEO_CALL_IN, number);
+            } else {
+                TG_SVT1(MSG_SV_CALL_IN, number);
+            }
         } else if (message->is_out) {
-            TG_SERVICE_PUT(video ? "Cancelled video call" : "Cancelled call");
+            if (video) {
+                TG_SVT(MSG_SV_VIDEO_CALL_CANCELLED);
+            } else {
+                TG_SVT(MSG_SV_CALL_CANCELLED);
+            }
+        } else if (video) {
+            TG_SVT(MSG_SV_VIDEO_CALL_MISSED);
         } else {
-            TG_SERVICE_PUT(video ? "Missed video call" : "Missed call");
+            TG_SVT(MSG_SV_CALL_MISSED);
         }
         break;
     case TG_ACTION_SCREENSHOT_TAKEN:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" took a screenshot");
+        TG_SV(MSG_SV_SCREENSHOT);
         break;
     case TG_ACTION_CUSTOM:
-        TG_SERVICE_PUT(message->text);
+        tg_service_set(out, out_size, message->text);
         break;
     case TG_ACTION_BOT_ALLOWED:
-        TG_SERVICE_PUT("You allowed this bot to message you");
+        TG_SVT(MSG_SV_BOT_ALLOWED);
         break;
     case TG_ACTION_CONTACT_SIGN_UP:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" joined Telegram");
+        TG_SV(MSG_SV_JOINED_TELEGRAM);
         break;
     case TG_ACTION_GROUP_CALL:
         if ((message->service_flags & 1UL) != 0UL) {
-            TG_SERVICE_PUT("Video chat ended (");
             tg_service_duration(number, message->service_value);
-            TG_SERVICE_PUT(number);
-            TG_SERVICE_PUT(")");
+            TG_SVT1(MSG_SV_VIDEO_CHAT_ENDED, number);
         } else if (post) {
-            TG_SERVICE_PUT("Live stream started");
+            TG_SVT(MSG_SV_LIVE_STARTED);
         } else {
-            TG_SERVICE_PUT(who);
-            TG_SERVICE_PUT(" started a video chat");
+            TG_SV(MSG_SV_VIDEO_CHAT_STARTED);
         }
         break;
     case TG_ACTION_INVITE_TO_GROUP_CALL:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" invited ");
-        TG_SERVICE_PUT(whom != 0 ? whom : "members");
-        TG_SERVICE_PUT(" to the video chat");
+        if (whom != 0) {
+            TG_SV1(MSG_SV_INVITED, whom);
+        } else {
+            TG_SV(MSG_SV_INVITED_MEMBERS);
+        }
         break;
     case TG_ACTION_SET_MESSAGES_TTL:
-        TG_SERVICE_PUT(who);
         if (message->service_value == 0UL) {
-            TG_SERVICE_PUT(" turned off auto-delete");
+            TG_SV(MSG_SV_TTL_OFF);
         } else {
-            TG_SERVICE_PUT(" set messages to auto-delete after ");
-            tg_service_period(number, message->service_value);
-            TG_SERVICE_PUT(number);
+            tg_service_period(number, sizeof(number),
+                              message->service_value);
+            TG_SV1(MSG_SV_TTL_SET, number);
         }
         break;
     case TG_ACTION_GROUP_CALL_SCHEDULED:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" scheduled a video chat");
+        TG_SV(MSG_SV_VIDEO_CHAT_SCHEDULED);
         break;
     case TG_ACTION_SET_CHAT_THEME:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" changed the chat theme");
+        TG_SV(MSG_SV_THEME);
         break;
     case TG_ACTION_SET_CHAT_WALLPAPER:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" changed the chat wallpaper");
+        TG_SV(MSG_SV_WALLPAPER);
         break;
     case TG_ACTION_TOPIC_CREATE:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" created the topic \"");
-        TG_SERVICE_PUT(message->text);
-        TG_SERVICE_PUT("\"");
+        TG_SV1(MSG_SV_TOPIC_CREATED, message->text);
         break;
     case TG_ACTION_TOPIC_EDIT:
-        TG_SERVICE_PUT(who);
         if (message->text[0] != '\0') {
-            TG_SERVICE_PUT(" renamed the topic to \"");
-            TG_SERVICE_PUT(message->text);
-            TG_SERVICE_PUT("\"");
+            TG_SV1(MSG_SV_TOPIC_RENAMED, message->text);
         } else if ((message->service_value & 1UL) != 0UL) {
-            TG_SERVICE_PUT(" closed the topic");
+            TG_SV(MSG_SV_TOPIC_CLOSED);
         } else if ((message->service_value & 2UL) != 0UL) {
-            TG_SERVICE_PUT(" reopened the topic");
+            TG_SV(MSG_SV_TOPIC_REOPENED);
         } else if ((message->service_value & 4UL) != 0UL) {
-            TG_SERVICE_PUT(" hid the topic");
+            TG_SV(MSG_SV_TOPIC_HID);
         } else if ((message->service_value & 8UL) != 0UL) {
-            TG_SERVICE_PUT(" showed the topic again");
+            TG_SV(MSG_SV_TOPIC_SHOWED);
         } else {
-            TG_SERVICE_PUT(" edited the topic");
+            TG_SV(MSG_SV_TOPIC_EDITED);
         }
         break;
     case TG_ACTION_SUGGEST_PROFILE_PHOTO:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" suggested a profile photo");
+        TG_SV(MSG_SV_PROFILE_PHOTO);
         break;
     case TG_ACTION_BOOST_APPLY:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" boosted the group");
         if (message->service_value > 1UL) {
-            sprintf(number, " %lu times", message->service_value % 100000UL);
-            TG_SERVICE_PUT(number);
+            TG_SV1(MSG_SV_BOOSTED_TIMES, message->service_value % 100000UL);
+        } else {
+            TG_SV(MSG_SV_BOOSTED);
         }
         break;
     case TG_ACTION_WEB_VIEW_DATA_SENT:
     case TG_ACTION_WEB_VIEW_DATA_SENT_ME:
-        TG_SERVICE_PUT("Data sent to the bot");
+        TG_SVT(MSG_SV_DATA_SENT);
         break;
     case TG_ACTION_GIFT_PREMIUM:
     case TG_ACTION_GIFT_CODE:
@@ -11770,39 +11851,42 @@ void tg_mtproto_service_text(const tg_mtproto_message_text *message,
     case TG_ACTION_STAR_GIFT:
     case TG_ACTION_STAR_GIFT_UNIQUE:
     case TG_ACTION_GIFT_TON:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" sent a gift");
+        TG_SV(MSG_SV_GIFT);
         break;
     case TG_ACTION_GIVEAWAY_LAUNCH:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" started a giveaway");
+        TG_SV(MSG_SV_GIVEAWAY);
         break;
     case TG_ACTION_GIVEAWAY_RESULTS:
-        TG_SERVICE_PUT("Giveaway results");
+        TG_SVT(MSG_SV_GIVEAWAY_RESULTS);
         break;
     case TG_ACTION_PAYMENT_SENT:
-        TG_SERVICE_PUT("Payment sent");
+        TG_SVT(MSG_SV_PAYMENT_SENT);
         break;
     case TG_ACTION_PAYMENT_SENT_ME:
-        TG_SERVICE_PUT("Payment received");
+        TG_SVT(MSG_SV_PAYMENT_RECEIVED);
         break;
     case TG_ACTION_PAYMENT_REFUNDED:
-        TG_SERVICE_PUT("Payment refunded");
+        TG_SVT(MSG_SV_PAYMENT_REFUNDED);
         break;
     case TG_ACTION_CONFERENCE_CALL:
-        TG_SERVICE_PUT("Group call");
+        TG_SVT(MSG_SV_GROUP_CALL);
         break;
     case TG_ACTION_TODO_COMPLETIONS:
     case TG_ACTION_TODO_APPEND_TASKS:
-        TG_SERVICE_PUT(who);
-        TG_SERVICE_PUT(" updated a checklist");
+        TG_SV(MSG_SV_CHECKLIST);
         break;
     default:
-        TG_SERVICE_PUT("Service message");
+        TG_SVT(MSG_SV_SERVICE);
         break;
     }
-#undef TG_SERVICE_PUT
+    tg_trim_utf8_tail(out); /* a cut never leaves half a letter */
 }
+#undef TG_SV
+#undef TG_SV1
+#undef TG_SV2
+#undef TG_SVT
+#undef TG_SVT1
+#undef TG_SV_F
 
 tg_mtproto_tl_status tg_mtproto_parse_updates_summary(
     unsigned long constructor,
@@ -12577,6 +12661,150 @@ static int tg_service_message_self_test(void)
     if (strcmp(small, "Marco j") != 0) {
         puts("login self-test: a service line runs past its buffer");
         return 2;
+    }
+    return 0;
+}
+
+/* The end of a UTF-8 text is a whole letter. */
+static int tg_text_ends_whole(const char *text)
+{
+    unsigned long n = (unsigned long)strlen(text);
+    unsigned long lead = n;
+    unsigned char b;
+
+    if (n == 0UL) {
+        return 1;
+    }
+    while (lead > 0UL &&
+           ((unsigned char)text[lead - 1UL] & 0xc0U) == 0x80U) {
+        --lead;
+    }
+    if (lead == 0UL) {
+        return 0;
+    }
+    b = (unsigned char)text[lead - 1UL];
+    if (b < 0x80U) {
+        return lead == n;
+    }
+    return n - (lead - 1UL) ==
+           (b >= 0xf0U ? 4UL : b >= 0xe0U ? 3UL : 2UL);
+}
+
+/* What the session says in the language of the catalog open: every
+   service line, for the reader and for someone else, with names that
+   hold two-byte letters, is not empty, ends inside its buffer and on a
+   whole letter, in a wide buffer and in one too short for it; so do a
+   media label and a poll. The English words have their own tests; this
+   one is for a translation, and runs before the catalog is shut for
+   them. */
+int tg_mtproto_session_texts_self_test(void)
+{
+    static const unsigned long actions[] = {
+        TG_ACTION_CHAT_CREATE, TG_ACTION_CHAT_EDIT_TITLE,
+        TG_ACTION_CHAT_EDIT_PHOTO, TG_ACTION_CHAT_DELETE_PHOTO,
+        TG_ACTION_CHAT_ADD_USER, TG_ACTION_CHAT_DELETE_USER,
+        TG_ACTION_CHAT_JOINED_BY_LINK, TG_ACTION_CHAT_JOINED_BY_REQUEST,
+        TG_ACTION_CHANNEL_CREATE, TG_ACTION_CHAT_MIGRATE_TO,
+        TG_ACTION_PIN_MESSAGE, TG_ACTION_HISTORY_CLEAR,
+        TG_ACTION_GAME_SCORE, TG_ACTION_PHONE_CALL,
+        TG_ACTION_SCREENSHOT_TAKEN, TG_ACTION_BOT_ALLOWED,
+        TG_ACTION_CONTACT_SIGN_UP, TG_ACTION_GROUP_CALL,
+        TG_ACTION_INVITE_TO_GROUP_CALL, TG_ACTION_SET_MESSAGES_TTL,
+        TG_ACTION_GROUP_CALL_SCHEDULED, TG_ACTION_SET_CHAT_THEME,
+        TG_ACTION_SET_CHAT_WALLPAPER, TG_ACTION_TOPIC_CREATE,
+        TG_ACTION_TOPIC_EDIT, TG_ACTION_SUGGEST_PROFILE_PHOTO,
+        TG_ACTION_BOOST_APPLY, TG_ACTION_WEB_VIEW_DATA_SENT,
+        TG_ACTION_STAR_GIFT, TG_ACTION_GIVEAWAY_LAUNCH,
+        TG_ACTION_GIVEAWAY_RESULTS, TG_ACTION_PAYMENT_SENT,
+        TG_ACTION_PAYMENT_SENT_ME, TG_ACTION_PAYMENT_REFUNDED,
+        TG_ACTION_CONFERENCE_CALL, TG_ACTION_TODO_COMPLETIONS,
+        0x12345678UL
+    };
+    static tg_mtproto_message_text m;
+    static tg_mtproto_poll poll;
+    static char text[512];
+    char wide[256];
+    char tight[24];
+    unsigned long i;
+    unsigned long variant;
+    int self;
+
+    for (i = 0UL; i < sizeof(actions) / sizeof(actions[0]); ++i) {
+        for (variant = 0UL; variant < 6UL; ++variant) {
+            for (self = 0; self < 2; ++self) {
+                const char *target = (variant & 1UL) ? "Ren\xc3\xa9" "e" : 0;
+
+                memset(&m, 0, sizeof(m));
+                m.service_action = actions[i];
+                m.service_user_count = variant; /* none, one, some, many */
+                m.service_value = variant == 0UL ? 0UL : variant * 3600UL;
+                m.service_flags = variant;
+                m.is_out = self;
+                if (variant >= 2UL) {
+                    strcpy(m.text, "Caff\xc3\xa8 e t\xc3\xa8");
+                }
+                if (variant == 4UL) {
+                    strcpy(m.reply_quote, "perch\xc3\xa9");
+                }
+                tg_mtproto_service_text(&m, "Zo\xc3\xab", self, target,
+                                        wide, sizeof(wide));
+                tg_mtproto_service_text(&m, "Zo\xc3\xab", self, target,
+                                        tight, sizeof(tight));
+                if ((wide[0] == '\0' && actions[i] != TG_ACTION_CUSTOM) ||
+                    strlen(wide) >= sizeof(wide) ||
+                    strlen(tight) >= sizeof(tight) ||
+                    !tg_text_ends_whole(wide) ||
+                    !tg_text_ends_whole(tight)) {
+                    printf("session texts self-test: service line of "
+                           "action %08lx, case %lu: \"%s\" / \"%s\"\n",
+                           actions[i], variant, wide, tight);
+                    return 2;
+                }
+            }
+        }
+    }
+    {
+        tg_mtproto_document_meta doc;
+
+        memset(&doc, 0, sizeof(doc));
+        for (i = 0UL; i < 6UL; ++i) {
+            doc.kind = (unsigned char)i;
+            doc.duration = 95UL;
+            doc.size_lo = 300000UL;
+            tg_mtproto_format_document_label(&doc, wide, sizeof(wide));
+            tg_mtproto_format_document_label(&doc, tight, sizeof(tight));
+            if (wide[0] != '[' || !tg_text_ends_whole(wide) ||
+                !tg_text_ends_whole(tight) ||
+                strlen(tight) >= sizeof(tight)) {
+                printf("session texts self-test: label of kind %lu: "
+                       "\"%s\" / \"%s\"\n", i, wide, tight);
+                return 2;
+            }
+        }
+    }
+    memset(&poll, 0, sizeof(poll));
+    strcpy(poll.question, "Pizza o pasta?");
+    poll.answer_count = 2;
+    strcpy(poll.answers[0].text, "Pizza");
+    strcpy(poll.answers[1].text, "Pasta");
+    poll.answers[0].chosen = 1;
+    poll.answers[0].correct = 1;
+    poll.has_results = 1;
+    poll.total_voters = 1UL;
+    poll.quiz = 1;
+    poll.public_voters = 1;
+    strcpy(poll.solution, "perch\xc3\xa9 s\xc3\xac");
+    for (i = 0UL; i < 2UL; ++i) {
+        poll.closed = (unsigned char)i;
+        tg_mtproto_poll_text(&poll, text, sizeof(text));
+        tg_mtproto_poll_text(&poll, tight, sizeof(tight));
+        if (text[0] != '[' || strstr(text, "Pasta") == 0 ||
+            !tg_text_ends_whole(text) || !tg_text_ends_whole(tight) ||
+            strlen(tight) >= sizeof(tight)) {
+            printf("session texts self-test: poll: \"%s\" / \"%s\"\n",
+                   text, tight);
+            return 2;
+        }
     }
     return 0;
 }

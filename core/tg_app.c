@@ -25,6 +25,7 @@
 #include "tg_https.h"
 #include "tg_http.h"
 #include "tg_json.h"
+#include "tg_locale.h"
 #include "tg_log.h"
 #include "tg_mtproto.h"
 #include "tg_mtproto_crypto.h"
@@ -34,6 +35,15 @@
 #include "tg_offset_state.h"
 #include "tg_platform.h"
 #include "tg_telegram.h"
+
+/* A text of the catalog made ready for the console (Latin-1, or UTF-8
+   where --charset utf8 says so). With TG_LOCALE_CHECK_FORMATS it is the
+   English literal, for the compiler's check of the arguments. */
+#if defined(TG_LOCALE_CHECK_FORMATS)
+#define TG_ATXT(name) (name##_STR)
+#else
+#define TG_ATXT(name) tg_console_ui_text(tg_str((long)(name), name##_STR))
+#endif
 #include "tg_text_client.h"
 #include "tg_mtproto_login.h"
 #include <sys/time.h>
@@ -158,14 +168,14 @@ static int tg_run_mtproto_ensure_api_file(const char *api_file)
     return 0;
 #endif
     if (api_status != TG_FILE_OPEN_FAILED) {
-        printf("Login setup required: cannot read %s (%s).\n", api_file,
+        printf(TG_ATXT(MSG_T_SETUP_CANNOT_READ), api_file,
                tg_file_status_name(api_status));
         return 2;
     }
 
-    printf("Login setup: %s was not found.\n", api_file);
-    puts(TG_APP_NAME " will create it now.");
-    puts("Enter the Telegram API credentials for this client.");
+    printf(TG_ATXT(MSG_T_SETUP_NOT_FOUND), api_file);
+    printf(TG_ATXT(MSG_T_SETUP_WILL_CREATE), TG_APP_NAME);
+    puts(TG_ATXT(MSG_T_SETUP_ENTER_API));
     if (tg_app_prompt_required_line("api_id: ", api_id,
                                     sizeof(api_id)) != 0 ||
         tg_app_prompt_required_line("api_hash: ", api_hash,
@@ -192,7 +202,7 @@ static int tg_run_mtproto_ensure_api_file(const char *api_file)
                tg_file_status_name(api_status));
         return 2;
     }
-    printf("Saved %s.\n", api_file);
+    printf(TG_ATXT(MSG_T_SETUP_SAVED), api_file);
     return 0;
 }
 
@@ -223,8 +233,8 @@ static int tg_app_login_key_to_auth(const char *auth_file)
 {
     (void)remove(auth_file);
     if (rename(TG_MTPROTO_LOGIN_KEY_FILE, auth_file) != 0) {
-        printf("Signed in, but %s could not be written: rename %s to it.\n",
-               auth_file, TG_MTPROTO_LOGIN_KEY_FILE);
+        printf(TG_ATXT(MSG_T_SIGNED_IN_RENAME), auth_file,
+               TG_MTPROTO_LOGIN_KEY_FILE);
         return 2;
     }
     return 0;
@@ -271,9 +281,9 @@ static int tg_run_mtproto_start_file(const char *api_file,
     if (session_status == TG_MTPROTO_SESSION_FILE_ERROR ||
         session_status == TG_MTPROTO_SESSION_PARSE_ERROR) {
         if (session_status == TG_MTPROTO_SESSION_FILE_ERROR) {
-            puts("No saved login found. Starting login wizard.");
+            puts(TG_ATXT(MSG_T_NO_SAVED_LOGIN));
         } else {
-            puts("Saved login is not usable. Starting login wizard.");
+            puts(TG_ATXT(MSG_T_SAVED_LOGIN_UNUSABLE));
         }
 #if defined(TG_LOWMEM)
         /* Plain-68000 build: the first login runs a Diffie-Hellman exchange,
@@ -283,29 +293,15 @@ static int tg_run_mtproto_start_file(const char *api_file,
         {
             char answer[16];
 
+            /* three texts of the catalog: the reason, the steps (with
+               the program's name twice), what to press */
             puts("");
-            puts("--------------------------------------------------------");
-            puts("FIRST LOGIN ON A 68000: PLEASE READ");
+            fputs(TG_ATXT(MSG_T_68000_LOGIN_WHY), stdout);
             puts("");
-            puts("Signing in for the first time needs a Diffie-Hellman key");
-            puts("exchange. On a plain 68000 that takes a very long time and");
-            puts("may run out of stack. Do it once elsewhere instead:");
+            printf(TG_ATXT(MSG_T_68000_LOGIN_STEPS), TG_APP_NAME,
+                   TG_APP_NAME);
             puts("");
-            puts(" 1. Run " TG_APP_NAME " on a faster Amiga (68020 or better)");
-            puts("    or in an emulator (WinUAE, FS-UAE, vAmiga) using the");
-            puts("    standard package, and log in there.");
-            puts(" 2. Copy telegram-auth.bin from that drawer into THIS");
-            puts("    drawer, next to " TG_APP_NAME ". Copying");
-            puts("    data/telegram-peers.txt too brings your chat list.");
-            puts(" 3. Start this program again: it reuses that login and");
-            puts("    goes straight to the chats.");
-            puts("");
-            puts("The login then works on both machines, one at a time:");
-            puts("Telegram closes a login it sees in two places at once.");
-            puts("");
-            puts("Press RETURN to attempt the login here anyway,");
-            puts("or Ctrl+C to quit and follow the steps above.");
-            puts("--------------------------------------------------------");
+            fputs(TG_ATXT(MSG_T_68000_LOGIN_PRESS), stdout);
             fflush(stdout);
             if (fgets(answer, (int)sizeof(answer), stdin) == 0) {
                 return 2; /* console closed: nothing sensible left to do */
@@ -356,12 +352,12 @@ static int tg_run_mtproto_start_file(const char *api_file,
 #endif
 
     if (!tg_run_mtproto_peer_cache_exists(peer_cache_file)) {
-        puts("Login complete.");
-        puts("No cached chat list found.");
-        puts("Use /add name inside " TG_APP_NAME " to search users or groups.");
+        puts(TG_ATXT(MSG_T_START_LOGIN_COMPLETE));
+        puts(TG_ATXT(MSG_T_START_NO_CHAT_LIST));
+        printf(TG_ATXT(MSG_T_START_USE_ADD), TG_APP_NAME);
     }
 
-    puts("Opening chat.");
+    puts(TG_ATXT(MSG_T_START_OPENING_CHAT));
 #ifdef TG_DIAG_TRACE
     tg_gui_log("diag: entering chat loop");
 #endif
@@ -3955,6 +3951,23 @@ static int tg_run_telegram_send_last_default(const tg_config *config)
 }
 #endif /* !TG_NO_LEGACY_BOT */
 
+#if !defined(TG_NO_SELFTEST)
+/* The session's suites compare the English words of what they print. With
+   a catalog open (TG_CATALOG on the host) what the session says in that
+   language is checked first, for fit and whole letters; then the catalog
+   is shut and the suite runs in English. */
+static int tg_app_session_suite_english(void)
+{
+    int rc = 0;
+
+    if (tg_locale_language()[0] != '\0') {
+        rc = tg_mtproto_session_texts_self_test();
+        tg_locale_close();
+    }
+    return rc;
+}
+#endif
+
 #if !defined(TG_NO_GUI)
 /* The GUI model tg_app_run hands to the window, the demo and the two chat
    probes. One object, off the stack: it is over half a megabyte on a 64-bit
@@ -3980,7 +3993,7 @@ static tg_gui_state *tg_app_gui_state_zeroed(void)
 
 static int tg_app_gui_no_memory(void)
 {
-    puts("Not enough free memory for the window.");
+    puts(TG_ATXT(MSG_T_NO_MEMORY_FOR_WINDOW));
     return 2;
 }
 
@@ -4032,9 +4045,12 @@ static int tg_app_gui_connect(tg_gui_state *gui)
 
         /* The cached chats stay, read-only, as before the attempt. */
         if (why != 0 && why[0] != '\0') {
-            sprintf(line, "Offline: %.38s", why); /* the reason fills the bar */
+            /* the reason fills the bar */
+            tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_OFFLINE_WHY),
+                             why);
         } else {
-            strcpy(line, "Offline (cache) - Amiga+Q quits");
+            tg_locale_format(line, sizeof(line), "%s",
+                             TG_STR(MSG_ST_OFFLINE_CACHE));
         }
         tg_gui_window_startup_status(line);
         return rc;
@@ -4045,14 +4061,16 @@ static int tg_app_gui_connect(tg_gui_state *gui)
     if (gui->chat_count > 0) {
         char line[96];
 
-        sprintf(line, "Opening %.40s...", gui->title);
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_OPENING),
+                         gui->title);
         tg_gui_window_startup_status(line);
         tg_gui_log("live: open first chat start");
         (void)tg_gui_session_open_chat(
             gui->chats[gui->selected_chat].index, stdout);
         tg_gui_log("live: open first chat done");
     }
-    strcpy(gui->status, "Live - F1-F10 chats, Amiga+Q quits");
+    tg_locale_format(gui->status, sizeof(gui->status), "%s",
+                     TG_STR(MSG_ST_LIVE));
     return 0;
 }
 #endif /* !TG_NO_GUI */
@@ -4544,10 +4562,16 @@ int tg_app_run(int argc, char **argv)
     }
 
     if (config.run_chat_render_self_test) {
+        if (tg_app_session_suite_english() != 0) {
+            return 2;
+        }
         return tg_mtproto_chat_render_self_test();
     }
 
     if (config.run_chat_list_self_test) {
+        if (tg_app_session_suite_english() != 0) {
+            return 2;
+        }
         return tg_mtproto_chat_list_self_test();
     }
 
@@ -4565,7 +4589,7 @@ int tg_app_run(int argc, char **argv)
        a 68000 would never use. */
     if (config.run_gui_window || config.run_gui_live || config.run_gui_chats ||
         config.run_gui_chats_live) {
-        puts("This build has no GUI: it is the text-client package.");
+        puts(TG_ATXT(MSG_T_NO_GUI_BUILD));
         return 2;
     }
 #else
@@ -4617,13 +4641,15 @@ int tg_app_run(int argc, char **argv)
                no login code has to arrive. P turns to the number. */
             gui->mode = TG_GUI_MODE_LOGIN_QR;
             strcpy(gui->title, TG_APP_TITLE);
-            strcpy(gui->status, "Getting a code from Telegram...");
+            tg_locale_format(gui->status, sizeof(gui->status), "%s",
+                             TG_STR(MSG_ST_GETTING_CODE));
         } else {
             fclose(auth_probe);
             (void)tg_gui_session_project_cached(config.gui_chats_cache_file,
                                                 gui);
             tg_app_gui_title_from_selection(gui);
-            strcpy(gui->status, "Connecting to Telegram...");
+            tg_locale_format(gui->status, sizeof(gui->status), "%s",
+                             TG_STR(MSG_ST_CONNECTING));
             tg_app_gui_api_file = config.mtproto_auth_api_file;
             tg_app_gui_auth_file = config.mtproto_auth_file;
             tg_app_gui_chats_file = config.gui_chats_cache_file;
@@ -4714,11 +4740,13 @@ int tg_app_run(int argc, char **argv)
                 gui->title[k] = name[k];
             }
             gui->title[k] = '\0';
-            strcpy(gui->status, "Read-only - F1-F10 chats, Amiga+Q quits");
+            tg_locale_format(gui->status, sizeof(gui->status), "%s",
+                             TG_STR(MSG_ST_READ_ONLY));
         } else {
             strcpy(gui->title, TG_APP_TITLE);
-            strcpy(gui->status, missing ? "Cache chat non trovata"
-                                       : "Nessuna chat in cache");
+            tg_locale_format(gui->status, sizeof(gui->status), "%s",
+                             missing ? TG_STR(MSG_ST_NO_CHAT_CACHE)
+                                     : TG_STR(MSG_ST_CHAT_CACHE_EMPTY));
         }
         return tg_gui_run_window(gui);
     }
@@ -4734,14 +4762,23 @@ int tg_app_run(int argc, char **argv)
     }
 
     if (config.run_mtproto_self_test) {
+        if (tg_app_session_suite_english() != 0) {
+            return 2;
+        }
         return tg_mtproto_self_test();
     }
 
     if (config.run_mtproto_self_test_fast) {
+        if (tg_app_session_suite_english() != 0) {
+            return 2;
+        }
         return tg_mtproto_self_test_fast();
     }
 
     if (config.run_mtproto_self_test_heavy) {
+        if (tg_app_session_suite_english() != 0) {
+            return 2;
+        }
         return tg_mtproto_self_test_heavy();
     }
 #endif /* !TG_NO_SELFTEST */
@@ -5056,7 +5093,7 @@ int tg_app_run(int argc, char **argv)
             if (chat_probe_status == TG_MTPROTO_SESSION_FILE_ERROR) {
                 int wizard_rc;
 
-                puts("No saved login found. Starting login wizard.");
+                puts(TG_ATXT(MSG_T_NO_SAVED_LOGIN));
                 wizard_rc = tg_mtproto_auth_login_wizard_file(
                     config.mtproto_auth_host, config.mtproto_auth_port,
                     config.mtproto_auth_dc_id, config.mtproto_auth_api_file,

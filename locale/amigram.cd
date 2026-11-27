@@ -846,6 +846,98 @@ MSG_ST_FIND_ALL_PROMPT (456//)
 All chats: type, ENTER searches (ESC ends)
 MSG_ST_FIND_CHAT_PROMPT (457//)
 Find in chat: type, ENTER searches (ESC ends)
+MSG_ST_CODE_IN_TELEGRAM (458//)
+Code sent in Telegram on your phone
+MSG_ST_CODE_BY_SMS (459//)
+Code sent by SMS
+MSG_ST_CODE_BY_CALL (460//)
+Telegram is calling with the code
+MSG_ST_CODE_FLASH_CALL (461//)
+Read the code from the incoming call
+MSG_ST_CODE_BY_EMAIL (462//)
+Code sent to your email
+MSG_ST_CODE_WANTS_EMAIL (463//)
+Telegram wants a login email first
+MSG_ST_CODE_UNKNOWN (464//)
+Telegram did not say where it sent the code
+MSG_ST_REACT_NOT_ALLOWED (465//)
+This chat does not allow that reaction.
+MSG_ST_REACT_TOO_MANY (466//)
+This message has too many different reactions.
+MSG_ST_REACT_CANNOT (467//)
+You cannot react in this chat.
+MSG_ST_REACT_MESSAGE_GONE (468//)
+This message is no longer available.
+MSG_ST_REACT_PREMIUM (469//)
+That reaction requires Telegram Premium.
+MSG_ST_REACT_WAIT (470//)
+Please wait before reacting again.
+MSG_ST_REACT_FAILED (471//)
+Could not change the reaction. Please try again.
+MSG_ST_REACTION_REMOVED (472//)
+Reaction removed
+MSG_ST_REACTION_SENT (473//)
+Reaction sent
+MSG_ST_LG_NUMBER_INVALID (474//)
+That number is not valid
+MSG_ST_LG_NUMBER_BANNED (475//)
+Telegram has banned this number
+MSG_ST_LG_TOO_MANY_CODES (476//)
+Too many codes asked for this number
+MSG_ST_LG_TOO_MANY_PASSWORDS (477//)
+Too many password attempts
+MSG_ST_LG_WRONG_CODE (478//)
+Wrong code - try again
+MSG_ST_LG_CODE_FIRST (479//)
+Type the code first
+MSG_ST_LG_CODE_EXPIRED (480//)
+That code has expired
+MSG_ST_LG_NO_ACCOUNT (481//)
+No Telegram account for this number
+MSG_ST_LG_WRONG_PASSWORD (482//)
+Wrong password - try again
+MSG_ST_LG_START_OVER (483//)
+Telegram asks to start over
+MSG_ST_LG_CODE_NOT_SENT (484//)
+Telegram could not send the code
+MSG_ST_LG_NO_OTHER_WAY (485//)
+No other way to send this code
+MSG_ST_LG_KEY_REFUSED (486//)
+Telegram refused this program's key
+MSG_ST_LG_LIMITING (487//)
+Telegram is limiting logins from this app
+MSG_ST_LG_NEWER_APP (488//)
+Telegram wants a newer app to log in
+MSG_ST_LG_TOO_MANY_ATTEMPTS (489//)
+Too many attempts
+MSG_ST_LG_REFUSED (490//)
+Telegram refused the login
+MSG_ST_LG_NO_REACH (491//)
+Could not reach Telegram
+MSG_ST_LG_NO_KEY_FILE (492//)
+This program's key file is missing
+MSG_ST_LG_TYPE_NUMBER (493//)
+Type your phone number
+MSG_ST_UPDATE_OUT (494//)
+%.16s %s is out: you have %s. See About
+MSG_ST_OFFLINE_WHY (495//)
+Offline: %.38s
+MSG_ST_OFFLINE_CACHE (496//)
+Offline (cache) - Amiga+Q quits
+MSG_ST_OPENING (497//)
+Opening %.40s...
+MSG_ST_LIVE (498//)
+Live - F1-F10 chats, Amiga+Q quits
+MSG_ST_READ_ONLY (499//)
+Read-only - F1-F10 chats, Amiga+Q quits
+MSG_ST_NO_CHAT_CACHE (500//)
+Chat cache not found
+MSG_ST_CHAT_CACHE_EMPTY (501//)
+No chats in the cache
+MSG_ST_GETTING_CODE (502//)
+Getting a code from Telegram...
+MSG_ST_CONNECTING (503//)
+Connecting to Telegram...
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1453,3 +1545,1134 @@ MSG_G_LOGIN_KEYS (1435//)
 ENTER confirms   ESC quits
 MSG_G_NO_CODE_PRESS_S (1436//)
 No code? Press S to get it %.24s
+;
+; --- what the session says (1600-1999) -------------------------------------
+MSG_S_LBL_PHOTO (1600//)
+[Photo]
+MSG_S_LBL_FILE (1601//)
+[File]
+MSG_S_LBL_LOCATION (1602//)
+[Location]
+MSG_S_LBL_LINK (1603//)
+[Link]
+MSG_S_LBL_MEDIA (1604//)
+[Media]
+MSG_S_W_STICKER (1605//)
+Sticker
+MSG_S_W_GIF (1606//)
+GIF
+MSG_S_W_VIDEO (1607//)
+Video
+MSG_S_W_VOICE (1608//)
+Voice
+MSG_S_W_AUDIO (1609//)
+Audio
+MSG_S_W_FILE (1610//)
+File
+MSG_S_W_LINK (1611//)
+Link
+MSG_S_W_POLL (1612//)
+Poll
+MSG_S_W_QUIZ (1613//)
+Quiz
+MSG_S_POLL_YOUR_RIGHT (1614//)
+ (your answer, right)
+MSG_S_POLL_YOUR_ANSWER (1615//)
+ (your answer)
+MSG_S_POLL_YOUR_VOTE (1616//)
+ (your vote)
+MSG_S_POLL_RIGHT (1617//)
+ (right)
+MSG_S_POLL_VOTES_1 (1618//)
+%lu vote
+MSG_S_POLL_VOTES (1619//)
+%lu votes
+MSG_S_POLL_NO_RESULTS (1620//)
+No results
+MSG_S_POLL_VOTE_TO_SEE (1621//)
+Vote to see the results
+MSG_S_POLL_CLOSED (1622//)
+, closed
+MSG_S_POLL_SEVERAL (1623//)
+, several answers allowed
+MSG_S_POLL_PUBLIC (1624//)
+, votes are public
+MSG_S_POLL_WHY (1625//)
+Why: 
+MSG_S_POLL_SOMEONE (1626//)
+someone
+MSG_S_POLL_A_CHANNEL (1627//)
+a channel
+MSG_S_POLL_NOBODY_SO_FAR (1628//)
+ nobody so far
+MSG_S_POLL_NOBODY (1629//)
+ nobody
+MSG_S_POLL_LATEST (1630//)
+The latest %lu of %lu votes.
+MSG_SV_SOMEONE (1631//)
+Someone
+MSG_SV_CREATED_GROUP (1632//)
+%s created the group \"%s\"
+MSG_SV_CREATED_GROUP_YOU (1633//)
+You created the group \"%s\"
+MSG_SV_CHANNEL_RENAMED (1634//)
+Channel renamed to \"%s\"
+MSG_SV_GROUP_NAME (1635//)
+%s changed the group name to \"%s\"
+MSG_SV_GROUP_NAME_YOU (1636//)
+You changed the group name to \"%s\"
+MSG_SV_CHANNEL_PHOTO (1637//)
+Channel photo updated
+MSG_SV_GROUP_PHOTO (1638//)
+%s changed the group photo
+MSG_SV_GROUP_PHOTO_YOU (1639//)
+You changed the group photo
+MSG_SV_CHANNEL_PHOTO_GONE (1640//)
+Channel photo removed
+MSG_SV_GROUP_PHOTO_GONE (1641//)
+%s removed the group photo
+MSG_SV_GROUP_PHOTO_GONE_YOU (1642//)
+You removed the group photo
+MSG_SV_JOINED (1643//)
+%s joined the group
+MSG_SV_JOINED_YOU (1644//)
+You joined the group
+MSG_SV_ADDED (1645//)
+%s added %s
+MSG_SV_ADDED_YOU (1646//)
+You added %s
+MSG_SV_ADDED_MORE_1 (1647//)
+%s added %s and 1 more
+MSG_SV_ADDED_MORE_1_YOU (1648//)
+You added %s and 1 more
+MSG_SV_ADDED_MORE (1649//)
+%s added %s and %lu more
+MSG_SV_ADDED_MORE_YOU (1650//)
+You added %s and %lu more
+MSG_SV_ADDED_MEMBERS (1651//)
+%s added %lu members
+MSG_SV_ADDED_MEMBERS_YOU (1652//)
+You added %lu members
+MSG_SV_ADDED_A_MEMBER (1653//)
+%s added a member
+MSG_SV_ADDED_A_MEMBER_YOU (1654//)
+You added a member
+MSG_SV_LEFT (1655//)
+%s left the group
+MSG_SV_LEFT_YOU (1656//)
+You left the group
+MSG_SV_REMOVED (1657//)
+%s removed %s
+MSG_SV_REMOVED_YOU (1658//)
+You removed %s
+MSG_SV_REMOVED_A_MEMBER (1659//)
+%s removed a member
+MSG_SV_REMOVED_A_MEMBER_YOU (1660//)
+You removed a member
+MSG_SV_JOINED_LINK (1661//)
+%s joined the group via invite link
+MSG_SV_JOINED_LINK_YOU (1662//)
+You joined the group via invite link
+MSG_SV_CHANNEL_CREATED (1663//)
+Channel \"%s\" created
+MSG_SV_UPGRADED (1664//)
+The group was upgraded to a supergroup
+MSG_SV_PINNED_QUOTE (1665//)
+%s pinned \"%s\"
+MSG_SV_PINNED_QUOTE_YOU (1666//)
+You pinned \"%s\"
+MSG_SV_PINNED (1667//)
+%s pinned a message
+MSG_SV_PINNED_YOU (1668//)
+You pinned a message
+MSG_SV_HISTORY_CLEARED (1669//)
+History was cleared
+MSG_SV_SCORED (1670//)
+%s scored %lu
+MSG_SV_SCORED_YOU (1671//)
+You scored %lu
+MSG_SV_CALL_OUT (1672//)
+Outgoing call (%s)
+MSG_SV_CALL_IN (1673//)
+Incoming call (%s)
+MSG_SV_VIDEO_CALL_OUT (1674//)
+Outgoing video call (%s)
+MSG_SV_VIDEO_CALL_IN (1675//)
+Incoming video call (%s)
+MSG_SV_CALL_CANCELLED (1676//)
+Cancelled call
+MSG_SV_VIDEO_CALL_CANCELLED (1677//)
+Cancelled video call
+MSG_SV_CALL_MISSED (1678//)
+Missed call
+MSG_SV_VIDEO_CALL_MISSED (1679//)
+Missed video call
+MSG_SV_SCREENSHOT (1680//)
+%s took a screenshot
+MSG_SV_SCREENSHOT_YOU (1681//)
+You took a screenshot
+MSG_SV_BOT_ALLOWED (1682//)
+You allowed this bot to message you
+MSG_SV_JOINED_TELEGRAM (1683//)
+%s joined Telegram
+MSG_SV_JOINED_TELEGRAM_YOU (1684//)
+You joined Telegram
+MSG_SV_VIDEO_CHAT_ENDED (1685//)
+Video chat ended (%s)
+MSG_SV_LIVE_STARTED (1686//)
+Live stream started
+MSG_SV_VIDEO_CHAT_STARTED (1687//)
+%s started a video chat
+MSG_SV_VIDEO_CHAT_STARTED_YOU (1688//)
+You started a video chat
+MSG_SV_INVITED (1689//)
+%s invited %s to the video chat
+MSG_SV_INVITED_YOU (1690//)
+You invited %s to the video chat
+MSG_SV_INVITED_MEMBERS (1691//)
+%s invited members to the video chat
+MSG_SV_INVITED_MEMBERS_YOU (1692//)
+You invited members to the video chat
+MSG_SV_TTL_OFF (1693//)
+%s turned off auto-delete
+MSG_SV_TTL_OFF_YOU (1694//)
+You turned off auto-delete
+MSG_SV_TTL_SET (1695//)
+%s set messages to auto-delete after %s
+MSG_SV_TTL_SET_YOU (1696//)
+You set messages to auto-delete after %s
+MSG_SV_PERIOD_MONTH (1697//)
+1 month
+MSG_SV_PERIOD_WEEK_1 (1698//)
+1 week
+MSG_SV_PERIOD_WEEKS (1699//)
+%lu weeks
+MSG_SV_PERIOD_DAY_1 (1700//)
+1 day
+MSG_SV_PERIOD_DAYS (1701//)
+%lu days
+MSG_SV_PERIOD_HOUR_1 (1702//)
+1 hour
+MSG_SV_PERIOD_HOURS (1703//)
+%lu hours
+MSG_SV_PERIOD_MINUTE_1 (1704//)
+1 minute
+MSG_SV_PERIOD_MINUTES (1705//)
+%lu minutes
+MSG_SV_PERIOD_SECOND_1 (1706//)
+1 second
+MSG_SV_PERIOD_SECONDS (1707//)
+%lu seconds
+MSG_SV_VIDEO_CHAT_SCHEDULED (1708//)
+%s scheduled a video chat
+MSG_SV_VIDEO_CHAT_SCHEDULED_YOU (1709//)
+You scheduled a video chat
+MSG_SV_THEME (1710//)
+%s changed the chat theme
+MSG_SV_THEME_YOU (1711//)
+You changed the chat theme
+MSG_SV_WALLPAPER (1712//)
+%s changed the chat wallpaper
+MSG_SV_WALLPAPER_YOU (1713//)
+You changed the chat wallpaper
+MSG_SV_TOPIC_CREATED (1714//)
+%s created the topic \"%s\"
+MSG_SV_TOPIC_CREATED_YOU (1715//)
+You created the topic \"%s\"
+MSG_SV_TOPIC_RENAMED (1716//)
+%s renamed the topic to \"%s\"
+MSG_SV_TOPIC_RENAMED_YOU (1717//)
+You renamed the topic to \"%s\"
+MSG_SV_TOPIC_CLOSED (1718//)
+%s closed the topic
+MSG_SV_TOPIC_CLOSED_YOU (1719//)
+You closed the topic
+MSG_SV_TOPIC_REOPENED (1720//)
+%s reopened the topic
+MSG_SV_TOPIC_REOPENED_YOU (1721//)
+You reopened the topic
+MSG_SV_TOPIC_HID (1722//)
+%s hid the topic
+MSG_SV_TOPIC_HID_YOU (1723//)
+You hid the topic
+MSG_SV_TOPIC_SHOWED (1724//)
+%s showed the topic again
+MSG_SV_TOPIC_SHOWED_YOU (1725//)
+You showed the topic again
+MSG_SV_TOPIC_EDITED (1726//)
+%s edited the topic
+MSG_SV_TOPIC_EDITED_YOU (1727//)
+You edited the topic
+MSG_SV_PROFILE_PHOTO (1728//)
+%s suggested a profile photo
+MSG_SV_PROFILE_PHOTO_YOU (1729//)
+You suggested a profile photo
+MSG_SV_BOOSTED (1730//)
+%s boosted the group
+MSG_SV_BOOSTED_YOU (1731//)
+You boosted the group
+MSG_SV_BOOSTED_TIMES (1732//)
+%s boosted the group %lu times
+MSG_SV_BOOSTED_TIMES_YOU (1733//)
+You boosted the group %lu times
+MSG_SV_DATA_SENT (1734//)
+Data sent to the bot
+MSG_SV_GIFT (1735//)
+%s sent a gift
+MSG_SV_GIFT_YOU (1736//)
+You sent a gift
+MSG_SV_GIVEAWAY (1737//)
+%s started a giveaway
+MSG_SV_GIVEAWAY_YOU (1738//)
+You started a giveaway
+MSG_SV_GIVEAWAY_RESULTS (1739//)
+Giveaway results
+MSG_SV_PAYMENT_SENT (1740//)
+Payment sent
+MSG_SV_PAYMENT_RECEIVED (1741//)
+Payment received
+MSG_SV_PAYMENT_REFUNDED (1742//)
+Payment refunded
+MSG_SV_GROUP_CALL (1743//)
+Group call
+MSG_SV_CHECKLIST (1744//)
+%s updated a checklist
+MSG_SV_CHECKLIST_YOU (1745//)
+You updated a checklist
+MSG_SV_SERVICE (1746//)
+Service message
+MSG_S_ROUTE_SMS (1747//)
+by SMS
+MSG_S_ROUTE_CALL (1748//)
+by phone call
+MSG_S_ROUTE_FLASH_CALL (1749//)
+by a flash call
+MSG_S_ROUTE_MISSED_CALL (1750//)
+by a missed call
+MSG_S_ROUTE_FRAGMENT (1751//)
+via fragment.com
+MSG_S_LGH_COUNTRY_CODE (1752//)
+Type it with the country code, e.g. +39 3331234567
+MSG_S_LGH_ONLY_TELEGRAM (1753//)
+Only Telegram can lift the ban
+MSG_S_LGH_TRY_TOMORROW (1754//)
+Telegram blocks new codes for a while: try tomorrow
+MSG_S_LGH_WAIT_A_WHILE (1755//)
+Wait a while, then try again
+MSG_S_LGH_LATEST_CODE (1756//)
+Type the latest code Telegram sent you
+MSG_S_LGH_SENT_ELSEWHERE (1757//)
+Telegram sent it to your other devices or by SMS
+MSG_S_LGH_ENTER_FOR_NEW (1758//)
+Press ENTER on your number for a new code
+MSG_S_LGH_CREATE_ON_PHONE (1759//)
+Create one in the Telegram app on a phone first
+MSG_S_LGH_TWO_STEP (1760//)
+It is your Telegram two-step verification password
+MSG_S_LGH_NUMBER_AGAIN (1761//)
+Type your number again
+MSG_S_LGH_FEW_MINUTES (1762//)
+Try again in a few minutes
+MSG_S_LGH_LOOK_IN_APP (1763//)
+Look for it in the Telegram app on your phone
+MSG_S_LGH_REMOVE_API_FILE (1764//)
+Remove data/telegram-api.txt if you made one, or update
+MSG_S_LGH_CHECK_API_FILE (1765//)
+Check the api_id and api_hash in data/telegram-api.txt
+MSG_S_LGH_TRY_LATER (1766//)
+Try again later
+MSG_S_LGH_NEW_RELEASE (1767//)
+Look for a new release of Amigram
+MSG_S_LGH_WAIT_SECONDS (1768//)
+Telegram asks to wait %lu seconds
+MSG_S_LGH_WAIT_MINUTES (1769//)
+Telegram asks to wait %lu minutes
+MSG_S_LGH_WAIT_HOURS (1770//)
+Telegram asks to wait %lu hours
+MSG_S_LGH_TRY_LATER_NAME (1771//)
+Try again later (%.24s)
+MSG_S_LGH_CHECK_NETWORK (1772//)
+Check the network connection and try again
+MSG_S_LGH_PUT_API_FILE (1773//)
+Put your api_id and api_hash in data/telegram-api.txt
+MSG_S_LGH_WITH_COUNTRY_CODE (1774//)
+With the country code, e.g. +39 3331234567
+MSG_S_HIDDEN_MARK (1775//)
+ (hidden)
+MSG_S_IS_TYPING (1776//)
+ is typing...
+MSG_S_SOMEONE_IS_TYPING (1777//)
+someone is typing...
+MSG_S_A_MESSAGE_FURTHER_UP (1778//)
+a message further up
+MSG_S_MESSAGE (1779//)
+Message
+MSG_S_TOPIC_GENERAL (1780//)
+General
+MSG_S_TOPIC (1781//)
+Topic
+MSG_S_TOPICS_CHOOSE (1782//)
+Topics: choose one on the left
+MSG_S_CHOOSE_A_TOPIC (1783//)
+Choose a topic in the list on the left
+MSG_S_MORE_RESULTS (1784//)
+More results...
+MSG_S_OLDER_THAT_MATCH (1785//)
+Older messages that match
+MSG_S_SAVED_MESSAGES (1786//)
+Saved Messages
+MSG_S_MORE_ARCHIVED (1787//)
+More archived chats...
+;
+MSG_S_ALL_CHATS (1788//)
+All chats
+MSG_S_BACK_TO_LIST (1789//)
+Back to the chat list
+MSG_S_TOPIC_CLOSED (1790//)
+Closed
+MSG_S_OPEN_NO_AUTH (1791//)
+cannot read telegram-auth.bin
+MSG_S_OPEN_NO_REACH (1792//)
+cannot reach Telegram
+MSG_S_OPEN_NO_ANSWER (1793//)
+Telegram did not answer
+MSG_S_OPEN_DROPPED (1794//)
+the connection dropped
+MSG_S_UP_PHOTO_SIZE (1795//)
+Telegram refused the photo's size (width + height over 10000, or over 20:1)
+MSG_S_UP_PHOTO_FORMAT (1796//)
+Telegram does not take this image format as a photo
+MSG_S_UP_PHOTO_DECODE (1797//)
+Telegram could not decode the image
+MSG_S_UP_PHOTO_SAVE (1798//)
+Telegram could not save the photo
+MSG_S_IMG_NO_SIZE (1799//)
+image has no size
+MSG_S_IMG_TOO_LARGE (1800//)
+image too large for a photo (width + height over 10000)
+MSG_S_IMG_TOO_LONG (1801//)
+image too elongated for a photo (over 20:1)
+MSG_S_IMG_NOT_VALID (1802//)
+not a valid JPEG or PNG
+MSG_S_IMG_BAD_JPEG (1803//)
+not a valid JPEG (truncated or damaged)
+MSG_S_IMG_BAD_PNG (1804//)
+not a valid PNG (truncated or damaged)
+MSG_S_UPD_NONE (1805//)
+No update to install
+MSG_S_UPD_NOT_IN_CHANNEL (1806//)
+The update is not in the channel yet
+MSG_S_UPD_NOT_SIGNED (1807//)
+The update is not signed by its author
+MSG_S_UPD_BAD_MANIFEST (1808//)
+The update's manifest is not right
+MSG_S_UPD_NOT_FOR_SYSTEM (1809//)
+No update for this system in that version
+MSG_S_UPD_PROGRAM_MISSING (1810//)
+The program is not in the channel yet
+MSG_S_UPD_PROGRAM_WRONG (1811//)
+The program that came is not the signed one
+MSG_S_UPD_OTHER_NAME (1812//)
+The program is not called Amigram here: update it by hand
+MSG_S_UPD_OLD_NOT_KEPT (1813//)
+Could not keep the old program as Amigram.old
+MSG_S_UPD_NOT_WRITTEN (1814//)
+Could not write the new program: the old one is back
+MSG_S_UPD_NOT_CONNECTED (1815//)
+Not connected to Telegram
+MSG_S_NO_RECENT_FILE (1816//)
+no recent file in this chat
+MSG_T_ANOTHER_ALPHABET (1817//)
+(another alphabet)
+MSG_T_EMOJI (1818//)
+(emoji)
+MSG_S_TOPIC_NUMBER (1819//)
+Topic %lu
+MSG_S_DL_NEED_ROOM (1820//)
+Need %lu KB, only %lu KB free in %.16s
+MSG_S_DL_VOLUME_FULL (1821//)
+%.20s is full, stopped at %lu KB
+; --- the text client (2000-3999) -------------------------------------------
+MSG_T_CODE_IN_TELEGRAM (2000//)
+Check your other Telegram apps (mobile/desktop/web) for the code.
+MSG_T_CODE_BY_SMS (2001//)
+Telegram is sending the code by SMS to your phone.
+MSG_T_CODE_BY_CALL (2002//)
+Telegram will call your phone and speak the code.
+MSG_T_CODE_FLASH_CALL (2003//)
+Telegram is calling: the last digits of the caller ID are the code.
+MSG_T_CODE_BY_EMAIL (2004//)
+Check your email for the code.
+MSG_T_CODE_WANTS_EMAIL (2005//)
+No code is coming: Telegram wants this account to add and verify a login email. Do that once in an official Telegram app, then sign in here again.
+MSG_T_CODE_UNKNOWN_TYPE (2006//)
+Telegram did not say where it sent the code (delivery type 0x%08lx).\n
+MSG_T_REACTION_REMOVED (2007//)
+Reaction removed.
+MSG_T_REACTION_SENT (2008//)
+Reaction sent.
+MSG_T_HELP_EVERY_DAY (2009//)
+Every day:
+MSG_T_HELP_TEXT_ENTER_SEND (2010//)
+  text + Enter    send a message
+MSG_T_HELP_ENTER_READ_NEW (2011//)
+  Enter           read new messages now
+MSG_T_HELP_1_2_3 (2012//)
+  1, 2, 3 ...     open chat 1, 2, 3 (or F1..F10, with shift 11..20)
+MSG_T_HELP_F1_F10_KEEP (2013//)
+                  F1..F10 keep text typed as the draft of the chat left
+MSG_T_HELP_0_SAVED_MESSAGES (2014//)
+  0               Saved Messages, your cloud drawer
+MSG_T_HELP_TAB_BACK_TO (2015//)
+  Tab             back to the previous chat
+MSG_T_HELP_SHIFT_UP_DOWN (2016//)
+  Shift+Up/Down   older messages, and back
+MSG_T_HELP_LIST_YOUR_CHATS (2017//)
+  /list           your chats
+MSG_T_HELP_HELP_KEY_THIS (2018//)
+  Help key        this list
+MSG_T_HELP_QUIT_EXIT (2019//)
+  /quit           exit
+MSG_T_HELP_MORE (2020//)
+More:
+MSG_T_HELP_SEARCH_TEXT_FIND (2021//)
+  /search text    find a chat in the list by name or username
+MSG_T_HELP_ADD_NAME_SEARCH (2022//)
+  /add name       search Telegram and add a chat to the list
+MSG_T_HELP_MOVE_5_1 (2023//)
+  /move 5 1       chat 5 becomes number 1, the one F1 opens
+MSG_T_HELP_REMOVE_N_REMOVE (2024//)
+  /remove n       remove chat n from the list
+MSG_T_HELP_HISTORY_SHOW_THE (2025//)
+  /history        show the recent messages again
+MSG_T_HELP_FIND_WORDS_FIND (2026//)
+  /find words     find messages in this chat, the newest ten
+MSG_T_HELP_FORWARD_ID_FORWARD (2027//)
+  /forward [id]   forward the latest (or that id) to Saved Messages
+MSG_T_HELP_FORWARDTO_N_ID (2028//)
+  /forwardto n [id]  forward the latest (or that id) to chat n
+MSG_T_HELP_REACT_ID_NAME (2029//)
+  /react [id] name   react to the last one received (or that id):
+MSG_T_HELP_UP_HEART_FIRE (2030//)
+                  up heart fire laugh surprise sad party pray
+MSG_T_HELP_CLAP_OK_NONE (2031//)
+                  clap ok; none removes your reactions
+MSG_T_HELP_REACTIONS_EVERY_NAME (2032//)
+  /reactions      every name /react takes
+MSG_T_HELP_IDS_MESSAGE_IDS (2033//)
+  /ids            message ids before each message, on or off
+MSG_T_HELP_HIDE_ID_HIDE (2034//)
+  /hide [id]      hide the last one received (or that id) in a group
+MSG_T_HELP_UNHIDE_BRING_BACK (2035//)
+  /unhide         bring back this chat's hidden messages
+MSG_T_HELP_GETFILE_DOWNLOAD_THE (2036//)
+  /getfile        download the newest file here to downloads/
+MSG_T_HELP_SENDFILE_PATH_SEND (2037//)
+  /sendfile path  send a file
+MSG_T_HELP_PHOTO_PATH_SEND (2038//)
+  /photo path     send a JPEG as a photo (over 10 MiB: as a file)
+MSG_T_HELP_WATCH_SEC_READ (2039//)
+  /watch sec      read new messages every sec seconds (off: never)
+MSG_T_HELP_RESIZE_REDRAW_AFTER (2040//)
+  /resize         redraw after the window changed size
+MSG_T_HELP_DIFF_BACKGROUND_CATCH (2041//)
+  /diff           background catch-up, on or off
+MSG_T_HELP_COLOR_COLOURS_ON (2042//)
+  /color          colours, on or off
+MSG_T_HELP_BELL_FLASH_ON (2043//)
+  /bell           flash on new messages, on or off
+MSG_T_HELP_RING_DOES_THIS (2044//)
+  /ring           does this chat ring? /ring on or off changes it
+MSG_T_HELP_MUTE_1H_8H (2045//)
+  /mute [1h|8h|2d]  mute this chat on Telegram, for good or for a while
+MSG_T_HELP_UNMUTE_TAKE_THE (2046//)
+  /unmute         take the mute back
+MSG_T_HELP_MARKREAD_MARK_THIS (2047//)
+  /markread       mark this chat as read on every device
+MSG_T_HELP_MARKUNREAD_MARK_THIS (2048//)
+  /markunread     mark this chat as unread
+MSG_T_HELP_VOTE_N_N (2049//)
+  /vote n [n..]   vote the last poll shown here; /vote none takes it back
+MSG_T_HELP_VOTERS_WHO_VOTED (2050//)
+  /voters         who voted in that poll, when its votes are public
+MSG_T_HELP_TOPICS_THE_TOPICS (2051//)
+  /topics         the topics of this group, when it is a forum
+MSG_T_HELP_TOPIC_N_ONLY (2052//)
+  /topic n        only topic n of that list; /topic alone: all again
+MSG_T_HELP_TOPIC_NEW_X (2053//)
+  /topic new x    a new topic x; rename x, close, reopen: the chosen one
+MSG_T_HELP_UPDATE_A_NEW (2054//)
+  /update         a new version? /update yes installs it
+MSG_T_HELP_LOGOUT_LOG_OUT (2055//)
+  /logout         log out on this computer (/logout yes)
+MSG_T_HELP_SWAP_SAVED_PEERS (2056//)
+  /swap /saved /peers  the same as Tab, 0 and /list
+MSG_T_HELP_SUPPORT_MY_WORK (2057//)
+Support my work on Patreon: www.patreon.com/c/kaffeine1
+MSG_T_HELP_OR_WITH_A (2058//)
+or with a one-time tip on Ko-fi: ko-fi.com/kaffeine1
+MSG_T_HELP_CONTRIBUTIONS_ARE_VOLUNTARY (2059//)
+Contributions are voluntary; no subscription is required.
+MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_NO_CODE (2060//)
+Telegram knows this computer: no code needed.\n
+MSG_T_TELEGRAM_KNOWS_THIS_COMPUTER_SIGNED_IN (2061//)
+Telegram knows this computer: signed in without a code.\n
+MSG_T_LOGIN_CODE_SENT (2062//)
+Login code sent.\n
+MSG_T_RESEND_FAILED_NO_OTHER_WAY_TO (2063//)
+Resend failed: no other way to send it\n
+MSG_T_RESEND_FAILED_THE_CODE_EXPIRED_PRESS (2064//)
+Resend failed: the code expired, press ESC\n
+MSG_T_RESEND_FAILED_TOO_MANY_TRIES_WAIT (2065//)
+Resend failed: too many tries, wait %.10s s\n
+MSG_T_LOGIN_CODE_SENT_AGAIN (2066//)
+Login code sent again.\n
+MSG_T_VERIFYING_PASSWORD (2067//)
+Verifying password
+MSG_T_KEY_READY_ASKING_TELEGRAM_TO_CHECK (2068//)
+Key ready. Asking Telegram to check it.\n
+MSG_T_THE_ACCOUNT_S_PASSWORD_CHANGED_WHILE (2069//)
+The account's password changed while this one was being checked. Sign in again with the new one.\n
+MSG_T_GETTING_A_QR_CODE_FROM_TELEGRAM (2070//)
+Getting a QR code from Telegram.\n
+MSG_T_THE_QR_CODE_CANNOT_BE_SHOWN (2071//)
+The QR code cannot be shown here.\n
+MSG_T_SCAN_THE_QR_CODE_WITH_TELEGRAM (2072//)
+Scan the QR code with Telegram on your phone: Settings > Devices > Link Desktop Device.\n\
+It is renewed every 30 seconds. Type P and press Return to use your phone number instead.\n
+MSG_T_NO_SCAN_IN_TEN_MINUTES (2073//)
+No scan in ten minutes.\n
+MSG_T_SCANNED_YOUR_ACCOUNT_LIVES_ON_TELEGRAM (2074//)
+Scanned. Your account lives on Telegram DC %s.\n
+MSG_T_STOPPED (2075//)
+Stopped.\n
+MSG_T_SIGNED_IN_WITH_THE_QR_CODE (2076//)
+Signed in with the QR code.\n
+MSG_T_SCANNED (2077//)
+Scanned.\n
+MSG_T_CONNECTING_TO_TELEGRAM (2078//)
+Connecting to Telegram.\n
+MSG_T_YOU_NEED_A_TELEGRAM_ACCOUNT_TO (2079//)
+You need a Telegram account to sign in here.\n\
+%s.\n
+MSG_T_PHONE_NUMBER (2080//)
+Phone number: 
+MSG_T_USING_PHONE_NUMBER_S (2081//)
+Using phone number %s.\n
+MSG_T_SENDING_LOGIN_CODE_REQUEST (2082//)
+Sending login code request.\n
+MSG_T_USING_TELEGRAM_DC_S (2083//)
+Using Telegram DC %s.\n
+MSG_T_TYPE_THE_NUMBER_AGAIN_EMPTY_INPUT (2084//)
+Type the number again (empty input aborts).\n
+MSG_T_TELEGRAM_LOGIN_CODE_RECEIVED (2085//)
+\n\
+Telegram login code received.\n
+MSG_T_TYPE_THE_TELEGRAM_CODE_AND_PRESS (2086//)
+Type the Telegram code and press Return.\n
+MSG_T_NO_CODE_TYPE_S_AND_PRESS (2087//)
+No code? Type S and press Return to get it %s.\n
+MSG_T_TELEGRAM_CODE_EMPTY_TO_ABORT (2088//)
+Telegram code (empty to abort): 
+MSG_T_TELEGRAM_OFFERED_NO_OTHER_WAY_TO (2089//)
+Telegram offered no other way to send this code.\n
+MSG_T_TELEGRAM_ALLOWS_THAT_IN_LU_SECONDS (2090//)
+Telegram allows that in %lu seconds: type S again then.\n
+MSG_T_ASKING_TELEGRAM_TO_SEND_THE_CODE (2091//)
+Asking Telegram to send the code %s.\n
+MSG_T_CHECKING_TELEGRAM_CODE (2092//)
+Checking Telegram code.\n
+MSG_T_THAT_CODE_HAS_EXPIRED_ASKING_TELEGRAM (2093//)
+That code has expired. Asking Telegram for a new one.\n
+MSG_T_THAT_CODE_WAS_NOT_ACCEPTED_CHECK (2094//)
+That code was not accepted. Check the latest Telegram message and try again.\n
+MSG_T_2FA_PASSWORD_REQUIRED_CHECKING_IT_DERIVE (2095//)
+2FA password required.\n\
+Checking it derives a key with PBKDF2 (100000 rounds of SHA-512). On a slow 68k, such as a stock 14 MHz 68020, that takes half an hour or more; the dots show it working. Once the key is ready the client asks Telegram for a fresh challenge, so the wait does not lose the login. Enter the password (empty to abort).\n
+MSG_T_2FA_PASSWORD_EMPTY_TO_ABORT (2096//)
+2FA password, empty to abort: 
+MSG_T_THAT_PASSWORD_WAS_NOT_ACCEPTED_TRY (2097//)
+That password was not accepted. Try again (empty to abort).\n
+MSG_T_LOGIN_COMPLETE (2098//)
+Login complete.\n
+MSG_T_NO_CHATS_AVAILABLE (2099//)
+No chats available.\n
+MSG_T_SINGLE_CHATS (2100//)
+Single chats:
+MSG_T_GROUPS_AND_CHANNELS (2101//)
+Groups and channels:
+MSG_T_LU_NEW (2102//)
+ %lu new
+MSG_T_NO_CACHED_CHATS_YET (2103//)
+No cached chats yet.\n
+MSG_T_0_SAVED_MESSAGES_YOUR_CLOUD_DRAWER (2104//)
+0. Saved Messages (your cloud drawer)\n
+MSG_T_TYPE_SOMETHING_TO_SEARCH_FOR (2105//)
+Type something to search for.\n
+MSG_T_NO_CACHED_CHATS_YET_ADD_ONE (2106//)
+No cached chats yet. Add one with /add @username.\n
+MSG_T_MATCHES (2107//)
+Matches:\n
+MSG_T_NO_CACHED_CHAT_MATCHES_THAT_NAME (2108//)
+No cached chat matches that name.\n
+MSG_T_TYPE_THE_NUMBER_TO_SWITCH_CHAT (2109//)
+Type the number to switch chat.\n
+MSG_T_USE_REMOVE_NUMBER (2110//)
+Use /remove <number>.\n
+MSG_T_NO_CACHED_CHATS_TO_REMOVE (2111//)
+No cached chats to remove.\n
+MSG_T_CHAT_NUMBER_NOT_FOUND (2112//)
+Chat number not found.\n
+MSG_T_COULD_NOT_UPDATE_CACHED_CHATS (2113//)
+Could not update cached chats.\n
+MSG_T_NO_CACHED_CHATS_TO_REORDER (2114//)
+No cached chats to reorder.\n
+MSG_T_COULD_NOT_SAVE_CHAT_ORDER (2115//)
+Could not save chat order.\n
+MSG_T_CANNOT_OPEN (2116//)
+, cannot open
+MSG_T_THIS_CHAT_IS_NOT_IN_THE (2117//)
+This chat is not in the chat list.
+MSG_T_ONLY_MESSAGES_IN_GROUPS_AND_CHANNELS (2118//)
+Only messages in groups and channels can be hidden.
+MSG_T_NO_HIDDEN_MESSAGES_IN_THIS_CHAT (2119//)
+No hidden messages in this chat.
+MSG_T_COULD_NOT_SAVE_THE_HIDDEN_MESSAGE (2120//)
+Could not save the hidden message.
+MSG_T_SAVED_MESSAGES_NEVER_RING (2121//)
+Saved Messages never ring.
+MSG_T_THIS_CHAT_STAYS_QUIET_RING_ON (2122//)
+This chat stays quiet; /ring on lets it ring.
+MSG_T_THIS_CHAT_STAYS_QUIET_IT_IS (2123//)
+This chat stays quiet: it is muted in Telegram, here or on another device.
+MSG_T_THIS_CHAT_RINGS_BUT_BELL_IS (2124//)
+This chat rings, but /bell is off for every chat.
+MSG_T_THIS_CHAT_RINGS_WHEN_A_MESSAGE (2125//)
+This chat rings when a message arrives while another chat is open.
+MSG_T_CHOOSE_A_CHAT_BEFORE_RING (2126//)
+Choose a chat before /ring.
+MSG_T_USE_RING_TO_SEE_WHAT_THIS (2127//)
+Use /ring to see what this chat does, /ring on or /ring off to change it.
+MSG_T_COULD_NOT_SAVE_THIS_CHAT_S (2128//)
+Could not save this chat's ring choice.
+MSG_T_GROUP (2129//)
+ (group)
+MSG_T_GROUP_MESSAGE (2130//)
+group message
+MSG_T_NEW_MESSAGE (2131//)
+new message
+MSG_T_LU_MORE (2132//)
+(+%lu more)
+MSG_T_LU_ELSEWHERE (2133//)
+(+%lu elsewhere)
+MSG_T_REACTIONS_FOR_REACT_MESSAGE_ID_NAME (2134//)
+\n\
+Reactions for /react [message-id] <name>:\n
+MSG_T_NONE_REMOVES_YOUR_REACTIONS (2135//)
+  none removes your reactions\n
+MSG_T_FILE_DRAG_AND_DROP_S (2136//)
+  file drag-and-drop: %s
+MSG_T_TOPICS_TOPIC_N_READS_ONE (2137//)
+Topics (/topic n reads one):\n
+MSG_T_NO_TITLE (2138//)
+(no title)
+MSG_T_LU_NEW_2 (2139//)
+  (%lu new)
+MSG_T_CLOSED (2140//)
+  [closed]
+MSG_T_DRAFT (2141//)
+  [draft]
+MSG_T_READING (2142//)
+  <- reading
+MSG_T_LU_READ_LU_OF_LU (2143//)
+  #%lu read %lu of %lu
+MSG_T_THE_LU_MOST_ACTIVE_OF_LU (2144//)
+(the %lu most active of %lu)\n
+MSG_T_OPENING_CHAT (2145//)
+Opening chat
+MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS (2146//)
+No reply yet (slow link). Press Enter to retry reading.\n
+MSG_T_COULD_NOT_LOAD_RECENT_MESSAGES_NOW (2147//)
+Could not load recent messages now (error %d).\n
+MSG_T_REACTIONS_ON_MESSAGE_LU (2148//)
+Reactions on message %lu:
+MSG_T_USAGE_TOPIC_NEW_NAME (2149//)
+Usage: /topic new <name>
+MSG_T_USAGE_TOPIC_RENAME_NAME (2150//)
+Usage: /topic rename <name>
+MSG_T_CHOOSE_THE_TOPIC_FIRST_WITH_TOPIC (2151//)
+Choose the topic first with /topic and its number.
+MSG_T_THIS_CHAT_HAS_NO_TOPICS (2152//)
+This chat has no topics.
+MSG_T_NO_ANSWER_FROM_TELEGRAM_TRY_AGAIN (2153//)
+No answer from Telegram. Try again.
+MSG_T_TOPIC_MADE (2154//)
+Topic made.
+MSG_T_TOPIC_RENAMED (2155//)
+Topic renamed.
+MSG_T_TOPIC_CLOSED_ONLY_ADMINS_CAN_WRITE (2156//)
+Topic closed: only admins can write in it.
+MSG_T_TOPIC_OPEN_AGAIN (2157//)
+Topic open again.
+MSG_T_KEPT_AS_A_DRAFT_IN (2158//)
+Kept as a draft in 
+MSG_T_COULD_NOT_KEEP_THE_TEXT_AS (2159//)
+Could not keep the text as a draft (network?).
+MSG_T_DRAFT_2 (2160//)
+Draft: 
+MSG_T_SENDFILE_PATH_SEND_A_FILE (2161//)
+/sendfile path: send a file
+MSG_T_LOADING_CHATS (2162//)
+Loading chats...
+MSG_T_NO_CACHED_CHATS_YET_2 (2163//)
+No cached chats yet.
+MSG_T_USE_ADD_NAME_TO_SEARCH_USERS (2164//)
+Use /add name to search users or groups.
+MSG_T_USING_CACHED_CHATS (2165//)
+Using cached chats.
+MSG_T_OPENING_SESSION (2166//)
+Opening session...
+MSG_T_SLOW_START_RETRYING_ONCE (2167//)
+Slow start, retrying once...
+MSG_T_LOADING_PROFILE (2168//)
+Loading profile...
+MSG_T_CHOOSE_A_CHAT (2169//)
+Choose a chat:
+MSG_T_CHAT_NUMBER (2170//)
+\n\
+Chat number: 
+MSG_T_TYPE_ADD_NAME_TO_FIND_A (2171//)
+Type /add name to find a chat.
+MSG_T_INPUT_CLOSED (2172//)
+Input closed.
+MSG_T_CHOOSE_A_CHAT_FIRST_WITH_ADD (2173//)
+Choose a chat first with /add name.
+MSG_T_NO_REPLY_YET_SLOW_LINK_PRESS_2 (2174//)
+No reply yet (slow link). Press Enter to retry.\n
+MSG_T_COULD_NOT_READ_MESSAGES_NOW_ERROR (2175//)
+Could not read messages now (error %d).\n
+MSG_T_THIS_SYSTEM_HAS_NO_UPDATE_TO (2176//)
+This system has no update to install.
+MSG_T_UPDATE_SAYS_WHETHER_A_NEW_VERSION (2177//)
+/update says whether a new version is out; /update yes installs it.
+MSG_T_LOOKING_FOR_A_NEW_VERSION (2178//)
+Looking for a new version...
+MSG_T_LOGGING_OUT (2179//)
+Logging out...
+MSG_T_TELEGRAM_COULD_NOT_BE_REACHED_NOTHING (2180//)
+Telegram could not be reached: nothing was removed. /logout here removes the files on this computer anyway; the session then stays in Telegram's list of devices until you end it from another device.
+MSG_T_LOGOUT_YES_LOGS_OUT_OF_TELEGRAM (2181//)
+/logout yes logs out of Telegram on this computer: it ends this session at Telegram, removes telegram-auth.bin and what is kept here of the account (the chat list, hidden chats; downloads stay) and quits. The next start shows the login.
+MSG_T_LOGGED_OUT_THE_NEXT_START_SHOWS (2182//)
+Logged out. The next start shows the login.
+MSG_T_THE_FILES_ARE_REMOVED_FROM_THIS (2183//)
+The files are removed from this computer. The next start shows the login.
+MSG_T_COLORS_ON (2184//)
+Colors on.
+MSG_T_COLORS_OFF (2185//)
+Colors off.
+MSG_T_BELL_ON (2186//)
+Bell on.
+MSG_T_BELL_OFF (2187//)
+Bell off.
+MSG_T_MESSAGE_IDS_ON_REACT_FORWARD_AND (2188//)
+Message ids on: /react, /forward and /forwardto take the number after #.
+MSG_T_MESSAGE_IDS_OFF (2189//)
+Message ids off.
+MSG_T_NO_PREVIOUS_CHAT_YET (2190//)
+No previous chat yet.
+MSG_T_CURRENT_CHAT (2191//)
+Current chat: 
+MSG_T_CHOOSE_A_CHAT_2 (2192//)
+\n\
+Choose a chat:\n\
+\n
+MSG_T_TYPE_A_NUMBER_SEARCH_TEXT_OR (2193//)
+Type a number, /search text, or /add name.\n
+MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST (2194//)
+Choose a chat first with /list or /add name.
+MSG_T_USE_FIND_WORDS_IT_SEARCHES_THIS (2195//)
+Use /find words: it searches this chat's messages.
+MSG_T_COULD_NOT_SEARCH_NOW (2196//)
+Could not search now.\n
+MSG_T_NO_MESSAGE_FOUND (2197//)
+No message found.\n
+MSG_T_EVERY_TOPIC_AGAIN_HISTORY_SHOWS_THEM (2198//)
+Every topic again: /history shows them.
+MSG_T_USE_TOPIC_AND_A_NUMBER_FROM (2199//)
+Use /topic and a number from /topics.
+MSG_T_TELEGRAM_DID_NOT_GIVE_THE_TOPICS (2200//)
+Telegram did not give the topics. Try again.
+MSG_T_NO_TOPIC_WITH_THAT_NUMBER_TOPICS (2201//)
+No topic with that number: /topics lists them.
+MSG_T_TOPIC (2202//)
+Topic: 
+MSG_T_WHAT_YOU_WRITE_GOES_THERE_TOPIC (2203//)
+ (what you write goes there; /topic alone: every topic)\n
+MSG_T_COULD_NOT_READ_MESSAGE_HISTORY_NOW (2204//)
+Could not read message history now.\n
+MSG_T_DOWNLOADING (2205//)
+Downloading...
+MSG_T_SAVED_TO_S (2206//)
+Saved to %s\n
+MSG_T_FILE_IS_ON_ANOTHER_SERVER_NOT (2207//)
+File is on another server - not supported yet.\n
+MSG_T_120S_THE_PART_WAS_REMOVED (2208//)
+%.120s, the part was removed.\n
+MSG_T_COULD_NOT_WRITE_TO_DOWNLOADS (2209//)
+Could not write to downloads/.\n
+MSG_T_NOT_ENOUGH_ROOM_FOR_THAT_FILE (2210//)
+Not enough room for that file
+MSG_T_TRANSFER_FAILED_110S (2211//)
+Transfer failed: %.110s\n
+MSG_T_TRANSFER_FAILED_SERVER_ERROR (2212//)
+Transfer failed (server error).\n
+MSG_T_NO_FILE_120S (2213//)
+No file: %.120s\n
+MSG_T_DOWNLOAD_FAILED (2214//)
+Download failed.\n
+MSG_T_USAGE_PHOTO_JPEG_OR_PNG_PATH (2215//)
+Usage: /photo <jpeg-or-png-path> [caption]
+MSG_T_USAGE_SENDFILE_PATH (2216//)
+Usage: /sendfile <path>
+MSG_T_UPLOADING_PHOTO (2217//)
+Uploading photo...
+MSG_T_UPLOADING (2218//)
+Uploading...
+MSG_T_FILE_SENT_PHOTO_WAS_OVER_10 (2219//)
+File sent (photo was over 10 MiB).\n
+MSG_T_PHOTO_SENT (2220//)
+Photo sent.\n
+MSG_T_FILE_SENT (2221//)
+File sent.\n
+MSG_T_FILE_TOO_BIG_LU_MIB_LIMIT (2222//)
+File too big (%lu MiB limit on this build).\n
+MSG_T_COULD_NOT_READ_THAT_PHOTO (2223//)
+Could not read that photo.\n
+MSG_T_COULD_NOT_READ_THAT_FILE (2224//)
+Could not read that file.\n
+MSG_T_THAT_FILE_IS_EMPTY_0_BYTES (2225//)
+That file is empty (0 bytes).\n
+MSG_T_NOT_SENT_AS_A_PHOTO_100S (2226//)
+Not sent as a photo: %.100s.\n
+MSG_T_UPLOAD_FAILED_100S (2227//)
+Upload failed: %.100s\n
+MSG_T_UPLOAD_FAILED (2228//)
+Upload failed.\n
+MSG_T_CURRENT_CHAT_SAVED_MESSAGES (2229//)
+Current chat: Saved Messages\n
+MSG_T_BACKGROUND_CATCH_UP_ON (2230//)
+Background catch-up on.
+MSG_T_BACKGROUND_CATCH_UP_OFF (2231//)
+Background catch-up off.
+MSG_T_WINDOW_SIZE_UNCHANGED (2232//)
+Window size unchanged.
+MSG_T_FULL_SCREEN_MODE_IS_NOT_ACTIVE (2233//)
+Full-screen mode is not active.
+MSG_T_SEARCH (2234//)
+Search: 
+MSG_T_USAGE_MOVE_5_1_MAKES_CHAT (2235//)
+Usage: /move 5 1 makes chat 5 number 1, on F1.
+MSG_T_NO_SUCH_CHAT_NUMBER_LIST_SHOWS (2236//)
+No such chat number: /list shows them.
+MSG_T_MOVED (2237//)
+Moved 
+MSG_T_THE_CHAT (2238//)
+the chat
+MSG_T_TO_NUMBER_LU (2239//)
+ to number %lu
+MSG_T_REMOVE_CHAT_NUMBER (2240//)
+Remove chat number: 
+MSG_T_REMOVED (2241//)
+Removed 
+MSG_T_NO_CACHED_CHATS_ADD_ONE_WITH (2242//)
+No cached chats. Add one with /add name.
+MSG_T_CHAT_NUMBER_2 (2243//)
+Chat number: 
+MSG_T_NAME_USERNAME_OR_T_ME_LINK (2244//)
+Name, username or t.me link: 
+MSG_T_COULD_NOT_ADD_THAT_CHAT_TRY (2245//)
+Could not add that chat. Try @username or a t.me link.
+MSG_T_CHAT_ADDED_CACHED_CHATS (2246//)
+\n\
+Chat added. Cached chats:\n\
+\n
+MSG_T_TYPE_A_NUMBER_TO_SWITCH (2247//)
+Type a number to switch.\n
+MSG_T_CHOOSE_A_CHAT_BEFORE_FORWARDING_A (2248//)
+Choose a chat before forwarding a message.
+MSG_T_USE_FORWARDTO_CHAT_NUMBER_MESSAGE_ID (2249//)
+Use /forwardto <chat-number> [message-id].
+MSG_T_NO_RECENT_MESSAGE_IS_AVAILABLE_TO (2250//)
+No recent message is available to forward.
+MSG_T_FORWARDED_TO (2251//)
+Forwarded to 
+MSG_T_SAVED_MESSAGES_HAS_NO_MUTE_AND (2252//)
+Saved Messages has no mute and no read mark.
+MSG_T_USE_MUTE_OR_MUTE_WITH_A (2253//)
+Use /mute, or /mute with a time: 30m, 1h, 8h, 2d. /unmute takes it back.
+MSG_T_MARKED_AS_UNREAD (2254//)
+Marked as unread.
+MSG_T_MUTED_ON_TELEGRAM_UNTIL_UNMUTE (2255//)
+Muted on Telegram, until /unmute.
+MSG_T_MUTED_ON_TELEGRAM_FOR_THAT_LONG (2256//)
+Muted on Telegram for that long.
+MSG_T_NOT_MUTED_ANY_MORE (2257//)
+Not muted any more.
+MSG_T_MARKED_AS_READ (2258//)
+Marked as read.
+MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY (2259//)
+Telegram did not take it. Try again.
+MSG_T_NO_POLL_SHOWN_HERE_YET_HISTORY (2260//)
+No poll shown here yet: /history shows the recent messages again.
+MSG_T_THE_VOTES_OF_THAT_POLL_ARE (2261//)
+The votes of that poll are anonymous.
+MSG_T_WHO_VOTED (2262//)
+Who voted:\n
+MSG_T_VOTE_FIRST_VOTE_THEN_TELEGRAM_SAYS (2263//)
+Vote first (/vote): then Telegram says who voted.
+MSG_T_TELEGRAM_DID_NOT_SAY_WHO_VOTED (2264//)
+Telegram did not say who voted. Try again.
+MSG_T_THAT_POLL_IS_CLOSED (2265//)
+That poll is closed.
+MSG_T_USE_VOTE_WITH_THE_NUMBERS_OF (2266//)
+Use /vote with the numbers of your answers (/vote 1 3), or /vote none.
+MSG_T_USE_VOTE_WITH_THE_NUMBER_OF (2267//)
+Use /vote with the number of one answer, or /vote none.
+MSG_T_VOTED (2268//)
+Voted.
+MSG_T_VOTE_TAKEN_BACK (2269//)
+Vote taken back.
+MSG_T_THIS_POLL_DOES_NOT_LET_A (2270//)
+This poll does not let a vote be changed.
+MSG_T_TELEGRAM_DID_NOT_TAKE_THE_VOTE (2271//)
+Telegram did not take the vote. Try again.
+MSG_T_CHOOSE_A_CHAT_BEFORE_REACTING_TO (2272//)
+Choose a chat before reacting to a message.
+MSG_T_USE_REACT_MESSAGE_ID_NAME_OR (2273//)
+Use /react [message-id] <name>, or /react [message-id] none; /reactions lists the names, /ids shows the ids.
+MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO (2274//)
+No message from the others to react to yet.
+MSG_T_CHOOSE_A_CHAT_BEFORE_HIDING_A (2275//)
+Choose a chat before hiding a message.
+MSG_T_USE_HIDE_OR_HIDE_MESSAGE_ID (2276//)
+Use /hide or /hide <message-id>; /unhide brings them back.
+MSG_T_NO_MESSAGE_FROM_THE_OTHERS_TO_2 (2277//)
+No message from the others to hide yet.
+MSG_T_CHOOSE_A_CHAT_FIRST (2278//)
+Choose a chat first.
+MSG_T_USE_FORWARD_OR_FORWARD_MESSAGE_ID (2279//)
+Use /forward or /forward <message-id>.
+MSG_T_FORWARDED_TO_SAVED_MESSAGES (2280//)
+Forwarded to Saved Messages.
+MSG_T_USE_WATCH_SECONDS_3600_OR_WATCH (2281//)
+Use /watch <seconds <= 3600> or /watch off.
+MSG_T_AUTO_READ_DISABLED (2282//)
+Auto-read disabled.
+MSG_T_MESSAGE_NOT_CONFIRMED_PRESS_ENTER_TO (2283//)
+Message not confirmed. Press Enter to refresh.
+MSG_T_COULD_NOT_SEND_MESSAGE (2284//)
+Could not send message.
+MSG_T_DROPPED (2285//)
+Dropped: %.280s
+MSG_T_LINE_FULL (2286//)
+That is %u characters, the most one message holds.
+MSG_T_ELSEWHERE_STATUS (2287//)
+(+%lu elsewhere) 
+MSG_T_HIDDEN_BACK_1 (2288//)
+%lu hidden message back; /history shows it.
+MSG_T_HIDDEN_BACK (2289//)
+%lu hidden messages back; /history shows them.
+MSG_T_HIDDEN_FROM_NOW (2290//)
+#%lu hidden from now on; /unhide brings back the %lu hidden here.
+MSG_T_TELEGRAM_REFUSED (2291//)
+Telegram refused: %.48s
+MSG_T_TOPIC_MADE_NUMBER (2292//)
+Topic made, number %lu: what you write goes there.
+MSG_T_UPD_COULD_NOT_ASK (2293//)
+Could not ask @%.32s%s%.60s.
+MSG_T_UPD_NEWEST (2294//)
+You have the newest version, %s.
+MSG_T_UPD_IS_OUT (2295//)
+%s %.15s is out: you have %s. /update yes installs it: it comes from @%.32s, signed by its author, and this version is kept as Amigram.old.
+MSG_T_UPD_FETCHING (2296//)
+Fetching %s %.15s...
+MSG_T_UPD_INSTALLED (2297//)
+%s %.15s is installed. Quit with /quit and start Amigram again to use it.
+MSG_T_UPD_FAILED (2298//)
+The update failed
+MSG_T_CAPTION_MAX (2299//)
+A caption holds %u characters at most.
+MSG_T_USE_PEER_NUMBER (2300//)
+%.64s: use /peer <number>
+MSG_T_COULD_NOT_FORWARD (2301//)
+Could not forward message: %.80s
+MSG_T_NO_REPLY (2302//)
+no reply
+MSG_T_AUTO_READ_1 (2303//)
+Auto-read every %lu second.
+MSG_T_AUTO_READ (2304//)
+Auto-read every %lu seconds.
+MSG_T_SOMEONE_COLON (2305//)
+someone:
+MSG_T_THEM_COLON (2306//)
+them:
+MSG_T_QUICK_SEND (2307//)
+Type a message and press Enter to send it.
+MSG_T_QUICK_CHATS (2308//)
+F1-F10 or a chat number: change chat. 0: Saved Messages. Tab: back.
+MSG_T_QUICK_COMMANDS (2309//)
+/list: your chats.  /help: all commands.  /quit: exit.
+MSG_T_SETUP_CANNOT_READ (2310//)
+Login setup required: cannot read %s (%s).\n
+MSG_T_SETUP_NOT_FOUND (2311//)
+Login setup: %s was not found.\n
+MSG_T_SETUP_WILL_CREATE (2312//)
+%s will create it now.\n
+MSG_T_SETUP_ENTER_API (2313//)
+Enter the Telegram API credentials for this client.
+MSG_T_SETUP_SAVED (2314//)
+Saved %s.\n
+MSG_T_SIGNED_IN_RENAME (2315//)
+Signed in, but %s could not be written: rename %s to it.\n
+MSG_T_NO_SAVED_LOGIN (2316//)
+No saved login found. Starting login wizard.
+MSG_T_SAVED_LOGIN_UNUSABLE (2317//)
+Saved login is not usable. Starting login wizard.
+MSG_T_68000_LOGIN_WHY (2318//)
+--------------------------------------------------------\n\
+FIRST LOGIN ON A 68000: PLEASE READ\n\
+\n\
+Signing in for the first time needs a Diffie-Hellman key\n\
+exchange. On a plain 68000 that takes a very long time and\n\
+may run out of stack. Do it once elsewhere instead:\n
+MSG_T_68000_LOGIN_STEPS (2319//)
+ 1. Run %s on a faster Amiga (68020 or better)\n\
+    or in an emulator (WinUAE, FS-UAE, vAmiga) using the\n\
+    standard package, and log in there.\n\
+ 2. Copy telegram-auth.bin from that drawer into THIS\n\
+    drawer, next to %s. Copying\n\
+    data/telegram-peers.txt too brings your chat list.\n\
+ 3. Start this program again: it reuses that login and\n\
+    goes straight to the chats.\n
+MSG_T_68000_LOGIN_PRESS (2320//)
+The login then works on both machines, one at a time:\n\
+Telegram closes a login it sees in two places at once.\n\
+\n\
+Press RETURN to attempt the login here anyway,\n\
+or Ctrl+C to quit and follow the steps above.\n\
+--------------------------------------------------------\n
+MSG_T_START_LOGIN_COMPLETE (2321//)
+Login complete.
+MSG_T_START_NO_CHAT_LIST (2322//)
+No cached chat list found.
+MSG_T_START_USE_ADD (2323//)
+Use /add name inside %s to search users or groups.\n
+MSG_T_START_OPENING_CHAT (2324//)
+Opening chat.
+MSG_T_NO_MEMORY_FOR_WINDOW (2325//)
+Not enough free memory for the window.
+MSG_T_NO_GUI_BUILD (2326//)
+This build has no GUI: it is the text-client package.
+MSG_T_OLDER_SEPARATOR (2327//)
+---- older messages -- Shift+Down: back to live ----------------------------------

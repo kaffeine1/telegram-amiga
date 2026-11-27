@@ -23,24 +23,39 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   text client, the 68000 one included, has the same: /update says
   whether a newer version is out, /update yes installs it. The first
   update this way is from this release to the next one.
-- Amigram in Italian. The window speaks the language chosen in the
-  Locale preferences through the system's locale.library: menus,
-  context menus, the Settings panel with its values, every status line,
-  the requesters (About, Help, Log out, Update, deleting, leaving,
-  pinning, muting, the WEBP datatype), the poll and photo dialogs, the
-  login and QR screens, the composer, dates and the title's count of new
-  messages. English, built into the program, stands wherever a catalog
-  has no text. The Italian catalog ships in Catalogs/italiano/ next to
-  the program. The texts are in locale/amigram.cd, a translation is one
-  text file in locale/, and scripts/catalog.py turns it into a catalog
-  (no FlexCat or CatComp needed), refusing a translation that changes a
-  text's conversions, its number of buttons, or would not fit the status
-  line; docs/TRANSLATING.md says how. Texts printed with a number or a
-  name go through a bounded formatter of ours, and every requester shows
-  its text as written: a name with a % in it no longer upsets one. Still
-  in English: what the session reports (reasons from Telegram, chat
-  names such as Saved Messages, media labels), the text client and the
-  login wizard.
+- Amigram in Italian. Amigram speaks the language chosen in the Locale
+  preferences through the system's locale.library, the window and the
+  text client alike, the plain-68000 package included: menus, context
+  menus, the Settings panel with its values, every status line, the
+  requesters (About, Help, Log out, Update, deleting, leaving, pinning,
+  muting, the WEBP datatype), the poll and photo dialogs, the login and
+  QR screens, the composer, dates and the title's count of new messages;
+  in the text client the login, the chat list, /help and what every
+  command answers. What the session says is translated too: the media
+  labels ([Photo], [Voice 0:07], [File: ...]), polls, the service lines
+  of a group ("Anna added Marco", "You pinned a message"), Saved
+  Messages, who is typing, where Telegram sent the login code and why a
+  login, a photo or an update did not go through. English, built into
+  the program, stands wherever a catalog has no text. The Italian
+  catalog ships in Catalogs/italiano/ next to the program; the 68000
+  package carries a smaller one, with only what the text client says.
+  The texts are in locale/amigram.cd, a translation is one text file in
+  locale/, and scripts/catalog.py turns it into a catalog (no FlexCat or
+  CatComp needed), refusing a translation that changes a text's
+  conversions, its number of buttons, the spaces at its ends, or would
+  not fit the status line; docs/TRANSLATING.md says how. Texts printed
+  with a number or a name go through a bounded formatter of ours. Still
+  in English, on purpose: the names of the text client's commands, the
+  technical lines meant for a bug report and the debug log.
+
+### Changed
+- The text client says "Auto-read every 1 second" and "1 hidden message
+  back" where it used to add "(s)" or an "s" to a word: a plural is a
+  text of its own now, as a translation needs it.
+
+### Fixed
+- A long topic title could run past the room of the window's subtitle
+  line (60 letters written where 47 fit). The line is cut where it ends.
 
 ## [0.6] - 2026-11-23
 

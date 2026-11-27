@@ -1367,7 +1367,14 @@ First start
 -----------
 $first_start_en
 
-${coming_en}${window_section}Message times
+${coming_en}${window_section}Language
+--------
+Amigram speaks the language chosen in the system's Locale preferences,
+when the Catalogs drawer next to the program has it: Italian so far,
+English everywhere else. Nothing has to be installed. A translation is
+one text file: docs/TRANSLATING.md in the sources says how to make one.
+
+Message times
 -------------
 Times follow the Amiga clock, so set it in the system preferences. If
 the clock was never set (no battery clock), the client takes Telegram's
@@ -1464,7 +1471,15 @@ Primo avvio
 -----------
 $first_start_it
 
-${coming_it}${window_section}Orari dei messaggi
+${coming_it}${window_section}Lingua
+------
+Amigram parla la lingua scelta nelle preferenze Locale del sistema,
+quando il cassetto Catalogs accanto al programma ce l'ha: per ora
+l'italiano, altrimenti l'inglese. Non c'e' niente da installare. Una
+traduzione e' un file di testo: docs/TRANSLATING.md nei sorgenti dice
+come farla.
+
+Orari dei messaggi
 ------------------
 Gli orari seguono l'orologio dell'Amiga, quindi impostalo nelle
 preferenze di sistema. Se l'orologio non e' mai stato impostato (niente
@@ -1885,20 +1900,26 @@ package_one() {
 
     # The translations (locale/<language>.ct, made into Catalogs/ by
     # scripts/catalog.py): the system's locale.library finds
-    # Catalogs/<language>/amigram.catalog next to the program. Only the
-    # window's texts are translated so far, so the 68000 text client gets
-    # none.
+    # Catalogs/<language>/amigram.catalog next to the program. The window
+    # packages get every text; the 68000 text client gets only what it
+    # says (about half the size: its memory is the scarce thing there).
+    if ! python3 "$ROOT_DIR/scripts/catalog.py" check >/dev/null; then
+        echo "ERROR: Catalogs/ out of date: python3 scripts/catalog.py all" >&2
+        exit 1
+    fi
     if [ "$gui_icon" != "0" ]; then
-        if ! python3 "$ROOT_DIR/scripts/catalog.py" check >/dev/null; then
-            echo "ERROR: Catalogs/ out of date: python3 scripts/catalog.py all" >&2
-            exit 1
-        fi
         for catalog in "$ROOT_DIR"/Catalogs/*/amigram.catalog; do
             [ -f "$catalog" ] || continue
             language=$(basename "$(dirname "$catalog")")
             mkdir -p "$dest/Catalogs/$language"
             cp "$catalog" "$dest/Catalogs/$language/amigram.catalog"
         done
+    else
+        python3 "$ROOT_DIR/scripts/catalog.py" text-client "$dest/Catalogs" \
+            >/dev/null || {
+            echo "ERROR: the text client's catalogs could not be made" >&2
+            exit 1
+        }
     fi
 
     write_readme "$dest/README.txt" "$platform"
