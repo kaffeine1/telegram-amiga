@@ -17550,6 +17550,24 @@ static unsigned long tg_hist_shorter_page(unsigned long limit)
     return limit > 3UL ? limit / 3UL : 1UL;
 }
 
+/* A page asked around one message (a search hit, a pinned message, a reply's
+   target, a link, a day): `wanted` is negative, that many places newer than
+   the message come first, and the message itself sits one place before the
+   older ones. A page asked again shorter must still hold it: with the first
+   offset kept, six messages asked ten places up ended four places above the
+   message and the chat came back empty or without it (seen on a 68k machine
+   in a channel of heavy posts). The newer side takes half the page at most. */
+static long tg_hist_page_add_offset(long wanted, unsigned long limit)
+{
+    long half;
+
+    if (wanted >= 0L || limit == 0UL) {
+        return wanted;
+    }
+    half = (long)((limit + 1UL) / 2UL);
+    return (0L - wanted) > half ? (0L - half) : wanted;
+}
+
 /* The chats that needed a shorter page in this session, and the page that
    fitted: their next pages (older ones, a search) are asked that short from
    the start, instead of failing first every time. */
@@ -17679,13 +17697,18 @@ static int tg_mtproto_auth_print_history_text_peer_on_context(
                              peer_id_lo, access_hash_hi, access_hash_lo,
                              has_access_hash, tg_mtproto_history_topic_id,
                              tg_mtproto_history_offset_id_override,
-                             tg_mtproto_history_add_offset_override, limit)
+                             tg_hist_page_add_offset(
+                                 tg_mtproto_history_add_offset_override,
+                                 limit),
+                             limit)
                        : tg_mtproto_build_messages_get_history_peer_at(
                              &writer, peer_constructor, peer_id_hi,
                              peer_id_lo, access_hash_hi, access_hash_lo,
                              has_access_hash,
                              tg_mtproto_history_offset_id_override,
-                             tg_mtproto_history_add_offset_override,
+                             tg_hist_page_add_offset(
+                                 tg_mtproto_history_add_offset_override,
+                                 limit),
                              limit)) != TG_MTPROTO_TL_OK) {
             tg_mtproto_close_quiet_stream(quiet, stream);
             return 2;
@@ -30669,6 +30692,42 @@ static int tg_hist_short_self_test(void)
         tg_hist_shorter_page(0UL) != 0UL) {
         puts("probe self-test: shorter history page steps mismatch");
         return 2;
+    }
+    {
+        /* The three pages a jump asks (12, 20 and 30 messages, half of them
+           newer), and each one shortened down to a single message: the
+           message asked for is at place -1 and must be inside the page. A
+           full page keeps its offset; so does a page read from the newest. */
+        static const unsigned long full[3] = {12UL, 20UL, 30UL};
+        int p;
+
+        for (p = 0; p < 3; ++p) {
+            long wanted = 0L - (long)(full[p] / 2UL);
+            unsigned long lim = full[p];
+
+            if (tg_hist_page_add_offset(wanted, lim) != wanted) {
+                puts("probe self-test: a full page around a message moved");
+                return 2;
+            }
+            while (lim != 0UL) {
+                long add = tg_hist_page_add_offset(wanted, lim);
+
+                if (add > -1L || add + (long)lim <= -1L || add < wanted) {
+                    printf("probe self-test: a page of %lu around a message "
+                           "does not hold it (offset %ld)\n", lim, add);
+                    return 2;
+                }
+                lim = tg_hist_shorter_page(lim);
+            }
+        }
+        if (tg_hist_page_add_offset(-10L, 6UL) != -3L ||
+            tg_hist_page_add_offset(-10L, 1UL) != -1L ||
+            tg_hist_page_add_offset(0L, 6UL) != 0L ||
+            tg_hist_page_add_offset(5L, 6UL) != 5L ||
+            tg_hist_page_add_offset(-2L, 20UL) != -2L) {
+            puts("probe self-test: history page offset mismatch");
+            return 2;
+        }
     }
     memset(tg_hist_short, 0, sizeof(tg_hist_short));
     tg_hist_short_next = 0;

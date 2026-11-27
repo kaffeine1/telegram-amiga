@@ -536,6 +536,12 @@ typedef struct tg_gui_state {
     int chat_scroll;       /* first visible chat row in the sidebar (0 = top) */
     int chat_scroll_to_sel; /* one-shot: next paint scrolls the list to selected_chat */
     int msg_scroll_to_sel;  /* one-shot: next paint centres selected_msg */
+    /* The message a jump centred, held in the middle while what is under
+       it grows (pictures that arrive later) and until the reader scrolls:
+       its id, and the scroll the painter left (a different one = the
+       reader moved). 0 = nothing held. */
+    unsigned long jump_msg_id;
+    int jump_scroll;
     int transcript_scroll; /* PIXELS scrolled up from the newest-pinned bottom (0 = newest) */
     int input_h;           /* composer box height (px), cached by the painter for the hit-test */
     int nav_lh;            /* native font + leading, cached for sidebar mouse geometry */

@@ -180,6 +180,18 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   not step over a bot's bot_info_version: reading a reply's users one
   after the other stopped at the first such user. Both are read as the
   layer 214 schema has them.
+- A jump to one message (a search hit, the pinned message, the target
+  of a reply, a link to a post, a day) in a chat of heavy posts could
+  show another post, or an empty chat. A page of messages that does not
+  fit the unpack buffer (64 KB on the 68k build, 32 KB on the 68000
+  one) is asked again shorter, and the shorter page kept the offset of
+  the first: six messages asked ten places above the one wanted ended
+  four places above it. The offset now follows the page asked. Seen on
+  a real 68k machine in a channel of posts with videos.
+- After such a jump the message stays in the middle of the view while
+  pictures arrive in the posts under it; each picture used to push it
+  up, and a channel of posts with pictures showed the next post. It
+  lets go as soon as the chat is scrolled.
 
 ## [0.6] - 2026-11-23
 

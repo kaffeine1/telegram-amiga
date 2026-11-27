@@ -6502,6 +6502,26 @@ static void tg_gui_paint_main(const tg_gui_state *state,
                message (scroll counts pixels up from the newest-pinned
                bottom, so it is the height below the message plus half its
                own, less half the view). */
+            /* The message stays there afterwards: scroll counts from the
+               bottom, so a picture arriving in a message under it pushed it
+               out of the view (a channel of posts with pictures showed the
+               next post). While the reader has not scrolled, it is centred
+               again on every paint. */
+            if (!st->msg_scroll_to_sel && st->jump_msg_id != 0UL) {
+                if (st->selected_msg >= 0 &&
+                    st->selected_msg < st->message_count &&
+                    st->messages[st->selected_msg].id == st->jump_msg_id &&
+                    st->transcript_scroll == st->jump_scroll) {
+                    st->msg_scroll_to_sel = 1;
+                } else {
+                    st->jump_msg_id = 0UL;
+                }
+            } else if (st->msg_scroll_to_sel) {
+                st->jump_msg_id =
+                    (st->selected_msg >= 0 &&
+                     st->selected_msg < st->message_count)
+                        ? st->messages[st->selected_msg].id : 0UL;
+            }
             if (st->msg_scroll_to_sel) {
                 st->msg_scroll_to_sel = 0;
                 if (st->selected_msg >= 0 &&
@@ -6530,6 +6550,11 @@ static void tg_gui_paint_main(const tg_gui_state *state,
             if (st->transcript_scroll < 0) {
                 st->transcript_scroll = 0;
             }
+            if (st->transcript_scroll <= 0) {
+                /* at the newest message: the view follows the chat again */
+                st->jump_msg_id = 0UL;
+            }
+            st->jump_scroll = st->transcript_scroll;
             /* Content scroll uses only the REAL range, so a phantom bar keeps the
                newest pinned to the bottom -- the phantom is a load-older handle,
                not an actual scroll into blank space. */
@@ -15376,6 +15401,72 @@ int tg_gui_self_test(void)
         }
         state.pinned_id = 0UL;
         state.pinned_text[0] = '\0';
+        tg_gui_paint(&state, &b);
+    }
+
+    /* After a jump the message asked for stays where it was put while what
+       is under it grows (a picture that arrives later makes its message
+       taller), and lets go once the reader scrolls. */
+    if (state.message_count >= 3) {
+        static tg_gui_message saved_one;
+        tg_gui_record rec;
+        tg_gui_backend b = backend;
+        int saved_sel = state.selected_msg;
+        int saved_scroll = state.transcript_scroll;
+        unsigned long saved_id = state.messages[0].id;
+        int top_first;
+        int top_grown;
+        int top_let_go;
+        int h_first;
+        int h_grown;
+        int scroll_grown;
+        int held;
+
+        /* the message under the one asked for: plain text, three heights */
+        saved_one = state.messages[1];
+        memset(&state.messages[1], 0, sizeof(state.messages[1]));
+        state.messages[1].id = 902UL;
+        tg_gui_copy(state.messages[1].text, sizeof(state.messages[1].text),
+                    "uno");
+        state.messages[0].id = 901UL;
+        state.selected_msg = 0;
+        state.msg_scroll_to_sel = 1;
+        memset(&rec, 0, sizeof(rec));
+        rec.width = 640;
+        rec.height = 170;
+        b.context = &rec;
+        tg_gui_paint(&state, &b);
+        top_first = state.msg_top[0];
+        h_first = state.msg_top[2] - state.msg_top[1];
+        tg_gui_copy(state.messages[1].text, sizeof(state.messages[1].text),
+                    "uno\ndue\ntre\nquattro\ncinque\nsei");
+        tg_gui_paint(&state, &b);
+        top_grown = state.msg_top[0];
+        h_grown = state.msg_top[2] - state.msg_top[1];
+        scroll_grown = state.transcript_scroll;
+        /* the reader scrolls a little: nothing is held any more */
+        state.transcript_scroll -= 7;
+        held = state.transcript_scroll;
+        tg_gui_copy(state.messages[1].text, sizeof(state.messages[1].text),
+                    "uno\ndue\ntre\nquattro\ncinque\nsei\nsette\notto\n"
+                    "nove\ndieci\nundici\ndodici");
+        tg_gui_paint(&state, &b);
+        top_let_go = state.msg_top[0];
+        state.messages[1] = saved_one;
+        state.messages[0].id = saved_id;
+        state.selected_msg = saved_sel;
+        state.transcript_scroll = saved_scroll;
+        state.jump_msg_id = 0UL;
+        if (h_grown <= h_first || top_grown != top_first ||
+            scroll_grown < 7 || state.jump_scroll != held ||
+            top_let_go >= top_grown - 7) {
+            printf("gui self-test: a jump's message at %d, %d after the "
+                   "one under it grew from %d to %d (scroll %d), %d once "
+                   "scrolled (scroll %d, kept %d)\n",
+                   top_first, top_grown, h_first, h_grown, scroll_grown,
+                   top_let_go, state.jump_scroll, held);
+            return 2;
+        }
         tg_gui_paint(&state, &b);
     }
 
