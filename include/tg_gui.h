@@ -1071,6 +1071,11 @@ void tg_gui_notify_count(tg_gui_state *state, unsigned long peer_hi,
 /* The chat (hi, lo) was opened: its news are seen. */
 void tg_gui_notify_seen(tg_gui_state *state, unsigned long peer_hi,
                         unsigned long peer_lo);
+/* The chat (hi, lo) was read on another device and `unread` of its
+   messages are left: its news count no more than that, and none when
+   nothing is left. The news of the other chats stay. 1 = it changed. */
+int tg_gui_notify_cap(tg_gui_state *state, unsigned long peer_hi,
+                      unsigned long peer_lo, int unread);
 int tg_gui_notify_total(const tg_gui_state *state);
 int tg_gui_notify_count_for(const tg_gui_state *state, unsigned long peer_hi,
                             unsigned long peer_lo);

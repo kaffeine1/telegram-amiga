@@ -687,6 +687,33 @@ void tg_gui_notify_seen(tg_gui_state *state, unsigned long peer_hi,
     }
 }
 
+int tg_gui_notify_cap(tg_gui_state *state, unsigned long peer_hi,
+                      unsigned long peer_lo, int unread)
+{
+    int i;
+
+    if (state == 0) {
+        return 0;
+    }
+    for (i = 0; i < state->notify_peer_count; ++i) {
+        if (state->notify_peers[i].peer_hi == peer_hi &&
+            state->notify_peers[i].peer_lo == peer_lo) {
+            if (unread <= 0) {
+                state->notify_peer_count -= 1;
+                state->notify_peers[i] =
+                    state->notify_peers[state->notify_peer_count];
+                return 1;
+            }
+            if (state->notify_peers[i].count > unread) {
+                state->notify_peers[i].count = unread;
+                return 1;
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+
 int tg_gui_notify_total(const tg_gui_state *state)
 {
     int total;
@@ -16046,6 +16073,23 @@ int tg_gui_self_test(void)
             return 2;
         }
         ns->notify_mode = TG_GUI_NOTIFY_TITLE;
+        /* A chat read on another device: its news count no more than what
+           is left unread there, and go when nothing is left; the other
+           chats keep theirs. */
+        tg_gui_notify_count(ns, 0UL, 0x10UL);
+        tg_gui_notify_count(ns, 0UL, 0x30UL);
+        if (tg_gui_notify_cap(ns, 0UL, 0x10UL, 5) != 0 ||
+            tg_gui_notify_cap(ns, 0UL, 0x10UL, 2) != 1 ||
+            tg_gui_notify_count_for(ns, 0UL, 0x10UL) != 2 ||
+            tg_gui_notify_cap(ns, 0UL, 0x30UL, 0) != 1 ||
+            tg_gui_notify_count_for(ns, 0UL, 0x30UL) != 0 ||
+            tg_gui_notify_cap(ns, 0UL, 0x99UL, 0) != 0 ||
+            tg_gui_notify_cap(0, 0UL, 0x10UL, 0) != 0 ||
+            tg_gui_notify_total(ns) != 3 ||
+            tg_gui_notify_count_for(ns, 0UL, 0x20UL) != 1) {
+            puts("gui self-test: a chat read elsewhere kept its news");
+            return 2;
+        }
         tg_gui_notify_seen(ns, 0UL, 0x10UL);
         if (tg_gui_notify_total(ns) != 1 ||
             tg_gui_notify_count_for(ns, 0UL, 0x10UL) != 0) {

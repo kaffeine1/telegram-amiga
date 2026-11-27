@@ -51,6 +51,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   with a number or a name go through a bounded formatter of ours. Still
   in English, on purpose: the names of the text client's commands, the
   technical lines meant for a bug report and the debug log.
+- A chat read on another device loses its badge here at once. The count
+  beside a chat used to wait for the chat to be opened, or for the next
+  start: reading it on the phone left the number in the list and in the
+  window's title. Telegram says how many messages are still unread
+  (`updateReadHistoryInbox`, `updateReadChannelInbox`) and the row, the
+  title, the Archive's line and the saved list take that count. The chat
+  open in the window keeps its own.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message

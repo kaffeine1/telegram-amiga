@@ -595,6 +595,27 @@ typedef struct tg_chat_folder_entry {
 } tg_chat_folder_entry;
 static tg_chat_folder_entry tg_chat_folder_queue[TG_CHAT_FOLDER_QUEUE_MAX];
 static unsigned long tg_chat_folder_count = 0UL;
+/* A chat read on another device: Telegram says how many of its messages
+   are still unread, and the window's badge takes that count (collected
+   only while the window's session is open, like the moves above). One
+   entry a chat: a later reading replaces the earlier one.
+   updateReadHistoryInbox#9c974fdf flags:# folder_id:flags.0?int peer:Peer
+   max_id:int still_unread_count:int pts:int pts_count:int and
+   updateReadChannelInbox#922e6e10 flags:# folder_id:flags.0?int
+   channel_id:long max_id:int still_unread_count:int pts:int (layer 214
+   schema). */
+#define TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR 0x9c974fdfUL
+#define TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR 0x922e6e10UL
+#define TG_CHAT_INBOX_READ_QUEUE_MAX 8U
+typedef struct tg_chat_inbox_read_entry {
+    unsigned long peer_constructor;
+    unsigned long id_hi;
+    unsigned long id_lo;
+    unsigned long still_unread;
+} tg_chat_inbox_read_entry;
+static tg_chat_inbox_read_entry
+    tg_chat_inbox_read_queue[TG_CHAT_INBOX_READ_QUEUE_MAX];
+static unsigned long tg_chat_inbox_read_count = 0UL;
 /* The pinned chats, or the chats marked as unread, changed on another
    device: the window reads them again at its next tick rather than piece
    the change together from the update. */
@@ -4460,6 +4481,77 @@ static void tg_chat_folder_parse_update(tg_mtproto_tl_reader *reader)
     }
 }
 
+/* updateReadHistoryInbox or updateReadChannelInbox, the reader just past
+   the constructor: the chat was read on another device, up to max_id, and
+   still_unread_count messages are left. The envelope scan offers any
+   aligned constructor match, so the update counts only when every field is
+   what the schema puts there and holds a value Telegram can send. */
+static void tg_chat_inbox_read_parse_update(tg_mtproto_tl_reader *reader,
+                                            unsigned long constructor)
+{
+    tg_chat_inbox_read_entry entry;
+    unsigned long flags;
+    unsigned long word;
+    unsigned long i;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: nobody shows a badge */
+    }
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & ~1UL) != 0UL) {
+        return;
+    }
+    if ((flags & 1UL) != 0UL &&
+        (tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+         word > 1UL)) {
+        return; /* folder_id: the main list or the Archive */
+    }
+    if (constructor == TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR) {
+        entry.peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+    } else if (tg_mtproto_tl_read_u32(reader, &entry.peer_constructor) !=
+                   TG_MTPROTO_TL_OK ||
+               (entry.peer_constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR &&
+                entry.peer_constructor != TG_MTPROTO_PEER_CHAT_CONSTRUCTOR &&
+                entry.peer_constructor !=
+                    TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR)) {
+        return;
+    }
+    if (tg_mtproto_tl_read_u64(reader, &entry.id_hi, &entry.id_lo) !=
+            TG_MTPROTO_TL_OK ||
+        (entry.id_hi == 0UL && entry.id_lo == 0UL) ||
+        entry.id_hi > 0x000fffffUL || /* ids are below 2^52 */
+        tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+        word == 0UL || word > 0x7fffffffUL || /* max_id */
+        tg_mtproto_tl_read_u32(reader, &entry.still_unread) !=
+            TG_MTPROTO_TL_OK ||
+        entry.still_unread > 0x00ffffffUL ||
+        tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+        word == 0UL || word > 0x7fffffffUL) { /* pts */
+        return;
+    }
+    if (constructor == TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR &&
+        (tg_mtproto_tl_read_u32(reader, &word) != TG_MTPROTO_TL_OK ||
+         word > 0xffffUL)) { /* pts_count */
+        return;
+    }
+    for (i = 0UL; i < tg_chat_inbox_read_count; ++i) {
+        if (tg_chat_inbox_read_queue[i].peer_constructor ==
+                entry.peer_constructor &&
+            tg_chat_inbox_read_queue[i].id_hi == entry.id_hi &&
+            tg_chat_inbox_read_queue[i].id_lo == entry.id_lo) {
+            tg_chat_inbox_read_queue[i].still_unread = entry.still_unread;
+            return;
+        }
+    }
+    if (tg_chat_inbox_read_count == TG_CHAT_INBOX_READ_QUEUE_MAX) {
+        memmove(tg_chat_inbox_read_queue, tg_chat_inbox_read_queue + 1,
+                (TG_CHAT_INBOX_READ_QUEUE_MAX - 1U) *
+                    sizeof(*tg_chat_inbox_read_queue));
+        --tg_chat_inbox_read_count;
+    }
+    tg_chat_inbox_read_queue[tg_chat_inbox_read_count++] = entry;
+}
+
 /* updateDialogPinned, updatePinnedDialogs or updateDialogUnreadMark, the
    reader just past the constructor: the window's pins or unread marks are
    out of date. The envelope scan offers any aligned constructor match, so
@@ -4922,6 +5014,13 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             reader.offset = offset + 4UL;
             tg_chat_folder_parse_update(&reader);
         } else if (constructor ==
+                       TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR ||
+                   constructor ==
+                       TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_chat_inbox_read_parse_update(&reader, constructor);
+        } else if (constructor ==
                        TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
                    constructor ==
                        TG_MTPROTO_UPDATE_PINNED_DIALOGS_CONSTRUCTOR ||
@@ -5080,6 +5179,11 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
     }
     if (update_ctor == TG_MTPROTO_UPDATE_FOLDER_PEERS_CONSTRUCTOR) {
         tg_chat_folder_parse_update(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR ||
+        update_ctor == TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR) {
+        tg_chat_inbox_read_parse_update(reader, update_ctor);
         return;
     }
     if (update_ctor == TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
@@ -24230,6 +24334,209 @@ int tg_mtproto_probe_self_test(void)
                 tg_chat_pins_stale = 0;
                 tg_chat_marks_stale = 0;
             }
+            /* A chat read on another device: both updates queue what is
+               left unread there, in an updateShort and found by the scan
+               of an envelope; a later reading of the same chat replaces
+               the earlier one and a full queue drops its oldest. Nothing
+               is kept without a window, with a flag or a folder the schema
+               does not have, a peer that is none, a count Telegram cannot
+               send, or a body that ends before its pts. */
+            {
+                static const struct {
+                    unsigned long ctor;
+                    unsigned long flags;
+                    unsigned long folder;
+                    unsigned long peer; /* updateReadHistoryInbox only */
+                    unsigned long id_lo;
+                    unsigned long max_id;
+                    unsigned long left;
+                    int ends_early;
+                    int queued;
+                } cases[] = {
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 500UL,
+                      3UL, 0, 1 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 1UL,
+                      1UL, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 78UL, 500UL,
+                      0UL, 0, 1 },
+                    { TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, 0UL, 79UL, 500UL, 12UL, 0, 1 },
+                    { TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR, 1UL,
+                      0UL, 0UL, 79UL, 500UL, 12UL, 0, 1 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 2UL,
+                      0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 500UL,
+                      3UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 1UL,
+                      5UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 500UL,
+                      3UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, 0x12345678UL, 77UL, 500UL, 3UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, 500UL,
+                      3UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 0UL, 3UL,
+                      0, 0 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 500UL,
+                      0x01000000UL, 0, 0 },
+                    { TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 500UL,
+                      3UL, 1, 0 },
+                    { TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR, 0UL,
+                      0UL, 0UL, 79UL, 500UL, 12UL, 1, 0 }
+                };
+                unsigned int c;
+                int window;
+                int scan;
+
+                for (window = 1; window >= 0; --window) {
+                    for (scan = 0; scan < 2; ++scan) {
+                        for (c = 0U; c < sizeof(cases) / sizeof(cases[0]);
+                             ++c) {
+                            int history =
+                                cases[c].ctor ==
+                                TG_MTPROTO_UPDATE_READ_HISTORY_INBOX_CONSTRUCTOR;
+                            int want = window ? cases[c].queued : 0;
+
+                            tg_chat_inbox_read_count = 0UL;
+                            tg_chat_delete_target = window ? &del_sink : 0;
+                            tg_mtproto_tl_writer_init(&writer, payload,
+                                                      sizeof(payload));
+                            ok = tg_mtproto_tl_write_u32(
+                                     &writer,
+                                     scan ? 0x11111111UL
+                                          : TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                                     TG_MTPROTO_TL_OK &&
+                                 tg_mtproto_tl_write_u32(&writer,
+                                                         cases[c].ctor) ==
+                                     TG_MTPROTO_TL_OK &&
+                                 tg_mtproto_tl_write_u32(&writer,
+                                                         cases[c].flags) ==
+                                     TG_MTPROTO_TL_OK &&
+                                 ((cases[c].flags & 1UL) == 0UL ||
+                                  tg_mtproto_tl_write_u32(&writer,
+                                                          cases[c].folder) ==
+                                      TG_MTPROTO_TL_OK) &&
+                                 (!history ||
+                                  tg_mtproto_tl_write_u32(&writer,
+                                                          cases[c].peer) ==
+                                      TG_MTPROTO_TL_OK) &&
+                                 tg_mtproto_tl_write_u64(&writer, 0UL,
+                                                         cases[c].id_lo) ==
+                                     TG_MTPROTO_TL_OK &&
+                                 tg_mtproto_tl_write_u32(&writer,
+                                                         cases[c].max_id) ==
+                                     TG_MTPROTO_TL_OK &&
+                                 tg_mtproto_tl_write_u32(&writer,
+                                                         cases[c].left) ==
+                                     TG_MTPROTO_TL_OK;
+                            if (ok && !cases[c].ends_early) {
+                                ok = tg_mtproto_tl_write_u32(&writer, 900UL) ==
+                                         TG_MTPROTO_TL_OK &&
+                                     (!history ||
+                                      tg_mtproto_tl_write_u32(&writer, 1UL) ==
+                                          TG_MTPROTO_TL_OK) &&
+                                     tg_mtproto_tl_write_u32(
+                                         &writer, 1700000005UL) ==
+                                         TG_MTPROTO_TL_OK;
+                            }
+                            if (ok && scan) {
+                                tg_chat_edit_scan_updates(payload,
+                                                          writer.length, 0UL);
+                            } else if (ok) {
+                                tg_chat_notify_collect(payload, writer.length);
+                            }
+                            tg_chat_delete_target = 0;
+                            if (!ok ||
+                                tg_chat_inbox_read_count !=
+                                    (unsigned long)want ||
+                                (want &&
+                                 (tg_chat_inbox_read_queue[0].id_lo !=
+                                      cases[c].id_lo ||
+                                  tg_chat_inbox_read_queue[0].id_hi != 0UL ||
+                                  tg_chat_inbox_read_queue[0].still_unread !=
+                                      cases[c].left ||
+                                  tg_chat_inbox_read_queue[0]
+                                          .peer_constructor !=
+                                      (history
+                                           ? cases[c].peer
+                                           : TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR)))) {
+                                tg_chat_inbox_read_count = 0UL;
+                                tg_chat_nq = 0;
+                                tg_chat_typing_target = 0;
+                                tg_chat_edit_target = 0;
+                                printf("probe self-test: a chat read "
+                                       "elsewhere, case %u (window %d, scan "
+                                       "%d) wrong\n",
+                                       c, window, scan);
+                                return 2;
+                            }
+                        }
+                    }
+                }
+                {
+                    /* the same chat twice, then more chats than the queue
+                       holds */
+                    tg_mtproto_tl_reader inbox_reader;
+                    unsigned long n;
+
+                    tg_chat_inbox_read_count = 0UL;
+                    tg_chat_delete_target = &del_sink;
+                    ok = 1;
+                    for (n = 0UL; ok && n < TG_CHAT_INBOX_READ_QUEUE_MAX + 3UL;
+                         ++n) {
+                        tg_mtproto_tl_writer_init(&writer, payload,
+                                                  sizeof(payload));
+                        ok = tg_mtproto_tl_write_u32(&writer, 0UL) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u64(
+                                 &writer, 0UL, n < 2UL ? 40UL : 40UL + n) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer, 9UL) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer, 100UL + n) ==
+                                 TG_MTPROTO_TL_OK &&
+                             tg_mtproto_tl_write_u32(&writer, 900UL) ==
+                                 TG_MTPROTO_TL_OK;
+                        if (ok) {
+                            tg_mtproto_tl_reader_init(&inbox_reader, payload,
+                                                      writer.length);
+                            tg_chat_inbox_read_parse_update(
+                                &inbox_reader,
+                                TG_MTPROTO_UPDATE_READ_CHANNEL_INBOX_CONSTRUCTOR);
+                        }
+                        if (n == 1UL &&
+                            (tg_chat_inbox_read_count != 1UL ||
+                             tg_chat_inbox_read_queue[0].still_unread !=
+                                 101UL)) {
+                            ok = 0;
+                        }
+                    }
+                    /* ten different chats went in after the first: the
+                       queue holds the last eight */
+                    if (ok &&
+                        (tg_chat_inbox_read_count !=
+                             TG_CHAT_INBOX_READ_QUEUE_MAX ||
+                         tg_chat_inbox_read_queue[0].id_lo != 43UL ||
+                         tg_chat_inbox_read_queue[
+                                 TG_CHAT_INBOX_READ_QUEUE_MAX - 1U]
+                                 .id_lo !=
+                             40UL + TG_CHAT_INBOX_READ_QUEUE_MAX + 2UL)) {
+                        ok = 0;
+                    }
+                    tg_chat_delete_target = 0;
+                    tg_chat_inbox_read_count = 0UL;
+                    if (!ok) {
+                        tg_chat_nq = 0;
+                        tg_chat_typing_target = 0;
+                        tg_chat_edit_target = 0;
+                        puts("probe self-test: the queue of chats read "
+                             "elsewhere wrong");
+                        return 2;
+                    }
+                }
+            }
         }
 
         tg_chat_nq = 0;
@@ -43050,8 +43357,9 @@ static int tg_gui_row_read(tg_gui_state *gst, int is_user,
    at that moment (search results, a filtered list without the chat): the
    chat list read back from the cache brought the count back. 1 = the
    cache changed and is to be saved. */
-static int tg_gui_cache_read(tg_mtproto_peer_cache *cache, int is_user,
-                             unsigned long id_hi, unsigned long id_lo)
+static int tg_gui_cache_take_unread(tg_mtproto_peer_cache *cache,
+                                    int is_user, unsigned long id_hi,
+                                    unsigned long id_lo, unsigned long unread)
 {
     unsigned long i;
 
@@ -43061,14 +43369,20 @@ static int tg_gui_cache_read(tg_mtproto_peer_cache *cache, int is_user,
         if (!e->is_self && e->id_hi == id_hi && e->id_lo == id_lo &&
             (e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR
                  ? 1 : 0) == (is_user ? 1 : 0)) {
-            if (e->unread_count == 0UL) {
+            if (e->unread_count == unread) {
                 return 0;
             }
-            e->unread_count = 0UL;
+            e->unread_count = unread;
             return 1;
         }
     }
     return 0;
+}
+
+static int tg_gui_cache_read(tg_mtproto_peer_cache *cache, int is_user,
+                             unsigned long id_hi, unsigned long id_lo)
+{
+    return tg_gui_cache_take_unread(cache, is_user, id_hi, id_lo, 0UL);
 }
 
 /* ...and the count that came with its pin, if it is pinned and that count
@@ -43084,6 +43398,104 @@ static void tg_gui_pin_read(int is_user, unsigned long id_hi,
             tg_gui_pins[i].unread = 0UL;
         }
     }
+}
+
+/* A chat read on another device, on the rows: its badge takes what
+   Telegram counts as still unread there, a badge that blinked stops once
+   nothing is left, and the window's title counts no more news of that
+   chat than are still unread. The open chat's row is left alone, as for
+   any count, and so are rows that are something else (search results, a
+   forum's topics). 1 = something to redraw. */
+static int tg_gui_row_read_elsewhere(tg_gui_state *gst, int is_user,
+                                     unsigned long id_hi, unsigned long id_lo,
+                                     unsigned long unread)
+{
+    int changed = 0;
+    int k;
+
+    if (gst == 0) {
+        return 0;
+    }
+    if (tg_gui_notify_cap(gst, id_hi, id_lo,
+                          unread > 99999UL ? 99999 : (int)unread)) {
+        changed = 1;
+    }
+    if (gst->in_search || gst->forward_pick_active || gst->topic_view) {
+        return changed;
+    }
+    for (k = 0; k < gst->chat_count; ++k) {
+        if (tg_gui_row_is_peer(&gst->chats[k], is_user, id_hi, id_lo)) {
+            if (tg_gui_row_take_unread(gst, k, unread)) {
+                changed = 1;
+            }
+            if (unread == 0UL && k != gst->selected_chat &&
+                gst->chats[k].flash) {
+                gst->chats[k].flash = 0;
+                changed = 1;
+            }
+            break;
+        }
+    }
+    return changed;
+}
+
+/* The chats read on another device since the last tick: rows, title, the
+   count that came with a pin, the cache (whatever the rows are at that
+   moment: the list read back from the cache would bring the old count
+   back) and the Archive's band, when the chat is in there. */
+static int tg_gui_session_apply_inbox_read_updates(void)
+{
+    tg_gui_state *gst = tg_gui_session_state.gui_driver.state;
+    unsigned long i;
+    int changed = 0;
+    int cache_state = 0; /* 1 loaded, -1 could not be read */
+    int cache_changed = 0;
+    int k;
+
+    if (tg_chat_inbox_read_count == 0UL) {
+        return 0;
+    }
+    for (i = 0UL; i < tg_chat_inbox_read_count; ++i) {
+        const tg_chat_inbox_read_entry *entry = &tg_chat_inbox_read_queue[i];
+        int is_user =
+            entry->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR;
+
+        if (tg_gui_row_read_elsewhere(gst, is_user, entry->id_hi,
+                                      entry->id_lo, entry->still_unread)) {
+            changed = 1;
+        }
+        for (k = 0; k < tg_gui_pin_count; ++k) {
+            if (tg_gui_pins[k].is_user == (is_user ? 1 : 0) &&
+                tg_gui_pins[k].id_hi == entry->id_hi &&
+                tg_gui_pins[k].id_lo == entry->id_lo) {
+                tg_gui_pins[k].unread = entry->still_unread;
+            }
+        }
+        if (cache_state == 0) {
+            cache_state = tg_mtproto_load_peer_cache_file(
+                              tg_gui_session_state.peer_cache_file,
+                              &tg_gui_probe_cache) == 0 ? 1 : -1;
+        }
+        if (cache_state > 0 &&
+            tg_gui_cache_take_unread(&tg_gui_probe_cache, is_user,
+                                     entry->id_hi, entry->id_lo,
+                                     entry->still_unread)) {
+            cache_changed = 1;
+        }
+        if (tg_gui_archived_find(is_user, entry->id_hi, entry->id_lo) >= 0) {
+            tg_gui_archive_counts_stale = 1;
+        }
+    }
+    tg_chat_inbox_read_count = 0UL;
+    if (cache_changed) {
+        (void)tg_mtproto_save_peer_cache_file(
+            tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache, 0,
+            "chat cache");
+    }
+    if (changed) {
+        tg_gui_log("read: a chat was read elsewhere");
+    }
+    return changed;
 }
 
 /* Asks Telegram for the dialog of the chat at this 1-based cache index:
@@ -43270,6 +43682,81 @@ static int tg_gui_unread_self_test(void)
         memset(gst, 0, sizeof(*gst));
         if (!ok) {
             puts("probe self-test: unread badge of a pinned or a read chat "
+                 "failed");
+            return 2;
+        }
+        /* A chat read on another device: its row takes what is left
+           unread, a blinking badge stops when nothing is left, the title
+           counts no more news than are unread; the open chat's row and
+           the rows of a search stay as they are, a user is not the group
+           with its number. */
+        gst->chat_count = 3;
+        gst->selected_chat = 1;
+        gst->chats[0].index = 1UL;
+        gst->chats[0].is_group = 1;
+        gst->chats[0].peer_id_lo = 7UL;
+        gst->chats[0].unread = 12;
+        gst->chats[0].flash = 1;
+        gst->chats[1].index = 2UL;
+        gst->chats[1].peer_id_lo = 8UL;
+        gst->chats[1].unread = 4;
+        gst->chats[2].index = 3UL;
+        gst->chats[2].peer_id_lo = 7UL;
+        gst->chats[2].unread = 3;
+        tg_gui_notify_count(gst, 0UL, 7UL);
+        tg_gui_notify_count(gst, 0UL, 7UL);
+        tg_gui_notify_count(gst, 0UL, 7UL);
+        tg_gui_notify_count(gst, 0UL, 8UL);
+        ok = tg_gui_row_read_elsewhere(gst, 0, 0UL, 7UL, 5UL) == 1 &&
+             gst->chats[0].unread == 5 && gst->chats[0].flash == 1 &&
+             gst->chats[2].unread == 3 &&
+             tg_gui_notify_count_for(gst, 0UL, 7UL) == 3 &&
+             tg_gui_row_read_elsewhere(gst, 0, 0UL, 7UL, 5UL) == 0 &&
+             tg_gui_row_read_elsewhere(gst, 0, 0UL, 7UL, 2UL) == 1 &&
+             gst->chats[0].unread == 2 &&
+             tg_gui_notify_count_for(gst, 0UL, 7UL) == 2 &&
+             tg_gui_row_read_elsewhere(gst, 0, 0UL, 7UL, 0UL) == 1 &&
+             gst->chats[0].unread == 0 && gst->chats[0].flash == 0 &&
+             tg_gui_notify_count_for(gst, 0UL, 7UL) == 0 &&
+             tg_gui_notify_total(gst) == 1 &&
+             /* the open chat: the title's count goes, the row stays */
+             tg_gui_row_read_elsewhere(gst, 1, 0UL, 8UL, 0UL) == 1 &&
+             gst->chats[1].unread == 4 && tg_gui_notify_total(gst) == 0 &&
+             tg_gui_row_read_elsewhere(gst, 1, 0UL, 8UL, 0UL) == 0 &&
+             tg_gui_row_read_elsewhere(gst, 1, 0UL, 99UL, 0UL) == 0 &&
+             tg_gui_row_read_elsewhere(0, 1, 0UL, 7UL, 0UL) == 0;
+        gst->in_search = 1;
+        ok = ok && tg_gui_row_read_elsewhere(gst, 1, 0UL, 7UL, 0UL) == 0 &&
+             gst->chats[2].unread == 3;
+        gst->in_search = 0;
+        ok = ok && tg_gui_row_read_elsewhere(gst, 1, 0UL, 7UL, 1UL) == 1 &&
+             gst->chats[2].unread == 1;
+        memset(gst, 0, sizeof(*gst));
+        {
+            unsigned long keep_count = tg_gui_search_results.count;
+            tg_mtproto_peer_cache_entry keep0 =
+                tg_gui_search_results.entries[0];
+            tg_mtproto_peer_cache_entry *e = tg_gui_search_results.entries;
+
+            memset(e, 0, sizeof(e[0]));
+            e[0].peer_constructor = TG_MTPROTO_PEER_CHANNEL_CONSTRUCTOR;
+            e[0].id_lo = 7UL;
+            e[0].unread_count = 919UL;
+            tg_gui_search_results.count = 1UL;
+            ok = ok &&
+                 tg_gui_cache_take_unread(&tg_gui_search_results, 0, 0UL,
+                                          7UL, 25UL) == 1 &&
+                 e[0].unread_count == 25UL &&
+                 tg_gui_cache_take_unread(&tg_gui_search_results, 0, 0UL,
+                                          7UL, 25UL) == 0 &&
+                 tg_gui_cache_take_unread(&tg_gui_search_results, 1, 0UL,
+                                          7UL, 1UL) == 0 &&
+                 e[0].unread_count == 25UL;
+            e[0] = keep0;
+            tg_gui_search_results.count = keep_count;
+        }
+        if (!ok) {
+            puts("probe self-test: unread badge of a chat read elsewhere "
                  "failed");
             return 2;
         }
@@ -44013,6 +44500,9 @@ static int tg_gui_session_apply_pushes(FILE *stream, int allow_member_fetch)
     }
 #if !defined(TG_NO_GUI)
     if (tg_gui_session_apply_poll_updates()) {
+        dirty = 1;
+    }
+    if (tg_gui_session_apply_inbox_read_updates()) {
         dirty = 1;
     }
 #endif
