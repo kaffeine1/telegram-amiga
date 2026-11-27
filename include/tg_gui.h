@@ -798,6 +798,10 @@ typedef struct tg_gui_state {
     int set_x, set_y, set_w, set_row_h, set_rows, set_hint_y;
     int set_close_x, set_close_w; /* the Close button, in the title row */
     int ctx_muted; /* Telegram holds the menu's chat muted: it offers Unmute */
+    /* The menu's chat is another person's, who can be blocked; and the
+       session knows them blocked: the menu then offers Unblock. */
+    int ctx_can_block;
+    int ctx_blocked;
     int ctx_msg_pinned; /* the menu's message is pinned: it offers Unpin */
     /* The menu's message carries a file that a download from here saved
        and that is still on disk: Open and Show in drawer, not Download. */
@@ -1202,6 +1206,7 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_CHAT_SHOW_HIDDEN 15
 #define TG_GUI_CTX_POLL_VOTERS 16 /* Who voted...: a poll with public votes */
 #define TG_GUI_CTX_WHO_READ 20 /* Who read...: one's own message in a group */
+#define TG_GUI_CTX_CHAT_BLOCK 21 /* Block... / Unblock: a person's row */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */

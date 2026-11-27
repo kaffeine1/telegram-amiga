@@ -925,6 +925,16 @@
 #define MSG_ST_WHO_READ_SMALL_GROUPS_STR "Telegram tells it in small groups only"
 #define MSG_ST_WHO_READ_ONE_WEEK 513
 #define MSG_ST_WHO_READ_ONE_WEEK_STR "Telegram tells it for a week only"
+#define MSG_ST_ASKING_TELEGRAM 514
+#define MSG_ST_ASKING_TELEGRAM_STR "Asking Telegram..."
+#define MSG_ST_BLOCKED_ON_TELEGRAM 515
+#define MSG_ST_BLOCKED_ON_TELEGRAM_STR "Blocked on Telegram"
+#define MSG_ST_UNBLOCKED_ON_TELEGRAM 516
+#define MSG_ST_UNBLOCKED_ON_TELEGRAM_STR "Not blocked any more"
+#define MSG_ST_COULD_NOT_BLOCK 517
+#define MSG_ST_COULD_NOT_BLOCK_STR "Could not block (network?)"
+#define MSG_ST_COULD_NOT_UNBLOCK 518
+#define MSG_ST_COULD_NOT_UNBLOCK_STR "Could not unblock (network?)"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1029,6 +1039,12 @@
 #define MSG_RQ_WEBP_UNWRITABLE_STR "This file could not be written:\n\n    %.80s\n\nNothing was installed."
 #define MSG_RQ_WHO_READ 651
 #define MSG_RQ_WHO_READ_STR "Who read"
+#define MSG_RQ_BLOCK 652
+#define MSG_RQ_BLOCK_STR "Block"
+#define MSG_RQ_BLOCK_CANCEL 653
+#define MSG_RQ_BLOCK_CANCEL_STR "Block|Cancel"
+#define MSG_RQ_UNBLOCK_CANCEL 654
+#define MSG_RQ_UNBLOCK_CANCEL_STR "Unblock|Cancel"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1151,6 +1167,14 @@
 #define MSG_W_BTN_FILES_STR "Files"
 #define MSG_W_BTN_FILE 953
 #define MSG_W_BTN_FILE_STR "File"
+#define MSG_W_BLOCK_THIS_PERSON 954
+#define MSG_W_BLOCK_THIS_PERSON_STR "Block this person on Telegram?\n\n"
+#define MSG_W_BLOCKED_CANNOT_WRITE 955
+#define MSG_W_BLOCKED_CANNOT_WRITE_STR "\n\nThey can no longer write to you and do not\nsee when you are here, on all your devices.\nThe chat stays in your list."
+#define MSG_W_ALREADY_BLOCKED 956
+#define MSG_W_ALREADY_BLOCKED_STR "You have already blocked this person:\n\n"
+#define MSG_W_UNBLOCK_THEM 957
+#define MSG_W_UNBLOCK_THEM_STR "\n\nUnblock them?"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1451,6 +1475,10 @@
 #define MSG_SET_SHOW_WHEN_I_TYPE_STR "Show others when I type"
 #define MSG_G_WHO_READ 1449
 #define MSG_G_WHO_READ_STR "Who read..."
+#define MSG_G_BLOCK 1450
+#define MSG_G_BLOCK_STR "Block..."
+#define MSG_G_UNBLOCK 1451
+#define MSG_G_UNBLOCK_STR "Unblock"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2603,8 +2631,16 @@
 #define MSG_T_HELP_SILENT_TEXT_SEND_STR "  /silent text    send the text without a sound for the others"
 #define MSG_T_USE_SILENT_TEXT 2346
 #define MSG_T_USE_SILENT_TEXT_STR "Use: /silent <text>"
+#define MSG_T_HELP_BLOCK_UNBLOCK 2347
+#define MSG_T_HELP_BLOCK_UNBLOCK_STR "  /block /unblock  block this chat's person on Telegram, or take it back"
+#define MSG_T_BLOCKED_ON_TELEGRAM 2348
+#define MSG_T_BLOCKED_ON_TELEGRAM_STR "Blocked on Telegram: they can no longer write to you. /unblock takes it back."
+#define MSG_T_NOT_BLOCKED_ANY_MORE 2349
+#define MSG_T_NOT_BLOCKED_ANY_MORE_STR "Not blocked any more."
+#define MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED 2350
+#define MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED_STR "Only the private chat with a person can be blocked."
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2346
+#define TG_STRINGS_ID_MAX 2350
 
 #endif

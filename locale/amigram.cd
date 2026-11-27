@@ -958,6 +958,16 @@ MSG_ST_WHO_READ_SMALL_GROUPS (512//)
 Telegram tells it in small groups only
 MSG_ST_WHO_READ_ONE_WEEK (513//)
 Telegram tells it for a week only
+MSG_ST_ASKING_TELEGRAM (514//)
+Asking Telegram...
+MSG_ST_BLOCKED_ON_TELEGRAM (515//)
+Blocked on Telegram
+MSG_ST_UNBLOCKED_ON_TELEGRAM (516//)
+Not blocked any more
+MSG_ST_COULD_NOT_BLOCK (517//)
+Could not block (network?)
+MSG_ST_COULD_NOT_UNBLOCK (518//)
+Could not unblock (network?)
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1102,6 +1112,12 @@ This file could not be written:\n\
 Nothing was installed.
 MSG_RQ_WHO_READ (651//)
 Who read
+MSG_RQ_BLOCK (652//)
+Block
+MSG_RQ_BLOCK_CANCEL (653//)
+Block|Cancel
+MSG_RQ_UNBLOCK_CANCEL (654//)
+Unblock|Cancel
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1293,6 +1309,14 @@ Files
 MSG_W_BTN_FILE (953//)
 File
 ;
+MSG_W_BLOCK_THIS_PERSON (954//)
+Block this person on Telegram?\n\n
+MSG_W_BLOCKED_CANNOT_WRITE (955//)
+\n\nThey can no longer write to you and do not\nsee when you are here, on all your devices.\nThe chat stays in your list.
+MSG_W_ALREADY_BLOCKED (956//)
+You have already blocked this person:\n\n
+MSG_W_UNBLOCK_THEM (957//)
+\n\nUnblock them?
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -1595,6 +1619,10 @@ MSG_SET_SHOW_WHEN_I_TYPE (1448//)
 Show others when I type
 MSG_G_WHO_READ (1449//)
 Who read...
+MSG_G_BLOCK (1450//)
+Block...
+MSG_G_UNBLOCK (1451//)
+Unblock
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2777,3 +2805,11 @@ MSG_T_HELP_SILENT_TEXT_SEND (2345//)
   /silent text    send the text without a sound for the others
 MSG_T_USE_SILENT_TEXT (2346//)
 Use: /silent <text>
+MSG_T_HELP_BLOCK_UNBLOCK (2347//)
+  /block /unblock  block this chat's person on Telegram, or take it back
+MSG_T_BLOCKED_ON_TELEGRAM (2348//)
+Blocked on Telegram: they can no longer write to you. /unblock takes it back.
+MSG_T_NOT_BLOCKED_ANY_MORE (2349//)
+Not blocked any more.
+MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED (2350//)
+Only the private chat with a person can be blocked.

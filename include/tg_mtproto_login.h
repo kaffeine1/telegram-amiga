@@ -1328,6 +1328,27 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
                                        unsigned long body_length,
                                        tg_mtproto_read_participant *out,
                                        int max);
+/* Whether this account blocked a person (users.getFullUser, of which only
+   that is read: 1 blocked, 0 not, -1 no such answer), and the block and
+   unblock themselves (contacts.block, contacts.unblock: a person only). */
+tg_mtproto_tl_status tg_mtproto_build_users_get_full_user(
+    tg_mtproto_tl_writer *writer,
+    unsigned long user_id_hi,
+    unsigned long user_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo);
+int tg_mtproto_parse_user_full_blocked(unsigned long constructor,
+                                       const unsigned char *body,
+                                       unsigned long body_length);
+tg_mtproto_tl_status tg_mtproto_build_contacts_block(
+    tg_mtproto_tl_writer *writer,
+    int block,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
 /* messages.setTyping with the typing action: "is typing..." for the
    others in that chat (top_msg_id: a forum's topic, 0 = none). */
 tg_mtproto_tl_status tg_mtproto_build_messages_set_typing(

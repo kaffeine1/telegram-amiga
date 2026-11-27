@@ -697,6 +697,86 @@ static void tg_chat_status_parse_update(tg_mtproto_tl_reader *reader)
     }
     tg_chat_status_note(id_hi, id_lo, kind, when, 0);
 }
+
+/* The people this session knows to be blocked by this account, or not:
+   what Telegram answered about one, a block or an unblock made from here,
+   and the update that tells of one made on another device. Until one of
+   those a person is unknown: the menu of their row offers Block, and
+   Telegram is asked before anything is done.
+   updatePeerBlocked#ebe07752 flags:# blocked:flags.0?true
+   blocked_my_stories_from:flags.1?true peer_id:Peer (layer 214). */
+#define TG_MTPROTO_UPDATE_PEER_BLOCKED_CONSTRUCTOR 0xebe07752UL
+#define TG_GUI_BLOCK_KNOWN_MAX 16
+typedef struct tg_gui_block_entry {
+    unsigned long id_hi;
+    unsigned long id_lo;
+    int blocked;
+} tg_gui_block_entry;
+static tg_gui_block_entry tg_gui_block_known[TG_GUI_BLOCK_KNOWN_MAX];
+static int tg_gui_block_count = 0;
+
+/* 1 blocked, 0 not, -1 nothing known of this person. */
+static int tg_gui_block_lookup(unsigned long id_hi, unsigned long id_lo)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_block_count; ++i) {
+        if (tg_gui_block_known[i].id_hi == id_hi &&
+            tg_gui_block_known[i].id_lo == id_lo) {
+            return tg_gui_block_known[i].blocked;
+        }
+    }
+    return -1;
+}
+
+static void tg_gui_block_note(unsigned long id_hi, unsigned long id_lo,
+                              int blocked)
+{
+    int i;
+
+    for (i = 0; i < tg_gui_block_count; ++i) {
+        if (tg_gui_block_known[i].id_hi == id_hi &&
+            tg_gui_block_known[i].id_lo == id_lo) {
+            tg_gui_block_known[i].blocked = blocked != 0;
+            return;
+        }
+    }
+    if (tg_gui_block_count == TG_GUI_BLOCK_KNOWN_MAX) {
+        /* the one learnt first goes: asked again if it comes up */
+        memmove(tg_gui_block_known, tg_gui_block_known + 1,
+                (TG_GUI_BLOCK_KNOWN_MAX - 1) * sizeof(*tg_gui_block_known));
+        --tg_gui_block_count;
+    }
+    tg_gui_block_known[tg_gui_block_count].id_hi = id_hi;
+    tg_gui_block_known[tg_gui_block_count].id_lo = id_lo;
+    tg_gui_block_known[tg_gui_block_count].blocked = blocked != 0;
+    ++tg_gui_block_count;
+}
+
+/* updatePeerBlocked, the reader just past the constructor. The envelope
+   scan offers any aligned constructor match: the update counts only when
+   it reads as one about a person. */
+static void tg_gui_block_parse_update(tg_mtproto_tl_reader *reader)
+{
+    unsigned long flags;
+    unsigned long peer;
+    unsigned long id_hi;
+    unsigned long id_lo;
+
+    if (tg_chat_delete_target == 0) {
+        return; /* no window session: no menu to offer the other word */
+    }
+    if (tg_mtproto_tl_read_u32(reader, &flags) != TG_MTPROTO_TL_OK ||
+        (flags & ~3UL) != 0UL ||
+        tg_mtproto_tl_read_u32(reader, &peer) != TG_MTPROTO_TL_OK ||
+        peer != TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
+        tg_mtproto_tl_read_u64(reader, &id_hi, &id_lo) != TG_MTPROTO_TL_OK ||
+        (id_hi == 0UL && id_lo == 0UL) ||
+        id_hi > 0x000fffffUL) { /* ids are below 2^52 */
+        return;
+    }
+    tg_gui_block_note(id_hi, id_lo, (flags & 1UL) != 0UL);
+}
 #endif /* !TG_NO_GUI */
 /* The pinned chats, or the chats marked as unread, changed on another
    device: the window reads them again at its next tick rather than piece
@@ -5577,6 +5657,11 @@ static void tg_chat_edit_scan_updates(const unsigned char *body,
             tg_mtproto_tl_reader_init(&reader, body, body_length);
             reader.offset = offset + 4UL;
             tg_chat_status_parse_update(&reader);
+        } else if (constructor ==
+                       TG_MTPROTO_UPDATE_PEER_BLOCKED_CONSTRUCTOR) {
+            tg_mtproto_tl_reader_init(&reader, body, body_length);
+            reader.offset = offset + 4UL;
+            tg_gui_block_parse_update(&reader);
 #endif
         } else if (constructor ==
                        TG_MTPROTO_UPDATE_DIALOG_PINNED_CONSTRUCTOR ||
@@ -5747,6 +5832,10 @@ static void tg_chat_collect_update_item(tg_mtproto_tl_reader *reader,
 #if !defined(TG_NO_GUI)
     if (update_ctor == TG_MTPROTO_UPDATE_USER_STATUS_CONSTRUCTOR) {
         tg_chat_status_parse_update(reader);
+        return;
+    }
+    if (update_ctor == TG_MTPROTO_UPDATE_PEER_BLOCKED_CONSTRUCTOR) {
+        tg_gui_block_parse_update(reader);
         return;
     }
 #endif
@@ -13698,6 +13787,8 @@ static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
 #define TG_CHAT_CMD_UNREAD 3
 #define TG_CHAT_CMD_VOTE 4
 #define TG_CHAT_CMD_VOTERS 5
+#define TG_CHAT_CMD_BLOCK 6
+#define TG_CHAT_CMD_UNBLOCK 7
 /* What /voters prints: who voted in the last poll shown, by answer. */
 static char tg_chat_voters_text[TG_MTPROTO_POLL_VOTERS_TEXT_MAX];
 static int tg_mtproto_auth_chat_command_on_context(
@@ -13745,6 +13836,15 @@ static int tg_mtproto_auth_chat_command_on_context(
         built = tg_mtproto_build_messages_get_poll_votes(
             &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash, value,
             (unsigned long)TG_MTPROTO_POLL_VOTES_MAX);
+    } else if (what == TG_CHAT_CMD_BLOCK || what == TG_CHAT_CMD_UNBLOCK) {
+        if (constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+            /* said in the caller's words, not asked of Telegram */
+            strcpy(tg_mtproto_query_fail, "NOT_A_PERSON");
+            return 2;
+        }
+        built = tg_mtproto_build_contacts_block(
+            &writer, what == TG_CHAT_CMD_BLOCK, constructor, hi, lo, hash_hi,
+            hash_lo, has_hash);
     }
     if (built != TG_MTPROTO_TL_OK) {
         return 2;
@@ -13765,6 +13865,10 @@ static int tg_mtproto_auth_chat_command_on_context(
     }
     if (what == TG_CHAT_CMD_MUTE) {
         tg_mtproto_peer_notify_set_mute(constructor, hi, lo, value);
+    } else if (what == TG_CHAT_CMD_BLOCK || what == TG_CHAT_CMD_UNBLOCK) {
+        if (result.result_constructor != 0x997275b5UL) { /* boolTrue */
+            return 2;
+        }
     } else if (what == TG_CHAT_CMD_READ) {
         /* the unread mark, when there was one, goes with the reading; a
            mark that was not there is no failure */
@@ -14682,7 +14786,7 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
-    "          /help /update /logout /quit\n"
+    "          /block /unblock /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -18833,6 +18937,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_UNMUTE_TAKE_THE),
     TG_HELP(MSG_T_HELP_MARKREAD_MARK_THIS),
     TG_HELP(MSG_T_HELP_MARKUNREAD_MARK_THIS),
+    TG_HELP(MSG_T_HELP_BLOCK_UNBLOCK),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -21884,6 +21989,40 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
             continue;
         }
+        if (strcmp(line, "/block") == 0 || strcmp(line, "/unblock") == 0) {
+            /* The person of the open chat, blocked on Telegram or let back
+               in: every device follows. */
+            int what = line[1] == 'b' ? TG_CHAT_CMD_BLOCK
+                                      : TG_CHAT_CMD_UNBLOCK;
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
+            } else if (strcmp(peer_index, "self") == 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED));
+            } else {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_auth_chat_command_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, what, 0UL, 0, 0UL, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                tg_mtproto_chat_print_system_line(
+                    stream,
+                    rc == 0 ? (what == TG_CHAT_CMD_BLOCK
+                                   ? TG_TSTR(MSG_T_BLOCKED_ON_TELEGRAM)
+                                   : TG_TSTR(MSG_T_NOT_BLOCKED_ANY_MORE))
+                    : strcmp(tg_mtproto_query_fail, "NOT_A_PERSON") == 0
+                        ? TG_TSTR(MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED)
+                        : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                    tg_mtproto_close_auth_context(&chat_context);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
         cmd_arg = 0;
         if (tg_mtproto_chat_named_command_arg(line, "/voters", &cmd_arg)) {
             const tg_mtproto_poll *poll =
@@ -22930,6 +23069,7 @@ static int tg_gui_channel_install_self_test(void);
 static int tg_gui_unread_self_test(void);
 static int tg_gui_last_self_test(void);
 static int tg_gui_peer_seen_self_test(void);
+static int tg_gui_block_self_test(void);
 static int tg_gui_who_read_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
@@ -25376,6 +25516,7 @@ int tg_mtproto_probe_self_test(void)
         tg_gui_unread_self_test() != 0 ||
         tg_gui_last_self_test() != 0 ||
         tg_gui_peer_seen_self_test() != 0 ||
+        tg_gui_block_self_test() != 0 ||
         tg_gui_who_read_self_test() != 0 ||
         tg_gui_topic_change_self_test() != 0) {
         return 2;
@@ -28496,6 +28637,7 @@ int tg_gui_session_open(const char *api_file, const char *auth_file,
     tg_gui_session_state.gui_driver.draft_text = tg_gui_draft_for_row;
     tg_gui_session_state.gui_driver.offlist_news = tg_gui_offlist_news;
     tg_gui_session_state.gui_driver.last_row = tg_gui_last_for_row;
+    tg_gui_block_count = 0; /* another account may be here, other people */
     tg_gui_draft_count = 0;
     tg_gui_drafts_changed = 0;
     tg_gui_draft_follow = 0;
@@ -34099,6 +34241,132 @@ int tg_gui_session_leave_chat(unsigned long peer_index, int both,
     tg_gui_session_reload_chats();
     return 0;
 }
+
+#if !defined(TG_NO_GUI) /* asked from a row's menu */
+/* Public: whether this account blocked the person of the chat at this
+   1-based cache index: 1 blocked, 0 not (with ask = 0: not known to be),
+   -1 the chat is no other person's, or Telegram did not answer. With ask
+   set and nothing known of the person, Telegram is asked
+   (users.getFullUser), once: the answer is kept for the session. */
+int tg_gui_session_user_blocked(unsigned long peer_index, int ask,
+                                FILE *stream)
+{
+    static unsigned char query[32];
+    static const char label[] = "mtproto users.getFullUser";
+    char index_text[24];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int hah;
+    int known;
+    int rc;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return -1;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, "blocked peer") != 0 ||
+        pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
+        (tg_gui_self_known && ph == tg_gui_self_hi && pl == tg_gui_self_lo)) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    known = tg_gui_block_lookup(ph, pl);
+    if (known >= 0 || !ask) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return known > 0 ? 1 : 0;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_build_users_get_full_user(&writer, ph, pl, ahh, ahl) ==
+                 TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, 0, 0UL, quiet)
+             : 2;
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    known = rc == 0 ? tg_mtproto_parse_user_full_blocked(
+                          result.result_constructor, result.result_body,
+                          result.result_body_length)
+                    : -1;
+    if (known < 0) {
+        tg_gui_log("block: Telegram did not say whether they are blocked");
+        return -1;
+    }
+    tg_gui_block_note(ph, pl, known);
+    tg_gui_log(known ? "block: Telegram holds them blocked"
+                     : "block: Telegram does not hold them blocked");
+    return known;
+}
+
+/* Public: block (1) or unblock (0) on Telegram the person of the chat at
+   this 1-based cache index (contacts.block, contacts.unblock): every
+   device of the account follows. 0 = done, 2 = failed. */
+int tg_gui_session_block_user(unsigned long peer_index, int block,
+                              FILE *stream)
+{
+    unsigned char query[40];
+    char index_text[24];
+    char emsg[48];
+    unsigned long pc;
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    int hah;
+    int rc;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || peer_index == 0UL ||
+        peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, &ph, &pl, &ahh, &ahl,
+                                        &hah, quiet, "block peer") != 0 ||
+        pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    rc = tg_mtproto_build_contacts_block(&writer, block, pc, ph, pl, ahh,
+                                         ahl, hah) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(
+                   query, writer.length, &result,
+                   block ? "mtproto contacts.block"
+                         : "mtproto contacts.unblock",
+                   emsg, sizeof(emsg), quiet)
+             : 2;
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0 || result.result_constructor != 0x997275b5UL) { /* boolTrue */
+        tg_gui_log(block ? "block: Telegram did not block them"
+                         : "block: Telegram did not unblock them");
+        return 2;
+    }
+    tg_gui_block_note(ph, pl, block != 0);
+    tg_gui_log(block ? "block: blocked on Telegram"
+                     : "block: unblocked on Telegram");
+    return 0;
+}
+#endif
 
 /* UTF-8 (wire) -> Latin-1 (GUI display), for search-result titles that reach
    the sidebar directly rather than through the driver's copy_latin1. Without
@@ -45106,6 +45374,115 @@ static int tg_gui_peer_seen_self_test(void)
     tg_chat_edit_target = 0;
     if (!ok) {
         puts("probe self-test: what is kept of who was here wrong");
+        return 2;
+    }
+    return 0;
+}
+#endif
+
+#if !defined(TG_NO_SELFTEST)
+/* Who is known blocked: what is kept, and the update that tells of a block
+   or an unblock made on another device, in an updateShort and found by
+   the scan of an envelope. */
+static int tg_gui_block_self_test(void)
+{
+    static const struct {
+        unsigned long flags;
+        unsigned long peer;
+        unsigned long id_lo;
+        int known; /* what the person 77 is known as afterwards */
+    } cases[] = {
+        { 1UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 1 },
+        { 0UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 0 },
+        { 3UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, 1 },
+        { 1UL, TG_MTPROTO_PEER_CHAT_CONSTRUCTOR, 77UL, -1 }, /* a group */
+        { 5UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 77UL, -1 }, /* no such flag */
+        { 1UL, TG_MTPROTO_PEER_USER_CONSTRUCTOR, 0UL, -1 }   /* nobody */
+    };
+    static tg_chat_notify notify; /* the collector works for an armed one */
+    unsigned char payload[64];
+    tg_mtproto_tl_writer writer;
+    tg_chat_delete_sink del_sink;
+    unsigned int c;
+    int window;
+    int scan;
+    int i;
+    int ok = 1;
+
+    memset(&notify, 0, sizeof(notify));
+    notify.armed = 1;
+    tg_chat_nq = &notify;
+    for (window = 1; ok && window >= 0; --window) {
+        for (scan = 0; ok && scan < 2; ++scan) {
+            for (c = 0U; ok && c < sizeof(cases) / sizeof(cases[0]); ++c) {
+                int want = window ? cases[c].known : -1;
+
+                memset(&del_sink, 0, sizeof(del_sink));
+                tg_gui_block_count = 0;
+                tg_chat_delete_target = window ? &del_sink : 0;
+                tg_mtproto_tl_writer_init(&writer, payload, sizeof(payload));
+                ok = tg_mtproto_tl_write_u32(
+                         &writer,
+                         scan ? 0x11111111UL
+                              : TG_MTPROTO_UPDATE_SHORT_CONSTRUCTOR) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(
+                         &writer,
+                         TG_MTPROTO_UPDATE_PEER_BLOCKED_CONSTRUCTOR) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, cases[c].flags) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, cases[c].peer) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u64(&writer, 0UL, cases[c].id_lo) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, 1700000005UL) ==
+                         TG_MTPROTO_TL_OK;
+                if (ok && scan) {
+                    tg_chat_edit_scan_updates(payload, writer.length, 0UL);
+                } else if (ok) {
+                    tg_chat_notify_collect(payload, writer.length);
+                }
+                tg_chat_delete_target = 0;
+                if (!ok || tg_gui_block_lookup(0UL, 77UL) != want ||
+                    tg_gui_block_count != (want >= 0 ? 1 : 0)) {
+                    tg_gui_block_count = 0;
+                    tg_chat_nq = 0;
+                    tg_chat_typing_target = 0;
+                    tg_chat_edit_target = 0;
+                    printf("probe self-test: a block made elsewhere, case %u "
+                           "(window %d, scan %d) wrong\n", c, window, scan);
+                    return 2;
+                }
+            }
+        }
+    }
+    tg_chat_nq = 0;
+    tg_chat_typing_target = 0;
+    tg_chat_edit_target = 0;
+    /* What is kept: the newer word about a person replaces the older, a
+       person never heard of is unknown, and one more than the table holds
+       pushes out the one learnt first. */
+    tg_gui_block_count = 0;
+    tg_gui_block_note(0UL, 1UL, 1);
+    tg_gui_block_note(0UL, 1UL, 0);
+    tg_gui_block_note(0UL, 2UL, 7); /* any yes is a yes */
+    ok = tg_gui_block_count == 2 && tg_gui_block_lookup(0UL, 1UL) == 0 &&
+         tg_gui_block_lookup(0UL, 2UL) == 1 &&
+         tg_gui_block_lookup(0UL, 3UL) == -1 &&
+         tg_gui_block_lookup(1UL, 1UL) == -1;
+    for (i = 3; i <= TG_GUI_BLOCK_KNOWN_MAX + 1; ++i) {
+        tg_gui_block_note(0UL, (unsigned long)i, 1);
+    }
+    ok = ok && tg_gui_block_count == TG_GUI_BLOCK_KNOWN_MAX &&
+         tg_gui_block_lookup(0UL, 1UL) == -1 &&
+         tg_gui_block_lookup(0UL, 2UL) == 1 &&
+         tg_gui_block_lookup(0UL,
+                             (unsigned long)TG_GUI_BLOCK_KNOWN_MAX + 1UL) ==
+             1;
+    tg_gui_block_count = 0;
+    if (!ok) {
+        puts("probe self-test: what is kept of who is blocked wrong");
         return 2;
     }
     return 0;

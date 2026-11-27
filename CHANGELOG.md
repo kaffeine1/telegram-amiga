@@ -108,6 +108,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   and a reader the client cannot name is counted in a last line. Where
   Telegram does not tell (a big group, an old message) the status line
   says why.
+- Block and unblock a person (`contacts.block`, `contacts.unblock`):
+  "Block..." in the menu of a private chat's row, after a requester that
+  says what it means. Telegram is asked first whether the person is
+  blocked already (the block may have been made on another device), and
+  the menu then reads "Unblock"; a block or an unblock made elsewhere
+  while Amigram runs is heard of too. The text client has `/block` and
+  `/unblock` for the open chat.
 
 ### Changed
 - The text client says "Auto-read every 1 second" and "1 hidden message

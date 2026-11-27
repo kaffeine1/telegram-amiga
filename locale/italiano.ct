@@ -1398,6 +1398,21 @@ Telegram lo dice solo nei gruppi piccoli
 MSG_ST_WHO_READ_ONE_WEEK
 Telegram lo dice solo per una settimana
 ; Telegram tells it for a week only
+MSG_ST_ASKING_TELEGRAM
+Chiedo a Telegram...
+; Asking Telegram...
+MSG_ST_BLOCKED_ON_TELEGRAM
+Bloccato su Telegram
+; Blocked on Telegram
+MSG_ST_UNBLOCKED_ON_TELEGRAM
+Non è più bloccato
+; Not blocked any more
+MSG_ST_COULD_NOT_BLOCK
+Blocco non riuscito (rete?)
+; Could not block (network?)
+MSG_ST_COULD_NOT_UNBLOCK
+Sblocco non riuscito (rete?)
+; Could not unblock (network?)
 MSG_RQ_OK
 OK
 ; OK
@@ -1582,6 +1597,15 @@ Non è stato installato niente.
 MSG_RQ_WHO_READ
 Chi ha letto
 ; Who read
+MSG_RQ_BLOCK
+Blocca
+; Block
+MSG_RQ_BLOCK_CANCEL
+Blocca|Annulla
+; Block|Cancel
+MSG_RQ_UNBLOCK_CANCEL
+Sblocca|Annulla
+; Unblock|Cancel
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -1817,6 +1841,18 @@ File
 MSG_W_BTN_FILE
 File
 ; File
+MSG_W_BLOCK_THIS_PERSON
+Bloccare questa persona su Telegram?\n\n
+; Block this person on Telegram?\n\n
+MSG_W_BLOCKED_CANNOT_WRITE
+\n\nNon potrà più scriverti e non vedrà quando\nci sei, su tutti i tuoi dispositivi.\nLa chat resta nel tuo elenco.
+; \n\nThey can no longer write to you and do not\nsee when you are here, on all your devices.\nThe chat stays in your list.
+MSG_W_ALREADY_BLOCKED
+Hai già bloccato questa persona:\n\n
+; You have already blocked this person:\n\n
+MSG_W_UNBLOCK_THEM
+\n\nVuoi sbloccarla?
+; \n\nUnblock them?
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -2267,6 +2303,12 @@ Mostra agli altri quando scrivo
 MSG_G_WHO_READ
 Chi ha letto...
 ; Who read...
+MSG_G_BLOCK
+Blocca...
+; Block...
+MSG_G_UNBLOCK
+Sblocca
+; Unblock
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -3926,3 +3968,15 @@ MSG_T_HELP_SILENT_TEXT_SEND
 MSG_T_USE_SILENT_TEXT
 Uso: /silent <testo>
 ; Use: /silent <text>
+MSG_T_HELP_BLOCK_UNBLOCK
+  /block /unblock  blocca su Telegram la persona di questa chat, o la sblocca
+;   /block /unblock  block this chat's person on Telegram, or take it back
+MSG_T_BLOCKED_ON_TELEGRAM
+Bloccato su Telegram: non potrà più scriverti. /unblock lo toglie.
+; Blocked on Telegram: they can no longer write to you. /unblock takes it back.
+MSG_T_NOT_BLOCKED_ANY_MORE
+Non è più bloccato.
+; Not blocked any more.
+MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED
+Si può bloccare solo la chat privata con una persona.
+; Only the private chat with a person can be blocked.

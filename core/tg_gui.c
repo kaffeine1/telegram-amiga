@@ -8100,6 +8100,15 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = TG_STR(MSG_G_SHOW_HIDDEN_MESSAGES);
             ids[n++] = TG_GUI_CTX_CHAT_SHOW_HIDDEN;
         }
+        /* A person can be blocked on Telegram, or let back in. */
+        if (state->ctx_can_block &&
+            !state->chats[state->ctx_chat - 1].is_group &&
+            state->chats[state->ctx_chat - 1].index !=
+                TG_GUI_SAVED_PEER_INDEX) {
+            labels[n] = state->ctx_blocked ? TG_STR(MSG_G_UNBLOCK)
+                                           : TG_STR(MSG_G_BLOCK);
+            ids[n++] = TG_GUI_CTX_CHAT_BLOCK;
+        }
         /* Gone from Telegram, not just from this list: last of the chat's
            own items, and asked again before it happens. */
         if (state->chats[state->ctx_chat - 1].index !=
@@ -11235,6 +11244,50 @@ static int tg_gui_notify_menu_self_test(void)
         return 2;
     }
     state->chats[0].unread_mark = 0;
+    /* A person can be blocked: the line before the chat's deletion, which
+       reads Unblock once they are known blocked. Never a group, never
+       Saved Messages. */
+    state->ctx_can_block = 1;
+    if (tg_gui_context_items(state, labels, ids) != 9 ||
+        ids[7] != TG_GUI_CTX_CHAT_BLOCK ||
+        strcmp(labels[7], TG_STR(MSG_G_BLOCK)) != 0 ||
+        ids[8] != TG_GUI_CTX_CHAT_LEAVE) {
+        puts("gui self-test: a person's menu cannot block them");
+        return 2;
+    }
+    state->ctx_blocked = 1;
+    if (tg_gui_context_items(state, labels, ids) != 9 ||
+        ids[7] != TG_GUI_CTX_CHAT_BLOCK ||
+        strcmp(labels[7], TG_STR(MSG_G_UNBLOCK)) != 0) {
+        puts("gui self-test: a blocked person's menu cannot unblock them");
+        return 2;
+    }
+    {
+        int kind;
+
+        for (kind = 0; kind < 2; ++kind) {
+            int n;
+            int i;
+
+            if (kind == 0) {
+                state->chats[0].is_group = 1;
+            } else {
+                state->chats[0].index = TG_GUI_SAVED_PEER_INDEX;
+            }
+            n = tg_gui_context_items(state, labels, ids);
+            state->chats[0].is_group = 0;
+            state->chats[0].index = 5UL;
+            for (i = 0; i < n; ++i) {
+                if (ids[i] == TG_GUI_CTX_CHAT_BLOCK) {
+                    puts("gui self-test: a group or Saved Messages can be "
+                         "blocked");
+                    return 2;
+                }
+            }
+        }
+    }
+    state->ctx_can_block = 0;
+    state->ctx_blocked = 0;
     /* In the Archive the menu leads with the way back, and has no pin;
        its last line, there only, leaves the Archive. */
     state->archive_view = 1;

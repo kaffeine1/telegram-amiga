@@ -461,6 +461,18 @@ int tg_gui_session_who_read(unsigned long message_id, char *out,
                             unsigned long size, char *emsg,
                             unsigned long emsg_size, FILE *stream);
 
+/* Whether this account blocked the person of the chat at this 1-based
+   cache index: 1 blocked, 0 not (with ask = 0: not known to be), -1 the
+   chat is no other person's or Telegram did not answer. With ask set,
+   Telegram is asked when the session does not know yet. */
+int tg_gui_session_user_blocked(unsigned long peer_index, int ask,
+                                FILE *stream);
+
+/* Blocks (1) or unblocks (0) that person on Telegram, for every device of
+   the account. 0 = done, 2 = failed. */
+int tg_gui_session_block_user(unsigned long peer_index, int block,
+                              FILE *stream);
+
 /* The messages tg_gui_session_send sends from now on reach the others
    without a sound (1), or with it again (0): set it around a send. */
 void tg_gui_session_send_silent(int on);

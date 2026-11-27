@@ -9838,7 +9838,91 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
     }
     return n;
 }
+
+/* users.getFullUser#b60f5918 id:InputUser = users.UserFull (layer 214
+   schema), asked for one thing: whether this account blocked the
+   person. */
+tg_mtproto_tl_status tg_mtproto_build_users_get_full_user(
+    tg_mtproto_tl_writer *writer,
+    unsigned long user_id_hi,
+    unsigned long user_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || (user_id_hi == 0UL && user_id_lo == 0UL)) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0xb60f5918UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_USER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, user_id_hi, user_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi,
+                                         access_hash_lo);
+    }
+    return status;
+}
+
+/* Its answer: users.userFull#3b6d152e full_user:UserFull chats users, with
+   userFull#c577b5ad flags:# blocked:flags.0?true ... first. 1 = blocked,
+   0 = not, -1 when the body is no such answer. */
+int tg_mtproto_parse_user_full_blocked(unsigned long constructor,
+                                       const unsigned char *body,
+                                       unsigned long body_length)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long inner;
+    unsigned long flags;
+
+    if (constructor != 0x3b6d152eUL || body == 0) {
+        return -1;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_mtproto_tl_read_u32(&reader, &inner) != TG_MTPROTO_TL_OK ||
+        inner != 0xc577b5adUL ||
+        tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK) {
+        return -1;
+    }
+    return (flags & 1UL) != 0UL ? 1 : 0;
+}
 #endif
+
+/* contacts.block#2e2e8734 and contacts.unblock#b550d328, both flags:#
+   my_stories_from:flags.0?true id:InputPeer = Bool (layer 214 schema): a
+   person can no longer write to this account, or can again. Asked of a
+   person only: nothing else is blocked from here. */
+tg_mtproto_tl_status tg_mtproto_build_contacts_block(
+    tg_mtproto_tl_writer *writer,
+    int block,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || peer_constructor != TG_PEER_USER_CONSTRUCTOR) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer,
+                                     block ? 0x2e2e8734UL : 0xb550d328UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    return status;
+}
 
 /* One vote of a votes list: who, and the answers chosen (bit 0 = the
    poll's first answer). */
@@ -19813,6 +19897,67 @@ int tg_mtproto_login_self_test(void)
             return 2;
         }
     }
+    /* Whether a person is blocked: the request's bytes, and its answer
+       read: blocked, not blocked, something else, a body cut short. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_users_get_full_user(&writer, 0UL, 0x55UL, 0x11UL,
+                                             0x22UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 24UL ||
+        tg_read_u32_le(peer_rpc) != 0xb60f5918UL ||
+        tg_read_u32_le(peer_rpc + 4) != 0xf21158c6UL ||
+        tg_read_u32_le(peer_rpc + 8) != 0x55UL ||
+        tg_read_u32_le(peer_rpc + 16) != 0x22UL ||
+        tg_read_u32_le(peer_rpc + 20) != 0x11UL ||
+        tg_mtproto_build_users_get_full_user(&writer, 0UL, 0UL, 0x11UL,
+                                             0x22UL) == TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_tl_write_u32(&writer, 0xc577b5adUL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_write_u32(&writer, 0x00000091UL) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_parse_user_full_blocked(0x3b6d152eUL, peer_rpc,
+                                           writer.length) != 1 ||
+        tg_mtproto_parse_user_full_blocked(0x3b6d152eUL, peer_rpc, 4UL) !=
+            -1 ||
+        tg_mtproto_parse_user_full_blocked(0x12345678UL, peer_rpc,
+                                           writer.length) != -1) {
+        return 2;
+    }
+    peer_rpc[4] = 0x90U; /* the same flags without the first */
+    if (tg_mtproto_parse_user_full_blocked(0x3b6d152eUL, peer_rpc,
+                                           writer.length) != 0) {
+        return 2;
+    }
+    peer_rpc[0] ^= 0x01U; /* the full user is something else */
+    if (tg_mtproto_parse_user_full_blocked(0x3b6d152eUL, peer_rpc,
+                                           writer.length) != -1) {
+        return 2;
+    }
+#endif
+    /* Blocking and unblocking a person: the two requests, flags 0 and the
+       person; nothing but a person is blocked from here. */
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_contacts_block(&writer, 1, TG_PEER_USER_CONSTRUCTOR,
+                                        0UL, 0x55UL, 0x11UL, 0x22UL, 1) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 28UL ||
+        tg_read_u32_le(peer_rpc) != 0x2e2e8734UL ||
+        tg_read_u32_le(peer_rpc + 4) != 0UL ||
+        tg_read_u32_le(peer_rpc + 12) != 0x55UL) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_contacts_block(&writer, 0, TG_PEER_USER_CONSTRUCTOR,
+                                        0UL, 0x55UL, 0x11UL, 0x22UL, 1) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 28UL ||
+        tg_read_u32_le(peer_rpc) != 0xb550d328UL ||
+        tg_mtproto_build_contacts_block(&writer, 1, TG_PEER_CHAT_CONSTRUCTOR,
+                                        0UL, 0x77UL, 0UL, 0UL, 0) ==
+            TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+#if !defined(TG_NO_GUI)
     /* messages.setTyping: to a user with no topic (flags 0), and to a
        forum's topic (flags 1, the topic before the action). */
     tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));

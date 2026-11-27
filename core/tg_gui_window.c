@@ -9200,6 +9200,49 @@ static int tg_gui_amiga_confirm_leave(struct Window *win, const char *name,
     return (int)tg_gui_amiga_easyreq_args(win, &es);
 }
 
+/* Asks before a person is blocked on Telegram; with `already` set, says
+   that they are blocked already and offers to unblock them. 1 = go ahead,
+   0 = cancelled. The name is baked into the body, as for Remove chat. */
+static int tg_gui_amiga_confirm_block(struct Window *win, const char *name,
+                                      int already)
+{
+    struct EasyStruct es;
+    char shown[3 * TG_GUI_NAME_MAX]; /* an emoticon outgrows its pair */
+    char body[sizeof(shown) + 240];
+    const char *pre = already ? TG_STR(MSG_W_ALREADY_BLOCKED)
+                              : TG_STR(MSG_W_BLOCK_THIS_PERSON);
+    const char *post = already ? TG_STR(MSG_W_UNBLOCK_THEM)
+                               : TG_STR(MSG_W_BLOCKED_CANNOT_WRITE);
+    const char *p;
+    int n;
+
+    n = 0;
+    for (p = pre; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+        body[n++] = *p;
+    }
+    if (name != 0) {
+        tg_gui_emoji_expand_pairs(shown, sizeof(shown), name);
+        for (p = shown; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+            if (*p != '%') {
+                body[n++] = *p;
+            }
+        }
+    }
+    for (p = post; *p != '\0' && n < (int)sizeof(body) - 1; ++p) {
+        body[n++] = *p;
+    }
+    body[n] = '\0';
+
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems and UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_BLOCK);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)(already ? TG_STR(MSG_RQ_UNBLOCK_CANCEL)
+                                        : TG_STR(MSG_RQ_BLOCK_CANCEL));
+    return (int)tg_gui_amiga_easyreq_args(win, &es) == 1;
+}
+
 /* One-line confirm before deleting a message for everyone. 1 = Delete. */
 /* own_chat: Saved Messages, where there is no "everyone" to speak of. */
 static int tg_gui_amiga_confirm_delete(struct Window *win, int own_chat)
@@ -12010,6 +12053,58 @@ static void tg_gui_window_leave_chat(tg_gui_state *state, struct Window *win,
         state->open_chat_valid = 0;
         tg_gui_window_paint(state, backend);
     }
+}
+
+/* "Block..." / "Unblock" of a person's row menu. Telegram is asked first
+   whether they are blocked, when the session does not know: the menu's
+   word may be older than a block made on another device. Blocking is
+   asked about; unblocking someone the menu named blocked is not. */
+static void tg_gui_window_block_chat(tg_gui_state *state, struct Window *win,
+                                     int sel, tg_gui_backend *backend)
+{
+    char name[TG_GUI_NAME_MAX];
+    unsigned long idx;
+    int offered_unblock = state->ctx_blocked;
+    int blocked;
+    int want;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        state->in_search || sel < 0 || sel >= state->chat_count ||
+        tg_gui_topics_listed(state)) {
+        return;
+    }
+    idx = state->chats[sel].index;
+    if (idx == 0UL || idx == TG_GUI_SAVED_PEER_INDEX) {
+        return;
+    }
+    tg_gui_window_copy(name, sizeof(name), state->chats[sel].name);
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_ASKING_TELEGRAM));
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    blocked = tg_gui_session_user_blocked(idx, 1, stdout);
+    if (blocked < 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    want = !blocked;
+    if (!(blocked && offered_unblock) &&
+        !tg_gui_amiga_confirm_block(win, name, blocked)) {
+        return; /* cancelled */
+    }
+    if (tg_gui_session_block_user(idx, want, stdout) != 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           want ? TG_STR(MSG_ST_COULD_NOT_BLOCK)
+                                : TG_STR(MSG_ST_COULD_NOT_UNBLOCK));
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           want ? TG_STR(MSG_ST_BLOCKED_ON_TELEGRAM)
+                                : TG_STR(MSG_ST_UNBLOCKED_ON_TELEGRAM));
+    }
+    tg_gui_window_paint(state, backend);
 }
 
 /* "Reload chat list", from the Chats menu: pages
@@ -19271,6 +19366,17 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->ctx_muted =
                             tg_gui_session_chat_muted(chat->index,
                                                       stdout) == 1;
+                        {
+                            /* what the session knows: Telegram is asked
+                               only when Block is chosen */
+                            int known = chat->is_group
+                                ? -1
+                                : tg_gui_session_user_blocked(chat->index,
+                                                              0, stdout);
+
+                            state->ctx_can_block = known >= 0;
+                            state->ctx_blocked = known == 1;
+                        }
                         state->ctx_hidden_count = chat->is_group
                             ? tg_gui_session_hidden_count(chat->peer_id_hi,
                                                           chat->peer_id_lo)
@@ -19462,6 +19568,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_LEAVE) {
                         tg_gui_window_leave_chat(state, ctx.window, ci,
+                                                 &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_BLOCK) {
+                        tg_gui_window_block_chat(state, ctx.window, ci,
                                                  &backend);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_READ) {
