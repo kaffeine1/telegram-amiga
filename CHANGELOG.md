@@ -192,6 +192,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   pictures arrive in the posts under it; each picture used to push it
   up, and a channel of posts with pictures showed the next post. It
   lets go as soon as the chat is scrolled.
+- The line a reply shows when its target is not loaded, "Reply to an
+  earlier message", was not in the catalog and stayed English in the
+  Italian window.
 
 ## [0.6] - 2026-11-23
 

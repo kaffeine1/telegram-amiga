@@ -1551,6 +1551,8 @@
 #define MSG_G_COMMENTS_ON_A_POST_STR "Comments on a post"
 #define MSG_G_TRANSLATE 1458
 #define MSG_G_TRANSLATE_STR "Translate"
+#define MSG_G_REPLY_TO_AN_EARLIER_MESSAGE 1459
+#define MSG_G_REPLY_TO_AN_EARLIER_MESSAGE_STR "Reply to an earlier message"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

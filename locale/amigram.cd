@@ -1700,6 +1700,8 @@ MSG_G_COMMENTS_ON_A_POST (1457//)
 Comments on a post
 MSG_G_TRANSLATE (1458//)
 Translate
+MSG_G_REPLY_TO_AN_EARLIER_MESSAGE (1459//)
+Reply to an earlier message
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

@@ -2423,6 +2423,9 @@ Commenti a un post
 MSG_G_TRANSLATE
 Traduci
 ; Translate
+MSG_G_REPLY_TO_AN_EARLIER_MESSAGE
+Risposta a un messaggio precedente
+; Reply to an earlier message
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]

@@ -304,7 +304,7 @@ static void tg_gui_driver_forward_text(tg_gui_message *message,
 /* A reply whose header carries no quote names its target only by id (the
    usual case, and always when the target is a photo): show the target's
    sender and opening text, as the official clients do. */
-#define TG_GUI_REPLY_UNSEEN "Reply to an earlier message"
+#define TG_GUI_REPLY_UNSEEN TG_STR(MSG_G_REPLY_TO_AN_EARLIER_MESSAGE)
 
 static void tg_gui_driver_reply_from(tg_gui_message *reply,
                                      const tg_gui_message *target)
