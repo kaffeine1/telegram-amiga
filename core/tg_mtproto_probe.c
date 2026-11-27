@@ -40603,6 +40603,69 @@ int tg_gui_session_update_can_install(void)
     return strcmp(tg_update_lane(), "host") != 0 || tg_gui_update_host_ok;
 }
 
+/* The translations of the update, after the program is in place: each
+   catalog the manifest has for this build (tg_update_entry_is_catalog) is
+   fetched, checked against its size and SHA-256 like the program, and put
+   in Catalogs/<language>/, the language being the one the catalog itself
+   names. A catalog that does not come, or cannot be written, leaves what
+   was there: the new program then says in English what the old catalog
+   lacks. Nothing here fails the update. */
+static void tg_mtproto_update_catalogs_on(const tg_mtproto_file_ctx *q,
+                                          const tg_mtproto_file_ctx *fc,
+                                          const tg_update_manifest *m,
+                                          FILE *stream)
+{
+    static const char part[] = "data/telegram-update-catalog.tmp";
+    unsigned char head[256]; /* the language is in the first hundred bytes */
+    char language[TG_UPDATE_LANGUAGE_MAX];
+    char path[16 + TG_UPDATE_LANGUAGE_MAX + 24];
+    char why[96];
+    unsigned int i;
+    size_t got;
+    FILE *f;
+
+    for (i = 0U; i < m->count; ++i) {
+        const tg_update_entry *e = &m->entries[i];
+
+        if (!tg_update_entry_is_catalog(e, tg_update_lane())) {
+            continue;
+        }
+        (void)remove(part);
+        if (tg_mtproto_fetch_channel_file_on(q, fc,
+                                             tg_gui_update_files_channel,
+                                             e->file_name, e->size,
+                                             e->sha256_hex, part, why,
+                                             sizeof(why), stream) != 0) {
+            tg_gui_log("update: a catalog did not come, the old one stays");
+            (void)remove(part);
+            continue;
+        }
+        got = 0U;
+        f = fopen(part, "rb");
+        if (f != 0) {
+            got = fread(head, 1, sizeof(head), f);
+            fclose(f);
+        }
+        if (!tg_update_catalog_language(head, (unsigned long)got, language,
+                                        sizeof(language))) {
+            tg_gui_log("update: a catalog names no language, left out");
+            (void)remove(part);
+            continue;
+        }
+        (void)mkdir("Catalogs", 0777);
+        sprintf(path, "Catalogs/%.31s", language);
+        (void)mkdir(path, 0777);
+        sprintf(path, "Catalogs/%.31s/amigram.catalog", language);
+        (void)remove(path);
+        if (tg_gui_install_copy(part, path, e->sha256_hex) != 0) {
+            tg_gui_log("update: a catalog could not be written");
+        } else {
+            tg_gui_log("update: a catalog installed");
+        }
+        (void)remove(part);
+    }
+}
+
 /* Fetches and installs `version`, on any session. 0 = installed (it runs at the next start); 1 = Telegram
    refused; 2 = failed (network); 3 = the channel has no update for this
    version or this platform; 4 = a file came wrong; 5 = the manifest is not
@@ -40718,6 +40781,7 @@ static int tg_mtproto_update_install_on(const tg_mtproto_file_ctx *q,
     (void)remove(tg_gui_update_program_new);
     tg_platform_set_executable(tg_gui_update_program);
     tg_gui_log("update: installed");
+    tg_mtproto_update_catalogs_on(q, fc, &m, stream);
     return 0;
 }
 

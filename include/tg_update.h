@@ -15,15 +15,26 @@
        version 0.7
        os3 Amigram-0.7-os3 1143156 <sha256, 64 lowercase hex digits>
        ...one line per platform...
+       cat-italiano Amigram-0.7-italiano.catalog 53270 <sha256>
+       catt-italiano Amigram-0.7-italiano-text.catalog 28210 <sha256>
+       ...two lines per language...
        signature <512 lowercase hex digits>
 
    The signature (RSA-2048, PKCS#1 v1.5 with SHA-256, as `openssl dgst
    -sha256 -sign` makes it) covers every byte before the "signature" line.
    The client checks it against the public key built in, takes its own
    platform's line and installs that file only when its size and SHA-256
-   match: a channel taken over by someone else cannot hand out a program. */
+   match: a channel taken over by someone else cannot hand out a program.
 
-#define TG_UPDATE_LANES_MAX 8
+   The translations come the same way, after the program: a "cat-" line
+   is a language's catalog for the packages with the window, a "catt-"
+   line the smaller one of the plain-68000 text client. What follows the
+   hyphen only tells the lines apart; the drawer under Catalogs/ is the
+   language the catalog itself names (tg_update_catalog_language). A
+   catalog that does not come leaves the one that is there: English
+   stands for what it lacks. */
+
+#define TG_UPDATE_LANES_MAX 32 /* platforms, and two catalogs a language */
 #define TG_UPDATE_LANE_MAX 16
 #define TG_UPDATE_FILE_NAME_MAX 64
 #define TG_UPDATE_VERSION_MAX 16
@@ -68,6 +79,20 @@ int tg_update_manifest_read(const char *text, unsigned long length,
 /* This platform's line of the manifest, 0 when it has none. */
 const tg_update_entry *tg_update_manifest_lane(const tg_update_manifest *m,
                                                const char *lane);
+
+/* 1 when the manifest's line is a catalog for this build: a "cat-" line,
+   or a "catt-" line on the plain-68000 text client. */
+int tg_update_entry_is_catalog(const tg_update_entry *e, const char *lane);
+
+#define TG_UPDATE_LANGUAGE_MAX 32
+
+/* The language a catalog names (its LANG chunk; `data` is the start of
+   the file, 64 bytes are plenty), as the name of its drawer under
+   Catalogs/: 1 when it is there and fit for one (no path separator, no
+   control character, not starting with a dot, under 31 letters). */
+int tg_update_catalog_language(const unsigned char *data,
+                               unsigned long length, char *out,
+                               unsigned long out_size);
 
 /* The platform this build is for, as the manifest names it: "os3",
    "os3-68000", "os4", "morphos", "aros-i386", "aros-x86_64",

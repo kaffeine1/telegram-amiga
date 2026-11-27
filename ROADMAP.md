@@ -569,9 +569,13 @@ The self-tests run with a catalog as well
 (TG_CATALOG=Catalogs/italiano/amigram.catalog on the host): the window's
 layout checks, and for the session a check that every service line fits
 and ends on a whole letter. Not yet seen on a real Amiga in Italian.
-Still open: the update from inside Amigram replaces the program alone,
-so a new catalog reaches those who update that way only once the
-manifest carries catalogs too.
+The update from inside Amigram brings the catalogs with the program:
+the signed manifest names them ("cat-" lines for the window packages,
+"catt-" for the 68000 text client), and each goes into
+Catalogs/<language>/ after the same size and SHA-256 check, the drawer
+being the language the catalog itself names. Tried live with the test
+account, Saved Messages standing in for the channel: the program and
+the Italian catalog installed, a catalog naming a path left out.
 
 ## Done for 0.0.95: two-step verification on slow 68k
 

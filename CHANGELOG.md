@@ -21,8 +21,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   version is refused, and if the new program cannot be written the old
   one is put back. Nothing is installed unless Update is chosen. The
   text client, the 68000 one included, has the same: /update says
-  whether a newer version is out, /update yes installs it. The first
-  update this way is from this release to the next one.
+  whether a newer version is out, /update yes installs it. The
+  translations come with the program: the manifest names each
+  language's catalog too, with its size and SHA-256, and the update
+  puts it in Catalogs/<language>/ (the 68000 package gets its smaller
+  one); a catalog that does not come leaves the one that is there. The
+  first update this way is from this release to the next one.
 - Amigram in Italian. Amigram speaks the language chosen in the Locale
   preferences through the system's locale.library, the window and the
   text client alike, the plain-68000 package included: menus, context

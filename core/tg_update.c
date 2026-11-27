@@ -235,6 +235,67 @@ const tg_update_entry *tg_update_manifest_lane(const tg_update_manifest *m,
     return 0;
 }
 
+int tg_update_entry_is_catalog(const tg_update_entry *e, const char *lane)
+{
+    if (e == 0 || lane == 0) {
+        return 0;
+    }
+    if (strcmp(lane, "os3-68000") == 0) {
+        return strncmp(e->lane, "catt-", 5U) == 0;
+    }
+    return strncmp(e->lane, "cat-", 4U) == 0;
+}
+
+int tg_update_catalog_language(const unsigned char *data,
+                               unsigned long length, char *out,
+                               unsigned long out_size)
+{
+    unsigned long at = 12UL;
+
+    if (out == 0 || out_size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (data == 0 || length < 20UL || memcmp(data, "FORM", 4U) != 0 ||
+        memcmp(data + 8, "CTLG", 4U) != 0) {
+        return 0;
+    }
+    while (at + 8UL <= length) {
+        unsigned long size = ((unsigned long)data[at + 4] << 24) |
+                             ((unsigned long)data[at + 5] << 16) |
+                             ((unsigned long)data[at + 6] << 8) |
+                             (unsigned long)data[at + 7];
+
+        if (memcmp(data + at, "LANG", 4U) == 0) {
+            unsigned long n;
+
+            for (n = 0UL; n < size && at + 8UL + n < length &&
+                          data[at + 8UL + n] != '\0'; ++n) {
+                unsigned char c = data[at + 8UL + n];
+
+                if (n + 1UL >= out_size || n + 1UL >= TG_UPDATE_LANGUAGE_MAX ||
+                    c < 0x20U || c == 0x7fU || c == '/' || c == ':' ||
+                    c == '\\' || (n == 0UL && c == '.')) {
+                    out[0] = '\0';
+                    return 0;
+                }
+                out[n] = (char)c;
+            }
+            if (n == 0UL || n >= size || at + 8UL + n >= length) {
+                out[0] = '\0';
+                return 0; /* empty, or its end is not in sight */
+            }
+            out[n] = '\0';
+            return 1;
+        }
+        if (size > length) {
+            return 0;
+        }
+        at += 8UL + size + (size & 1UL);
+    }
+    return 0;
+}
+
 const char *tg_update_lane(void)
 {
 #if defined(__amigaos4__)
@@ -407,6 +468,78 @@ int tg_update_self_test(void)
     if (strcmp(text, "Amigram-update-0.7.txt") != 0) {
         puts("update self-test: manifest name wrong");
         return 2;
+    }
+    /* The catalogs: a "cat-" line is one for a window package, a "catt-"
+       line for the 68000 text client; the drawer's name is the language
+       the catalog names, and never a path. */
+    {
+        static const unsigned char good[] =
+            "FORM\0\0\0\x22" "CTLG" "FVER\0\0\0\4" "v1\0\0"
+            "LANG\0\0\0\x0a" "italiano\0\0";
+        static const unsigned char accent[] =
+            "FORM\0\0\0\x18" "CTLG" "LANG\0\0\0\x0a" "fran\xe7" "ais\0\0";
+        static const unsigned char path[] =
+            "FORM\0\0\0\x18" "CTLG" "LANG\0\0\0\x0a" "../../s\0\0\0";
+        static const unsigned char colon[] =
+            "FORM\0\0\0\x18" "CTLG" "LANG\0\0\0\x0a" "SYS:Libs\0\0";
+        static const unsigned char slash[] =
+            "FORM\0\0\0\x18" "CTLG" "LANG\0\0\0\x0a" "ital/ano\0\0";
+        static const unsigned char dot[] =
+            "FORM\0\0\0\x18" "CTLG" "LANG\0\0\0\x0a" ".italian\0\0";
+        static const unsigned char open_end[] =
+            "FORM\0\0\0\x18" "CTLG" "LANG\0\0\0\x0a" "italiano!!";
+        char language[TG_UPDATE_LANGUAGE_MAX];
+        tg_update_entry e;
+
+        if (!tg_update_catalog_language(good, sizeof(good) - 1U, language,
+                                        sizeof(language)) ||
+            strcmp(language, "italiano") != 0 ||
+            !tg_update_catalog_language(accent, sizeof(accent) - 1U,
+                                        language, sizeof(language)) ||
+            strcmp(language, "fran\xe7" "ais") != 0) {
+            puts("update self-test: a catalog's language not read");
+            return 2;
+        }
+        if (tg_update_catalog_language(path, sizeof(path) - 1U, language,
+                                       sizeof(language)) ||
+            tg_update_catalog_language(colon, sizeof(colon) - 1U, language,
+                                       sizeof(language)) ||
+            tg_update_catalog_language(slash, sizeof(slash) - 1U, language,
+                                       sizeof(language)) ||
+            tg_update_catalog_language(dot, sizeof(dot) - 1U, language,
+                                       sizeof(language)) ||
+            tg_update_catalog_language(open_end, sizeof(open_end) - 1U,
+                                       language, sizeof(language)) ||
+            tg_update_catalog_language(good, 30UL, language,
+                                       sizeof(language)) ||
+            tg_update_catalog_language(good, sizeof(good) - 1U, language,
+                                       4UL) ||
+            tg_update_catalog_language((const unsigned char *)signed_text,
+                                       40UL, language, sizeof(language)) ||
+            language[0] != '\0') {
+            puts("update self-test: a bad catalog language taken");
+            return 2;
+        }
+        memset(&e, 0, sizeof(e));
+        strcpy(e.lane, "cat-italiano");
+        if (!tg_update_entry_is_catalog(&e, "os3") ||
+            !tg_update_entry_is_catalog(&e, "morphos") ||
+            tg_update_entry_is_catalog(&e, "os3-68000")) {
+            puts("update self-test: a window catalog's line misread");
+            return 2;
+        }
+        strcpy(e.lane, "catt-italiano");
+        if (tg_update_entry_is_catalog(&e, "os3") ||
+            !tg_update_entry_is_catalog(&e, "os3-68000")) {
+            puts("update self-test: a text catalog's line misread");
+            return 2;
+        }
+        strcpy(e.lane, "os3");
+        if (tg_update_entry_is_catalog(&e, "os3") ||
+            tg_update_entry_is_catalog(&e, "os3-68000")) {
+            puts("update self-test: a program's line taken for a catalog");
+            return 2;
+        }
     }
     return 0;
 }
