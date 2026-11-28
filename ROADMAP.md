@@ -39,19 +39,21 @@ On 2026-11-28: 0.6, the third beta, is out in all seven packages
 (2026-11-23), with the login by QR code. Direct chats, groups,
 channels and the topics of forum groups work on the six systems; what
 each release brought is in CHANGELOG.md. On `main` for the next
-release, not released yet: the update installed from inside Amigram,
-the program and its text client in Italian, and the round described in
+release, not released yet: the update installed from inside Amigram
+(asked first, or by itself when switched on), the program and its text
+client in Italian, and the round described in
 "Done after 0.6: what a client is expected to show" below (the last
 message under each chat, forwarded and edited marks, online and last
 seen, who read, blocking, bots' buttons, comments, a date to go to,
 devices, t.me links, translation, scheduled messages, the address
-book, a forgotten password recovered by email, two more ARexx
-commands).
+book, a forgotten password recovered by email, more ARexx, one's own
+profile, contacts, a reply quoting part of a message).
 
 Open, each in its section below:
 
-- next in the round: adding a contact, editing one's own profile,
-  quoting part of a message, an ARexx script run on a new message;
+- for the version after the next one: chat folders, group
+  administration, sending stickers, GIFs and a location, voice in the
+  window;
 - left over from the 0.5 list: more than the Archive's latest 32 chats;
 - videos: the resolution in the details, and playing while the video
   still downloads;
@@ -1555,6 +1557,31 @@ Then the middle-sized ones:
 - Two more ARexx commands: CHATS (the chat list, a line a chat with
   its unread count) and LAST (the open chat's newest message, its
   sender and text). Tried in the OS4 VM.
+- One's own profile: "My profile..." in the Amigram menu reads the name
+  and the bio (`users.getFullUser` with `inputUserSelf`) and changes
+  either (`account.updateProfile`, only the fields given); /profile in
+  the text client. Tried live, the old values put back.
+- A chat's person in the contacts: "Contact..." in a person's row menu
+  asks Telegram (`users.getFullUser`, the user's contact flag) and puts
+  them in (`contacts.addContact`, after a question about the phone
+  number), renames them there or takes them out
+  (`contacts.deleteContacts`); /addcontact and /delcontact. Tried on a
+  bot, which Telegram accepts but never lists among the contacts; a
+  person already in them is not tried live.
+- A reply that quotes part of a message: Reply with a selection dragged
+  in that message sends it as `quote_text` of `inputReplyToMessage`;
+  when Telegram does not find it (QUOTE_TEXT_INVALID) the reply goes
+  again without it and the status line says so. Window only. Tried in
+  Saved Messages.
+- An ARexx script for new messages: "Script for new messages..." under
+  ARexx in the settings; the news a pop-up would tell hands it to ARexx
+  at its REXX port as a function (RXFUNC), the chat's name as its
+  argument and the AMIGRAM port as its host; NEWS answers with that
+  news. Its message comes back to the AMIGRAM port and is freed there;
+  at the end the program waits a few seconds and then leaves its port
+  behind, deaf, rather than let a late answer land in freed memory.
+  Tried in the OS4 VM: a bot's answer and a group's message ran it, two
+  at once, and quitting while one ran (10 and 30 seconds).
 
 Tried live with the test account, two sessions of it for what one
 device tells another, seen in a window on the OS4 VM in Italian, and on
@@ -1568,11 +1595,9 @@ every new command of the text client (the owner's choice, once they
 were seen working on an emulated A600 and written in its manual): its
 program is 703 KB now, 35 KB more than before the round.
 
-Next: adding a contact, editing one's own profile, quoting part of a
-message, an ARexx script run when a message comes. The large ones
-(chat folders, group administration, sending stickers, GIFs and a
-location, voice in the window, creating an account) are weighed one by
-one after that.
+The large ones (chat folders, group administration, sending stickers,
+GIFs and a location, voice in the window, creating an account) are left
+for the version after the next one (the owner's choice, 2026-11-28).
 
 ## Done after 0.6: the update from inside Amigram
 
@@ -1604,6 +1629,17 @@ and out of the TG_NO_GUI guard, and /update and /update yes call them
 (the 68000 program grew by 11.7 KB). Tried live on a context of its
 own: the lookup read 0.6 from @amigram1, the install from Saved
 Messages replaced the program and kept the old one.
+
+Step 3 of the plan, the install without the question, followed on
+2026-11-28 (the owner's choice, the way it was planned: opt-in, off by
+default). "Install updates by themselves" in the settings, greyed while
+"Check for updates" is off: when the day's look finds a newer version,
+the window runs the same signed install (manifest signature, then the
+program's size and SHA-256, the old one kept as Amigram.old) without
+"Update now?", and then asks "Quit|Later" as before. Kept in
+data/telegram-update.txt as "auto 1". About's Update and the text
+client's /update yes still ask. The first update that can run this way
+is from the release that carries it to the one after.
 
 ## Done after 0.5: login with a QR code
 

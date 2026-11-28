@@ -813,6 +813,7 @@ typedef struct tg_gui_state {
        lets it look. The window sets both from the session. */
     int update_can;
     int update_check;
+    int update_auto;       /* it installs by itself (still only signed) */
     /* The settings panel, drawn over the chat while it is open: the line
        the keyboard is on, how far the lines are scrolled when they do not
        all fit, and two values only the window knows (it sets them when it
@@ -1315,6 +1316,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_PREVIEWS 22    /* each chat's newest message in the list */
 #define TG_GUI_SET_TYPING 23      /* the others see "is typing..." */
 #define TG_GUI_SET_AREXX_NEWS 24  /* action: the script news runs, or none */
+#define TG_GUI_SET_UPDATE_AUTO 25 /* a newer version installs by itself */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2

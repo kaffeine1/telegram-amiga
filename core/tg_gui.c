@@ -9825,6 +9825,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {MSG_SET_DOWNLOAD_DRAWER, MSG_SET_DOWNLOAD_DRAWER_STR, TG_GUI_SET_DOWNLOAD},
     {MSG_SET_MEDIA_PLAYER, MSG_SET_MEDIA_PLAYER_STR, TG_GUI_SET_PLAYER},
     {MSG_SET_CHECK_FOR_UPDATES, MSG_SET_CHECK_FOR_UPDATES_STR, TG_GUI_SET_UPDATES},
+    {MSG_SET_INSTALL_UPDATES_BY_THEMSELVES, MSG_SET_INSTALL_UPDATES_BY_THEMSELVES_STR, TG_GUI_SET_UPDATE_AUTO},
     {MSG_SET_AREXX, MSG_SET_AREXX_STR, 0},
     {MSG_SET_AREXX_PORT, MSG_SET_AREXX_PORT_STR, TG_GUI_SET_AREXX_PORT},
     {MSG_SET_SCRIPTS_MAY_SEND_MESSAGES, MSG_SET_SCRIPTS_MAY_SEND_MESSAGES_STR, TG_GUI_SET_AREXX_SEND},
@@ -9884,7 +9885,9 @@ int tg_gui_settings_disabled(const tg_gui_state *state, int id)
            (id == TG_GUI_SET_STICKERS && !state->inline_photos) ||
            (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port) ||
            (id == TG_GUI_SET_AREXX_NEWS && !state->arexx_port) ||
-           (id == TG_GUI_SET_UPDATES && !state->update_can);
+           (id == TG_GUI_SET_UPDATES && !state->update_can) ||
+           (id == TG_GUI_SET_UPDATE_AUTO &&
+            (!state->update_can || !state->update_check));
 }
 
 /* The last part of a path: what follows the last ':' or '/'. */
@@ -9990,6 +9993,9 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
     case TG_GUI_SET_AREXX_SEND: on = state->arexx_send; break;
     case TG_GUI_SET_UPDATES:
         on = state->update_can && state->update_check;
+        break;
+    case TG_GUI_SET_UPDATE_AUTO:
+        on = state->update_can && state->update_check && state->update_auto;
         break;
     default: break;
     }
@@ -15139,7 +15145,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 29 && switches == 14 &&
+        ok_set = ok_set && lines == 30 && switches == 15 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&
@@ -15294,6 +15300,37 @@ int tg_gui_self_test(void)
         ok_set = ok_set &&
                  tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_SEND);
         state.arexx_port = 1;
+        /* Installing by itself: a switch that waits for the look, and
+           shows off while the look is off, whatever it holds. */
+        {
+            int can = state.update_can;
+            int check = state.update_check;
+            int autoinst = state.update_auto;
+
+            state.update_can = 1;
+            state.update_check = 1;
+            state.update_auto = 1;
+            tg_gui_settings_value(&state, TG_GUI_SET_UPDATE_AUTO, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "[x]") == 0 &&
+                     tg_gui_settings_kind(TG_GUI_SET_UPDATE_AUTO) ==
+                         TG_GUI_SET_KIND_SWITCH &&
+                     !tg_gui_settings_disabled(&state,
+                                               TG_GUI_SET_UPDATE_AUTO);
+            state.update_check = 0;
+            tg_gui_settings_value(&state, TG_GUI_SET_UPDATE_AUTO, value,
+                                  sizeof(value));
+            ok_set = ok_set && strcmp(value, "[ ]") == 0 &&
+                     tg_gui_settings_disabled(&state,
+                                              TG_GUI_SET_UPDATE_AUTO);
+            state.update_check = 1;
+            state.update_can = 0;
+            ok_set = ok_set &&
+                     tg_gui_settings_disabled(&state, TG_GUI_SET_UPDATE_AUTO);
+            state.update_can = can;
+            state.update_check = check;
+            state.update_auto = autoinst;
+        }
 
         /* Down from the last line of a group lands on the first of the
            next, over the heading; up from the first line goes nowhere. */
@@ -15315,7 +15352,7 @@ int tg_gui_self_test(void)
            panel it is outside. */
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
-        rec.height = 580; /* tall enough for every line */
+        rec.height = 600; /* tall enough for every line */
         rec.watch_text[0] = TG_STR(MSG_SET_TITLE);
         rec.watch_text[1] = TG_STR(MSG_SET_PHOTOS_AND_EMOJI);
         rec.watch_text[2] = TG_STR(MSG_SET_BUILT_IN_CHIME);

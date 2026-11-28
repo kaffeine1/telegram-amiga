@@ -137,6 +137,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- Updates that install by themselves: "Install updates by themselves" in
+  the settings, off until switched on and greyed while "Check for
+  updates" is off. When the day's look finds a newer version, it is
+  fetched from the channel, its manifest's signature and its own size
+  and SHA-256 checked, and put in place with the old one kept as
+  Amigram.old, without the "Update now?" question; then the same
+  "Quit|Later" to start the new one. Kept in data/telegram-update.txt
+  ("auto 1"). About's Update and the text client's /update yes are as
+  before.
 - An ARexx script for new messages: "Script for new messages..." in the
   settings picks one, and the news a pop-up would tell (not a muted
   chat's) hands it to ARexx at its REXX port as a function, with the

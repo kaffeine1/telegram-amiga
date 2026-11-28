@@ -45612,6 +45612,7 @@ typedef struct tg_gui_update_peer {
 typedef struct tg_gui_update_state {
     int loaded;
     int off;              /* the user's switch */
+    int autoinst;         /* install by itself, without the question */
     tg_gui_update_peer peers[TG_GUI_UPDATE_CHANNELS_MAX];
     int peer_count;        /* the channels looked up so far */
     unsigned long checked; /* time() of the last round that ended */
@@ -45778,6 +45779,8 @@ static void tg_gui_update_load(void)
         memset(&peer, 0, sizeof(peer));
         if (strncmp(line, "check ", 6) == 0) {
             tg_gui_update.off = line[6] == '0';
+        } else if (strncmp(line, "auto ", 5) == 0) {
+            tg_gui_update.autoinst = line[5] == '1'; /* only a plain 1 */
         } else if (sscanf(line, "peer %47s %lx %lx %lx %lx", peer.channel,
                           &peer.id_hi, &peer.id_lo, &peer.hash_hi,
                           &peer.hash_lo) == 5) {
@@ -45810,6 +45813,9 @@ static void tg_gui_update_store(void)
         return;
     }
     fprintf(f, "check %d\n", tg_gui_update.off ? 0 : 1);
+    if (tg_gui_update.autoinst) {
+        fprintf(f, "auto 1\n");
+    }
     for (k = 0; k < tg_gui_update.peer_count; ++k) {
         const tg_gui_update_peer *p = &tg_gui_update.peers[k];
 
@@ -45850,6 +45856,22 @@ void tg_gui_session_update_set_enabled(int on)
 {
     tg_gui_update_load();
     tg_gui_update.off = on ? 0 : 1;
+    tg_gui_update_store();
+}
+
+/* Public: whether a newer version found installs by itself (still only
+   signed, and never while the look itself is switched off); off unless
+   the user switched it on. */
+int tg_gui_session_update_auto(void)
+{
+    tg_gui_update_load();
+    return tg_gui_update.autoinst && !tg_gui_update.off;
+}
+
+void tg_gui_session_update_set_auto(int on)
+{
+    tg_gui_update_load();
+    tg_gui_update.autoinst = on ? 1 : 0;
     tg_gui_update_store();
 }
 
@@ -46368,7 +46390,9 @@ static int tg_gui_update_self_test(void)
     ok = ok && !tg_gui_update.off && tg_gui_update.peer_count == 0 &&
          tg_gui_session_update_possible() &&
          tg_gui_session_update_enabled() &&
+         !tg_gui_session_update_auto() && /* off until switched on */
          tg_gui_session_update_newer()[0] == '\0';
+    tg_gui_session_update_set_auto(1);
     memset(&peer, 0, sizeof(peer));
     strcpy(peer.channel, "amigram_test");
     peer.id_hi = 0x1UL;
@@ -46413,7 +46437,13 @@ static int tg_gui_update_self_test(void)
          tg_gui_update.checked == 1700000000UL && tg_gui_update.has_found &&
          tg_gui_update.found[1] == 3UL && !tg_gui_update.has_told &&
          tg_gui_update.next == 0 &&
-         strcmp(tg_gui_session_update_newer(), "0.3") == 0;
+         strcmp(tg_gui_session_update_newer(), "0.3") == 0 &&
+         tg_gui_session_update_auto(); /* kept between two runs */
+    /* never by itself while the look is switched off; back with it */
+    tg_gui_update.off = 1;
+    ok = ok && !tg_gui_session_update_auto();
+    tg_gui_update.off = 0;
+    ok = ok && tg_gui_session_update_auto();
     tg_update_peer_drop(0);
     ok = ok && tg_gui_update.peer_count == 1 &&
          tg_update_peer_find("second_test") == 0 &&

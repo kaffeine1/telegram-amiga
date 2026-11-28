@@ -1031,6 +1031,10 @@
 #define MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES_STR "No script for new messages"
 #define MSG_ST_COULD_NOT_SAVE_THE_SCRIPT 563
 #define MSG_ST_COULD_NOT_SAVE_THE_SCRIPT_STR "Could not save the script's name"
+#define MSG_ST_UPDATES_INSTALL_BY_THEMSELVES 564
+#define MSG_ST_UPDATES_INSTALL_BY_THEMSELVES_STR "Updates install by themselves, if signed"
+#define MSG_ST_UPDATES_ARE_OFFERED_FIRST 565
+#define MSG_ST_UPDATES_ARE_OFFERED_FIRST_STR "Updates are offered before they install"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1679,6 +1683,8 @@
 #define MSG_SET_SCRIPT_FOR_NEW_MESSAGES_STR "Script for new messages..."
 #define MSG_SETV_NO_SCRIPT 1467
 #define MSG_SETV_NO_SCRIPT_STR "(none)"
+#define MSG_SET_INSTALL_UPDATES_BY_THEMSELVES 1468
+#define MSG_SET_INSTALL_UPDATES_BY_THEMSELVES_STR "Install updates by themselves"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

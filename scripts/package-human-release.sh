@@ -52,8 +52,11 @@ if [ -n "$UPDATE_SHOWN" ]; then
   keeps saying it. It then offers to install it: Update fetches the new
   program from that channel, checks that its author signed it and keeps
   your version as Amigram.old; start Amigram again to use it. Nothing
-  is installed unless you choose Update. Switch the line off and the
-  program never looks."
+  is installed unless you choose Update, or switch on \"Install updates
+  by themselves\" (off until you do): then a newer version is fetched,
+  checked and installed without the question, only when its author
+  signed it, and the program offers to quit so that you start the new
+  one. Switch \"Check for updates\" off and the program never looks."
     update_manual_it="
 - \"Settings > Check for updates\": una volta al giorno il programma
   legge, su Telegram, dove vengono annunciate le versioni nuove:
@@ -62,7 +65,12 @@ if [ -n "$UPDATE_SHOWN" ]; then
   di installarla: Update prende il programma nuovo da quel canale,
   controlla che sia firmato dal suo autore e tiene la tua versione come
   Amigram.old; riavvia Amigram per usarla. Non si installa niente se
-  non scegli Update. Spegni la riga e il programma non guarda piu'."
+  non scegli Update, o se non accendi \"Installa da solo gli
+  aggiornamenti\" (spenta finche' non la accendi): allora una versione
+  piu' nuova viene presa, controllata e installata senza la domanda,
+  solo se firmata dal suo autore, e il programma propone di uscire per
+  avviare quella nuova. Spegni \"Check for updates\" e il programma non
+  guarda piu'."
 fi
 if [ -z "$CHANNEL" ]; then
     case $VERSION in

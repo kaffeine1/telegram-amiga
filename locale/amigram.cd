@@ -1064,6 +1064,10 @@ MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES (562//)
 No script for new messages
 MSG_ST_COULD_NOT_SAVE_THE_SCRIPT (563//)
 Could not save the script's name
+MSG_ST_UPDATES_INSTALL_BY_THEMSELVES (564//)
+Updates install by themselves, if signed
+MSG_ST_UPDATES_ARE_OFFERED_FIRST (565//)
+Updates are offered before they install
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1831,6 +1835,8 @@ MSG_SET_SCRIPT_FOR_NEW_MESSAGES (1466//)
 Script for new messages...
 MSG_SETV_NO_SCRIPT (1467//)
 (none)
+MSG_SET_INSTALL_UPDATES_BY_THEMSELVES (1468//)
+Install updates by themselves
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

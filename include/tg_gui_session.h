@@ -260,6 +260,11 @@ void tg_gui_session_batch_end(void);
 int tg_gui_session_update_possible(void);
 int tg_gui_session_update_enabled(void);
 void tg_gui_session_update_set_enabled(int on);
+/* A newer version found installs by itself, without the question (still
+   only when signed); off unless switched on, and never while the look is
+   off. Kept in the update's file. */
+int tg_gui_session_update_auto(void);
+void tg_gui_session_update_set_auto(int on);
 const char *tg_gui_session_update_newer(void);
 /* The update itself (tg_update.h): 1 when this build can install one;
    install fetches the signed manifest of `version` from the update

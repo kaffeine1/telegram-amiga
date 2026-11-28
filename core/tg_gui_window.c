@@ -15753,10 +15753,12 @@ static int tg_gui_window_session_closed(struct Window *win, tg_gui_state *state)
 /* The update (tg_update.h): Amigram <newer> is offered; Update fetches the
    signed manifest and this platform's program from the update channel and
    puts it in place of this one, kept as Amigram.old. Offered once when the
-   notice names the version, and from About while it holds. 1 = quit now
-   (installed, and the user chose to start again). */
+   notice names the version, and from About while it holds. With ask 0
+   ("Install updates by themselves") the question is skipped: the same
+   signed install, then the same "Quit|Later". 1 = quit now (installed,
+   and the user chose to start again). */
 static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
-                                      tg_gui_backend *backend)
+                                      tg_gui_backend *backend, int ask)
 {
     static char text[700];
     struct EasyStruct es;
@@ -15777,9 +15779,13 @@ static int tg_gui_window_update_offer(struct Window *win, tg_gui_state *state,
     es.es_Title = (APTR)TG_STR(MSG_UPDATE_TITLE);
     es.es_TextFormat = (APTR)text;
     es.es_GadgetFormat = (APTR)TG_STR(MSG_UPDATE_BUTTONS);
-    pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
-    if (pick != 1L) {
-        return 0;
+    if (ask) {
+        pick = tg_gui_amiga_easyreq_cancel_args(win, &es);
+        if (pick != 1L) {
+            return 0;
+        }
+    } else {
+        tg_gui_log("update: installing by itself (switched on)");
     }
     tg_gui_window_format3(text, sizeof(text), TG_STR(MSG_UPDATE_FETCHING),
                           MSG_UPDATE_FETCHING_STR, newer, "", "");
@@ -17562,6 +17568,14 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
                            state->update_check
                                ? TG_STR(MSG_ST_UPDATES_A_LOOK_ONCE_A)
                                : TG_STR(MSG_ST_UPDATES_NOT_LOOKED_FOR));
+        return 0;
+    case TG_GUI_SET_UPDATE_AUTO:
+        state->update_auto = !state->update_auto;
+        tg_gui_session_update_set_auto(state->update_auto);
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           state->update_auto
+                               ? TG_STR(MSG_ST_UPDATES_INSTALL_BY_THEMSELVES)
+                               : TG_STR(MSG_ST_UPDATES_ARE_OFFERED_FIRST));
         return 0;
     case TG_GUI_SET_STICKERS: {
         /* Read when a chat's messages are: the stickers already on screen
@@ -19532,7 +19546,7 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         if (ud == (APTR)TG_MENU_ABOUT) {
                             if (tg_gui_window_about(ctx.window) &&
                                 tg_gui_window_update_offer(ctx.window, state,
-                                                           &backend)) {
+                                                           &backend, 1)) {
                                 done = 1;
                             }
                         } else if (ud == (APTR)TG_MENU_SUPPORT) {
@@ -22714,7 +22728,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
         if (!done && tg_gui_update_offer && !state->composing &&
             state->mode == TG_GUI_MODE_CHAT) {
             tg_gui_update_offer = 0;
-            if (tg_gui_window_update_offer(ctx.window, state, &backend)) {
+            if (tg_gui_window_update_offer(ctx.window, state, &backend,
+                                           !state->update_auto)) {
                 done = 1;
             } else {
                 session_dirty = 1;
@@ -23340,6 +23355,7 @@ int tg_gui_run_window(tg_gui_state *state)
     }
     state->update_can = tg_gui_session_update_possible();
     state->update_check = tg_gui_session_update_enabled();
+    state->update_auto = tg_gui_session_update_auto();
 #if defined(TG_DIAG_FREEZE)
     tg_gui_diag_start();
 #endif
