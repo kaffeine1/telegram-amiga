@@ -19236,6 +19236,15 @@ static void tg_mtproto_chat_tui_status(const char *peer_index,
 
 /* A "Chat number:" question: the tabs on screen show which key is which
    chat, and a function key answers with its chat. */
+/* What was typed at the first "Chat number:" is a command when it starts
+   with '/' (/logout yes, /add name, /help), /saved aside, which names
+   Saved Messages there. */
+static int tg_mtproto_chat_answer_is_command(const char *answer)
+{
+    return answer != 0 && answer[0] == '/' && answer[1] != '\0' &&
+           strcmp(answer, "/saved") != 0;
+}
+
 static int tg_mtproto_chat_prompt_chat_number(const char *prompt,
                                               char *out,
                                               unsigned long out_size,
@@ -21319,6 +21328,8 @@ int tg_mtproto_auth_chat_file(const char *host,
     unsigned long chat_draft_len;   /* draft state at the previous editor exit */
     unsigned long chat_draft_caret;
     int chat_line_consumed;         /* a dispatched line awaits its reset */
+    int first_command = 0;          /* `line` holds a command typed at the
+                                       first chat prompt: run it first */
     static const char label[] = "chat";
     static const char peer_limit[] = "5";
 
@@ -21533,8 +21544,9 @@ int tg_mtproto_auth_chat_file(const char *host,
                                                peer_index);
             tg_console_tui_capture_end(tui_cap, stream);
         }
-        if (tg_mtproto_chat_prompt_chat_number(TG_TSTR(MSG_T_CHAT_NUMBER), peer_index,
-                                               sizeof(peer_index), stream,
+        line[0] = '\0';
+        if (tg_mtproto_chat_prompt_chat_number(TG_TSTR(MSG_T_CHAT_NUMBER), line,
+                                               sizeof(line), stream,
                                                label, peer_index) != 0) {
             tg_mtproto_close_auth_context(&chat_context);
             tg_net_set_connect_timeout_seconds(saved_timeout);
@@ -21543,6 +21555,22 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_console_ui_leave_screen(stream);
             if (chat_raw) { tg_platform_stdin_set_raw(0); }
             return 2;
+        }
+        /* A command typed there (/logout yes, /add, /help) is no chat:
+           none is open, and the loop runs the line as typed. A number or a
+           name goes on as the chat. */
+        if (tg_mtproto_chat_answer_is_command(line)) {
+            first_command = 1;
+            peer_index[0] = '\0';
+        } else {
+            unsigned long k;
+
+            for (k = 0UL; line[k] != '\0' && k + 1UL < sizeof(peer_index);
+                 ++k) {
+                peer_index[k] = line[k];
+            }
+            peer_index[k] = '\0';
+            line[0] = '\0';
         }
         /* The picker footer advertises /saved: honour it (and its plain
            forms) here too by normalising to the "self" sentinel index. */
@@ -21643,7 +21671,13 @@ int tg_mtproto_auth_chat_file(const char *host,
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
         }
-        if (watch_seconds == 0UL) {
+        if (first_command) {
+            /* the command typed at the first chat prompt, as if just typed
+               here */
+            first_command = 0;
+            line_length = (unsigned long)strlen(line);
+            rc = 1;
+        } else if (watch_seconds == 0UL) {
             /* Auto-read is off, so we would otherwise block ~forever. Wake the
                editor every few seconds anyway so a file dropped on the console
                window (polled on the read timeout) is noticed promptly; rc==0
@@ -26958,6 +26992,20 @@ int tg_mtproto_probe_self_test(void)
         return 2;
     }
     if (tg_later_self_test() != 0) {
+        return 2;
+    }
+    /* At the first chat prompt a command is a command, /saved and numbers
+       and names are chats. */
+    if (!tg_mtproto_chat_answer_is_command("/logout yes") ||
+        !tg_mtproto_chat_answer_is_command("/add Mario") ||
+        !tg_mtproto_chat_answer_is_command("/help") ||
+        tg_mtproto_chat_answer_is_command("/saved") ||
+        tg_mtproto_chat_answer_is_command("/") ||
+        tg_mtproto_chat_answer_is_command("3") ||
+        tg_mtproto_chat_answer_is_command("saved") ||
+        tg_mtproto_chat_answer_is_command("") ||
+        tg_mtproto_chat_answer_is_command(0)) {
+        puts("probe self-test: a command at the first chat prompt read wrong");
         return 2;
     }
 #if !defined(TG_NO_GUI)

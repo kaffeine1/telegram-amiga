@@ -203,6 +203,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   text of its own now, as a translation needs it.
 
 ### Fixed
+- In the text client a command typed at the first "Chat number:" prompt
+  (/logout yes, /add, /help) was taken as a chat to open. It runs as a
+  command now, with no chat open; a number, a name or /saved still
+  opens the chat.
 - A long topic title could run past the room of the window's subtitle
   line (60 letters written where 47 fit). The line is cut where it ends.
 - The reader of a user knew the status "last seen recently" (and
