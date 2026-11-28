@@ -1046,6 +1046,22 @@ tg_mtproto_tl_status tg_mtproto_build_contacts_search(
    in the order of their names. contactsNotModified is an empty list. */
 tg_mtproto_tl_status tg_mtproto_build_contacts_get_contacts(
     tg_mtproto_tl_writer *writer);
+/* One's own profile: asked for (users.getFullUser#b60f5918 with
+   inputUserSelf#f7c1b13f) and read from users.userFull#3b6d152e: the
+   names of the self user among the users, the bio from userFull#c577b5ad
+   (about, flags.1). 1 = read. Changed with account.updateProfile
+   #78515775: a field that is 0 is left as it is (its flag unset). */
+tg_mtproto_tl_status tg_mtproto_build_users_get_full_user_self(
+    tg_mtproto_tl_writer *writer);
+int tg_mtproto_parse_own_profile(unsigned long constructor,
+                                 const unsigned char *body,
+                                 unsigned long body_length, char *first,
+                                 unsigned long first_size, char *last,
+                                 unsigned long last_size, char *about,
+                                 unsigned long about_size);
+tg_mtproto_tl_status tg_mtproto_build_account_update_profile(
+    tg_mtproto_tl_writer *writer, const char *first, const char *last,
+    const char *about);
 tg_mtproto_tl_status tg_mtproto_parse_contacts_peer_cache(
     unsigned long constructor,
     const unsigned char *body,

@@ -59,6 +59,8 @@
 #define MSG_MENU_DEVICES_STR "Devices..."
 #define MSG_MENU_CONTACTS 24
 #define MSG_MENU_CONTACTS_STR "Contacts..."
+#define MSG_MENU_PROFILE 25
+#define MSG_MENU_PROFILE_STR "My profile..."
 #define MSG_QR_STEP1 30
 #define MSG_QR_STEP1_STR "1. Open Telegram on your phone"
 #define MSG_QR_STEP2 31
@@ -1007,6 +1009,12 @@
 #define MSG_ST_CODE_SENT_TO_S_STR "Code sent to %.22s: type it"
 #define MSG_ST_NO_RECOVERY_EMAIL 552
 #define MSG_ST_NO_RECOVERY_EMAIL_STR "This account has no recovery email"
+#define MSG_ST_READING_YOUR_PROFILE 553
+#define MSG_ST_READING_YOUR_PROFILE_STR "Reading your profile..."
+#define MSG_ST_PROFILE_CHANGED 554
+#define MSG_ST_PROFILE_CHANGED_STR "Profile changed"
+#define MSG_ST_THE_BIO_IS_TOO_LONG 555
+#define MSG_ST_THE_BIO_IS_TOO_LONG_STR "The bio is too long: 70 letters at most"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1137,6 +1145,10 @@
 #define MSG_RQ_SEND_NOW_DELETE_CANCEL_STR "Send now|Delete|Cancel"
 #define MSG_RQ_CLOUD_PASSWORD 664
 #define MSG_RQ_CLOUD_PASSWORD_STR "Cloud password"
+#define MSG_RQ_MY_PROFILE 665
+#define MSG_RQ_MY_PROFILE_STR "My profile"
+#define MSG_RQ_NAME_BIO_CLOSE 666
+#define MSG_RQ_NAME_BIO_CLOSE_STR "Name...|Bio...|Close"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1283,6 +1295,20 @@
 #define MSG_W_SIGNED_IN_THE_CLOUD_PASSWORD_STR "Signed in. Telegram removed the cloud password:\nset a new one in Telegram's settings."
 #define MSG_W_WRONG_OR_EXPIRED_CODE 965
 #define MSG_W_WRONG_OR_EXPIRED_CODE_STR "Wrong or expired code, try again"
+#define MSG_W_PROFILE_NAME_S_S_BIO_S 966
+#define MSG_W_PROFILE_NAME_S_S_BIO_S_STR "Name: %s %s\nBio: %s"
+#define MSG_W_YOUR_NAME_AS_OTHERS_SEE 967
+#define MSG_W_YOUR_NAME_AS_OTHERS_SEE_STR "Your name, as others see it"
+#define MSG_W_A_FEW_WORDS_ABOUT_YOU 968
+#define MSG_W_A_FEW_WORDS_ABOUT_YOU_STR "A few words about you, 70 letters at most"
+#define MSG_W_FIRST_NAME 969
+#define MSG_W_FIRST_NAME_STR "First name"
+#define MSG_W_LAST_NAME 970
+#define MSG_W_LAST_NAME_STR "Last name"
+#define MSG_W_BIO 971
+#define MSG_W_BIO_STR "Bio"
+#define MSG_W_CHANGE 972
+#define MSG_W_CHANGE_STR "Change"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -2855,8 +2881,20 @@
 #define MSG_T_THAT_RECOVERY_CODE_WAS_NOT_STR "That code was not accepted, or has expired.\n"
 #define MSG_T_PASSWORD_REMOVED_SET_A_NEW 2389
 #define MSG_T_PASSWORD_REMOVED_SET_A_NEW_STR "Signed in. Telegram removed the cloud password: set a new one in Telegram's settings.\n"
+#define MSG_T_HELP_PROFILE 2390
+#define MSG_T_HELP_PROFILE_STR "  /profile        your name and bio; /profile name A B, /profile bio text"
+#define MSG_T_PROFILE_NAME 2391
+#define MSG_T_PROFILE_NAME_STR "Name: "
+#define MSG_T_PROFILE_BIO 2392
+#define MSG_T_PROFILE_BIO_STR "Bio: "
+#define MSG_T_PROFILE_CHANGED 2393
+#define MSG_T_PROFILE_CHANGED_STR "Profile changed."
+#define MSG_T_USE_PROFILE 2394
+#define MSG_T_USE_PROFILE_STR "Use /profile, /profile name First Last or /profile bio text."
+#define MSG_T_BIO_TOO_LONG 2395
+#define MSG_T_BIO_TOO_LONG_STR "The bio is too long: 70 letters at most."
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2389
+#define TG_STRINGS_ID_MAX 2395
 
 #endif

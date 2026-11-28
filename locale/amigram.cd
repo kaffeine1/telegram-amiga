@@ -58,6 +58,8 @@ MSG_MENU_DEVICES (23//)
 Devices...
 MSG_MENU_CONTACTS (24//)
 Contacts...
+MSG_MENU_PROFILE (25//)
+My profile...
 ; --- the QR login screen (30-39) ---------------------------------------------
 MSG_QR_STEP1 (30//)
 1. Open Telegram on your phone
@@ -1040,6 +1042,12 @@ MSG_ST_CODE_SENT_TO_S (551//)
 Code sent to %.22s: type it
 MSG_ST_NO_RECOVERY_EMAIL (552//)
 This account has no recovery email
+MSG_ST_READING_YOUR_PROFILE (553//)
+Reading your profile...
+MSG_ST_PROFILE_CHANGED (554//)
+Profile changed
+MSG_ST_THE_BIO_IS_TOO_LONG (555//)
+The bio is too long: 70 letters at most
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1210,6 +1218,10 @@ MSG_RQ_SEND_NOW_DELETE_CANCEL (663//)
 Send now|Delete|Cancel
 MSG_RQ_CLOUD_PASSWORD (664//)
 Cloud password
+MSG_RQ_MY_PROFILE (665//)
+My profile
+MSG_RQ_NAME_BIO_CLOSE (666//)
+Name...|Bio...|Close
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1431,6 +1443,21 @@ Signed in. Telegram removed the cloud password:\n\
 set a new one in Telegram's settings.
 MSG_W_WRONG_OR_EXPIRED_CODE (965//)
 Wrong or expired code, try again
+MSG_W_PROFILE_NAME_S_S_BIO_S (966//)
+Name: %s %s\n\
+Bio: %s
+MSG_W_YOUR_NAME_AS_OTHERS_SEE (967//)
+Your name, as others see it
+MSG_W_A_FEW_WORDS_ABOUT_YOU (968//)
+A few words about you, 70 letters at most
+MSG_W_FIRST_NAME (969//)
+First name
+MSG_W_LAST_NAME (970//)
+Last name
+MSG_W_BIO (971//)
+Bio
+MSG_W_CHANGE (972//)
+Change
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -3035,3 +3062,15 @@ MSG_T_THAT_RECOVERY_CODE_WAS_NOT (2388//)
 That code was not accepted, or has expired.\n
 MSG_T_PASSWORD_REMOVED_SET_A_NEW (2389//)
 Signed in. Telegram removed the cloud password: set a new one in Telegram's settings.\n
+MSG_T_HELP_PROFILE (2390//)
+  /profile        your name and bio; /profile name A B, /profile bio text
+MSG_T_PROFILE_NAME (2391//)
+Name: 
+MSG_T_PROFILE_BIO (2392//)
+Bio: 
+MSG_T_PROFILE_CHANGED (2393//)
+Profile changed.
+MSG_T_USE_PROFILE (2394//)
+Use /profile, /profile name First Last or /profile bio text.
+MSG_T_BIO_TOO_LONG (2395//)
+The bio is too long: 70 letters at most.

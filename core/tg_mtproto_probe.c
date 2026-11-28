@@ -14458,6 +14458,90 @@ static int tg_mtproto_later_act_on_context(
     return 0;
 }
 
+/* ---- One's own profile: names and bio, read and changed ---- */
+static int tg_profile_soft_fail = 0;
+
+/* Reads the names and the bio (UTF-8). 0 = read, 2 = failed
+   (tg_profile_soft_fail: the connection is to be opened again). */
+static int tg_mtproto_profile_fetch_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, char *first, unsigned long first_size,
+    char *last, unsigned long last_size, char *about,
+    unsigned long about_size, FILE *stream)
+{
+    static const char label[] = "mtproto users.getFullUser(self)";
+    unsigned char query[16];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    int rc;
+
+    tg_profile_soft_fail = 0;
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_users_get_full_user_self(&writer) !=
+        TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_profile_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 2;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        !tg_mtproto_parse_own_profile(result.result_constructor,
+                                      result.result_body,
+                                      result.result_body_length, first,
+                                      first_size, last, last_size, about,
+                                      about_size)) {
+        return 2;
+    }
+    return 0;
+}
+
+/* Changes the fields given (UTF-8; 0 = left as it is). 0 = done, 1 =
+   refused (tg_mtproto_query_fail says why: ABOUT_TOO_LONG,
+   FIRSTNAME_INVALID), 2 = failed. */
+static int tg_mtproto_profile_set_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *first, const char *last,
+    const char *about, FILE *stream)
+{
+    static const char label[] = "mtproto account.updateProfile";
+    static unsigned char query[640];
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+    int rc;
+
+    tg_profile_soft_fail = 0;
+    tg_mtproto_query_fail[0] = '\0';
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_account_update_profile(&writer, first, last,
+                                                about) != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_profile_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 1;
+    }
+    return 0;
+}
+
 /* A message of this chat translated by Telegram, for the window and for
    the text client alike: the text in `out`, in UTF-8. 0 = done, 1 =
    Telegram refused (tg_mtproto_query_fail says why), 2 = failed
@@ -15854,7 +15938,7 @@ static void tg_chat_history_add(const char *text)
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
     "          /block /unblock /press /devices /translate /later\n" \
-    "          /contacts /help /update /logout /quit\n"
+    "          /contacts /profile /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -20058,6 +20142,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_LATER),
     TG_HELP(MSG_T_HELP_LATER_SEND),
     TG_HELP(MSG_T_HELP_CONTACTS),
+    TG_HELP(MSG_T_HELP_PROFILE),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -23183,6 +23268,106 @@ int tg_mtproto_auth_chat_file(const char *host,
                 if (tg_translate_soft_fail) {
                     tg_mtproto_close_auth_context(&chat_context);
                 }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/profile", &cmd_arg)) {
+            /* One's own names and bio: shown, or one of them changed. */
+            static char p_first[96];
+            static char p_last[96];
+            static char p_about[256];
+            static char p_utf8[512];
+            const char *text = 0;
+            int which = -1;
+
+            if (cmd_arg[0] == '\0') {
+                which = 0;
+            } else if (strncmp(cmd_arg, "name ", 5) == 0 &&
+                       cmd_arg[5] != '\0') {
+                which = 1;
+                text = cmd_arg + 5;
+            } else if (strcmp(cmd_arg, "bio") == 0) {
+                which = 2;
+                text = "";
+            } else if (strncmp(cmd_arg, "bio ", 4) == 0) {
+                which = 2;
+                text = cmd_arg + 4;
+            }
+            if (which < 0) {
+                tg_mtproto_chat_print_system_line(stream,
+                                                  TG_TSTR(MSG_T_USE_PROFILE));
+            } else if (which == 0) {
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_profile_fetch_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    p_first, sizeof(p_first), p_last, sizeof(p_last), p_about,
+                    sizeof(p_about), quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (rc != 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                } else {
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+
+                    fputs(TG_TSTR(MSG_T_PROFILE_NAME), tui_cap);
+                    tg_mtproto_print_message_text(tui_cap, p_first);
+                    if (p_last[0] != '\0') {
+                        fputc(' ', tui_cap);
+                        tg_mtproto_print_message_text(tui_cap, p_last);
+                    }
+                    fputc('\n', tui_cap);
+                    fputs(TG_TSTR(MSG_T_PROFILE_BIO), tui_cap);
+                    tg_mtproto_print_message_text(tui_cap, p_about);
+                    fputc('\n', tui_cap);
+                    tg_console_tui_capture_end(tui_cap, stream);
+                }
+            } else {
+                const char *send = text;
+
+#if TG_MTPROTO_DISPLAY_LATIN1
+                if (tg_mtproto_latin1_to_utf8(text, p_utf8,
+                                              sizeof(p_utf8))) {
+                    send = p_utf8;
+                }
+#endif
+                if (which == 1) {
+                    /* the first word the first name, the rest the last */
+                    char *sp;
+
+                    if (send != p_utf8) {
+                        tg_mtproto_copy_plain_cache_text(p_utf8,
+                                                         sizeof(p_utf8), send);
+                    }
+                    sp = strchr(p_utf8, ' ');
+                    if (sp != 0) {
+                        *sp++ = '\0';
+                        while (*sp == ' ') {
+                            ++sp;
+                        }
+                    }
+                    quiet = tg_mtproto_open_quiet_stream(stream);
+                    rc = tg_mtproto_profile_set_on_context(
+                        host, port, api_id, auth_file, dc_id_text,
+                        &chat_context, p_utf8, sp != 0 ? sp : "", 0, quiet);
+                } else {
+                    quiet = tg_mtproto_open_quiet_stream(stream);
+                    rc = tg_mtproto_profile_set_on_context(
+                        host, port, api_id, auth_file, dc_id_text,
+                        &chat_context, 0, 0, send, quiet);
+                }
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                tg_mtproto_chat_print_system_line(
+                    stream,
+                    rc == 0 ? TG_TSTR(MSG_T_PROFILE_CHANGED)
+                    : strcmp(tg_mtproto_query_fail, "ABOUT_TOO_LONG") == 0
+                        ? TG_TSTR(MSG_T_BIO_TOO_LONG)
+                        : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+            }
+            if (tg_profile_soft_fail) {
+                tg_mtproto_close_auth_context(&chat_context);
             }
             tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
                                         0UL, tg_chat_input_raw);
@@ -36488,6 +36673,92 @@ static void tg_mtproto_utf8_to_latin1_name(char *dst, unsigned long dst_size,
     }
 #endif
 }
+
+#if !defined(TG_NO_GUI)
+/* Public: one's own names and bio, Latin-1 for the window. 0 = read. */
+int tg_gui_session_profile(char *first, unsigned long first_size, char *last,
+                           unsigned long last_size, char *about,
+                           unsigned long about_size, FILE *stream)
+{
+    static char u_first[96];
+    static char u_last[96];
+    static char u_about[256];
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || first == 0 ||
+        last == 0 || about == 0) {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_profile_fetch_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        u_first, sizeof(u_first), u_last, sizeof(u_last), u_about,
+        sizeof(u_about), quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        return rc;
+    }
+    tg_gui_driver_text_from_utf8(first, first_size, u_first);
+    tg_gui_driver_text_from_utf8(last, last_size, u_last);
+    tg_gui_driver_text_from_utf8(about, about_size, u_about);
+    return 0;
+}
+
+/* Public: the fields given changed (Latin-1 from the window; 0 = left as
+   it is). 0 = done, 3 = the bio is too long, otherwise failed. */
+int tg_gui_session_set_profile(const char *first, const char *last,
+                               const char *about, FILE *stream)
+{
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char u_first[192];
+    static char u_last[192];
+    static char u_about[512];
+#endif
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (first != 0 && tg_mtproto_latin1_to_utf8(first, u_first,
+                                                sizeof(u_first))) {
+        first = u_first;
+    }
+    if (last != 0 && tg_mtproto_latin1_to_utf8(last, u_last,
+                                               sizeof(u_last))) {
+        last = u_last;
+    }
+    if (about != 0 && tg_mtproto_latin1_to_utf8(about, u_about,
+                                                sizeof(u_about))) {
+        about = u_about;
+    }
+#endif
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_profile_set_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        first, last, about, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 1 && strcmp(tg_mtproto_query_fail, "ABOUT_TOO_LONG") == 0) {
+        return 3;
+    }
+    tg_gui_log(rc == 0 ? "profile: changed" : "profile: not changed");
+    return rc;
+}
+#endif /* !TG_NO_GUI */
 
 /* Public: the account's contacts in the online picker's place, by name,
    for the sidebar to show (tg_gui_session_search_count/_name/_open_result).

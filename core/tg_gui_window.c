@@ -1539,6 +1539,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_LOGOUT 44
 #define TG_MENU_DEVICES 45
 #define TG_MENU_CONTACTS 46
+#define TG_MENU_PROFILE 47
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -8764,6 +8765,8 @@ static struct NewMenu tg_gui_newmenu[] = {
     { NM_ITEM,  (STRPTR)"Support development...", 0, 0, 0,
       (APTR)TG_MENU_SUPPORT },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
+    { NM_ITEM,  (STRPTR)"My profile...", 0, 0, 0,
+      (APTR)TG_MENU_PROFILE },
     { NM_ITEM,  (STRPTR)"Devices...", 0, 0, 0,
       (APTR)TG_MENU_DEVICES },
     { NM_ITEM,  (STRPTR)"Log out...", 0, 0, 0,
@@ -8821,6 +8824,7 @@ static void tg_gui_window_localize_menu(void)
         { MSG_MENU_ABOUT_STR, MSG_MENU_ABOUT },
         { MSG_MENU_HELP_STR, MSG_MENU_HELP },
         { MSG_MENU_SUPPORT_STR, MSG_MENU_SUPPORT },
+        { MSG_MENU_PROFILE_STR, MSG_MENU_PROFILE },
         { MSG_MENU_DEVICES_STR, MSG_MENU_DEVICES },
         { MSG_MENU_LOGOUT_STR, MSG_MENU_LOGOUT },
         { MSG_MENU_QUIT_STR, MSG_MENU_QUIT },
@@ -13097,6 +13101,87 @@ static void tg_gui_window_key_press(tg_gui_state *state, struct Window *win,
                                ? TG_STR(MSG_ST_BUTTON_NEEDS_TELEGRAM_APP)
                                : TG_STR(MSG_ST_THE_BOT_DID_NOT_ANSWER));
     }
+    tg_gui_window_paint(state, backend);
+}
+
+/* My profile...: one's own names and bio as Telegram has them, and a
+   way to change either; what Telegram says goes on the status line. */
+static void tg_gui_window_profile(tg_gui_state *state, tg_gui_amiga_ctx *ctx,
+                                  tg_gui_backend *backend)
+{
+    static char first[96];
+    static char last[96];
+    static char about[256];
+    static char body[640];
+    static char shown_about[300];
+    static char shown_first[200];
+    static char shown_last[200];
+    struct EasyStruct es;
+    LONG r;
+    int rc;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open()) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_READING_YOUR_PROFILE));
+    tg_gui_window_paint(state, backend);
+    if (tg_gui_session_profile(first, sizeof(first), last, sizeof(last),
+                               about, sizeof(about), stdout) != 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    /* every text through the helper: a '%' in a name too is doubled */
+    tg_gui_requester_text(shown_first, sizeof(shown_first), first, 1);
+    tg_gui_requester_text(shown_last, sizeof(shown_last), last, 1);
+    tg_gui_requester_text(shown_about, sizeof(shown_about), about, 4);
+    tg_locale_format(body, sizeof(body), TG_STR(MSG_W_PROFILE_NAME_S_S_BIO_S),
+                     shown_first, shown_last, shown_about);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems, UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_MY_PROFILE);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_NAME_BIO_CLOSE);
+    r = tg_gui_amiga_easyreq_args(ctx->window, &es);
+    if (r == 1L) {
+        if (!tg_gui_window_text_dialog(ctx, ctx->window,
+                                       TG_STR(MSG_RQ_MY_PROFILE),
+                                       TG_STR(MSG_W_YOUR_NAME_AS_OTHERS_SEE),
+                                       TG_STR(MSG_W_FIRST_NAME),
+                                       TG_STR(MSG_W_CHANGE), first,
+                                       64UL) ||
+            first[0] == '\0' ||
+            !tg_gui_window_text_dialog(ctx, ctx->window,
+                                       TG_STR(MSG_RQ_MY_PROFILE),
+                                       TG_STR(MSG_W_YOUR_NAME_AS_OTHERS_SEE),
+                                       TG_STR(MSG_W_LAST_NAME),
+                                       TG_STR(MSG_W_CHANGE), last, 64UL)) {
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        rc = tg_gui_session_set_profile(first, last, 0, stdout);
+    } else if (r == 2L) {
+        if (!tg_gui_window_text_dialog(ctx, ctx->window,
+                                       TG_STR(MSG_RQ_MY_PROFILE),
+                                       TG_STR(MSG_W_A_FEW_WORDS_ABOUT_YOU),
+                                       TG_STR(MSG_W_BIO), TG_STR(MSG_W_CHANGE),
+                                       about, 141UL)) {
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        rc = tg_gui_session_set_profile(0, 0, about, stdout);
+    } else {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       rc == 0 ? TG_STR(MSG_ST_PROFILE_CHANGED)
+                       : rc == 3 ? TG_STR(MSG_ST_THE_BIO_IS_TOO_LONG)
+                                 : TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
     tg_gui_window_paint(state, backend);
 }
 
@@ -19882,6 +19967,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                     (int)ctx.window->TopEdge,
                                                     want_own);
                             done = 3; /* reopen (no AppIcon) */
+                        } else if (ud == (APTR)TG_MENU_PROFILE) {
+                            tg_gui_window_profile(state, &ctx, &backend);
                         } else if (ud == (APTR)TG_MENU_CONTACTS) {
                             tg_gui_window_contacts(state, &backend);
                         } else if (ud == (APTR)TG_MENU_DEVICES) {

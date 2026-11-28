@@ -874,6 +874,14 @@ int tg_gui_session_search_open(const char *query, FILE *stream);
    (>= 0), -1 on failure. */
 int tg_gui_session_search_run(const char *query, FILE *stream);
 /* Count / display name of the last search's openable results (0-based). */
+/* One's own names and bio (Latin-1): read (0 = done), and changed, the
+   fields given only (0 = left as it is): 0 = done, 3 = the bio is too
+   long, otherwise failed. */
+int tg_gui_session_profile(char *first, unsigned long first_size, char *last,
+                           unsigned long last_size, char *about,
+                           unsigned long about_size, FILE *stream);
+int tg_gui_session_set_profile(const char *first, const char *last,
+                               const char *about, FILE *stream);
 /* The account's contacts, by name, in the online picker's place: the
    count (then tg_gui_session_search_name / _open_result as for a search),
    or -1. */

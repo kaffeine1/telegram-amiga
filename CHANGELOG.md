@@ -137,6 +137,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- One's own profile: "My profile..." in the Amigram menu shows the name
+  and the bio as Telegram has them (users.getFullUser with
+  inputUserSelf) and changes either (account.updateProfile): Name...
+  asks the first and the last name, Bio... the bio, 70 letters at most,
+  which the status line says when Telegram finds it too long. The text
+  client, the 68000 one included, has /profile, /profile name and
+  /profile bio.
 - Two more ARexx commands: CHATS answers with the chat list, a line a
   chat with its name, a TAB and its unread count; LAST with the open
   chat's newest message, its sender, a TAB and the text on one line.

@@ -1004,6 +1004,11 @@ Window and screen
   machine, the place and when it was last used, this one marked with a
   star. "End the others" logs every other device out, after one more
   question. In the text client: /devices, and /devices end yes.
+- "My profile..." in the Amigram menu shows your name and bio as
+  Telegram has them, and changes either: Name... asks the first and
+  the last name, Bio... a few words (70 letters at most). In the text
+  client: /profile, /profile name First Last, /profile bio text
+  (/profile bio alone clears it).
 - "Log out..." ends the session at Telegram and removes what Amigram
   keeps of the account on this computer (telegram-auth.bin, chat list,
   hidden chats, avatars, cached photos; downloads and settings stay),
@@ -1424,6 +1429,11 @@ Finestra e schermo
   stella su questo. "End the others" fa uscire tutti gli altri
   dispositivi, dopo un'altra domanda. Nel client testuale: /devices, e
   /devices end yes.
+- "Il mio profilo..." nel menu Amigram mostra nome e bio come li ha
+  Telegram, e cambia l'uno o l'altra: Nome... chiede nome e cognome,
+  Bio... due parole (al massimo 70 lettere). Nel client testuale:
+  /profile, /profile name Nome Cognome, /profile bio testo (/profile bio
+  da solo la cancella).
 - "Log out..." chiude la sessione presso Telegram e toglie quello che
   Amigram tiene dell'account su questo computer (telegram-auth.bin,
   elenco chat, chat nascoste, avatar, foto in cache; download e
@@ -1516,6 +1526,9 @@ by Telegram into the language of your Locale preferences. /devices lists
 where your account is logged in (program, machine, system, place, when it
 was last used; this one marked with *). /devices end yes logs out every
 other device; this one stays.
+/profile shows your name and bio; /profile name First Last changes the
+name, /profile bio text the bio (70 letters at most; /profile bio alone
+clears it).
 /contacts lists your address book by name; type a number to open the
 chat with that person (a big one shows its first names: /add name finds
 the others).
@@ -1642,6 +1655,9 @@ da Telegram nella lingua delle preferenze Locale. /devices elenca dove e'
 aperto il tuo account (programma, macchina, sistema, luogo, ultimo uso;
 questo segnato con *). /devices end yes chiude tutti gli altri
 dispositivi; questo resta.
+/profile mostra nome e bio; /profile name Nome Cognome cambia il nome,
+/profile bio testo la bio (al massimo 70 lettere; /profile bio da solo
+la cancella).
 /contacts elenca la tua rubrica per nome; scrivi un numero per aprire la
 chat con quella persona (una rubrica grande mostra i primi nomi: /add
 nome trova gli altri).

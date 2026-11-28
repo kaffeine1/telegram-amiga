@@ -76,6 +76,9 @@ Dispositivi...
 MSG_MENU_CONTACTS
 Rubrica...
 ; Contacts...
+MSG_MENU_PROFILE
+Il mio profilo...
+; My profile...
 MSG_QR_STEP1
 1. Apri Telegram sul telefono
 ; 1. Open Telegram on your phone
@@ -1521,6 +1524,15 @@ Codice a %.22s: scrivilo qui
 MSG_ST_NO_RECOVERY_EMAIL
 Questo account non ha un'email di recupero
 ; This account has no recovery email
+MSG_ST_READING_YOUR_PROFILE
+Leggo il tuo profilo...
+; Reading your profile...
+MSG_ST_PROFILE_CHANGED
+Profilo cambiato
+; Profile changed
+MSG_ST_THE_BIO_IS_TOO_LONG
+Bio troppo lunga: al massimo 70 lettere
+; The bio is too long: 70 letters at most
 MSG_RQ_OK
 OK
 ; OK
@@ -1744,6 +1756,12 @@ Invia ora|Elimina|Annulla
 MSG_RQ_CLOUD_PASSWORD
 Password cloud
 ; Cloud password
+MSG_RQ_MY_PROFILE
+Il mio profilo
+; My profile
+MSG_RQ_NAME_BIO_CLOSE
+Nome...|Bio...|Chiudi
+; Name...|Bio...|Close
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -2021,6 +2039,27 @@ impostane una nuova nelle impostazioni di Telegram.
 MSG_W_WRONG_OR_EXPIRED_CODE
 Codice sbagliato o scaduto, riprova
 ; Wrong or expired code, try again
+MSG_W_PROFILE_NAME_S_S_BIO_S
+Nome: %s %s\n\
+Bio: %s
+MSG_W_YOUR_NAME_AS_OTHERS_SEE
+Il tuo nome, come lo vedono gli altri
+; Your name, as others see it
+MSG_W_A_FEW_WORDS_ABOUT_YOU
+Due parole su di te, al massimo 70 lettere
+; A few words about you, 70 letters at most
+MSG_W_FIRST_NAME
+Nome
+; First name
+MSG_W_LAST_NAME
+Cognome
+; Last name
+MSG_W_BIO
+Bio
+; Bio
+MSG_W_CHANGE
+Cambia
+; Change
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -4298,3 +4337,21 @@ MSG_T_THAT_RECOVERY_CODE_WAS_NOT
 Quel codice non è stato accettato, o è scaduto.\n
 MSG_T_PASSWORD_REMOVED_SET_A_NEW
 Accesso fatto. Telegram ha tolto la password cloud: impostane una nuova nelle impostazioni di Telegram.\n
+MSG_T_HELP_PROFILE
+  /profile        nome e bio; /profile name A B, /profile bio testo
+;   /profile        your name and bio; /profile name A B, /profile bio text
+MSG_T_PROFILE_NAME
+Nome: 
+; Name: 
+MSG_T_PROFILE_BIO
+Bio: 
+; Bio: 
+MSG_T_PROFILE_CHANGED
+Profilo cambiato.
+; Profile changed.
+MSG_T_USE_PROFILE
+Usa /profile, /profile name Nome Cognome o /profile bio testo.
+; Use /profile, /profile name First Last or /profile bio text.
+MSG_T_BIO_TOO_LONG
+Bio troppo lunga: al massimo 70 lettere.
+; The bio is too long: 70 letters at most.
