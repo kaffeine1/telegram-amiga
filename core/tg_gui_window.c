@@ -13185,6 +13185,118 @@ static void tg_gui_window_profile(tg_gui_state *state, tg_gui_amiga_ctx *ctx,
     tg_gui_window_paint(state, backend);
 }
 
+/* "Contact..." of a person's row menu: Telegram says whether they are in
+   this account's contacts. One who is can be renamed there or taken out;
+   one who is not is put in, under the names Telegram has for them unless
+   others are typed, after a question about seeing this account's number
+   (no, unless the answer is yes). */
+static void tg_gui_window_contact_chat(tg_gui_state *state,
+                                       tg_gui_amiga_ctx *ctx, int sel,
+                                       tg_gui_backend *backend)
+{
+    static char first[96];
+    static char last[96];
+    static char shown[200];
+    static char body[320];
+    char why[48];
+    char line[80];
+    struct EasyStruct es;
+    unsigned long idx;
+    LONG r;
+    int contact;
+    int share = 0;
+    int rc;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        state->in_search || sel < 0 || sel >= state->chat_count ||
+        tg_gui_topics_listed(state)) {
+        return;
+    }
+    idx = state->chats[sel].index;
+    if (idx == 0UL || idx == TG_GUI_SAVED_PEER_INDEX) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_ASKING_TELEGRAM));
+    tg_gui_window_paint(state, backend); /* the menu leaves the screen */
+    contact = tg_gui_session_contact_get(idx, first, sizeof(first), last,
+                                         sizeof(last), stdout);
+    if (contact < 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status), "");
+    tg_gui_window_paint(state, backend);
+    /* the name as the list shows it, a '%' doubled for the requester */
+    tg_gui_requester_text(shown, sizeof(shown), state->chats[sel].name, 1);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems, UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_CONTACT);
+    if (contact) {
+        tg_locale_format(body, sizeof(body),
+                         TG_STR(MSG_W_S_IS_IN_YOUR_CONTACTS), shown);
+        es.es_TextFormat = (APTR)body;
+        es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_RENAME_REMOVE_CANCEL);
+        r = tg_gui_amiga_easyreq_args(ctx->window, &es);
+        if (r == 2L) {
+            rc = tg_gui_session_contact_set(idx, 0, 0, 0, why, sizeof(why),
+                                            stdout);
+            if (rc == 1) {
+                tg_locale_format(line, sizeof(line),
+                                 TG_STR(MSG_ST_TELEGRAM_REFUSED_28S), why);
+            }
+            tg_gui_window_copy(
+                state->status, sizeof(state->status),
+                rc == 0 ? TG_STR(MSG_ST_NO_LONGER_IN_YOUR_CONTACTS)
+                : rc == 1 ? line : TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+            tg_gui_window_paint(state, backend);
+            return;
+        }
+        if (r != 1L) {
+            return; /* cancelled */
+        }
+    }
+    if (!tg_gui_window_text_dialog(ctx, ctx->window, TG_STR(MSG_RQ_CONTACT),
+                                   TG_STR(MSG_W_THE_NAME_IN_YOUR_CONTACTS),
+                                   TG_STR(MSG_W_FIRST_NAME),
+                                   contact ? TG_STR(MSG_W_RENAME)
+                                           : TG_STR(MSG_W_ADD),
+                                   first, 64UL) ||
+        first[0] == '\0' ||
+        !tg_gui_window_text_dialog(ctx, ctx->window, TG_STR(MSG_RQ_CONTACT),
+                                   TG_STR(MSG_W_THE_NAME_IN_YOUR_CONTACTS),
+                                   TG_STR(MSG_W_LAST_NAME),
+                                   contact ? TG_STR(MSG_W_RENAME)
+                                           : TG_STR(MSG_W_ADD),
+                                   last, 64UL)) {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (!contact) {
+        tg_locale_format(body, sizeof(body),
+                         TG_STR(MSG_W_LET_S_SEE_YOUR_PHONE), shown);
+        es.es_TextFormat = (APTR)body;
+        es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_YES_NO);
+        share = tg_gui_amiga_easyreq_args(ctx->window, &es) == 1L;
+    }
+    rc = tg_gui_session_contact_set(idx, first, last, share, why, sizeof(why),
+                                    stdout);
+    if (rc == 1) {
+        tg_locale_format(line, sizeof(line),
+                         TG_STR(MSG_ST_TELEGRAM_REFUSED_28S), why);
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       rc == 0 ? (contact
+                                      ? TG_STR(MSG_ST_RENAMED_IN_YOUR_CONTACTS)
+                                      : TG_STR(MSG_ST_NOW_IN_YOUR_CONTACTS))
+                       : rc == 1 ? line
+                                 : TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+    tg_gui_window_paint(state, backend);
+}
+
 static void tg_gui_window_load_search_results(tg_gui_state *state);
 
 /* Contacts...: the account's address book in the sidebar, by name, the
@@ -20348,6 +20460,10 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                it == TG_GUI_CTX_CHAT_BLOCK) {
                         tg_gui_window_block_chat(state, ctx.window, ci,
                                                  &backend);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               it == TG_GUI_CTX_CHAT_CONTACT) {
+                        tg_gui_window_contact_chat(state, &ctx, ci,
+                                                   &backend);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_READ) {
                         int want_unread = !(state->chats[ci].unread > 0 ||

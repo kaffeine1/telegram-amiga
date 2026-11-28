@@ -137,6 +137,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- A person in the contacts: "Contact..." in a person's row menu asks
+  Telegram whether they are one (users.getFullUser, the user's contact
+  flag); one who is not is put in under the names Telegram has for them
+  or typed ones (contacts.addContact), with a question about seeing this
+  account's phone number, and one who is can be renamed there or taken
+  out (contacts.deleteContacts). The text client, the 68000 one
+  included, has /addcontact and /delcontact.
 - One's own profile: "My profile..." in the Amigram menu shows the name
   and the bio as Telegram has them (users.getFullUser with
   inputUserSelf) and changes either (account.updateProfile): Name...

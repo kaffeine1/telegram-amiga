@@ -1533,6 +1533,15 @@ Profilo cambiato
 MSG_ST_THE_BIO_IS_TOO_LONG
 Bio troppo lunga: al massimo 70 lettere
 ; The bio is too long: 70 letters at most
+MSG_ST_NOW_IN_YOUR_CONTACTS
+Ora è nella tua rubrica
+; Now in your contacts
+MSG_ST_RENAMED_IN_YOUR_CONTACTS
+Nome cambiato in rubrica
+; Renamed in your contacts
+MSG_ST_NO_LONGER_IN_YOUR_CONTACTS
+Non è più nella tua rubrica
+; No longer in your contacts
 MSG_RQ_OK
 OK
 ; OK
@@ -1762,6 +1771,12 @@ Il mio profilo
 MSG_RQ_NAME_BIO_CLOSE
 Nome...|Bio...|Chiudi
 ; Name...|Bio...|Close
+MSG_RQ_CONTACT
+Contatto
+; Contact
+MSG_RQ_RENAME_REMOVE_CANCEL
+Rinomina...|Togli|Annulla
+; Rename...|Remove|Cancel
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -2060,6 +2075,18 @@ Bio
 MSG_W_CHANGE
 Cambia
 ; Change
+MSG_W_S_IS_IN_YOUR_CONTACTS
+%s è nella tua rubrica.
+; %s is in your contacts.
+MSG_W_THE_NAME_IN_YOUR_CONTACTS
+Il nome nella tua rubrica
+; The name in your contacts
+MSG_W_ADD
+Aggiungi
+; Add
+MSG_W_LET_S_SEE_YOUR_PHONE
+Far vedere anche il tuo numero a %s?
+; Let %s see your phone number too?
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -2555,6 +2582,9 @@ Col codice la password cloud viene tolta. TAB: indietro
 MSG_G_ONLY_TELEGRAM_S_APPS_RESET
 Solo le app di Telegram la azzerano, dopo una settimana
 ; Only Telegram's apps can reset it, after a week
+MSG_G_CONTACT
+Contatto...
+; Contact...
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -4355,3 +4385,18 @@ Usa /profile, /profile name Nome Cognome o /profile bio testo.
 MSG_T_BIO_TOO_LONG
 Bio troppo lunga: al massimo 70 lettere.
 ; The bio is too long: 70 letters at most.
+MSG_T_HELP_ADDCONTACT
+  /addcontact     metti questa persona in rubrica (o: Nome Cognome)
+;   /addcontact     put this chat's person in your contacts (or: First Last)
+MSG_T_HELP_DELCONTACT
+  /delcontact     togli questa persona dalla rubrica
+;   /delcontact     take this chat's person out of your contacts
+MSG_T_NOW_IN_YOUR_CONTACTS
+Ora è nella tua rubrica.
+; Now in your contacts.
+MSG_T_NO_LONGER_IN_YOUR_CONTACTS
+Non è più nella tua rubrica.
+; No longer in your contacts.
+MSG_T_ONLY_A_PERSON_IN_CONTACTS
+In rubrica può stare solo una persona.
+; Only a person can be in your contacts.

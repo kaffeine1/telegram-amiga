@@ -8474,7 +8474,16 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = TG_STR(MSG_G_SHOW_HIDDEN_MESSAGES);
             ids[n++] = TG_GUI_CTX_CHAT_SHOW_HIDDEN;
         }
-        /* A person can be blocked on Telegram, or let back in. */
+        /* A person can be put in the contacts, renamed there or taken
+           out (Telegram is asked which when it is chosen), and blocked on
+           Telegram, or let back in. */
+        if (state->ctx_can_block &&
+            !state->chats[state->ctx_chat - 1].is_group &&
+            state->chats[state->ctx_chat - 1].index !=
+                TG_GUI_SAVED_PEER_INDEX) {
+            labels[n] = TG_STR(MSG_G_CONTACT);
+            ids[n++] = TG_GUI_CTX_CHAT_CONTACT;
+        }
         if (state->ctx_can_block &&
             !state->chats[state->ctx_chat - 1].is_group &&
             state->chats[state->ctx_chat - 1].index !=
@@ -11886,21 +11895,23 @@ static int tg_gui_notify_menu_self_test(void)
             }
         }
     }
-    /* A person can be blocked: the line before the chat's deletion, which
-       reads Unblock once they are known blocked. Never a group, never
-       Saved Messages. */
+    /* A person can be put in the contacts and blocked: the two lines
+       before the chat's deletion, the second reading Unblock once they are
+       known blocked. Never a group, never Saved Messages. */
     state->ctx_can_block = 1;
-    if (tg_gui_context_items(state, labels, ids) != 9 ||
-        ids[7] != TG_GUI_CTX_CHAT_BLOCK ||
-        strcmp(labels[7], TG_STR(MSG_G_BLOCK)) != 0 ||
-        ids[8] != TG_GUI_CTX_CHAT_LEAVE) {
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
+        ids[7] != TG_GUI_CTX_CHAT_CONTACT ||
+        strcmp(labels[7], TG_STR(MSG_G_CONTACT)) != 0 ||
+        ids[8] != TG_GUI_CTX_CHAT_BLOCK ||
+        strcmp(labels[8], TG_STR(MSG_G_BLOCK)) != 0 ||
+        ids[9] != TG_GUI_CTX_CHAT_LEAVE) {
         puts("gui self-test: a person's menu cannot block them");
         return 2;
     }
     state->ctx_blocked = 1;
-    if (tg_gui_context_items(state, labels, ids) != 9 ||
-        ids[7] != TG_GUI_CTX_CHAT_BLOCK ||
-        strcmp(labels[7], TG_STR(MSG_G_UNBLOCK)) != 0) {
+    if (tg_gui_context_items(state, labels, ids) != 10 ||
+        ids[8] != TG_GUI_CTX_CHAT_BLOCK ||
+        strcmp(labels[8], TG_STR(MSG_G_UNBLOCK)) != 0) {
         puts("gui self-test: a blocked person's menu cannot unblock them");
         return 2;
     }
@@ -11920,7 +11931,8 @@ static int tg_gui_notify_menu_self_test(void)
             state->chats[0].is_group = 0;
             state->chats[0].index = 5UL;
             for (i = 0; i < n; ++i) {
-                if (ids[i] == TG_GUI_CTX_CHAT_BLOCK) {
+                if (ids[i] == TG_GUI_CTX_CHAT_BLOCK ||
+                    ids[i] == TG_GUI_CTX_CHAT_CONTACT) {
                     puts("gui self-test: a group or Saved Messages can be "
                          "blocked");
                     return 2;

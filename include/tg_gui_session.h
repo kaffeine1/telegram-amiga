@@ -530,6 +530,20 @@ int tg_gui_session_user_blocked(unsigned long peer_index, int ask,
 int tg_gui_session_block_user(unsigned long peer_index, int block,
                               FILE *stream);
 
+/* Whether the person of the chat at this 1-based cache index is in this
+   account's contacts, asked of Telegram, with the names it has for them
+   (Latin-1): 1 in them, 0 not, -1 no other person's chat or no answer. */
+int tg_gui_session_contact_get(unsigned long peer_index, char *first,
+                               unsigned long first_size, char *last,
+                               unsigned long last_size, FILE *stream);
+/* That person put in the contacts under this name (Latin-1; renamed when
+   already there; share_phone: they see this account's number), or taken
+   out when first is 0. 0 = done, 1 = refused (Telegram's word in why),
+   2 = failed. */
+int tg_gui_session_contact_set(unsigned long peer_index, const char *first,
+                               const char *last, int share_phone, char *why,
+                               unsigned long why_size, FILE *stream);
+
 /* The messages tg_gui_session_send sends from now on reach the others
    without a sound (1), or with it again (0): set it around a send. */
 void tg_gui_session_send_silent(int on);

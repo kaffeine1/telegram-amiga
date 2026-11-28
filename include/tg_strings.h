@@ -1015,6 +1015,12 @@
 #define MSG_ST_PROFILE_CHANGED_STR "Profile changed"
 #define MSG_ST_THE_BIO_IS_TOO_LONG 555
 #define MSG_ST_THE_BIO_IS_TOO_LONG_STR "The bio is too long: 70 letters at most"
+#define MSG_ST_NOW_IN_YOUR_CONTACTS 556
+#define MSG_ST_NOW_IN_YOUR_CONTACTS_STR "Now in your contacts"
+#define MSG_ST_RENAMED_IN_YOUR_CONTACTS 557
+#define MSG_ST_RENAMED_IN_YOUR_CONTACTS_STR "Renamed in your contacts"
+#define MSG_ST_NO_LONGER_IN_YOUR_CONTACTS 558
+#define MSG_ST_NO_LONGER_IN_YOUR_CONTACTS_STR "No longer in your contacts"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1149,6 +1155,10 @@
 #define MSG_RQ_MY_PROFILE_STR "My profile"
 #define MSG_RQ_NAME_BIO_CLOSE 666
 #define MSG_RQ_NAME_BIO_CLOSE_STR "Name...|Bio...|Close"
+#define MSG_RQ_CONTACT 667
+#define MSG_RQ_CONTACT_STR "Contact"
+#define MSG_RQ_RENAME_REMOVE_CANCEL 668
+#define MSG_RQ_RENAME_REMOVE_CANCEL_STR "Rename...|Remove|Cancel"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1309,6 +1319,14 @@
 #define MSG_W_BIO_STR "Bio"
 #define MSG_W_CHANGE 972
 #define MSG_W_CHANGE_STR "Change"
+#define MSG_W_S_IS_IN_YOUR_CONTACTS 973
+#define MSG_W_S_IS_IN_YOUR_CONTACTS_STR "%s is in your contacts."
+#define MSG_W_THE_NAME_IN_YOUR_CONTACTS 974
+#define MSG_W_THE_NAME_IN_YOUR_CONTACTS_STR "The name in your contacts"
+#define MSG_W_ADD 975
+#define MSG_W_ADD_STR "Add"
+#define MSG_W_LET_S_SEE_YOUR_PHONE 976
+#define MSG_W_LET_S_SEE_YOUR_PHONE_STR "Let %s see your phone number too?"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1639,6 +1657,8 @@
 #define MSG_G_THE_PASSWORD_GOES_TAB_BACK_STR "With the code the cloud password is removed. TAB: back"
 #define MSG_G_ONLY_TELEGRAM_S_APPS_RESET 1464
 #define MSG_G_ONLY_TELEGRAM_S_APPS_RESET_STR "Only Telegram's apps can reset it, after a week"
+#define MSG_G_CONTACT 1465
+#define MSG_G_CONTACT_STR "Contact..."
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2893,8 +2913,18 @@
 #define MSG_T_USE_PROFILE_STR "Use /profile, /profile name First Last or /profile bio text."
 #define MSG_T_BIO_TOO_LONG 2395
 #define MSG_T_BIO_TOO_LONG_STR "The bio is too long: 70 letters at most."
+#define MSG_T_HELP_ADDCONTACT 2396
+#define MSG_T_HELP_ADDCONTACT_STR "  /addcontact     put this chat's person in your contacts (or: First Last)"
+#define MSG_T_HELP_DELCONTACT 2397
+#define MSG_T_HELP_DELCONTACT_STR "  /delcontact     take this chat's person out of your contacts"
+#define MSG_T_NOW_IN_YOUR_CONTACTS 2398
+#define MSG_T_NOW_IN_YOUR_CONTACTS_STR "Now in your contacts."
+#define MSG_T_NO_LONGER_IN_YOUR_CONTACTS 2399
+#define MSG_T_NO_LONGER_IN_YOUR_CONTACTS_STR "No longer in your contacts."
+#define MSG_T_ONLY_A_PERSON_IN_CONTACTS 2400
+#define MSG_T_ONLY_A_PERSON_IN_CONTACTS_STR "Only a person can be in your contacts."
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2395
+#define TG_STRINGS_ID_MAX 2400
 
 #endif

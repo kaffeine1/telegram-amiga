@@ -14940,6 +14940,11 @@ static int tg_mtproto_key_press_on_context(
 #define TG_CHAT_CMD_VOTERS 5
 #define TG_CHAT_CMD_BLOCK 6
 #define TG_CHAT_CMD_UNBLOCK 7
+#define TG_CHAT_CMD_ADD_CONTACT 8 /* the names in tg_chat_contact_* */
+#define TG_CHAT_CMD_DEL_CONTACT 9
+/* The names (UTF-8) /addcontact gives the person of the open chat. */
+static char tg_chat_contact_first[200];
+static char tg_chat_contact_last[200];
 /* What /voters prints: who voted in the last poll shown, by answer. */
 static char tg_chat_voters_text[TG_MTPROTO_POLL_VOTERS_TEXT_MAX];
 static int tg_mtproto_auth_chat_command_on_context(
@@ -14949,8 +14954,10 @@ static int tg_mtproto_auth_chat_command_on_context(
     const char *peer_index_text, int what, unsigned long value,
     const tg_mtproto_poll *poll, unsigned long mask, FILE *stream)
 {
+    /* room for a poll's answers, or for a contact's two names */
     static unsigned char query[32 + (TG_MTPROTO_POLL_ANSWERS_MAX *
-                                     (TG_MTPROTO_POLL_OPTION_MAX + 4))];
+                                     (TG_MTPROTO_POLL_OPTION_MAX + 4)) +
+                               2 * (sizeof(tg_chat_contact_first) + 4)];
     static const char label[] = "mtproto chat command";
     unsigned long constructor;
     unsigned long hi, lo, hash_hi, hash_lo;
@@ -14996,6 +15003,19 @@ static int tg_mtproto_auth_chat_command_on_context(
         built = tg_mtproto_build_contacts_block(
             &writer, what == TG_CHAT_CMD_BLOCK, constructor, hi, lo, hash_hi,
             hash_lo, has_hash);
+    } else if (what == TG_CHAT_CMD_ADD_CONTACT ||
+               what == TG_CHAT_CMD_DEL_CONTACT) {
+        if (constructor != TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+            strcpy(tg_mtproto_query_fail, "NOT_A_PERSON");
+            return 2;
+        }
+        /* this account's number is never shown to them from here */
+        built = what == TG_CHAT_CMD_ADD_CONTACT
+                    ? tg_mtproto_build_contacts_add_contact(
+                          &writer, hi, lo, hash_hi, hash_lo,
+                          tg_chat_contact_first, tg_chat_contact_last, 0)
+                    : tg_mtproto_build_contacts_delete_contacts(
+                          &writer, hi, lo, hash_hi, hash_lo);
     }
     if (built != TG_MTPROTO_TL_OK) {
         return 2;
@@ -15938,7 +15958,8 @@ static void tg_chat_history_add(const char *text)
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
     "          /block /unblock /press /devices /translate /later\n" \
-    "          /contacts /profile /help /update /logout /quit\n"
+    "          /contacts /addcontact /delcontact /profile\n" \
+    "          /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -20136,6 +20157,8 @@ static const struct {
     TG_HELP(MSG_T_HELP_MARKREAD_MARK_THIS),
     TG_HELP(MSG_T_HELP_MARKUNREAD_MARK_THIS),
     TG_HELP(MSG_T_HELP_BLOCK_UNBLOCK),
+    TG_HELP(MSG_T_HELP_ADDCONTACT),
+    TG_HELP(MSG_T_HELP_DELCONTACT),
     TG_HELP(MSG_T_HELP_PRESS_N),
     TG_HELP(MSG_T_HELP_DEVICES),
     TG_HELP(MSG_T_HELP_TRANSLATE),
@@ -23554,6 +23577,70 @@ int tg_mtproto_auth_chat_file(const char *host,
                                    : TG_TSTR(MSG_T_NOT_BLOCKED_ANY_MORE))
                     : strcmp(tg_mtproto_query_fail, "NOT_A_PERSON") == 0
                         ? TG_TSTR(MSG_T_ONLY_A_PERSON_CAN_BE_BLOCKED)
+                        : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                    tg_mtproto_close_auth_context(&chat_context);
+                }
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/addcontact",
+                                              &cmd_arg) ||
+            strcmp(line, "/delcontact") == 0) {
+            /* The person of the open chat put in the contacts, under the
+               name given or the one shown (the first word the first
+               name), or taken out. */
+            int add = line[1] == 'a';
+
+            if (peer_index[0] == '\0') {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_CHOOSE_A_CHAT_FIRST_WITH_LIST));
+            } else if (strcmp(peer_index, "self") == 0) {
+                tg_mtproto_chat_print_system_line(
+                    stream, TG_TSTR(MSG_T_ONLY_A_PERSON_IN_CONTACTS));
+            } else {
+                const char *src = peer_label; /* UTF-8, from the cache */
+                char *sp;
+
+                if (add && cmd_arg != 0 && cmd_arg[0] != '\0') {
+                    src = cmd_arg;
+#if TG_MTPROTO_DISPLAY_LATIN1
+                    if (tg_mtproto_latin1_to_utf8(
+                            cmd_arg, tg_chat_contact_last,
+                            sizeof(tg_chat_contact_last))) {
+                        src = tg_chat_contact_last;
+                    }
+#endif
+                }
+                tg_mtproto_copy_plain_cache_text(
+                    tg_chat_contact_first, sizeof(tg_chat_contact_first), src);
+                tg_chat_contact_last[0] = '\0';
+                sp = strchr(tg_chat_contact_first, ' ');
+                if (sp != 0) {
+                    *sp++ = '\0';
+                    while (*sp == ' ') {
+                        ++sp;
+                    }
+                    tg_mtproto_copy_plain_cache_text(
+                        tg_chat_contact_last, sizeof(tg_chat_contact_last),
+                        sp);
+                }
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                rc = tg_mtproto_auth_chat_command_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index,
+                    add ? TG_CHAT_CMD_ADD_CONTACT : TG_CHAT_CMD_DEL_CONTACT,
+                    0UL, 0, 0UL, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                tg_mtproto_chat_print_system_line(
+                    stream,
+                    rc == 0 ? (add ? TG_TSTR(MSG_T_NOW_IN_YOUR_CONTACTS)
+                                   : TG_TSTR(MSG_T_NO_LONGER_IN_YOUR_CONTACTS))
+                    : strcmp(tg_mtproto_query_fail, "NOT_A_PERSON") == 0
+                        ? TG_TSTR(MSG_T_ONLY_A_PERSON_IN_CONTACTS)
                         : TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
                 if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
                     tg_mtproto_close_auth_context(&chat_context);
@@ -36629,6 +36716,188 @@ int tg_gui_session_block_user(unsigned long peer_index, int block,
     tg_gui_log(block ? "block: blocked on Telegram"
                      : "block: unblocked on Telegram");
     return 0;
+}
+
+/* The person of the chat at a cache index, from the cache: 0 = a person
+   other than this account. */
+static int tg_gui_contact_peer(unsigned long peer_index, unsigned long *ph,
+                               unsigned long *pl, unsigned long *ahh,
+                               unsigned long *ahl, FILE *quiet)
+{
+    char index_text[24];
+    unsigned long pc;
+    int hah;
+
+    if (peer_index == 0UL || peer_index == TG_GUI_SAVED_PEER_INDEX) {
+        return 2;
+    }
+    sprintf(index_text, "%lu", peer_index % 100000000UL);
+    if (tg_mtproto_load_peer_cache_peer(tg_gui_session_state.peer_cache_file,
+                                        index_text, &pc, ph, pl, ahh, ahl,
+                                        &hah, quiet, "contact peer") != 0 ||
+        pc != TG_MTPROTO_PEER_USER_CONSTRUCTOR ||
+        (tg_gui_self_known && *ph == tg_gui_self_hi &&
+         *pl == tg_gui_self_lo)) {
+        return 2;
+    }
+    return 0;
+}
+
+/* Public: whether the person of the chat at this 1-based cache index is in
+   this account's contacts, asked of Telegram (users.getFullUser), and the
+   names it has for them (Latin-1): 1 in them, 0 not, -1 no other person's
+   chat or no answer. The answer tells whether they are blocked too. */
+int tg_gui_session_contact_get(unsigned long peer_index, char *first,
+                               unsigned long first_size, char *last,
+                               unsigned long last_size, FILE *stream)
+{
+    static unsigned char query[32];
+    static const char label[] = "mtproto users.getFullUser";
+    static char u_first[96];
+    static char u_last[96];
+    char emsg[48] = "";
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int contact;
+    int blocked;
+    int attempt;
+    int rc;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+
+    if (!tg_gui_session_state.open || stream == 0 || first == 0 ||
+        last == 0) {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_gui_contact_peer(peer_index, &ph, &pl, &ahh, &ahl, quiet) != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_users_get_full_user(&writer, ph, pl, ahh, ahl) !=
+        TG_MTPROTO_TL_OK) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return -1;
+    }
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    for (attempt = 0; attempt < 2; ++attempt) {
+        unsigned long wait;
+
+        rc = tg_gui_session_peer_request(query, writer.length, &result, label,
+                                         emsg, sizeof(emsg), quiet);
+        /* The same question a moment ago (Block..., then Contact...):
+           Telegram's few seconds are waited out, once. */
+        if (rc == 1 && attempt == 0 &&
+            strncmp(emsg, "FLOOD_WAIT_", 11) == 0 &&
+            (wait = strtoul(emsg + 11, 0, 10)) <= 5UL) {
+            tg_gui_log("contact: Telegram asks to wait, then again");
+            tg_platform_sleep_seconds(wait + 1UL);
+            continue;
+        }
+        break;
+    }
+    if (rc == 0 && tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    contact = rc == 0 ? tg_mtproto_parse_user_full_person(
+                            result.result_constructor, result.result_body,
+                            result.result_body_length, u_first,
+                            sizeof(u_first), u_last, sizeof(u_last))
+                      : -1;
+    if (contact < 0) {
+        char line[96];
+
+        sprintf(line,
+                "contact: Telegram did not say whether they are one%s%.40s",
+                rc == 1 ? ": " : "", rc == 1 ? emsg : "");
+        tg_gui_log(line);
+        return -1;
+    }
+    blocked = tg_mtproto_parse_user_full_blocked(result.result_constructor,
+                                                 result.result_body,
+                                                 result.result_body_length);
+    if (blocked >= 0) {
+        tg_gui_block_note(ph, pl, blocked);
+    }
+    tg_gui_driver_text_from_utf8(first, first_size, u_first);
+    tg_gui_driver_text_from_utf8(last, last_size, u_last);
+    tg_gui_log(contact ? "contact: in the contacts" : "contact: not one");
+    return contact;
+}
+
+/* Public: the person of the chat at this 1-based cache index put in the
+   contacts under this name (Latin-1; one already there is renamed),
+   seeing this account's number with share_phone (contacts.addContact),
+   or taken out when first is 0 (contacts.deleteContacts). 0 = done, 1 =
+   Telegram refused it (why it says in `why`), 2 = failed. */
+int tg_gui_session_contact_set(unsigned long peer_index, const char *first,
+                               const char *last, int share_phone, char *why,
+                               unsigned long why_size, FILE *stream)
+{
+    static unsigned char query[512];
+#if TG_MTPROTO_DISPLAY_LATIN1
+    static char u_first[200];
+    static char u_last[200];
+#endif
+    unsigned long ph;
+    unsigned long pl;
+    unsigned long ahh;
+    unsigned long ahl;
+    unsigned long prev_timeout;
+    int rc;
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    FILE *quiet;
+
+    if (why != 0 && why_size > 0UL) {
+        why[0] = '\0';
+    }
+    if (!tg_gui_session_state.open || stream == 0) {
+        return 2;
+    }
+#if TG_MTPROTO_DISPLAY_LATIN1
+    if (first != 0 && tg_mtproto_latin1_to_utf8(first, u_first,
+                                                sizeof(u_first))) {
+        first = u_first;
+    }
+    if (last != 0 && tg_mtproto_latin1_to_utf8(last, u_last,
+                                               sizeof(u_last))) {
+        last = u_last;
+    }
+#endif
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    if (tg_gui_contact_peer(peer_index, &ph, &pl, &ahh, &ahl, quiet) != 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = (first != 0 ? tg_mtproto_build_contacts_add_contact(
+                           &writer, ph, pl, ahh, ahl, first, last,
+                           share_phone)
+                     : tg_mtproto_build_contacts_delete_contacts(
+                           &writer, ph, pl, ahh, ahl)) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(
+                   query, writer.length, &result,
+                   first != 0 ? "mtproto contacts.addContact"
+                              : "mtproto contacts.deleteContacts",
+                   why, why_size, quiet)
+             : 2;
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_gui_log(rc == 0 ? (first != 0 ? "contact: put in the contacts"
+                                     : "contact: taken out")
+                       : "contact: Telegram did not take it");
+    return rc;
 }
 #endif
 

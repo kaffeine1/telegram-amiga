@@ -1009,6 +1009,11 @@ Window and screen
   the last name, Bio... a few words (70 letters at most). In the text
   client: /profile, /profile name First Last, /profile bio text
   (/profile bio alone clears it).
+- "Contact..." in a person's row menu asks Telegram whether they are in
+  your contacts. If not, it puts them in under the name Telegram has for
+  them, or one you type, and asks whether they may see your phone
+  number; if they are, it renames them there or takes them out. In the
+  text client: /addcontact (or /addcontact First Last) and /delcontact.
 - "Log out..." ends the session at Telegram and removes what Amigram
   keeps of the account on this computer (telegram-auth.bin, chat list,
   hidden chats, avatars, cached photos; downloads and settings stay),
@@ -1434,6 +1439,11 @@ Finestra e schermo
   Bio... due parole (al massimo 70 lettere). Nel client testuale:
   /profile, /profile name Nome Cognome, /profile bio testo (/profile bio
   da solo la cancella).
+- "Contatto..." nel menu della riga di una persona chiede a Telegram se
+  e' nella tua rubrica. Se non c'e' la aggiunge, col nome che Telegram
+  ha per lei o con quello che scrivi, e chiede se puo' vedere il tuo
+  numero; se c'e' la rinomina o la toglie. Nel client testuale:
+  /addcontact (o /addcontact Nome Cognome) e /delcontact.
 - "Log out..." chiude la sessione presso Telegram e toglie quello che
   Amigram tiene dell'account su questo computer (telegram-auth.bin,
   elenco chat, chat nascoste, avatar, foto in cache; download e
@@ -1529,6 +1539,9 @@ other device; this one stays.
 /profile shows your name and bio; /profile name First Last changes the
 name, /profile bio text the bio (70 letters at most; /profile bio alone
 clears it).
+In a chat with a person, /addcontact puts them in your contacts under the
+name shown (or /addcontact First Last), without showing them your phone
+number; /delcontact takes them out.
 /contacts lists your address book by name; type a number to open the
 chat with that person (a big one shows its first names: /add name finds
 the others).
@@ -1658,6 +1671,9 @@ dispositivi; questo resta.
 /profile mostra nome e bio; /profile name Nome Cognome cambia il nome,
 /profile bio testo la bio (al massimo 70 lettere; /profile bio da solo
 la cancella).
+In una chat con una persona, /addcontact la mette in rubrica col nome
+che vedi (o /addcontact Nome Cognome), senza farle vedere il tuo numero;
+/delcontact la toglie.
 /contacts elenca la tua rubrica per nome; scrivi un numero per aprire la
 chat con quella persona (una rubrica grande mostra i primi nomi: /add
 nome trova gli altri).

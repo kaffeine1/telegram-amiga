@@ -1062,6 +1062,27 @@ int tg_mtproto_parse_own_profile(unsigned long constructor,
 tg_mtproto_tl_status tg_mtproto_build_account_update_profile(
     tg_mtproto_tl_writer *writer, const char *first, const char *last,
     const char *about);
+/* A person put in this account's contacts under a name, or renamed
+   there (contacts.addContact#e8f463d0; a first name is needed; with
+   share_phone they see this account's number too, flags.0), or taken
+   out (contacts.deleteContacts#96a0e00). Both answer with Updates. */
+tg_mtproto_tl_status tg_mtproto_build_contacts_add_contact(
+    tg_mtproto_tl_writer *writer, unsigned long user_id_hi,
+    unsigned long user_id_lo, unsigned long access_hash_hi,
+    unsigned long access_hash_lo, const char *first, const char *last,
+    int share_phone);
+tg_mtproto_tl_status tg_mtproto_build_contacts_delete_contacts(
+    tg_mtproto_tl_writer *writer, unsigned long user_id_hi,
+    unsigned long user_id_lo, unsigned long access_hash_hi,
+    unsigned long access_hash_lo);
+/* The person of a users.userFull answer (users.getFullUser of them): 1 in
+   this account's contacts (user flags.11), 0 not, -1 no such answer; the
+   names Telegram has for them (the contact's ones when they are one). */
+int tg_mtproto_parse_user_full_person(unsigned long constructor,
+                                      const unsigned char *body,
+                                      unsigned long body_length, char *first,
+                                      unsigned long first_size, char *last,
+                                      unsigned long last_size);
 tg_mtproto_tl_status tg_mtproto_parse_contacts_peer_cache(
     unsigned long constructor,
     const unsigned char *body,

@@ -1229,7 +1229,8 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_COMMENTS 23 /* Comments...: the comments of a post */
 #define TG_GUI_CTX_TRANSLATE 24 /* Translate: someone else's text */
 #define TG_GUI_CTX_SEND_LATER 25 /* the paperclip's menu: Send later... */
-#define TG_GUI_CTX_SCHEDULED 26 /* ...and Scheduled...: the chat's messages
+#define TG_GUI_CTX_SCHEDULED 26
+#define TG_GUI_CTX_CHAT_CONTACT 27 /* Contact...: a person's row */ /* ...and Scheduled...: the chat's messages
                                    waiting for their time take the menu */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33

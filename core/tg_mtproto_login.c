@@ -12452,6 +12452,49 @@ tg_mtproto_tl_status tg_mtproto_build_users_get_full_user_self(
     return status;
 }
 
+/* A users.userFull#3b6d152e body (its constructor read): the user of
+   userFull#c577b5ad's id among the answer's users, or 0. `after` is left
+   just past that id, where userFull's about may follow, and `full_flags`
+   holds userFull's flags. */
+static const tg_mtproto_user_summary *tg_user_full_user(
+    const unsigned char *body, unsigned long body_length,
+    tg_mtproto_tl_reader *after, unsigned long *full_flags)
+{
+    static tg_mtproto_user_summary user;
+    unsigned long inner;
+    unsigned long flags2;
+    unsigned long hi;
+    unsigned long lo;
+    unsigned long at;
+
+    if (body == 0) {
+        return 0;
+    }
+    /* userFull: flags, flags2, id, then about when flags.1 */
+    tg_mtproto_tl_reader_init(after, body, body_length);
+    if (tg_mtproto_tl_read_u32(after, &inner) != TG_MTPROTO_TL_OK ||
+        inner != 0xc577b5adUL ||
+        tg_mtproto_tl_read_u32(after, full_flags) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u32(after, &flags2) != TG_MTPROTO_TL_OK ||
+        tg_mtproto_tl_read_u64(after, &hi, &lo) != TG_MTPROTO_TL_OK) {
+        return 0;
+    }
+    for (at = after->offset; at + 20UL <= body_length; at += 4UL) {
+        tg_mtproto_tl_reader user_reader;
+
+        if (tg_read_u32_le(body + at) != TG_USER_CONSTRUCTOR) {
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&user_reader, body + at, body_length - at);
+        if (tg_read_user_leading_from_reader(&user_reader, &user) ==
+                TG_MTPROTO_TL_OK &&
+            user.id_hi == hi && user.id_lo == lo) {
+            return &user;
+        }
+    }
+    return 0;
+}
+
 int tg_mtproto_parse_own_profile(unsigned long constructor,
                                  const unsigned char *body,
                                  unsigned long body_length, char *first,
@@ -12460,58 +12503,57 @@ int tg_mtproto_parse_own_profile(unsigned long constructor,
                                  unsigned long about_size)
 {
     tg_mtproto_tl_reader reader;
-    unsigned long inner;
-    unsigned long flags;
-    unsigned long flags2;
-    unsigned long hi;
-    unsigned long lo;
-    unsigned long at;
-    int named = 0;
+    const tg_mtproto_user_summary *user;
+    unsigned long flags = 0UL;
 
     if (first == 0 || first_size == 0UL || last == 0 || last_size == 0UL ||
         about == 0 || about_size == 0UL) {
         return 0;
     }
     first[0] = last[0] = about[0] = '\0';
-    if (constructor != 0x3b6d152eUL || body == 0) {
+    if (constructor != 0x3b6d152eUL) {
         return 0;
     }
-    /* userFull: flags, flags2, id, then about when flags.1 */
-    tg_mtproto_tl_reader_init(&reader, body, body_length);
-    if (tg_mtproto_tl_read_u32(&reader, &inner) != TG_MTPROTO_TL_OK ||
-        inner != 0xc577b5adUL ||
-        tg_mtproto_tl_read_u32(&reader, &flags) != TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u32(&reader, &flags2) != TG_MTPROTO_TL_OK ||
-        tg_mtproto_tl_read_u64(&reader, &hi, &lo) != TG_MTPROTO_TL_OK) {
+    user = tg_user_full_user(body, body_length, &reader, &flags);
+    if (user == 0) {
         return 0;
     }
-    (void)flags2;
     if ((flags & 2UL) != 0UL &&
         tg_read_string_copy(&reader, about, about_size) != TG_MTPROTO_TL_OK) {
         about[0] = '\0';
         return 0;
     }
-    /* the names: the user of that id among the answer's users */
-    for (at = reader.offset; at + 20UL <= body_length; at += 4UL) {
-        tg_mtproto_tl_reader user_reader;
-        static tg_mtproto_user_summary user;
-
-        if (tg_read_u32_le(body + at) != TG_USER_CONSTRUCTOR) {
-            continue;
-        }
-        tg_mtproto_tl_reader_init(&user_reader, body + at, body_length - at);
-        if (tg_read_user_leading_from_reader(&user_reader, &user) !=
-                TG_MTPROTO_TL_OK ||
-            user.id_hi != hi || user.id_lo != lo) {
-            continue;
-        }
-        tg_peer_cache_copy_text(first, first_size, user.first_name);
-        tg_peer_cache_copy_text(last, last_size, user.last_name);
-        named = 1;
-        break;
-    }
-    return named;
+    tg_peer_cache_copy_text(first, first_size, user->first_name);
+    tg_peer_cache_copy_text(last, last_size, user->last_name);
+    return 1;
 }
+
+#if !defined(TG_NO_GUI)
+int tg_mtproto_parse_user_full_person(unsigned long constructor,
+                                      const unsigned char *body,
+                                      unsigned long body_length, char *first,
+                                      unsigned long first_size, char *last,
+                                      unsigned long last_size)
+{
+    tg_mtproto_tl_reader reader;
+    const tg_mtproto_user_summary *user;
+    unsigned long flags = 0UL;
+
+    if (first == 0 || first_size == 0UL || last == 0 || last_size == 0UL) {
+        return -1;
+    }
+    first[0] = last[0] = '\0';
+    user = constructor == 0x3b6d152eUL
+               ? tg_user_full_user(body, body_length, &reader, &flags)
+               : 0;
+    if (user == 0) {
+        return -1;
+    }
+    tg_peer_cache_copy_text(first, first_size, user->first_name);
+    tg_peer_cache_copy_text(last, last_size, user->last_name);
+    return (user->flags & (1UL << 11)) != 0UL ? 1 : 0; /* contact */
+}
+#endif
 
 tg_mtproto_tl_status tg_mtproto_build_account_update_profile(
     tg_mtproto_tl_writer *writer, const char *first, const char *last,
@@ -12537,6 +12579,74 @@ tg_mtproto_tl_status tg_mtproto_build_account_update_profile(
     }
     if (status == TG_MTPROTO_TL_OK && about != 0) {
         status = tg_write_string(writer, about);
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_contacts_add_contact(
+    tg_mtproto_tl_writer *writer, unsigned long user_id_hi,
+    unsigned long user_id_lo, unsigned long access_hash_hi,
+    unsigned long access_hash_lo, const char *first, const char *last,
+    int share_phone)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || (user_id_hi == 0UL && user_id_lo == 0UL) ||
+        first == 0 || first[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT; /* a first name is needed */
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0xe8f463d0UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, share_phone ? 1UL : 0UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_USER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, user_id_hi, user_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi,
+                                         access_hash_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, first);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, last != 0 ? last : "");
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, ""); /* a person, not a number */
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_contacts_delete_contacts(
+    tg_mtproto_tl_writer *writer, unsigned long user_id_hi,
+    unsigned long user_id_lo, unsigned long access_hash_hi,
+    unsigned long access_hash_lo)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || (user_id_hi == 0UL && user_id_lo == 0UL)) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x096a0e00UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_INPUT_USER_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, user_id_hi, user_id_lo);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, access_hash_hi,
+                                         access_hash_lo);
     }
     return status;
 }
@@ -21229,6 +21339,113 @@ int tg_mtproto_login_self_test(void)
             return 2;
         }
     }
+    /* A person put in the contacts, renamed there or taken out: the two
+       requests' bytes (the phone shared only when asked, never without a
+       first name), and the person read from a users.userFull answer:
+       whether they are a contact, and their names, not another's. */
+    {
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_contacts_add_contact(&writer, 0UL, 77UL, 0UL,
+                                                  5UL, "Ada", "", 1) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 40UL ||
+            tg_read_u32_le(peer_rpc) != 0xe8f463d0UL ||
+            tg_read_u32_le(peer_rpc + 4) != 1UL ||
+            tg_read_u32_le(peer_rpc + 8) != 0xf21158c6UL ||
+            tg_read_u32_le(peer_rpc + 12) != 77UL ||
+            tg_read_u32_le(peer_rpc + 20) != 5UL || peer_rpc[28] != 3U ||
+            memcmp(peer_rpc + 29, "Ada", 3) != 0 ||
+            tg_read_u32_le(peer_rpc + 32) != 0UL ||
+            tg_read_u32_le(peer_rpc + 36) != 0UL) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_contacts_add_contact(&writer, 0UL, 77UL, 0UL,
+                                                  5UL, "Ada", "B", 0) !=
+                TG_MTPROTO_TL_OK ||
+            tg_read_u32_le(peer_rpc + 4) != 0UL || peer_rpc[32] != 1U ||
+            peer_rpc[33] != 'B' ||
+            tg_mtproto_build_contacts_add_contact(&writer, 0UL, 77UL, 0UL,
+                                                  5UL, "", "B", 0) ==
+                TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_contacts_delete_contacts(&writer, 0UL, 77UL,
+                                                      0UL, 5UL) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 32UL ||
+            tg_read_u32_le(peer_rpc) != 0x096a0e00UL ||
+            tg_read_u32_le(peer_rpc + 4) != 0x1cb5c415UL ||
+            tg_read_u32_le(peer_rpc + 8) != 1UL ||
+            tg_read_u32_le(peer_rpc + 12) != 0xf21158c6UL ||
+            tg_read_u32_le(peer_rpc + 16) != 77UL ||
+            tg_read_u32_le(peer_rpc + 24) != 5UL) {
+            return 2;
+        }
+    }
+#if !defined(TG_NO_GUI)
+    {
+        char first[32];
+        char last[32];
+        int round;
+
+        /* users.userFull of person 77: userFull with no about, chats 0,
+           users: another first, then 77 (a contact in round 0) */
+        for (round = 0; round < 3; ++round) {
+            int got;
+
+            tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+            if (tg_mtproto_tl_write_u32(&writer, 0xc577b5adUL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL, 77UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 2UL | (1UL << 11)) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL, 78UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Other") != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(
+                    &writer, 2UL | 4UL | (round == 0 ? 1UL << 11 : 0UL)) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u32(&writer, 0UL) != TG_MTPROTO_TL_OK ||
+                tg_mtproto_tl_write_u64(&writer, 0UL,
+                                        round == 2 ? 79UL : 77UL) !=
+                    TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Ada") != TG_MTPROTO_TL_OK ||
+                tg_write_string(&writer, "Prova") != TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            got = tg_mtproto_parse_user_full_person(
+                0x3b6d152eUL, peer_rpc, writer.length, first, sizeof(first),
+                last, sizeof(last));
+            if (got != (round == 0 ? 1 : round == 1 ? 0 : -1) ||
+                (round < 2 && (strcmp(first, "Ada") != 0 ||
+                               strcmp(last, "Prova") != 0))) {
+                return 2;
+            }
+        }
+        if (tg_mtproto_parse_user_full_person(0x11111111UL, peer_rpc,
+                                              writer.length, first,
+                                              sizeof(first), last,
+                                              sizeof(last)) != -1) {
+            return 2;
+        }
+    }
+#endif
     /* A forgotten password: the two requests' bytes (no new password,
        flags 0), no code no request, and the recovery answer read: its
        email pattern, nothing from another answer. */
