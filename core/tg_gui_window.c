@@ -12993,6 +12993,119 @@ static void tg_gui_window_key_press(tg_gui_state *state, struct Window *win,
     tg_gui_window_paint(state, backend);
 }
 
+/* Send later...: the composer's text waits on Telegram until a time typed
+   in a box ("21:30", "28/11 21:30", "28/11/2026 21:30"). A time that
+   cannot be read, or has passed, is said on the status line and the text
+   stays in the composer. */
+static void tg_gui_window_send_later(tg_gui_state *state,
+                                     tg_gui_amiga_ctx *ctx,
+                                     tg_gui_backend *backend)
+{
+    static char typed[32];
+    char shown[24];
+    char line[96];
+    unsigned long when = 0UL;
+    int r;
+
+    if (state->input[0] == '\0') {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_WRITE_THE_MESSAGE_THEN_SEND));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_session_later_suggest(typed, sizeof(typed));
+    if (!tg_gui_window_text_dialog(ctx, ctx->window, TG_STR(MSG_W_SEND_LATER),
+                                   TG_STR(MSG_W_WHEN_IT_GOES),
+                                   TG_STR(MSG_W_TIME), TG_STR(MSG_G_SEND),
+                                   typed, sizeof(typed)) ||
+        typed[0] == '\0') {
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    r = tg_gui_session_later_when(typed, &when, shown, sizeof(shown));
+    if (r != 1) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           r == 0 ? TG_STR(MSG_ST_WRITE_THE_TIME_AS)
+                                  : TG_STR(MSG_ST_THAT_TIME_HAS_PASSED));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_session_send_at(when);
+    r = tg_gui_window_send_input(state, 0);
+    tg_gui_session_send_at(0UL);
+    if (r == 0) {
+        state->input[0] = '\0';
+        state->input_caret = 0;
+        state->history_pos = -1;
+        state->history_draft[0] = '\0';
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_SCHEDULED_FOR_S),
+                         shown);
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+    }
+    tg_gui_window_paint(state, backend);
+}
+
+/* Scheduled...: the open chat's messages that wait for their time take
+   the paperclip's menu; none, or no answer, is said on the status line. */
+static void tg_gui_window_scheduled(tg_gui_state *state,
+                                    tg_gui_backend *backend, int lh)
+{
+    int n;
+
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_READING_THE_SCHEDULED));
+    tg_gui_window_paint(state, backend);
+    state->poll_mask = 0UL;
+    state->poll_multiple = 0;
+    n = tg_gui_session_later_list(&state->poll_items[0][0],
+                                  TG_GUI_POLL_ITEM_LEN, TG_GUI_POLL_ITEMS_MAX,
+                                  stdout);
+    if (n > 0) {
+        state->poll_item_count = n;
+        tg_gui_scheduled_menu_open(state, lh);
+        state->ctx_w = tg_gui_context_menu_measure(state, backend);
+        tg_gui_window_copy(state->status, sizeof(state->status), "");
+    } else {
+        state->poll_item_count = 0;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           n == 0 ? TG_STR(MSG_ST_NO_SCHEDULED_MESSAGES)
+                                  : TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+    }
+}
+
+/* One scheduled message picked from that menu: sent at once, deleted, or
+   left as it is. */
+static void tg_gui_window_scheduled_pick(tg_gui_state *state,
+                                         struct Window *win,
+                                         tg_gui_backend *backend, int index)
+{
+    static char body[TG_GUI_POLL_ITEM_LEN * 2];
+    struct EasyStruct es;
+    LONG r;
+    int rc;
+
+    if (index < 0 || index >= state->poll_item_count) {
+        return;
+    }
+    tg_gui_requester_text(body, sizeof(body), state->poll_items[index], 4);
+    es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+    es.es_Flags = 0UL;
+    /* APTR: the fields are STRPTR on some systems, UBYTE * on others. */
+    es.es_Title = (APTR)TG_STR(MSG_RQ_SCHEDULED_MESSAGE);
+    es.es_TextFormat = (APTR)body;
+    es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_SEND_NOW_DELETE_CANCEL);
+    r = tg_gui_amiga_easyreq_args(win, &es);
+    if (r != 1L && r != 2L) {
+        return; /* left as it is */
+    }
+    rc = tg_gui_session_later_act(index, r == 1L, stdout);
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       rc != 0 ? TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM)
+                       : r == 1L ? TG_STR(MSG_ST_SCHEDULED_SENT_NOW)
+                                 : TG_STR(MSG_ST_SCHEDULED_DELETED));
+    tg_gui_window_paint(state, backend);
+}
+
 /* Who read...: asks Telegram who read this message of the user's own and
    shows the answer, or says on the status line why there is none. */
 static void tg_gui_window_who_read(tg_gui_state *state, struct Window *win,
@@ -20554,6 +20667,19 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                       &backend)) {
                             session_dirty = 1; /* the poll shows it */
                         }
+                    } else if (it == TG_GUI_CTX_SEND_LATER) {
+                        tg_gui_window_paint(state, &backend);
+                        tg_gui_window_send_later(state, &ctx, &backend);
+                    } else if (it == TG_GUI_CTX_SCHEDULED) {
+                        tg_gui_window_scheduled(state, &backend, ctx.line_h);
+                    } else if (was_poll == 3 &&
+                               it >= TG_GUI_CTX_POLL_FIRST &&
+                               it < TG_GUI_CTX_POLL_FIRST +
+                                        state->poll_item_count) {
+                        tg_gui_window_paint(state, &backend);
+                        tg_gui_window_scheduled_pick(
+                            state, ctx.window, &backend,
+                            it - TG_GUI_CTX_POLL_FIRST);
                     }
                     tg_gui_window_paint(state, &backend);
                 } else if (msg_code == SELECTUP) {

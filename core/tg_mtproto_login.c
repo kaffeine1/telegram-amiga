@@ -2901,13 +2901,22 @@ void tg_mtproto_send_set_silent(int on)
     tg_send_silent = on ? 1 : 0;
 }
 
+/* schedule_date:flags.10: when the sends that follow go, 0 = at once. */
+static unsigned long tg_send_schedule = 0UL;
+
+void tg_mtproto_send_set_schedule(unsigned long when)
+{
+    tg_send_schedule = when;
+}
+
 static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
 {
     return ((reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL) ? 1UL
                                                                    : 0UL) |
            (tg_send_mention_count + tg_send_style_count > 0 ? 8UL : 0UL) |
            (tg_send_silent ? 32UL : 0UL) |
-           (tg_send_clear_draft ? 128UL : 0UL);
+           (tg_send_clear_draft ? 128UL : 0UL) |
+           (tg_send_schedule != 0UL ? 1024UL : 0UL);
 }
 
 static tg_mtproto_tl_status tg_write_send_mention(
@@ -2988,6 +2997,16 @@ static tg_mtproto_tl_status tg_write_send_styles_vector(
    there are any (no reply_markup: flags.2 is never set). The styles and
    the mentions, each list in the order of the text, go out merged in
    that order. */
+/* The last field written: schedule_date (flags.10), after the entities. */
+static tg_mtproto_tl_status tg_write_send_schedule(
+    tg_mtproto_tl_writer *writer, tg_mtproto_tl_status status)
+{
+    if (status == TG_MTPROTO_TL_OK && tg_send_schedule != 0UL) {
+        status = tg_mtproto_tl_write_u32(writer, tg_send_schedule);
+    }
+    return status;
+}
+
 static tg_mtproto_tl_status tg_write_send_message_tail(
     tg_mtproto_tl_writer *writer, unsigned long random_id_hi,
     unsigned long random_id_lo)
@@ -2998,7 +3017,7 @@ static tg_mtproto_tl_status tg_write_send_message_tail(
 
     status = tg_mtproto_tl_write_u64(writer, random_id_hi, random_id_lo);
     if (tg_send_mention_count + tg_send_style_count <= 0) {
-        return status;
+        return tg_write_send_schedule(writer, status);
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
@@ -3018,7 +3037,7 @@ static tg_mtproto_tl_status tg_write_send_message_tail(
             status = tg_write_send_mention(writer, &tg_send_mentions[m++]);
         }
     }
-    return status;
+    return tg_write_send_schedule(writer, status);
 }
 
 /* In a forum topic other than General (core.telegram.org/api/forum): a new
@@ -10343,6 +10362,67 @@ int tg_mtproto_parse_user_full_blocked(unsigned long constructor,
    id:flags.0?Vector<int> text:flags.1?Vector<TextWithEntities>
    to_lang:string = messages.TranslatedText (layer 214 schema): one
    message of a chat, by its id. */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_scheduled_history(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0xf516760bUL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* hash */
+    }
+    return status;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_messages_scheduled_act(
+    tg_mtproto_tl_writer *writer,
+    int send_now,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || message_id == 0UL) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, send_now ? 0xbd38850aUL
+                                                      : 0x59ae2b16UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_input_peer(writer, peer_constructor, peer_id_hi,
+                                     peer_id_lo, access_hash_hi,
+                                     access_hash_lo, has_access_hash);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, TG_VECTOR_CONSTRUCTOR);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 1UL);
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, message_id);
+    }
+    return status;
+}
+
 tg_mtproto_tl_status tg_mtproto_build_messages_translate_message(
     tg_mtproto_tl_writer *writer,
     unsigned long peer_constructor,
@@ -20675,6 +20755,61 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #endif
+    /* A message that waits for its time: flags.10 and schedule_date last,
+       after random_id; gone again once cleared. The scheduled messages
+       asked for (a chat, hash 0), one sent at once, one deleted, and no
+       id is no request. */
+    tg_mtproto_send_set_schedule(1795000000UL);
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_send_self(&writer, "hi", 0UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 28UL ||
+        tg_read_u32_le(peer_rpc) != TG_MESSAGES_SEND_MESSAGE_CONSTRUCTOR ||
+        (tg_read_u32_le(peer_rpc + 4) & 1024UL) == 0UL ||
+        tg_read_u32_le(peer_rpc + 24) != 1795000000UL) {
+        tg_mtproto_send_set_schedule(0UL);
+        return 2;
+    }
+    tg_mtproto_send_set_schedule(0UL);
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_send_self(&writer, "hi", 0UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 24UL ||
+        (tg_read_u32_le(peer_rpc + 4) & 1024UL) != 0UL) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_get_scheduled_history(
+            &writer, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 24UL ||
+        tg_read_u32_le(peer_rpc) != 0xf516760bUL ||
+        tg_read_u32_le(peer_rpc + 8) != 0x77UL ||
+        tg_read_u32_le(peer_rpc + 16) != 0UL ||
+        tg_read_u32_le(peer_rpc + 20) != 0UL) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_scheduled_act(
+            &writer, 1, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+            55UL) != TG_MTPROTO_TL_OK ||
+        writer.length != 28UL ||
+        tg_read_u32_le(peer_rpc) != 0xbd38850aUL ||
+        tg_read_u32_le(peer_rpc + 16) != TG_VECTOR_CONSTRUCTOR ||
+        tg_read_u32_le(peer_rpc + 20) != 1UL ||
+        tg_read_u32_le(peer_rpc + 24) != 55UL) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_scheduled_act(
+            &writer, 0, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+            55UL) != TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(peer_rpc) != 0x59ae2b16UL ||
+        tg_mtproto_build_messages_scheduled_act(
+            &writer, 0, TG_PEER_CHAT_CONSTRUCTOR, 0UL, 0x77UL, 0UL, 0UL, 0,
+            0UL) == TG_MTPROTO_TL_OK) {
+        return 2;
+    }
     /* A message translated: the request's bytes (the chat, one id, the
        language), and the answer read: the first text; nothing asked for
        without a language or a message; an answer that is something else
@@ -21483,8 +21618,11 @@ int tg_mtproto_find_message_text(const unsigned char *body,
     return 0;
 }
 
+#endif /* !TG_NO_GUI */
+
 /* The messages of a reply body one after the other, wherever they stand
-   (a page of dialogs carries the top message of each chat): looks from
+   (a page of dialogs carries the top message of each chat; the text
+   client's /later reads its scheduled messages with it): looks from
    *pos on, 1 = `out` holds the next one and `dest` its chat, *pos moved
    past its start; 0 = no more. */
 int tg_mtproto_next_message_text(const unsigned char *body,
@@ -21519,7 +21657,6 @@ int tg_mtproto_next_message_text(const unsigned char *body,
     *pos = body_length;
     return 0;
 }
-#endif /* !TG_NO_GUI */
 
 /* Reads the messages of an answer for the sake of the keyboard asked for
    (tg_mtproto_keyboard_want): 1 when it is kept now. */

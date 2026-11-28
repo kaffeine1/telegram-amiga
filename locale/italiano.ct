@@ -1473,6 +1473,30 @@ Telegram non l'ha tradotto
 MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN
 Quel link si apre solo nelle app di Telegram
 ; Only Telegram's own apps open that link
+MSG_ST_WRITE_THE_MESSAGE_THEN_SEND
+Scrivi il messaggio, poi Invia più tardi...
+; Write the message, then Send later...
+MSG_ST_WRITE_THE_TIME_AS
+Scrivi l'ora come 21:30 o 28/11 21:30
+; Write the time as 21:30 or 28/11 21:30
+MSG_ST_THAT_TIME_HAS_PASSED
+Quell'ora è passata, o è oltre un anno
+; That time has passed, or is a year away
+MSG_ST_SCHEDULED_FOR_S
+Programmato per il %s
+; Scheduled for %s
+MSG_ST_READING_THE_SCHEDULED
+Leggo i messaggi programmati...
+; Reading the scheduled messages...
+MSG_ST_NO_SCHEDULED_MESSAGES
+Nessun messaggio programmato in questa chat
+; No scheduled messages in this chat
+MSG_ST_SCHEDULED_SENT_NOW
+Inviato ora
+; Sent now
+MSG_ST_SCHEDULED_DELETED
+Messaggio programmato eliminato
+; Scheduled message deleted
 MSG_RQ_OK
 OK
 ; OK
@@ -1687,6 +1711,12 @@ Chiudile|Annulla
 MSG_RQ_TRANSLATION
 Traduzione
 ; Translation
+MSG_RQ_SCHEDULED_MESSAGE
+Messaggio programmato
+; Scheduled message
+MSG_RQ_SEND_NOW_DELETE_CANCEL
+Invia ora|Elimina|Annulla
+; Send now|Delete|Cancel
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -1949,6 +1979,15 @@ Chiudere tutte le altre sessioni?\n\
 \n\
 Gli altri dispositivi escono da Telegram\n\
 e dovranno rifare il login. Questo resta.
+MSG_W_SEND_LATER
+Invia più tardi
+; Send later
+MSG_W_WHEN_IT_GOES
+Quando parte: 21:30, 28/11 21:30 o 28/11/2026 21:30
+; When it goes: 21:30, 28/11 21:30 or 28/11/2026 21:30
+MSG_W_TIME
+Ora
+; Time
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -2429,6 +2468,12 @@ Traduci
 MSG_G_REPLY_TO_AN_EARLIER_MESSAGE
 Risposta a un messaggio precedente
 ; Reply to an earlier message
+MSG_G_SEND_LATER
+Invia più tardi...
+; Send later...
+MSG_G_SCHEDULED
+Programmati...
+; Scheduled...
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -4158,3 +4203,32 @@ Qui non c'è ancora un messaggio ricevuto da tradurre.
 MSG_T_COULD_NOT_TRANSLATE
 Telegram non l'ha tradotto.
 ; Telegram did not translate it.
+MSG_T_HELP_LATER
+  /later t text   invia all'ora t (21:30, 28/11 21:30); /later li elenca
+;   /later t text   send at time t (21:30, 28/11 21:30); /later lists them
+MSG_T_HELP_LATER_SEND
+  /later send n   invia ora il programmato n; /later delete n lo elimina
+;   /later send n   send scheduled message n now; /later delete n deletes it
+MSG_T_SCHEDULED_FOR_S
+Programmato per il %s.
+; Scheduled for %s.
+MSG_T_NO_SCHEDULED_MESSAGES_HERE
+Nessun messaggio programmato in questa chat.
+; No scheduled messages in this chat.
+MSG_T_SCHEDULED_MESSAGES
+Messaggi programmati:\n
+MSG_T_NO_SUCH_SCHEDULED_MESSAGE
+Nessun programmato con quel numero: /later li elenca.
+; No such scheduled message: /later lists them.
+MSG_T_SCHEDULED_SENT_NOW
+Inviato ora.
+; Sent now.
+MSG_T_SCHEDULED_DELETED
+Messaggio programmato eliminato.
+; Scheduled message deleted.
+MSG_T_USE_LATER
+Usa /later 21:30 testo, /later 28/11 21:30 testo, /later send n o /later delete n.
+; Use /later 21:30 text, /later 28/11 21:30 text, /later send n or /later delete n.
+MSG_T_THAT_TIME_HAS_PASSED
+Quell'ora è passata, o è oltre un anno da adesso.
+; That time has passed, or is more than a year away.

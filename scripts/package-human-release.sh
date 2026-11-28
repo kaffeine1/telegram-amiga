@@ -929,9 +929,16 @@ Files
   Photo, File or Cancel. A picture is known by its content, so its name
   needs no .jpg or .png. The paperclip left of the input line opens a
   small menu with the same two, Photo... and File..., and Poll... where
-  Telegram takes polls; any key or a click elsewhere closes it.
+  Telegram takes polls, then Send later... and Scheduled... (below); any
+  key or a click elsewhere closes it.
   Telegram may re-encode photos as JPEG: send a PNG as File to keep it
   as it is. A photo over 10 MiB goes as a file.
+- Send later: write the message, then choose "Send later..." under the
+  paperclip and type when it goes: 21:30 (today, or tomorrow once that
+  time has passed), 28/11 21:30 or 28/11/2026 21:30, up to a year ahead.
+  Telegram keeps it and sends it then, even with this computer off.
+  "Scheduled..." under the paperclip lists the chat's messages that
+  wait, soonest first; pick one to send it now or delete it.
 - Several files at once: in the file requester hold Shift and click
   more than one, thirty at most, or drop several icons on the window
   together. Photos picked together with "Send photo..." leave as an
@@ -1325,10 +1332,18 @@ File
   chiede Photo, File o Cancel. Un'immagine si riconosce dal contenuto:
   il nome non ha bisogno di .jpg o .png. La graffetta a sinistra della
   riga di input apre un piccolo menu con le stesse due, Photo... e
-  File..., e Poll... dove Telegram accetta i sondaggi; un tasto
-  qualsiasi o un click altrove lo chiude. Telegram puo' ricodificare le
-  foto in JPEG: manda un PNG come File per tenerlo com'e'. Una foto
-  oltre 10 MiB parte come file.
+  File..., e Poll... dove Telegram accetta i sondaggi, poi Invia piu'
+  tardi... e Programmati... (sotto); un tasto qualsiasi o un click
+  altrove lo chiude. Telegram puo' ricodificare le foto in JPEG: manda
+  un PNG come File per tenerlo com'e'. Una foto oltre 10 MiB parte come
+  file.
+- Invio programmato: scrivi il messaggio, poi scegli "Invia piu'
+  tardi..." sotto la graffetta e scrivi quando parte: 21:30 (oggi, o
+  domani se quell'ora e' passata), 28/11 21:30 o 28/11/2026 21:30, fino
+  a un anno avanti. Lo tiene Telegram e lo manda a quell'ora, anche con
+  questo computer spento. "Programmati..." sotto la graffetta elenca i
+  messaggi della chat in attesa, il piu' vicino per primo: sceglierne
+  uno lo manda subito o lo cancella.
 - Piu' file insieme: nel requester tieni premuto Shift e fai click su
   piu' di uno, trenta al massimo, oppure lascia piu' icone insieme
   sulla finestra. Le foto scelte insieme con "Send photo..." partono
@@ -1468,6 +1483,11 @@ by Telegram into the language of your Locale preferences. /devices lists
 where your account is logged in (program, machine, system, place, when it
 was last used; this one marked with *). /devices end yes logs out every
 other device; this one stays.
+/later 21:30 text sends the text at that time (also /later 28/11 21:30
+text or /later 28/11/2026 21:30 text): Telegram keeps it until then,
+even with this computer off. /later lists the chat's scheduled
+messages, /later send 2 sends the second at once, /later delete 2
+deletes it.
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
@@ -1586,6 +1606,11 @@ da Telegram nella lingua delle preferenze Locale. /devices elenca dove e'
 aperto il tuo account (programma, macchina, sistema, luogo, ultimo uso;
 questo segnato con *). /devices end yes chiude tutti gli altri
 dispositivi; questo resta.
+/later 21:30 testo manda il testo a quell'ora (anche /later 28/11 21:30
+testo o /later 28/11/2026 21:30 testo): lo tiene Telegram fino ad
+allora, anche con questo computer spento. /later elenca i messaggi
+programmati della chat, /later send 2 manda subito il secondo, /later
+delete 2 lo cancella.
 Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga

@@ -1008,6 +1008,22 @@ MSG_ST_COULD_NOT_TRANSLATE (536//)
 Telegram did not translate it
 MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN (537//)
 Only Telegram's own apps open that link
+MSG_ST_WRITE_THE_MESSAGE_THEN_SEND (538//)
+Write the message, then Send later...
+MSG_ST_WRITE_THE_TIME_AS (539//)
+Write the time as 21:30 or 28/11 21:30
+MSG_ST_THAT_TIME_HAS_PASSED (540//)
+That time has passed, or is a year away
+MSG_ST_SCHEDULED_FOR_S (541//)
+Scheduled for %s
+MSG_ST_READING_THE_SCHEDULED (542//)
+Reading the scheduled messages...
+MSG_ST_NO_SCHEDULED_MESSAGES (543//)
+No scheduled messages in this chat
+MSG_ST_SCHEDULED_SENT_NOW (544//)
+Sent now
+MSG_ST_SCHEDULED_DELETED (545//)
+Scheduled message deleted
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1172,6 +1188,10 @@ MSG_RQ_END_THEM_CANCEL (660//)
 End them|Cancel
 MSG_RQ_TRANSLATION (661//)
 Translation
+MSG_RQ_SCHEDULED_MESSAGE (662//)
+Scheduled message
+MSG_RQ_SEND_NOW_DELETE_CANCEL (663//)
+Send now|Delete|Cancel
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1382,6 +1402,12 @@ End every other session?\n\
 \n\
 The other devices are logged out of Telegram\n\
 and have to log in again. This one stays.
+MSG_W_SEND_LATER (961//)
+Send later
+MSG_W_WHEN_IT_GOES (962//)
+When it goes: 21:30, 28/11 21:30 or 28/11/2026 21:30
+MSG_W_TIME (963//)
+Time
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -1704,6 +1730,10 @@ MSG_G_TRANSLATE (1458//)
 Translate
 MSG_G_REPLY_TO_AN_EARLIER_MESSAGE (1459//)
 Reply to an earlier message
+MSG_G_SEND_LATER (1460//)
+Send later...
+MSG_G_SCHEDULED (1461//)
+Scheduled...
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -2934,3 +2964,23 @@ MSG_T_NO_MESSAGE_TO_TRANSLATE (2367//)
 No message received here to translate yet.
 MSG_T_COULD_NOT_TRANSLATE (2368//)
 Telegram did not translate it.
+MSG_T_HELP_LATER (2369//)
+  /later t text   send at time t (21:30, 28/11 21:30); /later lists them
+MSG_T_HELP_LATER_SEND (2370//)
+  /later send n   send scheduled message n now; /later delete n deletes it
+MSG_T_SCHEDULED_FOR_S (2371//)
+Scheduled for %s.
+MSG_T_NO_SCHEDULED_MESSAGES_HERE (2372//)
+No scheduled messages in this chat.
+MSG_T_SCHEDULED_MESSAGES (2373//)
+Scheduled messages:\n
+MSG_T_NO_SUCH_SCHEDULED_MESSAGE (2374//)
+No such scheduled message: /later lists them.
+MSG_T_SCHEDULED_SENT_NOW (2375//)
+Sent now.
+MSG_T_SCHEDULED_DELETED (2376//)
+Scheduled message deleted.
+MSG_T_USE_LATER (2377//)
+Use /later 21:30 text, /later 28/11 21:30 text, /later send n or /later delete n.
+MSG_T_THAT_TIME_HAS_PASSED (2378//)
+That time has passed, or is more than a year away.

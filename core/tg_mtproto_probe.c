@@ -13825,6 +13825,415 @@ static long tg_mtproto_chat_vote_mask(const char *arg, int answers,
    message, poll and mask its answers). 0 = done, 2 = failed or refused
    (tg_mtproto_query_fail holds Telegram's word when it gave one), or the
    link's own soft failure. */
+/* ---- Messages that wait on Telegram for their time (schedule_date) ----
+   The moments are counted on the user's clock the way
+   tg_mtproto_chat_local_epoch counts them (Telegram's time moved by the
+   display delta); Telegram's own time is that plus the delta. */
+#if defined(TG_LOWMEM)
+#define TG_LATER_MAX 6
+#else
+#define TG_LATER_MAX 10
+#endif
+#define TG_LATER_TEXT 48
+
+typedef struct tg_later_item {
+    unsigned long id;
+    unsigned long date;           /* when it goes, on Telegram's clock */
+    char text[TG_LATER_TEXT];     /* its opening words, UTF-8, one line */
+} tg_later_item;
+
+static tg_later_item tg_later[TG_LATER_MAX];
+static int tg_later_count = 0;
+static int tg_later_soft_fail = 0;
+
+/* Days since 1 January 1970 of a date, and the way back. */
+static unsigned long tg_later_days(int year, int month, int day)
+{
+    unsigned long y = (unsigned long)year - (month <= 2 ? 1UL : 0UL);
+    unsigned long era = y / 400UL;
+    unsigned long yoe = y - era * 400UL;
+    unsigned long mp = (unsigned long)(month > 2 ? month - 3 : month + 9);
+    unsigned long doy = (153UL * mp + 2UL) / 5UL + (unsigned long)day - 1UL;
+    unsigned long doe = yoe * 365UL + yoe / 4UL - yoe / 100UL + doy;
+
+    return era * 146097UL + doe - 719468UL;
+}
+
+static void tg_later_civil(unsigned long days, int *year, int *month,
+                           int *day)
+{
+    unsigned long z = days + 719468UL;
+    unsigned long era = z / 146097UL;
+    unsigned long doe = z - era * 146097UL;
+    unsigned long yoe = (doe - doe / 1460UL + doe / 36524UL -
+                         doe / 146096UL) / 365UL;
+    unsigned long doy = doe - (365UL * yoe + yoe / 4UL - yoe / 100UL);
+    unsigned long mp = (5UL * doy + 2UL) / 153UL;
+    unsigned long m = mp < 10UL ? mp + 3UL : mp - 9UL;
+
+    *day = (int)(doy - (153UL * mp + 2UL) / 5UL + 1UL);
+    *month = (int)m;
+    *year = (int)(yoe + era * 400UL + (m <= 2UL ? 1UL : 0UL));
+}
+
+static int tg_later_month_days(int year, int month)
+{
+    static const int days[12] = {31, 28, 31, 30, 31, 30,
+                                 31, 31, 30, 31, 30, 31};
+
+    if (month == 2 && ((year % 4 == 0 && year % 100 != 0) ||
+                       year % 400 == 0)) {
+        return 29;
+    }
+    return days[month - 1];
+}
+
+static int tg_later_number(const char **p, int max_digits, int *value)
+{
+    int n = 0;
+    int v = 0;
+
+    while (**p >= '0' && **p <= '9' && n < max_digits) {
+        v = v * 10 + (**p - '0');
+        ++*p;
+        ++n;
+    }
+    *value = v;
+    return n;
+}
+
+/* "21:30", "28/11 21:30", "28/11/2026 21:30" or "2026-11-28 21:30" ('/',
+   '.' or '-' in the date, a year of two or four digits): the moment it
+   names on the user's clock, from `now` on that clock. A time alone is
+   today, or tomorrow once it has passed; a day without a year is this
+   year's, or next year's once it has passed. 1 = read, *rest pointing past
+   it and its spaces (the message, for /later); 0 = not a time. */
+static int tg_later_parse(const char *text, unsigned long now,
+                          unsigned long *when, const char **rest)
+{
+    const char *p = text;
+    int a;
+    int da;
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour;
+    int minute;
+    int dated = 0;
+    int now_y;
+    int now_m;
+    int now_d;
+
+    if (text == 0 || when == 0) {
+        return 0;
+    }
+    while (*p == ' ') {
+        ++p;
+    }
+    da = tg_later_number(&p, 4, &a);
+    if (da == 0) {
+        return 0;
+    }
+    if (*p == '/' || *p == '.' || *p == '-') {
+        char sep = *p++;
+        int b;
+        int c;
+        int db;
+        int dc;
+
+        dated = 1;
+        db = tg_later_number(&p, 2, &b);
+        if (db == 0) {
+            return 0;
+        }
+        if (da == 4) {
+            /* year first: 2026-11-28 */
+            if (*p != sep) {
+                return 0;
+            }
+            ++p;
+            dc = tg_later_number(&p, 2, &c);
+            if (dc == 0) {
+                return 0;
+            }
+            year = a;
+            month = b;
+            day = c;
+        } else if (da <= 2) {
+            day = a;
+            month = b;
+            if (*p == sep) {
+                ++p;
+                dc = tg_later_number(&p, 4, &c);
+                if (dc != 2 && dc != 4) {
+                    return 0;
+                }
+                year = dc == 2 ? 2000 + c : c;
+            }
+        } else {
+            return 0;
+        }
+        if (*p != ' ') {
+            return 0;
+        }
+        while (*p == ' ') {
+            ++p;
+        }
+        if (tg_later_number(&p, 2, &a) == 0) {
+            return 0;
+        }
+    } else if (da > 2) {
+        return 0;
+    }
+    hour = a;
+    if (*p != ':') {
+        return 0; /* "21.30" is not a time: '.' parts a date */
+    }
+    ++p;
+    if (tg_later_number(&p, 2, &minute) != 2) {
+        return 0;
+    }
+    if (*p != '\0' && *p != ' ') {
+        return 0;
+    }
+    if (hour > 23 || minute > 59) {
+        return 0;
+    }
+    tg_later_civil(now / 86400UL, &now_y, &now_m, &now_d);
+    if (!dated) {
+        *when = (now / 86400UL) * 86400UL + (unsigned long)hour * 3600UL +
+                (unsigned long)minute * 60UL;
+        if (*when <= now) {
+            *when += 86400UL;
+        }
+    } else {
+        int guessed = year == 0;
+
+        if (guessed) {
+            year = now_y;
+        }
+        if (year < 1970 || year > 2100 || month < 1 || month > 12 ||
+            day < 1) {
+            return 0;
+        }
+        if (day > tg_later_month_days(year, month)) {
+            /* 29/02 of a year without one waits for the next that has */
+            if (!guessed || month != 2 || day != 29) {
+                return 0;
+            }
+            while (day > tg_later_month_days(year, month)) {
+                ++year;
+            }
+        }
+        *when = tg_later_days(year, month, day) * 86400UL +
+                (unsigned long)hour * 3600UL + (unsigned long)minute * 60UL;
+        if (guessed && *when <= now) {
+            ++year;
+            while (day > tg_later_month_days(year, month)) {
+                ++year;
+            }
+            *when = tg_later_days(year, month, day) * 86400UL +
+                    (unsigned long)hour * 3600UL +
+                    (unsigned long)minute * 60UL;
+        }
+    }
+    while (*p == ' ') {
+        ++p;
+    }
+    if (rest != 0) {
+        *rest = p;
+    }
+    return 1;
+}
+
+/* Telegram keeps a message for at most a year, and not for a moment that
+   has passed: a minute from now at the least. */
+static int tg_later_in_range(unsigned long when, unsigned long now)
+{
+    return when >= now + 60UL && when <= now + 365UL * 86400UL;
+}
+
+/* A moment on the user's clock as "28/11 21:30" (16 bytes do). */
+static void tg_later_when_text(unsigned long local, char *out)
+{
+    int y;
+    int m;
+    int d;
+    unsigned long s = local % 86400UL;
+
+    tg_later_civil(local / 86400UL, &y, &m, &d);
+    sprintf(out, "%02d/%02d %02lu:%02lu", d % 100, m % 100,
+            (s / 3600UL) % 100UL, (s / 60UL) % 60UL);
+}
+
+static unsigned long tg_later_to_server(unsigned long local, long delta)
+{
+    if (delta < 0L) {
+        return local > (unsigned long)(0L - delta)
+                   ? local - (unsigned long)(0L - delta) : 0UL;
+    }
+    return local + (unsigned long)delta;
+}
+
+/* The scheduled messages of the chat at this cache index, into tg_later,
+   soonest first. The count, or -1 (tg_later_soft_fail: the connection is
+   to be opened again). */
+static int tg_mtproto_later_fetch_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, FILE *stream)
+{
+    static const char label[] = "mtproto messages.getScheduledHistory";
+    static tg_mtproto_message_text one;
+    unsigned char query[64];
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    unsigned long pos = 0UL;
+    int has_hash;
+    int rc;
+    int i;
+    tg_mtproto_dialog_peer dest;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+
+    tg_later_soft_fail = 0;
+    tg_later_count = 0;
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) {
+        return -1;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_get_scheduled_history(
+            &writer, constructor, hi, lo, hash_hi, hash_lo, has_hash) !=
+        TG_MTPROTO_TL_OK) {
+        return -1;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        char note[48];
+
+        sprintf(note, "later: the list was not read, rc=%d", rc);
+        tg_gui_log(note);
+        tg_later_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return -1;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        long ecode = 0L;
+        char text[48];
+        char note[80];
+
+        text[0] = '\0';
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        (void)tg_mtproto_parse_rpc_error(result.result_body - 4U,
+                                         result.result_body_length + 4U,
+                                         &ecode, text, sizeof(text));
+        sprintf(note, "later: Telegram refused the list, %ld %.40s", ecode,
+                text);
+        tg_gui_log(note);
+        return -1;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0) {
+        tg_gui_log("later: the list did not unpack");
+        return -1;
+    }
+    while (tg_later_count < TG_LATER_MAX &&
+           tg_mtproto_next_message_text(result.result_body,
+                                        result.result_body_length, &pos,
+                                        &one, &dest)) {
+        tg_later_item *it = &tg_later[tg_later_count];
+        unsigned long n = 0UL;
+        unsigned long k;
+
+        if (one.id == 0UL) {
+            continue;
+        }
+        it->id = one.id;
+        it->date = one.date;
+        for (k = 0UL; one.text[k] != '\0' && n + 1UL < TG_LATER_TEXT; ++k) {
+            unsigned char ch = (unsigned char)one.text[k];
+
+            if (TG_TEXT_IS_MARKER(ch)) {
+                continue;
+            }
+            it->text[n++] = (ch == '\n' || ch == '\r' || ch == '\t')
+                                ? ' ' : (char)ch;
+        }
+        /* not in the middle of a character */
+        while (n > 0UL && one.text[k] != '\0' &&
+               (((unsigned char)it->text[n - 1UL]) & 0xc0U) == 0x80U) {
+            --n;
+        }
+        if (n > 0UL && one.text[k] != '\0' &&
+            (((unsigned char)it->text[n - 1UL]) & 0xc0U) == 0xc0U) {
+            --n;
+        }
+        it->text[n] = '\0';
+        ++tg_later_count;
+    }
+    /* soonest first */
+    for (i = 1; i < tg_later_count; ++i) {
+        tg_later_item moved = tg_later[i];
+        int j = i - 1;
+
+        while (j >= 0 && tg_later[j].date > moved.date) {
+            tg_later[j + 1] = tg_later[j];
+            --j;
+        }
+        tg_later[j + 1] = moved;
+    }
+    return tg_later_count;
+}
+
+/* One scheduled message sent at once (send_now) or deleted. 0 = done, 1 =
+   Telegram refused, 2 = failed (tg_later_soft_fail as above). */
+static int tg_mtproto_later_act_on_context(
+    const char *host, const char *port, const char *api_id,
+    const char *auth_file, const char *dc_id_text,
+    tg_mtproto_auth_context *context, const char *peer_cache_file,
+    const char *peer_index_text, unsigned long message_id, int send_now,
+    FILE *stream)
+{
+    static const char label[] = "mtproto messages.scheduled";
+    unsigned char query[64];
+    unsigned long constructor;
+    unsigned long hi, lo, hash_hi, hash_lo;
+    int has_hash;
+    int rc;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_rpc_result result;
+
+    tg_later_soft_fail = 0;
+    if (tg_mtproto_load_peer_cache_peer(peer_cache_file, peer_index_text,
+            &constructor, &hi, &lo, &hash_hi, &hash_lo, &has_hash,
+            stream, label) != 0) {
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_messages_scheduled_act(
+            &writer, send_now, constructor, hi, lo, hash_hi, hash_lo,
+            has_hash, message_id) != TG_MTPROTO_TL_OK) {
+        return 2;
+    }
+    memset(&result, 0, sizeof(result));
+    rc = tg_mtproto_send_saved_query_on_context(host, port, api_id, auth_file,
+        dc_id_text, context, query, writer.length, &result, stream, label,
+        600U);
+    if (rc != 0) {
+        tg_later_soft_fail = rc == TG_MTPROTO_QUERY_SOFT_FAIL;
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, &result, stream);
+        return 1;
+    }
+    return 0;
+}
+
 /* A message of this chat translated by Telegram, for the window and for
    the text client alike: the text in `out`, in UTF-8. 0 = done, 1 =
    Telegram refused (tg_mtproto_query_fail says why), 2 = failed
@@ -15220,7 +15629,7 @@ static void tg_chat_history_add(const char *text)
     "          /hide /unhide /getfile /sendfile /photo /watch /resize\n" \
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
-    "          /block /unblock /press /devices /translate\n" \
+    "          /block /unblock /press /devices /translate /later\n" \
     "          /help /update /logout /quit\n"
 
 /*
@@ -19413,6 +19822,8 @@ static const struct {
     TG_HELP(MSG_T_HELP_PRESS_N),
     TG_HELP(MSG_T_HELP_DEVICES),
     TG_HELP(MSG_T_HELP_TRANSLATE),
+    TG_HELP(MSG_T_HELP_LATER),
+    TG_HELP(MSG_T_HELP_LATER_SEND),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -22964,6 +23375,132 @@ int tg_mtproto_auth_chat_file(const char *host,
                                         0UL, tg_chat_input_raw);
             continue;
         }
+        cmd_arg = 0;
+        if (tg_mtproto_chat_named_command_arg(line, "/later", &cmd_arg)) {
+            /* A message that waits on Telegram for its time: "/later 21:30
+               text" schedules it, "/later" lists this chat's, "/later send
+               n" sends one at once, "/later delete n" deletes it. */
+            long delta = tg_mtproto_display_delta(
+                chat_context.server_time_delta_seconds,
+                tg_mtproto_local_clock_skew());
+            unsigned long now_local = tg_mtproto_chat_local_epoch(
+                tg_mtproto_context_time(&chat_context), delta);
+            const char *num = 0;
+            int act = -1;
+
+            if (strncmp(cmd_arg, "send ", 5) == 0) {
+                act = 1;
+                num = cmd_arg + 5;
+            } else if (strncmp(cmd_arg, "delete ", 7) == 0) {
+                act = 0;
+                num = cmd_arg + 7;
+            }
+            if (cmd_arg[0] == '\0' || act >= 0) {
+                int count;
+
+                quiet = tg_mtproto_open_quiet_stream(stream);
+                count = tg_mtproto_later_fetch_on_context(
+                    host, port, api_id, auth_file, dc_id_text, &chat_context,
+                    peer_cache_file, peer_index, quiet);
+                tg_mtproto_close_quiet_stream(quiet, stream);
+                if (count < 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY));
+                } else if (act < 0 && count == 0) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_NO_SCHEDULED_MESSAGES_HERE));
+                } else if (act < 0) {
+                    FILE *tui_cap = tg_console_tui_capture_begin(stream);
+                    int k;
+
+                    fputs(TG_TSTR(MSG_T_SCHEDULED_MESSAGES), tui_cap);
+                    for (k = 0; k < count; ++k) {
+                        char at[20];
+
+                        tg_later_when_text(
+                            tg_mtproto_chat_local_epoch(tg_later[k].date,
+                                                        delta),
+                            at);
+                        fprintf(tui_cap, "  %d  %s  ", k + 1, at);
+                        tg_mtproto_print_message_text(tui_cap,
+                                                      tg_later[k].text);
+                        fputc('\n', tui_cap);
+                    }
+                    tg_console_tui_capture_end(tui_cap, stream);
+                } else {
+                    long n = strtol(num, 0, 10);
+
+                    if (n < 1L || n > (long)count) {
+                        tg_mtproto_chat_print_system_line(
+                            stream, TG_TSTR(MSG_T_NO_SUCH_SCHEDULED_MESSAGE));
+                    } else {
+                        quiet = tg_mtproto_open_quiet_stream(stream);
+                        rc = tg_mtproto_later_act_on_context(
+                            host, port, api_id, auth_file, dc_id_text,
+                            &chat_context, peer_cache_file, peer_index,
+                            tg_later[n - 1L].id, act, quiet);
+                        tg_mtproto_close_quiet_stream(quiet, stream);
+                        tg_mtproto_chat_print_system_line(
+                            stream,
+                            rc != 0 ? TG_TSTR(MSG_T_TELEGRAM_DID_NOT_TAKE_IT_TRY)
+                            : act ? TG_TSTR(MSG_T_SCHEDULED_SENT_NOW)
+                                  : TG_TSTR(MSG_T_SCHEDULED_DELETED));
+                    }
+                }
+            } else {
+                unsigned long when = 0UL;
+                const char *rest = "";
+
+                if (!tg_later_parse(cmd_arg, now_local, &when, &rest) ||
+                    rest[0] == '\0') {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_USE_LATER));
+                } else if (!tg_later_in_range(when, now_local)) {
+                    tg_mtproto_chat_print_system_line(
+                        stream, TG_TSTR(MSG_T_THAT_TIME_HAS_PASSED));
+                } else {
+                    const char *send_text = rest;
+                    unsigned long later_id = 0UL;
+
+#if TG_MTPROTO_DISPLAY_LATIN1
+                    if (tg_mtproto_latin1_to_utf8(rest, send_line,
+                                                  sizeof(send_line))) {
+                        send_text = send_line;
+                    }
+#endif
+                    quiet = tg_mtproto_open_quiet_stream(stream);
+                    tg_mtproto_send_set_schedule(
+                        tg_later_to_server(when, delta));
+                    rc = tg_mtproto_auth_send_peer_on_context(
+                        host, port, api_id, auth_file, dc_id_text,
+                        &chat_context, peer_cache_file, peer_index,
+                        send_text, 0UL, &later_id, quiet);
+                    tg_mtproto_send_set_schedule(0UL);
+                    tg_mtproto_close_quiet_stream(quiet, stream);
+                    if (rc == 0) {
+                        char at[20];
+                        char said[96];
+
+                        tg_later_when_text(when, at);
+                        tg_locale_format(said, sizeof(said),
+                                         TG_TSTR(MSG_T_SCHEDULED_FOR_S), at);
+                        tg_mtproto_chat_print_system_line(stream, said);
+                    } else {
+                        tg_mtproto_chat_print_system_line(
+                            stream, TG_TSTR(MSG_T_COULD_NOT_SEND_MESSAGE));
+                    }
+                    if (rc == TG_MTPROTO_QUERY_SOFT_FAIL) {
+                        tg_mtproto_close_auth_context(&chat_context);
+                    }
+                }
+            }
+            if (tg_later_soft_fail) {
+                tg_mtproto_close_auth_context(&chat_context);
+            }
+            tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                        0UL, tg_chat_input_raw);
+            continue;
+        }
         if (strcmp(line, "/silent") == 0) {
             tg_mtproto_chat_print_system_line(stream,
                                               TG_TSTR(MSG_T_USE_SILENT_TEXT));
@@ -23746,6 +24283,7 @@ static int tg_gui_who_read_self_test(void);
 static int tg_gui_topic_change_self_test(void);
 #endif
 static int tg_gui_session_server_time_self_test(void);
+static int tg_later_self_test(void);
 
 #if !defined(TG_NO_SELFTEST)
 static int tg_mtproto_executable_sniff_self_test(void); /* defined by the download engine */
@@ -26176,6 +26714,9 @@ int tg_mtproto_probe_self_test(void)
         tg_chat_drafts_self_test() != 0 ||
         tg_gui_follow_open_self_test() != 0 ||
         tg_gui_reload_room_self_test() != 0) {
+        return 2;
+    }
+    if (tg_later_self_test() != 0) {
         return 2;
     }
 #if !defined(TG_NO_GUI)
@@ -36121,6 +36662,167 @@ void tg_gui_session_send_silent(int on)
     tg_gui_send_silent = on ? 1 : 0;
 }
 
+/* Public: the messages tg_gui_session_send sends from now on wait on
+   Telegram until `when` (its clock), or go at once (0). The window sets it
+   around one send. */
+static unsigned long tg_gui_send_at = 0UL;
+
+void tg_gui_session_send_at(unsigned long when)
+{
+    tg_gui_send_at = when;
+}
+
+#if !defined(TG_NO_GUI)
+static void tg_later_copy(char *dest, unsigned long size, const char *src)
+{
+    unsigned long i;
+
+    if (dest == 0 || size == 0UL) {
+        return;
+    }
+    for (i = 0UL; i + 1UL < size && src[i] != '\0'; ++i) {
+        dest[i] = src[i];
+    }
+    dest[i] = '\0';
+}
+
+static long tg_gui_later_delta(void)
+{
+    return tg_mtproto_display_delta(
+        tg_gui_session_state.context.server_time_delta_seconds,
+        tg_mtproto_local_clock_skew());
+}
+
+/* Public: a time typed for a message that waits ("21:30", "28/11 21:30",
+   "28/11/2026 21:30"): 1 = read and within a year from now, *when on
+   Telegram's clock and `shown` as "28/11 21:30"; 0 = not a time; -1 = a
+   moment passed or more than a year away. */
+int tg_gui_session_later_when(const char *typed, unsigned long *when,
+                              char *shown, unsigned long size)
+{
+    long delta = tg_gui_later_delta();
+    unsigned long now = tg_mtproto_chat_local_epoch(
+        tg_mtproto_context_time(&tg_gui_session_state.context), delta);
+    unsigned long local = 0UL;
+    const char *rest = "";
+    char at[20];
+
+    if (typed == 0 || when == 0 ||
+        !tg_later_parse(typed, now, &local, &rest) || rest[0] != '\0') {
+        return 0;
+    }
+    if (!tg_later_in_range(local, now)) {
+        return -1;
+    }
+    *when = tg_later_to_server(local, delta);
+    if (shown != 0 && size > 0UL) {
+        tg_later_when_text(local, at);
+        tg_later_copy(shown, size, at);
+    }
+    return 1;
+}
+
+/* Public: an hour from now on the user's clock, as "21:30": what the time
+   box starts with. */
+void tg_gui_session_later_suggest(char *out, unsigned long size)
+{
+    long delta = tg_gui_later_delta();
+    unsigned long now = tg_mtproto_chat_local_epoch(
+        tg_mtproto_context_time(&tg_gui_session_state.context), delta);
+    char at[20];
+
+    tg_later_when_text(now + 3600UL - (now % 300UL), at);
+    tg_later_copy(out, size, at + 6); /* the time, without the day */
+}
+
+/* Public: the open chat's scheduled messages as menu lines, "28/11 21:30
+   opening words", soonest first. The count, or -1. */
+int tg_gui_session_later_list(char *items, unsigned long item_len, int max,
+                              FILE *stream)
+{
+    long delta = tg_gui_later_delta();
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int count;
+    int i;
+
+    if (!tg_gui_session_state.open || stream == 0 || items == 0 ||
+        item_len < 20UL || max <= 0 ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    count = tg_mtproto_later_fetch_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (count < 0) {
+        return -1;
+    }
+    for (i = 0; i < count && i < max; ++i) {
+        char *line = items + (unsigned long)i * item_len;
+        char at[20];
+        unsigned long n;
+
+        tg_later_when_text(tg_mtproto_chat_local_epoch(tg_later[i].date,
+                                                       delta), at);
+        tg_later_copy(line, item_len, at);
+        n = (unsigned long)strlen(line);
+        if (n + 2UL < item_len) {
+            line[n++] = ' ';
+            line[n++] = ' ';
+            line[n] = '\0';
+            tg_gui_driver_text_from_utf8(line + n, item_len - n,
+                                         tg_later[i].text);
+        }
+    }
+    return i;
+}
+
+/* Public: scheduled message `index` of the last list sent at once
+   (send_now) or deleted. 0 = done. */
+int tg_gui_session_later_act(int index, int send_now, FILE *stream)
+{
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.open || stream == 0 || index < 0 ||
+        index >= tg_later_count ||
+        tg_gui_session_state.current_peer_index[0] == '\0') {
+        return 2;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(10UL);
+    rc = tg_mtproto_later_act_on_context(
+        tg_gui_session_state.host, tg_gui_session_state.port,
+        tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+        tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+        tg_gui_session_state.peer_cache_file,
+        tg_gui_session_state.current_peer_index, tg_later[index].id,
+        send_now, quiet);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc == 0) {
+        /* gone from the list; one sent now comes in as a new message */
+        int k;
+
+        for (k = index; k + 1 < tg_later_count; ++k) {
+            tg_later[k] = tg_later[k + 1];
+        }
+        --tg_later_count;
+    }
+    return rc;
+}
+#endif /* !TG_NO_GUI */
+
 int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
                         FILE *stream)
 {
@@ -36177,6 +36879,7 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     /* The names picked from the "@" popup that are still in the text. */
     send_text = tg_gui_mentions_for_send(send_text);
     tg_mtproto_send_set_silent(tg_gui_send_silent);
+    tg_mtproto_send_set_schedule(tg_gui_send_at);
     rc = tg_mtproto_auth_send_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
@@ -36184,7 +36887,17 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, send_text, reply_to_msg_id,
         &sent_id, quiet);
+    tg_mtproto_send_set_schedule(0UL);
     tg_mtproto_send_set_silent(0);
+    if (rc == 0 && tg_gui_send_at != 0UL) {
+        /* it waits on Telegram: not in the chat, nor the chat's newest */
+        tg_gui_mentions_sent(1);
+        tg_mtproto_send_set_styles(0, 0);
+        tg_gui_draft_send_end(had_draft, 1);
+        tg_net_set_connect_timeout_seconds(prev_timeout);
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        return 0;
+    }
     tg_gui_mentions_sent(rc == 0);
     tg_mtproto_send_set_styles(0, 0);
     tg_gui_draft_send_end(had_draft, rc == 0);
@@ -46813,6 +47526,86 @@ static int tg_devices_text_self_test(void)
         printf("probe self-test: the devices on two lines read \"%s\"\n",
                out);
         return 2;
+    }
+    return 0;
+}
+#endif
+
+#if !defined(TG_NO_SELFTEST)
+/* Times typed for a message that waits: from Friday 27 November 2026,
+   20:00 on the user's clock (1795809600 on that clock). */
+static int tg_later_self_test(void)
+{
+    static const struct {
+        const char *text;
+        int ok;
+        unsigned long when;
+        const char *rest;
+    } cases[] = {
+        /* later today, and tomorrow once the time has passed */
+        { "21:30 hello", 1, 1795809600UL + 5400UL, "hello" },
+        { "  9:05", 1, 1795809600UL - 39600UL + 86400UL + 300UL, "" },
+        { "21.30 x", 0, 0UL, "" },
+        { "20:00 x", 1, 1795809600UL + 86400UL, "x" },
+        /* a day, this year's or next year's */
+        { "28/11 08:00 a b", 1, 1795824000UL + 28800UL, "a b" },
+        { "1.1 00:00", 1, 1798761600UL, "" },
+        { "27/11 19:59", 1, 1827345540UL, "" },
+        /* with the year, in its three orders */
+        { "28/11/2026 21:30", 1, 1795824000UL + 77400UL, "" },
+        { "28-11-26 21:30", 1, 1795824000UL + 77400UL, "" },
+        { "2026-11-28 21:30  ciao", 1, 1795824000UL + 77400UL, "ciao" },
+        /* 29 February waits for a year that has one */
+        { "29/02 12:00", 1, 1835438400UL, "" },
+        { "29/02/2027 12:00", 0, 0UL, "" },
+        /* not times */
+        { "24:00", 0, 0UL, "" }, { "12:60", 0, 0UL, "" },
+        { "12:5", 0, 0UL, "" }, { "12", 0, 0UL, "" },
+        { "1230 x", 0, 0UL, "" }, { "31/04 10:00", 0, 0UL, "" },
+        { "13/13 10:00", 0, 0UL, "" }, { "28/11", 0, 0UL, "" },
+        { "28/11/2026", 0, 0UL, "" }, { "28/11/202 10:00", 0, 0UL, "" },
+        { "28/11-2026 10:00", 0, 0UL, "" }, { "21:30x", 0, 0UL, "" },
+        { "ciao", 0, 0UL, "" }, { "", 0, 0UL, "" }
+    };
+    const unsigned long now = 1795809600UL;
+    unsigned int k;
+    char shown[20];
+
+    for (k = 0U; k < sizeof(cases) / sizeof(cases[0]); ++k) {
+        unsigned long when = 0UL;
+        const char *rest = "?";
+        int ok = tg_later_parse(cases[k].text, now, &when, &rest);
+
+        if (ok != cases[k].ok ||
+            (ok && (when != cases[k].when ||
+                    strcmp(rest, cases[k].rest) != 0))) {
+            printf("probe self-test: the time \"%s\" read %d, %lu\n",
+                   cases[k].text, ok, when);
+            return 2;
+        }
+    }
+    tg_later_when_text(1795824000UL + 77400UL, shown);
+    if (strcmp(shown, "28/11 21:30") != 0 ||
+        !tg_later_in_range(now + 60UL, now) ||
+        tg_later_in_range(now + 59UL, now) ||
+        tg_later_in_range(now - 1UL, now) ||
+        !tg_later_in_range(now + 365UL * 86400UL, now) ||
+        tg_later_in_range(now + 366UL * 86400UL, now) ||
+        tg_later_to_server(1000UL, -3600L) != 0UL ||
+        tg_later_to_server(10000UL, -3600L) != 6400UL ||
+        tg_later_to_server(10000UL, 7200L) != 17200UL ||
+        tg_later_days(2026, 11, 27) * 86400UL != 1795737600UL) {
+        puts("probe self-test: scheduled time helpers mismatch");
+        return 2;
+    }
+    {
+        int y, m, d;
+
+        tg_later_civil(tg_later_days(2024, 2, 29), &y, &m, &d);
+        if (y != 2024 || m != 2 || d != 29) {
+            puts("probe self-test: the day count does not go back");
+            return 2;
+        }
     }
     return 0;
 }

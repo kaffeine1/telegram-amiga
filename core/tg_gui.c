@@ -8049,7 +8049,34 @@ void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh)
     /* Its lower edge two pixels over the click: the menu grows upwards,
        clear of the input line and of the pointer. */
     state->ctx_x = x;
+    state->ctx_open_y = y;
     state->ctx_y = y - (n * (lh + 4) + 4) - 2;
+    if (state->ctx_y < 0) {
+        state->ctx_y = 0;
+    }
+    state->ctx_visible = 1;
+}
+
+void tg_gui_scheduled_menu_open(tg_gui_state *state, int lh)
+{
+    int n;
+
+    if (state == 0 || state->poll_item_count <= 0) {
+        return;
+    }
+    n = state->poll_item_count < TG_GUI_POLL_ITEMS_MAX
+            ? state->poll_item_count : TG_GUI_POLL_ITEMS_MAX;
+    state->ctx_attach = 1;
+    state->ctx_react = 0;
+    state->ctx_poll = 3;
+    state->ctx_chat = 0;
+    state->ctx_sender[0] = '\0';
+    state->ctx_msg = -1;
+    state->ctx_msg_id = 0UL;
+    state->ctx_hover = -1;
+    state->ctx_w = 0;
+    /* above the paperclip, as its menu was */
+    state->ctx_y = state->ctx_open_y - (n * (lh + 4) + 4) - 2;
     if (state->ctx_y < 0) {
         state->ctx_y = 0;
     }
@@ -8365,6 +8392,15 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
 {
     int n = 0;
 
+    if (state->ctx_attach && state->ctx_poll == 3) {
+        /* Scheduled...: the chat's waiting messages, soonest first */
+        while (n < state->poll_item_count && n < TG_GUI_POLL_ITEMS_MAX) {
+            labels[n] = state->poll_items[n];
+            ids[n] = TG_GUI_CTX_POLL_FIRST + n;
+            ++n;
+        }
+        return n;
+    }
     if (state->ctx_attach) {
         /* The paperclip's menu. A poll only where Telegram takes one. */
         const tg_gui_chat *row = tg_gui_open_chat_row(state);
@@ -8378,6 +8414,11 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
             labels[n] = TG_STR(MSG_G_POLL);
             ids[n++] = TG_GUI_CTX_POLL_NEW;
         }
+        /* the composer's text at a time, and what waits for its time */
+        labels[n] = TG_STR(MSG_G_SEND_LATER);
+        ids[n++] = TG_GUI_CTX_SEND_LATER;
+        labels[n] = TG_STR(MSG_G_SCHEDULED);
+        ids[n++] = TG_GUI_CTX_SCHEDULED;
         return n;
     }
     if (state->ctx_topic != 0UL && state->ctx_chat == 0 &&
@@ -12110,38 +12151,50 @@ static int tg_gui_notify_menu_self_test(void)
     {
         int kept_index = state->chats[0].index;
         int n;
+        int top;
 
         state->selected_chat = 0;
         state->chats[0].is_group = 1;
         tg_gui_attach_menu_open(state, 200, 300, 18);
         n = tg_gui_context_items(state, labels, ids);
-        if (!state->ctx_visible || !state->ctx_attach || n != 3 ||
+        top = 300 - (n * (18 + 4) + 4) - 2;
+        if (!state->ctx_visible || !state->ctx_attach || n != 5 ||
             ids[0] != TG_GUI_CTX_SENDPHOTO ||
             strcmp(labels[0], TG_STR(MSG_G_PHOTO)) != 0 ||
             ids[1] != TG_GUI_CTX_SENDFILE ||
             strcmp(labels[1], TG_STR(MSG_G_FILE)) != 0 ||
             ids[2] != TG_GUI_CTX_POLL_NEW ||
             strcmp(labels[2], TG_STR(MSG_G_POLL)) != 0 ||
+            ids[3] != TG_GUI_CTX_SEND_LATER ||
+            strcmp(labels[3], TG_STR(MSG_G_SEND_LATER)) != 0 ||
+            ids[4] != TG_GUI_CTX_SCHEDULED ||
+            strcmp(labels[4], TG_STR(MSG_G_SCHEDULED)) != 0 ||
+            state->ctx_y != top ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 200, 300) != -1 ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 204, 298) != -1 ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 204, 296) !=
-                TG_GUI_CTX_POLL_NEW ||
-            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 229) !=
+                TG_GUI_CTX_SCHEDULED ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, top + 1) !=
                 TG_GUI_CTX_SENDPHOTO ||
-            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 227) != -1) {
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, top - 1) !=
+                -1) {
             puts("gui self-test: the paperclip's menu is wrong");
             return 2;
         }
         state->chats[0].is_group = 0; /* a chat with one person: no poll */
         tg_gui_attach_menu_open(state, 200, 300, 18);
         n = tg_gui_context_items(state, labels, ids);
-        if (n != 2 || ids[0] != TG_GUI_CTX_SENDPHOTO ||
+        top = 300 - (n * (18 + 4) + 4) - 2;
+        if (n != 4 || ids[0] != TG_GUI_CTX_SENDPHOTO ||
             ids[1] != TG_GUI_CTX_SENDFILE ||
+            ids[2] != TG_GUI_CTX_SEND_LATER ||
+            ids[3] != TG_GUI_CTX_SCHEDULED ||
             tg_gui_context_menu_hit(state, 480, 320, 18, 204, 296) !=
-                TG_GUI_CTX_SENDFILE ||
-            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 250) !=
+                TG_GUI_CTX_SCHEDULED ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, top + 1) !=
                 TG_GUI_CTX_SENDPHOTO ||
-            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 249) != -1) {
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, top - 1) !=
+                -1) {
             puts("gui self-test: the paperclip offers a poll to one person");
             return 2;
         }
@@ -12149,10 +12202,33 @@ static int tg_gui_notify_menu_self_test(void)
         tg_gui_attach_menu_open(state, 200, 300, 18);
         n = tg_gui_context_items(state, labels, ids);
         state->chats[0].index = kept_index;
-        if (n != 3 || ids[2] != TG_GUI_CTX_POLL_NEW) {
+        if (n != 5 || ids[2] != TG_GUI_CTX_POLL_NEW) {
             puts("gui self-test: the paperclip has no poll in Saved Messages");
             return 2;
         }
+        /* Scheduled...: the chat's waiting messages take the menu, above
+           the paperclip as its own menu was, and a click picks one. */
+        strcpy(state->poll_items[0], "28/11 21:30  ciao");
+        strcpy(state->poll_items[1], "29/11 08:00  buongiorno");
+        state->poll_item_count = 2;
+        tg_gui_attach_menu_open(state, 200, 300, 18);
+        tg_gui_scheduled_menu_open(state, 18);
+        n = tg_gui_context_items(state, labels, ids);
+        if (n != 2 || ids[0] != TG_GUI_CTX_POLL_FIRST ||
+            ids[1] != TG_GUI_CTX_POLL_FIRST + 1 ||
+            strcmp(labels[1], state->poll_items[1]) != 0 ||
+            !state->ctx_attach || state->ctx_poll != 3 ||
+            !state->ctx_visible ||
+            state->ctx_y != 300 - (2 * (18 + 4) + 4) - 2 ||
+            tg_gui_context_menu_hit(state, 480, 320, 18, 204, 296) !=
+                TG_GUI_CTX_POLL_FIRST + 1) {
+            puts("gui self-test: the scheduled messages' menu is wrong");
+            state->poll_item_count = 0;
+            state->ctx_poll = 0;
+            return 2;
+        }
+        state->poll_item_count = 0;
+        state->ctx_poll = 0;
         /* near the top of the window the menu stays inside it */
         tg_gui_attach_menu_open(state, 200, 10, 18);
         if (state->ctx_y != 0) {

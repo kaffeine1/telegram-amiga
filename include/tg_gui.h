@@ -847,6 +847,7 @@ typedef struct tg_gui_state {
     /* The menu is the paperclip's: what can be attached to the open chat
        (tg_gui_attach_menu_open). */
     int ctx_attach;
+    int ctx_open_y; /* where the paperclip's menu was opened (its bottom) */
     /* "Message <name>" of the message menu, "" when there is nobody to
        write to (tg_gui_context_sender_label). */
     char ctx_sender[40];
@@ -1225,6 +1226,9 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_KEYS 22 /* Buttons...: a bot's buttons take the menu */
 #define TG_GUI_CTX_COMMENTS 23 /* Comments...: the comments of a post */
 #define TG_GUI_CTX_TRANSLATE 24 /* Translate: someone else's text */
+#define TG_GUI_CTX_SEND_LATER 25 /* the paperclip's menu: Send later... */
+#define TG_GUI_CTX_SCHEDULED 26 /* ...and Scheduled...: the chat's messages
+                                   waiting for their time take the menu */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33
 #define TG_GUI_CTX_REACT_MORE 34 /* the arrow that opens every reaction */
@@ -1431,6 +1435,10 @@ void tg_gui_context_sender_label(tg_gui_state *state);
    click at (x, y), so that it never covers the input line; lh is the
    line height. The caller measures its width and paints. */
 void tg_gui_attach_menu_open(tg_gui_state *state, int x, int y, int lh);
+/* The open chat's scheduled messages (poll_items, poll_item_count) take
+   the paperclip's menu, at the place it opened: ctx_poll 3, item i =
+   TG_GUI_CTX_POLL_FIRST + i. */
+void tg_gui_scheduled_menu_open(tg_gui_state *state, int lh);
 /* 1 when the currently selected sidebar row is the pinned Saved Messages
    (self) chat -- the row whose index carries TG_GUI_SAVED_PEER_INDEX. There
    the server clears the out flag on every message (nothing in Saved Messages

@@ -533,6 +533,23 @@ int tg_gui_session_block_user(unsigned long peer_index, int block,
 /* The messages tg_gui_session_send sends from now on reach the others
    without a sound (1), or with it again (0): set it around a send. */
 void tg_gui_session_send_silent(int on);
+/* The messages tg_gui_session_send sends from now on wait on Telegram until
+   `when` (its clock, from tg_gui_session_later_when), or go at once (0). */
+void tg_gui_session_send_at(unsigned long when);
+/* A time typed for a message that waits: "21:30" (today, or tomorrow once
+   passed), "28/11 21:30" or "28/11/2026 21:30". 1 = read and within a year
+   from now (*when on Telegram's clock, `shown` "28/11 21:30"), 0 = not a
+   time, -1 = passed or more than a year away. */
+int tg_gui_session_later_when(const char *typed, unsigned long *when,
+                              char *shown, unsigned long size);
+/* An hour from now as "21:30": what the time box starts with. */
+void tg_gui_session_later_suggest(char *out, unsigned long size);
+/* The open chat's scheduled messages as menu lines ("28/11 21:30 words"),
+   soonest first: the count, or -1. Then one of them, by its place in that
+   list, sent at once (send_now) or deleted: 0 = done. */
+int tg_gui_session_later_list(char *items, unsigned long item_len, int max,
+                              FILE *stream);
+int tg_gui_session_later_act(int index, int send_now, FILE *stream);
 
 /* The user is writing in the open chat: the others are told ("is
    typing..."), once every few seconds while the composer's text keeps

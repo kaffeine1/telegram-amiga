@@ -1349,6 +1349,28 @@ int tg_mtproto_parse_read_participants(unsigned long constructor,
                                        unsigned long body_length,
                                        tg_mtproto_read_participant *out,
                                        int max);
+/* The messages of a chat that wait on Telegram for their time
+   (messages.getScheduledHistory#f516760b, hash 0 = all of them), and one
+   of them sent at once (messages.sendScheduledMessages#bd38850a, when
+   send_now) or deleted (messages.deleteScheduledMessages#59ae2b16). */
+tg_mtproto_tl_status tg_mtproto_build_messages_get_scheduled_history(
+    tg_mtproto_tl_writer *writer,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash);
+tg_mtproto_tl_status tg_mtproto_build_messages_scheduled_act(
+    tg_mtproto_tl_writer *writer,
+    int send_now,
+    unsigned long peer_constructor,
+    unsigned long peer_id_hi,
+    unsigned long peer_id_lo,
+    unsigned long access_hash_hi,
+    unsigned long access_hash_lo,
+    int has_access_hash,
+    unsigned long message_id);
 /* One message of a chat translated by Telegram into a language, named
    by its two-letter code (messages.translateText), and the answer read:
    the translated text, cut to the buffer on a whole character. 1 when
@@ -1601,6 +1623,10 @@ void tg_mtproto_send_set_clear_draft(int on);
 /* The text messages sent from now on carry silent:flags.5 (no sound on
    the other side) until this is called again with 0. */
 void tg_mtproto_send_set_silent(int on);
+/* schedule_date:flags.10 of messages.sendMessage (layer 214): the sends
+   that follow wait on Telegram until `when` (Unix time) before they go;
+   0 = they go at once. Set for the sends that follow, until cleared. */
+void tg_mtproto_send_set_schedule(unsigned long when);
 
 /* The mentions by name the next messages.sendMessage built carries: where
    each name is in its text (UTF-16 units) and whose it is. None (0, 0)

@@ -975,6 +975,22 @@
 #define MSG_ST_COULD_NOT_TRANSLATE_STR "Telegram did not translate it"
 #define MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN 537
 #define MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN_STR "Only Telegram's own apps open that link"
+#define MSG_ST_WRITE_THE_MESSAGE_THEN_SEND 538
+#define MSG_ST_WRITE_THE_MESSAGE_THEN_SEND_STR "Write the message, then Send later..."
+#define MSG_ST_WRITE_THE_TIME_AS 539
+#define MSG_ST_WRITE_THE_TIME_AS_STR "Write the time as 21:30 or 28/11 21:30"
+#define MSG_ST_THAT_TIME_HAS_PASSED 540
+#define MSG_ST_THAT_TIME_HAS_PASSED_STR "That time has passed, or is a year away"
+#define MSG_ST_SCHEDULED_FOR_S 541
+#define MSG_ST_SCHEDULED_FOR_S_STR "Scheduled for %s"
+#define MSG_ST_READING_THE_SCHEDULED 542
+#define MSG_ST_READING_THE_SCHEDULED_STR "Reading the scheduled messages..."
+#define MSG_ST_NO_SCHEDULED_MESSAGES 543
+#define MSG_ST_NO_SCHEDULED_MESSAGES_STR "No scheduled messages in this chat"
+#define MSG_ST_SCHEDULED_SENT_NOW 544
+#define MSG_ST_SCHEDULED_SENT_NOW_STR "Sent now"
+#define MSG_ST_SCHEDULED_DELETED 545
+#define MSG_ST_SCHEDULED_DELETED_STR "Scheduled message deleted"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1099,6 +1115,10 @@
 #define MSG_RQ_END_THEM_CANCEL_STR "End them|Cancel"
 #define MSG_RQ_TRANSLATION 661
 #define MSG_RQ_TRANSLATION_STR "Translation"
+#define MSG_RQ_SCHEDULED_MESSAGE 662
+#define MSG_RQ_SCHEDULED_MESSAGE_STR "Scheduled message"
+#define MSG_RQ_SEND_NOW_DELETE_CANCEL 663
+#define MSG_RQ_SEND_NOW_DELETE_CANCEL_STR "Send now|Delete|Cancel"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1235,6 +1255,12 @@
 #define MSG_W_THIS_ACCOUNT_IS_OPEN_HERE_STR "This account is open here:\n\n"
 #define MSG_W_END_EVERY_OTHER_SESSION 960
 #define MSG_W_END_EVERY_OTHER_SESSION_STR "End every other session?\n\nThe other devices are logged out of Telegram\nand have to log in again. This one stays."
+#define MSG_W_SEND_LATER 961
+#define MSG_W_SEND_LATER_STR "Send later"
+#define MSG_W_WHEN_IT_GOES 962
+#define MSG_W_WHEN_IT_GOES_STR "When it goes: 21:30, 28/11 21:30 or 28/11/2026 21:30"
+#define MSG_W_TIME 963
+#define MSG_W_TIME_STR "Time"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1555,6 +1581,10 @@
 #define MSG_G_TRANSLATE_STR "Translate"
 #define MSG_G_REPLY_TO_AN_EARLIER_MESSAGE 1459
 #define MSG_G_REPLY_TO_AN_EARLIER_MESSAGE_STR "Reply to an earlier message"
+#define MSG_G_SEND_LATER 1460
+#define MSG_G_SEND_LATER_STR "Send later..."
+#define MSG_G_SCHEDULED 1461
+#define MSG_G_SCHEDULED_STR "Scheduled..."
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2755,8 +2785,28 @@
 #define MSG_T_NO_MESSAGE_TO_TRANSLATE_STR "No message received here to translate yet."
 #define MSG_T_COULD_NOT_TRANSLATE 2368
 #define MSG_T_COULD_NOT_TRANSLATE_STR "Telegram did not translate it."
+#define MSG_T_HELP_LATER 2369
+#define MSG_T_HELP_LATER_STR "  /later t text   send at time t (21:30, 28/11 21:30); /later lists them"
+#define MSG_T_HELP_LATER_SEND 2370
+#define MSG_T_HELP_LATER_SEND_STR "  /later send n   send scheduled message n now; /later delete n deletes it"
+#define MSG_T_SCHEDULED_FOR_S 2371
+#define MSG_T_SCHEDULED_FOR_S_STR "Scheduled for %s."
+#define MSG_T_NO_SCHEDULED_MESSAGES_HERE 2372
+#define MSG_T_NO_SCHEDULED_MESSAGES_HERE_STR "No scheduled messages in this chat."
+#define MSG_T_SCHEDULED_MESSAGES 2373
+#define MSG_T_SCHEDULED_MESSAGES_STR "Scheduled messages:\n"
+#define MSG_T_NO_SUCH_SCHEDULED_MESSAGE 2374
+#define MSG_T_NO_SUCH_SCHEDULED_MESSAGE_STR "No such scheduled message: /later lists them."
+#define MSG_T_SCHEDULED_SENT_NOW 2375
+#define MSG_T_SCHEDULED_SENT_NOW_STR "Sent now."
+#define MSG_T_SCHEDULED_DELETED 2376
+#define MSG_T_SCHEDULED_DELETED_STR "Scheduled message deleted."
+#define MSG_T_USE_LATER 2377
+#define MSG_T_USE_LATER_STR "Use /later 21:30 text, /later 28/11 21:30 text, /later send n or /later delete n."
+#define MSG_T_THAT_TIME_HAS_PASSED 2378
+#define MSG_T_THAT_TIME_HAS_PASSED_STR "That time has passed, or is more than a year away."
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2368
+#define TG_STRINGS_ID_MAX 2378
 
 #endif

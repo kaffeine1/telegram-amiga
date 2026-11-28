@@ -137,6 +137,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- Scheduled messages (`schedule_date`). "Send later..." under the
+  paperclip asks when the composer's text goes (21:30, 28/11 21:30 or
+  28/11/2026 21:30, up to a year ahead) and Telegram keeps it until
+  then. "Scheduled..." lists the chat's waiting messages
+  (`messages.getScheduledHistory`), soonest first; one picked is sent
+  at once (`messages.sendScheduledMessages`) or deleted
+  (`messages.deleteScheduledMessages`). The text client, the 68000 one
+  included, has `/later 21:30 text`, `/later`, `/later send n` and
+  `/later delete n`.
 - A link to a public chat on Telegram (`t.me/name`, `t.me/name/123`)
   clicked in a message opens that chat in Amigram, at the message the
   link names, instead of going to the browser. Invitations, sticker
