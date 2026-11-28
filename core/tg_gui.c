@@ -2558,29 +2558,25 @@ static void tg_gui_paint_search_box(const tg_gui_state *state,
                            (unsigned long)strlen(state->search_query));
     } else {
         const char *placeholder;
-        unsigned long placeholder_len;
 
         if (state->forward_pick_active) {
             placeholder = TG_STR(MSG_G_CHOOSE_DESTINATION);
-            placeholder_len = 21UL;
         } else if (state->msg_search_active && state->msg_search_global) {
             placeholder = TG_STR(MSG_MENU_FINDALL);
-            placeholder_len = 20UL;
         } else if (state->msg_search_active) {
             placeholder = TG_STR(MSG_G_FIND_IN_THIS_CHAT);
-            placeholder_len = 20UL;
         } else if (state->search_active) {
             placeholder = TG_STR(MSG_G_TYPE_A_NAME_ENTER);
-            placeholder_len = 20UL;
         } else if (state->archive_view) {
             placeholder = TG_STR(MSG_ST_ARCHIVE_ESC_GOES_BACK);
-            placeholder_len = 23UL;
         } else {
             placeholder = TG_STR(MSG_G_SEARCH_CHATS);
-            placeholder_len = 15UL;
         }
-        backend->draw_text(backend, TG_GUI_PEN_TEXT_DIM, 10, sbase,
-                           placeholder, placeholder_len);
+        /* Its own length, in whatever language, and ".." where the field
+           has no room: the lengths of the English texts cut the Italian
+           ones ("Scrivi un nome, ENTE"). */
+        tg_gui_draw_clipped(backend, TG_GUI_PEN_TEXT_DIM, 10, sbase,
+                            placeholder, sidebar_w - 20);
     }
     if (state->search_active && state->cursor_on) {
         int cx;
@@ -11765,6 +11761,22 @@ static int tg_gui_archive_band_self_test(void)
     state->in_filter = 0;
     if (!ok) {
         puts("gui self-test: the Archive's band is not where it should be");
+        return 2;
+    }
+    /* The search field's hint, in whatever language: the whole text where
+       the field has room for it, never cut to the English one's length. */
+    state->search_active = 1;
+    state->search_query[0] = '\0';
+    record.watch_text[0] = TG_STR(MSG_G_TYPE_A_NAME_ENTER);
+    record.watch_text[1] = 0;
+    record.watch_text[2] = 0;
+    for (k = 0; k < 5; ++k) {
+        record.watch_hits[k] = 0;
+    }
+    tg_gui_paint(state, &backend);
+    state->search_active = 0;
+    if (record.watch_hits[0] != 1) {
+        puts("gui self-test: the search field's hint is cut short");
         return 2;
     }
     return 0;
