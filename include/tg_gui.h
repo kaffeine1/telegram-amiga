@@ -1351,6 +1351,8 @@ int tg_gui_settings_hit(const tg_gui_state *state, int x, int y);
 #define TG_GUI_REXX_UNREAD 6
 #define TG_GUI_REXX_CHAT 7
 #define TG_GUI_REXX_VERSION 8
+#define TG_GUI_REXX_CHATS 9 /* the chat list: "name<TAB>unread" a line */
+#define TG_GUI_REXX_LAST 10 /* the open chat's newest message */
 int tg_gui_rexx_command(char *text, const char **arg);
 /* SEND's argument in its two parts: the chat, one word or a name between
    quotes, and the text after it. 1 = both are there. rest is cut. */
@@ -1360,6 +1362,16 @@ int tg_gui_rexx_split_send(char *rest, const char **chat, const char **text);
 int tg_gui_chat_named(const tg_gui_state *state, const char *name);
 /* Unread messages over the whole chat list, as its badges count them. */
 unsigned long tg_gui_unread_total(const tg_gui_state *state);
+/* What CHATS and LAST answer: the chat list a line a chat, its name (the
+   emoji as text), a TAB and its unread count; and the open chat's newest
+   message as its sender (the catalog's "You" for one's own), a TAB and its
+   text on one line, both empty when there is none. The count of lines, or
+   -1 while the list holds something else (search results, a filter, a
+   forum's topics, the forward picker). out is always a string. */
+int tg_gui_rexx_chats_text(const tg_gui_state *state, char *out,
+                           unsigned long size);
+int tg_gui_rexx_last_text(const tg_gui_state *state, char *out,
+                          unsigned long size);
 /* What ARexx may do, kept in data/telegram-arexx.txt: the port itself (on
    unless switched off) and sending messages through it (off unless
    switched on: any program on the machine could write as the user). */

@@ -137,6 +137,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- Two more ARexx commands: CHATS answers with the chat list, a line a
+  chat with its name, a TAB and its unread count; LAST with the open
+  chat's newest message, its sender, a TAB and the text on one line.
 - A forgotten cloud password at login. On the password screen TAB asks
   Telegram to mail a code to the account's recovery email
   (`auth.requestPasswordRecovery`) and says where it went; the field

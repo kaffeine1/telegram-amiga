@@ -16977,6 +16977,24 @@ static int tg_gui_rexx_common(tg_gui_state *state, struct Message *m,
         tg_gui_rexx_reply_text(m, 0L, TG_APP_NAME " " TG_VERSION);
         return 1;
     }
+    if (code == TG_GUI_REXX_CHATS) {
+        /* the list as it stands: 5 while it holds something else */
+        static char list[TG_GUI_MAX_CHATS * 48];
+
+        if (tg_gui_rexx_chats_text(state, list, sizeof(list)) < 0) {
+            tg_gui_rexx_reply(m, 5L);
+        } else {
+            tg_gui_rexx_reply_text(m, 0L, list);
+        }
+        return 1;
+    }
+    if (code == TG_GUI_REXX_LAST) {
+        static char last[TG_GUI_MSG_TEXT_MAX + TG_GUI_NAME_MAX];
+
+        (void)tg_gui_rexx_last_text(state, last, sizeof(last));
+        tg_gui_rexx_reply_text(m, 0L, last);
+        return 1;
+    }
     if (code == TG_GUI_REXX_SEND) {
         const char *chat = 0;
         const char *body = 0;

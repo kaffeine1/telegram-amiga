@@ -8729,6 +8729,8 @@ int tg_gui_rexx_command(char *text, const char **arg)
         {"unread", TG_GUI_REXX_UNREAD},
         {"chat", TG_GUI_REXX_CHAT},
         {"version", TG_GUI_REXX_VERSION},
+        {"chats", TG_GUI_REXX_CHATS},
+        {"last", TG_GUI_REXX_LAST},
     };
     char *s = text;
     char *rest;
@@ -8880,6 +8882,99 @@ unsigned long tg_gui_unread_total(const tg_gui_state *state)
         }
     }
     return total;
+}
+
+int tg_gui_rexx_chats_text(const tg_gui_state *state, char *out,
+                           unsigned long size)
+{
+    unsigned long used = 0UL;
+    int lines = 0;
+    int i;
+
+    if (out == 0 || size == 0UL) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (state == 0 || state->mode != TG_GUI_MODE_CHAT || state->in_search ||
+        state->in_filter || state->forward_pick_active ||
+        tg_gui_topics_listed(state)) {
+        return -1;
+    }
+    for (i = 0; i < state->chat_count; ++i) {
+        char name[TG_GUI_NAME_MAX * 2];
+        char count[16];
+        unsigned long n;
+        unsigned long c;
+
+        if (state->chats[i].index == TG_GUI_ARCHIVE_MORE_INDEX) {
+            continue;
+        }
+        tg_gui_emoji_expand_pairs(name, sizeof(name), state->chats[i].name);
+        sprintf(count, "\t%d\n",
+                state->chats[i].unread > 0 ? state->chats[i].unread : 0);
+        n = (unsigned long)strlen(name);
+        c = (unsigned long)strlen(count);
+        if (used + n + c + 1UL > size) {
+            break; /* whole lines only */
+        }
+        memcpy(out + used, name, n);
+        memcpy(out + used + n, count, c + 1UL);
+        used += n + c;
+        ++lines;
+    }
+    return lines;
+}
+
+int tg_gui_rexx_last_text(const tg_gui_state *state, char *out,
+                          unsigned long size)
+{
+    static char plain[TG_GUI_MSG_TEXT_MAX];
+    static char text[TG_GUI_MSG_TEXT_MAX * 2];
+    const tg_gui_message *m = 0;
+    const char *who;
+    unsigned long n;
+    unsigned long k;
+    int i;
+
+    if (out == 0 || size == 0UL) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (state == 0 || state->mode != TG_GUI_MODE_CHAT ||
+        !state->open_chat_valid) {
+        return 0;
+    }
+    for (i = state->message_count - 1; i >= 0; --i) {
+        if (!state->messages[i].is_system && state->messages[i].id != 0UL) {
+            m = &state->messages[i];
+            break;
+        }
+    }
+    if (m == 0) {
+        return 0;
+    }
+    tg_gui_strip_markers(plain, sizeof(plain), m->text + m->fwd_len);
+    tg_gui_emoji_expand_pairs(text, sizeof(text), plain);
+    for (k = 0UL; text[k] != '\0'; ++k) {
+        if (text[k] == '\n' || text[k] == '\r' || text[k] == '\t') {
+            text[k] = ' ';
+        }
+    }
+    who = m->is_own ? TG_STR(MSG_S_YOU)
+                    : (m->sender[0] != '\0' ? m->sender
+                                            : state->open_chat.name);
+    tg_gui_emoji_expand_pairs(plain, sizeof(plain), who);
+    n = (unsigned long)strlen(plain);
+    if (n + 2UL > size) {
+        return 0;
+    }
+    memcpy(out, plain, n);
+    out[n++] = '\t';
+    for (k = 0UL; text[k] != '\0' && n + 1UL < size; ++k) {
+        out[n++] = text[k];
+    }
+    out[n] = '\0';
+    return 1;
 }
 
 void tg_gui_arexx_preferences_load(const char *path, int *port_on,
@@ -15308,6 +15403,13 @@ int tg_gui_self_test(void)
         strcpy(line, "unread now");
         ok_rx = ok_rx &&
                 tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        strcpy(line, "Chats");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_CHATS;
+        strcpy(line, " LAST ");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_LAST;
+        strcpy(line, "last 3");
+        ok_rx = ok_rx &&
+                tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
         strcpy(line, "send");
         ok_rx = ok_rx &&
                 tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
@@ -15361,6 +15463,54 @@ int tg_gui_self_test(void)
                 tg_gui_chat_named(&state, "Amiga I") == -1 &&
                 tg_gui_chat_named(&state, "italia") == -1 &&
                 tg_gui_unread_total(&state) == 7UL;
+        /* CHATS: a line a chat, whole lines only, none while the list
+           holds search results; LAST: the newest message of the open
+           chat, the sender, a TAB and the text on one line. */
+        {
+            static char out[128];
+            int saved_mode = state.mode;
+            int saved_search = state.in_search;
+            int saved_valid = state.open_chat_valid;
+            int saved_msgs = state.message_count;
+            tg_gui_message saved_msg = state.messages[0];
+
+            state.mode = TG_GUI_MODE_CHAT;
+            state.in_search = 0;
+            ok_rx = ok_rx && tg_gui_rexx_chats_text(&state, out,
+                                                    sizeof(out)) == 3 &&
+                    strcmp(out, "Amiga Italia\t3\nAmiga\t0\n"
+                                "Caff\xe8 Amiga\t4\n") == 0 &&
+                    tg_gui_rexx_chats_text(&state, out, 20UL) == 1 &&
+                    strcmp(out, "Amiga Italia\t3\n") == 0;
+            state.in_search = 1;
+            ok_rx = ok_rx && tg_gui_rexx_chats_text(&state, out,
+                                                    sizeof(out)) == -1 &&
+                    out[0] == '\0';
+            state.in_search = 0;
+            state.open_chat_valid = 1;
+            state.message_count = 1;
+            memset(&state.messages[0], 0, sizeof(state.messages[0]));
+            state.messages[0].id = 77UL;
+            strcpy(state.messages[0].sender, "Anna");
+            strcpy(state.messages[0].text, "ciao\na tutti");
+            ok_rx = ok_rx && tg_gui_rexx_last_text(&state, out,
+                                                   sizeof(out)) == 1 &&
+                    strcmp(out, "Anna\tciao a tutti") == 0;
+            state.messages[0].is_own = 1;
+            ok_rx = ok_rx && tg_gui_rexx_last_text(&state, out,
+                                                   sizeof(out)) == 1 &&
+                    strncmp(out, TG_STR(MSG_S_YOU),
+                            strlen(TG_STR(MSG_S_YOU))) == 0;
+            state.messages[0].is_system = 1;
+            ok_rx = ok_rx && tg_gui_rexx_last_text(&state, out,
+                                                   sizeof(out)) == 0 &&
+                    out[0] == '\0';
+            state.messages[0] = saved_msg;
+            state.message_count = saved_msgs;
+            state.open_chat_valid = saved_valid;
+            state.in_search = saved_search;
+            state.mode = saved_mode;
+        }
         /* The switches: the port is on and sending off until the file
            says otherwise, and only a plain "on" allows sending. */
         {

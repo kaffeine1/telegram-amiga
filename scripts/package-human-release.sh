@@ -1022,6 +1022,12 @@ ARexx
 - UNREAD, CHAT and VERSION answer with a text in RESULT (the script
   needs "options results"): how many unread messages there are, the
   name of the open chat, the program's version.
+- CHATS answers with the chat list, a line a chat: its name, a TAB and
+  its unread count (code 5 while the list shows search results or a
+  forum's topics). LAST answers with the open chat's newest message:
+  who wrote it, a TAB and the text on one line; empty with no chat
+  open. For example:
+      rx "options results; address AMIGRAM 'LAST'; say result"
 - SEND <chat> <text> sends a message: SEND "Mario Rossi" build done.
   The chat's name must be the whole name, in quotes if it has spaces.
   It is switched off until you allow it: any program on your machine
@@ -1436,6 +1442,12 @@ ARexx
 - UNREAD, CHAT e VERSION rispondono con un testo in RESULT (allo script
   serve "options results"): quanti messaggi non letti ci sono, il nome
   della chat aperta, la versione del programma.
+- CHATS risponde con la lista chat, una riga per chat: il nome, un TAB e
+  i suoi non letti (codice 5 mentre la lista mostra risultati di una
+  ricerca o gli argomenti di un forum). LAST risponde con il messaggio
+  piu' recente della chat aperta: chi l'ha scritto, un TAB e il testo su
+  una riga; vuoto senza chat aperta. Per esempio:
+      rx "options results; address AMIGRAM 'LAST'; say result"
 - SEND <chat> <testo> manda un messaggio: SEND "Mario Rossi" build
   finita. Il nome della chat deve essere quello intero, tra virgolette
   se ha spazi. E' spento finche' non lo permetti tu: altrimenti
