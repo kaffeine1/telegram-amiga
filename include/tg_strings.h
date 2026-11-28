@@ -973,6 +973,8 @@
 #define MSG_ST_TRANSLATING_STR "Translating..."
 #define MSG_ST_COULD_NOT_TRANSLATE 536
 #define MSG_ST_COULD_NOT_TRANSLATE_STR "Telegram did not translate it"
+#define MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN 537
+#define MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN_STR "Only Telegram's own apps open that link"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601

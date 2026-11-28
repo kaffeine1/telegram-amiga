@@ -1673,6 +1673,9 @@ void tg_gui_wrap_text(char *dest, unsigned long size, const char *src,
    private chat (t.me/c/...) or of a bot's web app are not: 0. */
 int tg_gui_tme_link(const char *url, char *name, unsigned long name_size,
                     unsigned long *message_id);
+/* A link only Telegram's own apps open (tg:...), where tg_gui_tme_link
+   did not find a chat: 1 = do not hand it to the browser. */
+int tg_gui_link_app_only(const char *url);
 /* A date typed where words are searched: day, month and year in that
    order with '/', '.' or '-' between them (12/11/2026, 12.11.26), or the
    year first (2026-11-12). 1 = a day that exists, from 2013 on; anything

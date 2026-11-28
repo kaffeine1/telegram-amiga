@@ -8123,6 +8123,44 @@ static int tg_gui_starts_nocase(const char *text, const char *word)
     return 1;
 }
 
+/* The value of `key` in a link's query ("a=1&b=2"), up to '&' or '#'.
+   1 = found and not empty, and it fitted. */
+static int tg_gui_link_query(const char *query, const char *key, char *out,
+                             unsigned long size)
+{
+    unsigned long klen = (unsigned long)strlen(key);
+    const char *p = query;
+    unsigned long n = 0UL;
+
+    out[0] = '\0';
+    while (*p != '\0' && *p != '#') {
+        if (strncmp(p, key, klen) == 0 && p[klen] == '=') {
+            p += klen + 1UL;
+            while (*p != '\0' && *p != '&' && *p != '#') {
+                if (n + 1UL >= size) {
+                    out[0] = '\0';
+                    return 0;
+                }
+                out[n++] = *p++;
+            }
+            out[n] = '\0';
+            return n > 0UL;
+        }
+        while (*p != '\0' && *p != '&' && *p != '#') {
+            ++p;
+        }
+        if (*p == '&') {
+            ++p;
+        }
+    }
+    return 0;
+}
+
+int tg_gui_link_app_only(const char *url)
+{
+    return url != 0 && tg_gui_starts_nocase(url, "tg:");
+}
+
 int tg_gui_tme_link(const char *url, char *name, unsigned long name_size,
                     unsigned long *message_id)
 {
@@ -8143,6 +8181,26 @@ int tg_gui_tme_link(const char *url, char *name, unsigned long name_size,
     }
     name[0] = '\0';
     *message_id = 0UL;
+    /* tg://resolve?domain=name&post=12, the form Telegram's own apps use
+       (a bot's link button gives it): read as t.me/name/12 */
+    if (tg_gui_starts_nocase(p, "tg://resolve?") ||
+        tg_gui_starts_nocase(p, "tg:resolve?")) {
+        char dom[40];
+        char post[12];
+        char again[64];
+
+        p = strchr(p, '?') + 1;
+        if (!tg_gui_link_query(p, "domain", dom, sizeof(dom))) {
+            return 0;
+        }
+        strcpy(again, "t.me/");
+        strcat(again, dom);
+        if (tg_gui_link_query(p, "post", post, sizeof(post))) {
+            strcat(again, "/");
+            strcat(again, post);
+        }
+        return tg_gui_tme_link(again, name, name_size, message_id);
+    }
     if (tg_gui_starts_nocase(p, "https://")) {
         p += 8;
     } else if (tg_gui_starts_nocase(p, "http://")) {
@@ -11612,6 +11670,16 @@ static int tg_gui_notify_menu_self_test(void)
             { "https://t.me/", 0, "", 0UL },
             { "https://example.org/t.me/name", 0, "", 0UL },
             { "https://t.me/name with space", 0, "", 0UL },
+            { "tg://resolve?domain=telegram&post=457", 1, "telegram", 457UL },
+            { "tg://resolve?post=12&domain=amigram1", 1, "amigram1", 12UL },
+            { "TG://resolve?domain=Durov", 1, "Durov", 0UL },
+            { "tg:resolve?domain=amigram1&start=x", 1, "amigram1", 0UL },
+            { "tg://resolve?domain=abc", 0, "", 0UL },
+            { "tg://resolve?domain=joinchat", 0, "", 0UL },
+            { "tg://resolve?domain=amigram1&post=1x", 0, "", 0UL },
+            { "tg://resolve?domainx=amigram1", 0, "", 0UL },
+            { "tg://resolve?", 0, "", 0UL },
+            { "tg://premium_offer?ref=premium", 0, "", 0UL },
             { "", 0, "", 0UL }
         };
         unsigned int k;
@@ -11627,6 +11695,15 @@ static int tg_gui_notify_menu_self_test(void)
                        links[k].url);
                 return 2;
             }
+        }
+        /* what only Telegram's own apps open: not for the browser */
+        if (!tg_gui_link_app_only("tg://premium_offer?ref=premium") ||
+            !tg_gui_link_app_only("TG:settings") ||
+            tg_gui_link_app_only("https://t.me/amigram1") ||
+            tg_gui_link_app_only("http://tg.example.org") ||
+            tg_gui_link_app_only("") || tg_gui_link_app_only(0)) {
+            puts("gui self-test: a link only Telegram opens read wrong");
+            return 2;
         }
     }
     /* A date typed where words are searched: the three orders it is

@@ -140,7 +140,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
 - A link to a public chat on Telegram (`t.me/name`, `t.me/name/123`)
   clicked in a message opens that chat in Amigram, at the message the
   link names, instead of going to the browser. Invitations, sticker
-  sets and the other kinds of `t.me` link still go to the browser.
+  sets and the other kinds of `t.me` link still go to the browser. A
+  bot's link button does the same, and reads the form Telegram's own
+  apps use too (`tg://resolve?domain=name&post=123`); any other `tg:`
+  link, which only Telegram's apps open, says so on the status line
+  instead of going to a browser that would not know it.
 - Devices: "Devices..." in the Amigram menu lists where the account is
   logged in (`account.getAuthorizations`): the program, the machine,
   its system, the place and when it was last used, this one marked. The

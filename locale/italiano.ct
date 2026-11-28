@@ -1470,6 +1470,9 @@ Traduco...
 MSG_ST_COULD_NOT_TRANSLATE
 Telegram non l'ha tradotto
 ; Telegram did not translate it
+MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN
+Quel link si apre solo nelle app di Telegram
+; Only Telegram's own apps open that link
 MSG_RQ_OK
 OK
 ; OK

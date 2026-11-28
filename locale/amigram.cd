@@ -1006,6 +1006,8 @@ MSG_ST_TRANSLATING (535//)
 Translating...
 MSG_ST_COULD_NOT_TRANSLATE (536//)
 Telegram did not translate it
+MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN (537//)
+Only Telegram's own apps open that link
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK

@@ -12926,6 +12926,18 @@ static void tg_gui_window_key_press(tg_gui_state *state, struct Window *win,
         (void)tg_gui_amiga_easyreq_args(win, &es);
         return;
     }
+    if (what == TG_GUI_KEY_LINK && tg_gui_window_open_tme(state, backend, got)) {
+        /* a chat or a post on Telegram: opened here */
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (what == TG_GUI_KEY_LINK && tg_gui_link_app_only(got)) {
+        /* tg://...: the browser would not know it */
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
     if (what == TG_GUI_KEY_LINK) {
         /* the link, sixty letters a line: a requester does not wrap */
         o = 0UL;
@@ -20601,6 +20613,12 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                 clicked_url)) {
                                             /* a chat on Telegram: opened
                                                here, not in the browser */
+                                        } else if (tg_gui_link_app_only(
+                                                       clicked_url)) {
+                                            tg_gui_window_copy(
+                                                state->status,
+                                                sizeof(state->status),
+                                                TG_STR(MSG_ST_ONLY_TELEGRAM_S_APPS_OPEN));
                                         } else if (tg_platform_open_url(
                                                 clicked_url) == 0) {
                                             tg_gui_window_copy(
