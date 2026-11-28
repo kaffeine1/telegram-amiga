@@ -141,6 +141,17 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   posted in @amigram1 next to 45.1: the same decoder, a new
   installation (icons and Installer). Its four files are pinned by
   size and SHA-256 as before.
+- The Archive on a full chat list (64 chats on a 68k), seen on a Vampire:
+  a chat opened from "More archived chats...", the address book or a
+  search was left out of the list, so it never opened and the window
+  went on showing the chat open before; it now takes the place of a
+  hidden chat, else of the last one of the main list that is not
+  pinned, archived or open, as a pinned chat does. When the list holds
+  few archived chats (fewer than eight of those the Archive has), the
+  Archive opens straight on all of them, as "More archived chats..."
+  lists them, instead of showing one. And a chat whose name has only
+  letters the Amiga cannot show, which read as question marks, shows
+  its @username there when it has one.
 - The avatars of the chat list came back as initials after the address
   book or the Archive had been open (seen on a Vampire): the thumbs kept
   in memory, 128 on a 68k, were pushed out one by one by the hundred and

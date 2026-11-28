@@ -387,6 +387,9 @@ static int tg_mtproto_auth_check_password_text(const char *host,
 static FILE *tg_mtproto_open_quiet_stream(FILE *fallback);
 static void tg_mtproto_close_quiet_stream(FILE *quiet, FILE *fallback);
 static void tg_mtproto_quiet_tmp_sweep(void);
+#if !defined(TG_NO_GUI)
+static int tg_gui_name_unreadable(const char *latin1);
+#endif
 static void tg_mtproto_replay_quiet_stream(FILE *quiet, FILE *fallback);
 #if !defined(TG_NO_SELFTEST)
 static int tg_hist_short_self_test(void);
@@ -20240,6 +20243,16 @@ static int tg_mtproto_chat_slash_hint_self_test(void)
             }
         }
     }
+#if !defined(TG_NO_GUI)
+    /* A name of letters the Amiga cannot show reads as question marks:
+       the window then shows the username instead. */
+    if (!tg_gui_name_unreadable("????") || !tg_gui_name_unreadable("?? ?") ||
+        tg_gui_name_unreadable("Anna?") || tg_gui_name_unreadable("") ||
+        tg_gui_name_unreadable("   ")) {
+        puts("probe self-test: an unreadable name not told");
+        ok = 0;
+    }
+#endif
     if (checked < 20UL || strstr(hint, " /help ") == 0) {
         puts("probe self-test: slash hint check read too few commands");
         ok = 0;
@@ -34392,6 +34405,34 @@ static int tg_gui_search_cache_entry(
     }
     new_index[0] = '\0';
     new_label[0] = '\0';
+    /* A full list (64 chats on a 68k): the chat takes the place of a
+       hidden one, else of the last chat of the main list that is not
+       pinned, archived or open, in place, as a pinned chat does. Left
+       out, it was never opened, and the window kept showing the chat
+       open before (a chat of the Archive, seen on a Vampire). */
+    if (tg_mtproto_load_peer_cache_file(tg_gui_session_state.peer_cache_file,
+                                        &tg_gui_probe_cache) == 0 &&
+        tg_gui_probe_cache.count >= TG_MTPROTO_PEER_CACHE_MAX &&
+        tg_mtproto_peer_cache_entry_is_openable(selected) &&
+        tg_mtproto_peer_cache_find_local(&tg_gui_probe_cache,
+                                         selected->peer_constructor,
+                                         selected->id_hi,
+                                         selected->id_lo) == 0) {
+        long slot;
+
+        tg_gui_list_marks_begin(TG_GUI_HIDDEN_FILE, &tg_gui_probe_cache);
+        slot = tg_gui_list_free_slot(&tg_gui_probe_cache);
+        if (slot >= 0L) {
+            tg_gui_list_put(&tg_gui_probe_cache, slot, selected);
+            tg_gui_probe_cache.entries[slot].from_dialog = 1;
+            tg_mtproto_recount_peer_cache(&tg_gui_probe_cache);
+            if (tg_mtproto_save_peer_cache_file(
+                    tg_gui_session_state.peer_cache_file, &tg_gui_probe_cache,
+                    0, "chat cache") == 0) {
+                tg_gui_log("search: the list full, a chat's place taken");
+            }
+        }
+    }
     prev_timeout = tg_net_connect_timeout_seconds();
     tg_net_set_connect_timeout_seconds(12UL);
     quiet = tg_mtproto_open_quiet_stream(stream);
@@ -37113,6 +37154,23 @@ int tg_gui_session_search_count(void)
     return tg_gui_search_openable_n;
 }
 
+/* 1 when a name, as the window shows it, is question marks and spaces
+   only: letters of a script Latin-1 has not (an empty name is not). */
+static int tg_gui_name_unreadable(const char *latin1)
+{
+    unsigned long i;
+    int marks = 0;
+
+    for (i = 0UL; latin1[i] != '\0'; ++i) {
+        if (latin1[i] == '?') {
+            ++marks;
+        } else if (latin1[i] != ' ') {
+            return 0;
+        }
+    }
+    return marks > 0;
+}
+
 const char *tg_gui_session_search_name(int i)
 {
     const tg_mtproto_peer_cache_entry *e;
@@ -37135,6 +37193,14 @@ const char *tg_gui_session_search_name(int i)
         /* the wire title is UTF-8; the sidebar renders Latin-1 (bug: "o-uml"
            showed as two chars). Convert like the chat-list path does. */
         tg_mtproto_utf8_to_latin1_name(latin1_name, sizeof(latin1_name), raw);
+        if (tg_gui_name_unreadable(latin1_name) && e->username[0] != '\0') {
+            /* letters the Amiga cannot show (Cyrillic, say): "????" tells
+               nothing, the username does */
+            latin1_name[0] = '@';
+            tg_mtproto_utf8_to_latin1_name(latin1_name + 1,
+                                           sizeof(latin1_name) - 1U,
+                                           e->username);
+        }
         return latin1_name;
     }
 }

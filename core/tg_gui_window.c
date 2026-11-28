@@ -14402,7 +14402,22 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
                                fresh ? TG_STR(MSG_ST_THE_ARCHIVE_IS_EMPTY)
                                      : TG_STR(MSG_ST_COULD_NOT_READ_THE_ARCHIVE));
         } else {
+            int held = 0;
+            int k;
+
             tg_gui_session_set_archive_view(1);
+            for (k = 0; k < state->chat_count; ++k) {
+                if (state->chats[k].index != TG_GUI_ARCHIVE_MORE_INDEX) {
+                    ++held;
+                }
+            }
+            if (fresh && held < n && held < 8) {
+                /* A full list (64 chats on a 68k) holds a few archived
+                   chats only, or none: the Archive is shown whole, as
+                   "More archived chats..." shows it, at once. */
+                tg_gui_window_archive_more(state, backend, 0);
+                return;
+            }
             /* A large Archive shows its most recent chats only. */
             if (!fresh) {
                 tg_locale_format(line, sizeof(line),
