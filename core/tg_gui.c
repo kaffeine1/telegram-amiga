@@ -2616,6 +2616,7 @@ int tg_gui_pin_mark_width(int lh)
    mark and its place in the results (1 = the first). */
 void tg_gui_chat_set_search_result(tg_gui_chat *row, const char *name, int k)
 {
+    unsigned long i;
     char c;
 
     if (row == 0 || name == 0) {
@@ -2623,7 +2624,22 @@ void tg_gui_chat_set_search_result(tg_gui_chat *row, const char *name, int k)
     }
     memset(row, 0, sizeof(*row));
     tg_gui_copy(row->name, sizeof(row->name), name);
-    c = name[0];
+    /* the first letter or digit: an emoji at the head (two bytes, the
+       first 0x80 or 0x81) would draw as a box */
+    c = '\0';
+    for (i = 0UL; name[i] != '\0'; ++i) {
+        unsigned char u = (unsigned char)name[i];
+
+        if (tg_gui_emoji_pair_at(name, (unsigned long)strlen(name), i, 0)) {
+            ++i;
+            continue;
+        }
+        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') ||
+            (u >= '0' && u <= '9') || u >= 0xC0U) {
+            c = name[i];
+            break;
+        }
+    }
     if (c >= 'a' && c <= 'z') {
         c = (char)(c - 32);
     }
@@ -12063,6 +12079,26 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->ctx_can_block = 0;
     state->ctx_blocked = 0;
+    /* A search result's initial is its first letter, past an emoji at the
+       head of its name. */
+    {
+        static tg_gui_chat one;
+        char named[16];
+
+        named[0] = (char)TG_GUI_EMOJI_PREFIX0;
+        named[1] = (char)1;
+        strcpy(named + 2, " offerte");
+        tg_gui_chat_set_search_result(&one, named, 0);
+        if (one.initials[0] != 'O') {
+            puts("gui self-test: a result's initial is not its first letter");
+            return 2;
+        }
+        tg_gui_chat_set_search_result(&one, "", 0);
+        if (one.initials[0] != '?') {
+            puts("gui self-test: a nameless result's initial");
+            return 2;
+        }
+    }
     /* A row of the address book has a menu of its own: the chat opened,
        the contact renamed or taken out, the person blocked. */
     state->chats[0].contact_row = 1;

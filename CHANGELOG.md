@@ -141,6 +141,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   posted in @amigram1 next to 45.1: the same decoder, a new
   installation (icons and Installer). Its four files are pinned by
   size and SHA-256 as before.
+- The names in the lists of results (the Archive's "More archived
+  chats...", the address book, a search) were converted for the window
+  by a function of their own that stopped at the first character it
+  could not show: a channel whose name began with such an emoji had
+  no name at all, a "?" row (seen on a Vampire). They are converted as
+  the chat list's names are now, that character left out and a known
+  emoji kept, and a row's initial is its first letter, past an emoji.
 - The Archive on a full chat list (64 chats on a 68k), seen on a Vampire:
   a chat opened from "More archived chats...", the address book or a
   search was left out of the list, so it never opened and the window

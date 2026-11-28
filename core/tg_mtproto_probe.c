@@ -36956,47 +36956,6 @@ int tg_gui_session_contact_set(unsigned long peer_index, const char *first,
 }
 #endif
 
-/* UTF-8 (wire) -> Latin-1 (GUI display), for search-result titles that reach
-   the sidebar directly rather than through the driver's copy_latin1. Without
-   it a name like "Bjorn" with o-umlaut showed as the raw two-byte "A~ 3/4".
-   No-op copy when the build is not Latin-1 (host/utf8). */
-static void tg_mtproto_utf8_to_latin1_name(char *dst, unsigned long dst_size,
-                                           const char *src)
-{
-#if TG_MTPROTO_DISPLAY_LATIN1
-    unsigned long i;
-    unsigned long o;
-
-    if (dst == 0 || dst_size == 0UL) {
-        return;
-    }
-    i = 0UL;
-    o = 0UL;
-    while (src != 0 && src[i] != '\0' && o + 1UL < dst_size) {
-        unsigned long cp;
-        char one[8];
-        unsigned long got;
-
-        cp = tg_mtproto_utf8_read_codepoint(src, &i);
-        got = tg_mtproto_display_codepoint_to_latin1(cp, one, sizeof(one));
-        if (got == 0UL || o + got >= dst_size) {
-            break;
-        }
-        memcpy(dst + o, one, got);
-        o += got;
-    }
-    dst[o] = '\0';
-#else
-    if (dst != 0 && dst_size > 0UL) {
-        unsigned long i;
-
-        for (i = 0UL; src != 0 && src[i] != '\0' && i + 1UL < dst_size; ++i) {
-            dst[i] = src[i];
-        }
-        dst[(src != 0) ? i : 0UL] = '\0';
-    }
-#endif
-}
 
 #if !defined(TG_NO_GUI)
 /* Public: one's own names and bio, Latin-1 for the window. 0 = read. */
@@ -37154,6 +37113,7 @@ int tg_gui_session_search_count(void)
     return tg_gui_search_openable_n;
 }
 
+#if !defined(TG_NO_GUI)
 /* 1 when a name, as the window shows it, is question marks and spaces
    only: letters of a script Latin-1 has not (an empty name is not). */
 static int tg_gui_name_unreadable(const char *latin1)
@@ -37170,6 +37130,7 @@ static int tg_gui_name_unreadable(const char *latin1)
     }
     return marks > 0;
 }
+#endif
 
 const char *tg_gui_session_search_name(int i)
 {
@@ -37190,17 +37151,26 @@ const char *tg_gui_session_search_name(int i)
             /* no name and no username: an account deleted, not a "?" */
             return TG_STR(MSG_G_DELETED_ACCOUNT);
         }
-        /* the wire title is UTF-8; the sidebar renders Latin-1 (bug: "o-uml"
-           showed as two chars). Convert like the chat-list path does. */
-        tg_mtproto_utf8_to_latin1_name(latin1_name, sizeof(latin1_name), raw);
-        if (tg_gui_name_unreadable(latin1_name) && e->username[0] != '\0') {
-            /* letters the Amiga cannot show (Cyrillic, say): "????" tells
-               nothing, the username does */
+        /* The wire title is UTF-8, the sidebar draws Latin-1: converted as
+           the chat list converts its names, a character it cannot show left
+           out and a known emoji kept. The conversion of its own stopped at
+           the first character it could not show, so a channel whose name
+           began with such an emoji had none ("?" rows in the Archive). */
+#if !defined(TG_NO_GUI)
+        tg_gui_driver_text_from_utf8(latin1_name, sizeof(latin1_name), raw);
+        if ((latin1_name[0] == '\0' || tg_gui_name_unreadable(latin1_name)) &&
+            e->username[0] != '\0') {
+            /* nothing the Amiga can show (Cyrillic, say): the username */
             latin1_name[0] = '@';
-            tg_mtproto_utf8_to_latin1_name(latin1_name + 1,
-                                           sizeof(latin1_name) - 1U,
-                                           e->username);
+            tg_gui_driver_text_from_utf8(latin1_name + 1,
+                                         sizeof(latin1_name) - 1U,
+                                         e->username);
         }
+#else
+        /* no window, no driver: the text client prints names itself */
+        tg_mtproto_copy_plain_cache_text(latin1_name, sizeof(latin1_name),
+                                         raw);
+#endif
         return latin1_name;
     }
 }
