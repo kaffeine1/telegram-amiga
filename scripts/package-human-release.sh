@@ -670,6 +670,12 @@ Chats
   muted. ESC goes back to the chats. A large Archive shows its most
   recent chats and ends with "More archived chats...": a click lists
   the rest, a click on one opens it, ESC goes back to the Archive.
+- Chats > Contacts... lists your address book in the sidebar, by name;
+  a click opens the chat with that person, even one you never wrote to,
+  and ESC goes back to the chats. A big address book shows its first
+  names (the status line says how many of how many): Find in all chats
+  (Amiga+G) finds the others. The text client has /contacts: type the
+  number of a name to open the chat.
 - What you leave typed in a chat stays there as its draft, on Telegram
   too, with the message it replies to, and the chat list shows it.
   Saved Messages keeps one as well.
@@ -1056,6 +1062,12 @@ Chat
   torna alle chat. Un Archivio grande mostra le chat piu' recenti e
   finisce con "More archived chats...": un clic elenca le altre, un clic
   su una la apre, ESC torna all'Archivio.
+- Chat > Rubrica... mette la tua rubrica nella colonna di sinistra, per
+  nome; un clic apre la chat con quella persona, anche se non le hai
+  mai scritto, e ESC torna alle chat. Una rubrica grande mostra i primi
+  nomi (la riga di stato dice quanti su quanti): Cerca in tutte le chat
+  (Amiga+G) trova gli altri. Il client testuale ha /contacts: scrivi il
+  numero di un nome per aprirne la chat.
 - Quello che lasci scritto in una chat resta come sua bozza, anche su
   Telegram, con il messaggio a cui risponde, e la lista chat la mostra.
   Anche i Messaggi salvati tengono la loro.
@@ -1483,6 +1495,9 @@ by Telegram into the language of your Locale preferences. /devices lists
 where your account is logged in (program, machine, system, place, when it
 was last used; this one marked with *). /devices end yes logs out every
 other device; this one stays.
+/contacts lists your address book by name; type a number to open the
+chat with that person (a big one shows its first names: /add name finds
+the others).
 /later 21:30 text sends the text at that time (also /later 28/11 21:30
 text or /later 28/11/2026 21:30 text): Telegram keeps it until then,
 even with this computer off. /later lists the chat's scheduled
@@ -1606,6 +1621,9 @@ da Telegram nella lingua delle preferenze Locale. /devices elenca dove e'
 aperto il tuo account (programma, macchina, sistema, luogo, ultimo uso;
 questo segnato con *). /devices end yes chiude tutti gli altri
 dispositivi; questo resta.
+/contacts elenca la tua rubrica per nome; scrivi un numero per aprire la
+chat con quella persona (una rubrica grande mostra i primi nomi: /add
+nome trova gli altri).
 /later 21:30 testo manda il testo a quell'ora (anche /later 28/11 21:30
 testo o /later 28/11/2026 21:30 testo): lo tiene Telegram fino ad
 allora, anche con questo computer spento. /later elenca i messaggi

@@ -73,6 +73,9 @@ Inserisci emoji...
 MSG_MENU_DEVICES
 Dispositivi...
 ; Devices...
+MSG_MENU_CONTACTS
+Rubrica...
+; Contacts...
 MSG_QR_STEP1
 1. Apri Telegram sul telefono
 ; 1. Open Telegram on your phone
@@ -1497,6 +1500,18 @@ Inviato ora
 MSG_ST_SCHEDULED_DELETED
 Messaggio programmato eliminato
 ; Scheduled message deleted
+MSG_ST_READING_YOUR_CONTACTS
+Leggo la rubrica...
+; Reading your contacts...
+MSG_ST_THIS_ACCOUNT_HAS_NO
+Questo account non ha contatti
+; This account has no contacts
+MSG_ST_YOUR_CONTACTS_CLICK_ONE
+La rubrica: clic su un nome, ESC torna
+; Your contacts: click one, ESC goes back
+MSG_ST_FIRST_D_OF_LU_CONTACTS
+Primi %d di %lu per nome: clic, ESC torna
+; First %d of %lu by name: click one, ESC back
 MSG_RQ_OK
 OK
 ; OK
@@ -4232,3 +4247,12 @@ Usa /later 21:30 testo, /later 28/11 21:30 testo, /later send n o /later delete 
 MSG_T_THAT_TIME_HAS_PASSED
 Quell'ora è passata, o è oltre un anno da adesso.
 ; That time has passed, or is more than a year away.
+MSG_T_HELP_CONTACTS
+  /contacts       la rubrica: scegline uno per aprire la chat
+;   /contacts       your contacts: pick one to open its chat
+MSG_T_YOUR_CONTACTS
+La tua rubrica:\n
+MSG_T_NO_CONTACTS
+Questo account non ha contatti.\n
+MSG_T_FIRST_CONTACTS
+(I primi %lu di %lu per nome: /add nome trova gli altri.)\n

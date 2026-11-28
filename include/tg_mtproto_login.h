@@ -1040,6 +1040,17 @@ tg_mtproto_tl_status tg_mtproto_build_contacts_search(
     tg_mtproto_tl_writer *writer,
     const char *query,
     unsigned long limit);
+/* The account's contacts (contacts.getContacts#5dd69e12, hash 0), and the
+   answer (contacts.contacts#eae87e42) read into a cache: one user entry a
+   contact, named and with its access hash from the users of the answer,
+   in the order of their names. contactsNotModified is an empty list. */
+tg_mtproto_tl_status tg_mtproto_build_contacts_get_contacts(
+    tg_mtproto_tl_writer *writer);
+tg_mtproto_tl_status tg_mtproto_parse_contacts_peer_cache(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_peer_cache *out);
 
 tg_mtproto_tl_status tg_mtproto_build_messages_get_history_self(
     tg_mtproto_tl_writer *writer,

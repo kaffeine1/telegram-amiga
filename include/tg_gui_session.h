@@ -874,6 +874,11 @@ int tg_gui_session_search_open(const char *query, FILE *stream);
    (>= 0), -1 on failure. */
 int tg_gui_session_search_run(const char *query, FILE *stream);
 /* Count / display name of the last search's openable results (0-based). */
+/* The account's contacts, by name, in the online picker's place: the
+   count (then tg_gui_session_search_name / _open_result as for a search),
+   or -1. */
+int tg_gui_session_contacts_run(FILE *stream);
+unsigned long tg_gui_session_contacts_total(void);
 int tg_gui_session_search_count(void);
 const char *tg_gui_session_search_name(int index);
 /* Open the index-th openable result of the last search. 0 = opened. */

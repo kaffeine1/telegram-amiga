@@ -1538,6 +1538,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_TOPIC_NEW 43
 #define TG_MENU_LOGOUT 44
 #define TG_MENU_DEVICES 45
+#define TG_MENU_CONTACTS 46
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -8687,6 +8688,8 @@ static struct NewMenu tg_gui_newmenu[] = {
       (APTR)TG_MENU_RELOAD },
     { NM_ITEM,  (STRPTR)"Archived chats", (STRPTR)"A", 0, 0,
       (APTR)TG_MENU_ARCHIVE },
+    { NM_ITEM,  (STRPTR)"Contacts...", 0, 0, 0,
+      (APTR)TG_MENU_CONTACTS },
     { NM_ITEM,  (STRPTR)"New topic...", 0, 0, 0,
       (APTR)TG_MENU_TOPIC_NEW },
     { NM_ITEM,  NM_BARLABEL, 0, 0, 0, 0 },
@@ -8728,6 +8731,7 @@ static void tg_gui_window_localize_menu(void)
         { MSG_MENU_REMOVE_STR, MSG_MENU_REMOVE },
         { MSG_MENU_RELOAD_STR, MSG_MENU_RELOAD },
         { MSG_MENU_ARCHIVE_STR, MSG_MENU_ARCHIVE },
+        { MSG_MENU_CONTACTS_STR, MSG_MENU_CONTACTS },
         { MSG_MENU_TOPIC_NEW_STR, MSG_MENU_TOPIC_NEW },
         { MSG_MENU_SENDFILE_STR, MSG_MENU_SENDFILE },
         { MSG_MENU_SENDPHOTO_STR, MSG_MENU_SENDPHOTO },
@@ -12989,6 +12993,52 @@ static void tg_gui_window_key_press(tg_gui_state *state, struct Window *win,
                            : what == TG_GUI_KEY_UNSERVED
                                ? TG_STR(MSG_ST_BUTTON_NEEDS_TELEGRAM_APP)
                                : TG_STR(MSG_ST_THE_BOT_DID_NOT_ANSWER));
+    }
+    tg_gui_window_paint(state, backend);
+}
+
+static void tg_gui_window_load_search_results(tg_gui_state *state);
+
+/* Contacts...: the account's address book in the sidebar, by name, the
+   way the results of a search stand there: a click opens the chat, ESC
+   goes back to the chats. */
+static void tg_gui_window_contacts(tg_gui_state *state,
+                                   tg_gui_backend *backend)
+{
+    int n;
+
+    if (state->mode != TG_GUI_MODE_CHAT || !tg_gui_session_is_open() ||
+        state->forward_pick_active) {
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_READING_YOUR_CONTACTS));
+    tg_gui_window_paint(state, backend);
+    n = tg_gui_session_contacts_run(stdout);
+    if (n <= 0) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           n < 0 ? TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM)
+                                 : TG_STR(MSG_ST_THIS_ACCOUNT_HAS_NO));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    state->in_filter = 0;
+    state->search_active = 1; /* ESC goes back, as from a search */
+    state->msg_search_active = 0;
+    state->search_query[0] = '\0';
+    state->search_caret = 0;
+    tg_gui_window_load_search_results(state);
+    if (tg_gui_session_contacts_total() > (unsigned long)state->chat_count) {
+        /* a big address book: the first ones by name, and how many */
+        char line[96];
+
+        tg_locale_format(line, sizeof(line),
+                         TG_STR(MSG_ST_FIRST_D_OF_LU_CONTACTS),
+                         state->chat_count, tg_gui_session_contacts_total());
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+    } else {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_YOUR_CONTACTS_CLICK_ONE));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -19711,6 +19761,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                                     (int)ctx.window->TopEdge,
                                                     want_own);
                             done = 3; /* reopen (no AppIcon) */
+                        } else if (ud == (APTR)TG_MENU_CONTACTS) {
+                            tg_gui_window_contacts(state, &backend);
                         } else if (ud == (APTR)TG_MENU_DEVICES) {
                             tg_gui_window_devices(ctx.window, state,
                                                   &backend);

@@ -12436,6 +12436,144 @@ tg_mtproto_tl_status tg_mtproto_parse_resolved_peer_cache(
     return TG_MTPROTO_TL_OK;
 }
 
+tg_mtproto_tl_status tg_mtproto_build_contacts_get_contacts(
+    tg_mtproto_tl_writer *writer)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x5dd69e12UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u64(writer, 0UL, 0UL); /* hash */
+    }
+    return status;
+}
+
+/* Two names in the order of a list, ASCII letters folded. */
+static int tg_contacts_before(const tg_mtproto_peer_cache_entry *a,
+                              const tg_mtproto_peer_cache_entry *b)
+{
+    const char *x = a->title[0] != '\0' ? a->title : a->username;
+    const char *y = b->title[0] != '\0' ? b->title : b->username;
+
+    for (;; ++x, ++y) {
+        int p = (unsigned char)*x;
+        int q = (unsigned char)*y;
+
+        if (p >= 'A' && p <= 'Z') {
+            p += 32;
+        }
+        if (q >= 'A' && q <= 'Z') {
+            q += 32;
+        }
+        if (p != q || p == 0) {
+            return p < q;
+        }
+    }
+}
+
+tg_mtproto_tl_status tg_mtproto_parse_contacts_peer_cache(
+    unsigned long constructor,
+    const unsigned char *body,
+    unsigned long body_length,
+    tg_mtproto_peer_cache *out)
+{
+    tg_mtproto_tl_reader reader;
+    unsigned long count;
+    unsigned long i;
+
+    if (body == 0 || out == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    memset(out, 0, sizeof(*out));
+    if (constructor == 0xb74ba9d2UL) {
+        return TG_MTPROTO_TL_OK; /* contacts.contactsNotModified */
+    }
+    if (constructor != 0xeae87e42UL) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_read_vector_count(&reader, &count) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    for (i = 0UL; i < count; ++i) {
+        unsigned long ctor;
+        unsigned long hi;
+        unsigned long lo;
+        unsigned long mutual;
+
+        /* contact#145ade0b user_id:long mutual:Bool */
+        if (tg_mtproto_tl_read_u32(&reader, &ctor) != TG_MTPROTO_TL_OK ||
+            ctor != 0x145ade0bUL ||
+            tg_mtproto_tl_read_u64(&reader, &hi, &lo) != TG_MTPROTO_TL_OK ||
+            tg_mtproto_tl_read_u32(&reader, &mutual) != TG_MTPROTO_TL_OK ||
+            (mutual != 0x997275b5UL && mutual != 0xbc799737UL)) {
+            return TG_MTPROTO_TL_INVALID_DATA;
+        }
+    }
+    /* saved_count:int, then the users: the contacts themselves. A cache
+       holds fewer than a big address book, so it keeps the first ones by
+       name (an address book is read from A on); the whole count stays in
+       total_dialog_count and `truncated` says some were left out. */
+    if (tg_mtproto_tl_read_u32(&reader, &i) != TG_MTPROTO_TL_OK) {
+        return TG_MTPROTO_TL_INVALID_DATA;
+    }
+    for (i = reader.offset; i + 20UL <= body_length; i += 4UL) {
+        static tg_mtproto_peer_cache_entry cand;
+        tg_mtproto_tl_reader user_reader;
+        tg_mtproto_user_summary user;
+        unsigned long at;
+
+        if (tg_read_u32_le(body + i) != TG_USER_CONSTRUCTOR) {
+            continue;
+        }
+        tg_mtproto_tl_reader_init(&user_reader, body + i, body_length - i);
+        if (tg_read_user_leading_from_reader(&user_reader, &user) !=
+                TG_MTPROTO_TL_OK ||
+            user.is_self || !user.has_access_hash ||
+            tg_peer_cache_find(out, TG_PEER_USER_CONSTRUCTOR, user.id_hi,
+                               user.id_lo) != 0) {
+            continue;
+        }
+        memset(&cand, 0, sizeof(cand));
+        cand.peer_constructor = TG_PEER_USER_CONSTRUCTOR;
+        cand.id_hi = user.id_hi;
+        cand.id_lo = user.id_lo;
+        cand.from_dialog = 1;
+        cand.has_access_hash = 1;
+        cand.access_hash_hi = user.access_hash_hi;
+        cand.access_hash_lo = user.access_hash_lo;
+        cand.is_bot = user.is_bot;
+        tg_peer_cache_copy_user_title(&cand, &user);
+        tg_peer_cache_copy_text(cand.username, sizeof(cand.username),
+                                user.username);
+        if (out->count < TG_MTPROTO_PEER_CACHE_MAX) {
+            at = out->count++;
+        } else if (tg_contacts_before(&cand,
+                                      &out->entries[out->count - 1UL])) {
+            at = out->count - 1UL; /* the last by name makes room */
+            out->truncated = 1;
+        } else {
+            out->truncated = 1;
+            continue;
+        }
+        while (at > 0UL && tg_contacts_before(&cand, &out->entries[at - 1UL])) {
+            out->entries[at] = out->entries[at - 1UL];
+            --at;
+        }
+        out->entries[at] = cand;
+    }
+    if (count > out->count) {
+        out->truncated = 1;
+    }
+    out->user_count = out->count;
+    out->chat_count = 0UL;
+    out->total_dialog_count = count;
+    return TG_MTPROTO_TL_OK;
+}
+
 tg_mtproto_tl_status tg_mtproto_parse_contacts_search_peer_cache(
     unsigned long constructor,
     const unsigned char *body,
@@ -20755,6 +20893,109 @@ int tg_mtproto_login_self_test(void)
         return 2;
     }
 #endif
+    /* The contacts asked for (hash 0) and read: one user entry a contact,
+       none from contactsNotModified, and an answer that is something else,
+       or a contact of another shape, is refused. */
+    {
+        static tg_mtproto_peer_cache contacts;
+
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_contacts_get_contacts(&writer) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 12UL ||
+            tg_read_u32_le(peer_rpc) != 0x5dd69e12UL ||
+            tg_read_u32_le(peer_rpc + 4) != 0UL ||
+            tg_read_u32_le(peer_rpc + 8) != 0UL) {
+            return 2;
+        }
+        /* four contacts, three of them among the users: the three by
+           name, the count of four, and the list said to be cut */
+        {
+            static const char *const names[3] = {"bruno", "Anna", "Carla"};
+            int ok = 1;
+            int k;
+
+            tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+            ok = tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 4UL) == TG_MTPROTO_TL_OK;
+            for (k = 0; k < 4 && ok; ++k) {
+                ok = tg_mtproto_tl_write_u32(&writer, 0x145ade0bUL) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u64(&writer, 0UL,
+                                             501UL + (unsigned long)k) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, k & 1 ? 0xbc799737UL
+                                                            : 0x997275b5UL) ==
+                         TG_MTPROTO_TL_OK;
+            }
+            ok = ok && tg_mtproto_tl_write_u32(&writer, 0UL) ==
+                           TG_MTPROTO_TL_OK && /* saved_count */
+                 tg_mtproto_tl_write_u32(&writer, TG_VECTOR_CONSTRUCTOR) ==
+                     TG_MTPROTO_TL_OK &&
+                 tg_mtproto_tl_write_u32(&writer, 3UL) == TG_MTPROTO_TL_OK;
+            for (k = 0; k < 3 && ok; ++k) {
+                ok = tg_mtproto_tl_write_u32(&writer, TG_USER_CONSTRUCTOR) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, 1UL | 2UL) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u32(&writer, 0UL) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u64(&writer, 0UL,
+                                             501UL + (unsigned long)k) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_mtproto_tl_write_u64(&writer, 0x55UL,
+                                             0x66UL + (unsigned long)k) ==
+                         TG_MTPROTO_TL_OK &&
+                     tg_write_string(&writer, names[k]) == TG_MTPROTO_TL_OK;
+            }
+            if (!ok ||
+                tg_mtproto_parse_contacts_peer_cache(0xeae87e42UL, peer_rpc,
+                                                     writer.length,
+                                                     &contacts) !=
+                    TG_MTPROTO_TL_OK ||
+                contacts.count != 3UL || contacts.user_count != 3UL ||
+                contacts.total_dialog_count != 4UL || !contacts.truncated ||
+                strcmp(contacts.entries[0].title, "Anna") != 0 ||
+                contacts.entries[0].id_lo != 502UL ||
+                contacts.entries[0].access_hash_lo != 0x67UL ||
+                !contacts.entries[0].has_access_hash ||
+                strcmp(contacts.entries[1].title, "bruno") != 0 ||
+                strcmp(contacts.entries[2].title, "Carla") != 0 ||
+                contacts.entries[2].peer_constructor !=
+                    TG_PEER_USER_CONSTRUCTOR) {
+                return 2;
+            }
+            if (tg_mtproto_parse_contacts_peer_cache(0xb74ba9d2UL, peer_rpc,
+                                                     0UL, &contacts) !=
+                    TG_MTPROTO_TL_OK ||
+                contacts.count != 0UL ||
+                tg_mtproto_parse_contacts_peer_cache(0x11111111UL, peer_rpc,
+                                                     writer.length,
+                                                     &contacts) ==
+                    TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+            peer_rpc[8] ^= 0x01U; /* the first contact of another shape */
+            if (tg_mtproto_parse_contacts_peer_cache(0xeae87e42UL, peer_rpc,
+                                                     writer.length,
+                                                     &contacts) ==
+                TG_MTPROTO_TL_OK) {
+                return 2;
+            }
+        }
+        /* names in order, letters folded, a name before its longer kin */
+        memset(&contacts, 0, sizeof(contacts));
+        strcpy(contacts.entries[0].title, "bruno");
+        strcpy(contacts.entries[1].title, "Anna");
+        strcpy(contacts.entries[2].title, "Annalisa");
+        if (!tg_contacts_before(&contacts.entries[1], &contacts.entries[0]) ||
+            tg_contacts_before(&contacts.entries[0], &contacts.entries[1]) ||
+            !tg_contacts_before(&contacts.entries[1], &contacts.entries[2]) ||
+            tg_contacts_before(&contacts.entries[1], &contacts.entries[1])) {
+            return 2;
+        }
+    }
     /* A message that waits for its time: flags.10 and schedule_date last,
        after random_id; gone again once cleared. The scheduled messages
        asked for (a chat, hash 0), one sent at once, one deleted, and no

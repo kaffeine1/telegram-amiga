@@ -56,6 +56,8 @@ Insert emoji...
 ;
 MSG_MENU_DEVICES (23//)
 Devices...
+MSG_MENU_CONTACTS (24//)
+Contacts...
 ; --- the QR login screen (30-39) ---------------------------------------------
 MSG_QR_STEP1 (30//)
 1. Open Telegram on your phone
@@ -1024,6 +1026,14 @@ MSG_ST_SCHEDULED_SENT_NOW (544//)
 Sent now
 MSG_ST_SCHEDULED_DELETED (545//)
 Scheduled message deleted
+MSG_ST_READING_YOUR_CONTACTS (546//)
+Reading your contacts...
+MSG_ST_THIS_ACCOUNT_HAS_NO (547//)
+This account has no contacts
+MSG_ST_YOUR_CONTACTS_CLICK_ONE (548//)
+Your contacts: click one, ESC goes back
+MSG_ST_FIRST_D_OF_LU_CONTACTS (549//)
+First %d of %lu by name: click one, ESC back
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -2984,3 +2994,11 @@ MSG_T_USE_LATER (2377//)
 Use /later 21:30 text, /later 28/11 21:30 text, /later send n or /later delete n.
 MSG_T_THAT_TIME_HAS_PASSED (2378//)
 That time has passed, or is more than a year away.
+MSG_T_HELP_CONTACTS (2379//)
+  /contacts       your contacts: pick one to open its chat
+MSG_T_YOUR_CONTACTS (2380//)
+Your contacts:\n
+MSG_T_NO_CONTACTS (2381//)
+This account has no contacts.\n
+MSG_T_FIRST_CONTACTS (2382//)
+(The first %lu of %lu by name: /add name finds the others.)\n

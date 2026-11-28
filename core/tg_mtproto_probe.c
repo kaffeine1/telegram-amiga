@@ -12945,6 +12945,10 @@ static int tg_mtproto_chat_prompt_line(const char *prompt,
                                        FILE *stream,
                                        const char *label);
 
+/* Set around one call of the picker below by /contacts: the list is the
+   account's contacts (contacts.getContacts) instead of a search. */
+static int tg_search_contacts = 0;
+
 static int tg_mtproto_auth_search_global_on_context(
     const char *host,
     const char *port,
@@ -12985,7 +12989,7 @@ static int tg_mtproto_auth_search_global_on_context(
     tg_mtproto_copy_plain_cache_text(trimmed_query, sizeof(trimmed_query),
                                      query_text);
     tg_mtproto_trim_line(trimmed_query);
-    if (trimmed_query[0] == '\0') {
+    if (trimmed_query[0] == '\0' && !tg_search_contacts) {
         fprintf(stream, "Type a name, username, or group to add.\n");
         return 2;
     }
@@ -13006,7 +13010,10 @@ static int tg_mtproto_auth_search_global_on_context(
 
     quiet = tg_mtproto_open_quiet_stream(stream);
     tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
-    if (tg_mtproto_build_contacts_search(&writer, trimmed_query, 10UL) !=
+    if ((tg_search_contacts
+             ? tg_mtproto_build_contacts_get_contacts(&writer)
+             : tg_mtproto_build_contacts_search(&writer, trimmed_query,
+                                                10UL)) !=
         TG_MTPROTO_TL_OK) {
         tg_mtproto_close_quiet_stream(quiet, stream);
         fprintf(stream, "Search text is too long.\n");
@@ -13032,9 +13039,13 @@ static int tg_mtproto_auth_search_global_on_context(
         return 2;
     }
     if (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
-        tg_mtproto_parse_contacts_search_peer_cache(
-            result.result_constructor, result.result_body,
-            result.result_body_length, &search_cache) !=
+        (tg_search_contacts
+             ? tg_mtproto_parse_contacts_peer_cache(
+                   result.result_constructor, result.result_body,
+                   result.result_body_length, &search_cache)
+             : tg_mtproto_parse_contacts_search_peer_cache(
+                   result.result_constructor, result.result_body,
+                   result.result_body_length, &search_cache)) !=
             TG_MTPROTO_TL_OK) {
         tg_mtproto_close_quiet_stream(quiet, stream);
         fprintf(stream, "Could not read Telegram search results.\n");
@@ -13051,14 +13062,27 @@ static int tg_mtproto_auth_search_global_on_context(
         }
         ++public_index;
         if (public_index == 1UL) {
-            fprintf(stream, "Search results:\n");
+            fputs(tg_search_contacts ? TG_TSTR(MSG_T_YOUR_CONTACTS)
+                                     : "Search results:\n",
+                  stream);
         }
         tg_mtproto_print_search_result_line(stream, public_index,
                                             &search_cache.entries[i]);
     }
+    if (tg_search_contacts && public_index > 0UL &&
+        search_cache.total_dialog_count > public_index) {
+        char first[96];
+
+        tg_locale_format(first, sizeof(first), TG_TSTR(MSG_T_FIRST_CONTACTS),
+                         public_index, search_cache.total_dialog_count);
+        fputs(first, stream);
+    }
     if (public_index == 0UL) {
-        fprintf(stream,
-                "No openable Telegram results. Try @username or a t.me link.\n");
+        fputs(tg_search_contacts
+                  ? TG_TSTR(MSG_T_NO_CONTACTS)
+                  : "No openable Telegram results. Try @username or a t.me "
+                    "link.\n",
+              stream);
         return 2;
     }
     if (tg_mtproto_chat_prompt_line(
@@ -15635,7 +15659,7 @@ static void tg_chat_history_add(const char *text)
     "          /diff /color /bell /ring /find /mute /unmute /vote\n" \
     "          /voters /markread /markunread /topics /topic /silent\n" \
     "          /block /unblock /press /devices /translate /later\n" \
-    "          /help /update /logout /quit\n"
+    "          /contacts /help /update /logout /quit\n"
 
 /*
  * Chat input reader. In raw mode it echoes characters itself and supports
@@ -19829,6 +19853,7 @@ static const struct {
     TG_HELP(MSG_T_HELP_TRANSLATE),
     TG_HELP(MSG_T_HELP_LATER),
     TG_HELP(MSG_T_HELP_LATER_SEND),
+    TG_HELP(MSG_T_HELP_CONTACTS),
     TG_HELP(MSG_T_HELP_VOTE_N_N),
     TG_HELP(MSG_T_HELP_VOTERS_WHO_VOTED),
     TG_HELP(MSG_T_HELP_TOPICS_THE_TOPICS),
@@ -22522,9 +22547,16 @@ int tg_mtproto_auth_chat_file(const char *host,
             continue;
         }
         username_arg = 0;
-        if (tg_mtproto_chat_named_command_arg(line, "/add", &username_arg) ||
+        /* /contacts: the address book, a number picks one, as /add does */
+        tg_search_contacts =
+            tg_mtproto_chat_named_command_arg(line, "/contacts",
+                                              &username_arg) &&
+            username_arg[0] == '\0';
+        if (tg_search_contacts ||
+            tg_mtproto_chat_named_command_arg(line, "/add", &username_arg) ||
             tg_mtproto_chat_named_command_arg(line, "add", &username_arg)) {
-            if (username_arg == 0 || username_arg[0] == '\0') {
+            if (!tg_search_contacts &&
+                (username_arg == 0 || username_arg[0] == '\0')) {
                 if (tg_mtproto_chat_prompt_line(TG_TSTR(MSG_T_NAME_USERNAME_OR_T_ME_LINK),
                                                 line, sizeof(line), 1,
                                                 stream, label) != 0) {
@@ -22541,7 +22573,8 @@ int tg_mtproto_auth_chat_file(const char *host,
             }
             requested_peer_index[0] = '\0';
             requested_peer_label[0] = '\0';
-            if (tg_mtproto_chat_arg_is_exact_username(username_arg)) {
+            if (!tg_search_contacts &&
+                tg_mtproto_chat_arg_is_exact_username(username_arg)) {
                 quiet = tg_mtproto_open_quiet_stream(stream);
                 rc = tg_mtproto_auth_resolve_username_file(
                     host, port, api_file, auth_file, dc_id_text, username_arg,
@@ -22566,7 +22599,7 @@ int tg_mtproto_auth_chat_file(const char *host,
                 if (tg_chat_tui_stream != 0 && tg_chat_input_raw) {
                     (void)tg_console_tui_enter(stream, " " TG_APP_NAME " ");
                 }
-                if (rc != 0 &&
+                if (rc != 0 && !tg_search_contacts &&
                     tg_mtproto_peer_cache_text_looks_username(username_arg)) {
                     quiet = tg_mtproto_open_quiet_stream(stream);
                     rc = tg_mtproto_auth_resolve_username_file(
@@ -22575,6 +22608,14 @@ int tg_mtproto_auth_chat_file(const char *host,
                     tg_mtproto_close_quiet_stream(quiet, stream);
                 }
             }
+            if (rc != 0 && tg_search_contacts) {
+                /* nothing picked, or no contacts: the list said why */
+                tg_search_contacts = 0;
+                tg_mtproto_chat_show_prompt(stream, own_label, peer_label, 0,
+                                            0UL, tg_chat_input_raw);
+                continue;
+            }
+            tg_search_contacts = 0;
             if (rc != 0) {
                 tg_mtproto_chat_print_system_line(
                     stream,
@@ -36203,6 +36244,71 @@ static void tg_mtproto_utf8_to_latin1_name(char *dst, unsigned long dst_size,
         dst[(src != 0) ? i : 0UL] = '\0';
     }
 #endif
+}
+
+/* Public: the account's contacts in the online picker's place, by name,
+   for the sidebar to show (tg_gui_session_search_count/_name/_open_result).
+   The count, or -1. */
+int tg_gui_session_contacts_run(FILE *stream)
+{
+    static unsigned char query[32];
+    static const char label[] = "gui contacts.getContacts";
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+    unsigned long prev_timeout;
+    unsigned long i;
+    FILE *quiet;
+    int rc;
+
+    tg_gui_search_openable_n = 0;
+    tg_gui_search_results.count = 0UL;
+    if (!tg_gui_session_state.open || stream == 0) {
+        return -1;
+    }
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(12UL);
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    rc = tg_mtproto_build_contacts_get_contacts(&writer) == TG_MTPROTO_TL_OK
+             ? tg_gui_session_peer_request(query, writer.length, &result,
+                                           label, 0, 0UL, quiet)
+             : 2;
+    if (rc == 0 &&
+        (tg_mtproto_unpack_gzip_result(&result, quiet, label) != 0 ||
+         tg_mtproto_parse_contacts_peer_cache(
+             result.result_constructor, result.result_body,
+             result.result_body_length, &tg_gui_search_results) !=
+             TG_MTPROTO_TL_OK)) {
+        rc = 2;
+    }
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    if (rc != 0) {
+        tg_gui_search_results.count = 0UL;
+        tg_gui_log("contacts: Telegram did not give the address book");
+        return -1;
+    }
+    for (i = 0UL; i < tg_gui_search_results.count &&
+                  tg_gui_search_openable_n <
+                      (int)(sizeof(tg_gui_search_openable_idx) /
+                            sizeof(tg_gui_search_openable_idx[0]));
+         ++i) {
+        if (!tg_gui_search_results.entries[i].is_self &&
+            tg_mtproto_peer_cache_entry_is_openable(
+                &tg_gui_search_results.entries[i])) {
+            tg_gui_search_openable_idx[tg_gui_search_openable_n] = (int)i;
+            ++tg_gui_search_openable_n;
+        }
+    }
+    tg_gui_log("contacts: read");
+    return tg_gui_search_openable_n;
+}
+
+/* Public: how many contacts the account has, of which the last
+   tg_gui_session_contacts_run kept the first ones by name. */
+unsigned long tg_gui_session_contacts_total(void)
+{
+    return tg_gui_search_results.total_dialog_count;
 }
 
 int tg_gui_session_search_count(void)

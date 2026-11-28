@@ -137,6 +137,13 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- Contacts: Chats > Contacts... puts the address book
+  (`contacts.getContacts`) in the sidebar, by name, where a search's
+  results stand: a click opens the chat with that person, ESC goes back.
+  A big address book keeps its first names (128, 64 on a 68k machine)
+  and says how many there are; Find in all chats finds the rest. The
+  text client, the 68000 one included, has `/contacts`, a numbered list
+  to pick from as `/add` has.
 - Scheduled messages (`schedule_date`). "Send later..." under the
   paperclip asks when the composer's text goes (21:30, 28/11 21:30 or
   28/11/2026 21:30, up to a year ahead) and Telegram keeps it until

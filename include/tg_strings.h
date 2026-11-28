@@ -57,6 +57,8 @@
 #define MSG_MENU_EMOJI_STR "Insert emoji..."
 #define MSG_MENU_DEVICES 23
 #define MSG_MENU_DEVICES_STR "Devices..."
+#define MSG_MENU_CONTACTS 24
+#define MSG_MENU_CONTACTS_STR "Contacts..."
 #define MSG_QR_STEP1 30
 #define MSG_QR_STEP1_STR "1. Open Telegram on your phone"
 #define MSG_QR_STEP2 31
@@ -991,6 +993,14 @@
 #define MSG_ST_SCHEDULED_SENT_NOW_STR "Sent now"
 #define MSG_ST_SCHEDULED_DELETED 545
 #define MSG_ST_SCHEDULED_DELETED_STR "Scheduled message deleted"
+#define MSG_ST_READING_YOUR_CONTACTS 546
+#define MSG_ST_READING_YOUR_CONTACTS_STR "Reading your contacts..."
+#define MSG_ST_THIS_ACCOUNT_HAS_NO 547
+#define MSG_ST_THIS_ACCOUNT_HAS_NO_STR "This account has no contacts"
+#define MSG_ST_YOUR_CONTACTS_CLICK_ONE 548
+#define MSG_ST_YOUR_CONTACTS_CLICK_ONE_STR "Your contacts: click one, ESC goes back"
+#define MSG_ST_FIRST_D_OF_LU_CONTACTS 549
+#define MSG_ST_FIRST_D_OF_LU_CONTACTS_STR "First %d of %lu by name: click one, ESC back"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -2805,8 +2815,16 @@
 #define MSG_T_USE_LATER_STR "Use /later 21:30 text, /later 28/11 21:30 text, /later send n or /later delete n."
 #define MSG_T_THAT_TIME_HAS_PASSED 2378
 #define MSG_T_THAT_TIME_HAS_PASSED_STR "That time has passed, or is more than a year away."
+#define MSG_T_HELP_CONTACTS 2379
+#define MSG_T_HELP_CONTACTS_STR "  /contacts       your contacts: pick one to open its chat"
+#define MSG_T_YOUR_CONTACTS 2380
+#define MSG_T_YOUR_CONTACTS_STR "Your contacts:\n"
+#define MSG_T_NO_CONTACTS 2381
+#define MSG_T_NO_CONTACTS_STR "This account has no contacts.\n"
+#define MSG_T_FIRST_CONTACTS 2382
+#define MSG_T_FIRST_CONTACTS_STR "(The first %lu of %lu by name: /add name finds the others.)\n"
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2378
+#define TG_STRINGS_ID_MAX 2382
 
 #endif
