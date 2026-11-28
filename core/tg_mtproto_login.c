@@ -13509,6 +13509,55 @@ int tg_mtproto_login_token_url(const unsigned char *token,
     return 0;
 }
 
+tg_mtproto_tl_status tg_mtproto_build_auth_request_password_recovery(
+    tg_mtproto_tl_writer *writer)
+{
+    if (writer == 0) {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    return tg_mtproto_tl_write_u32(writer, 0xd897bc66UL);
+}
+
+int tg_mtproto_parse_password_recovery(unsigned long constructor,
+                                       const unsigned char *body,
+                                       unsigned long body_length, char *out,
+                                       unsigned long size)
+{
+    tg_mtproto_tl_reader reader;
+
+    if (out == 0 || size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (body == 0 || constructor != 0x137948a5UL) {
+        return 0;
+    }
+    tg_mtproto_tl_reader_init(&reader, body, body_length);
+    if (tg_read_string_copy(&reader, out, size) != TG_MTPROTO_TL_OK) {
+        out[0] = '\0';
+        return 0;
+    }
+    return 1;
+}
+
+tg_mtproto_tl_status tg_mtproto_build_auth_recover_password(
+    tg_mtproto_tl_writer *writer, const char *code)
+{
+    tg_mtproto_tl_status status;
+
+    if (writer == 0 || code == 0 || code[0] == '\0') {
+        return TG_MTPROTO_TL_INVALID_ARGUMENT;
+    }
+    status = tg_mtproto_tl_write_u32(writer, 0x37096c70UL);
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_mtproto_tl_write_u32(writer, 0UL); /* no new password */
+    }
+    if (status == TG_MTPROTO_TL_OK) {
+        status = tg_write_string(writer, code);
+    }
+    return status;
+}
+
 int tg_mtproto_is_auth_authorization_constructor(unsigned long constructor)
 {
     return constructor == TG_AUTH_AUTHORIZATION_CONSTRUCTOR ||
@@ -20993,6 +21042,44 @@ int tg_mtproto_login_self_test(void)
             tg_contacts_before(&contacts.entries[0], &contacts.entries[1]) ||
             !tg_contacts_before(&contacts.entries[1], &contacts.entries[2]) ||
             tg_contacts_before(&contacts.entries[1], &contacts.entries[1])) {
+            return 2;
+        }
+    }
+    /* A forgotten password: the two requests' bytes (no new password,
+       flags 0), no code no request, and the recovery answer read: its
+       email pattern, nothing from another answer. */
+    {
+        char pattern[40];
+
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_auth_request_password_recovery(&writer) !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 4UL ||
+            tg_read_u32_le(peer_rpc) != 0xd897bc66UL) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_auth_recover_password(&writer, "123456") !=
+                TG_MTPROTO_TL_OK ||
+            writer.length != 16UL ||
+            tg_read_u32_le(peer_rpc) != 0x37096c70UL ||
+            tg_read_u32_le(peer_rpc + 4) != 0UL || peer_rpc[8] != 6U ||
+            memcmp(peer_rpc + 9, "123456", 6) != 0 ||
+            tg_mtproto_build_auth_recover_password(&writer, "") ==
+                TG_MTPROTO_TL_OK) {
+            return 2;
+        }
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_write_string(&writer, "m***@e******.org") !=
+                TG_MTPROTO_TL_OK ||
+            !tg_mtproto_parse_password_recovery(0x137948a5UL, peer_rpc,
+                                                writer.length, pattern,
+                                                sizeof(pattern)) ||
+            strcmp(pattern, "m***@e******.org") != 0 ||
+            tg_mtproto_parse_password_recovery(0x957b50fbUL, peer_rpc,
+                                               writer.length, pattern,
+                                               sizeof(pattern)) ||
+            pattern[0] != '\0') {
             return 2;
         }
     }

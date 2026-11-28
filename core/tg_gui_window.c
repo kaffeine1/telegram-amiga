@@ -8162,6 +8162,66 @@ static void tg_gui_window_login_failed(tg_gui_state *state,
                        h != 0 ? h : "");
 }
 
+static LONG tg_gui_amiga_easyreq_args(struct Window *win,
+                                      struct EasyStruct *es);
+
+/* The password screen's own line under the field: how to get a code
+   when the password is forgotten. A failure's hint keeps the line. */
+static void tg_gui_window_login_2fa_hint(tg_gui_state *state)
+{
+    if (state->status_hint[0] == '\0') {
+        tg_gui_window_copy(state->status_hint, sizeof(state->status_hint),
+                           TG_STR(MSG_G_FORGOT_IT_TAB_MAILS_A));
+    }
+}
+
+/* TAB on the password screen: Telegram mails a code to the recovery email
+   and the field takes that code; TAB again goes back to the password. */
+static void tg_gui_window_login_recovery(tg_gui_state *state,
+                                         tg_gui_backend *backend)
+{
+    char pattern[64];
+    char line[TG_GUI_NAME_MAX];
+    int rc;
+
+    memset(state->input, 0, sizeof(state->input));
+    state->status_hint[0] = '\0';
+    if (state->login_recovery) {
+        state->login_recovery = 0;
+        state->input_masked = 1;
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_2FA_PASSWORD_ENTER_IF_YOU));
+        tg_gui_window_login_2fa_hint(state);
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    tg_gui_window_copy(state->status, sizeof(state->status),
+                       TG_STR(MSG_ST_ASKING_FOR_A_RECOVERY_CODE));
+    state->cursor_on = 0;
+    tg_gui_window_paint(state, backend);
+    rc = tg_gui_session_login_recovery_request(pattern, sizeof(pattern),
+                                               stdout);
+    if (rc == TG_GUI_LOGIN_OK) {
+        state->login_recovery = 1;
+        state->input_masked = 0;
+        tg_locale_format(line, sizeof(line), TG_STR(MSG_ST_CODE_SENT_TO_S),
+                         pattern);
+        tg_gui_window_copy(state->status, sizeof(state->status), line);
+        tg_gui_window_copy(state->status_hint, sizeof(state->status_hint),
+                           TG_STR(MSG_G_THE_PASSWORD_GOES_TAB_BACK));
+    } else if (rc == TG_GUI_LOGIN_NO_RECOVERY) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_NO_RECOVERY_EMAIL));
+        tg_gui_window_copy(state->status_hint, sizeof(state->status_hint),
+                           TG_STR(MSG_G_ONLY_TELEGRAM_S_APPS_RESET));
+    } else {
+        tg_gui_window_login_failed(state,
+                                   TG_STR(MSG_W_NO_ANSWER_FROM_TELEGRAM));
+    }
+    state->cursor_on = 1;
+    tg_gui_window_paint(state, backend);
+}
+
 /* The code expired, and retyping it cannot help: back to the number, already
    in the field, so ENTER asks Telegram for a new code. */
 static void tg_gui_window_login_code_expired(tg_gui_state *state)
@@ -8219,7 +8279,9 @@ static void tg_gui_window_login_qr_poll(tg_gui_state *state,
         state->mode = TG_GUI_MODE_LOGIN_2FA;
         state->input[0] = '\0';
         state->input_masked = 1;
+        state->login_recovery = 0;
         state->status_hint[0] = '\0';
+        tg_gui_window_login_2fa_hint(state);
         tg_gui_window_copy(state->status, sizeof(state->status),
                            TG_STR(MSG_ST_SCANNED_NOW_YOUR_CLOUD_PASSWORD));
         state->cursor_on = 1;
@@ -8255,6 +8317,12 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             *caret_ticks = 0;
             tg_gui_window_paint(state, backend);
         }
+        return;
+    }
+    if (state->mode == TG_GUI_MODE_LOGIN_2FA && code == 9) {
+        /* TAB: the password is forgotten, or remembered again */
+        tg_gui_window_login_recovery(state, backend);
+        *caret_ticks = 0;
         return;
     }
     if (code == 8 || code == 127) { /* BACKSPACE */
@@ -8382,6 +8450,8 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         } else if (rc == TG_GUI_LOGIN_NEED_2FA) {
             state->mode = TG_GUI_MODE_LOGIN_2FA;
             state->input_masked = 1;
+            state->login_recovery = 0;
+            tg_gui_window_login_2fa_hint(state);
             tg_gui_window_copy(state->status, sizeof(state->status),
                                TG_STR(MSG_ST_NO_CODE_NEEDED_YOUR_CLOUD));
         } else {
@@ -8397,6 +8467,8 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
         } else if (rc == TG_GUI_LOGIN_NEED_2FA) {
             state->mode = TG_GUI_MODE_LOGIN_2FA;
             state->input_masked = 1;
+            state->login_recovery = 0;
+            tg_gui_window_login_2fa_hint(state);
             tg_gui_window_copy(state->status, sizeof(state->status),
                                TG_STR(MSG_ST_2FA_PASSWORD_ENTER_IF_YOU));
         } else if (rc == TG_GUI_LOGIN_CODE_EXPIRED) {
@@ -8406,6 +8478,36 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             state->mode = TG_GUI_MODE_LOGIN_CODE;
         } else {
             tg_gui_window_login_failed(state, TG_STR(MSG_W_ERROR_TRY_THE_CODE_AGAIN));
+        }
+    } else if (state->login_recovery) {
+        /* the code from the recovery email */
+        int rc;
+
+        rc = tg_gui_session_login_recover(state->input, stdout);
+        memset(state->input, 0, sizeof(state->input));
+        if (rc == TG_GUI_LOGIN_OK) {
+            const tg_gui_amiga_ctx *actx =
+                (const tg_gui_amiga_ctx *)backend->context;
+            struct EasyStruct es;
+
+            state->login_recovery = 0;
+            state->input_masked = 0;
+            es.es_StructSize = (ULONG)sizeof(struct EasyStruct);
+            es.es_Flags = 0UL;
+            /* APTR: the fields are STRPTR on some systems, UBYTE * on
+               others. */
+            es.es_Title = (APTR)TG_STR(MSG_RQ_CLOUD_PASSWORD);
+            es.es_TextFormat = (APTR)TG_STR(MSG_W_SIGNED_IN_THE_CLOUD_PASSWORD);
+            es.es_GadgetFormat = (APTR)TG_STR(MSG_RQ_OK);
+            (void)tg_gui_amiga_easyreq_args(actx != 0 ? actx->window : 0,
+                                            &es);
+            tg_gui_window_login_finish(state);
+        } else if (rc == TG_GUI_LOGIN_BAD_CODE) {
+            tg_gui_window_login_failed(state,
+                                       TG_STR(MSG_W_WRONG_OR_EXPIRED_CODE));
+        } else {
+            tg_gui_window_login_failed(state,
+                                       TG_STR(MSG_W_ERROR_TRY_THE_CODE_AGAIN));
         }
     } else { /* TG_GUI_MODE_LOGIN_2FA */
         int rc;
@@ -8417,6 +8519,7 @@ static void tg_gui_window_login_key(tg_gui_state *state, UWORD code,
             tg_gui_window_login_finish(state);
         } else if (rc == TG_GUI_LOGIN_BAD_PASSWORD) {
             tg_gui_window_login_failed(state, TG_STR(MSG_W_WRONG_PASSWORD_TRY_AGAIN));
+            tg_gui_window_login_2fa_hint(state);
         } else {
             tg_gui_window_login_failed(state,
                                        TG_STR(MSG_W_ERROR_TRY_THE_PASSWORD_AGAIN));

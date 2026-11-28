@@ -207,6 +207,8 @@ static const char *tg_tui_text(const char *latin1)
  * login. Naive callers still see this as a plain non-zero failure.
  */
 #define TG_MTPROTO_CHECK_PASSWORD_INVALID 6
+/* auth.recoverPassword: the email code was wrong or has expired. */
+#define TG_MTPROTO_RECOVERY_CODE_INVALID 9
 /* auth.exportLoginToken / auth.importLoginToken outcomes
    (tg_mtproto_auth_qr_step): signed in, a token to show, or the datacenter
    to import the token on. TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED comes from it
@@ -8373,6 +8375,147 @@ int tg_mtproto_auth_check_password_file(const char *host,
     return rc;
 }
 
+/* One request of the login on its own connection (the key being signed
+   in): loaded, sent wrapped in initConnection, the session saved again.
+   0 = an answer in *result (an RPC error too, then tg_mtproto_query_fail
+   names it), 2 = none. */
+static int tg_mtproto_login_request(const char *host, const char *port,
+                                    const char *api_id_text,
+                                    const char *auth_file,
+                                    const char *dc_id_text,
+                                    const unsigned char *query,
+                                    unsigned long length,
+                                    tg_mtproto_rpc_result *result,
+                                    FILE *stream, const char *label)
+{
+    static unsigned char wrapped[760];
+    tg_mtproto_auth_context context;
+    tg_mtproto_tl_writer writer;
+    tg_mtproto_session_status session_status;
+    unsigned long api_id;
+    long dc_id;
+    int qrc;
+
+    if (stream == 0 || host == 0 || port == 0 || auth_file == 0 ||
+        tg_mtproto_parse_dc_id(dc_id_text, &dc_id) != 0 ||
+        tg_mtproto_parse_ulong_arg(api_id_text, &api_id) != 0) {
+        return 2;
+    }
+    if (tg_mtproto_load_auth_context(host, port, auth_file, &context, stream,
+                                     label) != 0) {
+        return 2;
+    }
+    context.session.dc_id = (unsigned long)dc_id;
+    if (tg_mtproto_build_initialized_query(&writer, wrapped, sizeof(wrapped),
+                                           api_id, query, length) != 0) {
+        tg_mtproto_close_auth_context(&context);
+        return 2;
+    }
+    qrc = tg_mtproto_send_encrypted_query_login(&context, wrapped,
+                                                writer.length, result, stream,
+                                                label);
+    tg_mtproto_close_auth_context(&context);
+    session_status = tg_mtproto_session_save_authorization(
+        auth_file, &context.session, context.auth_key, 1);
+    if (session_status != TG_MTPROTO_SESSION_OK) {
+        fprintf(stream, "%s: auth-file-save-failed (%s)\n", label,
+                tg_mtproto_session_status_name(session_status));
+        return 2;
+    }
+    if (qrc != 0) {
+        return 2;
+    }
+    if (result->result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        (void)tg_mtproto_print_rpc_error(label, result, stream);
+    }
+    return 0;
+}
+
+/* A forgotten cloud password, step one: Telegram mails a code to the
+   recovery email. 0 = sent, `pattern` says where ("j*****@g****.com"); 1 =
+   refused (tg_mtproto_query_fail: PASSWORD_RECOVERY_NA when the account
+   has no recovery email); 2 = failed. */
+static int tg_mtproto_auth_recovery_request(const char *host,
+                                            const char *port,
+                                            const char *api_id_text,
+                                            const char *auth_file,
+                                            const char *dc_id_text,
+                                            char *pattern,
+                                            unsigned long size,
+                                            FILE *stream)
+{
+    static const char label[] = "mtproto auth.requestPasswordRecovery";
+    unsigned char query[16];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+
+    if (pattern == 0 || size == 0UL) {
+        return 2;
+    }
+    pattern[0] = '\0';
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (tg_mtproto_build_auth_request_password_recovery(&writer) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_login_request(host, port, api_id_text, auth_file,
+                                 dc_id_text, query, writer.length, &result,
+                                 stream, label) != 0) {
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        return 1;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        !tg_mtproto_parse_password_recovery(result.result_constructor,
+                                            result.result_body,
+                                            result.result_body_length,
+                                            pattern, size)) {
+        return 2;
+    }
+    return 0;
+}
+
+/* Step two: the code from the email. Telegram removes the cloud password
+   and the login is done. 0 = signed in, TG_MTPROTO_RECOVERY_CODE_INVALID =
+   a wrong or expired code, 1 = refused otherwise, 2 = failed. */
+static int tg_mtproto_auth_recovery_finish(const char *host,
+                                           const char *port,
+                                           const char *api_id_text,
+                                           const char *auth_file,
+                                           const char *dc_id_text,
+                                           const char *code, FILE *stream)
+{
+    static const char label[] = "mtproto auth.recoverPassword";
+    unsigned char query[96];
+    tg_mtproto_rpc_result result;
+    tg_mtproto_tl_writer writer;
+
+    tg_mtproto_tl_writer_init(&writer, query, sizeof(query));
+    if (code == 0 || code[0] == '\0' ||
+        tg_mtproto_build_auth_recover_password(&writer, code) !=
+            TG_MTPROTO_TL_OK ||
+        tg_mtproto_login_request(host, port, api_id_text, auth_file,
+                                 dc_id_text, query, writer.length, &result,
+                                 stream, label) != 0) {
+        return 2;
+    }
+    if (result.result_constructor == TG_MTPROTO_RPC_ERROR_CONSTRUCTOR) {
+        return (strcmp(tg_mtproto_query_fail, "CODE_INVALID") == 0 ||
+                strcmp(tg_mtproto_query_fail, "PASSWORD_RECOVERY_EXPIRED") ==
+                    0 ||
+                strcmp(tg_mtproto_query_fail, "CODE_EMPTY") == 0)
+                   ? TG_MTPROTO_RECOVERY_CODE_INVALID : 1;
+    }
+    if (tg_mtproto_unpack_gzip_result(&result, stream, label) != 0 ||
+        !tg_mtproto_is_auth_authorization_constructor(
+            result.result_constructor) ||
+        result.result_constructor == 0x44747e9aUL) {
+        return 2;
+    }
+    tg_mtproto_future_token_note(result.result_body,
+                                 result.result_body_length);
+    return 0;
+}
+
 /* A login step failed: under the technical line the step printed, what
    happened and what to do, in words. */
 static void tg_mtproto_print_login_failure(FILE *stream)
@@ -8793,6 +8936,7 @@ int tg_mtproto_auth_login_wizard_file(const char *host,
 password_step:
     if (rc == TG_MTPROTO_SIGN_IN_PASSWORD_NEEDED) {
         fputs(TG_TSTR(MSG_T_2FA_PASSWORD_REQUIRED_CHECKING_IT_DERIVE), stream);
+        fputs(TG_TSTR(MSG_T_FORGOT_IT_TYPE_RECOVER), stream);
         for (;;) {
             if (tg_mtproto_prompt_hidden_line(TG_TSTR(MSG_T_2FA_PASSWORD_EMPTY_TO_ABORT),
                                               password, sizeof(password),
@@ -8806,6 +8950,57 @@ password_step:
                 tg_mtproto_secure_zero(password, sizeof(password));
                 fprintf(stream, "%s: aborted\n", label);
                 return 2;
+            }
+            if (strcmp(password, "/recover") == 0) {
+                /* A forgotten password: a code to the recovery email,
+                   then the code, and Telegram removes the password. */
+                char pattern[64];
+                char said[160];
+
+                tg_mtproto_secure_zero(password, sizeof(password));
+                tg_mtproto_query_fail[0] = '\0';
+                rc = tg_mtproto_auth_recovery_request(
+                    current_host, port, api_id, auth_file,
+                    current_dc_id_text, pattern, sizeof(pattern), stream);
+                if (rc != 0) {
+                    fputs(strcmp(tg_mtproto_query_fail,
+                                 "PASSWORD_RECOVERY_NA") == 0
+                              ? TG_TSTR(MSG_T_NO_RECOVERY_EMAIL)
+                              : TG_TSTR(MSG_T_COULD_NOT_SEND_RECOVERY_CODE),
+                          stream);
+                    continue;
+                }
+                tg_locale_format(said, sizeof(said),
+                                 TG_TSTR(MSG_T_RECOVERY_CODE_SENT_TO_S),
+                                 pattern);
+                fputs(said, stream);
+                for (;;) {
+                    if (tg_mtproto_prompt_line(
+                            TG_TSTR(MSG_T_RECOVERY_CODE_EMPTY_TO_GO_BACK),
+                            password, sizeof(password), 0, stream,
+                            label) != 0 ||
+                        password[0] == '\0') {
+                        rc = TG_MTPROTO_CHECK_PASSWORD_INVALID;
+                        break;
+                    }
+                    tg_mtproto_query_fail[0] = '\0';
+                    rc = tg_mtproto_auth_recovery_finish(
+                        current_host, port, api_id, auth_file,
+                        current_dc_id_text, password, stream);
+                    tg_mtproto_secure_zero(password, sizeof(password));
+                    if (rc != TG_MTPROTO_RECOVERY_CODE_INVALID) {
+                        break;
+                    }
+                    fputs(TG_TSTR(MSG_T_THAT_RECOVERY_CODE_WAS_NOT), stream);
+                }
+                if (rc == 0) {
+                    fputs(TG_TSTR(MSG_T_PASSWORD_REMOVED_SET_A_NEW), stream);
+                    break;
+                }
+                if (rc == TG_MTPROTO_CHECK_PASSWORD_INVALID) {
+                    continue; /* back to the password */
+                }
+                break;
             }
             tg_mtproto_query_fail[0] = '\0';
             rc = tg_mtproto_auth_check_password_text(current_host, port, api_id,
@@ -50111,6 +50306,72 @@ const char *tg_gui_session_login_phone(void)
                           tg_gui_session_state.login.phone);
     }
     return tg_gui_session_state.login.phone_shown;
+}
+
+int tg_gui_session_login_recovery_request(char *pattern, unsigned long size,
+                                          FILE *stream)
+{
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.login.active || pattern == 0 || size == 0UL ||
+        stream == 0) {
+        return TG_GUI_LOGIN_ERROR;
+    }
+    tg_gui_login_step_begin();
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(45UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    tg_gui_log("login: recovery code asked");
+    rc = tg_mtproto_auth_recovery_request(
+        tg_gui_session_state.login.host, "443",
+        tg_gui_session_state.login.api_id, tg_gui_session_state.login.key_file,
+        tg_gui_session_state.login.dc_id_text, pattern, size, quiet);
+    if (rc == 1 && strcmp(tg_mtproto_query_fail, "PASSWORD_RECOVERY_NA") == 0) {
+        tg_mtproto_close_quiet_stream(quiet, stream);
+        tg_net_set_connect_timeout_seconds(prev_timeout);
+        tg_gui_log("login: no recovery email");
+        return TG_GUI_LOGIN_NO_RECOVERY;
+    }
+    if (rc != 0) {
+        tg_gui_login_step_failed(quiet, stream);
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    return rc == 0 ? TG_GUI_LOGIN_OK : TG_GUI_LOGIN_ERROR;
+}
+
+int tg_gui_session_login_recover(const char *code, FILE *stream)
+{
+    unsigned long prev_timeout;
+    FILE *quiet;
+    int rc;
+
+    if (!tg_gui_session_state.login.active || code == 0 || code[0] == '\0' ||
+        stream == 0) {
+        return TG_GUI_LOGIN_ERROR;
+    }
+    tg_gui_login_step_begin();
+    prev_timeout = tg_net_connect_timeout_seconds();
+    tg_net_set_connect_timeout_seconds(45UL);
+    quiet = tg_mtproto_open_quiet_stream(stream);
+    tg_gui_log("login: recovery code sent back");
+    rc = tg_mtproto_auth_recovery_finish(
+        tg_gui_session_state.login.host, "443",
+        tg_gui_session_state.login.api_id, tg_gui_session_state.login.key_file,
+        tg_gui_session_state.login.dc_id_text, code, quiet);
+    if (rc != 0 && rc != TG_MTPROTO_RECOVERY_CODE_INVALID) {
+        tg_gui_login_step_failed(quiet, stream);
+    }
+    tg_mtproto_close_quiet_stream(quiet, stream);
+    tg_net_set_connect_timeout_seconds(prev_timeout);
+    if (rc == 0) {
+        tg_gui_log("login: signed in with the recovery code");
+        return TG_GUI_LOGIN_OK;
+    }
+    return rc == TG_MTPROTO_RECOVERY_CODE_INVALID ? TG_GUI_LOGIN_BAD_CODE
+                                                  : TG_GUI_LOGIN_ERROR;
 }
 
 int tg_gui_session_login_check_password(const char *password, FILE *stream)

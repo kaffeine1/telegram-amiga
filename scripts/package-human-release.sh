@@ -259,7 +259,11 @@ prima con l'app ufficiale su un telefono."
    says where it went. If nothing comes, wait until the code screen
    offers another way and press S to have it sent again, usually by SMS.
 3. If your account has a cloud password (2FA), type it. If not, press
-   Enter.
+   Enter. Forgotten it? In the window press TAB on that screen, in the
+   text client type /recover: Telegram mails a code to the account's
+   recovery email, and with that code you are signed in and the cloud
+   password is removed (set a new one in Telegram's settings). Without
+   a recovery email only Telegram's apps can reset it, after a week.
 4. The client saves the login in telegram-auth.bin, in this drawer, and
    does not ask again."
     login_steps_it="2. La finestra mostra un codice QR (il client testuale lo mostra in
@@ -276,7 +280,12 @@ prima con l'app ufficiale su un telefono."
    schermata del codice proponga un'altra via e premi S per fartelo
    rimandare, di solito via SMS.
 3. Se il tuo account ha una password cloud (2FA), scrivila. Se no, premi
-   Invio.
+   Invio. L'hai dimenticata? Nella finestra premi TAB in quella
+   schermata, nel client testuale scrivi /recover: Telegram manda un
+   codice all'email di recupero dell'account, e con quel codice entri e
+   la password cloud viene tolta (impostane una nuova nelle impostazioni
+   di Telegram). Senza email di recupero solo le app di Telegram la
+   azzerano, dopo una settimana.
 4. Il client salva l'accesso in telegram-auth.bin, in questo cassetto, e
    non te lo chiede piu'."
     shell_cmd="      Amigram --mtproto-start-file data/telegram-api.txt

@@ -1001,6 +1001,12 @@
 #define MSG_ST_YOUR_CONTACTS_CLICK_ONE_STR "Your contacts: click one, ESC goes back"
 #define MSG_ST_FIRST_D_OF_LU_CONTACTS 549
 #define MSG_ST_FIRST_D_OF_LU_CONTACTS_STR "First %d of %lu by name: click one, ESC back"
+#define MSG_ST_ASKING_FOR_A_RECOVERY_CODE 550
+#define MSG_ST_ASKING_FOR_A_RECOVERY_CODE_STR "Asking Telegram for a recovery code..."
+#define MSG_ST_CODE_SENT_TO_S 551
+#define MSG_ST_CODE_SENT_TO_S_STR "Code sent to %.22s: type it"
+#define MSG_ST_NO_RECOVERY_EMAIL 552
+#define MSG_ST_NO_RECOVERY_EMAIL_STR "This account has no recovery email"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1129,6 +1135,8 @@
 #define MSG_RQ_SCHEDULED_MESSAGE_STR "Scheduled message"
 #define MSG_RQ_SEND_NOW_DELETE_CANCEL 663
 #define MSG_RQ_SEND_NOW_DELETE_CANCEL_STR "Send now|Delete|Cancel"
+#define MSG_RQ_CLOUD_PASSWORD 664
+#define MSG_RQ_CLOUD_PASSWORD_STR "Cloud password"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1271,6 +1279,10 @@
 #define MSG_W_WHEN_IT_GOES_STR "When it goes: 21:30, 28/11 21:30 or 28/11/2026 21:30"
 #define MSG_W_TIME 963
 #define MSG_W_TIME_STR "Time"
+#define MSG_W_SIGNED_IN_THE_CLOUD_PASSWORD 964
+#define MSG_W_SIGNED_IN_THE_CLOUD_PASSWORD_STR "Signed in. Telegram removed the cloud password:\nset a new one in Telegram's settings."
+#define MSG_W_WRONG_OR_EXPIRED_CODE 965
+#define MSG_W_WRONG_OR_EXPIRED_CODE_STR "Wrong or expired code, try again"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1595,6 +1607,12 @@
 #define MSG_G_SEND_LATER_STR "Send later..."
 #define MSG_G_SCHEDULED 1461
 #define MSG_G_SCHEDULED_STR "Scheduled..."
+#define MSG_G_FORGOT_IT_TAB_MAILS_A 1462
+#define MSG_G_FORGOT_IT_TAB_MAILS_A_STR "Forgot it? TAB mails a code to the recovery email"
+#define MSG_G_THE_PASSWORD_GOES_TAB_BACK 1463
+#define MSG_G_THE_PASSWORD_GOES_TAB_BACK_STR "With the code the cloud password is removed. TAB: back"
+#define MSG_G_ONLY_TELEGRAM_S_APPS_RESET 1464
+#define MSG_G_ONLY_TELEGRAM_S_APPS_RESET_STR "Only Telegram's apps can reset it, after a week"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601
@@ -2823,8 +2841,22 @@
 #define MSG_T_NO_CONTACTS_STR "This account has no contacts.\n"
 #define MSG_T_FIRST_CONTACTS 2382
 #define MSG_T_FIRST_CONTACTS_STR "(The first %lu of %lu by name: /add name finds the others.)\n"
+#define MSG_T_FORGOT_IT_TYPE_RECOVER 2383
+#define MSG_T_FORGOT_IT_TYPE_RECOVER_STR "Forgot it? Type /recover for a code by email.\n"
+#define MSG_T_NO_RECOVERY_EMAIL 2384
+#define MSG_T_NO_RECOVERY_EMAIL_STR "This account has no recovery email: only Telegram's apps can reset the password, after a week.\n"
+#define MSG_T_COULD_NOT_SEND_RECOVERY_CODE 2385
+#define MSG_T_COULD_NOT_SEND_RECOVERY_CODE_STR "Telegram did not send a recovery code. Try again.\n"
+#define MSG_T_RECOVERY_CODE_SENT_TO_S 2386
+#define MSG_T_RECOVERY_CODE_SENT_TO_S_STR "A code was sent to %s.\n"
+#define MSG_T_RECOVERY_CODE_EMPTY_TO_GO_BACK 2387
+#define MSG_T_RECOVERY_CODE_EMPTY_TO_GO_BACK_STR "Recovery code, empty to go back: "
+#define MSG_T_THAT_RECOVERY_CODE_WAS_NOT 2388
+#define MSG_T_THAT_RECOVERY_CODE_WAS_NOT_STR "That code was not accepted, or has expired.\n"
+#define MSG_T_PASSWORD_REMOVED_SET_A_NEW 2389
+#define MSG_T_PASSWORD_REMOVED_SET_A_NEW_STR "Signed in. Telegram removed the cloud password: set a new one in Telegram's settings.\n"
 
 /* the highest id above: the host build sizes its table by it */
-#define TG_STRINGS_ID_MAX 2382
+#define TG_STRINGS_ID_MAX 2389
 
 #endif

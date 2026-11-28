@@ -973,6 +973,7 @@ void tg_gui_session_close(void);
 #define TG_GUI_LOGIN_CODE_EXPIRED 6 /* the code expired -- ask for a new one */
 #define TG_GUI_LOGIN_QR_WAIT      7 /* a QR code is on screen -- ask again soon */
 #define TG_GUI_LOGIN_SIGNED_IN    8 /* signed in without a code (a future auth token) */
+#define TG_GUI_LOGIN_NO_RECOVERY  9 /* the account has no recovery email */
 
 /* Stores the file paths the login + the eventual session need. Call once before
    entering a login screen (paths must outlive the session). */
@@ -995,6 +996,13 @@ int tg_gui_session_login_resend_code(FILE *stream);
 
 /* Submits the 2FA `password` (SRP auth.checkPassword). TG_GUI_LOGIN_OK = logged
    in (call activate); TG_GUI_LOGIN_BAD_PASSWORD = re-prompt. */
+/* A forgotten cloud password, on the password screen: a code mailed to
+   the recovery email (`pattern` says where: OK, NO_RECOVERY, ERROR), then
+   that code, which signs in and removes the password (OK, BAD_CODE for a
+   wrong or expired code, ERROR). */
+int tg_gui_session_login_recovery_request(char *pattern, unsigned long size,
+                                          FILE *stream);
+int tg_gui_session_login_recover(const char *code, FILE *stream);
 int tg_gui_session_login_check_password(const char *password, FILE *stream);
 
 /* Why the last step failed, in words (the GUI has no console: stdout is NIL:

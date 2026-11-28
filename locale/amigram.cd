@@ -1034,6 +1034,12 @@ MSG_ST_YOUR_CONTACTS_CLICK_ONE (548//)
 Your contacts: click one, ESC goes back
 MSG_ST_FIRST_D_OF_LU_CONTACTS (549//)
 First %d of %lu by name: click one, ESC back
+MSG_ST_ASKING_FOR_A_RECOVERY_CODE (550//)
+Asking Telegram for a recovery code...
+MSG_ST_CODE_SENT_TO_S (551//)
+Code sent to %.22s: type it
+MSG_ST_NO_RECOVERY_EMAIL (552//)
+This account has no recovery email
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1202,6 +1208,8 @@ MSG_RQ_SCHEDULED_MESSAGE (662//)
 Scheduled message
 MSG_RQ_SEND_NOW_DELETE_CANCEL (663//)
 Send now|Delete|Cancel
+MSG_RQ_CLOUD_PASSWORD (664//)
+Cloud password
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1418,6 +1426,11 @@ MSG_W_WHEN_IT_GOES (962//)
 When it goes: 21:30, 28/11 21:30 or 28/11/2026 21:30
 MSG_W_TIME (963//)
 Time
+MSG_W_SIGNED_IN_THE_CLOUD_PASSWORD (964//)
+Signed in. Telegram removed the cloud password:\n\
+set a new one in Telegram's settings.
+MSG_W_WRONG_OR_EXPIRED_CODE (965//)
+Wrong or expired code, try again
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -1744,6 +1757,12 @@ MSG_G_SEND_LATER (1460//)
 Send later...
 MSG_G_SCHEDULED (1461//)
 Scheduled...
+MSG_G_FORGOT_IT_TAB_MAILS_A (1462//)
+Forgot it? TAB mails a code to the recovery email
+MSG_G_THE_PASSWORD_GOES_TAB_BACK (1463//)
+With the code the cloud password is removed. TAB: back
+MSG_G_ONLY_TELEGRAM_S_APPS_RESET (1464//)
+Only Telegram's apps can reset it, after a week
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]
@@ -3002,3 +3021,17 @@ MSG_T_NO_CONTACTS (2381//)
 This account has no contacts.\n
 MSG_T_FIRST_CONTACTS (2382//)
 (The first %lu of %lu by name: /add name finds the others.)\n
+MSG_T_FORGOT_IT_TYPE_RECOVER (2383//)
+Forgot it? Type /recover for a code by email.\n
+MSG_T_NO_RECOVERY_EMAIL (2384//)
+This account has no recovery email: only Telegram's apps can reset the password, after a week.\n
+MSG_T_COULD_NOT_SEND_RECOVERY_CODE (2385//)
+Telegram did not send a recovery code. Try again.\n
+MSG_T_RECOVERY_CODE_SENT_TO_S (2386//)
+A code was sent to %s.\n
+MSG_T_RECOVERY_CODE_EMPTY_TO_GO_BACK (2387//)
+Recovery code, empty to go back: 
+MSG_T_THAT_RECOVERY_CODE_WAS_NOT (2388//)
+That code was not accepted, or has expired.\n
+MSG_T_PASSWORD_REMOVED_SET_A_NEW (2389//)
+Signed in. Telegram removed the cloud password: set a new one in Telegram's settings.\n

@@ -1512,6 +1512,15 @@ La rubrica: clic su un nome, ESC torna
 MSG_ST_FIRST_D_OF_LU_CONTACTS
 Primi %d di %lu per nome: clic, ESC torna
 ; First %d of %lu by name: click one, ESC back
+MSG_ST_ASKING_FOR_A_RECOVERY_CODE
+Chiedo a Telegram un codice di recupero...
+; Asking Telegram for a recovery code...
+MSG_ST_CODE_SENT_TO_S
+Codice a %.22s: scrivilo qui
+; Code sent to %.22s: type it
+MSG_ST_NO_RECOVERY_EMAIL
+Questo account non ha un'email di recupero
+; This account has no recovery email
 MSG_RQ_OK
 OK
 ; OK
@@ -1732,6 +1741,9 @@ Messaggio programmato
 MSG_RQ_SEND_NOW_DELETE_CANCEL
 Invia ora|Elimina|Annulla
 ; Send now|Delete|Cancel
+MSG_RQ_CLOUD_PASSWORD
+Password cloud
+; Cloud password
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -2003,6 +2015,12 @@ Quando parte: 21:30, 28/11 21:30 o 28/11/2026 21:30
 MSG_W_TIME
 Ora
 ; Time
+MSG_W_SIGNED_IN_THE_CLOUD_PASSWORD
+Accesso fatto. Telegram ha tolto la password cloud:\n\
+impostane una nuova nelle impostazioni di Telegram.
+MSG_W_WRONG_OR_EXPIRED_CODE
+Codice sbagliato o scaduto, riprova
+; Wrong or expired code, try again
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -2489,6 +2507,15 @@ Invia più tardi...
 MSG_G_SCHEDULED
 Programmati...
 ; Scheduled...
+MSG_G_FORGOT_IT_TAB_MAILS_A
+Dimenticata? TAB manda un codice all'email di recupero
+; Forgot it? TAB mails a code to the recovery email
+MSG_G_THE_PASSWORD_GOES_TAB_BACK
+Col codice la password cloud viene tolta. TAB: indietro
+; With the code the cloud password is removed. TAB: back
+MSG_G_ONLY_TELEGRAM_S_APPS_RESET
+Solo le app di Telegram la azzerano, dopo una settimana
+; Only Telegram's apps can reset it, after a week
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
@@ -4256,3 +4283,18 @@ MSG_T_NO_CONTACTS
 Questo account non ha contatti.\n
 MSG_T_FIRST_CONTACTS
 (I primi %lu di %lu per nome: /add nome trova gli altri.)\n
+MSG_T_FORGOT_IT_TYPE_RECOVER
+Dimenticata? Scrivi /recover per un codice via email.\n
+MSG_T_NO_RECOVERY_EMAIL
+Questo account non ha un'email di recupero: solo le app di Telegram azzerano la password, dopo una settimana.\n
+MSG_T_COULD_NOT_SEND_RECOVERY_CODE
+Telegram non ha mandato il codice di recupero. Riprova.\n
+MSG_T_RECOVERY_CODE_SENT_TO_S
+Un codice è stato mandato a %s.\n
+MSG_T_RECOVERY_CODE_EMPTY_TO_GO_BACK
+Codice di recupero, vuoto per tornare: 
+; Recovery code, empty to go back: 
+MSG_T_THAT_RECOVERY_CODE_WAS_NOT
+Quel codice non è stato accettato, o è scaduto.\n
+MSG_T_PASSWORD_REMOVED_SET_A_NEW
+Accesso fatto. Telegram ha tolto la password cloud: impostane una nuova nelle impostazioni di Telegram.\n

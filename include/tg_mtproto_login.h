@@ -2278,6 +2278,20 @@ tg_mtproto_tl_status tg_mtproto_read_update_read_history_outbox(
     unsigned long *out_max_id);
 
 int tg_mtproto_is_auth_authorization_constructor(unsigned long constructor);
+/* A forgotten cloud password, while logging in: a code to the recovery
+   email (auth.requestPasswordRecovery#d897bc66, answered with
+   auth.passwordRecovery#137948a5 email_pattern), and that code taken
+   (auth.recoverPassword#37096c70, flags 0: the password is removed and
+   the login done, answered with an auth.Authorization). The reader puts
+   the pattern ("j*****@g****.com") in `out`: 1 = it was that answer. */
+tg_mtproto_tl_status tg_mtproto_build_auth_request_password_recovery(
+    tg_mtproto_tl_writer *writer);
+int tg_mtproto_parse_password_recovery(unsigned long constructor,
+                                       const unsigned char *body,
+                                       unsigned long body_length, char *out,
+                                       unsigned long size);
+tg_mtproto_tl_status tg_mtproto_build_auth_recover_password(
+    tg_mtproto_tl_writer *writer, const char *code);
 
 /* QR login (auth.exportLoginToken / auth.importLoginToken). A token at most
    144 bytes long keeps the link inside a version 10 QR code. */

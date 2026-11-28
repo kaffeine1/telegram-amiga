@@ -629,6 +629,8 @@ typedef struct tg_gui_state {
     char typing[TG_GUI_NAME_MAX]; /* "...sta scrivendo" for the open chat; "" = none */
     int mode;          /* TG_GUI_MODE_* (chat vs a first-login screen) */
     int input_masked;  /* render `input` as '*' (the 2FA password field) */
+    int login_recovery; /* the password screen takes the email's recovery
+                           code instead of the password */
     char login_qr[256]; /* the link the login QR code carries, "" = none yet */
     /* How much taller than wide the screen's pixels are, times ten: 20 on a
        hires screen without interlace (PAL 640x256), 10 or 0 = square. The
