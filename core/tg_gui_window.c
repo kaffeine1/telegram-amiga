@@ -13319,6 +13319,11 @@ static void tg_gui_window_contacts(tg_gui_state *state,
         state->forward_pick_active) {
         return;
     }
+    if (state->archive_view) {
+        /* the address book is no part of the Archive: out of it first, or
+           a contact opened from here would leave the Archive on show */
+        tg_gui_session_set_archive_view(0);
+    }
     tg_gui_window_copy(state->status, sizeof(state->status),
                        TG_STR(MSG_ST_READING_YOUR_CONTACTS));
     tg_gui_window_paint(state, backend);
@@ -13336,6 +13341,9 @@ static void tg_gui_window_contacts(tg_gui_state *state,
     state->search_query[0] = '\0';
     state->search_caret = 0;
     tg_gui_window_load_search_results(state);
+    for (n = 0; n < state->chat_count; ++n) {
+        state->chats[n].contact_row = 1; /* their own menu */
+    }
     if (tg_gui_session_contacts_total() > (unsigned long)state->chat_count) {
         /* a big address book: the first ones by name, and how many */
         char line[96];
@@ -13347,6 +13355,66 @@ static void tg_gui_window_contacts(tg_gui_state *state,
     } else {
         tg_gui_window_copy(state->status, sizeof(state->status),
                            TG_STR(MSG_ST_YOUR_CONTACTS_CLICK_ONE));
+    }
+    tg_gui_window_paint(state, backend);
+}
+
+/* A row of the address book, its menu: Open chat opens it as a click
+   does; Contact... and Block... first put the person in the chat cache
+   (which draws the chat list again: the address book's rows come back),
+   then work as on a chat's row. After Contact... the address book is read
+   again, the status line kept. */
+static void tg_gui_window_contact_row(tg_gui_state *state,
+                                      tg_gui_amiga_ctx *ctx, int ci, int it,
+                                      tg_gui_backend *backend)
+{
+    char said[sizeof(((tg_gui_state *)0)->status)];
+    unsigned long idx = 0UL;
+    int k;
+
+    if (ci < 0 || ci >= state->chat_count || !state->in_search) {
+        return;
+    }
+    if (it == TG_GUI_CTX_CONTACT_OPEN) {
+        state->in_search = 0;
+        state->search_active = 0;
+        state->msg_search_active = 0;
+        state->search_query[0] = '\0';
+        tg_gui_chat_touched = 1;
+        (void)tg_gui_session_search_open_result(ci, stdout);
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_LIVE_F1_F10_CHATS_AMIGA));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    if (tg_gui_session_search_cache_result(ci, &idx, stdout) != 0 ||
+        idx == 0UL) {
+        tg_gui_window_copy(state->status, sizeof(state->status),
+                           TG_STR(MSG_ST_COULD_NOT_REACH_TELEGRAM));
+        tg_gui_window_paint(state, backend);
+        return;
+    }
+    /* the chat list was drawn over the address book: its rows back */
+    tg_gui_window_load_search_results(state);
+    for (k = 0; k < state->chat_count; ++k) {
+        state->chats[k].contact_row = 1;
+    }
+    if (ci >= state->chat_count) {
+        return;
+    }
+    state->chats[ci].index = idx; /* the chat's number, for the moment */
+    state->in_search = 0;
+    if (it == TG_GUI_CTX_CHAT_CONTACT) {
+        tg_gui_window_contact_chat(state, ctx, ci, backend);
+    } else {
+        tg_gui_window_block_chat(state, ctx->window, ci, backend);
+    }
+    state->in_search = 1;
+    state->chats[ci].index = (unsigned long)(ci + 1);
+    if (it == TG_GUI_CTX_CHAT_CONTACT) {
+        memcpy(said, state->status, sizeof(said));
+        tg_gui_window_contacts(state, backend);
+        memcpy(state->status, said, sizeof(said));
     }
     tg_gui_window_paint(state, backend);
 }
@@ -20447,7 +20515,8 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                               ctx.line_h, hx, hy);
 
                     if (hit >= 0 && hit < state->chat_count &&
-                        !state->in_search && !state->in_filter &&
+                        (!state->in_search || state->chats[hit].contact_row) &&
+                        !state->in_filter &&
                         !tg_gui_topics_listed(state) &&
                         state->chats[hit].index !=
                             TG_GUI_ARCHIVE_MORE_INDEX) {
@@ -20462,13 +20531,16 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->ctx_topic = 0UL;
                         state->ctx_chat = hit + 1;
                         state->ctx_notify_choice = value.choice;
+                        /* a contact's row holds a place in the address book,
+                           not a chat's number: nothing to ask about it */
                         state->ctx_muted =
+                            !chat->contact_row &&
                             tg_gui_session_chat_muted(chat->index,
                                                       stdout) == 1;
                         {
                             /* what the session knows: Telegram is asked
                                only when Block is chosen */
-                            int known = chat->is_group
+                            int known = (chat->is_group || chat->contact_row)
                                 ? -1
                                 : tg_gui_session_user_blocked(chat->index,
                                                               0, stdout);
@@ -20664,6 +20736,13 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         /* Back to chats, in the Archive's row menu. */
                         tg_gui_window_show_archive(state, &backend,
                                                    !state->archive_view);
+                    } else if (ci >= 0 && ci < state->chat_count &&
+                               state->chats[ci].contact_row &&
+                               (it == TG_GUI_CTX_CONTACT_OPEN ||
+                                it == TG_GUI_CTX_CHAT_CONTACT ||
+                                it == TG_GUI_CTX_CHAT_BLOCK)) {
+                        tg_gui_window_contact_row(state, &ctx, ci, it,
+                                                  &backend);
                     } else if (ci >= 0 && ci < state->chat_count &&
                                it == TG_GUI_CTX_CHAT_LEAVE) {
                         tg_gui_window_leave_chat(state, ctx.window, ci,
@@ -21824,9 +21903,11 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->drag_press_y = hy;
                         state->drag_cur_y = hy;
                     } else if (hit == TG_GUI_HIT_ARCHIVE) {
-                        /* The "Archived chats" band: the Archive, as
-                           Amiga+A opens it. */
-                        tg_gui_window_show_archive(state, &backend, 1);
+                        /* The band: "Archived chats" opens the Archive, as
+                           Amiga+A does; over the Archive, "Back to chats"
+                           leads back. */
+                        tg_gui_window_show_archive(state, &backend,
+                                                   !state->archive_view);
                         picked_secs = msg_secs; /* swallow the second click */
                         picked_micros = msg_micros;
                     } else if (hit == TG_GUI_HIT_SEARCH &&

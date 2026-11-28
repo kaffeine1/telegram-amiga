@@ -1268,6 +1268,12 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
             tg_gui_driver_copy(display, sizeof(display), rows[i].name);
         }
         tg_gui_driver_copy_latin1(chat->name, sizeof(chat->name), display);
+        if (chat->name[0] == '\0' && rows[i].is_user &&
+            rows[i].index != TG_GUI_ARCHIVE_MORE_INDEX) {
+            /* a person with no name and no username: an account deleted */
+            tg_gui_driver_copy(chat->name, sizeof(chat->name),
+                               TG_STR(MSG_G_DELETED_ACCOUNT));
+        }
         tg_gui_driver_initials(chat->initials, sizeof(chat->initials),
                                chat->name);
         if (rows[i].index == TG_GUI_ARCHIVE_MORE_INDEX) {
@@ -3129,6 +3135,22 @@ int tg_gui_driver_self_test(void)
     }
     gui.prepend_at = -1;
     gui.prepend_allow_drop = 0;
+
+    /* A person with no name left (a deleted account): named so, not "?". */
+    {
+        tg_chat_list_row one;
+
+        memset(&one, 0, sizeof(one));
+        one.index = 5UL;
+        one.is_user = 1;
+        one.peer_id_lo = 0x500UL;
+        driver.on_chat_list_changed(driver.ctx, &one, 1);
+        if (state.chat_count != 1 ||
+            strcmp(state.chats[0].name, TG_STR(MSG_G_DELETED_ACCOUNT)) != 0) {
+            puts("gui driver self-test: a nameless person shows no name");
+            return 2;
+        }
+    }
 
     /* Chat-list projection: rows -> tg_gui_state.chats (the sidebar). */
     {

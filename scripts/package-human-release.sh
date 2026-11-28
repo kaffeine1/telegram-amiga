@@ -684,12 +684,16 @@ Chats
   Archived chats (Amiga+A) shows, and so does a click on the line
   "Archived chats" at the top of the list. That line says how many
   archived chats have something unread, in grey while they are all
-  muted. ESC goes back to the chats. A large Archive shows its most
-  recent chats and ends with "More archived chats...": a click lists
-  the rest, a click on one opens it, ESC goes back to the Archive.
+  muted. In the Archive the line at the top reads "Back to chats": a
+  click on it, or ESC, goes back to the chats. A large Archive shows its
+  most recent chats and ends with "More archived chats...": a click
+  lists the rest, a click on one opens it, ESC goes back to the Archive.
 - Chats > Contacts... lists your address book in the sidebar, by name;
   a click opens the chat with that person, even one you never wrote to,
-  and ESC goes back to the chats. A big address book shows its first
+  and ESC goes back to the chats. A right click on a name gives its own
+  menu: Open chat, Contact... (rename or remove) and Block.... A contact
+  whose account was deleted reads "Deleted account". A big address book
+  shows its first
   names (the status line says how many of how many): Find in all chats
   (Amiga+G) finds the others. The text client has /contacts: type the
   number of a name to open the chat.
@@ -1111,13 +1115,17 @@ Chat
 - Una chat archiviata lascia la lista per l'Archivio, che si apre da
   Chats > Archived chats (Amiga+A) o con un clic sulla riga "Archived
   chats" in cima alla lista. Quella riga dice quante chat archiviate
-  hanno qualcosa da leggere, in grigio se sono tutte silenziate. ESC
-  torna alle chat. Un Archivio grande mostra le chat piu' recenti e
+  hanno qualcosa da leggere, in grigio se sono tutte silenziate.
+  Nell'Archivio la riga in cima dice "Torna alle chat": un clic, o ESC,
+  riporta alle chat. Un Archivio grande mostra le chat piu' recenti e
   finisce con "More archived chats...": un clic elenca le altre, un clic
   su una la apre, ESC torna all'Archivio.
 - Chat > Rubrica... mette la tua rubrica nella colonna di sinistra, per
   nome; un clic apre la chat con quella persona, anche se non le hai
-  mai scritto, e ESC torna alle chat. Una rubrica grande mostra i primi
+  mai scritto, e ESC torna alle chat. Un clic destro su un nome da' il
+  suo menu: Apri la chat, Contatto... (rinomina o togli) e Blocca.... Un
+  contatto il cui account e' stato eliminato si legge "Account
+  eliminato". Una rubrica grande mostra i primi
   nomi (la riga di stato dice quanti su quanti): Cerca in tutte le chat
   (Amiga+G) trova gli altri. Il client testuale ha /contacts: scrivi il
   numero di un nome per aprirne la chat.

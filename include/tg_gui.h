@@ -317,6 +317,7 @@ typedef struct tg_gui_chat {
     int is_group;             /* basic groups and channels start quiet */
     int flash;                /* a notification landed since last opened: blink the badge */
     int pinned;               /* pinned on Telegram: first in the list, pin mark */
+    int contact_row;          /* a row of the address book (Contacts...) */
     int unread_mark;          /* marked as unread: an empty badge when unread is 0 */
     int draft;                /* preview is this chat's draft: "Draft:" before it */
     int muted;                /* muted on Telegram: a dim badge, or the mute mark */
@@ -1242,7 +1243,8 @@ int tg_gui_context_menu_measure(const tg_gui_state *state,
 #define TG_GUI_CTX_TRANSLATE 24 /* Translate: someone else's text */
 #define TG_GUI_CTX_SEND_LATER 25 /* the paperclip's menu: Send later... */
 #define TG_GUI_CTX_SCHEDULED 26
-#define TG_GUI_CTX_CHAT_CONTACT 27 /* Contact...: a person's row */ /* ...and Scheduled...: the chat's messages
+#define TG_GUI_CTX_CHAT_CONTACT 27 /* Contact...: a person's row */
+#define TG_GUI_CTX_CONTACT_OPEN 28 /* Open chat: a row of the address book */ /* ...and Scheduled...: the chat's messages
                                    waiting for their time take the menu */
 #define TG_GUI_CTX_CHAT_SOUND 32
 #define TG_GUI_CTX_CHAT_DEFAULT_SOUND 33

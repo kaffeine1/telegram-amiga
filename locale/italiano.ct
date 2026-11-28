@@ -2624,6 +2624,12 @@ MSG_SETV_NO_SCRIPT
 MSG_SET_INSTALL_UPDATES_BY_THEMSELVES
 Installa da solo gli aggiornamenti
 ; Install updates by themselves
+MSG_G_DELETED_ACCOUNT
+Account eliminato
+; Deleted account
+MSG_G_OPEN_CHAT
+Apri la chat
+; Open chat
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]

@@ -1685,6 +1685,10 @@
 #define MSG_SETV_NO_SCRIPT_STR "(none)"
 #define MSG_SET_INSTALL_UPDATES_BY_THEMSELVES 1468
 #define MSG_SET_INSTALL_UPDATES_BY_THEMSELVES_STR "Install updates by themselves"
+#define MSG_G_DELETED_ACCOUNT 1469
+#define MSG_G_DELETED_ACCOUNT_STR "Deleted account"
+#define MSG_G_OPEN_CHAT 1470
+#define MSG_G_OPEN_CHAT_STR "Open chat"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

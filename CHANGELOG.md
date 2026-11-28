@@ -137,6 +137,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- The address book and the Archive, after a test on a Vampire: Contacts...
+  opened from the Archive left the Archive on, so a contact clicked
+  there opened a chat of the main list while the Archive stayed in view;
+  it now leaves the Archive first. A person with no name and no
+  username, an account deleted, reads "Deleted account" in the list and
+  in the address book instead of an empty row with a "?". A right click
+  on a row of the address book gives it a menu of its own: Open chat,
+  Contact... and Block.... Over the Archive the band at the top reads
+  "Back to chats" and a click on it goes back, as ESC does.
 - The hints in the chat list's search field ("Type a name...", "Find
   in this chat...", the Archive's) are drawn at their own length, with
   ".." where the field has no room: they used the English texts'

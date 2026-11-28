@@ -3508,13 +3508,14 @@ int tg_gui_chat_badge_text_pen(const tg_gui_chat *chat)
                                                       : TG_GUI_PEN_BADGE_TEXT;
 }
 
-/* Height of the "Archived chats" band under the search box, 0 when it
-   is not shown: only over the main list itself (not the Archive, a search,
-   the name filter, a forum's topics or the forward picker). nav_lh is the
-   navigation line height the list is laid out with. */
+/* Height of the band under the search box, 0 when it is not shown: over
+   the main list, "Archived chats", when the Archive holds any; over the
+   Archive, always, the way back to the chats. Not over a search, the name
+   filter, a forum's topics or the forward picker. nav_lh is the navigation
+   line height the list is laid out with. */
 static int tg_gui_archive_band_h(const tg_gui_state *state, int nav_lh)
 {
-    if (state == 0 || !state->archive_band || state->archive_view ||
+    if (state == 0 || (!state->archive_band && !state->archive_view) ||
         state->in_search || state->in_filter || state->topic_view ||
         state->forward_pick_active || state->mode != TG_GUI_MODE_CHAT) {
         return 0;
@@ -3531,19 +3532,21 @@ static int tg_gui_sidebar_list_top(const tg_gui_state *state, int nav_lh)
 
 /* The band: "Archived chats" in the dim pen and, when something in the
    Archive is unread, the number of such chats in a pill, grey while all
-   of them are muted (archived chats mostly are). */
+   of them are muted (archived chats mostly are). Over the Archive itself
+   it reads "Back to chats", without a number. */
 static void tg_gui_paint_archive_band(const tg_gui_state *state,
                                       tg_gui_backend *backend, int y,
                                       int band_h, int width, int lh)
 {
-    const char *label = TG_STR(MSG_MENU_ARCHIVE);
+    const char *label = state->archive_view ? TG_STR(MSG_G_BACK_TO_CHATS)
+                                            : TG_STR(MSG_MENU_ARCHIVE);
     char badge[8];
     int badge_w = 0;
     int base = tg_gui_navigation_baseline(backend, y, band_h);
 
     backend->fill_rect(backend, TG_GUI_PEN_SURFACE,
                        tg_gui_make_rect(0, y, width, band_h));
-    if (state->archive_unread > 0UL) {
+    if (!state->archive_view && state->archive_unread > 0UL) {
         int badge_h = lh + 2;
         int badge_x;
         int badge_top = y + (band_h - badge_h) / 2;
@@ -8459,6 +8462,17 @@ static int tg_gui_context_items(const tg_gui_state *state, const char **labels,
         ids[n++] = TG_GUI_CTX_TOPIC_CLOSE;
         return n;
     }
+    if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count &&
+        state->chats[state->ctx_chat - 1].contact_row) {
+        /* A row of the address book: the person, not a chat of the list. */
+        labels[n] = TG_STR(MSG_G_OPEN_CHAT);
+        ids[n++] = TG_GUI_CTX_CONTACT_OPEN;
+        labels[n] = TG_STR(MSG_G_CONTACT);
+        ids[n++] = TG_GUI_CTX_CHAT_CONTACT;
+        labels[n] = TG_STR(MSG_G_BLOCK);
+        ids[n++] = TG_GUI_CTX_CHAT_BLOCK;
+        return n;
+    }
     if (state->ctx_chat > 0 && state->ctx_chat <= state->chat_count) {
         /* Pins belong to the main list, Saved Messages included; the
            Archive offers the way back instead. */
@@ -11743,15 +11757,21 @@ static int tg_gui_archive_band_self_test(void)
                                  2 * nav + 16 + 2 * (2 * nav + 12)) == 2;
     state->drag_src = -1;
     state->drag_active = 0;
-    /* over the Archive itself, or a filtered list: no band */
+    /* over the Archive itself the band leads back to the chats, even with
+       no chat left archived; over a filtered list there is no band */
     state->archive_view = 1;
+    state->archive_band = 0;
+    record.watch_text[3] = TG_STR(MSG_G_BACK_TO_CHATS);
     for (k = 0; k < 5; ++k) {
         record.watch_hits[k] = 0;
     }
     tg_gui_paint(state, &backend);
-    ok = ok && record.watch_hits[0] == 0 &&
-         tg_gui_hit_test(state, 640, 480, 18, 20, nav + 10) == 0;
+    ok = ok && record.watch_hits[0] == 0 && record.watch_hits[3] == 1 &&
+         tg_gui_hit_test(state, 640, 480, 18, 20, nav + 10) ==
+             TG_GUI_HIT_ARCHIVE;
     state->archive_view = 0;
+    state->archive_band = 1;
+    record.watch_text[3] = 0;
     state->in_filter = 1;
     for (k = 0; k < 5; ++k) {
         record.watch_hits[k] = 0;
@@ -12043,6 +12063,17 @@ static int tg_gui_notify_menu_self_test(void)
     }
     state->ctx_can_block = 0;
     state->ctx_blocked = 0;
+    /* A row of the address book has a menu of its own: the chat opened,
+       the contact renamed or taken out, the person blocked. */
+    state->chats[0].contact_row = 1;
+    if (tg_gui_context_items(state, labels, ids) != 3 ||
+        ids[0] != TG_GUI_CTX_CONTACT_OPEN ||
+        strcmp(labels[0], TG_STR(MSG_G_OPEN_CHAT)) != 0 ||
+        ids[1] != TG_GUI_CTX_CHAT_CONTACT || ids[2] != TG_GUI_CTX_CHAT_BLOCK) {
+        puts("gui self-test: a contact's row has not its own menu");
+        return 2;
+    }
+    state->chats[0].contact_row = 0;
     /* In the Archive the menu leads with the way back, and has no pin;
        its last line, there only, leaves the Archive. */
     state->archive_view = 1;

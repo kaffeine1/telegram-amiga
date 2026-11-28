@@ -1837,6 +1837,10 @@ MSG_SETV_NO_SCRIPT (1467//)
 (none)
 MSG_SET_INSTALL_UPDATES_BY_THEMSELVES (1468//)
 Install updates by themselves
+MSG_G_DELETED_ACCOUNT (1469//)
+Deleted account
+MSG_G_OPEN_CHAT (1470//)
+Open chat
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

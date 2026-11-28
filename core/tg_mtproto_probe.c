@@ -37119,6 +37119,11 @@ const char *tg_gui_session_search_name(int i)
         static char latin1_name[TG_GUI_NAME_MAX];
         const char *raw = (e->title[0] != '\0') ? e->title : e->username;
 
+        if (raw[0] == '\0' &&
+            e->peer_constructor == TG_MTPROTO_PEER_USER_CONSTRUCTOR) {
+            /* no name and no username: an account deleted, not a "?" */
+            return TG_STR(MSG_G_DELETED_ACCOUNT);
+        }
         /* the wire title is UTF-8; the sidebar renders Latin-1 (bug: "o-uml"
            showed as two chars). Convert like the chat-list path does. */
         tg_mtproto_utf8_to_latin1_name(latin1_name, sizeof(latin1_name), raw);
