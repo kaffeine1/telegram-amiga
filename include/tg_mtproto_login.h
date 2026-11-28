@@ -417,6 +417,10 @@ void tg_mtproto_avatar_store_load(void);
 int tg_mtproto_avatar_thumb_lookup(unsigned long id_hi, unsigned long id_lo,
                                    const unsigned char **thumb,
                                    unsigned long *len);
+/* The chats whose thumbs the store keeps when it is full (the main list's,
+   up to half the store): cleared, then named one by one. */
+void tg_mtproto_avatar_keep_clear(void);
+void tg_mtproto_avatar_keep(unsigned long id_hi, unsigned long id_lo);
 
 #define TG_MTPROTO_USER_STATUS_UNKNOWN 0 /* the user came without one */
 #define TG_MTPROTO_USER_STATUS_ONLINE 1     /* until status_time */

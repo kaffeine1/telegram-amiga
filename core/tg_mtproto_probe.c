@@ -32441,7 +32441,15 @@ static void tg_gui_session_reload_chats(void)
                                      TG_GUI_HIDDEN_FILE, 0UL, rows,
                                      TG_CHAT_LIST_MAX, &missing, 0, 0);
     if (!tg_gui_archive_view) {
+        int k;
+
         tg_gui_saved_messages_row(rows, &count, TG_CHAT_LIST_MAX);
+        /* the main list's thumbs stay while the address book or the
+           Archive come and go */
+        tg_mtproto_avatar_keep_clear();
+        for (k = 0; k < count; ++k) {
+            tg_mtproto_avatar_keep(rows[k].peer_id_hi, rows[k].peer_id_lo);
+        }
     }
     tg_gui_pins_apply(rows, count);
     if (tg_gui_archive_view && tg_gui_archive_partial) {

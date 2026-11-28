@@ -6888,6 +6888,42 @@ unsigned long tg_mtproto_avatar_store_generation(void)
     return tg_avatar_store_gen;
 }
 
+/* The chats of the main list keep their thumbs. The address book or the
+   Archive read in between (a hundred people and more, each with a thumb)
+   pushed every one of them out of the store, and back in the list their
+   avatars stayed initials (seen on a Vampire). Up to half the store is
+   kept so; the other half takes what comes and goes. */
+#define TG_AVATAR_KEEP_MAX (TG_AVATAR_STORE_MAX / 2)
+static unsigned long tg_avatar_keep_hi[TG_AVATAR_KEEP_MAX];
+static unsigned long tg_avatar_keep_lo[TG_AVATAR_KEEP_MAX];
+static unsigned long tg_avatar_keep_n = 0UL;
+
+void tg_mtproto_avatar_keep_clear(void)
+{
+    tg_avatar_keep_n = 0UL;
+}
+
+void tg_mtproto_avatar_keep(unsigned long id_hi, unsigned long id_lo)
+{
+    if (tg_avatar_keep_n < TG_AVATAR_KEEP_MAX && (id_hi != 0UL || id_lo != 0UL)) {
+        tg_avatar_keep_hi[tg_avatar_keep_n] = id_hi;
+        tg_avatar_keep_lo[tg_avatar_keep_n] = id_lo;
+        ++tg_avatar_keep_n;
+    }
+}
+
+static int tg_avatar_kept(unsigned long id_hi, unsigned long id_lo)
+{
+    unsigned long i;
+
+    for (i = 0UL; i < tg_avatar_keep_n; ++i) {
+        if (tg_avatar_keep_hi[i] == id_hi && tg_avatar_keep_lo[i] == id_lo) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void tg_avatar_store_put(unsigned long id_hi, unsigned long id_lo,
                                 const unsigned char *thumb, unsigned long len,
                                 unsigned long photo_id_hi,
@@ -6912,8 +6948,15 @@ static void tg_avatar_store_put(unsigned long id_hi, unsigned long id_lo,
         }
     }
     if (slot == 0) {
-        slot = &tg_avatar_store[tg_avatar_store_next % TG_AVATAR_STORE_MAX];
-        ++tg_avatar_store_next;
+        /* the oldest one out, passing over the main list's: they are at
+           most half the store, so one of the others is always there */
+        for (i = 0UL; i < TG_AVATAR_STORE_MAX; ++i) {
+            slot = &tg_avatar_store[tg_avatar_store_next % TG_AVATAR_STORE_MAX];
+            ++tg_avatar_store_next;
+            if (!tg_avatar_kept(slot->id_hi, slot->id_lo)) {
+                break;
+            }
+        }
     }
     ++tg_avatar_store_gen;
     slot->id_hi = id_hi;
@@ -22308,6 +22351,34 @@ int tg_mtproto_login_self_test(void)
         strcmp(user.first_name, "Test") != 0 ||
         strcmp(user.username, "tester") != 0) {
         return 2;
+    }
+    /* The main list's chats keep their thumbs while twice the store comes
+       and goes (the address book read, the Archive); one not kept goes. */
+    {
+        static const unsigned char thumb[4] = { 1U, 2U, 3U, 4U };
+        const unsigned char *got = 0;
+        unsigned long got_len = 0UL;
+        unsigned long i;
+        int kept;
+        int gone;
+
+        tg_mtproto_avatar_keep_clear();
+        tg_avatar_store_put(0UL, 0x70000001UL, thumb, 4UL, 0UL, 0UL, 0UL);
+        tg_avatar_store_put(0UL, 0x70000002UL, thumb, 4UL, 0UL, 0UL, 0UL);
+        tg_mtproto_avatar_keep(0UL, 0x70000001UL);
+        for (i = 0UL; i < 2UL * TG_AVATAR_STORE_MAX; ++i) {
+            tg_avatar_store_put(0UL, 0x71000000UL + i, thumb, 4UL, 0UL, 0UL,
+                                0UL);
+        }
+        kept = tg_mtproto_avatar_thumb_lookup(0UL, 0x70000001UL, &got,
+                                              &got_len) &&
+               got_len == 4UL;
+        gone = !tg_mtproto_avatar_thumb_lookup(0UL, 0x70000002UL, &got,
+                                               &got_len);
+        tg_mtproto_avatar_keep_clear();
+        if (!kept || !gone) {
+            return 2;
+        }
     }
 
     return 0;

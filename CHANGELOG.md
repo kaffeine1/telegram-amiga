@@ -137,6 +137,11 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- The avatars of the chat list came back as initials after the address
+  book or the Archive had been open (seen on a Vampire): the thumbs kept
+  in memory, 128 on a 68k, were pushed out one by one by the hundred and
+  more people those lists bring. The main list's chats now keep theirs,
+  up to half the store.
 - The address book and the Archive, after a test on a Vampire: Contacts...
   opened from the Archive left the Archive on, so a contact clicked
   there opened a chat of the main list while the Archive stayed in view;
