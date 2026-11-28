@@ -137,11 +137,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
-- The hints in the chat list's search field ("Type a name, ENTER...",
-  "Find in this chat...", the Archive's) are drawn at their own length,
-  with ".." where the field has no room: they used the English texts'
-  lengths, which cut the Italian ones ("Scrivi un nome, ENTE") and took
-  a dot off the English "Type a name, ENTER...".
+- The hints in the chat list's search field ("Type a name...", "Find
+  in this chat...", the Archive's) are drawn at their own length, with
+  ".." where the field has no room: they used the English texts'
+  lengths, which cut the Italian ones ("Scrivi un nome, ENTE"). The
+  search's hint says no more than "Type a name...": that ENTER goes
+  with it was plain to see.
 - Updates that install by themselves: "Install updates by themselves" in
   the settings, off until switched on and greyed while "Check for
   updates" is off. When the day's look finds a newer version, it is

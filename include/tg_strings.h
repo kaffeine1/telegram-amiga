@@ -1352,7 +1352,7 @@
 #define MSG_G_FIND_IN_THIS_CHAT 1301
 #define MSG_G_FIND_IN_THIS_CHAT_STR "Find in this chat..."
 #define MSG_G_TYPE_A_NAME_ENTER 1302
-#define MSG_G_TYPE_A_NAME_ENTER_STR "Type a name, ENTER..."
+#define MSG_G_TYPE_A_NAME_ENTER_STR "Type a name..."
 #define MSG_G_SEARCH_CHATS 1303
 #define MSG_G_SEARCH_CHATS_STR "Search chats..."
 #define MSG_G_PHOTO 1304
