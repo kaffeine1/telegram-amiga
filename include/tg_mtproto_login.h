@@ -1675,6 +1675,13 @@ void tg_mtproto_send_set_silent(int on);
    that follow wait on Telegram until `when` (Unix time) before they go;
    0 = they go at once. Set for the sends that follow, until cleared. */
 void tg_mtproto_send_set_schedule(unsigned long when);
+#if !defined(TG_NO_GUI)
+/* The part of the answered message a reply quotes (UTF-8, quote_text of
+   inputReplyToMessage), for the sends that follow; 0 or "" = none. One
+   that does not fit is none, never one cut short. */
+#define TG_MTPROTO_SEND_QUOTE_MAX 1024
+void tg_mtproto_send_set_quote(const char *utf8);
+#endif
 
 /* The mentions by name the next messages.sendMessage built carries: where
    each name is in its text (UTF-16 units) and whose it is. None (0, 0)

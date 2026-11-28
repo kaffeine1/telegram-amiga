@@ -550,6 +550,13 @@ void tg_gui_session_send_silent(int on);
 /* The messages tg_gui_session_send sends from now on wait on Telegram until
    `when` (its clock, from tg_gui_session_later_when), or go at once (0). */
 void tg_gui_session_send_at(unsigned long when);
+/* The part of the answered message that the replies tg_gui_session_send
+   sends from now on quote (Latin-1, as the window shows it), 0 = none: set
+   it around a reply. When Telegram does not find it in that message the
+   reply goes without it, and tg_gui_session_send_quote_dropped() says so
+   once. */
+void tg_gui_session_send_quote(const char *latin1);
+int tg_gui_session_send_quote_dropped(void);
 /* A time typed for a message that waits: "21:30" (today, or tomorrow once
    passed), "28/11 21:30" or "28/11/2026 21:30". 1 = read and within a year
    from now (*when on Telegram's clock, `shown` "28/11 21:30"), 0 = not a

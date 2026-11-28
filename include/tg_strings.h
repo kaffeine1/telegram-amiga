@@ -1021,6 +1021,10 @@
 #define MSG_ST_RENAMED_IN_YOUR_CONTACTS_STR "Renamed in your contacts"
 #define MSG_ST_NO_LONGER_IN_YOUR_CONTACTS 558
 #define MSG_ST_NO_LONGER_IN_YOUR_CONTACTS_STR "No longer in your contacts"
+#define MSG_ST_REPLY_QUOTING_ENTER_SENDS 559
+#define MSG_ST_REPLY_QUOTING_ENTER_SENDS_STR "Reply quoting it - ENTER sends, ESC cancels"
+#define MSG_ST_SENT_WITHOUT_THE_QUOTE 560
+#define MSG_ST_SENT_WITHOUT_THE_QUOTE_STR "Sent without the quote (not found in the text)"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601

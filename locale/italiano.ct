@@ -1542,6 +1542,12 @@ Nome cambiato in rubrica
 MSG_ST_NO_LONGER_IN_YOUR_CONTACTS
 Non è più nella tua rubrica
 ; No longer in your contacts
+MSG_ST_REPLY_QUOTING_ENTER_SENDS
+Risposta citando - ENTER invia, ESC annulla
+; Reply quoting it - ENTER sends, ESC cancels
+MSG_ST_SENT_WITHOUT_THE_QUOTE
+Inviato senza citazione (non trovata nel testo)
+; Sent without the quote (not found in the text)
 MSG_RQ_OK
 OK
 ; OK

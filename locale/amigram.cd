@@ -1054,6 +1054,10 @@ MSG_ST_RENAMED_IN_YOUR_CONTACTS (557//)
 Renamed in your contacts
 MSG_ST_NO_LONGER_IN_YOUR_CONTACTS (558//)
 No longer in your contacts
+MSG_ST_REPLY_QUOTING_ENTER_SENDS (559//)
+Reply quoting it - ENTER sends, ESC cancels
+MSG_ST_SENT_WITHOUT_THE_QUOTE (560//)
+Sent without the quote (not found in the text)
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK

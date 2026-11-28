@@ -261,6 +261,7 @@ void tg_gui_requester_text(char *dest, unsigned long size, const char *src,
 #define TG_GUI_DAY_SECONDS 86400UL /* tg_gui_message.day counts these */
 #define TG_GUI_INITIALS_MAX 4
 #define TG_GUI_REPLY_MAX 96
+#define TG_GUI_QUOTE_MAX 512 /* a quoted part, Latin-1 (UTF-8 up to 1024) */
 #define TG_GUI_SEARCH_MAX 64
 
 /* Width of the custom-drawn vertical scrollbars; shared with the event loop so
@@ -726,6 +727,10 @@ typedef struct tg_gui_state {
     unsigned long reply_to_id;
     char reply_sender[TG_GUI_NAME_MAX];
     char reply_snippet[TG_GUI_REPLY_MAX];
+    /* The part of it the reply quotes (a selection dragged in it when Reply
+       was chosen), for the message reply_quote_id only. */
+    unsigned long reply_quote_id;
+    char reply_quote[TG_GUI_QUOTE_MAX];
     int msg_top[TG_GUI_MAX_MESSAGES];
     int msg_cached;
     unsigned long today;   /* the same day count for now, 0 = unknown */
@@ -1553,6 +1558,12 @@ int tg_gui_link_note_at(const char *text, long ch, char *out,
                         unsigned long out_size);
 int tg_gui_selection_get(const tg_gui_state *state, char *out,
                          unsigned long out_size);
+/* Reply chosen on message `mi`: a selection dragged in THAT message becomes
+   the reply's quote (its style marks out), kept for that message's id;
+   none otherwise. 1 = there is one. And the quote of the reply being
+   written, 0 when it has none (or it was taken for another message). */
+int tg_gui_reply_quote_take(tg_gui_state *state, int mi);
+const char *tg_gui_reply_quote_for_send(const tg_gui_state *state);
 
 int tg_gui_input_click_caret(const tg_gui_state *state,
                              tg_gui_backend *backend, int x, int y);

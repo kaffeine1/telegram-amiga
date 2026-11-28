@@ -800,7 +800,10 @@ Messages
   edit cannot be saved the text stays in the input line.
 - Drag across text to select it. Right-Amiga+C copies, Right-Amiga+X
   cuts from the input line, Right-Amiga+V pastes; the Edit menu has the
-  same.
+  same. Reply on a message with part of it selected quotes that part:
+  the reply shows it above your text, on every device. A part Telegram
+  does not find as it has the message (a sign the Amiga cannot show)
+  goes without the quote, and the status line says so.
 - Reactions show under a message with their count, yours highlighted.
   React... opens a grid of the reactions the chat allows: a click adds
   one, a click on yours takes it back. When the chat allows more than
@@ -1217,7 +1220,11 @@ Messaggi
   resta nella riga di input.
 - Trascina sul testo per selezionarlo. Amiga-destro+C copia,
   Amiga-destro+X taglia dalla riga di input, Amiga-destro+V incolla; il
-  menu Edit fa lo stesso.
+  menu Edit fa lo stesso. Rispondi su un messaggio con una parte
+  selezionata cita quella parte: la risposta la mostra sopra il tuo
+  testo, su ogni dispositivo. Una parte che Telegram non ritrova nel
+  messaggio (un segno che l'Amiga non sa mostrare) parte senza
+  citazione, e la riga di stato lo dice.
 - Le reazioni compaiono sotto un messaggio con il loro numero, la tua
   evidenziata. React... apre una griglia con le reazioni che la chat
   permette: un click ne aggiunge una, un click sulla tua la toglie. Se

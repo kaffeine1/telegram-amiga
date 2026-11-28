@@ -137,6 +137,12 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- A reply that quotes part of a message: Reply on a message with part of
+  its text selected sends that part as the reply's quote (quote_text of
+  inputReplyToMessage), and the reply bar shows it. When Telegram does
+  not find it in the message as it has it (a sign the window shows in
+  another way, say), the reply goes again without the quote and the
+  status line says so.
 - A person in the contacts: "Contact..." in a person's row menu asks
   Telegram whether they are one (users.getFullUser, the user's contact
   flag); one who is not is put in under the names Telegram has for them

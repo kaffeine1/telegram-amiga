@@ -2909,6 +2909,24 @@ void tg_mtproto_send_set_schedule(unsigned long when)
     tg_send_schedule = when;
 }
 
+#if !defined(TG_NO_GUI)
+/* quote_text:flags.2 of the reply's inputReplyToMessage: the part of the
+   answered message that the reply quotes (UTF-8, as Telegram has it in
+   that message), "" = none. Set for the sends that follow, until cleared. */
+static char tg_send_quote[TG_MTPROTO_SEND_QUOTE_MAX];
+
+void tg_mtproto_send_set_quote(const char *utf8)
+{
+    unsigned long n = utf8 != 0 ? (unsigned long)strlen(utf8) : 0UL;
+
+    if (n >= sizeof(tg_send_quote)) {
+        n = 0UL; /* a quote cut short would no longer be found: none */
+    }
+    memcpy(tg_send_quote, utf8 != 0 ? utf8 : "", n);
+    tg_send_quote[n] = '\0';
+}
+#endif
+
 static unsigned long tg_send_message_flags(unsigned long reply_to_msg_id)
 {
     return ((reply_to_msg_id != 0UL || tg_send_topic_top() != 0UL) ? 1UL
@@ -3051,11 +3069,17 @@ static tg_mtproto_tl_status tg_write_input_reply_to_message(
     unsigned long top = tg_send_topic_top();
     int with_top = top != 0UL && reply_to_msg_id != 0UL &&
                    reply_to_msg_id != top;
+#if !defined(TG_NO_GUI)
+    int with_quote = reply_to_msg_id != 0UL && tg_send_quote[0] != '\0';
+#else
+    int with_quote = 0;
+#endif
 
     status = tg_mtproto_tl_write_u32(writer,
                                      TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR);
     if (status == TG_MTPROTO_TL_OK) {
-        status = tg_mtproto_tl_write_u32(writer, with_top ? 1UL : 0UL);
+        status = tg_mtproto_tl_write_u32(writer, (with_top ? 1UL : 0UL) |
+                                                     (with_quote ? 4UL : 0UL));
     }
     if (status == TG_MTPROTO_TL_OK) {
         status = tg_mtproto_tl_write_u32(
@@ -3064,6 +3088,12 @@ static tg_mtproto_tl_status tg_write_input_reply_to_message(
     if (status == TG_MTPROTO_TL_OK && with_top) {
         status = tg_mtproto_tl_write_u32(writer, top);
     }
+#if !defined(TG_NO_GUI)
+    /* no quote_offset: Telegram takes the first place the text is at */
+    if (status == TG_MTPROTO_TL_OK && with_quote) {
+        status = tg_write_string(writer, tg_send_quote);
+    }
+#endif
     return status;
 }
 
@@ -21484,6 +21514,53 @@ int tg_mtproto_login_self_test(void)
             return 2;
         }
     }
+#if !defined(TG_NO_GUI)
+    /* A reply that quotes part of the message it answers: quote_text,
+       flags.2 of its inputReplyToMessage, right after the message's id;
+       never on a message that answers nothing, gone again once cleared,
+       and none rather than one cut short. */
+    tg_mtproto_send_set_quote("ciao");
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_send_self(&writer, "hi", 7UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        (tg_read_u32_le(peer_rpc + 4) & 1UL) == 0UL ||
+        tg_read_u32_le(peer_rpc + 12) != TG_INPUT_REPLY_TO_MESSAGE_CONSTRUCTOR ||
+        tg_read_u32_le(peer_rpc + 16) != 4UL ||
+        tg_read_u32_le(peer_rpc + 20) != 7UL || peer_rpc[24] != 4U ||
+        memcmp(peer_rpc + 25, "ciao", 4) != 0 || peer_rpc[32] != 2U) {
+        tg_mtproto_send_set_quote(0);
+        return 2;
+    }
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_send_self(&writer, "hi", 0UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        writer.length != 24UL) {
+        tg_mtproto_send_set_quote(0);
+        return 2;
+    }
+    tg_mtproto_send_set_quote(0);
+    tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+    if (tg_mtproto_build_messages_send_self(&writer, "hi", 7UL, 1UL, 2UL) !=
+            TG_MTPROTO_TL_OK ||
+        tg_read_u32_le(peer_rpc + 16) != 0UL || peer_rpc[24] != 2U) {
+        return 2;
+    }
+    {
+        static char longq[TG_MTPROTO_SEND_QUOTE_MAX + 1];
+
+        memset(longq, 'a', sizeof(longq) - 1U);
+        longq[sizeof(longq) - 1U] = '\0';
+        tg_mtproto_send_set_quote(longq);
+        tg_mtproto_tl_writer_init(&writer, peer_rpc, sizeof(peer_rpc));
+        if (tg_mtproto_build_messages_send_self(&writer, "hi", 7UL, 1UL,
+                                                2UL) != TG_MTPROTO_TL_OK ||
+            tg_read_u32_le(peer_rpc + 16) != 0UL) {
+            tg_mtproto_send_set_quote(0);
+            return 2;
+        }
+        tg_mtproto_send_set_quote(0);
+    }
+#endif
     /* A message that waits for its time: flags.10 and schedule_date last,
        after random_id; gone again once cleared. The scheduled messages
        asked for (a chat, hash 0), one sent at once, one deleted, and no

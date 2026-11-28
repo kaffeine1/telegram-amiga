@@ -8022,7 +8022,9 @@ static void tg_gui_window_bot_start(tg_gui_state *state,
 static void tg_gui_window_sent_status(tg_gui_state *state)
 {
     tg_gui_window_copy(state->status, sizeof(state->status),
-                       tg_gui_sent_quietly
+                       tg_gui_session_send_quote_dropped()
+                           ? TG_STR(MSG_ST_SENT_WITHOUT_THE_QUOTE)
+                       : tg_gui_sent_quietly
                            ? TG_STR(MSG_ST_SENT_WITHOUT_SOUND)
                            : TG_STR(MSG_ST_TYPE_ENTER_SENDS_ESC_CANCELS));
     tg_gui_sent_quietly = 0;
@@ -8037,10 +8039,14 @@ static int tg_gui_window_send_parts(tg_gui_state *state)
     unsigned long at = 0UL;
     unsigned long done = 0UL;
 
+    /* the quote of a reply, its part of the message (the first part) */
+    tg_gui_session_send_quote(tg_gui_reply_quote_for_send(state));
     if (total < sizeof(part)) {
         /* one message, sent as it always was */
         int sent = tg_gui_session_send(state->input, state->reply_to_id,
                                        stdout);
+
+        tg_gui_session_send_quote(0);
 
         if (sent != 0) {
             char line[80];
@@ -8072,6 +8078,7 @@ static int tg_gui_window_send_parts(tg_gui_state *state)
         sent = tg_gui_session_send(part,
                                    done == 0UL ? state->reply_to_id : 0UL,
                                    stdout);
+        tg_gui_session_send_quote(0);
         if (sent != 0) {
             char line[80];
 
@@ -20785,9 +20792,14 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         tg_gui_window_copy(state->reply_sender,
                                            sizeof(state->reply_sender),
                                            m->sender);
+                        /* A selection dragged in THIS message: the reply
+                           quotes it, and the bar shows the part quoted. */
+                        (void)tg_gui_reply_quote_take(state, mi);
                         tg_gui_strip_markers(state->reply_snippet,
                                            sizeof(state->reply_snippet),
-                                           m->text);
+                                           state->reply_quote_id != 0UL
+                                               ? state->reply_quote
+                                               : m->text);
                         state->edit_to_id = 0UL;
                         state->search_active = 0;
                         state->msg_search_active = 0;
@@ -20796,7 +20808,9 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                         state->cursor_on = 1;
                         caret_ticks = 0;
                         tg_gui_window_copy(state->status, sizeof(state->status),
-                                           TG_STR(MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS));
+                                           state->reply_quote_id != 0UL
+                                               ? TG_STR(MSG_ST_REPLY_QUOTING_ENTER_SENDS)
+                                               : TG_STR(MSG_ST_REPLY_ENTER_SENDS_ESC_CANCELS));
                     } else if (it == TG_GUI_CTX_EDIT && m != 0 &&
                                (state->in_sel_active = 0, 1) &&
                                (m->is_own ||

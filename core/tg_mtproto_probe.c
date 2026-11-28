@@ -13622,8 +13622,14 @@ static int tg_mtproto_auth_send_peer_on_context(
        the longer of the two composers, doubled for the Latin-1 to UTF-8
        growth, plus room for the envelope. Static, not on the stack: the
        68000 profile runs on a fraction of the usual stack. */
+#if !defined(TG_NO_GUI)
+    static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128 +
+                               (TG_MTPROTO_SEND_MENTIONS_MAX * 32) + 8 +
+                               TG_MTPROTO_SEND_QUOTE_MAX + 8];
+#else
     static unsigned char query[TG_MTPROTO_SEND_UTF8_MAX + 128 +
                                (TG_MTPROTO_SEND_MENTIONS_MAX * 32) + 8];
+#endif
     unsigned char random_id[8];
     unsigned long random_id_hi;
     unsigned long random_id_lo;
@@ -37567,6 +37573,33 @@ void tg_gui_session_send_at(unsigned long when)
 }
 
 #if !defined(TG_NO_GUI)
+/* Public: the part of the answered message that the next replies quote
+   (Latin-1, as the window shows it), 0 = none; and whether the last one
+   went without it, Telegram not finding it in that message (read once). */
+static char tg_gui_send_quote[TG_MTPROTO_SEND_QUOTE_MAX / 2];
+static int tg_gui_quote_dropped = 0;
+
+void tg_gui_session_send_quote(const char *latin1)
+{
+    unsigned long n = latin1 != 0 ? (unsigned long)strlen(latin1) : 0UL;
+
+    if (n >= sizeof(tg_gui_send_quote)) {
+        n = 0UL;
+    }
+    memcpy(tg_gui_send_quote, latin1 != 0 ? latin1 : "", n);
+    tg_gui_send_quote[n] = '\0';
+}
+
+int tg_gui_session_send_quote_dropped(void)
+{
+    int was = tg_gui_quote_dropped;
+
+    tg_gui_quote_dropped = 0;
+    return was;
+}
+#endif
+
+#if !defined(TG_NO_GUI)
 static void tg_later_copy(char *dest, unsigned long size, const char *src)
 {
     unsigned long i;
@@ -37774,6 +37807,23 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
     send_text = tg_gui_mentions_for_send(send_text);
     tg_mtproto_send_set_silent(tg_gui_send_silent);
     tg_mtproto_send_set_schedule(tg_gui_send_at);
+#if !defined(TG_NO_GUI)
+    tg_gui_quote_dropped = 0;
+    if (reply_to_msg_id != 0UL && tg_gui_send_quote[0] != '\0') {
+        static char quote_utf8[TG_MTPROTO_SEND_QUOTE_MAX];
+        const char *q = tg_gui_send_quote;
+
+#if TG_MTPROTO_DISPLAY_LATIN1
+        if (tg_mtproto_latin1_to_utf8(tg_gui_send_quote, quote_utf8,
+                                      sizeof(quote_utf8))) {
+            q = quote_utf8;
+        }
+#else
+        (void)quote_utf8;
+#endif
+        tg_mtproto_send_set_quote(q);
+    }
+#endif
     rc = tg_mtproto_auth_send_peer_on_context(
         tg_gui_session_state.host, tg_gui_session_state.port,
         tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
@@ -37781,6 +37831,25 @@ int tg_gui_session_send(const char *text, unsigned long reply_to_msg_id,
         tg_gui_session_state.peer_cache_file,
         tg_gui_session_state.current_peer_index, send_text, reply_to_msg_id,
         &sent_id, quiet);
+#if !defined(TG_NO_GUI)
+    if (rc != 0 && reply_to_msg_id != 0UL && tg_gui_send_quote[0] != '\0' &&
+        strcmp(tg_chat_send_refusal, "QUOTE_TEXT_INVALID") == 0) {
+        /* Not found as Telegram has the message (a sign the window could
+           not show, say): the reply goes without the quote, and says so. */
+        tg_gui_log("send: quote not found, the reply goes without it");
+        tg_mtproto_send_set_quote(0);
+        sent_id = 0UL;
+        rc = tg_mtproto_auth_send_peer_on_context(
+            tg_gui_session_state.host, tg_gui_session_state.port,
+            tg_gui_session_state.api_id, tg_gui_session_state.auth_file,
+            tg_gui_session_state.dc_id_text, &tg_gui_session_state.context,
+            tg_gui_session_state.peer_cache_file,
+            tg_gui_session_state.current_peer_index, send_text,
+            reply_to_msg_id, &sent_id, quiet);
+        tg_gui_quote_dropped = rc == 0;
+    }
+    tg_mtproto_send_set_quote(0);
+#endif
     tg_mtproto_send_set_schedule(0UL);
     tg_mtproto_send_set_silent(0);
     if (rc == 0 && tg_gui_send_at != 0UL) {

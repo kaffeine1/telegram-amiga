@@ -7108,6 +7108,38 @@ int tg_gui_url_at(const tg_gui_message *m, long ch, char *out,
     return 1;
 }
 
+int tg_gui_reply_quote_take(tg_gui_state *state, int mi)
+{
+    static char sel[TG_GUI_MSG_TEXT_MAX];
+
+    if (state == 0) {
+        return 0;
+    }
+    state->reply_quote[0] = '\0';
+    state->reply_quote_id = 0UL;
+    if (mi < 0 || mi >= state->message_count || !state->sel_active ||
+        state->sel_msg != mi ||
+        !tg_gui_selection_get(state, sel, sizeof(sel))) {
+        return 0;
+    }
+    tg_gui_strip_markers(state->reply_quote, sizeof(state->reply_quote), sel);
+    if (state->reply_quote[0] == '\0') {
+        return 0;
+    }
+    state->reply_quote_id = state->messages[mi].id;
+    return 1;
+}
+
+const char *tg_gui_reply_quote_for_send(const tg_gui_state *state)
+{
+    if (state == 0 || state->reply_to_id == 0UL ||
+        state->reply_quote_id != state->reply_to_id ||
+        state->reply_quote[0] == '\0') {
+        return 0;
+    }
+    return state->reply_quote;
+}
+
 int tg_gui_selection_get(const tg_gui_state *state, char *out,
                          unsigned long out_size)
 {
@@ -13342,6 +13374,43 @@ int tg_gui_self_test(void)
     if (state.chat_count <= 0 || state.message_count <= 0) {
         puts("gui self-test: demo state empty");
         return 2;
+    }
+    /* Reply with part of a message selected quotes that part, its style
+       marks out, for that message only: not with the selection in another
+       message, not once the reply goes to another message. */
+    {
+        static char kept[TG_GUI_MSG_TEXT_MAX];
+        unsigned long kept_id = state.messages[0].id;
+        int ok;
+
+        memcpy(kept, state.messages[0].text, sizeof(kept));
+        sprintf(state.messages[0].text, "Ciao a %ctutti%c, si prova",
+                TG_TEXT_MARKER_BOLD, TG_TEXT_MARKER_BOLD);
+        state.messages[0].id = 42UL;
+        state.sel_active = 1;
+        state.sel_msg = 0;
+        state.sel_a = 12; /* backwards, as a drag to the left gives it */
+        state.sel_b = 5;
+        ok = tg_gui_reply_quote_take(&state, 0) == 1 &&
+             strcmp(state.reply_quote, "a tutti") == 0 &&
+             state.reply_quote_id == 42UL;
+        state.reply_to_id = 42UL;
+        ok = ok && tg_gui_reply_quote_for_send(&state) == state.reply_quote;
+        state.reply_to_id = 43UL;
+        ok = ok && tg_gui_reply_quote_for_send(&state) == 0;
+        ok = ok && (state.message_count < 2 ||
+                    (tg_gui_reply_quote_take(&state, 1) == 0 &&
+                     state.reply_quote[0] == '\0' &&
+                     state.reply_quote_id == 0UL));
+        state.sel_active = 0;
+        ok = ok && tg_gui_reply_quote_take(&state, 0) == 0;
+        state.reply_to_id = 0UL;
+        memcpy(state.messages[0].text, kept, sizeof(kept));
+        state.messages[0].id = kept_id;
+        if (!ok) {
+            puts("gui self-test: a reply does not quote the selection");
+            return 2;
+        }
     }
 
     memset(&record, 0, sizeof(record));
