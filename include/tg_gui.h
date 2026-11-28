@@ -321,6 +321,8 @@ typedef struct tg_gui_chat {
     int unread_mark;          /* marked as unread: an empty badge when unread is 0 */
     int draft;                /* preview is this chat's draft: "Draft:" before it */
     int muted;                /* muted on Telegram: a dim badge, or the mute mark */
+    unsigned long avatar_hi;  /* a search result's peer, for its picture */
+    unsigned long avatar_lo;  /* only: no notification is matched to it */
 } tg_gui_chat;
 
 /* A poll being written in the Create poll dialog: the question and up to

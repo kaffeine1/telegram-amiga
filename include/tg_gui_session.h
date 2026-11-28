@@ -915,6 +915,9 @@ int tg_gui_session_contacts_run(FILE *stream);
 unsigned long tg_gui_session_contacts_total(void);
 int tg_gui_session_search_count(void);
 const char *tg_gui_session_search_name(int index);
+/* The peer of the index-th result, for its picture: 0 = given. */
+int tg_gui_session_search_peer(int index, unsigned long *id_hi,
+                               unsigned long *id_lo);
 /* Open the index-th openable result of the last search. 0 = opened. */
 int tg_gui_session_search_open_result(int index, FILE *stream);
 /* Add an online-picker result to the real cache without opening or unhiding it.

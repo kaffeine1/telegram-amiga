@@ -7808,6 +7808,9 @@ static int tg_gui_window_topic_needed(tg_gui_state *state,
    load finishes. */
 static void tg_gui_window_archive_more(tg_gui_state *state,
                                        tg_gui_backend *backend, int next);
+static void tg_gui_window_archive_more_from(tg_gui_state *state,
+                                            tg_gui_backend *backend,
+                                            int next, int paint_first);
 
 static void tg_gui_window_open_selection(tg_gui_state *state, int sel,
                                          tg_gui_backend *backend)
@@ -13867,6 +13870,8 @@ static void tg_gui_window_load_search_results(tg_gui_state *state)
            mute mark is not the result's */
         tg_gui_chat_set_search_result(&state->chats[k],
                                       tg_gui_session_search_name(k), k);
+        (void)tg_gui_session_search_peer(k, &state->chats[k].avatar_hi,
+                                         &state->chats[k].avatar_lo);
     }
     state->chat_count = n;
     state->selected_chat = 0;
@@ -14415,8 +14420,10 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
             if (fresh && held < n && held < 8) {
                 /* A full list (64 chats on a 68k) holds a few archived
                    chats only, or none: the Archive is shown whole, as
-                   "More archived chats..." shows it, at once. */
-                tg_gui_window_archive_more(state, backend, 0);
+                   "More archived chats..." shows it, at once. The few are
+                   not painted while the whole is read: they flashed by for
+                   a second before the long list took their place. */
+                tg_gui_window_archive_more_from(state, backend, 0, 0);
                 return;
             }
             /* A large Archive shows its most recent chats only. */
@@ -14456,12 +14463,23 @@ static void tg_gui_window_show_archive(tg_gui_state *state,
 static void tg_gui_window_archive_more(tg_gui_state *state,
                                        tg_gui_backend *backend, int next)
 {
+    tg_gui_window_archive_more_from(state, backend, next, 1);
+}
+
+/* paint_first = 0: the window goes on showing what it shows (the chat list,
+   with "Reading the Archive..." below) until the list is read. */
+static void tg_gui_window_archive_more_from(tg_gui_state *state,
+                                            tg_gui_backend *backend,
+                                            int next, int paint_first)
+{
     char line[TG_GUI_NAME_MAX];
     int n;
 
     tg_gui_window_copy(state->status, sizeof(state->status),
                        TG_STR(MSG_ST_READING_THE_ARCHIVE));
-    tg_gui_window_paint(state, backend);
+    if (paint_first) {
+        tg_gui_window_paint(state, backend);
+    }
     n = tg_gui_session_archive_more(next, stdout);
     if (n <= 0) {
         tg_gui_window_copy(state->status, sizeof(state->status),

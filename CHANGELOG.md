@@ -162,6 +162,14 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   lists them, instead of showing one. And a chat whose name has only
   letters the Amiga cannot show, which read as question marks, shows
   its @username there when it has one.
+- The lists of results (the Archive's whole list, the address book, a
+  search) drew initials only, though the pictures of most of those chats
+  came with the list: a result's row now carries its peer for the
+  picture, and shows it as a chat's row does. Opening the Archive
+  straight on all of it no longer paints the few archived chats the list
+  holds while the whole is read: they flashed by for a second, with
+  their pictures, before the long list took their place (seen on a
+  Vampire).
 - The avatars of the chat list came back as initials after the address
   book or the Archive had been open (seen on a Vampire): the thumbs kept
   in memory, 128 on a 68k, were pushed out one by one by the hundred and

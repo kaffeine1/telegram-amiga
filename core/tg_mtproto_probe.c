@@ -37187,6 +37187,21 @@ const char *tg_gui_session_search_name(int i)
     }
 }
 
+int tg_gui_session_search_peer(int i, unsigned long *id_hi,
+                               unsigned long *id_lo)
+{
+    const tg_mtproto_peer_cache_entry *e;
+
+    if (i < 0 || i >= tg_gui_search_openable_n || id_hi == 0 ||
+        id_lo == 0) {
+        return 1;
+    }
+    e = &tg_gui_search_results.entries[tg_gui_search_openable_idx[i]];
+    *id_hi = e->id_hi;
+    *id_lo = e->id_lo;
+    return 0;
+}
+
 /* Open the i-th openable result of the last search (add it to the cache + open). */
 int tg_gui_session_search_open_result(int i, FILE *stream)
 {

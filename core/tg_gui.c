@@ -3727,11 +3727,18 @@ static void tg_gui_paint_sidebar(const tg_gui_state *state,
            store have one); the classic colored-initials square is the fallback
            and the only path on backends without image support, or with the
            avatars setting off. */
+        /* a result of a search, the Archive's whole list among them, has
+           its peer for the picture alone */
         if (!state->avatars_enabled || backend->avatar_image == 0 ||
-            !backend->avatar_image(backend, chat->peer_id_hi,
-                                   chat->peer_id_lo,
-                                   tg_gui_make_rect(8, avatar_y, avatar,
-                                                    avatar))) {
+            !backend->avatar_image(
+                backend,
+                (chat->peer_id_hi | chat->peer_id_lo) != 0UL
+                    ? chat->peer_id_hi
+                    : chat->avatar_hi,
+                (chat->peer_id_hi | chat->peer_id_lo) != 0UL
+                    ? chat->peer_id_lo
+                    : chat->avatar_lo,
+                tg_gui_make_rect(8, avatar_y, avatar, avatar))) {
             backend->avatar_fill(backend, chat->avatar_color,
                                  tg_gui_make_rect(8, avatar_y, avatar, avatar));
             /* Centre the initials in the circle: measured width across, and
@@ -10383,6 +10390,8 @@ typedef struct tg_gui_record {
     int link_msg;
     int link_bad_hits;
     int avatar_images;
+    unsigned long want_avatar_lo; /* a peer whose picture must be asked */
+    int saw_avatar_lo;
     int fills;
     int avatars;
     int photos;
@@ -10582,7 +10591,10 @@ static int tg_gui_rec_avatar_image(tg_gui_backend *backend,
     tg_gui_record *record = (tg_gui_record *)backend->context;
 
     (void)peer_id_hi;
-    (void)peer_id_lo;
+    if (record->want_avatar_lo != 0UL &&
+        peer_id_lo == record->want_avatar_lo) {
+        record->saw_avatar_lo = 1;
+    }
     record->avatar_images += 1;
     tg_gui_rec_avatar(backend, 0, rect);
     return 1;
@@ -17047,8 +17059,15 @@ int tg_gui_self_test(void)
                     if (images) {
                         strcpy(draft->typing, "Header typing \x80!");
                     }
+                    /* a result's row (no peer of its own) asks for the
+                       picture of the peer it carries for that */
+                    draft->chats[1].peer_id_hi = 0UL;
+                    draft->chats[1].peer_id_lo = 0UL;
+                    draft->chats[1].avatar_hi = 0UL;
+                    draft->chats[1].avatar_lo = 0x5150UL;
                     draft->more_above = 1; /* ensure a transcript scrollbar */
                     memset(&rec, 0, sizeof(rec));
+                    rec.want_avatar_lo = 0x5150UL;
                     rec.width = 1280;
                     rec.height = 720;
                     rec.font_h = fonts[f][0];
@@ -17068,6 +17087,11 @@ int tg_gui_self_test(void)
                     if (rec.avatars != draft->chat_count + 1 ||
                         rec.avatar_images != (images == 1 ? rec.avatars : 0)) {
                         puts("gui self-test: avatar paths were not painted");
+                        return 2;
+                    }
+                    if (rec.saw_avatar_lo != (images == 1)) {
+                        puts("gui self-test: a result's row did not ask for "
+                             "its peer's picture");
                         return 2;
                     }
                     if (rec.first_avatar.w != fonts[f][2] ||

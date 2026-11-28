@@ -1286,6 +1286,10 @@ static void tg_gui_driver_on_chat_list_changed(void *ctx,
         chat->index = rows[i].index;
         chat->peer_id_hi = rows[i].peer_id_hi;
         chat->peer_id_lo = rows[i].peer_id_lo;
+        /* a search result's picture must not stay on a row that is a chat
+           again (Saved Messages has no peer id of its own) */
+        chat->avatar_hi = 0UL;
+        chat->avatar_lo = 0UL;
         chat->is_group = !rows[i].is_user;
         chat->flash = 0;
         chat->pinned = rows[i].pinned ? 1 : 0;
