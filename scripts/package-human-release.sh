@@ -1463,6 +1463,11 @@ ends with (edited).
 A bot's buttons stand under its message, [Yes] [No]: /press lists the
 ones of the last message that has some, and /press 2 presses the second.
 What the bot answers is printed; a button with a link prints the link.
+/translate prints the last message received in the open chat, translated
+by Telegram into the language of your Locale preferences. /devices lists
+where your account is logged in (program, machine, system, place, when it
+was last used; this one marked with *). /devices end yes logs out every
+other device; this one stays.
 Drafts: text typed and left unsent when F1 to F10 change chat is kept
 as that chat's draft, on Telegram too, so the phone shows it. A chat
 with a draft, made here or elsewhere, shows it as a "Draft:" line under
@@ -1576,6 +1581,11 @@ I bottoni di un bot stanno sotto il suo messaggio, [Yes] [No]: /press
 elenca quelli dell'ultimo messaggio che ne ha, e /press 2 preme il
 secondo. Quello che il bot risponde viene stampato; un bottone con un
 link stampa il link.
+/translate stampa l'ultimo messaggio ricevuto nella chat aperta, tradotto
+da Telegram nella lingua delle preferenze Locale. /devices elenca dove e'
+aperto il tuo account (programma, macchina, sistema, luogo, ultimo uso;
+questo segnato con *). /devices end yes chiude tutti gli altri
+dispositivi; questo resta.
 Bozze: il testo scritto e non mandato quando F1..F10 cambiano chat resta
 come bozza di quella chat, anche su Telegram, e il telefono la mostra.
 Una chat con una bozza, fatta qui o altrove, la mostra in una riga
