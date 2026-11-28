@@ -137,6 +137,10 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- The WEBP datatype offered for stickers is now webp.datatype 45.3,
+  posted in @amigram1 next to 45.1: the same decoder, a new
+  installation (icons and Installer). Its four files are pinned by
+  size and SHA-256 as before.
 - The avatars of the chat list came back as initials after the address
   book or the Archive had been open (seen on a Vampire): the thumbs kept
   in memory, 128 on a 68k, were pushed out one by one by the hundred and

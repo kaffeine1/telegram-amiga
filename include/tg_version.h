@@ -86,18 +86,18 @@
 #ifndef TG_WEBP_DT_CHANNEL
 #define TG_WEBP_DT_CHANNEL "amigram1"
 #endif
-#define TG_WEBP_DT_OS3_NAME "webp-45.1-os3.datatype"
-#define TG_WEBP_DT_OS3_SIZE 130464UL
-#define TG_WEBP_DT_OS3_SHA256 "32d20714fec40237b96124de75ebbadd2324f654110163141ebeb3bef52bfbd9"
-#define TG_WEBP_DT_OS4_NAME "webp-45.1-os4.datatype"
+#define TG_WEBP_DT_OS3_NAME "webp-45.3-os3.datatype"
+#define TG_WEBP_DT_OS3_SIZE 130480UL
+#define TG_WEBP_DT_OS3_SHA256 "35f75a72c1e01e35d08f372076b4dc62d9d24ec6b6a0ee4f2b5c2a9484d551b4"
+#define TG_WEBP_DT_OS4_NAME "webp-45.3-os4.datatype"
 #define TG_WEBP_DT_OS4_SIZE 223524UL
-#define TG_WEBP_DT_OS4_SHA256 "9c487032571de5d2c30535c1201cdf69144612a7ae34faf33b7362ec6f132326"
-#define TG_WEBP_DT_MOS_NAME "webp-45.1-morphos.datatype"
-#define TG_WEBP_DT_MOS_SIZE 176648UL
-#define TG_WEBP_DT_MOS_SHA256 "b2ba6a951fdac2ee3f75a0206fe39e8fbf8937e8cae1d6b608c9facc309e415d"
-#define TG_WEBP_DT_DESC_NAME "WebP-45.1.descriptor"
+#define TG_WEBP_DT_OS4_SHA256 "4ab9ce7b0adf08e2f22e4c35c0b6497b9df3eb765449b3103a41c20964db7c95"
+#define TG_WEBP_DT_MOS_NAME "webp-45.3-morphos.datatype"
+#define TG_WEBP_DT_MOS_SIZE 176664UL
+#define TG_WEBP_DT_MOS_SHA256 "c7cf44bb443b3f847c424d4a646af2c397cc1d260e82936c23146f4d244a7620"
+#define TG_WEBP_DT_DESC_NAME "WebP-45.3.descriptor"
 #define TG_WEBP_DT_DESC_SIZE 142UL
-#define TG_WEBP_DT_DESC_SHA256 "ba3d7bb91221b090904d65d997f41de74febe14a22d6385a2377a1051ac4202b"
+#define TG_WEBP_DT_DESC_SHA256 "cf588a7e40c27bf9e531214bcfa7970a78ea1ee6bd6c70b064089158113791f1"
 /* the library of the system this build is for */
 #if defined(__amigaos4__)
 #define TG_WEBP_DT_NAME TG_WEBP_DT_OS4_NAME

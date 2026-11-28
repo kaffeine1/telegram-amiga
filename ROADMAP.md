@@ -498,7 +498,7 @@ Middle, more interface:
   requirement: without a datatype the emoji stays. AROS has a WEBP
   datatype in the system, the other systems need one installed, and
   there the "Sticker pictures" line of the settings offers to fetch
-  and install the project's own (webp.datatype 45.1, a separate
+  and install the project's own (webp.datatype 45.3, a separate
   project, fetched from the channel @amigram1 and kept only if its
   hash is the one in `include/tg_version.h`). It is not in the
   archives.
