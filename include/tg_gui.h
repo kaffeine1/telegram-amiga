@@ -413,6 +413,10 @@ int tg_gui_markdown_display(const char *in, char *out, unsigned long size);
    voice message or an audio file to,
    one line with its path; no file or an empty line = the Workbench. */
 #define TG_GUI_PLAYER_FILE "data/telegram-player.txt"
+/* "Script for new messages..." of the settings: the ARexx script that news
+   runs (TG_GUI_REXX_NEWS reads it), one line with its path, as the
+   player's file; no file or an empty line = none. */
+#define TG_GUI_AREXX_NEWS_FILE "data/telegram-arexx-news.txt"
 
 /* A chat's name for a requester's button ("For me and Anna"): '|' and '%'
    would break the requester apart and are replaced, a name longer than
@@ -584,6 +588,8 @@ typedef struct tg_gui_state {
     /* The program Play hands media to ("" = the Workbench decides), kept
        in TG_GUI_PLAYER_FILE. */
     char video_player[TG_NOTIFY_SOUND_MAX];
+    /* The ARexx script news runs ("" = none), in TG_GUI_AREXX_NEWS_FILE. */
+    char arexx_news[TG_NOTIFY_SOUND_MAX];
     int notify_explicit;   /* the user picked the mode (else "auto") */
     int notify_default_resolved; /* hardware default sampled this run */
     tg_gui_notify_peer notify_peers[TG_GUI_NOTIFY_PEERS];
@@ -1308,6 +1314,7 @@ int tg_gui_attachment_is_photo(const char *path);
 #define TG_GUI_SET_QUIET 21       /* choice: off, 5, 10, 30 s, 1 min */
 #define TG_GUI_SET_PREVIEWS 22    /* each chat's newest message in the list */
 #define TG_GUI_SET_TYPING 23      /* the others see "is typing..." */
+#define TG_GUI_SET_AREXX_NEWS 24  /* action: the script news runs, or none */
 #define TG_GUI_SET_KIND_HEADING 0
 #define TG_GUI_SET_KIND_SWITCH 1
 #define TG_GUI_SET_KIND_CHOICE 2
@@ -1359,6 +1366,7 @@ int tg_gui_settings_hit(const tg_gui_state *state, int x, int y);
 #define TG_GUI_REXX_VERSION 8
 #define TG_GUI_REXX_CHATS 9 /* the chat list: "name<TAB>unread" a line */
 #define TG_GUI_REXX_LAST 10 /* the open chat's newest message */
+#define TG_GUI_REXX_NEWS 11 /* the last news told: "chat<TAB>text" */
 int tg_gui_rexx_command(char *text, const char **arg);
 /* SEND's argument in its two parts: the chat, one word or a name between
    quotes, and the text after it. 1 = both are there. rest is cut. */
@@ -1377,6 +1385,12 @@ unsigned long tg_gui_unread_total(const tg_gui_state *state);
 int tg_gui_rexx_chats_text(const tg_gui_state *state, char *out,
                            unsigned long size);
 int tg_gui_rexx_last_text(const tg_gui_state *state, char *out,
+                          unsigned long size);
+/* What NEWS answers: the last news told (the chat a pop-up would name and
+   its text, "Sender: text" in a group), the chat's name, a TAB and the
+   text on one line, both with their emoji as text. 1 = there is some, 0 =
+   none yet (out empty). */
+int tg_gui_rexx_news_text(const tg_gui_state *state, char *out,
                           unsigned long size);
 /* What ARexx may do, kept in data/telegram-arexx.txt: the port itself (on
    unless switched off) and sending messages through it (off unless

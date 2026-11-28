@@ -1025,6 +1025,12 @@
 #define MSG_ST_REPLY_QUOTING_ENTER_SENDS_STR "Reply quoting it - ENTER sends, ESC cancels"
 #define MSG_ST_SENT_WITHOUT_THE_QUOTE 560
 #define MSG_ST_SENT_WITHOUT_THE_QUOTE_STR "Sent without the quote (not found in the text)"
+#define MSG_ST_NEW_MESSAGES_RUN_THAT_SCRIPT 561
+#define MSG_ST_NEW_MESSAGES_RUN_THAT_SCRIPT_STR "New messages run that script"
+#define MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES 562
+#define MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES_STR "No script for new messages"
+#define MSG_ST_COULD_NOT_SAVE_THE_SCRIPT 563
+#define MSG_ST_COULD_NOT_SAVE_THE_SCRIPT_STR "Could not save the script's name"
 #define MSG_RQ_OK 600
 #define MSG_RQ_OK_STR "OK"
 #define MSG_RQ_UPDATE_OK 601
@@ -1163,6 +1169,10 @@
 #define MSG_RQ_CONTACT_STR "Contact"
 #define MSG_RQ_RENAME_REMOVE_CANCEL 668
 #define MSG_RQ_RENAME_REMOVE_CANCEL_STR "Rename...|Remove|Cancel"
+#define MSG_RQ_SCRIPT_FOR_NEW_MESSAGES 669
+#define MSG_RQ_SCRIPT_FOR_NEW_MESSAGES_STR "Script for new messages"
+#define MSG_RQ_CHOOSE_ANOTHER_NONE_CANCEL 670
+#define MSG_RQ_CHOOSE_ANOTHER_NONE_CANCEL_STR "Choose another...|None|Cancel"
 #define MSG_ABOUT_TITLE 800
 #define MSG_ABOUT_TITLE_STR "About Amigram"
 #define MSG_ABOUT_BODY 801
@@ -1331,6 +1341,8 @@
 #define MSG_W_ADD_STR "Add"
 #define MSG_W_LET_S_SEE_YOUR_PHONE 976
 #define MSG_W_LET_S_SEE_YOUR_PHONE_STR "Let %s see your phone number too?"
+#define MSG_W_NEW_MESSAGES_RUN_S 977
+#define MSG_W_NEW_MESSAGES_RUN_S_STR "New messages run\n%s"
 #define MSG_G_CHOOSE_DESTINATION 1300
 #define MSG_G_CHOOSE_DESTINATION_STR "Choose destination..."
 #define MSG_G_FIND_IN_THIS_CHAT 1301
@@ -1663,6 +1675,10 @@
 #define MSG_G_ONLY_TELEGRAM_S_APPS_RESET_STR "Only Telegram's apps can reset it, after a week"
 #define MSG_G_CONTACT 1465
 #define MSG_G_CONTACT_STR "Contact..."
+#define MSG_SET_SCRIPT_FOR_NEW_MESSAGES 1466
+#define MSG_SET_SCRIPT_FOR_NEW_MESSAGES_STR "Script for new messages..."
+#define MSG_SETV_NO_SCRIPT 1467
+#define MSG_SETV_NO_SCRIPT_STR "(none)"
 #define MSG_S_LBL_PHOTO 1600
 #define MSG_S_LBL_PHOTO_STR "[Photo]"
 #define MSG_S_LBL_FILE 1601

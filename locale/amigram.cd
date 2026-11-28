@@ -1058,6 +1058,12 @@ MSG_ST_REPLY_QUOTING_ENTER_SENDS (559//)
 Reply quoting it - ENTER sends, ESC cancels
 MSG_ST_SENT_WITHOUT_THE_QUOTE (560//)
 Sent without the quote (not found in the text)
+MSG_ST_NEW_MESSAGES_RUN_THAT_SCRIPT (561//)
+New messages run that script
+MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES (562//)
+No script for new messages
+MSG_ST_COULD_NOT_SAVE_THE_SCRIPT (563//)
+Could not save the script's name
 ; --- requesters (600-799) --------------------------------------------------
 MSG_RQ_OK (600//)
 OK
@@ -1236,6 +1242,10 @@ MSG_RQ_CONTACT (667//)
 Contact
 MSG_RQ_RENAME_REMOVE_CANCEL (668//)
 Rename...|Remove|Cancel
+MSG_RQ_SCRIPT_FOR_NEW_MESSAGES (669//)
+Script for new messages
+MSG_RQ_CHOOSE_ANOTHER_NONE_CANCEL (670//)
+Choose another...|None|Cancel
 ; --- About, Support and Help (800-849) --------------------------------------
 MSG_ABOUT_TITLE (800//)
 About Amigram
@@ -1480,6 +1490,9 @@ MSG_W_ADD (975//)
 Add
 MSG_W_LET_S_SEE_YOUR_PHONE (976//)
 Let %s see your phone number too?
+MSG_W_NEW_MESSAGES_RUN_S (977//)
+New messages run\n\
+%s
 ; --- painted texts (1300-1599) ---------------------------------------------
 MSG_G_CHOOSE_DESTINATION (1300//)
 Choose destination...
@@ -1814,6 +1827,10 @@ MSG_G_ONLY_TELEGRAM_S_APPS_RESET (1464//)
 Only Telegram's apps can reset it, after a week
 MSG_G_CONTACT (1465//)
 Contact...
+MSG_SET_SCRIPT_FOR_NEW_MESSAGES (1466//)
+Script for new messages...
+MSG_SETV_NO_SCRIPT (1467//)
+(none)
 ; --- what the session says (1600-1999) -------------------------------------
 MSG_S_LBL_PHOTO (1600//)
 [Photo]

@@ -1041,6 +1041,23 @@ ARexx
   who wrote it, a TAB and the text on one line; empty with no chat
   open. For example:
       rx "options results; address AMIGRAM 'LAST'; say result"
+- NEWS answers with the last news told, as a pop-up would: the chat's
+  name, a TAB and the text ("Sender: text" in a group); empty before any.
+- "Script for new messages..." in the settings picks an ARexx script
+  that news runs, as a pop-up would come (not for muted chats): ARexx
+  runs it with the chat's name as its argument (PARSE ARG chat) and
+  AMIGRAM as its host, so 'NEWS' reads the rest. For example:
+      /* news.rexx */
+      options results
+      parse arg chat
+      'NEWS'
+      parse var result . '09'x text
+      f = 'RAM:news.log'
+      if ~open('l', f, 'A') then call open('l', f, 'W')
+      call writeln('l', chat ':' text)
+      call close('l')
+  ARexx must be running (RexxMast); a script still running when more
+  news comes is not started again and again.
 - SEND <chat> <text> sends a message: SEND "Mario Rossi" build done.
   The chat's name must be the whole name, in quotes if it has spaces.
   It is switched off until you allow it: any program on your machine
@@ -1475,6 +1492,25 @@ ARexx
   piu' recente della chat aperta: chi l'ha scritto, un TAB e il testo su
   una riga; vuoto senza chat aperta. Per esempio:
       rx "options results; address AMIGRAM 'LAST'; say result"
+- NEWS risponde con l'ultima novita' notificata, come la mostrerebbe un
+  avviso: il nome della chat, un TAB e il testo ("Mittente: testo" in un
+  gruppo); vuoto prima della prima.
+- "Script per i messaggi nuovi..." nelle impostazioni sceglie uno script
+  ARexx che le novita' avviano, quando arriverebbe un avviso (non per le
+  chat silenziate): ARexx lo avvia col nome della chat come argomento
+  (PARSE ARG chat) e AMIGRAM come host, cosi' 'NEWS' legge il resto. Per
+  esempio:
+      /* news.rexx */
+      options results
+      parse arg chat
+      'NEWS'
+      parse var result . '09'x text
+      f = 'RAM:news.log'
+      if ~open('l', f, 'A') then call open('l', f, 'W')
+      call writeln('l', chat ':' text)
+      call close('l')
+  Serve ARexx in funzione (RexxMast); uno script ancora in corso quando
+  arrivano altre novita' non viene riavviato all'infinito.
 - SEND <chat> <testo> manda un messaggio: SEND "Mario Rossi" build
   finita. Il nome della chat deve essere quello intero, tra virgolette
   se ha spazi. E' spento finche' non lo permetti tu: altrimenti

@@ -137,6 +137,15 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   requester shows it. The text client has `/translate` for the last
   message received. A translation of Amigram names the language Telegram
   is to translate into (a two-letter code in the catalog).
+- An ARexx script for new messages: "Script for new messages..." in the
+  settings picks one, and the news a pop-up would tell (not a muted
+  chat's) hands it to ARexx at its REXX port as a function, with the
+  chat's name as its argument and AMIGRAM as its host. A new command,
+  NEWS, answers with that news: the chat's name, a TAB and the text. The
+  script's message comes back to the AMIGRAM port and is freed there; at
+  the end the program waits a few seconds for scripts still running, and
+  leaves its port behind, deaf, rather than let one answer into freed
+  memory.
 - A reply that quotes part of a message: Reply on a message with part of
   its text selected sends that part as the reply's quote (quote_text of
   inputReplyToMessage), and the reply bar shows it. When Telegram does

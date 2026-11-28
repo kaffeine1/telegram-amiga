@@ -1540,6 +1540,7 @@ static int tg_gui_amiga_afa_text_compat(void)
 #define TG_MENU_DEVICES 45
 #define TG_MENU_CONTACTS 46
 #define TG_MENU_PROFILE 47
+#define TG_MENU_AREXX_NEWS 48 /* the settings' "Script for new messages..." */
 
 /* Dark-theme palette: one RGB triplet per pen role and per avatar tint. The
    backend resolves the renderer's pen indices to obtained pens here; a future
@@ -16900,6 +16901,8 @@ static void tg_gui_notify_sound(const char *path)
     tg_gui_log(line);
 }
 
+static void tg_gui_rexx_news_script(const tg_gui_state *state);
+
 /* Pending chats ring independently; pop-ups still require the user away.
    `popup_screen` 0 is the default public screen. */
 static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
@@ -16925,6 +16928,8 @@ static void tg_gui_notify_news(tg_gui_notify_ui *ui, tg_gui_state *state,
         return;
     }
     ui->seen_seq = state->notify_seq;
+    /* the script news runs, when one is chosen (Settings > ARexx) */
+    tg_gui_rexx_news_script(state);
     TG_GUI_POPUP_TRACE("news begin");
     /* tg_notify_sound_play owns loading, playback and the fallback chime. */
     now = time(0);
@@ -17152,6 +17157,112 @@ static void tg_gui_rexx_reply(struct Message *m, long rc)
     tg_gui_rexx_reply_text(m, rc, 0);
 }
 
+/* The script news runs (Settings > ARexx): handed to ARexx at its REXX
+   port as a function with the chat's name as its one argument, its host
+   this port, so that ADDRESS AMIGRAM is in place and NEWS reads the rest.
+   It runs on its own; its message comes back here when it ends, and is
+   only counted and freed. Without ARexx running, or with a few still
+   running, none is started. rm_Args is a pointer-sized integer on AROS. */
+#if defined(__AROS__)
+#define TG_GUI_REXX_ARG(p) ((IPTR)(p))
+#else
+#define TG_GUI_REXX_ARG(p) ((STRPTR)(p))
+#endif
+#define TG_GUI_REXX_NEWS_RUNNING_MAX 3
+static struct RexxMsg *tg_gui_rexx_news_msgs[TG_GUI_REXX_NEWS_RUNNING_MAX];
+static int tg_gui_rexx_news_out = 0;
+
+static void tg_gui_rexx_news_script(const tg_gui_state *state)
+{
+    static char name[TG_GUI_NAME_MAX * 2];
+    struct RexxMsg *rm;
+    struct MsgPort *rexx;
+    int slot;
+
+    if (state == 0 || state->arexx_news[0] == '\0' ||
+        tg_gui_rexx_port == 0) {
+        return;
+    }
+    for (slot = 0; slot < TG_GUI_REXX_NEWS_RUNNING_MAX; ++slot) {
+        if (tg_gui_rexx_news_msgs[slot] == 0) {
+            break;
+        }
+    }
+    if (slot == TG_GUI_REXX_NEWS_RUNNING_MAX) {
+        tg_gui_log("arexx: news scripts still running, none started");
+        return;
+    }
+    if (!tg_gui_rexx_lib_open()) {
+        tg_gui_log("arexx: no rexxsyslib.library, news script not started");
+        return;
+    }
+    /* the chat's name, its emoji as text and no style marks */
+    tg_gui_emoji_expand_pairs(name, sizeof(name), state->notify_last_name);
+    /* STRPTR: the strings are CONST_STRPTR on some systems, not on AROS */
+    rm = CreateRexxMsg(tg_gui_rexx_port, (STRPTR)"rexx",
+                       (STRPTR)tg_gui_rexx_port_name);
+    if (rm == 0) {
+        return;
+    }
+    rm->rm_Args[0] = TG_GUI_REXX_ARG(CreateArgstring(
+        (CONST_STRPTR)state->arexx_news, (ULONG)strlen(state->arexx_news)));
+    rm->rm_Args[1] = TG_GUI_REXX_ARG(CreateArgstring(
+        (CONST_STRPTR)name, (ULONG)strlen(name)));
+    if (rm->rm_Args[0] == 0 || rm->rm_Args[1] == 0) {
+        ClearRexxMsg(rm, 2UL);
+        DeleteRexxMsg(rm);
+        return;
+    }
+    rm->rm_Action = RXFUNC | 1UL;
+    Forbid();
+    rexx = FindPort((STRPTR)"REXX");
+    if (rexx != 0) {
+        PutMsg(rexx, (struct Message *)rm);
+    }
+    Permit();
+    if (rexx == 0) {
+        tg_gui_log("arexx: ARexx is not running, news script not started");
+        ClearRexxMsg(rm, 2UL);
+        DeleteRexxMsg(rm);
+        return;
+    }
+    tg_gui_rexx_news_msgs[slot] = rm;
+    ++tg_gui_rexx_news_out;
+    tg_gui_log("arexx: news script started");
+}
+
+/* A message come back to the port: one of the news scripts, ended, is
+   counted and freed (1); anything else is not ours to touch (0). */
+static int tg_gui_rexx_news_back(struct Message *m)
+{
+    struct RexxMsg *rm = (struct RexxMsg *)m;
+    char line[80];
+    int slot;
+
+    for (slot = 0; slot < TG_GUI_REXX_NEWS_RUNNING_MAX; ++slot) {
+        if (tg_gui_rexx_news_msgs[slot] == rm) {
+            break;
+        }
+    }
+    if (slot == TG_GUI_REXX_NEWS_RUNNING_MAX) {
+        return 0;
+    }
+    tg_gui_rexx_news_msgs[slot] = 0;
+    --tg_gui_rexx_news_out;
+    if (rm->rm_Result1 != 0) {
+        /* 5 with error 1 when the script was not found, for one */
+        sprintf(line, "arexx: news script ended with %ld (error %ld)",
+                (long)rm->rm_Result1, (long)rm->rm_Result2);
+        tg_gui_log(line);
+    } else {
+        tg_gui_log("arexx: news script ended");
+    }
+    /* no RXFF_RESULT asked: no result string to free */
+    ClearRexxMsg(rm, 2UL);
+    DeleteRexxMsg(rm);
+    return 1;
+}
+
 /* The commands that need no window: the three that answer with a text and
    SEND. 1 = this was one of them and it is answered (*sent says a message
    went out, so the window shows it); 0 = it is for the caller. */
@@ -17199,6 +17310,13 @@ static int tg_gui_rexx_common(tg_gui_state *state, struct Message *m,
         tg_gui_rexx_reply_text(m, 0L, last);
         return 1;
     }
+    if (code == TG_GUI_REXX_NEWS) {
+        static char news[TG_GUI_NOTIFY_TEXT_MAX * 2 + TG_GUI_NAME_MAX * 2];
+
+        (void)tg_gui_rexx_news_text(state, news, sizeof(news));
+        tg_gui_rexx_reply_text(m, 0L, news);
+        return 1;
+    }
     if (code == TG_GUI_REXX_SEND) {
         const char *chat = 0;
         const char *body = 0;
@@ -17232,15 +17350,36 @@ static int tg_gui_rexx_common(tg_gui_state *state, struct Message *m,
 static void tg_gui_rexx_close(void)
 {
     struct Message *m;
+    int tries;
 
     if (tg_gui_rexx_port == 0) {
         return;
     }
     RemPort(tg_gui_rexx_port); /* nobody finds it from here on */
-    while ((m = GetMsg(tg_gui_rexx_port)) != 0) {
-        tg_gui_rexx_reply(m, 20L); /* the program is going */
+    /* News scripts still running answer here: a few seconds for them. */
+    for (tries = 0; tries < 50; ++tries) {
+        while ((m = GetMsg(tg_gui_rexx_port)) != 0) {
+            if (m->mn_Node.ln_Type == NT_REPLYMSG) {
+                (void)tg_gui_rexx_news_back(m);
+            } else {
+                tg_gui_rexx_reply(m, 20L); /* the program is going */
+            }
+        }
+        if (tg_gui_rexx_news_out <= 0) {
+            break;
+        }
+        Delay(5L);
     }
-    DeleteMsgPort(tg_gui_rexx_port);
+    if (tg_gui_rexx_news_out > 0) {
+        /* One that does not end would answer into freed memory: the port
+           stays, deaf, and its few bytes with it. */
+        tg_gui_rexx_port->mp_Flags = PA_IGNORE;
+        memset(tg_gui_rexx_news_msgs, 0, sizeof(tg_gui_rexx_news_msgs));
+        tg_gui_rexx_news_out = 0;
+        tg_gui_log("arexx: a news script still runs: its port stays");
+    } else {
+        DeleteMsgPort(tg_gui_rexx_port);
+    }
     tg_gui_rexx_port = 0;
     tg_gui_rexx_lib_close();
 }
@@ -17268,7 +17407,11 @@ static struct Message *tg_gui_rexx_get(int *code, char *arg,
     if (tg_gui_rexx_port == 0) {
         return 0;
     }
-    m = GetMsg(tg_gui_rexx_port);
+    /* A news script's message back is no command: freed, and the next. */
+    while ((m = GetMsg(tg_gui_rexx_port)) != 0 &&
+           m->mn_Node.ln_Type == NT_REPLYMSG) {
+        (void)tg_gui_rexx_news_back(m);
+    }
     if (m == 0) {
         return 0;
     }
@@ -17409,6 +17552,7 @@ static APTR tg_gui_window_settings_action(tg_gui_state *state, int id,
     case TG_GUI_SET_OWN_SCREEN: return (APTR)TG_MENU_OWNSCREEN;
     case TG_GUI_SET_DOWNLOAD: return (APTR)TG_MENU_DLDIR;
     case TG_GUI_SET_PLAYER: return (APTR)TG_MENU_PLAYER;
+    case TG_GUI_SET_AREXX_NEWS: return (APTR)TG_MENU_AREXX_NEWS;
     case TG_GUI_SET_UPDATES:
         /* Kept by the session, with what it knows of the channel. */
         state->update_check = !state->update_check;
@@ -19887,6 +20031,53 @@ static int tg_gui_run_window_once(tg_gui_state *state)
                                         : state->video_player[0] != '\0'
                                               ? TG_STR(MSG_ST_PLAY_MEDIA_GO_TO_THAT)
                                               : TG_STR(MSG_ST_PLAY_THE_WORKBENCH_DECIDES));
+                            }
+                            tg_gui_window_paint(state, &backend);
+                        } else if (ud == (APTR)TG_MENU_AREXX_NEWS) {
+                            /* The ARexx script news runs, or none. With
+                               one chosen, the line asks which. */
+                            int changed = 0;
+                            LONG pick = 1;
+
+                            if (state->arexx_news[0] != '\0') {
+                                struct EasyStruct es;
+                                char text[2 * TG_NOTIFY_SOUND_MAX + 32];
+                                char shown[2 * TG_NOTIFY_SOUND_MAX];
+
+                                tg_gui_requester_text(shown, sizeof(shown),
+                                                      state->arexx_news, 2);
+                                tg_locale_format(text, sizeof(text),
+                                    TG_STR(MSG_W_NEW_MESSAGES_RUN_S), shown);
+                                es.es_StructSize = (ULONG)sizeof(es);
+                                es.es_Flags = 0UL;
+                                es.es_Title =
+                                    (APTR)TG_STR(MSG_RQ_SCRIPT_FOR_NEW_MESSAGES);
+                                es.es_TextFormat = (APTR)text;
+                                es.es_GadgetFormat =
+                                    (APTR)TG_STR(MSG_RQ_CHOOSE_ANOTHER_NONE_CANCEL);
+                                pick = tg_gui_amiga_easyreq_args(ctx.window,
+                                                                 &es);
+                            }
+                            if (pick == 2) {
+                                state->arexx_news[0] = '\0';
+                                changed = 1;
+                            } else if (pick == 1) {
+                                changed = tg_gui_window_pick_file(state,
+                                    ctx.window,
+                                    TG_STR(MSG_RQ_SCRIPT_FOR_NEW_MESSAGES),
+                                    state->arexx_news,
+                                    sizeof(state->arexx_news));
+                            }
+                            if (changed) {
+                                (void)mkdir("data", 0777);
+                                tg_gui_window_copy(state->status,
+                                    sizeof(state->status),
+                                    tg_gui_player_save(TG_GUI_AREXX_NEWS_FILE,
+                                        state->arexx_news) != 0
+                                        ? TG_STR(MSG_ST_COULD_NOT_SAVE_THE_SCRIPT)
+                                        : state->arexx_news[0] != '\0'
+                                              ? TG_STR(MSG_ST_NEW_MESSAGES_RUN_THAT_SCRIPT)
+                                              : TG_STR(MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES));
                             }
                             tg_gui_window_paint(state, &backend);
                         } else if (ud == (APTR)TG_MENU_NOTIFY_SOUND ||
@@ -23133,6 +23324,8 @@ int tg_gui_run_window(tg_gui_state *state)
     state->notify_default_resolved = 0;
     tg_gui_player_load(TG_GUI_PLAYER_FILE, state->video_player,
                        sizeof(state->video_player));
+    tg_gui_player_load(TG_GUI_AREXX_NEWS_FILE, state->arexx_news,
+                       sizeof(state->arexx_news));
     if (state->photo_cache_limit_mb != TG_GUI_PHOTO_CACHE_UNLIMITED_MB &&
         state->photo_cache_limit_mb != 10UL &&
         state->photo_cache_limit_mb != 50UL &&

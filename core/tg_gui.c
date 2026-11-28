@@ -8772,6 +8772,7 @@ int tg_gui_rexx_command(char *text, const char **arg)
         {"version", TG_GUI_REXX_VERSION},
         {"chats", TG_GUI_REXX_CHATS},
         {"last", TG_GUI_REXX_LAST},
+        {"news", TG_GUI_REXX_NEWS},
     };
     char *s = text;
     char *rest;
@@ -8964,6 +8965,48 @@ int tg_gui_rexx_chats_text(const tg_gui_state *state, char *out,
         ++lines;
     }
     return lines;
+}
+
+int tg_gui_rexx_news_text(const tg_gui_state *state, char *out,
+                          unsigned long size)
+{
+    static char name[TG_GUI_NAME_MAX * 2];
+    static char text[TG_GUI_NOTIFY_TEXT_MAX * 2];
+    unsigned long n;
+    unsigned long k;
+
+    if (out == 0 || size == 0UL) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (state == 0 || state->notify_seq == 0UL ||
+        state->notify_last_name[0] == '\0') {
+        return 0;
+    }
+    /* the style marks go with the emoji's expansion */
+    tg_gui_emoji_expand_pairs(name, sizeof(name), state->notify_last_name);
+    tg_gui_emoji_expand_pairs(text, sizeof(text), state->notify_last_text);
+    for (k = 0UL; name[k] != '\0'; ++k) {
+        if (name[k] == '\n' || name[k] == '\r' || name[k] == '\t') {
+            name[k] = ' ';
+        }
+    }
+    for (k = 0UL; text[k] != '\0'; ++k) {
+        if (text[k] == '\n' || text[k] == '\r' || text[k] == '\t') {
+            text[k] = ' ';
+        }
+    }
+    n = (unsigned long)strlen(name);
+    if (n + 2UL > size) {
+        return 0;
+    }
+    memcpy(out, name, n);
+    out[n++] = '\t';
+    for (k = 0UL; text[k] != '\0' && n + 1UL < size; ++k) {
+        out[n++] = text[k];
+    }
+    out[n] = '\0';
+    return 1;
 }
 
 int tg_gui_rexx_last_text(const tg_gui_state *state, char *out,
@@ -9785,6 +9828,7 @@ static const tg_gui_settings_line tg_gui_settings_table[] = {
     {MSG_SET_AREXX, MSG_SET_AREXX_STR, 0},
     {MSG_SET_AREXX_PORT, MSG_SET_AREXX_PORT_STR, TG_GUI_SET_AREXX_PORT},
     {MSG_SET_SCRIPTS_MAY_SEND_MESSAGES, MSG_SET_SCRIPTS_MAY_SEND_MESSAGES_STR, TG_GUI_SET_AREXX_SEND},
+    {MSG_SET_SCRIPT_FOR_NEW_MESSAGES, MSG_SET_SCRIPT_FOR_NEW_MESSAGES_STR, TG_GUI_SET_AREXX_NEWS},
 };
 #define TG_GUI_SETTINGS_LINES \
     ((int)(sizeof(tg_gui_settings_table) / sizeof(tg_gui_settings_table[0])))
@@ -9821,6 +9865,7 @@ int tg_gui_settings_kind(int id)
     case TG_GUI_SET_CACHE_CLEAR:
     case TG_GUI_SET_DOWNLOAD:
     case TG_GUI_SET_PLAYER:
+    case TG_GUI_SET_AREXX_NEWS:
         return TG_GUI_SET_KIND_ACTION;
     case 0:
         return TG_GUI_SET_KIND_HEADING;
@@ -9838,6 +9883,7 @@ int tg_gui_settings_disabled(const tg_gui_state *state, int id)
            (id == TG_GUI_SET_QUIET && !state->notify_beep) ||
            (id == TG_GUI_SET_STICKERS && !state->inline_photos) ||
            (id == TG_GUI_SET_AREXX_SEND && !state->arexx_port) ||
+           (id == TG_GUI_SET_AREXX_NEWS && !state->arexx_port) ||
            (id == TG_GUI_SET_UPDATES && !state->update_can);
 }
 
@@ -9921,6 +9967,11 @@ void tg_gui_settings_value(const tg_gui_state *state, int id, char *out,
         text = state->video_player[0] != '\0'
                    ? tg_gui_settings_leaf(state->video_player)
                    : TG_STR(MSG_SETV_WORKBENCH);
+        break;
+    case TG_GUI_SET_AREXX_NEWS:
+        text = state->arexx_news[0] != '\0'
+                   ? tg_gui_settings_leaf(state->arexx_news)
+                   : TG_STR(MSG_SETV_NO_SCRIPT);
         break;
     case TG_GUI_SET_BEEP: on = state->notify_beep; break;
     case TG_GUI_SET_INLINE: on = state->inline_photos; break;
@@ -14149,6 +14200,54 @@ int tg_gui_self_test(void)
             char value[48];
             char back[TG_NOTIFY_SOUND_MAX];
 
+            /* The script news runs: none until one is chosen, then its
+               name; a line that waits for the ARexx port. And what NEWS
+               answers: nothing before any news, then the chat, a TAB and
+               the text on one line, without style marks. */
+            {
+                char news[64];
+                unsigned long seq = state.notify_seq;
+                int port = state.arexx_port;
+                int ok;
+
+                state.arexx_news[0] = '\0';
+                state.arexx_port = 1;
+                tg_gui_settings_value(&state, TG_GUI_SET_AREXX_NEWS, value,
+                                      sizeof(value));
+                ok = strcmp(value, TG_STR(MSG_SETV_NO_SCRIPT)) == 0 &&
+                     tg_gui_settings_kind(TG_GUI_SET_AREXX_NEWS) ==
+                         TG_GUI_SET_KIND_ACTION &&
+                     !tg_gui_settings_disabled(&state,
+                                               TG_GUI_SET_AREXX_NEWS);
+                tg_gui_copy(state.arexx_news, sizeof(state.arexx_news),
+                            "Work:Rexx/news.rexx");
+                tg_gui_settings_value(&state, TG_GUI_SET_AREXX_NEWS, value,
+                                      sizeof(value));
+                state.arexx_port = 0;
+                ok = ok && strcmp(value, "news.rexx") == 0 &&
+                     tg_gui_settings_disabled(&state, TG_GUI_SET_AREXX_NEWS);
+                state.arexx_port = port;
+                state.arexx_news[0] = '\0';
+                state.notify_seq = 0UL;
+                ok = ok && tg_gui_rexx_news_text(&state, news,
+                                                 sizeof(news)) == 0 &&
+                     news[0] == '\0';
+                state.notify_seq = 3UL;
+                sprintf(state.notify_last_name, "%cAmici%c",
+                        TG_TEXT_MARKER_BOLD, TG_TEXT_MARKER_BOLD);
+                strcpy(state.notify_last_text, "Anna: ciao\ntutti");
+                ok = ok && tg_gui_rexx_news_text(&state, news,
+                                                 sizeof(news)) == 1 &&
+                     strcmp(news, "Amici\tAnna: ciao tutti") == 0;
+                state.notify_seq = seq;
+                state.notify_last_name[0] = '\0';
+                state.notify_last_text[0] = '\0';
+                if (!ok) {
+                    puts("gui self-test: the news script's line or NEWS");
+                    return 2;
+                }
+            }
+
             state.video_player[0] = '\0';
             tg_gui_settings_value(&state, TG_GUI_SET_PLAYER, value,
                                   sizeof(value));
@@ -15040,7 +15139,7 @@ int tg_gui_self_test(void)
             /* every line has a label, and every id shows up once */
             ok_set = ok_set && tg_gui_settings_line_label(i)[0] != '\0';
         }
-        ok_set = ok_set && lines == 28 && switches == 14 &&
+        ok_set = ok_set && lines == 29 && switches == 14 &&
                  tg_gui_settings_line_id(0) == 0 &&
                  tg_gui_settings_kind(TG_GUI_SET_NOTIFY) ==
                      TG_GUI_SET_KIND_CHOICE &&
@@ -15216,7 +15315,7 @@ int tg_gui_self_test(void)
            panel it is outside. */
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
-        rec.height = 540; /* tall enough for every line */
+        rec.height = 580; /* tall enough for every line */
         rec.watch_text[0] = TG_STR(MSG_SET_TITLE);
         rec.watch_text[1] = TG_STR(MSG_SET_PHOTOS_AND_EMOJI);
         rec.watch_text[2] = TG_STR(MSG_SET_BUILT_IN_CHIME);
@@ -15272,11 +15371,11 @@ int tg_gui_self_test(void)
             (void)tg_gui_settings_move(&state, 1);
         }
         ok_set = ok_set &&
-                 tg_gui_settings_selected(&state) == TG_GUI_SET_AREXX_SEND;
+                 tg_gui_settings_selected(&state) == TG_GUI_SET_AREXX_NEWS;
         memset(&rec, 0, sizeof(rec));
         rec.width = 640;
         rec.height = 200;
-        rec.watch_text[0] = TG_STR(MSG_SET_SCRIPTS_MAY_SEND_MESSAGES);
+        rec.watch_text[0] = TG_STR(MSG_SET_SCRIPT_FOR_NEW_MESSAGES);
         rec.watch_text[1] = TG_STR(MSG_SET_NOTIFICATIONS);
         rec.watch_text[2] = TG_STR(MSG_SET_MORE_ABOVE);
         b.context = &rec;
@@ -15489,6 +15588,11 @@ int tg_gui_self_test(void)
         strcpy(line, " LAST ");
         ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_LAST;
         strcpy(line, "last 3");
+        ok_rx = ok_rx &&
+                tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
+        strcpy(line, "News");
+        ok_rx = ok_rx && tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_NEWS;
+        strcpy(line, "news all");
         ok_rx = ok_rx &&
                 tg_gui_rexx_command(line, &arg) == TG_GUI_REXX_UNKNOWN;
         strcpy(line, "send");

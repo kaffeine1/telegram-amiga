@@ -1548,6 +1548,15 @@ Risposta citando - ENTER invia, ESC annulla
 MSG_ST_SENT_WITHOUT_THE_QUOTE
 Inviato senza citazione (non trovata nel testo)
 ; Sent without the quote (not found in the text)
+MSG_ST_NEW_MESSAGES_RUN_THAT_SCRIPT
+I messaggi nuovi avviano quello script
+; New messages run that script
+MSG_ST_NO_SCRIPT_FOR_NEW_MESSAGES
+Nessuno script per i messaggi nuovi
+; No script for new messages
+MSG_ST_COULD_NOT_SAVE_THE_SCRIPT
+Non ho potuto salvare il nome dello script
+; Could not save the script's name
 MSG_RQ_OK
 OK
 ; OK
@@ -1783,6 +1792,12 @@ Contatto
 MSG_RQ_RENAME_REMOVE_CANCEL
 Rinomina...|Togli|Annulla
 ; Rename...|Remove|Cancel
+MSG_RQ_SCRIPT_FOR_NEW_MESSAGES
+Script per i messaggi nuovi
+; Script for new messages
+MSG_RQ_CHOOSE_ANOTHER_NONE_CANCEL
+Scegline un altro...|Nessuno|Annulla
+; Choose another...|None|Cancel
 MSG_ABOUT_TITLE
 Informazioni su Amigram
 ; About Amigram
@@ -2093,6 +2108,9 @@ Aggiungi
 MSG_W_LET_S_SEE_YOUR_PHONE
 Far vedere anche il tuo numero a %s?
 ; Let %s see your phone number too?
+MSG_W_NEW_MESSAGES_RUN_S
+I messaggi nuovi avviano\n\
+%s
 MSG_G_CHOOSE_DESTINATION
 Scegli la destinazione...
 ; Choose destination...
@@ -2591,6 +2609,12 @@ Solo le app di Telegram la azzerano, dopo una settimana
 MSG_G_CONTACT
 Contatto...
 ; Contact...
+MSG_SET_SCRIPT_FOR_NEW_MESSAGES
+Script per i messaggi nuovi...
+; Script for new messages...
+MSG_SETV_NO_SCRIPT
+(nessuno)
+; (none)
 MSG_S_LBL_PHOTO
 [Foto]
 ; [Photo]
