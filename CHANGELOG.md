@@ -171,7 +171,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   username, an account deleted, reads "Deleted account" in the list and
   in the address book instead of an empty row with a "?". A right click
   on a row of the address book gives it a menu of its own: Open chat,
-  Contact... and Block.... Over the Archive the band at the top reads
+  Contact... and Block... (the window now claims the right button over
+  those rows too, or the system's menu bar opened instead). Over the
+  Archive the band at the top reads
   "Back to chats" and a click on it goes back, as ESC does.
 - The hints in the chat list's search field ("Type a name...", "Find
   in this chat...", the Archive's) are drawn at their own length, with

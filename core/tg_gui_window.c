@@ -10039,9 +10039,10 @@ static void tg_gui_window_track_rmbtrap(tg_gui_state *state,
     }
     hit = tg_gui_hit_test(state, ctx->inner_w, ctx->inner_h, ctx->line_h,
                           hx, hy);
-    over_msg = !state->in_search && !state->in_filter &&
-               !state->forward_pick_active && hit >= 0 &&
-               hit < state->chat_count;
+    /* a row of the address book has its menu too, search or not */
+    over_msg = !state->in_filter && !state->forward_pick_active &&
+               hit >= 0 && hit < state->chat_count &&
+               (!state->in_search || state->chats[hit].contact_row);
     if (hit <= TG_GUI_HIT_MESSAGE_BASE) {
         int mi = hit <= TG_GUI_HIT_PHOTO_BASE
             ? TG_GUI_HIT_PHOTO_BASE - hit
