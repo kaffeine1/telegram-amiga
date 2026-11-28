@@ -42,7 +42,9 @@ seven from 0.0.96, which adds the text client for the plain 68000.
   login, a photo or an update did not go through. English, built into
   the program, stands wherever a catalog has no text. The Italian
   catalog ships in Catalogs/italiano/ next to the program; the 68000
-  package carries a smaller one, with only what the text client says.
+  package carries a smaller one, with only what the text client says. Where
+  locale.library looks for catalogs only in LOCALE:Catalogs (AmigaOS
+  3.2), Amigram reads the one next to it by itself.
   The texts are in locale/amigram.cd, a translation is one text file in
   locale/, and scripts/catalog.py turns it into a catalog (no FlexCat or
   CatComp needed), refusing a translation that changes a text's

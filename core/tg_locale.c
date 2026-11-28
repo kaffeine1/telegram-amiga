@@ -18,6 +18,113 @@
 #define TG_LOCALE_AMIGA 1
 #endif
 
+/* A catalog read by hand: the host's way for the self-tests, and the
+   Amiga's when locale.library does not find the catalog in the program's
+   drawer (AmigaOS 3.2's locale.library 47 looks in LOCALE:Catalogs only:
+   on a Vampire the window stayed English with Catalogs/italiano/ beside
+   the program, where AmigaOS 4 and MorphOS find it). The table is made
+   when a catalog is read, so a system without one spends nothing. */
+#define TG_LOCALE_TEXTS_MAX (TG_STRINGS_ID_MAX + 1)
+
+static unsigned char *tg_locale_data = 0;
+static const char **tg_locale_texts = 0;
+static char tg_locale_lang[32];
+
+static unsigned long tg_locale_be32(const unsigned char *p)
+{
+    return ((unsigned long)p[0] << 24) | ((unsigned long)p[1] << 16) |
+           ((unsigned long)p[2] << 8) | (unsigned long)p[3];
+}
+
+static void tg_locale_hand_free(void)
+{
+    free((void *)tg_locale_texts);
+    tg_locale_texts = 0;
+    free(tg_locale_data);
+    tg_locale_data = 0;
+}
+
+/* Reads the IFF CTLG at path into the table; 0 = read. */
+static int tg_locale_load(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    long size;
+    unsigned long end;
+    unsigned long i;
+
+    if (f == 0) {
+        return 2;
+    }
+    if (fseek(f, 0L, SEEK_END) != 0 || (size = ftell(f)) < 12L ||
+        size > 1048576L || fseek(f, 0L, SEEK_SET) != 0) {
+        fclose(f);
+        return 2;
+    }
+    tg_locale_data = (unsigned char *)malloc((size_t)size + 1U);
+    tg_locale_texts = (const char **)calloc((size_t)TG_LOCALE_TEXTS_MAX,
+                                            sizeof(const char *));
+    if (tg_locale_data == 0 || tg_locale_texts == 0 ||
+        fread(tg_locale_data, 1, (size_t)size, f) != (size_t)size) {
+        fclose(f);
+        tg_locale_hand_free();
+        return 2;
+    }
+    fclose(f);
+    tg_locale_data[size] = 0;
+    if (memcmp(tg_locale_data, "FORM", 4U) != 0 ||
+        memcmp(tg_locale_data + 8, "CTLG", 4U) != 0) {
+        tg_locale_hand_free();
+        return 2;
+    }
+    end = 8UL + tg_locale_be32(tg_locale_data + 4);
+    if (end > (unsigned long)size) {
+        end = (unsigned long)size;
+    }
+    i = 12UL;
+    while (i + 8UL <= end) {
+        unsigned long len = tg_locale_be32(tg_locale_data + i + 4);
+        const unsigned char *body = tg_locale_data + i + 8;
+
+        if (i + 8UL + len > end) {
+            break;
+        }
+        if (memcmp(tg_locale_data + i, "LANG", 4U) == 0 && len > 0UL) {
+            unsigned long n = len < sizeof(tg_locale_lang) - 1U
+                                  ? len
+                                  : sizeof(tg_locale_lang) - 1U;
+
+            memcpy(tg_locale_lang, body, (size_t)n);
+            tg_locale_lang[n] = '\0';
+        } else if (memcmp(tg_locale_data + i, "STRS", 4U) == 0) {
+            unsigned long j = 0UL;
+
+            while (j + 8UL <= len) {
+                unsigned long id = tg_locale_be32(body + j);
+                unsigned long n = tg_locale_be32(body + j + 4);
+
+                if (j + 8UL + n > len) {
+                    break;
+                }
+                if (id < TG_LOCALE_TEXTS_MAX && n > 0UL &&
+                    body[j + 8UL + n - 1UL] == 0) {
+                    tg_locale_texts[id] = (const char *)(body + j + 8);
+                }
+                j += 8UL + ((n + 3UL) & ~3UL);
+            }
+        }
+        i += 8UL + len + (len & 1UL);
+    }
+    return 0;
+}
+
+static const char *tg_locale_hand_str(long id)
+{
+    if (tg_locale_texts != 0 && id >= 0L && id < TG_LOCALE_TEXTS_MAX) {
+        return tg_locale_texts[id];
+    }
+    return 0;
+}
+
 #if defined(TG_LOCALE_AMIGA)
 
 #if defined(__amigaos4__)
@@ -39,13 +146,37 @@ struct LocaleIFace *ILocale = 0;
 #endif
 
 static struct Catalog *tg_locale_catalog = 0;
-static char tg_locale_lang[32];
+
+/* No catalog from locale.library: the program's own drawer, by hand, in
+   the user's languages in their order, English ending the search. */
+static void tg_locale_open_by_hand(void)
+{
+    struct Locale *loc = OpenLocale(0);
+    char path[96];
+    int i;
+
+    if (loc == 0) {
+        return;
+    }
+    for (i = 0; i < 10 && loc->loc_PrefLanguages[i] != 0; ++i) {
+        const char *lang = (const char *)loc->loc_PrefLanguages[i];
+
+        if (strcmp(lang, "english") == 0 || strlen(lang) > 40U) {
+            break;
+        }
+        sprintf(path, "PROGDIR:Catalogs/%s/amigram.catalog", lang);
+        if (tg_locale_load(path) == 0) {
+            break;
+        }
+    }
+    CloseLocale(loc);
+}
 
 void tg_locale_open(void)
 {
     struct TagItem tags[2];
 
-    if (tg_locale_catalog != 0) {
+    if (tg_locale_catalog != 0 || tg_locale_texts != 0) {
         return;
     }
 #if defined(__amigaos4__)
@@ -81,6 +212,8 @@ void tg_locale_open(void)
         strncpy(tg_locale_lang, (const char *)tg_locale_catalog->cat_Language,
                 sizeof(tg_locale_lang) - 1U);
         tg_locale_lang[sizeof(tg_locale_lang) - 1U] = '\0';
+    } else if (tg_locale_catalog == 0) {
+        tg_locale_open_by_hand();
     }
 }
 
@@ -90,6 +223,7 @@ void tg_locale_close(void)
         CloseCatalog(tg_locale_catalog);
         tg_locale_catalog = 0;
     }
+    tg_locale_hand_free();
 #if defined(__amigaos4__)
     if (ILocale != 0) {
         DropInterface((struct Interface *)ILocale);
@@ -108,106 +242,15 @@ const char *tg_str(long id, const char *builtin)
     const char *s;
 
     if (tg_locale_catalog == 0) {
-        return builtin;
+        s = tg_locale_hand_str(id);
+        return s != 0 ? s : builtin;
     }
     s = (const char *)GetCatalogStr(tg_locale_catalog, (LONG)id,
                                     (CONST_STRPTR)builtin);
     return s != 0 ? s : builtin;
 }
 
-const char *tg_locale_language(void)
-{
-    return tg_locale_lang;
-}
-
-#else /* the host: a catalog file read by hand, for the self-tests */
-
-/* every id of include/tg_strings.h: with a fixed size the texts past it
-   stayed English here, and only here */
-#define TG_LOCALE_HOST_MAX (TG_STRINGS_ID_MAX + 1)
-
-static unsigned char *tg_locale_data = 0;
-static const char *tg_locale_texts[TG_LOCALE_HOST_MAX];
-static char tg_locale_lang[32];
-
-static unsigned long tg_locale_be32(const unsigned char *p)
-{
-    return ((unsigned long)p[0] << 24) | ((unsigned long)p[1] << 16) |
-           ((unsigned long)p[2] << 8) | (unsigned long)p[3];
-}
-
-/* Reads the IFF CTLG at path into the table; 0 = read. */
-static int tg_locale_load(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-    long size;
-    unsigned long end;
-    unsigned long i;
-
-    if (f == 0) {
-        return 2;
-    }
-    if (fseek(f, 0L, SEEK_END) != 0 || (size = ftell(f)) < 12L ||
-        size > 1048576L || fseek(f, 0L, SEEK_SET) != 0) {
-        fclose(f);
-        return 2;
-    }
-    tg_locale_data = (unsigned char *)malloc((size_t)size + 1U);
-    if (tg_locale_data == 0 ||
-        fread(tg_locale_data, 1, (size_t)size, f) != (size_t)size) {
-        fclose(f);
-        free(tg_locale_data);
-        tg_locale_data = 0;
-        return 2;
-    }
-    fclose(f);
-    tg_locale_data[size] = 0;
-    if (memcmp(tg_locale_data, "FORM", 4U) != 0 ||
-        memcmp(tg_locale_data + 8, "CTLG", 4U) != 0) {
-        free(tg_locale_data);
-        tg_locale_data = 0;
-        return 2;
-    }
-    end = 8UL + tg_locale_be32(tg_locale_data + 4);
-    if (end > (unsigned long)size) {
-        end = (unsigned long)size;
-    }
-    i = 12UL;
-    while (i + 8UL <= end) {
-        unsigned long len = tg_locale_be32(tg_locale_data + i + 4);
-        const unsigned char *body = tg_locale_data + i + 8;
-
-        if (i + 8UL + len > end) {
-            break;
-        }
-        if (memcmp(tg_locale_data + i, "LANG", 4U) == 0 && len > 0UL) {
-            unsigned long n = len < sizeof(tg_locale_lang) - 1U
-                                  ? len
-                                  : sizeof(tg_locale_lang) - 1U;
-
-            memcpy(tg_locale_lang, body, (size_t)n);
-            tg_locale_lang[n] = '\0';
-        } else if (memcmp(tg_locale_data + i, "STRS", 4U) == 0) {
-            unsigned long j = 0UL;
-
-            while (j + 8UL <= len) {
-                unsigned long id = tg_locale_be32(body + j);
-                unsigned long n = tg_locale_be32(body + j + 4);
-
-                if (j + 8UL + n > len) {
-                    break;
-                }
-                if (id < TG_LOCALE_HOST_MAX && n > 0UL &&
-                    body[j + 8UL + n - 1UL] == 0) {
-                    tg_locale_texts[id] = (const char *)(body + j + 8);
-                }
-                j += 8UL + ((n + 3UL) & ~3UL);
-            }
-        }
-        i += 8UL + len + (len & 1UL);
-    }
-    return 0;
-}
+#else /* the host: the catalog TG_CATALOG names, for the self-tests */
 
 void tg_locale_open(void)
 {
@@ -220,26 +263,23 @@ void tg_locale_open(void)
 
 void tg_locale_close(void)
 {
-    memset((void *)tg_locale_texts, 0, sizeof(tg_locale_texts));
-    free(tg_locale_data);
-    tg_locale_data = 0;
+    tg_locale_hand_free();
     tg_locale_lang[0] = '\0';
 }
 
 const char *tg_str(long id, const char *builtin)
 {
-    if (id >= 0L && id < TG_LOCALE_HOST_MAX && tg_locale_texts[id] != 0) {
-        return tg_locale_texts[id];
-    }
-    return builtin;
+    const char *s = tg_locale_hand_str(id);
+
+    return s != 0 ? s : builtin;
 }
+
+#endif
 
 const char *tg_locale_language(void)
 {
     return tg_locale_lang;
 }
-
-#endif
 
 const char *tg_locale_utf8(const char *latin1)
 {
