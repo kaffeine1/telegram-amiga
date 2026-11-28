@@ -14053,14 +14053,19 @@ static int tg_later_in_range(unsigned long when, unsigned long now)
     return when >= now + 60UL && when <= now + 365UL * 86400UL;
 }
 
-/* A moment on the user's clock as "28/11 21:30" (16 bytes do). */
+/* A moment on the user's clock as "28/11 21:30" (16 bytes do), to the
+   nearest minute: the way back from Telegram's clock moves by the
+   seconds the local clock drifts between two readings, and on a 68000 a
+   message set for 23:55 was listed at 23:54. */
 static void tg_later_when_text(unsigned long local, char *out)
 {
     int y;
     int m;
     int d;
-    unsigned long s = local % 86400UL;
+    unsigned long s;
 
+    local += 30UL;
+    s = local % 86400UL;
     tg_later_civil(local / 86400UL, &y, &m, &d);
     sprintf(out, "%02d/%02d %02lu:%02lu", d % 100, m % 100,
             (s / 3600UL) % 100UL, (s / 60UL) % 60UL);
@@ -47585,7 +47590,23 @@ static int tg_later_self_test(void)
         }
     }
     tg_later_when_text(1795824000UL + 77400UL, shown);
-    if (strcmp(shown, "28/11 21:30") != 0 ||
+    if (strcmp(shown, "28/11 21:30") != 0) {
+        puts("probe self-test: a scheduled time shown wrong");
+        return 2;
+    }
+    /* a few seconds either side of the minute show that minute */
+    tg_later_when_text(1795824000UL + 77400UL - 1UL, shown);
+    if (strcmp(shown, "28/11 21:30") != 0) {
+        puts("probe self-test: a second early shows the minute before");
+        return 2;
+    }
+    tg_later_when_text(1795824000UL + 77400UL + 29UL, shown);
+    if (strcmp(shown, "28/11 21:30") != 0) {
+        puts("probe self-test: seconds late show the minute after");
+        return 2;
+    }
+    tg_later_when_text(1795824000UL + 86399UL, shown);
+    if (strcmp(shown, "29/11 00:00") != 0 ||
         !tg_later_in_range(now + 60UL, now) ||
         tg_later_in_range(now + 59UL, now) ||
         tg_later_in_range(now - 1UL, now) ||
