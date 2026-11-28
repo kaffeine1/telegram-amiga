@@ -35,36 +35,33 @@ on at least one real Amiga-like platform.
 
 ## Current Status
 
-On 2026-11-15: 0.5, the second beta, is out in all seven packages
-(2026-11-14). Direct chats, groups, channels and the topics of forum
-groups work on the six systems; what each release brought is in
-CHANGELOG.md. On `main` for the next release: the Chats menu (issue
-#20), a picture sent as a photo whatever its name, a long text sent as
-several messages (issue #14), Play on a video, a voice message or an
-audio file with a player of one's choice, the account online while
-the window is in front, without which Telegram sends no "is typing",
-pins reordered by dragging, Saved Messages among them, the
-Archive's unread count on a line at the top of the chat list,
-drafts with their reply, in Saved Messages too, and albums of files,
-of more than ten photos and of several icons dropped together; the
-Archive read again a few seconds after the start, drafts in the text
-client, and the topics of forum groups made, renamed and closed, with
-their own drafts.
+On 2026-11-28: 0.6, the third beta, is out in all seven packages
+(2026-11-23), with the login by QR code. Direct chats, groups,
+channels and the topics of forum groups work on the six systems; what
+each release brought is in CHANGELOG.md. On `main` for the next
+release, not released yet: the update installed from inside Amigram,
+the program and its text client in Italian, and the round described in
+"Done after 0.6: what a client is expected to show" below (the last
+message under each chat, forwarded and edited marks, online and last
+seen, who read, blocking, bots' buttons, comments, a date to go to,
+devices, t.me links, translation, scheduled messages, the address
+book, a forgotten password recovered by email, two more ARexx
+commands).
 
 Open, each in its section below:
 
+- next in the round: adding a contact, editing one's own profile,
+  quoting part of a message, an ARexx script run on a new message;
 - left over from the 0.5 list: more than the Archive's latest 32 chats;
 - videos: the resolution in the details, and playing while the video
   still downloads;
-- sign-in by QR code, creating an account, the update fetched and
-  installed (the notice is done), AmiUpdate on AmigaOS 4;
+- creating an account, AmiUpdate on AmigaOS 4;
 - transfer speed, photo speed under AfA_OS, avatars on paletted
   screens, the send-photo dialog's preview, a MorphOS popup flicker;
 - sending stickers, a panel that suits each processor;
 - voice messages heard in the window on 68k, through opusfile.library
   when it is installed;
 - letters outside Latin-1, Cyrillic first;
-- after the beta: skins and translations;
 - in the text client: a line longer than one message.
 
 A Bot-API text path stays available as a fallback for tokens and bots.
@@ -734,10 +731,12 @@ conversion recipe belongs with the user instead: the download drawer is
 configurable onto a network share, and Saved Messages already works as a
 two-way drawer between the Amiga and a machine that has the CPU.
 
-## Done in 0.5: the update notice. Planned: self-update
+## Done in 0.5: the update notice; done after 0.6: self-update
 
 Step 1 shipped in 0.5 and reads the channel @amigram1, where the release
-posts go; steps 2 and 3 are still to do.
+posts go; steps 2 and 3, the update fetched, checked and installed, are
+on `main` for the next release ("Done after 0.6: the update from inside
+Amigram" above). What follows is the plan as it was written.
 
 A user asked for automatic update download and install, the way another
 actively developed Amiga program does it. Worth doing, but staged, and
@@ -1424,7 +1423,7 @@ a username is mentioned by first name with an
 of a basic group (`messages.getFullChat`), so in one of those only who
 wrote lately is offered.
 
-## Done after 0.6: ten small things other clients show
+## Done after 0.6: what a client is expected to show
 
 Asked by Michele on 2026-11-27, after a look at what other Telegram
 clients show and Amigram did not: everything feasible, done Amigram's
@@ -1484,6 +1483,12 @@ Then the middle-sized ones:
   are shown in. Tried live on a public channel: a day with no post
   leads to the next post, a day still to come says that nothing was
   written from then on. The text client does not have it yet.
+  Seen in a window on a G5 and on a Vampire, where it showed two old
+  faults of every jump to one message, both mended: a page asked again
+  shorter, after an unpack overflow, kept the first page's offset and
+  could miss the message (the offset now follows the page), and the
+  view drifted off the message as pictures loaded under it (the painter
+  keeps it in the middle until the chat is scrolled).
 - Comments on a channel's post. The reader keeps what messageReplies
   says of a post (its comments flag, how many), the time row says the
   number, and "Comments..." in the post's menu asks Telegram for the
@@ -1496,8 +1501,9 @@ Then the middle-sized ones:
   no reply line. ESC goes back to the channel, at the post. Tried live
   on a public channel for reading (a post of 20 comments shows 20
   messages, the group stays out of the list, the way back marks the
-  post); a comment was not written, for want of a place to write one
-  that is not somebody's public group.
+  post). A comment was written later, with the owner's leave, in the
+  reply thread of a group message of the test account's own: it went
+  as an answer to the thread's first message, as it should.
 
 - Devices: account.getAuthorizations read into a short list (the
   address Telegram gives is stepped over, not kept), shown from the
@@ -1511,7 +1517,11 @@ Then the middle-sized ones:
   name (contacts.resolveUsername) and opens the chat through what a
   search result opens with, then shows the message the link names.
   Invitations, sticker sets, private chats' /c/ links and bots' web
-  apps are left to the browser. Tried live on two public channels.
+  apps are left to the browser. Tried live on two public channels. The
+  form Telegram's own apps use, tg://resolve?domain=name&post=123, is
+  read the same way (a bot's link button gives it), and any other tg:
+  link says that only Telegram's apps open it instead of going to a
+  browser that would not know it.
 
 - Translate: messages.translateText with the chat and one message id,
   into the language named by a two-letter code that each catalog
@@ -1519,19 +1529,50 @@ Then the middle-sized ones:
   one); the answer's first text goes into a requester, wrapped at 60
   letters, and /translate prints it in the text client.
 
-Tried live with the test account, two sessions of it for what one
-device tells another, and seen in a window on the OS4 VM in Italian.
-The 68000 text client grew by about 5 KB with its share of the small
-ones, by 7 KB more with the bots' buttons, by 1 KB with the comments'
-count and by 5 KB with the devices: 686 KB now, 18 KB more than before
-this round. Worth a look before a release: what of this the plain 68000
-needs.
+- Scheduled messages: "Send later..." under the paperclip sends the
+  composer's text with schedule_date (21:30, 28/11 21:30 or
+  28/11/2026 21:30, up to a year ahead), and "Scheduled..." lists the
+  chat's waiting messages (messages.getScheduledHistory), one picked
+  being sent at once (messages.sendScheduledMessages) or deleted
+  (messages.deleteScheduledMessages). /later in the text client. The
+  times are read and shown on the user's clock, rounded to the minute
+  (a plain 68000 showed a minute less, its clock drifting by seconds
+  between two readings). Tried live in the test account's Saved
+  Messages, through the session, the host's text client and the text
+  client on an emulated A600.
+- The address book: Chats > Contacts... (contacts.getContacts) puts the
+  contacts in the sidebar where a search's results stand, by name. A
+  cache holds 128 of them (64 on a 68k machine): the first ones by name
+  are kept and the status line says how many there are. /contacts in
+  the text client. Tried live on an account of 380 contacts.
+- A forgotten cloud password at login: TAB on the password screen,
+  /recover at the text client's prompt, has Telegram mail a code to the
+  recovery email (auth.requestPasswordRecovery); with the code
+  (auth.recoverPassword) the login is done and the password removed.
+  Tried live with the text client, a real recovery email and the
+  owner typing the codes; the window's way waits for the account to
+  have a password again.
+- Two more ARexx commands: CHATS (the chat list, a line a chat with
+  its unread count) and LAST (the open chat's newest message, its
+  sender and text). Tried in the OS4 VM.
 
-Next, in this order: scheduled messages, contacts,
-password recovery by email, a richer ARexx port. The large ones (chat
-folders, profile editing, group administration, quoting part of a
-message, sending stickers, GIFs and a location, voice in the window,
-creating an account) are weighed one by one after that.
+Tried live with the test account, two sessions of it for what one
+device tells another, seen in a window on the OS4 VM in Italian, and on
+real machines: a G5 with MorphOS and a Vampire with AmigaOS 3.2 (the
+comments, the translation, the t.me links, a date, the devices, the
+Block item, the iconified start). Not tried yet: a bot's callback
+buttons and its Start (the test account may not make a bot, and no
+chat of it holds such a keyboard; a link button was tried), the names
+under "Who read...", ending the other sessions. The plain 68000 keeps
+every new command of the text client (the owner's choice, once they
+were seen working on an emulated A600 and written in its manual): its
+program is 703 KB now, 35 KB more than before the round.
+
+Next: adding a contact, editing one's own profile, quoting part of a
+message, an ARexx script run when a message comes. The large ones
+(chat folders, group administration, sending stickers, GIFs and a
+location, voice in the window, creating an account) are weighed one by
+one after that.
 
 ## Done after 0.6: the update from inside Amigram
 
@@ -2209,7 +2250,10 @@ can be requested, which also explains the silence that follows too many
 attempts. The manuals' first-start section gets the same sentence, so
 the answer arrives before the question.
 
-## Planned: sign in by QR code, so no code has to arrive at all
+## Done in 0.6: sign in by QR code, so no code has to arrive at all
+
+Shipped in 0.6 ("Done after 0.5: login with a QR code" above says how);
+what follows is the plan as it was written.
 
 Every login problem this project has had has the same shape: the client
 asks Telegram for a code, Telegram says it sent one, and the user never
