@@ -37158,6 +37158,18 @@ const char *tg_gui_session_search_name(int i)
            began with such an emoji had none ("?" rows in the Archive). */
 #if !defined(TG_NO_GUI)
         tg_gui_driver_text_from_utf8(latin1_name, sizeof(latin1_name), raw);
+        {
+            /* an emoji left out at the head leaves its space behind */
+            unsigned long lead = 0UL;
+
+            while (latin1_name[lead] == ' ') {
+                ++lead;
+            }
+            if (lead > 0UL) {
+                memmove(latin1_name, latin1_name + lead,
+                        strlen(latin1_name + lead) + 1U);
+            }
+        }
         if ((latin1_name[0] == '\0' || tg_gui_name_unreadable(latin1_name)) &&
             e->username[0] != '\0') {
             /* nothing the Amiga can show (Cyrillic, say): the username */
